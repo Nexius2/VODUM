@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:latest
+    container_name: vodum_db
+    restart: always
+    environment:
+      POSTGRES_USER: vodum_user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: vodum_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  backend:
+    build: .
+    container_name: vodum_backend
+    restart: always
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql://vodum_user:password@db/vodum_db
+    ports:
+      - "8000:8000"
+
+volumes:
+  db_data:
