@@ -24,3 +24,6 @@ jobs:
 
       - name: Push Docker Image to Docker Hub
         run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/vodum:latest
+
+      - name: Debug - Vérifier les images locales
+        run: docker images
