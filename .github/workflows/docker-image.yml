@@ -37,6 +37,3 @@ jobs:
           docker push nexius2/vodum:latest
           docker push nexius2/vodum:${{ github.sha }}
           
-            - name: Debug Environment Variables
-
-
