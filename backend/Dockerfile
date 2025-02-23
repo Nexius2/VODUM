@@ -26,6 +26,10 @@ ENV DATABASE_URL=postgresql://vodum:vodum@localhost:5432/vodum
 
 # Commande pour démarrer PostgreSQL et l'API FastAPI
 CMD service postgresql start && \
-    su - postgres -c "psql -c \"ALTER USER vodum WITH PASSWORD 'vodum';\"" && \
+	sleep 5 && \
+    su - postgres -c "psql -c \"CREATE ROLE vodum WITH LOGIN PASSWORD 'vodum';\"" && \
+    su - postgres -c "psql -c \"ALTER ROLE vodum CREATEDB;\"" && \
+    su - postgres -c "psql -c \"CREATE DATABASE vodum OWNER vodum;\"" && \
+    #su - postgres -c "psql -c \"ALTER USER vodum WITH PASSWORD 'vodum';\"" && \
     uvicorn main:app --host 0.0.0.0 --port 8080
 
