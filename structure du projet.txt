@@ -1,0 +1,26 @@
+vodum/
+│── backend/
+│   ├── main.py
+│   ├── models.py
+│   ├── database.py
+│   ├── routes/
+│   │   ├── auth.py
+│   │   ├── servers.py
+│   ├── requirements.txt
+│   ├── Dockerfile
+│   ├── .env
+│   ├── config.py
+│   ├── utils.py
+│── frontend/
+│   ├── pages/
+│   │   ├── index.tsx
+│   │   ├── login.tsx
+│   │   ├── dashboard.tsx
+│   ├── components/
+│   │   ├── ServerList.tsx
+│   ├── next.config.js
+│   ├── package.json
+│   ├── tailwind.config.js
+│── docker-compose.yml
+│── .gitignore
+│── README.md
