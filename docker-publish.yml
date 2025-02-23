@@ -3,7 +3,7 @@ name: Publish Docker Image
 on:
   push:
     branches:
-      - main
+      - main  # Déclenche l'action uniquement sur la branche principale
 
 jobs:
   build-and-push:
@@ -19,11 +19,5 @@ jobs:
       - name: Build Docker Image
         run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/vodum:latest .
 
-      - name: Tag Docker Image
-        run: docker tag ${{ secrets.DOCKERHUB_USERNAME }}/vodum:latest ${{ secrets.DOCKERHUB_USERNAME }}/vodum:latest
-
-      - name: Push Docker Image to Docker Hub
+      - name: Push Docker Image
         run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/vodum:latest
-
-      - name: Debug - Vérifier les images locales
-        run: docker images
