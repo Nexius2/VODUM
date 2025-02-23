@@ -23,4 +23,8 @@ vodum/
 │   ├── tailwind.config.js
 │── docker-compose.yml
 │── .gitignore
-│── README.md
+│── database/         # Modèles et gestion de PostgreSQL
+│── docker/ 
+│── .github/          # Workflows GitHub Actions pour CI/CD
+│── README.md         # Documentation du projet
+│── LICENSE           # Licence MIT
