@@ -32,5 +32,6 @@ CMD service postgresql start && \
     su - postgres -c "psql -c \"ALTER ROLE vodum CREATEDB;\"" && \
     su - postgres -c "psql -c \"CREATE DATABASE vodum OWNER vodum;\"" && \
     #su - postgres -c "psql -c \"ALTER USER vodum WITH PASSWORD 'vodum';\"" && \
+	sleep 5 && \
     uvicorn main:app --host 0.0.0.0 --port 8080
 
