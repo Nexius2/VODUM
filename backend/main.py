@@ -1,5 +1,6 @@
 from fastapi import FastAPI
-from backend.routes import auth, servers
+from routes import auth, servers
+
 from backend.database import init_db
 
 app = FastAPI(title="VODUM API")

@@ -4,4 +4,3 @@ sqlalchemy
 psycopg2
 python-dotenv
 databases
-
