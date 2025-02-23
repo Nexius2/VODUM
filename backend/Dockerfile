@@ -19,6 +19,7 @@ ENV POSTGRES_PASSWORD=vodum
 ENV POSTGRES_DB=vodum
 ENV DATABASE_URL=postgresql://vodum:vodum@localhost:5432/vodum
 
+ENV PYTHONPATH="/app"
 
 
 #CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
