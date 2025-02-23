@@ -33,7 +33,5 @@ jobs:
           docker push nexius2/vodum:${{ github.sha }}
           
             - name: Debug Environment Variables
-        run: |
-          echo "DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}"
-          echo "DOCKER_PASSWORD is set"
+
 
