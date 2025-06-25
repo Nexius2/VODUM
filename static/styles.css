@@ -1,0 +1,190 @@
+:root {
+  color-scheme: light dark;
+  --card-bg: #ffffff;
+  --border: #dddddd;
+  --input-bg: #f1f3f5;
+  --input-text: #212529;
+  --section-header: #e9ecef;
+  --text: #212529;
+}
+
+
+
+/* === THEMES === */
+body.light-mode {
+  background-color: #f8f9fa;
+  color: #212529;
+}
+
+body.dark-mode {
+  background-color: #121212;
+  color: #ffffff;
+
+  --card-bg: #1e1e1e;
+  --border: #333;
+  --input-bg: #2b2b2b;
+  --input-text: #ffffff;
+  --section-header: #1a1a1a;
+  --text: #ffffff;
+}
+
+
+
+/* === GENERAL LAYOUT === */
+.container,
+.page-card {
+  border: 1px solid var(--border);
+  margin-bottom: 2rem;
+  background-color: var(--card-bg);
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+}
+body.dark-mode .dark-background {
+  background-color: #121212;
+}
+
+
+
+/* === TITLES === */
+h1, h2, h3 {
+  color: var(--text);
+  font-weight: 700;
+}
+
+h2.section-title {
+  font-size: 1.2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--section-header);
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+
+/* === BADGES === */
+.badge-days {
+  background: #4caf50;
+  color: white;
+  padding: 0.25rem 1rem;
+  border-radius: 999px;
+  font-weight: bold;
+  font-size: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 2rem;
+  margin-top: 0;
+  font-variant-numeric: tabular-nums;
+  line-height: 2rem;
+  font-family: inherit;
+}
+
+.badge-days input {
+  width: 2.8rem;
+  background: transparent;
+  border: none;
+  color: white;
+  text-align: center;
+  font-weight: bold;
+  font-size: 0.9rem;
+  padding: 0;
+  appearance: textfield;
+  -webkit-appearance: none;
+  -moz-appearance: textfield;
+  margin: 0;
+  line-height: 2rem;
+  height: 2rem;
+  vertical-align: middle;
+}
+
+
+
+
+
+.badge-days input:focus {
+  outline: none;
+}
+
+input, textarea {
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+  transition: box-shadow 0.2s ease;
+}
+
+input:focus, textarea:focus {
+  box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.3);
+}
+
+
+/* === FORM ELEMENTS === */
+input, textarea, select {
+  background-color: var(--input-bg);
+  color: var(--input-text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem;
+  margin-bottom: 1rem;
+  width: 100%;
+}
+
+input:focus, textarea:focus {
+  outline: 2px solid #4caf50;
+  border-color: transparent;
+}
+
+label {
+  font-weight: bold;
+  margin-top: 0.5rem;
+  display: block;
+}
+
+
+/* === BUTTONS === */
+button, .btn {
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  padding: 0.5rem 1.25rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background 0.2s ease;
+}
+
+button:hover, .btn:hover {
+  background-color: #45a047;
+}
+
+
+/* === UTILITIES === */
+
+
+
+
+
+.mailing-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.mailing-header h2 {
+  font-size: 1.3rem;
+  margin: 0;
+  padding: 0;
+}
+
+.page-title {
+  font-size: 1.7rem;
+  margin-bottom: 2rem;
+  padding: 0.75rem 1rem;
+  background-color: var(--card-bg);
+  border-radius: 12px;
+  font-weight: bold;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Sauvegarde & Restauration</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    .restore-options {
+      display: flex;
+      gap: 2rem;
+      flex-wrap: wrap;
+      margin-top: 1rem;
+    }
+    .restore-options > div {
+      flex: 1;
+      min-width: 250px;
+      background-color: var(--card-bg);
+      padding: 1rem;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    .restore-options label {
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .restore-icon {
+      font-size: 1.4rem;
+    }
+    .file-info {
+      font-size: 0.85rem;
+      color: var(--text);
+      margin-top: 0.25rem;
+    }
+    .backup-details {
+      font-size: 0.85rem;
+      margin-top: 0.5rem;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="mb-3">
+      {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+
+  <div class="container dark-background">
+    <h1 class="page-title">💾 Sauvegarde & restauration</h1>
+
+	<section class="page-card">
+	  <h2 class="mb-3">📥 Sauvegarde</h2>
+	  <div class="restore-options">
+		<div>
+		  <p>Crée une copie manuelle de la base de données actuelle.</p>
+		  <a href="/backup/save" class="btn">💾 Sauvegarder maintenant</a>
+		</div>
+		<div>
+		  <p><strong>Sauvegarde automatique :</strong></p>
+		  <p class="backup-details">
+			🕒 Une sauvegarde est créée <strong>automatiquement tous les 7 jours</strong>.<br><br>
+			🔁 Le système conserve uniquement les <strong>6 dernières sauvegardes</strong>.
+		  </p>
+		</div>
+	  </div>
+	</section>
+
+
+
+    <section class="page-card">
+      <h2 class="mb-3">📤 Restauration</h2>
+      <p>Tu peux restaurer depuis un fichier de ton PC ou choisir une sauvegarde existante.</p>
+      <form method="POST" action="/backup/restore_combined" enctype="multipart/form-data">
+        <div class="restore-options">
+          <div>
+            <label class="form-label"><span class="restore-icon">🖥️</span> Depuis ton ordinateur :</label>
+            <input type="file" name="backup_file" accept=".db" class="form-control">
+          </div>
+
+          <div>
+            <label class="form-label"><span class="restore-icon">📁</span> Sauvegarde existante :</label>
+            <select name="selected_file" class="form-select" onchange="showBackupDetails(this.value)">
+              <option value="">-- Aucune sélection --</option>
+              {% for file in backups %}
+                <option value="{{ file }}">{{ file }}</option>
+              {% endfor %}
+            </select>
+            {% if backups %}
+              <div class="file-info">{{ backups|length }} sauvegarde(s) disponible(s)</div>
+            {% endif %}
+            <div class="backup-details" id="backupDetails"></div>
+          </div>
+        </div>
+        <div class="text-end mt-4">
+          <button type="submit" class="btn">♻️ Restaurer cette sauvegarde</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const mode = localStorage.getItem("theme") || "light";
+      document.body.classList.add(mode + "-mode");
+    });
+
+    window.addEventListener("message", function(event) {
+      if (event.data && event.data.theme) {
+        const mode = event.data.theme;
+        document.body.classList.remove("light-mode", "dark-mode");
+        document.body.classList.add(mode + "-mode");
+      }
+    });
+
+    function showBackupDetails(filename) {
+      const detailBox = document.getElementById("backupDetails");
+      if (!filename) {
+        detailBox.innerHTML = "";
+        return;
+      }
+
+      fetch(`/backup/info/${filename}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.size && data.modified) {
+            detailBox.innerHTML = `
+              🕓 Modifié : ${data.modified}<br>
+              📦 Taille : ${data.size} Ko
+            `;
+          } else {
+            detailBox.innerHTML = "\u274C Impossible de récupérer les infos.";
+          }
+        });
+    }
+  </script>
+</body>
+</html>

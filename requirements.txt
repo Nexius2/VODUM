@@ -1,0 +1,11 @@
+discord.py
+requests
+python-dotenv
+asyncpg
+beautifulsoup4
+lxml
+plexapi
+Flask
+Flask-Cors
+
+

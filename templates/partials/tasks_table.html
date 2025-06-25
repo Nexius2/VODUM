@@ -1,0 +1,21 @@
+{% for task in tasks %}
+<tr>
+  <td>{{ task.name }}</td>
+  <td>
+    <span class="utc-datetime" {% if task.last_run %}data-utc="{{ task.last_run }}"{% endif %}>
+      {{ task.last_run or '—' }}
+    </span>
+  </td>
+  <td>
+    <span class="utc-datetime" {% if task.next_run %}data-utc="{{ task.next_run }}"{% endif %}>
+      {{ task.next_run or '—' }}
+    </span>
+  </td>
+  <td>
+    <form action="/run_task/{{ task.name }}" method="post" target="hiddenFrame">
+      <button class="btn btn-primary btn-sm" onclick="setTimeout(() => location.reload(), 500)">Exécuter</button>
+    </form>
+    <iframe name="hiddenFrame" style="display:none;"></iframe>
+  </td>
+</tr>
+{% endfor %}

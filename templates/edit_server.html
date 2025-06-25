@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Modifier Serveur{% endblock %}
+{% block page_title %}Modifier le serveur : {{ server.name or "Sans nom" }}{% endblock %}
+
+{% block content %}
+<form method="POST" action="/update_server" class="row g-4">
+  <input type="hidden" name="id" value="{{ server.id }}">
+
+  <div class="col-md-6">
+    <h5 class="mb-3">🔷 Informations Plex</h5>
+
+    <label class="form-label">Nom</label>
+    <input type="text" name="name" class="form-control bg-light" value="{{ server.name }}" readonly>
+
+    <label class="form-label mt-2">Server ID</label>
+    <input type="text" name="server_id" class="form-control bg-light" value="{{ server.server_id }}" readonly>
+
+    <label class="form-label mt-2">Plex URL</label>
+    <input type="text" name="plex_url" class="form-control" value="{{ server.plex_url }}">
+
+    <label class="form-label mt-2">Plex Token</label>
+    <input type="text" name="plex_token" class="form-control" value="{{ server.plex_token }}">
+
+    <label class="form-label mt-2">Plex Status</label>
+    <input type="text" name="plex_status" class="form-control" value="{{ server.plex_status }}" readonly>
+  </div>
+
+  <div class="col-md-6">
+    <h5 class="mb-3">📊 Informations Tautulli</h5>
+
+    <label class="form-label">Tautulli URL</label>
+    <input type="text" name="tautulli_url" class="form-control" value="{{ server.tautulli_url }}">
+
+    <label class="form-label mt-2">Tautulli API Key</label>
+    <input type="text" name="tautulli_api_key" class="form-control" value="{{ server.tautulli_api_key }}">
+
+    <label class="form-label mt-2">Tautulli Status</label>
+    <input type="text" name="tautulli_status" class="form-control bg-light" value="{{ server.tautulli_status }}" readonly>
+
+    <label class="form-label mt-2">Local URL</label>
+    <input type="text" name="local_url" class="form-control bg-light" value="{{ server.local_url }}" readonly>
+
+    <label class="form-label mt-2">Public URL</label>
+    <input type="text" name="public_url" class="form-control bg-light" value="{{ server.public_url }}" readonly>
+  </div>
+
+  <div class="col-12 text-center mt-4">
+    <button type="submit" class="btn btn-primary">💾 Enregistrer</button>
+    <a href="/servers" class="btn btn-secondary">↩ Retour</a>
+  </div>
+</form>
+{% endblock %}

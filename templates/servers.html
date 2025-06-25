@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Serveurs{% endblock %}
+
+{% block page_title %}Serveurs Plex{% endblock %}
+
+{% block page_button %}
+<a href="/check_servers" class="btn btn-primary">🔄 Synchroniser</a>
+{% endblock %}
+
+{% block content %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<h2>Liste des serveurs</h2>
+<table class="table table-striped">
+  <thead>
+    <tr>
+      <th>Nom</th>
+      <th>plex_url</th>
+      <th>plex_status</th>
+      <th>tautulli_status</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody id="server-table">
+    {% for server in servers %}
+    <tr data-server-id="{{ server.id }}">
+      <td>{{ server.name }}</td>
+      <td>{{ server.plex_url }}</td>
+      <td>{{ server.plex_status }}</td>
+      <td>{{ server.tautulli_status }}</td>
+      <td>
+        <form method="POST" action="/servers/delete/{{ server.id }}" style="display:inline;">
+          <button class="btn btn-danger btn-sm" onclick="return confirm('Supprimer ce serveur ?')">❌ Supprimer</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<hr>
+
+<h2>Ajouter un serveur</h2>
+<form method="POST" action="/servers/add" class="row g-3">
+  <div class="col-md-6">
+    <label>Plex URL</label>
+    <input type="text" name="plex_url" class="form-control" placeholder="http://ip:32400" required>
+  </div>
+  <div class="col-md-6">
+    <label>Plex Token</label>
+    <input type="text" name="plex_token" class="form-control" required>
+  </div>
+  <div class="col-md-6">
+    <label>Tautulli URL</label>
+    <input type="text" name="tautulli_url" class="form-control">
+  </div>
+  <div class="col-md-6">
+    <label>Tautulli API Key</label>
+    <input type="text" name="tautulli_api_key" class="form-control">
+  </div>
+  <div class="col-12">
+    <button type="submit" class="btn btn-success">➕ Ajouter</button>
+  </div>
+</form>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  document.querySelectorAll("tbody tr[data-server-id]").forEach(function (row) {
+    row.style.cursor = "pointer";
+	row.addEventListener("click", function (e) {
+	  if (e.target.closest("button")) return; // 🔒 Ne pas déclencher si clic sur un bouton
+
+	  const id = this.getAttribute("data-server-id");
+	  if (id) {
+		window.parent.postMessage({
+		  action: "navigate",
+		  target: `/server/${id}`
+		}, "*");
+	  }
+	});
+
+  });
+});
+</script>
+<script>
+async function checkServerRefresh() {
+  const res = await fetch("/api/should-refresh/servers");
+  const data = await res.json();
+  if (data.refresh) {
+    const html = await fetch("/api/servers").then(r => r.text());
+    document.getElementById("server-table").innerHTML = html;
+    await fetch("/api/clear-refresh/servers", { method: "POST" });
+  }
+}
+setInterval(checkServerRefresh, 30000); // toutes les 30 secondes
+refreshLogs();
+
+</script>
+
+{% endblock %}
+

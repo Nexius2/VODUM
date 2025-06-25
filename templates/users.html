@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}Liste des utilisateurs{% endblock %}
+
+{% block page_button %}
+<a href="/sync_users" class="btn btn-primary">🔄 Synchroniser les utilisateurs</a>
+{% endblock %}
+
+{% block content %}
+<style>
+.text-orange { color: #fd7e14; }
+.table-orange { background-color: #fff3cd; }
+</style>
+
+<div class="container mt-4">
+    <!-- Tableau -->
+    <div class="table-responsive mt-3">
+        <table id="usersTable" class="table table-sm table-striped table-hover">
+            <thead class="table-dark">
+                <tr>
+                    <th>ID</th>
+                    <th>Avatar</th>
+                    <th>Nom d'utilisateur</th>
+                    <th>Email</th>
+                    <th>📌 Statut</th>
+                    <th>⏳ Jours restants</th>
+                    <th>📅 Date de fin</th>
+                </tr>
+            </thead>
+            <tbody id=\"user-table\">
+                {% for user in users %}
+                <tr 
+				  class="{% if user.statut == '🟢 Actif' %}table-success
+						 {% elif user.statut == '🟡 Préavis' %}table-warning
+						 {% elif user.statut == '🟠 Relance' %}table-orange
+						 {% elif user.statut == '🔴 Expiré' %}table-danger
+						 {% else %}table-light{% endif %}" 
+				  data-user-id="{{ user.id }}">
+                    <td>{{ user.id }}</td>
+                    <td>
+                        {% if user.avatar %}
+                        <img src="{{ user.avatar }}" alt="Avatar" width="40" class="rounded-circle">
+                        {% else %}
+                        ❌ Pas d'avatar
+                        {% endif %}
+                    </td>
+                    <td>{{ user.username }}</td>
+                    <td>{{ user.email }}</td>
+					<td>
+					  <span class="{% if user.statut == '🟢 Actif' %}text-success
+								   {% elif user.statut == '🟡 Préavis' %}text-warning
+								   {% elif user.statut == '🟠 Relance' %}text-orange
+								   {% elif user.statut == '🔴 Expiré' %}text-danger
+								   {% else %}text-muted{% endif %}">
+						{{ user.statut }}
+					  </span>
+					</td>
+                    <td data-order="{{ user.jours_restants if user.jours_restants is not none else 9999 }}">
+					  {{ user.jours_restants if user.jours_restants is not none else '—' }}
+					</td>
+
+                    <td>{{ user.expiration_date if user.expiration_date else 'Inconnu' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Graphique -->
+	<h4 class="text-center mt-4 mb-2">👥 Nombre total : {{ users|length }}</h4>
+    <div class="mt-4">
+        <h2 class="text-center">📊 Répartition des utilisateurs</h2>
+        <canvas id="usersChart"></canvas>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- JS + Bootstrap + DataTables -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.3.6/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.html5.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+	// Redirection au clic
+	document.querySelectorAll("#usersTable tbody tr").forEach(function (row) {
+		row.addEventListener("click", function () {
+			const userId = this.getAttribute("data-user-id");
+			if (userId) {
+				navigateToUser(userId);
+			}
+		});
+	});
+
+    // Datatables
+    $('#usersTable').DataTable({
+        paging: true,
+		order: [[5, 'asc']], // tri par Jours restants
+		stateSave: true,
+        pageLength: 10,
+        lengthChange: false,
+        ordering: true,
+        info: false,
+        searching: true,
+        language: {
+            search: "🔍 Rechercher :",
+            paginate: {
+                first: "Premier",
+                last: "Dernier",
+                next: "Suivant",
+                previous: "Précédent"
+            }
+        },
+        dom: 'Bfrtip',
+        buttons: [
+            {
+                extend: 'csvHtml5',
+                text: '📥 Exporter CSV',
+                className: 'btn btn-primary'
+            }
+        ]
+    });
+
+	// Graphique
+	var actifs = {{ users | selectattr('statut', 'equalto', '🟢 Actif') | list | length }};
+	var preavis = {{ users | selectattr('statut', 'equalto', '🟡 Préavis') | list | length }};
+	var relance = {{ users | selectattr('statut', 'equalto', '🟠 Relance') | list | length }};
+	var expires = {{ users | selectattr('statut', 'equalto', '🔴 Expiré') | list | length }};
+
+	var ctx = document.getElementById('usersChart').getContext('2d');
+	new Chart(ctx, {
+		type: 'bar',
+		data: {
+			labels: [
+			  `🟢 Actifs (${actifs})`,
+			  `🟡 Préavis (${preavis})`,
+			  `🟠 Relance (${relance})`,
+			  `🔴 Expirés (${expires})`
+			],
+			datasets: [{
+				label: "Utilisateurs par statut",
+				data: [actifs, preavis, relance, expires],
+				backgroundColor: [
+					'rgba(75, 192, 192, 0.5)',    // vert
+					'rgba(255, 206, 86, 0.5)',    // jaune
+					'rgba(255, 159, 64, 0.5)',    // orange
+					'rgba(255, 99, 132, 0.5)'     // rouge
+				],
+				borderColor: [
+					'rgba(75, 192, 192, 1)',
+					'rgba(255, 206, 86, 1)',
+					'rgba(255, 159, 64, 1)',
+					'rgba(255, 99, 132, 1)'
+				],
+				borderWidth: 1
+			}]
+		},
+		options: {
+			responsive: true,
+			scales: {
+				y: { beginAtZero: true }
+			}
+		}
+	});
+});
+
+function navigateToUser(id) {
+	window.parent.postMessage({
+		action: "navigate",
+		target: `/user/${id}`
+	}, "*");
+}
+</script>
+{% endblock %}
+
+<script>
+async function checkUserRefresh() {
+  const res = await fetch("/api/should-refresh/users");
+  const data = await res.json();
+  if (data.refresh) {
+    const html = await fetch("/api/users").then(r => r.text());
+    document.getElementById("user-table").innerHTML = html;
+    await fetch("/api/clear-refresh/users", { method: "POST" });
+  }
+}
+setInterval(checkUserRefresh, 30000); // toutes les 30 secondes
+refreshLogs();
+
+</script>
