@@ -1,72 +1,131 @@
-# ⚠️ Projet en développement - Non fonctionnel pour le moment ⚠️
 
-## 🎬 VODUM - Video On Demand User Manager
+# 🎬 Vodum – Gestion avancée de serveurs Plex (et Jellyfin)
 
-VODUM est une application de gestion des utilisateurs Plex et Jellyfin permettant de gérer les abonnements, les accès aux bibliothèques et les quotas de flux en toute simplicité. Ce projet est encore en phase de développement et n'est pas encore prêt à être utilisé en production.
-
----
-
-## 🚀 Fonctionnalités prévues
-
-- **Gestion des utilisateurs** : Création, modification et suppression des comptes Plex/Jellyfin.
-- **Gestion des abonnements** : Attribution des durées d'abonnement avec alertes avant expiration.
-- **Multi-serveurs** : Gestion de plusieurs serveurs Plex et Jellyfin avec des jetons d'authentification.
-- **Statistiques et monitoring** : Intégration avec Tautulli pour suivre l'utilisation des flux en temps réel.
-- **Notifications** : Envoi d'e-mails pour les rappels d'expiration et les annonces globales.
-- **Système de paiement** : Gestion des paiements via PayPal et possibilité d'ajouter d'autres moyens.
-- **Tableau de bord** : Interface web moderne pour administrer les utilisateurs et les serveurs.
+**Vodum** est un outil open source de gestion d'utilisateurs et de bibliothèques pour les serveurs multimédia Plex – avec une compatibilité Jellyfin en préparation. Il centralise les accès, automatise les notifications, et simplifie la vie des administrateurs via une interface moderne, une API robuste et des intégrations pratiques (Discord, mail...).
 
 ---
 
-## 🛠 Technologies utilisées
+## ✨ Fonctionnalités clés
 
-- **Backend** : Python (FastAPI)
-- **Frontend** : React (prévu)
-- **Base de données** : PostgreSQL
-- **Auth & Sécurité** : JWT, 2FA optionnelle
-- **Intégrations** : Plex, Jellyfin, Tautulli
-- **Déploiement** : Docker & Unraid
-- **CI/CD** : GitHub Actions, Docker Hub/GHCR
-
----
-
-## 📝 Licence
-
-VODUM est un projet open-source sous licence **MIT**.
+- 🔐 **Gestion des utilisateurs** avec rôles, permissions et expiration d’abonnement
+- 🗃️ **Accès multi-serveurs** (Plex aujourd’hui, Jellyfin à venir)
+- 📚 **Partage de bibliothèques** intelligent et personnalisable
+- ⏳ **Abonnements** avec relances, notifications email et désactivation automatique
+- 🤖 **Bot Discord intégré** pour interaction et administration
+- 🌐 **Interface web multilingue** (🇫🇷 Français & 🇬🇧 Anglais) avec thème sombre
+- 🧠 **Automatisation des tâches** via des scripts planifiables (cron)
+- 🔎 **Logs centralisés**, tableau de bord et système de configuration
+- 🐳 **Déploiement Docker ready**
 
 ---
 
-## 📢 Contribuer au projet
+## 🚀 Installation rapide
 
-Le projet étant en développement, toute aide est la bienvenue ! N'hésite pas à :
-- Signaler des bugs et proposer des améliorations via les [Issues](https://github.com/Nexius2/VODUM/issues)
-- Discuter des fonctionnalités sur Discord ou GitHub Discussions
-- Soumettre des Pull Requests une fois le projet stabilisé
+### Option 1 : via Docker (recommandé)
+
+```bash
+git clone https://github.com/<TON-UTILISATEUR>/vodum.git
+cd vodum
+docker build -t vodum .
+docker run -d -p 5000:5000 --name vodum vodum
+```
+
+Accessible sur `http://localhost:5000`
+
+### Option 2 : manuel
+
+- Installe Python 3.9+
+- Installe les dépendances :
+
+```bash
+pip install -r requirements.txt
+```
+
+- Lance le script principal :
+
+```bash
+python app/start.py
+```
 
 ---
 
-## 📌 Statut du projet
+## ⚙️ Configuration
 
-VODUM est actuellement en phase de développement **early-stage**. Les fonctionnalités ne sont pas encore entièrement implémentées. Restez à l'écoute pour les mises à jour ! 🚧
+La configuration se fait via l’interface web ou directement en base (`settings`) :
 
----
+- 🔑 Token Plex (admin)
+- 🔐 Accès Discord bot
+- 📬 Paramètres SMTP pour les mails
+- 🕒 Jours avant expiration / relance / suppression
+- 🌍 Langue par défaut
 
-## 📩 Contact
-
-Pour toute question ou suggestion, ouvre une issue sur GitHub ou contacte-moi directement.
-
----
-
-🔥 **Suivez l'avancement sur GitHub !** 🔥
+Les bibliothèques et serveurs peuvent être ajoutés depuis l’interface après la première connexion.
 
 ---
 
-## 📦 Déploiement avec Docker
+## 🌍 Multilingue
 
-VODUM est conçu pour être déployé avec Docker. Voici les étapes pour construire et exécuter le projet localement :
+- Tous les textes sont traduits depuis les fichiers `lang/fr.json` et `lang/en.json`
+- La langue est automatiquement détectée depuis le navigateur (modifiable dans l'interface)
+- Possibilité d’ajouter d’autres langues facilement
 
-```sh
-git clone https://github.com/Nexius2/VODUM.git
-cd VODUM
-docker-compose up -d
+---
 
+## 🔒 Sécurité
+
+- **Aucun mot de passe ou token n’est stocké dans le code.**
+- Les tokens Plex, Discord, SMTP sont stockés **dans la base** et ne sont jamais loggés.
+- ⚠️ Ne jamais exposer la base `.db` en ligne sans la filtrer.
+- Le fichier `.gitignore` exclut les éléments sensibles (base, logs, fichiers secrets…)
+
+---
+
+## 📁 Structure du projet
+
+```
+vodum/
+├── app/                # Backend Python
+├── lang/               # Traductions
+├── static/             # Style, favicon
+├── Dockerfile          # Build container
+├── create-container.sh # Script de déploiement
+├── requirements.txt    # Dépendances Python
+├── tables.sql          # Schéma de la base
+├── INFO, TODO.md       # Métadonnées du projet
+```
+
+---
+
+## 🛠️ Feuille de route (extraits)
+
+- [ ] Support complet Jellyfin
+- [ ] Gestion OAuth (Google, Discord)
+- [ ] Interface web de supervision (stats, graphiques)
+- [ ] Module d'import/export JSON
+- [ ] CI/CD GitHub Actions
+- [ ] Tests automatisés
+
+📄 Voir `TODO.md` pour la liste complète
+
+---
+
+## 🤝 Contribuer
+
+Les contributions sont les bienvenues ! Suggestions, bugs, traductions ou pull requests :
+- Forkez le projet
+- Travaillez sur une branche
+- Soumettez votre PR
+
+---
+
+## 🪪 Licence
+
+> Ce projet est publié sous licence MIT. Vous êtes libre de l'utiliser, modifier et redistribuer avec mention.
+
+---
+
+## 📸 Captures d'écran
+
+*(À venir – ajouter des screenshots de l'interface, des partages, du bot Discord...)*
+
+---
