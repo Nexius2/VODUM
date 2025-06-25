@@ -1,0 +1,13 @@
+{% for server in servers %}
+<tr data-server-id="{{ server.id }}">
+  <td>{{ server.name }}</td>
+  <td>{{ server.plex_url }}</td>
+  <td>{{ server.plex_status }}</td>
+  <td>{{ server.tautulli_status }}</td>
+  <td>
+    <form method="POST" action="/servers/delete/{{ server.id }}" style="display:inline;">
+      <button class="btn btn-danger btn-sm" onclick="return confirm('Supprimer ce serveur ?')">❌ Supprimer</button>
+    </form>
+  </td>
+</tr>
+{% endfor %}

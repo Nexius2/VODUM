@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Bibliothèques{% endblock %}
+
+{% block page_title %}Bibliothèques Plex{% endblock %}
+
+
+
+{% block content %}
+<table class="table table-striped">
+  <thead>
+    <tr>
+      <th>Nom</th>
+      <th>Section ID</th>
+      <th>Serveur</th>
+    </tr>
+  </thead>
+  <tbody id=\"library-table\">
+    {% for lib in libraries %}
+    <tr>
+      <td>{{ lib.name }}</td>
+      <td>{{ lib.section_id }}</td>
+      <td>{{ lib.server_name or lib.server_id }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
+
+<script>
+async function checkLibraryRefresh() {
+  const res = await fetch("/api/should-refresh/libraries");
+  const data = await res.json();
+  if (data.refresh) {
+    const html = await fetch("/api/libraries").then(r => r.text());
+    document.getElementById("library-table").innerHTML = html;
+    await fetch("/api/clear-refresh/libraries", { method: "POST" });
+  }
+}
+setInterval(checkLibraryRefresh, 30000); // toutes les 30 secondes
+</script>

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+<title>{{ _("Logs") }}</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    .log-container {
+      max-height: 80vh;
+      overflow-y: auto;
+      background-color: var(--card-bg);
+      border-radius: 0 0 12px 12px;
+      padding: 1rem;
+      font-family: monospace;
+      font-size: 0.85rem;
+      white-space: normal;
+      border: 1px solid var(--border-color);
+      border-top: none;
+    }
+    .log-line {
+      margin: 0;
+      padding: 0.1rem 0;
+      line-height: 1.2;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .log-line + .log-line {
+      margin-top: 0;
+    }
+    .log-line.DEBUG { color: gray; }
+    .log-line.INFO { color: #4caf50; }
+    .log-line.WARNING { color: #ff9800; }
+    .log-line.ERROR { color: #f44336; }
+    .log-line.CRITICAL { color: #e91e63; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+
+
+
+  <div class="container dark-background" id="logs-table">
+    <div class="log-header" style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 1rem; background: var(--card-bg); border-radius: 12px 12px 0 0; border: 1px solid var(--border-color);">
+      <h1 class="page-title" style="margin: 0;">📄 {{ _("Logs") }}</h1>
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        {% for lvl in ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'] %}
+          <label style="display: flex; align-items: center; gap: 0.2rem; font-size: 0.85rem;">
+            <input type="checkbox" class="log-filter" value="{{ lvl }}" {% if lvl != 'DEBUG' %}checked{% endif %}>
+            <span style="color: var(--text-color);">{{ _(lvl) }}</span>
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="log-container">
+      {% for line in log_lines %}
+        <div class="log-line {{ line.level }}" data-level="{{ line.level|upper }}">{{ line.text | replace('\n', ' ') }}</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const mode = localStorage.getItem("theme") || "light";
+      document.body.classList.add(mode + "-mode");
+
+      const checkboxes = document.querySelectorAll(".log-filter");
+      const logLines = document.querySelectorAll(".log-line");
+
+      function updateVisibility() {
+        const active = Array.from(checkboxes)
+          .filter(cb => cb.checked)
+          .map(cb => cb.value.toUpperCase());
+
+        logLines.forEach(line => {
+          const level = line.dataset.level;
+          line.style.display = active.includes(level) ? "" : "none";
+        });
+      }
+
+      checkboxes.forEach(cb => cb.addEventListener("change", updateVisibility));
+      updateVisibility();
+    });
+
+    window.addEventListener("message", function(event) {
+      if (event.data && event.data.theme) {
+        const mode = event.data.theme;
+        document.body.classList.remove("light-mode", "dark-mode");
+        document.body.classList.add(mode + "-mode");
+      }
+    });
+	document.querySelectorAll(".log-line").forEach(line => {
+	  const regex = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),/;
+	  const match = line.textContent.match(regex);
+	  if (match) {
+		const utc = new Date(match[1] + "Z");
+		const localStr = utc.toLocaleString();
+		line.textContent = line.textContent.replace(match[1], localStr);
+	  }
+	});
+
+  </script>
+<script>
+async function refreshLogs() {
+  const html = await fetch("/api/logs").then(r => r.text());
+  document.getElementById("logs-table").innerHTML = html;
+  document.querySelectorAll(".log-line").forEach(line => {
+    const regex = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),/;
+    const match = line.textContent.match(regex);
+    if (match) {
+      const utc = new Date(match[1] + "Z");
+      const localStr = utc.toLocaleString();
+      line.textContent = line.textContent.replace(match[1], localStr);
+    }
+  });
+}
+</script>
+
+</body>
+</html>

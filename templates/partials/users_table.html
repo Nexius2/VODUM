@@ -1,0 +1,34 @@
+{% for user in users %}
+                <tr 
+				  class="{% if user.statut == '🟢 Actif' %}table-success
+						 {% elif user.statut == '🟡 Préavis' %}table-warning
+						 {% elif user.statut == '🟠 Relance' %}table-orange
+						 {% elif user.statut == '🔴 Expiré' %}table-danger
+						 {% else %}table-light{% endif %}" 
+				  data-user-id="{{ user.id }}">
+                    <td>{{ user.id }}</td>
+                    <td>
+                        {% if user.avatar %}
+                        <img src="{{ user.avatar }}" alt="Avatar" width="40" class="rounded-circle">
+                        {% else %}
+                        ❌ Pas d'avatar
+                        {% endif %}
+                    </td>
+                    <td>{{ user.username }}</td>
+                    <td>{{ user.email }}</td>
+					<td>
+					  <span class="{% if user.statut == '🟢 Actif' %}text-success
+								   {% elif user.statut == '🟡 Préavis' %}text-warning
+								   {% elif user.statut == '🟠 Relance' %}text-orange
+								   {% elif user.statut == '🔴 Expiré' %}text-danger
+								   {% else %}text-muted{% endif %}">
+						{{ user.statut }}
+					  </span>
+					</td>
+                    <td data-order="{{ user.jours_restants if user.jours_restants is not none else 9999 }}">
+					  {{ user.jours_restants if user.jours_restants is not none else '—' }}
+					</td>
+
+                    <td>{{ user.expiration_date if user.expiration_date else 'Inconnu' }}</td>
+                </tr>
+                {% endfor %}

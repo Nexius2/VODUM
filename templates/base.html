@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Plex Admin{% endblock %}</title>
+	<link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <style>
+        body.light-mode {
+            background-color: #f8f9fa;
+            color: #212529;
+
+        }
+        .mode-toggle {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 999;
+            padding: 5px 10px;
+            border: none;
+            border-radius: 5px;
+            background: #ccc;
+            cursor: pointer;
+        }
+        /* Mode sombre */
+        body.dark-mode {
+            background-color: #121212 !important;
+            color: #ffffff !important;
+        }
+
+        .dark-mode .table {
+            background-color: #1e1e1e !important;
+            color: #ffffff !important;
+        }
+
+        .dark-mode .table th {
+            background-color: #333 !important;
+            color: #ffffff !important;
+        }
+
+        .dark-mode .table-striped tbody tr:nth-of-type(odd) {
+            background-color: #292929 !important;
+        }
+
+        .dark-mode .btn {
+            background-color: #444 !important;
+            color: #fff !important;
+            border-color: #666 !important;
+        }
+
+        .dark-mode canvas {
+            background-color: #1e1e1e !important;
+        }
+		
+		input[readonly] {
+		  background-color: #e9ecef  !important;
+		  color: #495057 ;
+		}
+    </style>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liste des utilisateurs</title>
+
+    <!-- Bootstrap & DataTables CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+	<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.3.6/css/buttons.bootstrap5.min.css">
+
+
+
+</head>
+    {% block head %}{% endblock %}
+</head>
+<body>
+
+
+
+    <div class="container mt-4">
+		<div class="d-flex justify-content-between align-items-center mb-3">
+			<h1 class="h4">{% block page_title %}{% endblock %}</h1>
+			{% block page_button %}{% endblock %}
+		</div>
+
+        {% block content %}{% endblock %}
+    </div>
+
+
+
+	<script>
+	  // Appliquer le thème au chargement (même sans message postMessage)
+	  document.addEventListener("DOMContentLoaded", function () {
+		const mode = localStorage.getItem("theme") || "light";
+		document.body.classList.add(mode + "-mode");
+	  });
+
+	  // Écoute postMessage depuis index.html pour synchro du thème
+	  window.addEventListener("message", function(event) {
+		if (event.data && event.data.theme) {
+		  const mode = event.data.theme;
+		  document.body.classList.remove("light-mode", "dark-mode");
+		  document.body.classList.add(mode + "-mode");
+		}
+	  });
+	</script>
+	<script>
+	  document.addEventListener("DOMContentLoaded", function () {
+		setTimeout(function () {
+		  document.querySelectorAll(".alert").forEach(function (el) {
+			el.classList.remove("show");
+			el.classList.add("fade");
+			setTimeout(() => el.remove(), 300);  // Nettoyage du DOM après disparition
+		  });
+		}, 5000); // ⏱️ 5 secondes avant disparition
+	  });
+	</script>
+
+
+
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,7 @@
+{% for lib in libraries %}
+    <tr>
+      <td>{{ lib.name }}</td>
+      <td>{{ lib.section_id }}</td>
+      <td>{{ lib.server_name or lib.server_id }}</td>
+    </tr>
+    {% endfor %}

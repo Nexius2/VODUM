@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>VODUM</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='vodum_icon.png') }}">
+  <style>
+    body.light-mode {
+      background-color: #f8f9fa;
+      color: #212529;
+    }
+
+    body.dark-mode {
+      background-color: #121212;
+      color: #f8f9fa;
+    }
+
+    .mode-toggle {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 999;
+      padding: 5px 10px;
+      border: none;
+      border-radius: 5px;
+      background: #ccc;
+      cursor: pointer;
+    }
+	
+	html, body {
+	  height: 100%;
+	  margin: 0;
+	}
+
+	.tab-content {
+	  height: calc(100vh - 150px); /* Ajuste selon ta barre du haut */
+	  overflow: hidden;
+	}
+
+	.tab-frame {
+	  height: 100%;
+	  border: none;
+	}
+
+  </style>
+</head>
+
+<body class="p-4">
+  <!-- Bouton thème -->
+  <button id="toggleThemeBtn" class="mode-toggle">🌗</button>
+
+  <!-- Titre + onglets -->
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4">📺 Vodum</h1>
+  </div>
+
+  <ul class="nav nav-tabs">
+    <li class="nav-item">
+      <a class="nav-link active" onclick="showTab('users')">👥 Utilisateurs</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link" onclick="showTab('servers')">🖥️ Serveurs</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link" onclick="showTab('libraries')">📚 Bibliothèques</a>
+    </li>
+	<li class="nav-item">
+      <a class="nav-link" onclick="showTab('mailling')">📧 Mailling</a>
+    </li>
+	<li class="nav-item">
+	  <a class="nav-link" onclick="showTab('settings')">⚙️ Paramètres</a>
+	</li>
+	<li class="nav-item">
+	  <a class="nav-link" onclick="showTab('backup')">💾 Sauvegarde</a>
+	</li>
+	<li class="nav-item">
+	  <a class="nav-link" onclick="showTab('tasks')">⏱️ Tâches</a>
+	</li>
+	<li class="nav-item">
+	  <a class="nav-link" onclick="showTab('logs')">📄 Logs</a>
+	</li>
+	<li class="nav-item">
+	  <a class="nav-link" onclick="showTab('about')">ℹ️ About</a>
+	</li>
+
+</ul>
+
+  <!-- Contenus -->
+  <div id="users" class="tab-content mt-4">
+    <iframe src="/users" width="100%" class="tab-frame" frameborder="0"></iframe>
+  </div>
+  <div id="servers" class="tab-content mt-4" style="display:none">
+    <iframe src="/servers" width="100%" class="tab-frame" frameborder="0"></iframe>
+  </div>
+  <div id="libraries" class="tab-content mt-4" style="display:none">
+    <iframe src="/libraries" width="100%" class="tab-frame" frameborder="0"></iframe>
+  </div>
+  <div id="mailling" class="tab-content mt-4" style="display:none">
+    <iframe src="/mailling" width="100%" class="tab-frame" frameborder="0"></iframe>
+  </div>
+  <div id="settings" class="tab-content mt-4" style="display:none">
+    <iframe src="/settings" width="100%" class="tab-frame" frameborder="0"></iframe>
+  </div>
+  <div id="backup" class="tab-content mt-4" style="display:none">
+    <iframe src="/backup" width="100%" class="tab-frame" frameborder="0"></iframe>
+  </div>
+  <div id="logs" class="tab-content mt-4" style="display:none">
+    <iframe src="/logs" width="100%" class="tab-frame" frameborder="0"></iframe>
+  </div>
+  <div id="tasks" class="tab-content mt-4" style="display:none">
+    <iframe src="/tasks" width="100%" class="tab-frame" frameborder="0"></iframe>
+  </div>
+  <div id="about" class="tab-content mt-4" style="display:none">
+    <iframe src="/about" width="100%" class="tab-frame" frameborder="0"></iframe>
+  </div>
+
+  <!-- JS en fin de body -->
+<script>
+	function showTab(tabId) {
+	  // Cacher tous les contenus
+	  const tabs = document.querySelectorAll('.tab-content');
+	  tabs.forEach(tab => {
+		tab.style.display = 'none';
+		tab.querySelector("iframe").classList.remove("active");
+	  });
+
+	  // Afficher l'onglet actif
+	  const activeTab = document.getElementById(tabId);
+	  const iframe = activeTab.querySelector("iframe");
+	  activeTab.style.display = 'block';
+	  iframe.classList.add("active");
+
+	  // Gérer les onglets actifs
+	  const navLinks = document.querySelectorAll('.nav-link');
+	  navLinks.forEach(link => link.classList.remove('active'));
+	  document.querySelector(`.nav-link[onclick="showTab('${tabId}')"]`).classList.add('active');
+
+	  // Mise à jour de l'iframe si besoin
+	  const expectedUrl = `/${tabId}`;
+	  if (!iframe.src.endsWith(expectedUrl)) {
+		iframe.src = expectedUrl;
+	  }
+	}
+
+
+
+
+  function setMode(mode) {
+    document.body.classList.remove("light-mode", "dark-mode");
+    document.body.classList.add(mode + "-mode");
+    localStorage.setItem("theme", mode);
+
+    // 🔄 Propagation du thème aux iframes
+    const iframes = document.querySelectorAll("iframe");
+    iframes.forEach(iframe => {
+      iframe.contentWindow.postMessage({ theme: mode }, "*");
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    const toggleThemeBtn = document.getElementById("toggleThemeBtn");
+    const savedMode = localStorage.getItem("theme") || "light";
+    setMode(savedMode);
+    showTab('users');
+
+    if (toggleThemeBtn) {
+      toggleThemeBtn.addEventListener("click", function () {
+        const newMode = document.body.classList.contains("dark-mode") ? "light" : "dark";
+        setMode(newMode);
+      });
+    }
+  });
+</script>
+<script>
+window.addEventListener("message", function(event) {
+  if (event.data?.action === "navigate" && event.data.target) {
+    const iframe = document.querySelector("iframe.active");
+    if (iframe) {
+      iframe.src = event.data.target;
+    }
+  }
+});
+</script>
+
+
+</body>
+</html>

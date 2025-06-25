@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+
+<html lang="fr">
+<head>
+<meta charset="utf-8"/>
+<title>{{ _('settings_title') }}</title>
+<link href="/static/styles.css" rel="stylesheet"/>
+<style>
+    .floating-save {
+      position: fixed;
+      top: 10px;
+      right: 20px;
+      z-index: 999;
+    }
+	
+	    .toast-message {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      z-index: 1000;
+      background-color: var(--card);
+      color: var(--text);
+      padding: 1rem 1.25rem;
+      border-radius: 12px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.15);
+      max-width: 400px;
+      font-size: 0.95rem;
+      animation: fadeIn 0.4s ease, fadeOut 0.4s ease 8s;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fadeOut {
+      from { opacity: 1; transform: translateY(0); }
+      to { opacity: 0; transform: translateY(-20px); }
+    }
+	
+  </style>
+</head>
+<body>
+<div class="container dark-background">
+<h1 class="margin-bottom: 2rem;">⚙️ {{ _('settings_title') }}</h1>
+<form action="/settings/save" class="d-grid gap-4" method="POST">
+	
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="toast-message">
+        {% if category == 'success' %}✅{% elif category == 'danger' %}⚠️{% else %}ℹ️{% endif %} {{ message | safe }}
+      </div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+	
+      <div class="floating-save">
+<button class="btn btn-success" type="submit">{{ _('save_button') }}</button>
+</div>
+<!-- Discord -->
+<section class="page-card">
+<h2 class="mb-3">{{ _('discord_section') }}</h2>
+<div class="mb-3">
+<label class="form-label">{{ _('discord_token') }}</label>
+<input class="form-control" name="discord_token" type="text" value="{{ settings.discord_token or '' }}"/>
+</div>
+<div class="mb-3">
+<label class="form-label">{{ _('discord_user_id') }}</label>
+<input class="form-control" name="discord_user_id" type="text" value="{{ settings.discord_user_id or '' }}"/>
+</div>
+</section>
+<!-- Mail -->
+<section class="page-card">
+<h2 class="mb-3">{{ _('mail_section') }}</h2>
+<div class="mb-3">
+<label class="form-label">{{ _('provider') }}</label>
+<select class="form-select" id="smtp_provider" onchange="applyMailPreset(this.value)">
+<option value="" {% if not settings.provider %}selected{% endif %}>{{ _('smtp_choose') }}</option>
+<option value="gmail" {% if settings.provider == "gmail" %}selected{% endif %}>{{ _('smtp_gmail') }}</option>
+<option value="outlook" {% if settings.provider == "outlook" %}selected{% endif %}>{{ _('smtp_outlook') }}</option>
+<option value="yahoo" {% if settings.provider == "yahoo" %}selected{% endif %}>{{ _('smtp_yahoo') }}</option>
+<option value="free" {% if settings.provider == "free" %}selected{% endif %}>{{ _('smtp_free') }}</option>
+<option value="custom" {% if settings.provider == "custom" %}selected{% endif %}>{{ _('smtp_other') }}</option>
+
+</select>
+</div>
+<div class="mb-3" id="mailHelp" style="font-size: 0.9rem; color: var(--text);"></div>
+<div class="mb-3">
+<label class="form-label">{{ _('mail_from') }}</label>
+<input class="form-control" name="mail_from" type="email" value="{{ settings.mail_from or '' }}"/>
+</div>
+<div class="mb-3">
+<label class="form-label">{{ _('smtp_host') }}</label>
+<input class="form-control" name="smtp_host" type="text" value="{{ settings.smtp_host or '' }}"/>
+</div>
+<div class="mb-3">
+<label class="form-label">{{ _('smtp_port') }}</label>
+<input class="form-control" name="smtp_port" type="number" value="{{ settings.smtp_port or 587 }}"/>
+</div>
+<div class="mb-3">
+<label class="form-label">{{ _('use_tls') }}</label>
+<select class="form-select" name="smtp_tls">
+<option value="1" {% if settings.disable_on_expiry == "1" %}selected{% endif %}>{{ _('yes') }}</option>
+<option value="0" {% if settings.disable_on_expiry == "0" %}selected{% endif %}>{{ _('no') }}</option>
+
+
+
+</select>
+</div>
+<div class="mb-3">
+<label class="form-label">{{ _('smtp_user') }}</label>
+<input class="form-control" name="smtp_user" type="text" value="{{ settings.smtp_user or '' }}"/>
+<div class="mt-1" id="smtpUserHelp" style="font-size: 0.9rem; color: var(--text);"></div>
+</div>
+<div class="mb-3">
+<label class="form-label">{{ _('smtp_pass') }}</label>
+<div style="display: flex; align-items: center; gap: 10px;">
+<input class="form-control" id="smtp_pass" name="smtp_pass" style="max-width: 400px;" type="password" value="{{ settings.smtp_pass or '' }}"/>
+<label style="display: inline-flex; align-items: center; margin-bottom: 0;">
+<input class="form-check-input me-1" onclick="document.getElementById('smtp_pass').type = this.checked ? 'text' : 'password';" type="checkbox"/>
+      {{ _('show_password') }}
+    </label>
+</div>
+<small class="form-text text-muted">
+    Cochez cette case pour afficher ou masquer le mot de passe pour vérification visuelle.
+  </small>
+</div>
+<div class="text-end mt-3">
+<button class="btn" onclick="saveAndTestEmail()" type="button">{{ _('test_email') }}</button>
+</div>
+</section>
+<!-- Utilisateurs -->
+<section class="page-card">
+<h2 class="mb-3">{{ _('users_section') }}</h2>
+<div class="mb-3">
+<label class="form-label">{{ _('disable_on_expiry') }}</label>
+<select class="form-select" name="disable_on_expiry">
+<option value="1" {% if settings.disable_on_expiry == "1" %}selected{% endif %}>{{ _('yes') }}</option>
+<option value="0" {% if settings.disable_on_expiry == "0" %}selected{% endif %}>{{ _('no') }}</option>
+
+</select>
+</div>
+<div class="mb-3">
+<label class="form-label">{{ _('delete_after_expiry_days') }}</label>
+<input class="form-control" name="delete_after_expiry_days" type="number" value="{{ settings.delete_after_expiry_days or 0 }}"/>
+</div>
+<div class="mb-3">
+<label class="form-label">{{ _('default_expiration_days') }}</label>
+<input class="form-control" name="default_expiration_days" type="number" value="{{ settings.default_expiration_days or 90 }}"/>
+</div>
+</section>
+<!-- Tâches de fond -->
+<section class="page-card">
+<h2 class="mb-3">{{ _('tasks_section') }}</h2>
+<div class="mb-3">
+<label class="form-label">{{ _('send_reminders') }}</label>
+<select class="form-select" name="send_reminders">
+<option value="1" {% if settings.send_reminders == "1" %}selected{% endif %}>{{ _('yes') }}</option>
+<option value="0" {% if settings.send_reminders == "0" %}selected{% endif %}>{{ _('no') }}</option>
+
+</select>
+</div>
+<div class="mb-3">
+<label class="form-label">{{ _('enable_cron_jobs') }}</label>
+<select class="form-select" name="enable_cron_jobs">
+<option value="1" {% if settings.enable_cron_jobs == "1" %}selected{% endif %}>{{ _('yes') }}</option>
+<option value="0" {% if settings.enable_cron_jobs == "0" %}selected{% endif %}>{{ _('no') }}</option>
+
+</select>
+</div>
+</section>
+<!-- Système -->
+<section class="page-card">
+<h2 class="mb-3">{{ _('system_section') }}</h2>
+<div class="mb-3">
+  <label class="form-label">{{ _('default_language') }}</label>
+	<select name="default_language" class="...">
+		{% for code, label in available_languages.items() %}
+			<option value="{{ code }}" {% if settings.default_language == code %}selected{% endif %}>{{ label }}</option>
+		{% endfor %}
+	</select>
+
+</div>
+
+<div class="mb-3">
+<label class="form-label">{{ _('timezone') }}</label>
+<input class="form-control" name="timezone" type="text" value="{{ settings.timezone or 'Europe/Paris' }}"/>
+</div>
+<div class="mb-3">
+<label class="form-label">{{ _('admin_email') }}</label>
+<input class="form-control" name="admin_email" type="email" value="{{ settings.admin_email or '' }}"/>
+</div>
+<div class="mb-3">
+<label class="form-label">{{ _('log_level') }}</label>
+<select class="form-select" name="log_level">
+<option value="INFO" {% if settings.log_level == "INFO" %}selected{% endif %}>{{ _('log_info') }}</option>
+<option value="WARNING" {% if settings.log_level == "WARNING" %}selected{% endif %}>{{ _('log_warning') }}</option>
+<option value="ERROR" {% if settings.log_level == "ERROR" %}selected{% endif %}>{{ _('log_error') }}</option>
+<option value="DEBUG" {% if settings.log_level == "DEBUG" %}selected{% endif %}>{{ _('log_debug') }}</option>
+
+</select>
+</div>
+<div class="mb-3">
+<label class="form-label">{{ _('maintenance_mode') }}</label>
+<select class="form-select" name="maintenance_mode">
+<option value="1" {% if settings.maintenance_mode == "1" %}selected{% endif %}>{{ _('yes') }}</option>
+<option value="0" {% if settings.maintenance_mode == "0" %}selected{% endif %}>{{ _('no') }}</option>
+
+</select>
+</div>
+<div class="mb-3">
+<label class="form-label">{{ _('debug_mode') }}</label>
+<select class="form-select" name="debug_mode">
+<option value="1" {% if settings.debug_mode == "1" %}selected{% endif %}>{{ _('yes') }}</option>
+<option value="0" {% if settings.debug_mode == "0" %}selected{% endif %}>{{ _('no') }}</option>
+
+</select>
+</div>
+</section>
+</form>
+</div>
+<script>
+
+
+function applyMailPreset(service) {
+  const translations = {{ translations|tojson }};
+  const mailFromInput = document.querySelector('[name="mail_from"]');
+  const smtpHostInput = document.querySelector('[name="smtp_host"]');
+  const smtpPortInput = document.querySelector('[name="smtp_port"]');
+  const smtpTLSInput = document.querySelector('[name="smtp_tls"]');
+  const smtpUserInput = document.querySelector('[name="smtp_user"]');
+
+  const helpBox = document.getElementById("mailHelp");
+  const userHelp = document.getElementById("smtpUserHelp");
+  const passHelp = document.getElementById("smtpPassHelp");
+
+  function setIfGeneric(defaultMail) {
+    const current = mailFromInput.value.trim();
+    if (
+      current === "" ||
+      current === "admin@localhost" ||
+      current.endsWith("@localhost")
+    ) {
+      mailFromInput.value = defaultMail;
+    }
+  }
+
+  if (service === "gmail") {
+    smtpHostInput.value = "smtp.gmail.com";
+    smtpPortInput.value = "587";
+    smtpTLSInput.value = "1";
+    setIfGeneric("votre.email@gmail.com");
+	helpBox.innerHTML = translations.smtp_gmail_help + ` <a href="https://myaccount.google.com/apppasswords" target="_blank">myaccount.google.com/apppasswords</a>`;
+	userHelp.innerHTML = translations.smtp_gmail_user;
+	passHelp.innerHTML = translations.smtp_gmail_pass;
+
+
+  } else if (service === "outlook") {
+    smtpHostInput.value = "smtp.office365.com";
+    smtpPortInput.value = "587";
+    smtpTLSInput.value = "1";
+    setIfGeneric("votre.email@outlook.com");
+	helpBox.innerHTML = translations.smtp_outlook_help;
+	userHelp.innerHTML = translations.smtp_outlook_user;
+	passHelp.innerHTML = translations.smtp_outlook_pass;
+
+
+  } else if (service === "yahoo") {
+    smtpHostInput.value = "smtp.mail.yahoo.com";
+    smtpPortInput.value = "587";
+    smtpTLSInput.value = "1";
+    setIfGeneric("votre.email@yahoo.fr");
+	helpBox.innerHTML = translations.smtp_yahoo_help;
+	userHelp.innerHTML = translations.smtp_yahoo_user;
+	passHelp.innerHTML = translations.smtp_yahoo_pass;
+
+
+  } else if (service === "free") {
+    smtpHostInput.value = "smtp.free.fr";
+    smtpPortInput.value = "587";
+    smtpTLSInput.value = "1";
+    setIfGeneric("votre.email@free.fr");
+	helpBox.innerHTML = translations.smtp_free_help;
+	userHelp.innerHTML = translations.smtp_free_user;
+	passHelp.innerHTML = translations.smtp_free_pass;
+
+  } else {
+    helpBox.innerHTML = "";
+    userHelp.innerHTML = "";
+    passHelp.innerHTML = "";
+  }
+
+  if (!smtpUserInput.value || smtpUserInput.value.trim() === "") {
+    smtpUserInput.value = mailFromInput.value.trim();
+  }
+}
+
+function autoSelectProvider() {
+  const host = document.querySelector('[name="smtp_host"]').value.trim();
+  const select = document.getElementById("smtp_provider");
+
+  if (host === "smtp.gmail.com") {
+    select.value = "gmail";
+  } else if (host === "smtp.office365.com") {
+    select.value = "outlook";
+  } else if (host === "smtp.mail.yahoo.com") {
+    select.value = "yahoo";
+  } else if (host === "smtp.free.fr") {
+    select.value = "free";
+  } else {
+    select.value = "custom";
+  }
+
+  applyMailPreset(select.value);
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  const mode = localStorage.getItem("theme") || "light";
+  document.body.classList.add(mode + "-mode");
+
+  autoSelectProvider();
+});
+
+window.addEventListener("message", function (event) {
+  if (event.data && event.data.theme) {
+    const mode = event.data.theme;
+    document.body.classList.remove("light-mode", "dark-mode");
+    document.body.classList.add(mode + "-mode");
+  }
+});
+
+function saveAndTestEmail() {
+  const form = document.querySelector('form[action="/settings/save"]');
+  const formData = new FormData(form);
+
+  fetch('/settings/save', {
+    method: 'POST',
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }, // Ajout pour indiquer requête AJAX
+    body: formData
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.status === "ok") {
+      window.location.href = '/test_email';
+    } else {
+      alert("❌ Une erreur est survenue lors de l'enregistrement des paramètres.");
+    }
+  })
+  .catch(err => {
+    console.error(err);
+    alert("❌ Échec de la requête vers le serveur.");
+  });
+}
+
+
+  </script>
+</body>
+</html>

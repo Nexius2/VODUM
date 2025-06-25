@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Paramétrage des mails</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    /* Supprimer les flèches des champs number */
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    input[type=number] {
+      -moz-appearance: textfield;
+    }
+	
+	.floating-save {
+	  position: fixed;
+	  top: 10px;
+	  right: 20px;
+	  z-index: 999;
+	}
+
+	
+  </style>
+</head>
+<body>
+  <div class="container dark-background">
+    <h1 style="margin-bottom: 2rem;">📬 Paramétrage des mails d'abonnement</h1>
+
+    <form id="mailForm"></form>
+	<div class="floating-save">
+	  <button type="button" class="btn btn-success" onclick="saveAllTemplates()">💾 Enregistrer</button>
+	</div>
+
+  </div>
+
+  <script>
+    const TYPES = ['preavis', 'relance', 'fin'];
+    const LABELS = {
+      preavis: "Préavis",
+      relance: "Relance",
+      fin: "Fin d'abonnement"
+    };
+
+    const form = document.getElementById('mailForm');
+
+    TYPES.forEach(type => {
+      const section = document.createElement('section');
+      section.classList.add('page-card');
+
+      section.innerHTML = `
+        <div class="mailing-header">
+          <h2 class="mb-0">${LABELS[type]}</h2>
+          <span class="badge-days">
+            <input type="number" name="${type}_days" /> jours
+          </span>
+        </div>
+
+        <div class="mb-3">
+          <label>Sujet</label>
+          <input type="text" name="${type}_subject" class="form-control" />
+        </div>
+
+        <div class="mb-3">
+          <label>Contenu</label>
+          <textarea name="${type}_body" rows="6" class="form-control"></textarea>
+        </div>
+      `;
+
+      form.appendChild(section);
+    });
+
+    fetch('/api/email_templates')
+      .then(res => res.json())
+      .then(data => {
+        TYPES.forEach(type => {
+          const val = data[type];
+          if (val) {
+            document.querySelector(`[name="${type}_days"]`).value = val.days_before ?? 0;
+            document.querySelector(`[name="${type}_subject"]`).value = val.subject;
+            document.querySelector(`[name="${type}_body"]`).value = val.body;
+          }
+        });
+      });
+
+    function saveTemplate(type) {
+      const subject = document.querySelector(`[name="${type}_subject"]`).value;
+      const body = document.querySelector(`[name="${type}_body"]`).value;
+      const days_before = parseInt(document.querySelector(`[name="${type}_days"]`).value || "0");
+
+      return fetch(`/api/email_templates/${type}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subject, body, days_before })
+      });
+    }
+
+    function saveAllTemplates() {
+      Promise.all(TYPES.map(type => saveTemplate(type)))
+        .then(responses => {
+          if (responses.every(res => res.ok)) {
+            alert("Modèles enregistrés ✔");
+          } else {
+            alert("Erreur lors de l'enregistrement ❌");
+          }
+        });
+    }
+  </script>
+	<script>
+	  document.addEventListener("DOMContentLoaded", function () {
+		const mode = localStorage.getItem("theme") || "light";
+		document.body.classList.add(mode + "-mode");
+	  });
+
+	  window.addEventListener("message", function(event) {
+		if (event.data && event.data.theme) {
+		  const mode = event.data.theme;
+		  document.body.classList.remove("light-mode", "dark-mode");
+		  document.body.classList.add(mode + "-mode");
+		}
+	  });
+	</script>
+
+</body>
+</html>

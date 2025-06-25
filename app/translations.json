@@ -1,0 +1,16 @@
+{
+    "fr": {
+        "sync_start": "🔄 Synchronisation en cours...",
+        "sync_done": "✅ Synchronisation terminée avec succès !",
+        "sync_error": "⚠ Aucune mise à jour effectuée (aucun utilisateur trouvé).",
+        "list_users": "📋 Liste des utilisateurs Plex :",
+        "no_users": "📭 Aucun utilisateur Plex enregistré."
+    },
+    "en": {
+        "sync_start": "🔄 Sync in progress...",
+        "sync_done": "✅ Sync completed successfully!",
+        "sync_error": "⚠ No updates made (no users found).",
+        "list_users": "📋 List of Plex users:",
+        "no_users": "📭 No Plex users registered."
+    }
+}

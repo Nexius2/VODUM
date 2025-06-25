@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container dark-background">
+  <section class="page-card">
+    <h2>ℹ️ {{ _('About') }}</h2>
+    <ul class="info-list">
+      {% for line in info_content.splitlines() %}
+      {% set parts = line.split(': ', 1) %}
+      {% if parts | length == 2 %}
+      <li>📝 <strong>{{ _(parts[0]) }}:</strong> {{ parts[1] }}</li>
+      {% else %}
+      <li>{{ line }}</li>
+      {% endif %}
+      {% endfor %}
+    </ul>
+  </section>
+</div>
+{% endblock %}
+<style>
+  .info-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .info-list li {
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border-color);
+  }
+  .info-list li:last-child {
+    border-bottom: none;
+  }
+</style>
