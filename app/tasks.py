@@ -17,3 +17,14 @@ def update_task_status(task_name, interval_seconds=None):
     """, (task_name, now.strftime("%Y-%m-%d %H:%M:%S"), next_run))
     conn.commit()
     conn.close()
+
+def get_all_tasks():
+    import sqlite3
+    from config import DATABASE_PATH
+    conn = sqlite3.connect(DATABASE_PATH)
+    c = conn.cursor()
+    c.execute("SELECT * FROM task_status")
+    rows = c.fetchall()
+    columns = [desc[0] for desc in c.description]
+    conn.close()
+    return [dict(zip(columns, row)) for row in rows]

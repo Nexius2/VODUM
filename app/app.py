@@ -9,13 +9,21 @@ import time
 from werkzeug.utils import secure_filename
 from logger import logger
 import logging
+
+# Passe le logger 'werkzeug' en DEBUG au lieu de INFO (ou WARNING pour quasi tout masquer)
+logging.getLogger('werkzeug').setLevel(logging.DEBUG)
+# ou, pour les masquer complètement :
+# logging.getLogger('werkzeug').setLevel(logging.WARNING)
 import json
 from jinja2.runtime import Undefined
-
+from tasks import get_all_tasks
 from config import DATABASE_PATH
 from mailer import send_email
 from settings_helper import get_settings
 from disable_expired_users import disable_expired_users
+from plex_share_helper import share_user_libraries, unshare_all_libraries, set_user_libraries, set_user_libraries_via_api, share_user_libraries_plexapi
+   
+
 import send_reminder_emails
 import check_servers
 import update_plex_users
@@ -1036,12 +1044,179 @@ def api_clear_refresh_libraries():
     clear_library_refresh_flag()
     return "", 204
 
+@app.route('/edit_user/<int:user_id>', methods=['GET', 'POST'])
+def edit_user(user_id):
+    conn = sqlite3.connect(DATABASE_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    user_id = int(user_id)  # S'assure que c'est bien un int (utile dans le POST aussi)
+
+    if request.method == 'GET':
+        # Récupère l'utilisateur
+        cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        user = cursor.fetchone()
+        if not user:
+            flash("Utilisateur introuvable.", "danger")
+            conn.close()
+            return redirect(url_for('get_users_page'))
+
+        # Récupère les serveurs de type 'plex' auxquels cet utilisateur a accès
+        cursor.execute("""
+            SELECT s.*
+            FROM servers s
+            JOIN user_servers us ON us.server_id = s.id
+            WHERE us.user_id = ? AND s.type = 'plex'
+        """, (user_id,))
+        servers = cursor.fetchall()
+
+        print("SERVERS:", [(srv['id'], srv['name'], srv['server_id']) for srv in servers])
+
+        # Récupère les bibliothèques déjà partagées à cet utilisateur
+        cursor.execute("SELECT library_id FROM user_libraries WHERE user_id = ?", (user_id,))
+        shared_ids = set(row['library_id'] for row in cursor.fetchall())
+
+        # Pour chaque serveur, récupère ses bibliothèques
+        server_bibs = {}
+        for srv in servers:
+            server_bibs[srv['id']] = []
+            cursor.execute("SELECT * FROM libraries WHERE server_id = ?", (srv['server_id'],))
+            libs = cursor.fetchall()
+            for lib in libs:
+                lib_dict = dict(lib)
+                lib_dict['shared'] = lib['id'] in shared_ids
+                server_bibs[srv['id']].append(lib_dict)
+        print("SERVER_BIBS:", {k: [l['name'] for l in v] for k, v in server_bibs.items()})
+
+        return render_template(
+            'edit_user.html',
+            user=user,
+            servers=servers,
+            server_bibs=server_bibs
+        )
+
+
+
+    if request.method == 'POST':
+        logger.info(f"✏️ [edit_user] POST reçu pour user_id={user_id}")
+
+        # 1. Récupère l'utilisateur
+        cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        user = cursor.fetchone()
+        if not user:
+            logger.warning(f"❌ [edit_user] Utilisateur {user_id} introuvable en base (POST)")
+            flash("Utilisateur introuvable.", "danger")
+            conn.close()
+            return redirect(url_for('get_users_page'))
+        else:
+            logger.info(f"👤 [edit_user] Utilisateur trouvé : username={user['username']} (id={user_id})")
+            # Ici on ne récupère QUE ce qui est dans la table users :
+            allowSync = bool(user['allow_sync'])  # c'est le SEUL champ présent ici
+
+        # 2. Récupère les champs à mettre à jour
+        second_email = request.form.get('second_email')
+        firstname = request.form.get('firstname')
+        lastname = request.form.get('lastname')
+        expiration_date = request.form.get('expiration_date')
+        logger.info(f"📝 [edit_user] Mise à jour infos utilisateur : second_email={second_email}, firstname={firstname}, lastname={lastname}, expiration_date={expiration_date}")
+
+        # 3. Mets à jour l'utilisateur
+        cursor.execute("""
+            UPDATE users
+            SET second_email = ?, firstname = ?, lastname = ?, expiration_date = ?
+            WHERE id = ?
+        """, (second_email, firstname, lastname, expiration_date, user_id))
+        logger.info("[edit_user] Infos utilisateur mises à jour en base")
+
+        # 4. Gestion des accès aux bibliothèques
+        selected_library_ids = request.form.getlist('library_ids')
+        selected_library_ids = [int(x) for x in selected_library_ids]
+        logger.info(f"🗃️ [edit_user] Bibliothèques sélectionnées : {selected_library_ids}")
+
+        cursor.execute("DELETE FROM user_libraries WHERE user_id = ?", (user_id,))
+        logger.info(f"🗑️ [edit_user] Anciennes associations user_libraries supprimées pour user_id={user_id}")
+
+        for lib_id in selected_library_ids:
+            cursor.execute(
+                "INSERT INTO user_libraries (user_id, library_id) VALUES (?, ?)",
+                (user_id, lib_id)
+            )
+        conn.commit()
+        logger.info(f"✅ [edit_user] Nouvelles associations user_libraries insérées ({len(selected_library_ids)} bibliothèques)")
+
+        # 5. Synchronise Plex pour CHAQUE serveur (par noms de bibliothèques)
+        if selected_library_ids:
+            placeholders = ','.join(['?'] * len(selected_library_ids))
+            cursor.execute(f"SELECT name FROM libraries WHERE id IN ({placeholders})", tuple(selected_library_ids))
+            library_names = [row[0] for row in cursor.fetchall()]
+        else:
+            library_names = []
+
+        # Récupère SEULEMENT les serveurs accessibles à cet utilisateur
+        cursor.execute("""
+            SELECT s.*
+            FROM servers s
+            JOIN user_servers us ON us.server_id = s.id
+            WHERE s.type = 'plex' AND us.user_id = ?
+        """, (user_id,))
+        servers = cursor.fetchall()
+        for srv in servers:
+            logger.info(f"🔄 [edit_user] Serveur {srv['name']} : bibliothèques à partager = {library_names}")
+            logger.debug(f"[edit_user] Appel PlexAPI avec username='{user['username']}' sur serveur '{srv['name']}'")
+
+            # Récupère les droits pour ce user ET ce serveur
+            cursor.execute(
+                "SELECT * FROM user_servers WHERE user_id = ? AND server_id = ?",
+                (user_id, srv['server_id'])
+            )
+            user_server = cursor.fetchone()
+            if user_server:
+                allowSync = bool(user_server['allow_sync'])
+                camera = bool(user_server['allow_camera_upload'])
+                channels = bool(user_server['allow_channels'])
+                filterMovies = user_server['filter_movies'] or {}
+                filterTelevision = user_server['filter_television'] or {}
+                filterMusic = user_server['filter_music'] or {}
+
+                share_user_libraries_plexapi(
+                    plex_token=srv['plex_token'],
+                    plex_url=srv['plex_url'],
+                    username=user['username'],
+                    library_names=library_names,
+                    allowSync=allowSync,
+                    camera=camera,
+                    channels=channels,
+                    filterMovies=filterMovies,
+                    filterTelevision=filterTelevision,
+                    filterMusic=filterMusic,
+                )
+
+                
+                
+            else:
+                logger.warning(f"[edit_user] Pas de droits user_servers pour user={user_id} sur serveur={srv['server_id']} : aucune synchro Plex effectuée.")
+                # On ne fait rien du tout (ni ajout, ni suppression côté Plex)
+
+            if library_names:
+                logger.info(f"🤝 [edit_user] Partage des bibliothèques effectué pour user={user['username']} sur serveur {srv['name']}")
+            else:
+                logger.info(f"🚫 [edit_user] Retrait de tous les partages pour user={user['username']} sur serveur {srv['name']}")
+
+        conn.close()
+        logger.info(f"🏁 [edit_user] POST terminé pour user_id={user_id}")
+        flash("Accès mis à jour pour l'utilisateur !", "success")
+        return redirect(url_for('get_users_page'))
+
+
+
+
+
 
 if __name__ == "__main__":
     create_tables_once()
     cleanup_locks()
     settings = get_settings() 
     logger.setLevel(logging.DEBUG if settings.get("log_level") == "DEBUG" else logging.INFO)
-    start_background_jobs()
+    #start_background_jobs()
     app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=False)
 

@@ -666,13 +666,16 @@ def get_shared_libraries(server_id, plex_token):
         return {}
 
 # Lancer la synchronisation automatique
-initialize_database()
+#initialize_database()
 
 
 if __name__ == "__main__":
-    main()
+    #main()
+    initialize_database()
+    sync_plex_users()
     trigger_user_refresh_flag()
     trigger_library_refresh_flag()
+
 
 
 
