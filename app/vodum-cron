@@ -1,0 +1,16 @@
+# /app/vodum-cron
+
+# Toutes les heures : vérification serveurs
+0 * * * * cd /app && python3 check_servers.py
+
+# Toutes les 6 heures : sync users
+0 */6 * * * cd /app && python3 update_plex_users.py
+
+# Tous les jours à 3h : rappels
+0 3 * * * cd /app && python3 send_reminder_emails.py
+
+# Tous les jours à 4h : désactivation expirés
+0 4 * * * cd /app && python3 disable_expired_users.py
+
+# Tous les jours à 5h : backup
+0 5 * * * cd /app && python3 backup.py

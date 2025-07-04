@@ -22,25 +22,27 @@ COPY requirements.txt .
 #COPY app.py /app/app.py
 
 COPY app/ /app/
-# Assurez-vous que le dossier templates existe et copiez le fichier index.html
 COPY templates/ /app/templates/
 COPY static/ /app/static/
 COPY lang/ /app/lang/
 COPY icon.png /usr/share/icons/hicolor/256x256/apps/icon.png
 COPY INFO /app/INFO
 
-
-
 # Assurer que les variables d’environnement sont bien chargées
 ENV BOT_LANGUAGE=fr
-
-
 
 # Installer les dépendances Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Lancer le bot au démarrage
-CMD ["python3", "start.py"]
+# Ajoute supercronic (version la plus récente possible)
+ADD https://github.com/aptible/supercronic/releases/download/v0.2.29/supercronic-linux-amd64 /usr/local/bin/supercronic
+RUN chmod +x /usr/local/bin/supercronic
+
+
+# Lancer au démarrage
+#CMD ["python3", "start.py"]
+RUN chmod +x /app/entrypoint.sh
+CMD ["/app/entrypoint.sh"]
 
 
 

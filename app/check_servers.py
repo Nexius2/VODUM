@@ -21,9 +21,24 @@ def run():
 def check_plex_server(url, token):
     try:
         res = requests.get(f"{url}/identity", headers={"X-Plex-Token": token}, timeout=5)
-        return "🟢 OK" if res.status_code == 200 else "🔴 Erreur"
-    except Exception:
-        return "🔴 Injoignable"
+        if res.status_code == 200:
+            return "🟢 OK"
+        else:
+            logger.error(f"[{url}] Erreur HTTP {res.status_code} lors de la connexion au serveur Plex.")
+            return f"🔴 Erreur HTTP {res.status_code}"
+    except requests.exceptions.ConnectTimeout:
+        logger.warning(f"[{url}] Serveur Plex injoignable (délai de connexion dépassé). Vérifiez que le serveur est allumé et que le port {url.split(':')[-1]} est accessible.")
+        return "🔴 Serveur injoignable (timeout)"
+    except requests.exceptions.ReadTimeout:
+        logger.warning(f"[{url}] Réponse trop lente du serveur Plex (read timeout). Vérifiez l’état réseau du serveur.")
+        return "🔴 Réponse trop lente"
+    except requests.exceptions.ConnectionError:
+        logger.warning(f"[{url}] Impossible de se connecter au serveur Plex. Vérifiez l’état du serveur, la configuration réseau ou l’accès distant Plex.")
+        return "🔴 Connexion impossible"
+    except Exception as e:
+        logger.warning(f"[{url}] Erreur inconnue lors de la connexion au serveur Plex : {e}")
+        return "🔴 Erreur inconnue"
+
 
 
 def check_tautulli(url, api_key):
@@ -157,25 +172,31 @@ def auto_check():
 
         time.sleep(UPDATE_INTERVAL)
 
-def update_task_status(task_name, interval_seconds):
+def update_task_status(task_name):
+    """
+    Met à jour la table task_status avec l'heure du dernier run.
+    """
     now = datetime.now()
-    next_run = now + timedelta(seconds=interval_seconds)
+    next_run = None  # Ou calcule-le si tu veux
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
     cursor.execute("""
         INSERT OR REPLACE INTO task_status (name, last_run, next_run)
         VALUES (?, ?, ?)
-    """, (task_name, now.isoformat(), next_run.isoformat()))
+    """, (task_name, now.isoformat(), next_run))
     conn.commit()
     conn.close()
 
 
 if __name__ == "__main__":
     main()
-    trigger_server_refresh_flag()
+    # Appelé à chaque cron : lance le refresh flag si besoin
+    try:
+        trigger_server_refresh_flag()
+    except NameError:
+        logger.warning("⚠️ trigger_server_refresh_flag() non défini/importé, appel ignoré.")
 
 
 
 
-# Lancement automatique au démarrage
-#threading.Thread(target=auto_check, daemon=True).start()
+
