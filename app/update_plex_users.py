@@ -316,7 +316,7 @@ def update_database(users, servers):
         exists = cursor.fetchone()
 
         if exists:
-            # Mise à jour
+            # Mise à jour utilisateur existant (on NE TOUCHE PAS à expiration_date)
             cursor.execute("""
                 UPDATE users SET
                     username = ?, email = ?, avatar = ?, is_admin = ?,
@@ -333,18 +333,14 @@ def update_database(users, servers):
                 user["plex_id"]
             ))
         else:
-            # Insertion
+            # Nouvel utilisateur → on fixe expiration_date = maintenant + 1 mois
+            expiration_date = (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
+
             cursor.execute("""
-                INSERT INTO users (plex_id, username, email, avatar, is_admin, firstname, lastname, second_email)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(plex_id) DO UPDATE SET
-                    username = excluded.username,
-                    email = excluded.email,
-                    avatar = excluded.avatar,
-                    is_admin = excluded.is_admin,
-                    firstname = excluded.firstname,
-                    lastname = excluded.lastname,
-                    second_email = excluded.second_email
+                INSERT INTO users (
+                    plex_id, username, email, avatar, is_admin,
+                    firstname, lastname, second_email, expiration_date
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 user["plex_id"],
                 user["username"],
@@ -353,8 +349,10 @@ def update_database(users, servers):
                 int(user.get("is_admin", False)),
                 user.get("firstname", ""),
                 user.get("lastname", ""),
-                user.get("second_email", "")
+                user.get("second_email", ""),
+                expiration_date
             ))
+
 
 
 

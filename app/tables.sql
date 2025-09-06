@@ -100,7 +100,7 @@ CREATE TABLE IF NOT EXISTS libraries (
     name TEXT,
     server_id TEXT,
     FOREIGN KEY(server_id) REFERENCES servers(server_id),
-    UNIQUE(name, server_id)
+    UNIQUE(section_id, server_id)
 );
 
 -- Table de relation utilisateur <-> bibliothèque
