@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS subscription (
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Table pour les utilisateurs Discord
+-- Table pour les utilisateurs 
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     discord_user_id TEXT,
@@ -39,7 +39,11 @@ CREATE TABLE IF NOT EXISTS users (
 	creation_date,
 	is_admin INTEGER DEFAULT 0,
 	unique_key TEXT UNIQUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP  -- Date d'inscription
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,  -- Date d'inscription
+	status TEXT CHECK (status IN ('active','pre_expired','reminder','expired','invited','unfriended','suspended','unknown')),
+	last_status TEXT,
+	status_changed_at DATETIME
+
 
 );
 

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
-{% block title %}Tâches{% endblock %}
-{% block page_title %}Tâches planifiées{% endblock %}
+{% block title %}{{ "tasks.title" | t }}{% endblock %}
+{% block page_title %}{{ "tasks.title" | t }}{% endblock %}
 
 {% block content %}
 {% with messages = get_flashed_messages(with_categories=true) %}
@@ -15,44 +15,46 @@
   {% endif %}
 {% endwith %}
 
-<h2>{{ "tasks.title" | t }}</h2>
+
+
 <table class="table table-striped">
   <thead>
     <tr>
-      <th>Nom</th>
-      <th>Dernière exécution</th>
-      <th>Prochaine exécution</th>
-      <th>Action</th>
+      <th>{{ "tasks.name" | t if "tasks.name" in translations else "Nom" }}</th>
+      <th>{{ "tasks.last_run" | t if "tasks.last_run" in translations else "Dernière exécution" }}</th>
+      <th>{{ "tasks.next_run" | t if "tasks.next_run" in translations else "Prochaine exécution" }}</th>
+      <th>{{ "tasks.action" | t if "tasks.action" in translations else "Action" }}</th>
     </tr>
   </thead>
   <tbody>
     {% for task in tasks %}
     <tr>
-      <td>{{ task.name }}</td>
-	<td>
-	  <span class="utc-datetime"
-			{% if task.last_run %}data-utc="{{ task.last_run }}"{% endif %}>
-		{{ task.last_run or '—' }}
-	  </span>
-	</td>
-	<td>
-	  <span class="utc-datetime"
-			{% if task.next_run %}data-utc="{{ task.next_run }}"{% endif %}>
-		{{ task.next_run or '—' }}
-	  </span>
-	</td>
-
+      <td>{{ ("task." ~ task.name) | t }}</td>
+      <td>
+        <span class="utc-datetime"
+              {% if task.last_run %}data-utc="{{ task.last_run }}"{% endif %}>
+          {{ task.last_run or '—' }}
+        </span>
+      </td>
+      <td>
+        <span class="utc-datetime"
+              {% if task.next_run %}data-utc="{{ task.next_run }}"{% endif %}>
+          {{ task.next_run or '—' }}
+        </span>
+      </td>
       <td>
         <form action="/run_task/{{ task.name }}" method="post" target="hiddenFrame">
-		  <button class="btn btn-primary btn-sm" onclick="setTimeout(() => location.reload(), 500)">Exécuter</button>
-		</form>
-		<iframe name="hiddenFrame" style="display:none;"></iframe>
-
+          <button class="btn btn-primary btn-sm" onclick="setTimeout(() => location.reload(), 500)">
+            {{ "tasks.run" | t if "tasks.run" in translations else "Exécuter" }}
+          </button>
+        </form>
+        <iframe name="hiddenFrame" style="display:none;"></iframe>
       </td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
+
 <script>
   document.querySelectorAll(".utc-datetime").forEach(el => {
     const raw = el.dataset.utc;
@@ -64,29 +66,28 @@
       }
     }
   });
-  
-function refreshTasks() {
-  fetch("/api/tasks")
-    .then(res => res.text())
-    .then(html => {
-      document.querySelector("tbody").innerHTML = html;
-      // reconvertir les dates
-      document.querySelectorAll(".utc-datetime").forEach(el => {
-        const raw = el.dataset.utc;
-        if (raw && raw !== "—") {
-          const cleaned = raw.split(".")[0];
-          if (!isNaN(Date.parse(cleaned))) {
-            const local = new Date(cleaned + "Z").toLocaleString();
-            el.textContent = local;
+
+  function refreshTasks() {
+    fetch("/api/tasks")
+      .then(res => res.text())
+      .then(html => {
+        document.querySelector("tbody").innerHTML = html;
+        // reconvertir les dates
+        document.querySelectorAll(".utc-datetime").forEach(el => {
+          const raw = el.dataset.utc;
+          if (raw && raw !== "—") {
+            const cleaned = raw.split(".")[0];
+            if (!isNaN(Date.parse(cleaned))) {
+              const local = new Date(cleaned + "Z").toLocaleString();
+              el.textContent = local;
+            }
           }
-        }
+        });
       });
-    });
-}
+  }
 
-setInterval(refreshTasks, 300000); // toutes les 5 min (300 000 ms)
-refreshLogs();
-
+  setInterval(refreshTasks, 300000); // toutes les 5 min
+  refreshLogs();
 </script>
 
 {% endblock %}

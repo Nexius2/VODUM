@@ -17,6 +17,7 @@
         <table id="usersTable" class="table table-sm table-striped table-hover">
             <thead class="table-dark">
                 <tr>
+                    <th class="d-none">_rank</th><!-- colonne cachée: 0 normal, 1 retiré -->
                     <th>ID</th>
                     <th>Avatar</th>
                     <th>Nom d'utilisateur</th>
@@ -26,15 +27,22 @@
                     <th>📅 Date de fin</th>
                 </tr>
             </thead>
-            <tbody id=\"user-table\">
+            <tbody id="user-table">
                 {% for user in users %}
-                <tr 
-				  class="{% if user.statut == '🟢 Actif' %}table-success
-						 {% elif user.statut == '🟡 Préavis' %}table-warning
-						 {% elif user.statut == '🟠 Relance' %}table-orange
-						 {% elif user.statut == '🔴 Expiré' %}table-danger
+				<tr 
+				  class="{% if user.status == 'active' %}table-success
+						 {% elif user.status == 'pre_expired' %}table-warning
+						 {% elif user.status == 'reminder' %}table-orange
+						 {% elif user.status == 'expired' %}table-danger
+						 {% elif user.status == 'invited' %}table-info
+						 {% elif user.status == 'unfriended' %}table-secondary
+						 {% elif user.status == 'unknown' %}table-secondary
+						 {% elif user.status == 'suspended' %}table-dark
 						 {% else %}table-light{% endif %}" 
 				  data-user-id="{{ user.id }}">
+                    <!-- cellule _rank cachée -->
+                    <td class="d-none status-rank">{{ 1 if user.status == 'unfriended' else 0 }}</td>
+
                     <td>{{ user.id }}</td>
                     <td>
                         {% if user.avatar %}
@@ -46,19 +54,24 @@
                     <td>{{ user.username }}</td>
                     <td>{{ user.email }}</td>
 					<td>
-					  <span class="{% if user.statut == '🟢 Actif' %}text-success
-								   {% elif user.statut == '🟡 Préavis' %}text-warning
-								   {% elif user.statut == '🟠 Relance' %}text-orange
-								   {% elif user.statut == '🔴 Expiré' %}text-danger
+					  <span class="{% if user.status == 'active' %}text-success
+								   {% elif user.status == 'pre_expired' %}text-warning
+								   {% elif user.status == 'reminder' %}text-orange
+								   {% elif user.status == 'expired' %}text-danger
+								   {% elif user.status == 'invited' %}text-info
+								   {% elif user.status == 'unfriended' %}text-secondary
+								   {% elif user.status == 'unknown' %}text-secondary
+								   {% elif user.status == 'suspended' %}text-dark
 								   {% else %}text-muted{% endif %}">
-						{{ user.statut }}
+						{{ _(user.status) }}
 					  </span>
 					</td>
-                    <td data-order="{{ user.jours_restants if user.jours_restants is not none else 9999 }}">
+					<!-- ⚠️ DataTables lit data-order pour trier -->
+					<td class="col-days"
+						data-order="{{ user.jours_restants if user.jours_restants is not none else 999999 }}">
 					  {{ user.jours_restants if user.jours_restants is not none else '—' }}
 					</td>
-
-                    <td>{{ user.expiration_date if user.expiration_date else 'Inconnu' }}</td>
+					<td>{{ user.expiration_date if user.expiration_date else 'Inconnu' }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -98,16 +111,24 @@ document.addEventListener("DOMContentLoaded", function () {
 		});
 	});
 
-    // Datatables
+    // DataTables
+    // colonnes (après ajout de _rank en 1ère position) :
+    // 0=_rank, 1=ID, 2=Avatar, 3=Nom, 4=Email, 5=Statut, 6=Jours, 7=Date
     $('#usersTable').DataTable({
         paging: true,
-		order: [[5, 'asc']], // tri par Jours restants
+		order: [[6, 'asc']], // tri par Jours restants
+        orderFixed: { pre: [[0, 'asc']] }, // garde toujours _rank=0 avant _rank=1 → “Retiré” en bas
 		stateSave: true,
         pageLength: 10,
         lengthChange: false,
         ordering: true,
         info: false,
         searching: true,
+        columnDefs: [
+            { targets: 0, visible: false, searchable: false }, // cache _rank
+            { targets: 2, orderable: false },                  // avatar non triable
+            { targets: 6, type: 'num' }                        // tri numérique sur jours
+        ],
         language: {
             search: "🔍 Rechercher :",
             paginate: {
@@ -128,35 +149,42 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
 	// Graphique
-	var actifs = {{ users | selectattr('statut', 'equalto', '🟢 Actif') | list | length }};
-	var preavis = {{ users | selectattr('statut', 'equalto', '🟡 Préavis') | list | length }};
-	var relance = {{ users | selectattr('statut', 'equalto', '🟠 Relance') | list | length }};
-	var expires = {{ users | selectattr('statut', 'equalto', '🔴 Expiré') | list | length }};
+	var actifs = {{ users | selectattr('status', 'equalto', 'active') | list | length }};
+	var preavis = {{ users | selectattr('status', 'equalto', 'pre_expired') | list | length }};
+	var reminder = {{ users | selectattr('status', 'equalto', 'reminder') | list | length }};
+	var expires = {{ users | selectattr('status', 'equalto', 'expired') | list | length }};
+	var invites = {{ users | selectattr('status', 'equalto', 'invited') | list | length }};
+	var unfriends = {{ users | selectattr('status', 'equalto', 'unfriended') | list | length }};
+	var unknown = {{ users | selectattr('status', 'equalto', 'unknown') | list | length }};
+	var suspendus = {{ users | selectattr('status', 'equalto', 'suspended') | list | length }};
 
-	var ctx = document.getElementById('usersChart').getContext('2d');
+	const ctx = document.getElementById('usersChart').getContext('2d');
 	new Chart(ctx, {
 		type: 'bar',
 		data: {
-			labels: [
-			  `🟢 Actifs (${actifs})`,
-			  `🟡 Préavis (${preavis})`,
-			  `🟠 Relance (${relance})`,
-			  `🔴 Expirés (${expires})`
-			],
+			labels: ['Actif', 'Préavis', 'Rappel', 'Expiré', 'Invité', 'Retiré', 'Inconnu', 'Suspendu'],
 			datasets: [{
-				label: "Utilisateurs par statut",
-				data: [actifs, preavis, relance, expires],
+				label: "Utilisateurs par status",
+				data: [actifs, preavis, reminder, expires, invites, unfriends, unknown, suspendus],
 				backgroundColor: [
-					'rgba(75, 192, 192, 0.5)',    // vert
-					'rgba(255, 206, 86, 0.5)',    // jaune
-					'rgba(255, 159, 64, 0.5)',    // orange
-					'rgba(255, 99, 132, 0.5)'     // rouge
+					'rgba(75, 192, 192, 0.5)',    // active
+					'rgba(255, 206, 86, 0.5)',    // pre_expired
+					'rgba(255, 159, 64, 0.5)',    // reminder
+					'rgba(255, 99, 132, 0.5)',    // expired
+					'rgba(13, 202, 240, 0.5)',    // invited
+					'rgba(108, 117, 125, 0.5)',   // unfriended
+					'rgba(111, 66, 193, 0.5)',    // unknown
+					'rgba(33, 37, 41, 0.5)'       // suspended
 				],
 				borderColor: [
 					'rgba(75, 192, 192, 1)',
 					'rgba(255, 206, 86, 1)',
 					'rgba(255, 159, 64, 1)',
-					'rgba(255, 99, 132, 1)'
+					'rgba(255, 99, 132, 1)',
+					'rgba(13, 202, 240, 1)',
+					'rgba(108, 117, 125, 1)',
+					'rgba(111, 66, 193, 1)',
+					'rgba(33, 37, 41, 1)'
 				],
 				borderWidth: 1
 			}]
@@ -171,13 +199,9 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 
 function navigateToUser(id) {
-	window.parent.postMessage({
-		action: "navigate",
-		target: `/user/${id}`
-	}, "*");
+  window.parent.postMessage({ action: "navigate", target: `/edit_user/${id}` }, "*");
 }
 </script>
-{% endblock %}
 
 <script>
 async function checkUserRefresh() {
@@ -191,5 +215,5 @@ async function checkUserRefresh() {
 }
 setInterval(checkUserRefresh, 30000); // toutes les 30 secondes
 refreshLogs();
-
 </script>
+{% endblock %}

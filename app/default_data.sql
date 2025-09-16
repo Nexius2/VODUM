@@ -29,7 +29,10 @@ INSERT OR IGNORE INTO task_status (name, last_run, next_run) VALUES
 ('check_servers', NULL, NULL),
 ('sync_users', NULL, NULL),
 ('disable_expired_users', NULL, NULL),
-('send_reminders', NULL, NULL);
+('send_reminders', NULL, NULL),
+('backup', NULL, NULL),
+('delete_expired_users', NULL, NULL),
+('check_libraries', NULL, NULL);
 
 
 
