@@ -188,3 +188,9 @@ button:hover, .btn:hover {
   font-weight: bold;
   box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
+
+.bg-orange {
+    background-color: #fd7e14 !important;
+    color: #fff !important;
+}
+

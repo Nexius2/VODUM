@@ -69,7 +69,7 @@
                 {% endif %}
             </div>
 
-            <form action="/update_user" method="POST" class="mt-3">
+            <form action="/edit_user/{{ user.id }}" method="POST" class="mt-3">
                 <input type="hidden" name="user_id" value="{{ user.id }}">
 
                 <div class="row">
@@ -134,11 +134,24 @@
 					</div>
 				</div>
 
+<h2>Accès aux bibliothèques</h2>
+{% for srv in servers %}
+    <fieldset style="margin-bottom:1em;">
+        <legend>{{ srv.name }}</legend>
+        {% for lib in server_bibs[srv.id] %}
+            <label>
+                <input type="checkbox" name="library_ids" value="{{ lib.id }}" {% if lib.shared %}checked{% endif %}>
+                {{ lib.name }}
+            </label><br>
+        {% endfor %}
+    </fieldset>
+{% endfor %}
 
-                <div class="text-left">
-                    <button type="submit" class="btn btn-success">💾 Enregistrer</button>
-                    <a href="/users" class="btn btn-secondary">↩ Retour</a>
-                </div>
+<button type="submit" class="btn btn-primary">💾 Enregistrer</button>
+<a href="{{ url_for('get_users_page') }}" class="btn btn-secondary">↩ Retour</a>
+
+  
+
             </form>
 			
 
@@ -154,23 +167,9 @@
             </form>
         </div>
 	
-	<h4 class="mt-4">Serveurs associés</h4>
-	{% if user.servers %}
-	<ul class="list-group mb-3">
-		{% for server in user.servers %}
-		<li class="list-group-item">
-			<strong>{{ server.name }}</strong><br>
-			Server ID : {{ server.server_id }}<br>
-			URL locale : {{ server.local_url }}<br>
-			URL publique : {{ server.public_url }}
-		</li>
-		{% endfor %}
-	</ul>
-	{% else %}
-	<p>Aucun serveur lié.</p>
-	{% endif %}
 
-	<h4 class="mt-4">Bibliothèques partagées</h4>
+
+	<!--<h4 class="mt-4">Bibliothèques partagées</h4>
 	{% if user.libraries %}
 	<ul class="list-group">
 		{% for lib in user.libraries %}
@@ -181,9 +180,16 @@
 	</ul>
 	{% else %}
 	<p>Aucune bibliothèque partagée.</p>
-	{% endif %}
-	
+	{% endif %}-->
+
+
+
     </div>
+
+
+
+
+
 
     <script>
         document.addEventListener("DOMContentLoaded", function () {

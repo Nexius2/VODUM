@@ -23,14 +23,21 @@ def load_templates():
     return templates
 
 def get_users():
-    """Récupère tous les utilisateurs avec une date d’expiration définie."""
+    """Récupère tous les utilisateurs éligibles à un mail (hors 'unfriended')."""
     conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE expiration_date IS NOT NULL")
+    cursor.execute("""
+        SELECT *
+        FROM users
+        WHERE expiration_date IS NOT NULL
+          AND status != 'unfriended'
+          AND COALESCE(TRIM(email), '') <> ''   -- évite les adresses vides
+    """)
     users = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return users
+
 
 def should_send(days_left, template_days):
     """Détermine si le mail doit être envoyé selon le nombre de jours restants."""
@@ -91,6 +98,8 @@ def auto_reminders():
 
     for user in get_users():
         if not user.get("email"):
+            continue
+        if (user.get("status") or "") == "unfriended":
             continue
 
         try:

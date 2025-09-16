@@ -1,7 +1,7 @@
 from flask import Flask, render_template, jsonify, request, redirect, url_for, flash, get_flashed_messages, g, session
 import sqlite3
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import uuid
 import threading
 import shutil
@@ -10,13 +10,14 @@ from werkzeug.utils import secure_filename
 from logger import logger
 import logging
 
+
 # Passe le logger 'werkzeug' en DEBUG au lieu de INFO (ou WARNING pour quasi tout masquer)
 logging.getLogger('werkzeug').setLevel(logging.DEBUG)
 # ou, pour les masquer complètement :
 # logging.getLogger('werkzeug').setLevel(logging.WARNING)
 import json
 from jinja2.runtime import Undefined
-from tasks import get_all_tasks
+from tasks import get_all_tasks, TASKS
 from config import DATABASE_PATH
 from mailer import send_email
 from settings_helper import get_settings
@@ -32,28 +33,62 @@ import update_plex_users
 app = Flask(__name__, template_folder="templates")  # Assure que Flask connaît le dossier "templates"
 app.secret_key = "une_clé_secrète_ultra_random"
 
+
+
 def create_tables_once():
-    sql_path = "/app/tables.sql"
-    if not os.path.exists(sql_path):
+    # ✅ corrige le chemin si besoin
+    tables_sql_path = "/app/tables.sql"
+    updates_sql_path = "/app/updates.sql"
+
+    if not os.path.exists(tables_sql_path):
         logger.critical("🚨 ERREUR : Le fichier tables.sql est introuvable !")
         return
 
-    logger.info("📜 Exécution de tables.sql pour mise à jour des schémas")
     try:
         with sqlite3.connect(DATABASE_PATH) as conn:
-            with open(sql_path, "r") as f:
-                conn.executescript(f.read())
-            conn.commit()
-            logger.info("✅ Fichier tables.sql exécuté avec succès")
-    except Exception as e:
-        logger.error(f"❌ Erreur lors de l'exécution de tables.sql : {e}")
+            cursor = conn.cursor()
 
-    try:
-        with open("/app/default_data.sql") as f:
-            conn.executescript(f.read())
-        logger.info("✅ Données par défaut appliquées (INSERT OR IGNORE)")
+            logger.info("📜 Exécution de tables.sql pour mise à jour des schémas")
+            with open(tables_sql_path, "r", encoding="utf-8") as f:
+                cursor.executescript(f.read())
+            logger.info("✅ Fichier tables.sql exécuté avec succès")
+
+            # Données par défaut (si tu gardes ça)
+            try:
+                default_data_path = "/app/app/default_data.sql"
+                if os.path.exists(default_data_path):
+                    with open(default_data_path, "r", encoding="utf-8") as f:
+                        cursor.executescript(f.read())
+                    logger.info("✅ Données par défaut appliquées (INSERT OR IGNORE)")
+                else:
+                    logger.info("ℹ️ Pas de default_data.sql à appliquer")
+            except Exception as e:
+                logger.error(f"❌ Erreur lors de l'application des données par défaut : {e}")
+
+            # ✅ NOUVEAU : exécuter updates.sql s’il existe
+            if os.path.exists(updates_sql_path):
+                try:
+                    logger.info("📜 Exécution de updates.sql (migrations)")
+                    with open(updates_sql_path, "r", encoding="utf-8") as f:
+                        cursor.executescript(f.read())
+                    logger.info("✅ Fichier updates.sql exécuté avec succès")
+                except Exception as e:
+                    logger.error(f"❌ Erreur lors de l'exécution de updates.sql : {e}")
+            else:
+                logger.info("ℹ️ Aucun updates.sql trouvé, pas de migrations à appliquer")
+
+            conn.commit()
+
+        # ⚡ Important : exécuter update_vodum après fermeture de la connexion
+        from update_vodum import update_vodum
+        update_vodum()
+
     except Exception as e:
-        logger.error(f"❌ Erreur lors de l'application des données par défaut : {e}")
+        logger.error(f"❌ Erreur lors de la création/mise à jour des tables : {e}")
+
+
+
+
 
 def cleanup_locks():
     try:
@@ -78,65 +113,51 @@ def load_lang():
     lang = get_locale()
     g.translations = load_translations(lang)
 
+def _parse_date_any(d):
+    """Accepte YYYY-MM-DD ou DD/MM/YYYY ; renvoie date() ou None."""
+    if not d:
+        return None
+    s = str(d).strip()
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(s.replace(" ", ""), fmt).date()
+        except ValueError:
+            continue
+    return None
+
 # Route pour afficher la liste des utilisateurs
 @app.route("/users")
 def get_users_page():
     conn = sqlite3.connect(DATABASE_PATH, timeout=10)
-    conn.row_factory = sqlite3.Row  # Permet d'accéder aux colonnes par nom
-    cursor = conn.cursor()
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
 
-    # Récupération des utilisateurs
-    cursor.execute("SELECT id, username, email, avatar, expiration_date FROM users")
-    user_rows = cursor.fetchall()
+    # On lit le statut calculé par les scripts (status), pas un "statut" maison
+    cur.execute("""
+        SELECT id, username, email, avatar, expiration_date, status
+        FROM users
+    """)
+    rows = cur.fetchall()
+    conn.close()
 
-    # Récupération des seuils configurés dans email_templates
-    cursor.execute("SELECT type, days_before FROM email_templates")
-    seuils = {row["type"]: int(row["days_before"]) for row in cursor.fetchall()}
-
-    preavis = seuils.get("preavis", 60)
-    relance = seuils.get("relance", 7)
-    fin = seuils.get("fin", 0)
-
-    today = datetime.now().date()
+    today = date.today()
     users = []
-
-    for row in user_rows:
-        user_id = row["id"]
-        username = row["username"]
-        email = row["email"]
-        avatar = row["avatar"]
-        expiration_str = row["expiration_date"]
-
-        jours_restants = None
-        statut = "❓ Inconnu"
-
-        if expiration_str:
-            expiration_date = datetime.strptime(expiration_str, "%Y-%m-%d").date()
-            jours_restants = (expiration_date - today).days
-
-            if jours_restants <= fin:
-                statut = "🔴 Expiré"
-            elif jours_restants <= relance:
-                statut = "🟠 Relance"
-            elif jours_restants <= preavis:
-                statut = "🟡 Préavis"
-            else:
-                statut = "🟢 Actif"
-        else:
-            expiration_date = None
+    for r in rows:
+        exp = _parse_date_any(r["expiration_date"])
+        jours_restants = (exp - today).days if exp else None
 
         users.append({
-            "id": user_id,
-            "username": username,
-            "email": email,
-            "avatar": avatar,
-            "expiration_date": expiration_date,
+            "id": r["id"],
+            "username": r["username"],
+            "email": r["email"],
+            "avatar": r["avatar"],
+            "expiration_date": r["expiration_date"],  # garde la chaîne telle quelle
             "jours_restants": jours_restants,
-            "statut": statut
+            "status": r["status"] or "unknown",       # aligne l’UI sur la DB
         })
 
-    conn.close()
     return render_template("users.html", users=users)
+
 
 
 
@@ -819,19 +840,20 @@ def tasks():
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM task_status")
-    rows = cursor.fetchall()
+    rows = {row["name"]: row for row in cursor.fetchall()}
     conn.close()
 
     tasks = []
-    for row in rows:
+    for name, meta in TASKS.items():
+        row = rows.get(name)
         tasks.append({
-            "name": row["name"],
-            "last_run": datetime.fromisoformat(row["last_run"]).strftime("%d/%m/%Y à %H:%M") if row["last_run"] else None,
-            "next_run": datetime.fromisoformat(row["next_run"]).strftime("%d/%m/%Y à %H:%M") if row["next_run"] else None
+            "name": name,
+            "label": meta["label"],
+            "last_run": row["last_run"] if row and "last_run" in row.keys() else None,
+            "next_run": row["next_run"] if row and "next_run" in row.keys() else None
         })
 
     return render_template("tasks.html", tasks=tasks)
-
 
 @app.route("/run_task/<task_name>", methods=["POST"])
 def run_task(task_name):
@@ -840,7 +862,11 @@ def run_task(task_name):
         "check_servers": "python check_servers.py",
         "sync_users": "python update_plex_users.py",
         "disable_expired_users": "python disable_expired_users.py",
-        "send_reminders": "python send_reminder_emails.py"
+        "send_reminders": "python send_reminder_emails.py",
+        "backup": "python backup.py",
+        "delete_expired_users": "python delete_expired_users.py",
+        "check_libraries": "python check_libraries.py",
+        "update_user_status": "python update_user_status.py"
     }
     command = task_map.get(task_name)
     if command:
@@ -849,7 +875,7 @@ def run_task(task_name):
         logger.info(f"▶️ Tâche manuelle lancée : {task_name}")
     else:
         flash(f"❌ Tâche inconnue : {task_name}", "danger")
-    return redirect("/taches")
+    return redirect("/tasks")
 
 def get_user_status(days_left, thresholds):
     if days_left <= 0:
@@ -924,7 +950,41 @@ def get_available_languages():
     return langs
 
 
+def _parse_date(d):
+    if not d:
+        return None
+    s = str(d).strip()
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(s.replace(" ", ""), fmt).date()
+        except Exception:
+            pass
+    return None
 
+def get_all_users():
+    conn = sqlite3.connect(DATABASE_PATH, timeout=10)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    cur.execute("SELECT id, username, email, avatar, expiration_date, status FROM users")
+    rows = cur.fetchall()
+    conn.close()
+
+    today = date.today()
+    users = []
+    for r in rows:
+        exp = _parse_date(r["expiration_date"])
+        jours_restants = (exp - today).days if exp else None
+        users.append({
+            "id": r["id"],
+            "username": r["username"],
+            "email": r["email"],
+            "avatar": r["avatar"],
+            "expiration_date": r["expiration_date"],
+            "jours_restants": jours_restants,
+            # ⚠️ aligne l’UI sur la DB
+            "status": r["status"] or "unknown",
+        })
+    return users
 
 
 @app.template_filter("t")
@@ -966,6 +1026,24 @@ def clear_user_refresh_flag():
 
 def should_refresh_users():
     return user_refresh_flag
+
+# --- Triggers exposés pour les autres process (cron) ---
+
+@app.route("/api/trigger-refresh/users", methods=["POST"])
+def api_trigger_refresh_users():
+    trigger_user_refresh_flag()  # met le flag global du process Flask
+    return "", 204
+
+@app.route("/api/trigger-refresh/libraries", methods=["POST"])
+def api_trigger_refresh_libraries():
+    trigger_library_refresh_flag()  # met le flag global du process Flask
+    return "", 204
+
+# (optionnel si tu veux un trigger serveurs aussi)
+@app.route("/api/trigger-refresh/servers", methods=["POST"])
+def api_trigger_refresh_servers():
+    trigger_server_refresh_flag()  # si tu as déjà cette fonction
+    return "", 204
 
 
 @app.route("/api/users")
@@ -1111,7 +1189,7 @@ def edit_user(user_id):
         else:
             logger.info(f"👤 [edit_user] Utilisateur trouvé : username={user['username']} (id={user_id})")
             # Ici on ne récupère QUE ce qui est dans la table users :
-            allowSync = bool(user['allow_sync'])  # c'est le SEUL champ présent ici
+            allowSync = bool(dict(user).get('allow_sync', 0))
 
         # 2. Récupère les champs à mettre à jour
         second_email = request.form.get('second_email')
