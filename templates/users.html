@@ -205,15 +205,40 @@ function navigateToUser(id) {
 
 <script>
 async function checkUserRefresh() {
-  const res = await fetch("/api/should-refresh/users");
-  const data = await res.json();
-  if (data.refresh) {
+  try {
+    const res = await fetch("/api/should-refresh/users");
+    const data = await res.json();
+    if (!data.refresh) return;
+
+    // 1) Récupère le fragment HTML serveur
     const html = await fetch("/api/users").then(r => r.text());
-    document.getElementById("user-table").innerHTML = html;
+
+    // 2) Remplace le contenu du <tbody>
+    const tbody = document.getElementById("user-table");
+    tbody.innerHTML = html;
+
+    // 3) Ré-attache le clic sur chaque ligne
+    tbody.querySelectorAll("tr").forEach(row => {
+      row.addEventListener("click", function () {
+        const userId = this.getAttribute("data-user-id");
+        if (userId) {
+          navigateToUser(userId);
+        }
+      });
+    });
+
+    // 4) Informe DataTables que les données ont changé
+    if ($.fn.DataTable.isDataTable('#usersTable')) {
+      const dt = $('#usersTable').DataTable();
+      dt.rows().invalidate().draw(false); // false => ne pas reset pagination/tri
+    }
+
+    // 5) Réinitialise le flag côté serveur
     await fetch("/api/clear-refresh/users", { method: "POST" });
+  } catch (e) {
+    console.error("Refresh users failed:", e);
   }
 }
-setInterval(checkUserRefresh, 30000); // toutes les 30 secondes
-refreshLogs();
 </script>
+
 {% endblock %}

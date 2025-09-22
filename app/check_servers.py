@@ -3,7 +3,7 @@ import time
 import sqlite3
 import requests
 from logger import logger
-from datetime import datetime
+from datetime import datetime, timezone
 import xml.etree.ElementTree as ET
 
 # --- Configuration ---
@@ -89,7 +89,8 @@ def get_server_name_from_plex_tv(server_id, plex_token):
 # --- Coeur du job ---
 def update_statuses():
     """Vérifie chaque serveur et met à jour la table servers."""
-    last_checked = datetime.utcnow().isoformat()
+    now_utc = datetime.now(timezone.utc)
+    last_checked = now_utc.isoformat()
 
     conn = open_db()
     cursor = conn.cursor()
@@ -205,7 +206,7 @@ def update_task_status(task_name: str):
             INSERT OR REPLACE INTO task_status (name, last_run, next_run)
             VALUES (?, ?, NULL)
             """,
-            (task_name, datetime.utcnow().isoformat()),
+            (task_name, datetime.now(timezone.utc).isoformat()),
         )
         conn.commit()
     except Exception as e:

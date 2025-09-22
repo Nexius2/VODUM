@@ -34,7 +34,7 @@ def run_backup():
 def cleanup_old_backups():
     """Supprime les anciennes sauvegardes au-delà de MAX_BACKUPS."""
     backups = sorted(
-        [f for f in os.listdir(BACKUP_DIR) if f.startswith("database-") and f.endswith(".db")]
+        [f for f in os.listdir(BACKUP_DIR) if f.startswith("database_") and f.endswith(".db")]
     )
     while len(backups) > MAX_BACKUPS:
         old = backups.pop(0)

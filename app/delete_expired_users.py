@@ -13,28 +13,34 @@ from plexapi.myplex import MyPlexAccount
 
 def get_setting_days(cur: sqlite3.Cursor) -> Optional[int]:
     """
-    Récupère le délai (en jours) après lequel on unfriend les 'expired'.
-    Gère 2 schémas possibles : table settings (key/value) ou colonne.
-    """
-    # Cas key/value
-    try:
-        cur.execute("SELECT value FROM settings WHERE key='delete_after_expiry_days' LIMIT 1")
-        row = cur.fetchone()
-        if row and row[0]:
-            return int(str(row[0]).strip())
-    except Exception:
-        pass
+    Récupère le délai (en jours) après lequel on 'unfriend' les utilisateurs en statut 'expired'.
 
-    # Cas colonne
-    try:
-        cur.execute("SELECT delete_after_expiry_days FROM settings LIMIT 1")
-        row = cur.fetchone()
-        if row and row[0]:
-            return int(str(row[0]).strip())
-    except Exception:
-        pass
+    Compatible avec 2 schémas :
+      - Table settings en key/value : key = 'delete_after_expiry_days' ou 'delete_after_days'
+      - Colonne directe dans settings : colonne 'delete_after_expiry_days' ou 'delete_after_days'
+    """
+    # 1) Schéma key/value
+    for key in ("delete_after_expiry_days", "delete_after_days"):
+        try:
+            cur.execute("SELECT value FROM settings WHERE key=? LIMIT 1", (key,))
+            row = cur.fetchone()
+            if row and row[0] is not None and str(row[0]).strip() != "":
+                return int(str(row[0]).strip())
+        except Exception:
+            pass
+
+    # 2) Schéma colonnes
+    for col in ("delete_after_expiry_days", "delete_after_days"):
+        try:
+            cur.execute(f"SELECT {col} FROM settings LIMIT 1")
+            row = cur.fetchone()
+            if row and row[0] is not None and str(row[0]).strip() != "":
+                return int(str(row[0]).strip())
+        except Exception:
+            pass
 
     return None
+
 
 
 def get_admin_token(cur: sqlite3.Cursor) -> Optional[str]:
@@ -173,9 +179,10 @@ def delete_expired_users():
     # 1) Délai de suppression / unfriend
     delete_after_days = get_setting_days(cur)
     if delete_after_days is None:
-        logger.info("⚠️ Aucun délai 'delete_after_expiry_days' configuré → tâche ignorée")
+        logger.info("⚠️ Aucun délai configuré (keys: 'delete_after_expiry_days' ou 'delete_after_days') → tâche ignorée")
         conn.close()
         return
+
 
     # 2) Liste des candidats
     candidates = list_expired_candidates(cur, delete_after_days)
