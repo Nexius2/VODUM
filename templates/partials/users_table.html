@@ -1,34 +1,52 @@
 {% for user in users %}
-                <tr 
-				  class="{% if user.statut == '🟢 Actif' %}table-success
-						 {% elif user.statut == '🟡 Préavis' %}table-warning
-						 {% elif user.statut == '🟠 Relance' %}table-orange
-						 {% elif user.statut == '🔴 Expiré' %}table-danger
-						 {% else %}table-light{% endif %}" 
-				  data-user-id="{{ user.id }}">
-                    <td>{{ user.id }}</td>
-                    <td>
-                        {% if user.avatar %}
-                        <img src="{{ user.avatar }}" alt="Avatar" width="40" class="rounded-circle">
-                        {% else %}
-                        ❌ Pas d'avatar
-                        {% endif %}
-                    </td>
-                    <td>{{ user.username }}</td>
-                    <td>{{ user.email }}</td>
-					<td>
-					  <span class="{% if user.statut == '🟢 Actif' %}text-success
-								   {% elif user.statut == '🟡 Préavis' %}text-warning
-								   {% elif user.statut == '🟠 Relance' %}text-orange
-								   {% elif user.statut == '🔴 Expiré' %}text-danger
-								   {% else %}text-muted{% endif %}">
-						{{ user.statut }}
-					  </span>
-					</td>
-                    <td data-order="{{ user.jours_restants if user.jours_restants is not none else 9999 }}">
-					  {{ user.jours_restants if user.jours_restants is not none else '—' }}
-					</td>
+<tr 
+  class="{% if user.status == 'active' %}table-success
+         {% elif user.status == 'pre_expired' %}table-warning
+         {% elif user.status == 'reminder' %}table-orange
+         {% elif user.status == 'expired' %}table-danger
+         {% elif user.status == 'invited' %}table-info
+         {% elif user.status == 'unfriended' %}table-secondary
+         {% elif user.status == 'unknown' %}table-secondary
+         {% elif user.status == 'suspended' %}table-dark
+         {% else %}table-light{% endif %}" 
+  data-user-id="{{ user.id }}">
 
-                    <td>{{ user.expiration_date if user.expiration_date else 'Inconnu' }}</td>
-                </tr>
-                {% endfor %}
+  <!-- colonne cachée _rank pour DataTables -->
+  <td class="d-none status-rank">{{ 1 if user.status == 'unfriended' else 0 }}</td>
+
+  <td>{{ user.id }}</td>
+
+  <td>
+    {% if user.avatar %}
+      <img src="{{ user.avatar }}" alt="Avatar" width="40" class="rounded-circle">
+    {% else %}
+      ❌ Pas d'avatar
+    {% endif %}
+  </td>
+
+  <td>{{ user.username }}</td>
+  <td>{{ user.email }}</td>
+
+  <td>
+    <span class="{% if user.status == 'active' %}text-success
+                 {% elif user.status == 'pre_expired' %}text-warning
+                 {% elif user.status == 'reminder' %}text-orange
+                 {% elif user.status == 'expired' %}text-danger
+                 {% elif user.status == 'invited' %}text-info
+                 {% elif user.status == 'unfriended' %}text-secondary
+                 {% elif user.status == 'unknown' %}text-secondary
+                 {% elif user.status == 'suspended' %}text-dark
+                 {% else %}text-muted{% endif %}">
+      {{ _(user.status) }}
+    </span>
+  </td>
+
+  <!-- ⚠️ tri numérique via data-order -->
+  <td class="col-days"
+      data-order="{{ user.jours_restants if user.jours_restants is not none else 999999 }}">
+    {{ user.jours_restants if user.jours_restants is not none else '—' }}
+  </td>
+
+  <td>{{ user.expiration_date if user.expiration_date else 'Inconnu' }}</td>
+</tr>
+{% endfor %}

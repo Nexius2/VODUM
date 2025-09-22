@@ -1,0 +1,7 @@
+Version: 22.09.25 b1420
+Tool: vodum
+Created by: NeXius2
+Python: 3.11.13
+SQLite: 3.49.1
+Container: Docker
+Image: python:3.12-slim

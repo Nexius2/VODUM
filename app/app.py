@@ -9,6 +9,7 @@ import time
 from werkzeug.utils import secure_filename
 from logger import logger
 import logging
+import hashlib  
 
 
 # Passe le logger 'werkzeug' en DEBUG au lieu de INFO (ou WARNING pour quasi tout masquer)
@@ -23,6 +24,7 @@ from mailer import send_email
 from settings_helper import get_settings
 from disable_expired_users import disable_expired_users
 from plex_share_helper import share_user_libraries, unshare_all_libraries, set_user_libraries, set_user_libraries_via_api, share_user_libraries_plexapi
+
    
 
 import send_reminder_emails
@@ -34,57 +36,132 @@ app = Flask(__name__, template_folder="templates")  # Assure que Flask connaît 
 app.secret_key = "une_clé_secrète_ultra_random"
 
 
+@app.context_processor
+def inject_app_name():
+    return {"APP_NAME": "Vodum"}  # change ici si tu renomme l’outil
+
+
+
+def _ensure_meta_tables(conn: sqlite3.Connection):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS vodum_meta (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            checksum TEXT NOT NULL UNIQUE,
+            applied_at TEXT NOT NULL
+        )
+    """)
+
+def _get_meta(conn: sqlite3.Connection, key: str):
+    cur = conn.execute("SELECT value FROM vodum_meta WHERE key=? LIMIT 1", (key,))
+    row = cur.fetchone()
+    return row[0] if row else None
+
+def _set_meta(conn: sqlite3.Connection, key: str, value: str):
+    conn.execute("""
+        INSERT INTO vodum_meta (key, value)
+        VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value=excluded.value
+    """, (key, value))
+
+def _sha1_of_file(path: str) -> str | None:
+    if not os.path.isfile(path):
+        return None
+    h = hashlib.sha1()
+    with open(path, "rb") as f:
+        while chunk := f.read(65536):
+            h.update(chunk)
+    return h.hexdigest()
 
 def create_tables_once():
-    # ✅ corrige le chemin si besoin
-    tables_sql_path = "/app/tables.sql"
-    updates_sql_path = "/app/updates.sql"
+    """
+    - tables.sql : exécuté une seule fois (meta flag)
+    - default_data.sql : exécuté une seule fois (meta flag)
+    - updates.sql : exécuté uniquement si le contenu a changé (checksum)
+    - puis update_vodum() pour compléter les colonnes manquantes, en loggant
+      uniquement les ajouts réels.
+    """
+    # chemins robustes (fonctionne en local et dans le conteneur)
+    base_dir = os.path.dirname(os.path.abspath(__file__))  # .../app
+    tables_sql_path   = os.path.join(base_dir, "tables.sql")
+    updates_sql_path  = os.path.join(base_dir, "updates.sql")
+    default_data_path = os.path.join(base_dir, "default_data.sql")
 
-    if not os.path.exists(tables_sql_path):
-        logger.critical("🚨 ERREUR : Le fichier tables.sql est introuvable !")
-        return
+    changed = False
 
     try:
         with sqlite3.connect(DATABASE_PATH) as conn:
-            cursor = conn.cursor()
+            _ensure_meta_tables(conn)
 
-            logger.info("📜 Exécution de tables.sql pour mise à jour des schémas")
-            with open(tables_sql_path, "r", encoding="utf-8") as f:
-                cursor.executescript(f.read())
-            logger.info("✅ Fichier tables.sql exécuté avec succès")
-
-            # Données par défaut (si tu gardes ça)
-            try:
-                default_data_path = "/app/app/default_data.sql"
-                if os.path.exists(default_data_path):
-                    with open(default_data_path, "r", encoding="utf-8") as f:
-                        cursor.executescript(f.read())
-                    logger.info("✅ Données par défaut appliquées (INSERT OR IGNORE)")
-                else:
-                    logger.info("ℹ️ Pas de default_data.sql à appliquer")
-            except Exception as e:
-                logger.error(f"❌ Erreur lors de l'application des données par défaut : {e}")
-
-            # ✅ NOUVEAU : exécuter updates.sql s’il existe
-            if os.path.exists(updates_sql_path):
-                try:
-                    logger.info("📜 Exécution de updates.sql (migrations)")
-                    with open(updates_sql_path, "r", encoding="utf-8") as f:
-                        cursor.executescript(f.read())
-                    logger.info("✅ Fichier updates.sql exécuté avec succès")
-                except Exception as e:
-                    logger.error(f"❌ Erreur lors de l'exécution de updates.sql : {e}")
+            # 1) tables.sql (une seule fois)
+            if _get_meta(conn, "tables_sql_applied") == "1":
+                logger.debug("tables.sql déjà appliqué — skip")
             else:
-                logger.info("ℹ️ Aucun updates.sql trouvé, pas de migrations à appliquer")
+                if os.path.exists(tables_sql_path):
+                    logger.info("📜 Exécution de tables.sql (première fois)")
+                    with open(tables_sql_path, "r", encoding="utf-8") as f:
+                        conn.executescript(f.read())
+                    _set_meta(conn, "tables_sql_applied", "1")
+                    logger.info("✅ Fichier tables.sql exécuté (premier démarrage)")
+                    changed = True
+                else:
+                    logger.debug(f"tables.sql introuvable ({tables_sql_path}) — skip")
+                    _set_meta(conn, "tables_sql_applied", "1")  # évite le spam si volontairement absent
+
+            # 2) default_data.sql (une seule fois)
+            if _get_meta(conn, "default_data_sql_applied") == "1":
+                logger.debug("default_data.sql déjà appliqué — skip")
+            else:
+                if os.path.exists(default_data_path):
+                    try:
+                        with open(default_data_path, "r", encoding="utf-8") as f:
+                            conn.executescript(f.read())
+                        _set_meta(conn, "default_data_sql_applied", "1")
+                        logger.info("✅ Données par défaut appliquées")
+                        changed = True
+                    except Exception as e:
+                        logger.error(f"❌ Erreur default_data.sql : {e}")
+                else:
+                    logger.debug("Pas de default_data.sql — skip")
+                    _set_meta(conn, "default_data_sql_applied", "1")
+
+            # 3) updates.sql (uniquement si contenu nouveau)
+            checksum = _sha1_of_file(updates_sql_path)
+            if checksum:
+                cur = conn.execute("SELECT 1 FROM schema_migrations WHERE checksum=? LIMIT 1", (checksum,))
+                if cur.fetchone():
+                    logger.debug("updates.sql inchangé — skip")
+                else:
+                    logger.info("📜 Exécution de updates.sql (nouvelle version détectée)")
+                    with open(updates_sql_path, "r", encoding="utf-8") as f:
+                        conn.executescript(f.read())
+                    conn.execute(
+                        "INSERT INTO schema_migrations (name, checksum, applied_at) VALUES (?, ?, datetime('now'))",
+                        ("updates.sql", checksum)
+                    )
+                    logger.info("✅ Fichier updates.sql exécuté (migrations appliquées)")
+                    changed = True
+            else:
+                logger.debug(f"updates.sql introuvable ({updates_sql_path}) — skip")
 
             conn.commit()
 
-        # ⚡ Important : exécuter update_vodum après fermeture de la connexion
+        # 4) Compléments de schéma (ajouts de colonnes si manquantes)
         from update_vodum import update_vodum
-        update_vodum()
+        update_vodum()  # INFO seulement si de vraies colonnes sont ajoutées
 
+        if not changed:
+            # Un message propre et unique quand il n’y a rien à faire
+            logger.info("✅ Schéma à jour (aucune modification)")
     except Exception as e:
-        logger.error(f"❌ Erreur lors de la création/mise à jour des tables : {e}")
+        logger.error(f"❌ Erreur lors de la préparation du schéma : {e}")
+
 
 
 
@@ -302,11 +379,76 @@ def get_user_page(user_id):
 def servers_page():
     conn = sqlite3.connect(DATABASE_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM servers")
-    servers = cursor.fetchall()
+    cur = conn.cursor()
+
+    # récupère tous les serveurs
+    cur.execute("SELECT * FROM servers")
+    rows = cur.fetchall()
+
+    # récupère les comptes d'utilisateurs par server_id (texte)
+    cur.execute("""
+        SELECT us.server_id, COUNT(DISTINCT us.user_id) AS n
+        FROM user_servers us
+        GROUP BY us.server_id
+    """)
+    counts = {r["server_id"]: r["n"] for r in cur.fetchall()}
+
+    # transforme en dict et ajoute user_count
+    servers = []
+    for r in rows:
+        d = dict(r)
+        d["user_count"] = counts.get(r["server_id"], 0)
+        servers.append(d)
+
     conn.close()
     return render_template("servers.html", servers=servers)
+
+
+@app.route("/servers/offer_time/<int:server_row_id>", methods=["POST"])
+def servers_offer_time(server_row_id):
+    data = request.get_json(silent=True) or {}
+    days = int(data.get("days", 0))
+    print(f"🎁 [DEBUG] Offer time route called: server_row_id={server_row_id}, days={days}", flush=True)
+    if days <= 0:
+        return jsonify({"error": "Durée invalide"}), 400
+
+    conn = sqlite3.connect(DATABASE_PATH, timeout=10)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+
+    # Récupération de l’ID texte du serveur
+    cur.execute("SELECT name, server_id FROM servers WHERE id = ?", (server_row_id,))
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        return jsonify({"error": "Serveur introuvable"}), 404
+
+    server_name = row["name"]
+    server_id_text = row["server_id"]
+
+    # Récupération des utilisateurs liés
+    cur.execute("""
+        SELECT u.id AS user_id, u.expiration_date
+        FROM users u
+        JOIN user_servers us ON us.user_id = u.id
+        WHERE us.server_id = ?
+    """, (server_id_text,))
+    users = cur.fetchall()
+
+    today = date.today()
+    updated = 0
+
+    for u in users:
+        current = _parse_date_any(u["expiration_date"])
+        base = current if current and current >= today else today
+        new_date = (base + timedelta(days=days)).strftime("%Y-%m-%d")
+        cur.execute("UPDATE users SET expiration_date = ? WHERE id = ?", (new_date, u["user_id"]))
+        updated += 1
+
+    conn.commit()
+    conn.close()
+
+    return jsonify({"success": True, "server": server_name, "days": days, "users": updated})
 
 
 @app.route("/servers/add", methods=["POST"])
@@ -1076,8 +1218,30 @@ def should_refresh_servers():
 
 @app.route("/api/servers")
 def api_servers():
-    servers = get_all_servers()
+    conn = sqlite3.connect(DATABASE_PATH, timeout=10)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+
+    cur.execute("SELECT * FROM servers")
+    rows = cur.fetchall()
+
+    cur.execute("""
+        SELECT us.server_id, COUNT(DISTINCT us.user_id) AS n
+        FROM user_servers us
+        GROUP BY us.server_id
+    """)
+    counts = {r["server_id"]: r["n"] for r in cur.fetchall()}
+
+    servers = []
+    for r in rows:
+        d = dict(r)
+        d["user_count"] = counts.get(r["server_id"], 0)
+        servers.append(d)
+
+
+    conn.close()
     return render_template("partials/servers_table.html", servers=servers)
+
 
 @app.route("/api/should-refresh/servers")
 def api_should_refresh_servers():

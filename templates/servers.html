@@ -28,6 +28,7 @@
       <th>plex_url</th>
       <th>plex_status</th>
       <th>tautulli_status</th>
+      <th>Utilisateurs</th>
       <th>Actions</th>
     </tr>
   </thead>
@@ -38,15 +39,43 @@
       <td>{{ server.plex_url }}</td>
       <td>{{ server.plex_status }}</td>
       <td>{{ server.tautulli_status }}</td>
+      <td>{{ server.user_count }}</td>
       <td>
         <form method="POST" action="/servers/delete/{{ server.id }}" style="display:inline;">
           <button class="btn btn-danger btn-sm" onclick="return confirm('Supprimer ce serveur ?')">❌ Supprimer</button>
         </form>
+        <!-- ⛔️ plus de onclick inline -->
+        <button class="btn btn-success btn-sm btn-offrir"
+                data-server-id="{{ server.id }}"
+                data-server-name="{{ server.name }}">
+          🎁 Offrir
+        </button>
       </td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
+
+<!-- Modale offrir -->
+<div class="modal" id="giftModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark text-light">
+      <div class="modal-header">
+        <h5 class="modal-title">Offrir du temps</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fermer"></button>
+      </div>
+      <div class="modal-body">
+        <p id="giftServerName"></p>
+        <div class="d-flex justify-content-around">
+          <!-- ⛔️ plus de onclick inline -->
+          <button id="giftPlus1"  class="btn btn-outline-light">+1j</button>
+          <button id="giftPlus7"  class="btn btn-outline-light">+7j</button>
+          <button id="giftPlus30" class="btn btn-outline-light">+1m</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <hr>
 
@@ -77,25 +106,86 @@
 
 {% block scripts %}
 <script>
-document.addEventListener("DOMContentLoaded", function () {
+let currentServerId = null;
+let modalInstance = null;
+
+function openGiftModal(serverId, serverName) {
+  currentServerId = serverId;
+  const nameEl = document.getElementById("giftServerName");
+  if (nameEl) nameEl.textContent = "Serveur : " + serverName;
+
+  const el = document.getElementById("giftModal");
+  if (window.bootstrap && bootstrap.Modal) {
+    if (!modalInstance) modalInstance = new bootstrap.Modal(el);
+    modalInstance.show();
+  } else {
+    // Fallback si Bootstrap JS absent
+    el.style.display = "block";
+    el.classList.add("show");
+    el.removeAttribute("aria-hidden");
+  }
+}
+
+function offerTime(days) {
+  if (!currentServerId) return;
+  fetch(`/servers/offer_time/${currentServerId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ days })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data && data.success) {
+      alert(`✅ ${days} jours offerts aux utilisateurs`);
+      location.reload();
+    } else {
+      alert("❌ Erreur : " + ((data && data.error) || "Inconnue"));
+    }
+  })
+  .catch(err => alert("❌ Exception JS : " + err.message));
+}
+
+// ⛓️ Fonction qui (re)branche tous les listeners sur la table
+function bindServerRowEvents() {
+  // navigation ligne → /server/<id>
   document.querySelectorAll("tbody tr[data-server-id]").forEach(function (row) {
     row.style.cursor = "pointer";
-	row.addEventListener("click", function (e) {
-	  if (e.target.closest("button")) return; // 🔒 Ne pas déclencher si clic sur un bouton
-
-	  const id = this.getAttribute("data-server-id");
-	  if (id) {
-		window.parent.postMessage({
-		  action: "navigate",
-		  target: `/server/${id}`
-		}, "*");
-	  }
-	});
-
+    row.addEventListener("click", function (e) {
+      if (e.target.closest("button")) return; // éviter si clic sur un bouton
+      const id = this.getAttribute("data-server-id");
+      if (id) {
+        window.parent.postMessage({ action: "navigate", target: `/server/${id}` }, "*");
+      }
+    });
   });
+
+  // 🎁 boutons offrir (plus d'onclick inline → addEventListener)
+  document.querySelectorAll(".btn-offrir").forEach(function (btn) {
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      const id = this.getAttribute("data-server-id");
+      const name = this.getAttribute("data-server-name");
+      openGiftModal(parseInt(id, 10), name);
+    });
+  });
+}
+
+// boutons de la modale (plus d'onclick inline)
+function bindGiftModalButtons() {
+  const b1 = document.getElementById("giftPlus1");
+  const b7 = document.getElementById("giftPlus7");
+  const b30 = document.getElementById("giftPlus30");
+  if (b1)  b1.addEventListener("click", function (e){ e.preventDefault(); offerTime(1);  });
+  if (b7)  b7.addEventListener("click", function (e){ e.preventDefault(); offerTime(7);  });
+  if (b30) b30.addEventListener("click", function (e){ e.preventDefault(); offerTime(30); });
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  bindServerRowEvents();
+  bindGiftModalButtons();
 });
-</script>
-<script>
+
+// refresh AJAX de la table
 async function checkServerRefresh() {
   const res = await fetch("/api/should-refresh/servers");
   const data = await res.json();
@@ -103,12 +193,15 @@ async function checkServerRefresh() {
     const html = await fetch("/api/servers").then(r => r.text());
     document.getElementById("server-table").innerHTML = html;
     await fetch("/api/clear-refresh/servers", { method: "POST" });
+    // 🔁 Re-binder les listeners après remplacement du DOM
+    bindServerRowEvents();
   }
 }
-setInterval(checkServerRefresh, 30000); // toutes les 30 secondes
-refreshLogs();
+setInterval(checkServerRefresh, 30000);
 
+// Si la page expose refreshLogs(), on l'appelle. Sinon on ne casse pas le script.
+if (typeof refreshLogs === "function") {
+  refreshLogs();
+}
 </script>
-
 {% endblock %}
-
