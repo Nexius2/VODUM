@@ -14,7 +14,6 @@ from plexapi.myplex import MyPlexAccount
 def get_setting_days(cur: sqlite3.Cursor) -> Optional[int]:
     """
     Récupère le délai (en jours) après lequel on 'unfriend' les utilisateurs en statut 'expired'.
-
     Compatible avec 2 schémas :
       - Table settings en key/value : key = 'delete_after_expiry_days' ou 'delete_after_days'
       - Colonne directe dans settings : colonne 'delete_after_expiry_days' ou 'delete_after_days'
@@ -42,33 +41,44 @@ def get_setting_days(cur: sqlite3.Cursor) -> Optional[int]:
     return None
 
 
-
 def get_admin_token(cur: sqlite3.Cursor) -> Optional[str]:
     """
     Récupère un token Plex admin utilisable.
     Priorité: servers.plex_token (non vide), fallback settings.plex_auth_token.
     """
-    try:
-        cur.execute("""
-            SELECT plex_token
-            FROM servers
-            WHERE plex_token IS NOT NULL AND TRIM(plex_token) <> ''
-            ORDER BY is_owner DESC, id ASC
-            LIMIT 1
-        """)
-        row = cur.fetchone()
-        if row and row[0]:
-            return row[0]
-    except Exception:
-        pass
+    # 1) Cherche d'abord dans servers (avec ou sans colonne is_owner selon le schéma)
+    for q in (
+        """
+        SELECT plex_token FROM servers
+        WHERE plex_token IS NOT NULL AND TRIM(plex_token) <> ''
+        ORDER BY is_owner DESC, id ASC LIMIT 1
+        """,
+        """
+        SELECT plex_token FROM servers
+        WHERE plex_token IS NOT NULL AND TRIM(plex_token) <> ''
+        ORDER BY id ASC LIMIT 1
+        """,
+    ):
+        try:
+            cur.execute(q)
+            row = cur.fetchone()
+            if row and row[0]:
+                return row[0]
+        except Exception:
+            continue
 
-    try:
-        cur.execute("SELECT value FROM settings WHERE key='plex_auth_token' LIMIT 1")
-        row = cur.fetchone()
-        if row and row[0]:
-            return row[0]
-    except Exception:
-        pass
+    # 2) Ensuite dans settings : d'abord en key/value, puis en colonne directe
+    for q in (
+        "SELECT value FROM settings WHERE key='plex_auth_token' LIMIT 1",
+        "SELECT plex_auth_token FROM settings LIMIT 1",
+    ):
+        try:
+            cur.execute(q)
+            row = cur.fetchone()
+            if row and row[0]:
+                return row[0]
+        except Exception:
+            continue
 
     return None
 
@@ -78,7 +88,7 @@ def list_expired_candidates(cur: sqlite3.Cursor, delete_after_days: int) -> List
     Cible les utilisateurs:
       - status = 'expired'
       - non admin, username != 'guest'
-      - dont la date de bascule en 'expired' (status_changed_at, à défaut expiration_date)
+      - dont la date d'expiration (expiration_date, ou fallback status_changed_at)
         est antérieure à aujourd'hui - delete_after_days.
     Retourne: (id, username, email, status_changed_at, expiration_date)
     """
@@ -91,8 +101,8 @@ def list_expired_candidates(cur: sqlite3.Cursor, delete_after_days: int) -> List
           AND LOWER(username) <> 'guest'
           AND DATE(
                 COALESCE(
-                    substr(status_changed_at, 1, 10),  -- 'YYYY-MM-DD' extrait si ISO
-                    expiration_date
+                    expiration_date,
+                    substr(status_changed_at, 1, 10)  -- 'YYYY-MM-DD' extrait si ISO
                 ),
                 '+' || ? || ' days'
               ) < DATE('now')
@@ -101,9 +111,7 @@ def list_expired_candidates(cur: sqlite3.Cursor, delete_after_days: int) -> List
 
 
 def find_friend_obj(account: MyPlexAccount, username: str, email: str):
-    """
-    Tente de retrouver l'ami sur Plex via username/email.
-    """
+    """Tente de retrouver l'ami sur Plex via username/email."""
     try:
         friends = account.users()  # liste des amis/partagés sur plex
     except Exception as e:
@@ -113,7 +121,6 @@ def find_friend_obj(account: MyPlexAccount, username: str, email: str):
     uname = (username or "").strip().lower()
     eml = (email or "").strip().lower()
 
-    # Match par username ou email
     for f in friends:
         try:
             fu = (getattr(f, "username", "") or "").strip().lower()
@@ -140,15 +147,12 @@ def unfriend_and_update_db(conn: sqlite3.Connection, account: MyPlexAccount, use
             logger.info(f"👋 Unfriend Plex: {username}")
             account.removeFriend(friend_obj)
         else:
-            # Fallback: certains PlexAPI acceptent removeFriend(str)
             logger.info(f"👋 Unfriend Plex (fallback str): {username}")
             account.removeFriend(username)
     except Exception as e:
         logger.error(f"❌ Echec unfriend Plex pour {username}: {e}")
-        # On n'arrête pas : on continue la mise à jour DB pour aligner l'UI
-        # (update_plex_users fera l'alignement complet à la prochaine synchro)
 
-    # 2) Nettoyage accès locaux (immédiat pour l’UI)
+    # 2) Nettoyage accès locaux
     try:
         cur.execute("DELETE FROM user_servers WHERE user_id = ?", (user_id,))
         cur.execute("DELETE FROM user_libraries WHERE user_id = ?", (user_id,))
@@ -176,13 +180,12 @@ def delete_expired_users():
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
 
-    # 1) Délai de suppression / unfriend
+    # 1) Délai de suppression
     delete_after_days = get_setting_days(cur)
     if delete_after_days is None:
         logger.info("⚠️ Aucun délai configuré (keys: 'delete_after_expiry_days' ou 'delete_after_days') → tâche ignorée")
         conn.close()
         return
-
 
     # 2) Liste des candidats
     candidates = list_expired_candidates(cur, delete_after_days)
