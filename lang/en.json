@@ -84,7 +84,7 @@
   "task.update_user_status": "Users status update",
   "active": "Active",
   "pre_expired": "Notice",
-  "relance": "Reminder",
+  "reminder": "Reminder",
   "expired": "Expired",
   "invited": "Invited",
   "unfriended": "Unfriended",
