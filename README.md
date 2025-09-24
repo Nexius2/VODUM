@@ -1,5 +1,5 @@
 
-# 🎬 Vodum – ALPHA Version - Gestion avancée de serveurs Plex (et Jellyfin)
+# 🎬 Vodum – ALPHA Version - Gestion avancée de serveurs Plex
 
 **Vodum** est un outil open source de gestion d'utilisateurs et de bibliothèques pour les serveurs multimédia Plex. Il centralise les accès, automatise les notifications d'abonnements, et simplifie la vie des administrateurs via une interface et des intégrations pratiques (Discord, mail...).
 
