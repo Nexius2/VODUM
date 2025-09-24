@@ -8,6 +8,28 @@
   --text: #212529;
 }
 
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+.tab-frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+  background: transparent;
+}
+
+body.dark-mode {
+  background-color: #121212 !important;
+  color: #f8f9fa !important;
+}
+
+body.light-mode {
+  background-color: #f8f9fa !important;
+  color: #212529 !important;
+}
 
 
 /* === THEMES === */
@@ -28,6 +50,15 @@ body.dark-mode {
   --text: #ffffff;
 }
 
+body.dark-mode table {
+  background-color: #1e1e1e;
+  color: #f8f9fa;
+}
+
+body.dark-mode thead {
+  background-color: #2c2c2c;
+  color: #ffffff;
+}
 
 
 /* === GENERAL LAYOUT === */
@@ -194,3 +225,8 @@ button:hover, .btn:hover {
     color: #fff !important;
 }
 
+/* Supprimer le padding des containers pour éviter les bordures blanches */
+.container-fluid {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
