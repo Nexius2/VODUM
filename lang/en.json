@@ -53,6 +53,7 @@
   "smtp_free_help": "✅ A Free.fr address is required.<br>📧 Example: votremail@free.fr",
   "smtp_free_user": "👤 Username: your @free.fr address",
   "smtp_free_pass": "🔐 Password: the one you use for Free webmail",
+  
   "About": "About",
   "Version": "Version",
   "Tool": "Tool",
@@ -68,6 +69,7 @@
   "WARNING": "Warning",
   "ERROR": "Error",
   "CRITICAL": "Critical",
+  
   "tasks.title": "Scheduled Tasks",
   "tasks.name": "Name",
   "tasks.last_run": "Last run",
@@ -82,6 +84,8 @@
   "task.delete_expired_users": "Delete expired users",
   "task.check_libraries": "Clean up libraries",
   "task.update_user_status": "Users status update",
+  "task.send_mail_queue": "Send mails",
+  
   "active": "Active",
   "pre_expired": "Notice",
   "reminder": "Reminder",
@@ -89,6 +93,47 @@
   "invited": "Invited",
   "unfriended": "Unfriended",
   "suspended": "Suspended",
-  "unknown": "Unknown"
+  "unknown": "Unknown",
+  
+  "menu_home": "📺 Vodum",
+  "menu_users": "👥 Users",
+  "menu_servers": "🖥️ Servers",
+  "menu_libraries": "📚 Libraries",
+  "menu_mail": "📧 Mailing",
+  "menu_settings": "⚙️ Settings",
+  "menu_backup": "💾 Backup",
+  "menu_tasks": "⏱️ Tasks",
+  "menu_about": "ℹ️ About",
 
+  "users_sync": "🔄 Sync users",
+  "users_id": "ID",
+  "users_avatar": "Avatar",
+  "users_name": "Username",
+  "users_email": "Email",
+  "users_status": "📌 Status",
+  "users_days_left": "⏳ Days left",
+  "users_end_date": "📅 End date",
+  "users_no_avatar": "❌ No avatar",
+  "users_total": "👥 Total users:",
+  "users_distribution": "📊 Users distribution",
+
+  "datatable_search": "🔍 Search:",
+  "datatable_first": "First",
+  "datatable_last": "Last",
+  "datatable_next": "Next",
+  "datatable_previous": "Previous",
+  "datatable_export_csv": "📥 Export CSV",
+  "datatable_length_menu": "Show _MENU_ users per page",
+  "datatable_info": "Showing _START_ to _END_ of _TOTAL_ users",
+
+
+  "chart_users_status": "Users by status",
+  "chart_active": "Active",
+  "chart_preavis": "Notice",
+  "chart_reminder": "Reminder",
+  "chart_expired": "Expired",
+  "chart_invited": "Invited",
+  "chart_removed": "Removed",
+  "chart_unknown": "Unknown",
+  "chart_suspended": "Suspended"
 }

@@ -17,9 +17,13 @@ TASKS = {
     "backup": {"label": "Sauvegarde", "interval": 1440},                                             # 1/jour
     "delete_expired_users": {"label": "Suppression des utilisateurs expirés", "interval": 1440},     # 1/jour
     "check_libraries": {"label": "Nettoyage des bibliothèques", "interval": 720},                    # 2/jour
-    "update_user_status": {"label": "Mise à jour des statuts utilisateurs", "interval": 1440},  # 1/jour
-
+    "update_user_status": {"label": "Mise à jour des statuts utilisateurs", "interval": 1440},       # 1/jour
+    "send_mail_queue": {
+        "label": "Envoi des mails en attente (campagnes)",
+        "interval": 60,  # toutes les heures (adaptable)
+    },
 }
+
 
 def update_task_status(name: str, next_run: str | None = None):
     """

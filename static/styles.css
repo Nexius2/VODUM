@@ -106,11 +106,19 @@ h2.section-title {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  height: 2rem;
   margin-top: 0;
   font-variant-numeric: tabular-nums;
-  line-height: 2rem;
   font-family: inherit;
+  justify-content: center;
+  padding: 0 0.8rem;
+  height: 34px;
+  line-height: 34px;
+}
+
+.badge-days label {
+  margin: 0;
+  padding: 0;
+  font-weight: 600;
 }
 
 .badge-days input {
@@ -131,7 +139,26 @@ h2.section-title {
   vertical-align: middle;
 }
 
+.badge-days input[type="number"] {
+  width: 60px;
+  height: 26px;
+  background: #1e1e1e;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  margin-left: 8px;
+  text-align: center;
+  font-weight: bold;
+  font-size: 0.9rem;
+  line-height: 26px;
+  padding: 0;
+  vertical-align: middle;
+}
 
+.badge-days input[type="number"]:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
+}
 
 
 
@@ -189,7 +216,30 @@ button:hover, .btn:hover {
 }
 
 
-/* === UTILITIES === */
+/* Harmonise la largeur de la bulle "Sujet du mail" avec celle du corps */
+.subject-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Ajuste la bulle verte et son input */
+.subject-container .badge-days {
+  flex-shrink: 0;
+  margin-right: 10px;
+}
+
+/* Champ texte du sujet (prend toute la largeur restante) */
+.subject-container input[type="text"],
+.subject-container input[type="email"] {
+  flex: 1;
+  width: 100%;
+  box-sizing: border-box;
+}
+
 
 
 
@@ -230,3 +280,365 @@ button:hover, .btn:hover {
   padding-left: 0 !important;
   padding-right: 0 !important;
 }
+
+.floating-save { position: fixed; top: 10px; right: 20px; z-index: 999; }
+
+.mailing-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr); /* Deux colonnes fixes */
+  grid-gap: 30px;
+  justify-content: center;
+  align-items: stretch;
+  margin-top: 1.5rem;
+  padding-bottom: 2rem;
+}
+
+/* Responsive : sur petit écran → une seule colonne */
+@media (max-width: 1200px) {
+  .mailing-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* === CARDS (bulles) === */
+.mail-card {
+  background: var(--card-bg);
+  color: var(--text);
+  border-radius: 16px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+  padding: 20px;
+  transition: transform 0.2s ease, box-shadow 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  height: 600px; /* pour remplir la cellule du grid */
+  min-height: 600px; /* ajuste selon ton confort visuel */
+  overflow: hidden; 
+}
+
+.mail-card .ql-container {
+  flex-grow: 1; /* l’éditeur prend l’espace disponible */
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto; /* permet le scroll interne du contenu long */
+}
+
+.mail-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 22px rgba(0,0,0,0.35);
+}
+
+body.dark-mode .mail-card {
+  background: #1e1e1e;
+  color: #f5f5f5;
+}
+
+body.light-mode .mail-card {
+  background: #ffffff;
+  color: #1e1e1e;
+}
+
+/* === CAMPAGNE : corrige le chevauchement des boutons === */
+.page-card .ql-container {
+  min-height: 200px;
+  margin-bottom: 20px !important; /* espace sous l'éditeur */
+  border-radius: 8px;
+  display: block;
+}
+
+
+
+
+
+/* --- Espacement correct entre éditeur et boutons (Campagne) --- */
+.page-card .editor {
+  margin-bottom: 25px !important; /* Espace entre l'éditeur et les boutons */
+  display: block;
+}
+
+/* Boutons sous l’éditeur */
+.page-card .actions {
+  margin-top: 0 !important;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  justify-content: flex-start;
+}
+
+/* --- CAMPAGNE : alignement propre du contenu et des boutons --- */
+#card-campaign {
+  position: relative;
+}
+
+#card-campaign .editor {
+  height: 250px;                 /* hauteur fixe et raisonnable */
+  overflow-y: auto;              /* scroll si besoin */
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 15px;           /* espace pour les boutons */
+}
+
+/* Boutons d’action sous le corps du message */
+#card-campaign .actions {
+  display: flex;
+  justify-content: flex-start;
+  gap: 10px;
+  padding-top: 5px;
+  border-top: 1px solid var(--border);
+  margin-top: 10px;
+  position: relative;
+  z-index: 2;                    /* assure que c’est au-dessus du contenu */
+}
+
+/* --- Correction finale : boutons visibles sous l’éditeur --- */
+#card-campaign .page-card,
+#card-campaign {
+  overflow: visible !important;     /* permet d’afficher les boutons même s’ils dépassent */
+  min-height: 100%;                 /* évite que la carte coupe le bas */
+  display: flex;
+  flex-direction: column;
+}
+
+#card-campaign .actions {
+  margin-bottom: 10px !important;   /* espace sous les boutons */
+}
+
+
+
+
+
+
+/* --- Correction affichage Campagne --- */
+.mail-campaign-card .form-group,
+.mail-campaign-card .ql-container,
+.mail-campaign-card .ql-editor {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Espace sous l'éditeur pour que les boutons ne collent plus */
+.mail-campaign-card .ql-container {
+  margin-bottom: 20px !important;
+}
+
+/* Boutons sous l'éditeur */
+.mail-campaign-card .actions {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  justify-content: flex-start;
+}
+
+
+
+
+
+/* Corrige le chevauchement des boutons sous Quill */
+.mail-card .editor {
+  min-height: 180px;
+  border-radius: 0 0 8px 8px;
+  margin-bottom: 16px; /* espace entre le texte et les boutons */
+  display: block;
+}
+
+/* Assure que la barre de boutons reste toujours visible */
+.mail-card .actions {
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  justify-content: flex-start;
+}
+
+
+.mail-card h2 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 6px 0 12px 0;
+    flex-wrap: wrap;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+/* Bulle "jours avant / après expiration" */
+.mail-card .badge-days {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #4caf50;
+  color: white;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 4px 10px;
+  height: 34px;
+  line-height: 34px;
+  margin-left: auto;
+}
+
+/* Champ numérique dans la bulle */
+.mail-card .badge-days input[type="number"] {
+  width: 60px;
+  height: 26px;
+  background: #1e1e1e;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  margin-left: 8px;
+  text-align: center;
+  font-weight: bold;
+  font-size: 0.9rem;
+  line-height: 26px;
+  padding: 0;
+  vertical-align: middle;
+}
+
+/* Bloc "Sujet du mail" */
+.mail-card .form-group {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 0.6rem;
+}
+
+.mail-card .form-group input[type="text"] {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.mail-days label {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.9rem;
+}
+
+.mail-days input {
+  width: 100%;
+  padding: 0.4rem;
+  border-radius: 8px;
+  border: 1px solid #555;
+  background: #1e1e1e;
+  color: #eee;
+}
+
+.quill-editor {
+  height: 200px;
+  background: #1c1c1c;
+  color: #f5f5f5;
+  border-radius: 8px;
+  margin: 1rem 0;
+}
+
+.btn-save, .btn-send, .btn-upload {
+  border: none;
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background 0.3s ease;
+}
+
+.btn-save {
+  background: linear-gradient(90deg, #7b5cff, #4090ff);
+  color: white;
+}
+
+.btn-send {
+  background: linear-gradient(90deg, #48c774, #3cc49e);
+  color: white;
+}
+
+.btn-upload {
+  background: #353535;
+  color: #ccc;
+  margin-right: 0.6rem;
+}
+
+.btn-save:hover, .btn-send:hover, .btn-upload:hover {
+  opacity: 0.85;
+}
+
+.badge {
+  padding: 0.3rem 0.6rem;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  color: white;
+}
+
+/* Harmonisation de la bulle "Jours avant expiration" */
+.days-before-container {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #44b758; /* vert actuel */
+  color: #fff;
+  padding: 0.3rem 1.2rem;
+  border-radius: 30px;
+  font-weight: bold;
+  height: 40px; /* hauteur fixe harmonisée */
+}
+
+/* Champ numérique à l'intérieur (ex: input ou span noir) */
+.days-before-container input,
+.days-before-container span {
+  background: #1e1e1e; /* fond noir */
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  margin-left: 10px;
+  text-align: center;
+  width: 60px;
+  height: 30px;
+  line-height: 30px;
+  font-weight: 600;
+  font-size: 15px;
+  padding: 0;
+}
+
+
+.badge-days, .badge-tag {
+    font-size: 0.9em;
+    color: var(--text-color-secondary, #bdbdbd);
+  }
+
+  .badge-tag {
+    padding: 4px 10px; border-radius: 999px; font-weight: 700;
+    background: #2b2b2b; color: #ddd;
+    margin-left: 10px;
+  }
+
+    /* Quill */
+    .toolbar { border-radius: 8px 8px 0 0; }
+    .editor  { min-height: 150px; border-radius: 0 0 8px 8px; }
+
+    /* Inputs */
+    .field { margin: 10px 0; }
+    .field label { display:block; margin-bottom: 6px; font-weight: 700; }
+    .input, select, input[type="number"], input[type="text"] {
+      width: 100%; background: #171717; color: #ddd; border: 1px solid #2b2b2b; border-radius: 8px; padding: 10px;
+    }
+
+    /* Boutons d’action */
+    .actions { display: flex; gap: 10px; margin-top: 10px; }
+    .btn { border: 0; border-radius: 10px; padding: 10px 14px; cursor: pointer; font-weight: 700; }
+    .btn.save { background: #1c5f2e; color: #fff; }
+    .btn.gray { background: #3a3a3a; color: #fff; }
+    .btn.blue { background: #1f4d87; color: #fff; }
+
+    .ok  { color: #86efac; }
+    .err { color: #fca5a5; }
+    .hint{ color: #a3a3a3; font-size: .9rem; }
+
+    /* Supprimer les flèches des champs number (ancien fichier) */
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type=number] { -moz-appearance: textfield; }
+
+.badge-green { background: #22c55e; }
+.badge-red { background: #ef4444; }
+.badge-blue { background: #3b82f6; }

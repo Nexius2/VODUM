@@ -1,127 +1,414 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Paramétrage des mails</title>
-  <link rel="stylesheet" href="/static/styles.css">
-  <style>
-    /* Supprimer les flèches des champs number */
-    input[type=number]::-webkit-inner-spin-button,
-    input[type=number]::-webkit-outer-spin-button {
-      -webkit-appearance: none;
-      margin: 0;
-    }
-    input[type=number] {
-      -moz-appearance: textfield;
-    }
-	
-	.floating-save {
-	  position: fixed;
-	  top: 10px;
-	  right: 20px;
-	  z-index: 999;
-	}
 
-	
-  </style>
+  <!-- Styles globaux de l'app -->
+  <link rel="stylesheet" href="/static/styles.css" />
+
+  <!-- Quill -->
+  <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet" />
+  <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
+
+
 </head>
+
 <body>
   <div class="container dark-background">
-    <h1 style="margin-bottom: 2rem;">📬 Paramétrage des mails d'abonnement</h1>
+    <h1 style="margin-bottom: 1rem;">📬 Paramétrage des mails d'abonnement</h1>
 
-    <form id="mailForm"></form>
-	<div class="floating-save">
-	  <button type="button" class="btn btn-success" onclick="saveAllTemplates()">💾 Enregistrer</button>
-	</div>
+    <!-- Bouton "Enregistrer tout" (on conserve ce comportement) -->
+    <div class="floating-save">
+      <button type="button" class="btn btn-success" id="saveAll">💾 Enregistrer</button>
+    </div>
 
-  </div>
+    <!-- ======= Grille 2x2 des bulles ======= -->
+    <div class="mailing-grid">
 
-  <script>
-    const TYPES = ['preavis', 'relance', 'fin'];
-    const LABELS = {
-      preavis: "Préavis",
-      relance: "Relance",
-      fin: "Fin d'abonnement"
-    };
-
-    const form = document.getElementById('mailForm');
-
-    TYPES.forEach(type => {
-      const section = document.createElement('section');
-      section.classList.add('page-card');
-
-      section.innerHTML = `
-        <div class="mailing-header">
-          <h2 class="mb-0">${LABELS[type]}</h2>
+      <!-- ====== 1. PRÉAVIS ====== -->
+      <section class="mail-card page-card" id="card-preavis">
+        <h2>
+          📅 Mail de préavis
           <span class="badge-days">
-            <input type="number" name="${type}_days" /> jours
+            <label for="preavis_days" style="font-weight:600;margin-right:6px;">Jours avant expiration:</label>
+            <input type="number" id="preavis_days" min="0" style="width:90px;display:inline-block;vertical-align:middle;">
           </span>
+        </h2>
+		  <div class="form-group">
+			<label for="preavis_subject"><i class="fas fa-heading"></i> Sujet du mail</label>
+			<input type="text" id="preavis_subject" class="form-control" placeholder="Sujet du mail de préavis">
+		  </div>
+        <div id="tb_preavis" class="toolbar">
+          <button class="ql-bold"></button>
+          <button class="ql-italic"></button>
+          <button class="ql-underline"></button>
+          <button class="ql-link"></button>
+        </div>
+        <div id="ed_preavis" class="editor"></div>
+
+        <div class="actions">
+          <button class="btn save" id="save_preavis">💾 Enregistrer le préavis</button>
+          <span id="preavis_status" class="hint"></span>
+        </div>
+      </section>
+
+      <!-- ====== 2. RELANCE ====== -->
+      <section class="mail-card page-card" id="card-relance">
+        <h2>
+          🔁 Mail de relance
+          <span class="badge-days">
+            <label for="relance_days" style="font-weight:600;margin-right:6px;">Jours après expiration:</label>
+            <input type="number" id="relance_days" min="0" style="width:90px;display:inline-block;vertical-align:middle;">
+          </span>
+        </h2>
+		  <div class="form-group">
+			<label for="relance_subject"><i class="fas fa-heading"></i> Sujet du mail</label>
+			<input type="text" id="relance_subject" class="form-control" placeholder="Sujet du mail de relance">
+		  </div>
+        <div id="tb_relance" class="toolbar">
+          <button class="ql-bold"></button>
+          <button class="ql-italic"></button>
+          <button class="ql-underline"></button>
+          <button class="ql-link"></button>
+        </div>
+        <div id="ed_relance" class="editor"></div>
+
+        <div class="actions">
+          <button class="btn save" id="save_relance">💾 Enregistrer la relance</button>
+          <span id="relance_status" class="hint"></span>
+        </div>
+      </section>
+
+      <!-- ====== 3. FIN D’ABONNEMENT ====== -->
+      <section class="mail-card page-card" id="card-fin">
+        <h2>
+          ⛔ Mail de fin d’abonnement
+          <!-- on conserve aussi un champ de jours si ton backend l’ignore, ça ne casse rien -->
+          <span class="badge-days">
+            <label for="fin_days" style="font-weight:600;margin-right:6px;">Jours (optionnel):</label>
+            <input type="number" id="fin_days" min="0" style="width:90px;display:inline-block;vertical-align:middle;">
+          </span>
+        </h2>
+		  <div class="form-group">
+			<label for="fin_subject"><i class="fas fa-heading"></i> Sujet du mail</label>
+			<input type="text" id="fin_subject" class="form-control" placeholder="Sujet du mail de fin d’abonnement">
+		  </div>
+        <div id="tb_fin" class="toolbar">
+          <button class="ql-bold"></button>
+          <button class="ql-italic"></button>
+          <button class="ql-underline"></button>
+          <button class="ql-link"></button>
+        </div>
+        <div id="ed_fin" class="editor"></div>
+
+        <div class="actions">
+          <button class="btn save" id="save_fin">💾 Enregistrer la fin</button>
+          <span id="fin_status" class="hint"></span>
+        </div>
+      </section>
+
+      <!-- ====== 4. ENVOI GLOBAL ====== -->
+      <section class="mail-card page-card" id="card-campaign">
+        <h2>
+          📢 Envoyer un message à tous les utilisateurs d’un serveur
+          <span class="badge-tag">Campagne</span>
+        </h2>
+
+        <div class="field">
+          <label for="serverSelect">Serveur</label>
+          <select id="serverSelect" class="input"></select>
         </div>
 
-        <div class="mb-3">
-          <label>Sujet</label>
-          <input type="text" name="${type}_subject" class="form-control" />
+        <div class="field">
+          <label for="mailSubject">Sujet du message</label>
+          <input id="mailSubject" type="text" class="input" placeholder="Sujet du mail">
         </div>
 
-        <div class="mb-3">
-          <label>Contenu</label>
-          <textarea name="${type}_body" rows="6" class="form-control"></textarea>
-        </div>
-      `;
+        <div class="field">
+          <label>Contenu du message</label>
 
-      form.appendChild(section);
+          <!-- Barre d’outils personnalisée (incl. upload) -->
+          <div id="tb_global" class="toolbar">
+            <select class="ql-header">
+              <option value="1"></option>
+              <option value="2"></option>
+              <option selected></option>
+            </select>
+            <button class="ql-bold"></button>
+            <button class="ql-italic"></button>
+            <button class="ql-underline"></button>
+            <button class="ql-list" value="ordered"></button>
+            <button class="ql-list" value="bullet"></button>
+            <button class="ql-link"></button>
+            <button id="btnUpload" type="button" title="Joindre un fichier">📎</button>
+          </div>
+
+          <div id="ed_global" class="editor" style="min-height:200px;"></div>
+          <div id="attachmentInfo" class="hint" style="margin-top:6px;"></div>
+        </div>
+
+        <div class="actions">
+          <button class="btn gray" id="preview">👁️ Prévisualiser</button>
+          <button class="btn blue" id="sendCampaign">🚀 Envoyer à tous les utilisateurs</button>
+        </div>
+
+        <div id="campaign_result" class="hint" style="margin-top:10px;"></div>
+      </section>
+
+    </div><!-- /mailing-grid -->
+  </div><!-- /container -->
+
+  <!-- =======================
+       JS – mêmes endpoints et IDs qu’actuellement
+       (on conserve intégralement les comportements)
+  ======================== -->
+  <script>
+    // Thème (conservé depuis l'ancien fichier)
+    document.addEventListener("DOMContentLoaded", function () {
+      const mode = localStorage.getItem("theme") || "light";
+      document.body.classList.add(mode + "-mode");
+    });
+    window.addEventListener("message", function(event) {
+      if (event.data && event.data.theme) {
+        const mode = event.data.theme;
+        document.body.classList.remove("light-mode", "dark-mode");
+        document.body.classList.add(mode + "-mode");
+      }
     });
 
-    fetch('/api/email_templates')
-      .then(res => res.json())
-      .then(data => {
-        TYPES.forEach(type => {
-          const val = data[type];
-          if (val) {
-            document.querySelector(`[name="${type}_days"]`).value = val.days_before ?? 0;
-            document.querySelector(`[name="${type}_subject"]`).value = val.subject;
-            document.querySelector(`[name="${type}_body"]`).value = val.body;
-          }
-        });
-      });
+    // --- Quill instances
+    let qPreavis, qRelance, qFin, qGlobal;
+    let uploadedAttachmentPath = null;
 
-    function saveTemplate(type) {
-      const subject = document.querySelector(`[name="${type}_subject"]`).value;
-      const body = document.querySelector(`[name="${type}_body"]`).value;
-      const days_before = parseInt(document.querySelector(`[name="${type}_days"]`).value || "0");
-
-      return fetch(`/api/email_templates/${type}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subject, body, days_before })
-      });
+    function initEditors() {
+      qPreavis = new Quill('#ed_preavis', { theme:'snow', modules:{ toolbar:'#tb_preavis' }});
+      qRelance = new Quill('#ed_relance', { theme:'snow', modules:{ toolbar:'#tb_relance' }});
+      qFin     = new Quill('#ed_fin',     { theme:'snow', modules:{ toolbar:'#tb_fin' }});
+      qGlobal  = new Quill('#ed_global',  { theme:'snow', modules:{ toolbar:'#tb_global' }});
     }
 
-    function saveAllTemplates() {
-      Promise.all(TYPES.map(type => saveTemplate(type)))
-        .then(responses => {
-          if (responses.every(res => res.ok)) {
-            alert("Modèles enregistrés ✔");
-          } else {
-            alert("Erreur lors de l'enregistrement ❌");
-          }
-        });
-    }
-  </script>
-	<script>
-	  document.addEventListener("DOMContentLoaded", function () {
-		const mode = localStorage.getItem("theme") || "light";
-		document.body.classList.add(mode + "-mode");
-	  });
+	function sanitizeMailHTML(html) {
+	  if (!html) return '';
+	  // Supprime uniquement les balises <html> et <body>, sans toucher au reste
+	  return html.replace(/<\/?(html|body)[^>]*>/gi, '').trim();
+	}
 
-	  window.addEventListener("message", function(event) {
-		if (event.data && event.data.theme) {
-		  const mode = event.data.theme;
-		  document.body.classList.remove("light-mode", "dark-mode");
-		  document.body.classList.add(mode + "-mode");
+	// Charger modèles depuis la BDD
+	async function loadTemplates() {
+	  try {
+		const res = await fetch('/api/email_templates');
+		const templates = await res.json();
+
+		// Nettoie le HTML sans toucher aux variables {username}, {days_left}, etc.
+		const cleanHTML = html => (html || '').replace(/<\/?(html|body)[^>]*>/gi, '').trim();
+
+		// Supprime les listes ordonnées (visuel Quill uniquement)
+		const removeNumberedLists = editor => {
+		  editor.root.querySelectorAll('ol').forEach(el => {
+			// On remplace les <li> par des sauts de ligne
+			const plainText = el.innerHTML.replace(/<\/li><li>/g, '<br>');
+			el.outerHTML = plainText.replace(/<\/?li>/g, '');
+		  });
+		};
+
+		// === Préavis ===
+		if (templates.preavis) {
+		  document.getElementById('preavis_days').value = templates.preavis.days_before ?? 0;
+		  document.getElementById('preavis_subject').value = templates.preavis.subject || '';
+		  qPreavis.clipboard.dangerouslyPasteHTML(cleanHTML(templates.preavis.body));
+		  removeNumberedLists(qPreavis);
 		}
-	  });
-	</script>
 
+		// === Relance ===
+		if (templates.relance) {
+		  document.getElementById('relance_days').value = templates.relance.days_before ?? 0;
+		  document.getElementById('relance_subject').value = templates.relance.subject || '';
+		  qRelance.clipboard.dangerouslyPasteHTML(cleanHTML(templates.relance.body));
+		  removeNumberedLists(qRelance);
+		}
+
+		// === Fin d’abonnement ===
+		if (templates.fin) {
+		  if (typeof templates.fin.days_before !== 'undefined') {
+			const finDaysEl = document.getElementById('fin_days');
+			if (finDaysEl) finDaysEl.value = templates.fin.days_before ?? 0;
+		  }
+
+		  const finSubjectEl = document.getElementById('fin_subject');
+		  if (finSubjectEl) finSubjectEl.value = templates.fin.subject || '';
+		  qFin.clipboard.dangerouslyPasteHTML(cleanHTML(templates.fin.body));
+		  removeNumberedLists(qFin);
+		}
+
+	  } catch (e) {
+		console.error('loadTemplates error', e);
+	  }
+	}
+
+
+
+    // Sauvegarder un modèle
+    async function saveTemplate(type) {
+      const statusEl = document.getElementById(type + '_status');
+
+      const payloadMap = {
+		preavis: {
+		  subject: document.getElementById('preavis_subject').value.trim(),
+		  body: qPreavis.root.innerHTML,
+		  days_before: Number(document.getElementById('preavis_days').value || 0)
+		},
+		relance: {
+		  subject: document.getElementById('relance_subject').value.trim(),
+		  body: qRelance.root.innerHTML,
+		  days_before: Number(document.getElementById('relance_days').value || 0)
+		},
+		fin: {
+		  subject: document.getElementById('fin_subject').value.trim(),
+		  body: qFin.root.innerHTML,
+		  days_before: Number(document.getElementById('fin_days').value || 0)
+		}
+
+      };
+
+      try {
+        const res = await fetch(`/api/email_templates/${type}`, {
+          method: 'POST',
+          headers: { 'Content-Type':'application/json' },
+          body: JSON.stringify(payloadMap[type])
+        });
+        const json = await res.json().catch(()=>({}));
+        if ((json && (json.status === 'ok' || json.success === true)) || res.ok) {
+          if (statusEl) statusEl.innerHTML = "<span class='ok'>✔ Enregistré</span>";
+        } else {
+          if (statusEl) statusEl.innerHTML = "<span class='err'>✖ Erreur</span>";
+        }
+      } catch (e) {
+        if (statusEl) statusEl.innerHTML = "<span class='err'>✖ Erreur</span>";
+      }
+    }
+
+    // Enregistrer tout
+    async function saveAll() {
+      await saveTemplate('preavis');
+      await saveTemplate('relance');
+      await saveTemplate('fin');
+      // feedback léger
+      try { alert("💾 Modèles enregistrés ✔"); } catch {}
+    }
+
+    // Charger la liste des serveurs
+    async function loadServers() {
+      try {
+        const res = await fetch('/api/servers_list');
+        const list = await res.json();
+        const sel = document.getElementById('serverSelect');
+        sel.innerHTML = '';
+        list.forEach(srv => {
+          const opt = document.createElement('option');
+          opt.value = srv.id;
+          // On affiche name + type + url si dispo (sans rien casser si absent)
+          const url = srv.plex_url || srv.url || srv.public_url || srv.local_url || 'n/a';
+          opt.textContent = `${srv.name} (${srv.type || 'server'}) - ${url}`;
+          sel.appendChild(opt);
+        });
+      } catch (e) {
+        console.error('loadServers error', e);
+      }
+    }
+
+    // Upload de fichier (tout type accepté côté serveur selon ta whitelist)
+    document.addEventListener('click', (ev) => {
+      if (ev.target && ev.target.id === 'btnUpload') {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.onchange = async e => {
+          const file = e.target.files[0];
+          if (!file) return;
+          const fd = new FormData();
+          fd.append('file', file);
+          try {
+            const res = await fetch('/api/upload_attachment', { method:'POST', body: fd });
+            const data = await res.json();
+            if (data.success) {
+              uploadedAttachmentPath = data.path;
+              document.getElementById('attachmentInfo').innerHTML =
+                `📎 Fichier joint : <strong>${data.filename || file.name}</strong>`;
+            } else {
+              document.getElementById('attachmentInfo').innerHTML =
+                `<span class="err">❌ ${data.error}</span>`;
+            }
+          } catch (err) {
+            document.getElementById('attachmentInfo').innerHTML =
+              `<span class="err">❌ Erreur réseau</span>`;
+          }
+        };
+        input.click();
+      }
+    });
+
+    // Prévisualisation
+    document.addEventListener('click', (ev) => {
+      if (ev.target && ev.target.id === 'preview') {
+        const subject = document.getElementById('mailSubject').value.trim() || '(Aperçu)';
+        const html = qGlobal.root.innerHTML;
+        const w = window.open('', '_blank');
+        w.document.write(`<html><head><title>${subject}</title></head><body>${html}</body></html>`);
+        w.document.close();
+      }
+    });
+
+    // Envoi d’une campagne
+    document.addEventListener('click', async (ev) => {
+      if (ev.target && ev.target.id === 'sendCampaign') {
+        const server_id = document.getElementById('serverSelect').value;
+        const subject = document.getElementById('mailSubject').value.trim();
+        const html_content = qGlobal.root.innerHTML.trim();
+        const out = document.getElementById('campaign_result');
+
+        if (!server_id || !subject || !html_content) {
+          out.innerHTML = "<span class='err'>Veuillez renseigner le serveur, le sujet et le contenu.</span>";
+          return;
+        }
+
+        if (!confirm("Confirmer la création de la campagne ?\n(L’envoi réel aura lieu à la prochaine synchronisation.)")) return;
+
+        try {
+          const res = await fetch('/api/mailing/send_to_server', {
+            method:'POST',
+            headers:{ 'Content-Type':'application/json' },
+            body: JSON.stringify({
+              server_id,
+              subject,
+              html_content,
+              attachment_path: uploadedAttachmentPath
+            })
+          });
+          const json = await res.json();
+          if (json.ok) {
+            out.innerHTML = `<span class='ok'>✅ Campagne #${json.campaign_id} enregistrée (${json.count} destinataires).</span>`;
+          } else {
+            out.innerHTML = `<span class='err'>❌ ${json.error || 'Erreur inconnue'}</span>`;
+          }
+        } catch (e) {
+          out.innerHTML = `<span class='err'>❌ Erreur réseau</span>`;
+        }
+      }
+    });
+
+    // Boutons sauvegarde
+    document.addEventListener('click', (ev) => {
+      if (ev.target && ev.target.id === 'save_preavis') saveTemplate('preavis');
+      if (ev.target && ev.target.id === 'save_relance') saveTemplate('relance');
+      if (ev.target && ev.target.id === 'save_fin')     saveTemplate('fin');
+      if (ev.target && ev.target.id === 'saveAll')      saveAll();
+    });
+
+    // Init
+    document.addEventListener('DOMContentLoaded', async () => {
+      initEditors();
+      await Promise.all([loadTemplates(), loadServers()]);
+    });
+  </script>
 </body>
 </html>
