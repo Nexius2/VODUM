@@ -195,6 +195,33 @@ CREATE TABLE IF NOT EXISTS task_status (
     next_run TEXT
 );
 
+CREATE TABLE IF NOT EXISTS mail_campaigns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    server_id INTEGER,
+    subject TEXT,
+    html_content TEXT,
+	attachment_path TEXT,
+    status TEXT DEFAULT 'pending',         -- pending, sending, finished, cancelled
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    started_at DATETIME,
+    finished_at DATETIME
+
+);
+
+CREATE TABLE IF NOT EXISTS mail_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id INTEGER NOT NULL,
+    server_id INTEGER,
+    user_id INTEGER,
+    subject TEXT,
+    html_content TEXT,
+    status TEXT DEFAULT 'pending',         -- pending, sending, sent, error, cancelled
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    sent_at DATETIME,
+    error_message TEXT,
+	email TEXT,
+    FOREIGN KEY (campaign_id) REFERENCES mail_campaigns(id) ON DELETE CASCADE
+);
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_user_server_unique ON user_servers(user_id, server_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_user_library_unique ON user_libraries(user_id, library_id);

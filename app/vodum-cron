@@ -31,3 +31,6 @@
 
 # Tous les jours à 4h : désactivation expirés
 0 4 * * * cd /app && python3 disable_expired_users.py
+
+# Toutes les heures : traitement des campagnes mailing
+0 * * * * cd /app && python3 send_mail_queue.py

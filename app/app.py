@@ -25,6 +25,7 @@ from settings_helper import get_settings
 from disable_expired_users import disable_expired_users
 from plex_share_helper import share_user_libraries, unshare_all_libraries, set_user_libraries, set_user_libraries_via_api, share_user_libraries_plexapi
 
+
    
 
 import send_reminder_emails
@@ -35,6 +36,9 @@ import update_plex_users
 app = Flask(__name__, template_folder="templates")  # Assure que Flask connaît le dossier "templates"
 app.secret_key = "une_clé_secrète_ultra_random"
 
+# 📁 Dossier temporaire pour les fichiers joints
+TEMP_FOLDER = os.path.join(os.getcwd(), "appdata/temp")
+os.makedirs(TEMP_FOLDER, exist_ok=True)
 
 @app.context_processor
 def inject_app_name():
@@ -1008,7 +1012,9 @@ def run_task(task_name):
         "backup": "python backup.py",
         "delete_expired_users": "python delete_expired_users.py",
         "check_libraries": "python check_libraries.py",
-        "update_user_status": "python update_user_status.py"
+        "update_user_status": "python update_user_status.py",
+        "send_mail_queue": "python send_mail_queue.py",
+
     }
     command = task_map.get(task_name)
     if command:
@@ -1448,6 +1454,151 @@ def edit_user(user_id):
         logger.info(f"🏁 [edit_user] POST terminé pour user_id={user_id}")
         flash("Accès mis à jour pour l'utilisateur !", "success")
         return redirect(url_for('get_users_page'))
+
+
+# =======================
+# Mailing: create campaign and queue
+# =======================
+@app.route("/api/mailing/send_to_server", methods=["POST"])
+def api_mailing_send_to_server():
+    """Crée une campagne de mailing pour tous les utilisateurs selon leur statut"""
+    conn = None
+    try:
+        data = request.get_json(force=True)
+        server_id = data.get("server_id")
+        subject = data.get("subject", "").strip()
+        html_content = data.get("html_content", "").strip()
+        attachment_path = data.get("attachment_path")
+
+        if not server_id or not subject or not html_content:
+            return jsonify({
+                "ok": False,
+                "error": "Champs manquants (serveur, sujet ou contenu)."
+            }), 400
+
+        # ✅ Connexion directe à la base
+        conn = sqlite3.connect(DATABASE_PATH)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+        # 🔧 Récupère tous les utilisateurs selon leur statut
+        cur.execute("""
+            SELECT id, email
+            FROM users
+            WHERE LOWER(status) IN ('actif', 'active', 'préavis', 'preavis', 'relance')
+              AND email IS NOT NULL
+              AND TRIM(email) <> ''
+        """)
+        users = cur.fetchall()
+        count = len(users)
+
+        if count == 0:
+            conn.close()
+            logger.warning(f"[MAILING] Aucun utilisateur actif/préavis/relance trouvé pour la campagne du serveur {server_id}")
+            return jsonify({
+                "ok": False,
+                "error": "Aucun utilisateur trouvé pour ce statut."
+            }), 404
+
+        # 🔧 Crée la campagne
+        cur.execute("""
+            INSERT INTO mail_campaigns (server_id, subject, html_content, attachment_path, status, created_at)
+            VALUES (?, ?, ?, ?, 'pending', datetime('now'))
+        """, (server_id, subject, html_content, attachment_path))
+        campaign_id = cur.lastrowid
+
+        # 🔧 Alimente la file d'envoi
+        inserted = 0
+        for u in users:
+            email = (u["email"] or "").strip()
+            if not email:
+                continue
+            cur.execute("""
+                INSERT INTO mail_queue (campaign_id, user_id, server_id, subject, html_content, email, status)
+                VALUES (?, ?, ?, ?, ?, ?, 'pending')
+            """, (campaign_id, u["id"], server_id, subject, html_content, email))
+            inserted += 1
+
+        conn.commit()
+
+        # ✅ Log clair après le commit
+        logger.info(f"[MAILING] Campagne #{campaign_id} créée pour {inserted}/{count} utilisateurs (serveur_id={server_id})")
+
+        conn.close()
+
+        return jsonify({
+            "ok": True,
+            "campaign_id": campaign_id,
+            "count": inserted
+        }), 200
+
+    except Exception as e:
+        if conn:
+            logger.error(f"[MAILING] Erreur création campagne : {e}")
+            conn.close()
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+
+
+
+# =======================
+# API: Liste JSON des serveurs
+# =======================
+@app.route("/api/servers_list", methods=["GET"])
+def api_servers_list():
+    try:
+        conn = sqlite3.connect(DATABASE_PATH, timeout=30)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT id, name, plex_url, type, plex_status
+            FROM servers
+            ORDER BY name ASC
+        """)
+        servers = [dict(row) for row in cur.fetchall()]
+        conn.close()
+
+        logger.info(f"/api/servers_list -> {len(servers)} serveurs trouvés")
+        return jsonify(servers)
+
+    except Exception as e:
+        logger.error(f"/api/servers_list error: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@app.route('/api/upload_attachment', methods=['POST'])
+def upload_attachment():
+    """Upload temporaire d’un fichier joint pour une campagne mailing (PDF, images, texte, etc.)"""
+    if 'file' not in request.files:
+        return jsonify({"success": False, "error": "Aucun fichier reçu"})
+
+    file = request.files['file']
+    filename = file.filename
+
+    # Vérification du type de fichier autorisé
+    allowed_ext = {'.pdf', '.jpg', '.jpeg', '.png', '.gif', '.txt', '.docx', '.odt', '.csv', '.zip'}
+    ext = os.path.splitext(filename.lower())[1]
+    if ext not in allowed_ext:
+        return jsonify({
+            "success": False,
+            "error": f"Extension non autorisée ({ext}). Fichiers acceptés : {', '.join(allowed_ext)}"
+        })
+
+    # Création du dossier temporaire s’il n’existe pas
+    os.makedirs(TEMP_FOLDER, exist_ok=True)
+
+    # Nom unique
+    safe_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{filename}"
+    save_path = os.path.join(TEMP_FOLDER, safe_name)
+
+    try:
+        file.save(save_path)
+        logger.info(f"[MAILING] Fichier uploadé : {save_path}")
+        return jsonify({"success": True, "path": save_path, "filename": filename})
+    except Exception as e:
+        logger.error(f"[MAILING] Erreur upload : {e}")
+        return jsonify({"success": False, "error": str(e)})
 
 
 

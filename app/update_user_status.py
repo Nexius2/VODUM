@@ -247,48 +247,31 @@ def has_any_library_access(cur, user_row) -> bool:
 
 
 
-
-def get_pre_expired_days(cur) -> int:
+def get_mail_threshold(cur, mail_type: str, default_value: int) -> int:
     """
-    Seuil 'préavis' en jours.
-    Ordre de priorité :
-      1) settings.pre_expired_days
-      2) email_templates.type in ('preavis','pre_expired') -> days_before
-      3) défaut: 30
+    Récupère la valeur de seuil (jours avant/après expiration)
+    depuis la table email_templates selon le type de mail.
     """
     try:
-        # 1) settings.pre_expired_days
-        cur.execute("SELECT value FROM settings WHERE name = 'pre_expired_days'")
+        cur.execute("SELECT days_before FROM email_templates WHERE type = ?", (mail_type,))
         row = cur.fetchone()
-        if row and str(row["value"]).strip():
-            return int(row["value"])
-
-        # 2) fallback: email_templates (clé historique)
-        cur.execute("SELECT days_before FROM email_templates WHERE type IN ('preavis','pre_expired') LIMIT 1")
-        row = cur.fetchone()
-        if row:
-            return int(row[0])
-
+        if row and row["days_before"] is not None:
+            return int(row["days_before"])
     except Exception as e:
-        log_error(cur, f"Lecture du seuil 'préavis' impossible: {e}")
-
-    # 3) défaut
-    return 30
+        log_error(cur, f"Lecture du seuil '{mail_type}' impossible: {e}")
+    return default_value
 
 
 
-def compute_subscription_status(user: dict, pre_expired_days: int) -> str:
+
+
+def compute_subscription_status(user: dict, cur) -> str:
     """
-    - Admin: toujours 'active' (sauf 'suspended').
-    - Pas d'accès aux bibliothèques → on ignore la date :
-        * ami=false   -> 'unfriended'
-        * ami=true    -> 'expired'
-        * ami=unknown -> 'unknown'
-    - Accès présents → logique date :
-        * date passée -> 'expired'
-        * <= 7 j      -> 'reminder'
-        * <= pre_exp  -> 'pre_expired'
-        * sinon       -> 'active'
+    Calcule le statut d’un utilisateur selon :
+      - son type (admin, ami, invité…)
+      - ses accès (bibliothèques)
+      - sa date d’expiration
+      - les seuils configurés dans 'email_templates'
     """
     cur_status = (user.get("status") or "").strip()
     is_admin   = int(user.get("is_admin") or 0) == 1
@@ -327,12 +310,22 @@ def compute_subscription_status(user: dict, pre_expired_days: int) -> str:
     if expiration < now:
         return "expired"
 
+    # --- Nouveau : lecture dynamique des seuils ---
+    preavis_days  = get_mail_threshold(cur, "preavis", 30)
+    relance_days  = get_mail_threshold(cur, "relance", 7)
+    fin_days      = get_mail_threshold(cur, "fin", 0)
+
     days_remaining = (expiration - now).days
-    if days_remaining <= 7:
+
+    # --- Application de la logique configurée ---
+    if days_remaining < -fin_days:
+        return "expired"
+    if days_remaining <= relance_days:
         return "reminder"
-    if days_remaining <= pre_expired_days:
+    if days_remaining <= preavis_days:
         return "pre_expired"
     return "active"
+
 
 
 
@@ -349,8 +342,8 @@ def update_statuses():
     try:
         log_info(cur, "🚀 Début de la mise à jour des statuts utilisateurs")
 
-        pre_expired_days = get_pre_expired_days(cur)
-        log_info(cur, f"⚙️ Paramètre pre_expired_days = {pre_expired_days}")
+        log_info(cur, "⚙️ Seuils dynamiques (email_templates) activés")
+
 
         cur.execute("""
             SELECT
@@ -378,7 +371,9 @@ def update_statuses():
             u["has_libraries"]   = 1 if has_libs else 0
             u["is_friend_state"] = is_friend_state
 
-            new_status = compute_subscription_status(u, pre_expired_days)
+            new_status = compute_subscription_status(u, cur)
+
+
 
             # (facultatif) petit log pour vérifier
             # log_debug(cur, f"uid={user['id']} user={user['username']} friend={is_friend_state} has_libs={has_libs} exp={user['expiration_date']} -> {new_status}")

@@ -53,6 +53,7 @@
   "smtp_free_help": "✅ Adresse Free obligatoire.<br>📧 Exemple : votremail@free.fr",
   "smtp_free_user": "👤 Identifiant : votre adresse @free.fr",
   "smtp_free_pass": "🔐 Mot de passe : celui que vous utilisez pour le webmail Free",
+  
   "About": "À propos",
   "Version": "Version",
   "Tool": "Outil",
@@ -68,6 +69,7 @@
   "WARNING": "Avertissement",
   "ERROR": "Erreur",
   "CRITICAL": "Critique",
+  
   "tasks.title": "Tâches planifiées",
   "tasks.name": "Nom",
   "tasks.last_run": "Dernière exécution",
@@ -82,6 +84,8 @@
   "task.delete_expired_users": "Suppression des utilisateurs expirés",
   "task.check_libraries": "Nettoyage des bibliothèques",
   "task.update_user_status": "Mise a jour des status utilisateurs",
+  "task.send_mail_queue": "Envoie des mails",
+  
   "active": "Actif",
   "pre_expired": "Préavis",
   "reminder": "Relance",
@@ -89,6 +93,48 @@
   "invited": "Invité",
   "unfriended": "Retiré",
   "suspended": "Suspendu",
-  "unknown": "Inconnu"
+  "unknown": "Inconnu",
+  
+  "menu_home": "📺 Vodum",
+  "menu_users": "👥 Utilisateurs",
+  "menu_servers": "🖥️ Serveurs",
+  "menu_libraries": "📚 Bibliothèques",
+  "menu_mail": "📧 Mailling",
+  "menu_settings": "⚙️ Paramètres",
+  "menu_backup": "💾 Sauvegarde",
+  "menu_tasks": "⏱️ Tâches",
+  "menu_about": "ℹ️ À propos",
+  
+  "users_sync": "🔄 Synchroniser les utilisateurs",
+  "users_id": "ID",
+  "users_avatar": "Avatar",
+  "users_name": "Nom d'utilisateur",
+  "users_email": "Email",
+  "users_status": "📌 Statut",
+  "users_days_left": "⏳ Jours restants",
+  "users_end_date": "📅 Date de fin",
+  "users_no_avatar": "❌ Pas d'avatar",
+  "users_total": "👥 Nombre total :",
+  "users_distribution": "📊 Répartition des utilisateurs",
+
+  "datatable_search": "🔍 Rechercher :",
+  "datatable_first": "Premier",
+  "datatable_last": "Dernier",
+  "datatable_next": "Suivant",
+  "datatable_previous": "Précédent",
+  "datatable_export_csv": "📥 Exporter CSV",
+  "datatable_length_menu": "Afficher _MENU_ utilisateurs par page",
+  "datatable_info": "Affichage de _START_ à _END_ sur _TOTAL_ utilisateurs",
+
+
+  "chart_users_status": "Utilisateurs par status",
+  "chart_active": "Actif",
+  "chart_preavis": "Préavis",
+  "chart_reminder": "Rappel",
+  "chart_expired": "Expiré",
+  "chart_invited": "Invité",
+  "chart_removed": "Retiré",
+  "chart_unknown": "Inconnu",
+  "chart_suspended": "Suspendu"
 
 }
