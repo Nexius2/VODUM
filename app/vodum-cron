@@ -34,3 +34,7 @@
 
 # Toutes les heures : traitement des campagnes mailing
 0 * * * * cd /app && python3 send_mail_queue.py
+
+# Clean le dossier temp de tout fichiers depuis 24h
+0 2 * * * /usr/bin/python3 /chemin/vers/scripts/clean_temp_files.py
+

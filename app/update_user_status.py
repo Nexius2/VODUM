@@ -279,26 +279,28 @@ def compute_subscription_status(user: dict, cur) -> str:
     friend_st  = (user.get("is_friend_state") or "unknown")
     exp_str    = user.get("expiration_date")
 
-    # Statut protégé
+    # 🛑 Statut protégé : suspension prioritaire
     if cur_status == "suspended":
         return "suspended"
 
-    # Admin = actif quoi qu'il arrive
+    # 👤 Admin = toujours actif
     if is_admin:
         return "active"
 
-    # Cas spécial 'guest' : si pas d'accès, rester neutre
+    # 🧑‍ guest : neutre si aucun accès
     if is_guest_user(user):
         if not has_libs:
             return "unknown"
 
-    # Pas d'accès → ignorer la date
+    # 📂 Pas d'accès aux bibliothèques → ignorer la date
     if not has_libs:
-        if friend_st == "false":  return "unfriended"
-        if friend_st == "true":   return "expired"
+        if friend_st == "false":
+            return "unfriended"
+        if friend_st == "true":
+            return "expired"
         return "unknown"
 
-    # Accès présents → logique date
+    # 📅 Si pas de date d’expiration → actif par défaut
     if not exp_str:
         return "active"
 
@@ -310,21 +312,31 @@ def compute_subscription_status(user: dict, cur) -> str:
     if expiration < now:
         return "expired"
 
-    # --- Nouveau : lecture dynamique des seuils ---
-    preavis_days  = get_mail_threshold(cur, "preavis", 30)
-    relance_days  = get_mail_threshold(cur, "relance", 7)
-    fin_days      = get_mail_threshold(cur, "fin", 0)
+    # --- ✅ Lecture dynamique des seuils configurés ---
+    preavis_days = get_mail_threshold(cur, "preavis", 30)
+    relance_days = get_mail_threshold(cur, "relance", 7)
+    fin_days     = get_mail_threshold(cur, "fin", 0)
 
-    days_remaining = (expiration - now).days
+    # ✅ Calcul précis des jours restants (en jours réels)
+    delta_days = (expiration - now).total_seconds() / 86400  # nombre réel de jours
+    days_remaining = int(delta_days + 0.5)  # arrondi au jour le plus proche
 
-    # --- Application de la logique configurée ---
+    # --- 📊 Application de la logique configurée ---
+    # ❗️ Si la date est dépassée de plus de fin_days → expiré
     if days_remaining < -fin_days:
         return "expired"
+
+    # 📩 Relance : en dessous ou égal au seuil relance
     if days_remaining <= relance_days:
         return "reminder"
-    if days_remaining <= preavis_days:
+
+    # ⚠️ Préavis : uniquement si jours restants strictement inférieurs au seuil
+    if days_remaining < preavis_days:
         return "pre_expired"
+
+    # ✅ Sinon, utilisateur actif
     return "active"
+
 
 
 
