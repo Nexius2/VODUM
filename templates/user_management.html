@@ -1,100 +1,89 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>User Management</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>User Management</title>
 
-    <!-- Bootstrap & DataTables CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/chart.js/dist/chart.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/chart.js/dist/chart.min.css" rel="stylesheet" />
 
-    <style>
-        body.dark-mode {
-            background-color: #1e1e2d;
-            color: #ffffff;
-        }
-
-        .container {
-            margin-top: 50px;
-            background: #2a2a3a;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0px 0px 15px rgba(255, 255, 255, 0.1);
-        }
-
-        h1, h2 {
-            color: #f8f9fa;
-            text-align: center;
-        }
-
-        .table thead {
-            background-color: #ff4757;
-            color: white;
-        }
-
-        .table tbody tr:hover {
-            background-color: #44445a;
-        }
-
-        .avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            border: 2px solid #ff4757;
-        }
-
-        .footer {
-            text-align: center;
-            padding: 15px;
-            color: #aaa;
-        }
-
-        .btn-toggle-theme {
-            float: right;
-        }
-    </style>
+  <style>
+    body.dark-mode {
+      background-color: #1e1e2d;
+      color: #ffffff;
+    }
+    .container {
+      margin-top: 50px;
+      background: #2a2a3a;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0px 0px 15px rgba(255, 255, 255, 0.1);
+    }
+    h1,
+    h2 {
+      color: #f8f9fa;
+      text-align: center;
+    }
+    .table thead {
+      background-color: #ff4757;
+      color: white;
+    }
+    .table tbody tr:hover {
+      background-color: #44445a;
+    }
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 2px solid #ff4757;
+    }
+    .footer {
+      text-align: center;
+      padding: 15px;
+      color: #aaa;
+    }
+    .btn-toggle-theme {
+      float: right;
+    }
+  </style>
 </head>
 <body class="bg-light">
 
 <div class="container">
-    <div class="d-flex justify-content-between align-items-center">
-        <h1>📋 User Management</h1>
-        <button id="toggleThemeBtn" class="btn btn-secondary btn-toggle-theme">🌗 Toggle Theme</button>
-    </div>
+  <div class="d-flex justify-content-between align-items-center">
+    <h1>📋 User Management</h1>
+    <button id="toggleThemeBtn" class="btn btn-secondary btn-toggle-theme">🌗 Toggle Theme</button>
+  </div>
 
-    <div class="table-responsive mt-4">
-        <table id="usersTable" class="table table-striped table-hover table-dark">
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Avatar</th>
-                    <th>Username</th>
-                    <th>Email</th>
-                    <th>Status</th>
-                    <th>Days Left</th>
-                    <th>Expiration</th>
-                </tr>
-            </thead>
-            <tbody>
-                <!-- Dynamic -->
-            </tbody>
-        </table>
-    </div>
+  <div class="table-responsive mt-4">
+    <table id="usersTable" class="table table-striped table-hover table-dark">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Avatar</th>
+          <th>Username</th>
+          <th>Email</th>
+          <th>Status</th>
+          <th>Days Left</th>
+          <th>Expiration</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
 
-    <div class="mt-5">
-        <h2>📊 User Distribution</h2>
-        <canvas id="usersChart"></canvas>
-    </div>
+  <div class="mt-5">
+    <h2>📊 User Distribution</h2>
+    <canvas id="usersChart"></canvas>
+  </div>
 </div>
 
 <div class="footer mt-4">
-    📢 Plex User Manager | Designed by <strong>StreamEmpire</strong>
+  📢 Plex User Manager | Designed by <strong>StreamEmpire</strong>
 </div>
 
-<!-- JS -->
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
@@ -102,95 +91,133 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>
-    async function fetchUsers() {
-        try {
-            const response = await fetch('/api/users');
-            const users = await response.json();
+  let MAIL_DAYS = { preavis: 30, relance: 7, fin: 0 };
 
-            const tbody = document.querySelector('#usersTable tbody');
-            let labels = [];
-            let tableRows = '';
+  async function loadMailDays() {
+    try {
+      const res = await fetch("/api/mail_days");
+      MAIL_DAYS = await res.json();
+      console.log("📬 Seuils mail :", MAIL_DAYS);
+    } catch (e) {
+      console.error("❌ Impossible de charger les seuils mail", e);
+    }
+  }
 
-            users.forEach(user => {
-                let days = '?';
-                let status = '❔ Unknown';
-                let expiration = user.expiration_date || 'N/A';
+  async function fetchUsers() {
+    try {
+      const response = await fetch("/api/users");
+      const data = await response.json();
+      const users = data.users || data; // selon ta structure API
 
-                if (expiration && expiration !== 'Inconnu') {
-                    const exp = new Date(expiration);
-                    const today = new Date();
-                    const diff = Math.ceil((exp - today) / (1000 * 60 * 60 * 24));
-                    days = diff;
-                    status = diff > 60 ? '🟢 Active' : (diff > 0 ? '🟡 Expiring Soon' : '🔴 Expired');
-                }
+      const tbody = document.querySelector("#usersTable tbody");
+      let labels = "";
+      let tableRows = "";
 
-                labels.push(user.username);
-                tableRows += `
-                    <tr data-user-id="${user.id}" class="${days <= 0 ? 'table-danger' : days <= 60 ? 'table-warning' : ''}">
-                        <td>${user.id}</td>
-                        <td><img src="${user.avatar}" class="avatar"></td>
-                        <td>${user.username}</td>
-                        <td>${user.email}</td>
-                        <td>${status}</td>
-                        <td>${days}</td>
-                        <td>${expiration}</td>
-                    </tr>
-                `;
-            });
+      users.forEach((user) => {
+        let days = user.jours_restants ?? "?";
+        let expiration = user.expiration_date || "N/A";
 
-            tbody.innerHTML = tableRows;
-
-            $('#usersTable').DataTable({
-                pageLength: 10,
-                lengthChange: false,
-                ordering: true,
-                info: false,
-                searching: true
-            });
-
-            new Chart(document.getElementById('usersChart'), {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: "Users",
-                        data: new Array(labels.length).fill(1),
-                        backgroundColor: 'rgba(54, 162, 235, 0.5)',
-                        borderColor: 'rgba(54, 162, 235, 1)',
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: { y: { beginAtZero: true } }
-                }
-            });
-        } catch (e) {
-            console.error("❌ Failed to fetch users:", e);
+        // ✅ On utilise directement le statut depuis la BDD
+        let statusText = "❔ Inconnu";
+        switch (user.status) {
+          case "active":
+            statusText = "🟢 Actif";
+            break;
+          case "pre_expired":
+            statusText = "🟠 Préavis";
+            break;
+          case "reminder":
+            statusText = "🟡 Relance";
+            break;
+          case "expired":
+            statusText = "🔴 Expiré";
+            break;
+          case "suspended":
+            statusText = "⏸️ Suspendu";
+            break;
+          default:
+            statusText = user.status;
         }
+
+        labels += user.username + ",";
+        tableRows += `
+          <tr data-user-id="${user.id}" class="${
+          user.status === "expired"
+            ? "table-danger"
+            : user.status === "pre_expired"
+            ? "table-warning"
+            : ""
+        }">
+            <td>${user.id}</td>
+            <td><img src="${user.avatar}" class="avatar"></td>
+            <td>${user.username}</td>
+            <td>${user.email}</td>
+            <td>${statusText}</td>
+            <td>${days}</td>
+            <td>${expiration}</td>
+          </tr>
+        `;
+      });
+
+      tbody.innerHTML = tableRows;
+
+      $("#usersTable").DataTable({
+        pageLength: 10,
+        lengthChange: false,
+        ordering: true,
+        info: false,
+        searching: true,
+        destroy: true,
+      });
+
+      new Chart(document.getElementById("usersChart"), {
+        type: "bar",
+        data: {
+          labels: labels.split(","),
+          datasets: [
+            {
+              label: "Users",
+              data: new Array(labels.length).fill(1),
+              backgroundColor: "rgba(54, 162, 235, 0.5)",
+              borderColor: "rgba(54, 162, 235, 1)",
+              borderWidth: 1,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          scales: { y: { beginAtZero: true } },
+        },
+      });
+    } catch (e) {
+      console.error("❌ Failed to fetch users:", e);
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", async function () {
+    await loadMailDays();
+    await fetchUsers();
+
+    const themeBtn = document.getElementById("toggleThemeBtn");
+    const body = document.body;
+
+    if (localStorage.getItem("theme") === "dark") {
+      body.classList.add("dark-mode");
     }
 
-    document.addEventListener("DOMContentLoaded", function () {
-        fetchUsers();
-
-        const themeBtn = document.getElementById("toggleThemeBtn");
-        const body = document.body;
-
-        if (localStorage.getItem("theme") === "dark") {
-            body.classList.add("dark-mode");
-        }
-
-        themeBtn.addEventListener("click", function () {
-            body.classList.toggle("dark-mode");
-            localStorage.setItem("theme", body.classList.contains("dark-mode") ? "dark" : "light");
-        });
-
-        $(document).on("click", "#usersTable tbody tr", function () {
-            const userId = $(this).data("user-id");
-            if (userId) window.location.href = `/user/${userId}`;
-        });
+    themeBtn.addEventListener("click", function () {
+      body.classList.toggle("dark-mode");
+      localStorage.setItem(
+        "theme",
+        body.classList.contains("dark-mode") ? "dark" : "light"
+      );
     });
-</script>
 
+    $(document).on("click", "#usersTable tbody tr", function () {
+      const userId = $(this).data("user-id");
+      if (userId) window.location.href = `/user/${userId}`;
+    });
+  });
+</script>
 </body>
 </html>

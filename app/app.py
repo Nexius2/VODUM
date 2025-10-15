@@ -1193,6 +1193,39 @@ def api_trigger_refresh_servers():
     trigger_server_refresh_flag()  # si tu as déjà cette fonction
     return "", 204
 
+def get_mail_days():
+    """
+    Récupère les jours configurés pour les 3 types d'e-mails :
+    - préavis
+    - relance
+    - fin d'abonnement
+    Retourne un dict avec les valeurs trouvées ou des valeurs par défaut.
+    """
+    conn = sqlite3.connect(DATABASE_PATH)
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT type, days_before
+        FROM email_templates
+        WHERE type IN ('preavis', 'relance', 'fin')
+    """)
+    rows = cur.fetchall()
+    conn.close()
+
+    values = {"preavis": 30, "relance": 7, "fin": 0}  # valeurs par défaut
+
+    for row in rows:
+        mail_type, days = row
+        values[mail_type] = int(days) if days is not None else values[mail_type]
+
+    return values
+
+@app.route("/api/mail_days")
+def api_mail_days():
+    values = get_mail_days()
+    return jsonify(values)
+
+
 
 @app.route("/api/users")
 def api_users():

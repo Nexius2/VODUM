@@ -5,6 +5,8 @@ from datetime import datetime, UTC
 from config import DATABASE_PATH
 from logger import logger
 from zoneinfo import ZoneInfo  # Python 3.9+
+from clean_temp_files import main as clean_temp_files_main
+
 
 tasks_bp = Blueprint("tasks", __name__)
 
@@ -22,6 +24,12 @@ TASKS = {
         "label": "Envoi des mails en attente (campagnes)",
         "interval": 60,  # toutes les heures (adaptable)
     },
+    "clean_temp": {
+        "label": "Nettoyage du dossier temporaire",
+        "interval": 1440,  # 1 fois par jour
+        "function": clean_temp_files_main
+    },
+
 }
 
 
