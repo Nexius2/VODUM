@@ -85,6 +85,8 @@
   "task.check_libraries": "Nettoyage des bibliothèques",
   "task.update_user_status": "Mise a jour des status utilisateurs",
   "task.send_mail_queue": "Envoie des mails",
+  "task.clean_temp": "Nettoyage du dossier temporaire",
+  "task.sync_user_libraries": "Synchronisation des bibliotheques utilisateurs",
   
   "active": "Actif",
   "pre_expired": "Préavis",

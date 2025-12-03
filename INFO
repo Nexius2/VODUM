@@ -1,7 +1,7 @@
-Version: 25.10.15 b1532
+Version: 25.12.03 b1531
 Tool: vodum
 Created by: NeXius2
 Python: 3.11.13
-SQLite: 3.49.1
+SQLite: 3.50.4
 Container: Docker
 Image: python:3.12-slim

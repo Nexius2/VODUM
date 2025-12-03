@@ -12,8 +12,8 @@
 2 */6 * * * cd /app && python3 update_user_status.py
 
 
-# Tous les jours à 5h : backup
-0 5 * * * cd /app && python3 backup.py
+# Tous les 3 jours à 5h : backup
+0 5 */3 * * cd /app && python3 backup.py
 
 # Tous les jours à 5h30 : delete expired users
 30 5 * * * cd /app && python3 delete_expired_users.py

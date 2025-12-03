@@ -187,25 +187,21 @@ def disable_user_libraries(plex_token, plex_url, username, server_name, library_
 
 
 def unshare_all_libraries(plex_token, plex_url, username):
-    """
-    Désactive tous les accès à toutes les bibliothèques pour un utilisateur, exactement comme plex_api_share.py --unshare.
-    """
-    from plexapi.server import PlexServer
+    logger.info(f"🔒 Suppression de l'accès aux bibliothèques Plex pour {username} sans retirer l'amitié")
+
     try:
-        session = requests.Session()
-        session.verify = False  # désactive le warning SSL si besoin
-        plex = PlexServer(plex_url, plex_token, session=session)
-        account = plex.myPlexAccount()
-        user = account.user(username)
-        # Liste complète des bibliothèques à retirer
-        section_titles = [x.title for x in plex.library.sections()]
-        # Unshare exactement comme dans plex_api_share.py
-        account.updateFriend(user=user, server=plex, removeSections=True, sections=section_titles)
-        logger.info(f"✅ Unshared all libraries from {username}.")
+        from plex_api_share import update_server_share  # si tu as déjà ce module
+
+        # Mettre un tableau vide supprime seulement les bibliothèques, pas l’amitié
+        update_server_share(username, [], plex_token)
+
+        logger.info(f"✅ Bibliothèques retirées pour {username} sans suppression du lien d’amitié.")
         return True
+
     except Exception as e:
-        logger.error(f"❌ Erreur lors du unshare complet pour {username} : {e}")
+        logger.error(f"❌ Erreur lors du unshare partiel : {e}")
         return False
+
 
 
 def share_user_libraries(plex_token, plex_url, username, section_ids):
