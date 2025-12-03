@@ -85,6 +85,8 @@
   "task.check_libraries": "Clean up libraries",
   "task.update_user_status": "Users status update",
   "task.send_mail_queue": "Send mails",
+  "task.clean_temp": "Temporary folder cleanup",
+  "task.sync_user_libraries": "libraries users sync",
   
   "active": "Active",
   "pre_expired": "Notice",

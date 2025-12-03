@@ -350,14 +350,18 @@ def get_user_page(user_id):
     """, (user_id,))
     user["servers"] = [dict(server) for server in cursor.fetchall()]
 
-    # Récupère les bibliothèques associées
+    # Récupère toutes les bibliothèques
     cursor.execute("""
-        SELECT l.*
+        SELECT l.*, 
+               CASE WHEN ul.user_id IS NULL THEN 0 ELSE 1 END AS is_enabled
         FROM libraries l
-        JOIN user_libraries ul ON ul.library_id = l.id
-        WHERE ul.user_id = ?
+        LEFT JOIN user_libraries ul 
+            ON ul.library_id = l.id 
+           AND ul.user_id = ?
+        ORDER BY l.server_id, l.name
     """, (user_id,))
-    user["libraries"] = [dict(lib) for lib in cursor.fetchall()]
+    user["libraries"] = [dict(row) for row in cursor.fetchall()]
+
 
 
     # Calcul du statut
