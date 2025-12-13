@@ -1,0 +1,74 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>VODUM</Name>
+  <Repository>nexius2/vodum:latest</Repository>
+  <Registry>https://hub.docker.com/r/nexius2/vodum</Registry>
+  <Network>bridge</Network>
+
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+
+  <Support>https://github.com/Nexius2/VODUM/issues</Support>
+  <Project>https://github.com/Nexius2/VODUM</Project>
+
+  <Overview>
+    VODUM – VOD user subscription manager.
+    Gestion des utilisateurs, abonnements et accès aux bibliothèques.
+  </Overview>
+
+  <!-- Web UI -->
+  <WebUI>http://[IP]:[PORT:5000]</WebUI>
+
+  <!-- Port -->
+  <Config>
+    <Type>Port</Type>
+    <Target>5000</Target>
+    <Published>5000</Published>
+    <Protocol>tcp</Protocol>
+    <Mode>host</Mode>
+    <Description>Interface Web VODUM</Description>
+  </Config>
+
+  <!-- Paths -->
+  <Config>
+    <Type>Path</Type>
+    <Target>/appdata</Target>
+    <Default>/mnt/user/appdata/vodum</Default>
+    <Mode>rw</Mode>
+    <Description>Données applicatives (SQLite, cache)</Description>
+  </Config>
+
+  <Config>
+    <Type>Path</Type>
+    <Target>/logs</Target>
+    <Default>/mnt/user/appdata/vodum/logs</Default>
+    <Mode>rw</Mode>
+    <Description>Logs applicatifs</Description>
+  </Config>
+
+  <Config>
+    <Type>Path</Type>
+    <Target>/backups</Target>
+    <Default>/mnt/user/appdata/vodum/backups</Default>
+    <Mode>rw</Mode>
+    <Description>Sauvegardes base de données</Description>
+  </Config>
+
+  <!-- Environment -->
+  <Config>
+    <Type>Variable</Type>
+    <Target>DATABASE_PATH</Target>
+    <Default>/appdata/database.db</Default>
+    <Description>Chemin de la base SQLite</Description>
+  </Config>
+
+  <Config>
+    <Type>Variable</Type>
+    <Target>TZ</Target>
+    <Default>Europe/Paris</Default>
+    <Description>Timezone</Description>
+  </Config>
+
+  <!-- Icon -->
+  <Icon>https://raw.githubusercontent.com/Nexius2/VODUM/main/static/icon.png</Icon>
+</Container>
