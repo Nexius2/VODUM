@@ -1,5 +1,0 @@
-{% for line in log_lines %}
-  <div class="log-line {{ line.level }}" data-level="{{ line.level|upper }}">
-    {{ line.text | replace('\n', ' ') }}
-  </div>
-{% endfor %}
