@@ -16,8 +16,12 @@ COPY templates/ /app/templates/
 COPY static/ /app/static/
 COPY lang/ /app/lang/
 COPY migrations/ /app/migrations/
+
+# SQL seeds
 COPY tables.sql /app/tables.sql
-COPY tables.sql /app/default_data.sql
+COPY default_data.sql /app/default_data.sql
+
+# Entrypoint + INFO
 COPY entrypoint.sh /app/entrypoint.sh
 COPY INFO /app/INFO
 RUN chmod 644 /app/INFO
