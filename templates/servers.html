@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% set active_page = 'servers' %}
+{% set active_tab = 'servers' %}
+
+{% block title %}{{ t("servers") }} - VODUM{% endblock %}
+{% block header_title %}{{ t("servers") }}{% endblock %}
+{% block header_subtitle %}{{ t("servers_libraries_subtitle") }}{% endblock %}
+
+{% block content %}
+
+<!-- NAV INTERNE (comme mailing_nav) -->
+<nav class="mb-4 border-b border-slate-800 text-sm flex gap-6">
+  <a href="{{ url_for('servers_list') }}"
+     class="pb-2 border-b-2 {% if active_tab == 'servers' %}border-primary text-primary{% else %}border-transparent text-slate-400{% endif %}">
+    {{ t("servers") }}
+  </a>
+
+  <a href="{{ url_for('libraries_list') }}"
+     class="pb-2 border-b-2 {% if active_tab == 'libraries' %}border-primary text-primary{% else %}border-transparent text-slate-400{% endif %}">
+    {{ t("libraries") }}
+  </a>
+</nav>
+
+
+<!-- ===================== -->
+<!--       SERVERS         -->
+<!-- ===================== -->
+
+{% set top_servers = servers[:4] %}
+{% set other_servers = servers[4:] %}
+
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+
+  <!-- Form add server -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 min-h-[320px] h-full">
+    <h2 class="text-sm font-semibold mb-3">{{ t("add_server") }}</h2>
+
+    <form method="post" action="{{ url_for('server_create') }}"
+          class="grid grid-cols-1 gap-3 text-sm">
+
+      <label class="flex flex-col">
+        {{ t("server_type") }}*
+        <select name="type"
+                class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm">
+          <option value="plex">Plex</option>
+          <option value="jellyfin">Jellyfin</option>
+          <!-- <option value="other">{{ t("other") }}</option>-->
+        </select>
+      </label>
+
+      <label class="flex flex-col">
+        {{ t("name") }}*
+        <input type="text" name="name" required
+               class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm">
+      </label>
+
+      <label class="flex flex-col">
+        URL*
+        <input type="text" name="url" required
+               class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm">
+      </label>
+
+      <label class="flex flex-col">
+        Token*
+        <input type="text" name="token" required
+               class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono text-xs">
+      </label>
+
+      <button class="mt-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-sm">
+        {{ t("add_server") }}
+      </button>
+
+    </form>
+  </div>
+
+
+  <!-- ===================== -->
+  <!--   TOP 4 SERVERS       -->
+  <!-- ===================== -->
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" style="grid-auto-rows:1fr;">
+
+    {% if servers|length == 0 %}
+      <p class="text-xs text-slate-500">{{ t("no_server") }}</p>
+    {% endif %}
+
+    {% for s in top_servers %}
+    <a href="{{ url_for('server_detail', server_id=s.id) }}"
+       class="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col gap-2 text-sm w-full
+			hover:bg-slate-800 transition cursor-pointer h-full min-h-[160px]"
+
+
+      <!-- Header -->
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2 font-semibold">
+          {{ s.name }}
+
+          {% if s.type == 'plex' %}
+            <span class="px-2 py-0.5 rounded-full bg-amber-700/40 text-amber-300 text-[10px]">Plex</span>
+          {% elif s.type == 'jellyfin' %}
+            <span class="px-2 py-0.5 rounded-full bg-blue-700/40 text-blue-300 text-[10px]">Jellyfin</span>
+          {% else %}
+            <span class="px-2 py-0.5 rounded-full bg-slate-700/40 text-slate-300 text-[10px]">{{ s.type }}</span>
+          {% endif %}
+        </div>
+
+        {% if s.status == 'up' %}
+          <span class="px-2 py-0.5 rounded-full bg-emerald-900/40 text-emerald-300 text-[10px]">{{ t("online") }}</span>
+        {% elif s.status == 'down' %}
+          <span class="px-2 py-0.5 rounded-full bg-rose-900/40 text-rose-300 text-[10px]">{{ t("offline") }}</span>
+        {% else %}
+          <span class="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 text-[10px]">{{ t("unknown") }}</span>
+        {% endif %}
+      </div>
+
+      <!-- URL -->
+      <div class="text-[11px] text-slate-400 leading-tight">
+        {{ s.url or s.public_url or s.local_url or t("url_not_defined") }}
+      </div>
+
+      <!-- Stats -->
+      <div class="text-[11px] text-slate-400 leading-tight">
+        {{ s.libraries_count }} {{ t("libraries") }} · {{ s.users_count }} {{ t("users") }}
+      </div>
+
+    </a>
+    {% endfor %}
+
+  </div>
+</div>
+
+
+<!-- ===================== -->
+<!--  OTHER SERVERS (grid) -->
+<!-- ===================== -->
+
+{% if other_servers %}
+<div class="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" style="grid-auto-rows:1fr;">
+
+  {% for s in other_servers %}
+  <a href="{{ url_for('server_detail', server_id=s.id) }}"
+     class="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col gap-2 text-sm w-full
+		hover:bg-slate-800 transition cursor-pointer h-full min-h-[160px]"
+
+
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2 font-semibold">
+        {{ s.name }}
+
+        {% if s.type == 'plex' %}
+          <span class="px-2 py-0.5 rounded-full bg-amber-700/40 text-amber-300 text-[10px]">Plex</span>
+        {% elif s.type == 'jellyfin' %}
+          <span class="px-2 py-0.5 rounded-full bg-blue-700/40 text-blue-300 text-[10px]">Jellyfin</span>
+        {% else %}
+          <span class="px-2 py-0.5 rounded-full bg-slate-700/40 text-slate-300 text-[10px]">{{ s.type }}</span>
+        {% endif %}
+      </div>
+
+      {% if s.status == 'up' %}
+        <span class="px-2 py-0.5 rounded-full bg-emerald-900/40 text-emerald-300 text-[10px]">{{ t("online") }}</span>
+      {% elif s.status == 'down' %}
+        <span class="px-2 py-0.5 rounded-full bg-rose-900/40 text-rose-300 text-[10px]">{{ t("offline") }}</span>
+      {% else %}
+        <span class="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 text-[10px]">{{ t("unknown") }}</span>
+      {% endif %}
+    </div>
+
+    <!-- URL -->
+    <div class="text-[11px] text-slate-400 leading-tight">
+      {{ s.url or s.public_url or s.local_url or t("url_not_defined") }}
+    </div>
+
+    <!-- Stats -->
+    <div class="text-[11px] text-slate-400 leading-tight">
+      {{ s.libraries_count }} {{ t("libraries") }} · {{ s.users_count }} {{ t("users") }}
+    </div>
+
+  </a>
+  {% endfor %}
+
+</div>
+{% endif %}
+
+{% endblock %}

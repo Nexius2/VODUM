@@ -1,87 +1,109 @@
+VODUM –  Media server Subscription Manager (BETA)
 
-# 🎬 Vodum – ALPHA Version - Gestion utilisateurs de Plex
-
-**Vodum** est un outil open source de gestion d'utilisateurs et de bibliothèques pour les serveurs multimédia Plex. Il centralise les accès, automatise les notifications d'abonnements, et simplifie la vie des administrateurs via une interface et des intégrations pratiques (Discord, mail...).
-
----
-
-## ✨ Fonctionnalités clés
-
-- 🔐 **Gestion des utilisateurs** avec rôles, permissions et expiration d’abonnement
-- 🗃️ **Accès multi-serveurs** 
-- 📚 **Partage de bibliothèques** intelligent et personnalisable
-- ⏳ **Abonnements** avec relances, notifications email et désactivation automatique
-- 🤖 **Bot Discord intégré** pour interaction et administration
-- 🌐 **Interface web multilingue** (🇫🇷 Français & 🇬🇧 Anglais a venir) 
-- 🧠 **Automatisation des tâches** via des scripts planifiables (cron)
-- 🔎 **Logs centralisés**, tableau de bord et système de configuration
-- 🐳 **Déploiement Docker ready**
-
----
-
-## 🚀 Installation rapide
-
-### Option 1 : via Docker (recommandé)
-
-```bash
-git clone https://github.com/<TON-UTILISATEUR>/vodum.git
-cd vodum
-docker build -t vodum .
-docker run -d -p 5000:5000 --name vodum vodum
-```
-
-Accessible sur `http://localhost:5000`
-
-### Option 2 : manuel
-
-- Installe Python 3.9+
-- Installe les dépendances :
-
-```bash
-pip install -r requirements.txt
-```
-
-- Lance le script principal :
-
-```bash
-python app/start.py
-```
-
----
-
-## ⚙️ Configuration
-
-La configuration se fait via l’interface web ou directement en base (`settings`) :
-
-- 🔑 Token Plex (admin)
-- 🔐 Accès Discord bot
-- 📬 Paramètres SMTP pour les mails
-- 🕒 Jours avant expiration / relance / suppression
-- 🌍 Langue par défaut
-
-Les bibliothèques et serveurs peuvent être ajoutés depuis l’interface après la première connexion.
-
----
-
-## 🌍 Multilingue (en cours)
-
-- Tous les textes sont traduits depuis les fichiers `lang/fr.json` et `lang/en.json`
-- La langue est automatiquement détectée depuis le navigateur 
-- Possibilité d’ajouter d’autres langues facilement
-
----
-
-## 🔒 Sécurité
-
-- **Aucun mot de passe ou token n’est stocké dans le code.**
-- Les tokens Plex, Discord, SMTP sont stockés **dans la base** et ne sont jamais loggés.
-- ⚠️ Ne jamais exposer la base `.db` en ligne sans la filtrer.
+VODUM is a self-hosted management tool designed to monitor Plex & jellyfin (on it's way) users, manage subscriptions, control library access, and automate notifications.
 
 
-## 🪪 Licence
+✨ Key Features
 
-> Ce projet est publié sous licence MIT. Vous êtes libre de l'utiliser, modifier et redistribuer avec mention.
+🎬 user management
+
+Track users, servers, libraries, and access rights
+
+Centralized view of all media servers
+
+📆 Subscription lifecycle
+
+Expiration tracking
+
+Status automation (active, reminder, expired…)
+
+✉️ Email notifications
+
+Customizable templates
+
+Pre-expiry reminders & post-expiry actions
+
+🚀 Quick Start (Docker / Unraid)
+Persistent directories
+
+VODUM uses the following persistent paths:
+
+/appdata
+ ├── database.db
+ ├── backups/
+ └── logs/
+
+
+Make sure /appdata is mapped to a persistent volume in Docker / Unraid.
+
+Environment
+
+No mandatory environment variables for now.
+All configuration is stored in the database and editable via the UI.
+
+🐳 Docker Image
+
+(Replace with your actual image name once published)
+
+docker run -d \
+  --name vodum \
+  -p 5000:5000 \
+  -v /mnt/user/appdata/vodum:/appdata \
+  vodum/vodum:latest
+
+🧩 Unraid Support
+
+VODUM is designed to be Unraid-friendly:
+
+Persistent /appdata
+
+Clean startup logic
+
+Automatic DB initialization
+
+Automatic V1 → V2 migration
+
+Logs visible via Docker logs
+
+An Unraid Community App template is planned.
 
 
 
+🔐 Security Notes
+
+No credentials are hardcoded
+
+Sensitive data is stored only in the local database
+
+Designed for private / self-hosted environments
+
+🛣️ Roadmap (Non-exhaustive)
+
+Jellyfin integration
+
+Multi-language UI
+
+OAuth-based email providers
+
+Advanced permission profiles
+
+API endpoints
+
+UI improvements
+
+🤝 Contributing
+
+Contributions are welcome!
+
+Please:
+
+keep migrations backward-safe
+
+respect the database architecture
+
+document any schema changes
+
+📄 License
+
+MIT
 

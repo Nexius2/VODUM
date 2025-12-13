@@ -1,11 +1,7 @@
-discord.py
-requests
-python-dotenv
-asyncpg
-beautifulsoup4
-lxml
+Flask==3.0.3
 plexapi
-Flask
-Flask-Cors
-
-
+pytz
+python-dateutil
+waitress
+itsdangerous
+croniter

@@ -1,141 +1,431 @@
 {
-  "lang_label": "English",
-  "settings_title": "Settings",
-  "save_button": "💾 Save",
-  "discord_section": "🔗 Discord Integration",
-  "discord_token": "Discord Token",
-  "discord_user_id": "Discord User ID to notify",
-  "mail_section": "📧 Email Sending",
-  "provider": "Provider",
-  "mail_from": "Sender Email",
-  "smtp_host": "SMTP Host",
-  "smtp_port": "SMTP Port",
-  "use_tls": "Enable TLS",
-  "smtp_user": "SMTP Username",
-  "smtp_pass": "SMTP Password",
-  "show_password": "Show",
-  "test_email": "📤 Send Test Email",
-  "users_section": "📅 Users",
-  "disable_on_expiry": "Disable user at expiration",
-  "delete_after_expiry_days": "Delete user X days after expiration",
-  "default_expiration_days": "Default subscription duration (in days)",
-  "tasks_section": "🔁 Background Tasks",
-  "send_reminders": "Enable automatic reminder emails",
-  "enable_cron_jobs": "Enable scheduled tasks",
-  "system_section": "⚙️ System Settings",
-  "default_language": "Language",
-  "timezone": "Timezone",
-  "admin_email": "Admin Email",
-  "log_level": "Log Level",
-  "maintenance_mode": "Maintenance Mode",
-  "debug_mode": "Debug Mode",
-  "smtp_choose": "-- Choose a provider --",
-  "smtp_free": "Free",
-  "smtp_gmail": "Gmail",
-  "smtp_outlook": "Outlook",
-  "smtp_yahoo": "Yahoo",
-  "smtp_other": "Other (custom)",
-  "yes": "Yes",
-  "no": "No",
-  "log_info": "Info",
-  "log_warning": "Warning",
-  "log_error": "Error",
-  "log_debug": "Debug",
-  "smtp_gmail_help": "➡️ Use your Gmail address.<br>🔐 If you enabled 2-Step Verification, create an <strong>app password</strong> here:",
-  "smtp_gmail_user": "👤 Username: your full Gmail address",
-  "smtp_gmail_pass": "🔐 Password: an <strong>app password</strong> (required if 2FA is enabled)",
-  "smtp_outlook_help": "➡️ Use your Outlook/Hotmail address.<br>💡 You might need to enable SMTP access in your account.",
-  "smtp_outlook_user": "👤 Username: your Outlook or Hotmail address",
-  "smtp_outlook_pass": "🔐 Password: your account password or an app password",
-  "smtp_yahoo_help": "🔐 Yahoo also requires an app password:",
-  "smtp_yahoo_user": "👤 Username: your Yahoo address",
-  "smtp_yahoo_pass": "🔐 Password: a required app password",
-  "smtp_free_help": "✅ A Free.fr address is required.<br>📧 Example: votremail@free.fr",
-  "smtp_free_user": "👤 Username: your @free.fr address",
-  "smtp_free_pass": "🔐 Password: the one you use for Free webmail",
+  "language_name": "English",
   
-  "About": "About",
-  "Version": "Version",
-  "Tool": "Tool",
-  "Created by": "Created by",
-  "Python": "Python",
-  "MySQL": "MySQL",
-  "Container": "Container",
-  "Image": "Image",
-  "INFO file not found.": "INFO file not found.",
-  "Logs": "Logs",
-  "INFO": "Info",
-  "DEBUG": "Debug",
-  "WARNING": "Warning",
-  "ERROR": "Error",
-  "CRITICAL": "Critical",
-  
-  "tasks.title": "Scheduled Tasks",
-  "tasks.name": "Name",
-  "tasks.last_run": "Last run",
-  "tasks.next_run": "Next run",
-  "tasks.action": "Action",
-  "tasks.run": "Run",
-  "task.disable_expired_users": "Disable expired users",
-  "task.sync_users": "Plex users sync",
-  "task.check_servers": "Server check",
-  "task.send_reminders": "Send reminders",
-  "task.backup": "Backup",
-  "task.delete_expired_users": "Delete expired users",
-  "task.check_libraries": "Clean up libraries",
-  "task.update_user_status": "Users status update",
-  "task.send_mail_queue": "Send mails",
-  "task.clean_temp": "Temporary folder cleanup",
-  "task.sync_user_libraries": "libraries users sync",
-  
+  "about": "About",
+  "about_description": "VODUM is an advanced management tool for Plex/Jellyfin including sync operations, user management, libraries, logs, scheduled tasks and more.",
+  "about_title": "About VODUM",
+
+  "access": "Access",
+  "actions": "Actions",
   "active": "Active",
-  "pre_expired": "Notice",
-  "reminder": "Reminder",
+  "add": "Add",
+  "add_server": "Add server",
+
+  "admin_email": "Administrator email",
+  "admin_email_missing": "Admin email is not configured. Please set it in Settings before sending test emails.",
+
+  "all": "All",
+  "all_servers": "All servers",
+
+  "allow_camera_upload": "Allow camera upload",
+  "allow_channels": "Allow channels",
+  "allow_sync": "Allow sync",
+
+  "app_logs": "Application logs",
+  "app_name": "VODUM",
+  "app_version": "Application version",
+
+  "artist": "Artists",
+
+  "auto_retention_info": "Automatic retention information",
+
+  "backup": "Backup",
+  "backup_restore": "Backup & Restore",
+  "backup_retention_days": "Backup retention time (days)",
+  "backup_retention_desc": "Defines how many days backups are kept before being automatically removed.",
+  "backup_settings": "Backup settings",
+  "backup_subtitle": "Manage database backups",
+
+  "body": "Body",
+
+  "campaign_created": "Campaign created",
+  "campaign_editor": "Campaign editor",
+  "campaign_help": "Available placeholders: {username}, {email}, {expiration_date}",
+  "campaign_missing_fields": "Subject and body are required",
+  "campaign_not_found": "Campaign not found.",
+  "campaign_send_failed": "Campaign send failed",
+  "campaign_sent": "Campaign sent.",
+  "campaign_test_failed": "Failed to send test campaign email.",
+  "campaign_test_sent": "Test campaign sent.",
+  "cancel": "Cancel",
+  "cancelled": "Cancelled",
+
+  "checking_servers": "Checking servers...",
+  "check_servers": "Check servers",
+  "check_servers_description": "Checks server availability and automatically updates their real name",
+
+  "choose_language": "Choose your language",
+
+  "cleanup_unfriended_no_users": "No users to process.",
+  "cleanup_unfriended_processed": "{count} user(s) were set to 'unfriended' because they no longer had access to any library.",
+
+  "confirm": "Confirm",
+  "confirm_delete_server": "Delete this server permanently?",
+
+  "created_at": "Created",
+  "create_backup": "Create backup",
+  "create_backup_btn": "Create backup",
+  "create_backup_desc": "Immediately generates a SQLite database backup in the backup directory.",
+  "create_campaign": "Create campaign",
+  "create_campaign_btn": "Create campaign",
+
+  "creation_date": "Creation date",
+
+  "cron_every_day_at": "Every day at {h}:{m}",
+  "cron_every_hour_at": "Every hour",
+  "cron_every_weekday": "Every {day}",
+  "cron_every_weekday_at": "Every {day} at {h}:{m}",
+  "cron_every_x_days_at": "Every {x} days at {h}:{m}",
+  "cron_every_x_hours": "Every {x} hours",
+  "cron_every_x_minutes": "Every {x} minutes",
+
+  "custom_smtp": "Custom SMTP",
+
+  "dashboard": "Dashboard",
+  "dashboard_subtitle": "Overview of your users and Plex servers",
+  "dashboard_title": "Dashboard",
+
+  "date": "Date",
+  "days_before_expiration": "Days before expiration",
+
+  "debug_mode": "Enable debug mode",
+
+  "default_subscription_days": "Default subscription duration (days)",
+  "default_subscription_days_help": "Number of days automatically applied to new users.",
+
+  "delete": "Delete",
+  "delete_after_expiry_days": "Delete user X days after expiration",
+  "delete_after_expiry_days_help": "Defines how many days an expired user remains before deletion.",
+
+  "details": "Details",
+
+  "disable_on_expiry": "Disable access at expiration",
+
+  "email": "Email",
+  "email_days_before": "Days before expiration",
+  "email_history": "Email history",
+
+  "email_template_body": "Template body",
+  "email_template_fin": "End-of-subscription template",
+  "email_template_preavis": "Pre-expiration template",
+  "email_template_relance": "Reminder template",
+  "email_template_saved": "Email template saved.",
+  "email_template_subject": "Template subject",
+
+  "enable_cron_jobs": "Enable scheduled tasks",
+
+  "enter_body": "Enter message body…",
+  "enter_subject": "Enter subject…",
+
+  "error": "Error",
+
   "expired": "Expired",
+  "expiring_soon": "Expiring soon",
+
+  "filter": "Filter",
+  "filter_movies": "Movie filter",
+  "filter_music": "Music filter",
+  "filter_television": "TV filter",
+
+  "finished": "Finished",
+  "finished_at": "Finished",
+
+  "firstname": "First name",
+  "flask_version": "Flask version",
+
+  "friend": "Friend",
+
+  "general_info": "General information",
+
+  "grant_all_users": "Grant access to all users of this server",
+  "grant_active_users": "Grant access to active users of the server",
+  "grant_access_active_success": "Access granted for active users of the server.",
+
+  "home": "Home",
+
   "invited": "Invited",
-  "unfriended": "Unfriended",
+  "is_test": "Test",
+
+  "joined_at": "Joined at",
+
+  "language": "Default language",
+
+  "last_check": "Last check",
+  "last_run": "Last run",
+  "last_status": "Last status",
+
+  "libraries": "Libraries",
+  "libraries_by_server": "Libraries by server",
+  "libraries_of": "Libraries of",
+
+  "load": "Load",
+  "local_url": "Local URL",
+
+  "log_mailing_disabled": "Task {task} automatically disabled (mailing_enabled=0)",
+  "log_mailing_enabled": "Task {task} automatically enabled (mailing_enabled=1)",
+  "logs": "Logs",
+
+  "mail_campaigns": "Campaigns",
+  "mail_smtp_config": "SMTP configuration",
+  "mail_templates": "Templates",
+
+  "mail_type_fin": "End-of-subscription email",
+  "mail_type_preavis": "Pre-expiration email",
+  "mail_type_relance": "Reminder email",
+
+  "mailing": "Mailing",
+  "mailing_enabled": "Mailing enabled",
+  "mailing_enabled_off": "Disabled",
+  "mailing_enabled_on": "Enabled",
+  "mailing_disabled_help": "Mailing is disabled. Enable it to configure SMTP, create campaigns or manage templates.",
+  "mailing_subtitle": "Email templates and sending campaigns",
+
+  "managed": "Managed",
+
+  "maintenance_mode": "Enable maintenance mode",
+
+  "manual_backup": "Manual backup",
+  "manual_backup_desc": "Immediately creates a SQLite database backup.",
+
+  "message": "Message",
+
+  "modified_at": "Modified",
+
+  "movie": "Movies",
+
+  "name": "Name",
+
+  "new_campaign": "New campaign",
+
+  "next_run": "Next run",
+
+  "no_access": "No access",
+  "no_app_logs": "No application logs yet.",
+  "no_backups": "No backups found in the configured directory.",
+  "no_campaigns": "No campaign found",
+  "no_campaigns_yet": "No campaigns yet.",
+  "no_data": "No data available",
+  "no_email_sent": "No email sent.",
+  "no_libraries": "No libraries associated with this server.",
+  "no_library": "No library for this server.",
+  "no_library_for_server": "No library for this server",
+  "no_logs": "No logs yet.",
+  "no_server": "No server configured yet.",
+  "no_servers_configured": "No servers configured.",
+  "no_task_logs": "No task logs yet.",
+  "no_tasks_found": "No tasks found in the database.",
+  "no_user_found": "No users found.",
+  "no_users_for_server": "No users currently have access to this server.",
+
+  "notes": "Notes",
+
+  "offline": "Offline",
+  "online": "Online",
+
+  "os_info": "Operating system",
+  "owner": "Owner",
+
+  "pending": "Pending",
+
+  "photo": "Photos",
+  "playlist": "Playlists",
+
+  "plex_email": "Plex email address",
+  "plex_id": "Plex ID",
+  "plex_role": "Plex role",
+  "plex_servers": "Plex Servers",
+  "plex_token": "Plex token",
+
+  "pre_expired": "Expiring soon",
+  "preavis": "Pre-expiration",
+
+  "python_version": "Python version",
+
+  "relance": "Reminder",
+
+  "remove": "Remove",
+
+  "renewal_date": "Renewal date",
+  "renewal_method": "Renewal method",
+
+  "reset": "Reset",
+
+  "restore_backup": "Restore backup",
+  "restore_backup_desc": "Upload a previously saved .db file. Warning: current database will be overwritten.",
+  "restore_btn": "Restore",
+
+  "role": "Role",
+
+  "run_now": "Run now",
+
+  "save": "Save",
+  "save_settings": "Save settings",
+  "save_templates": "Save templates",
+
+  "schedule": "Schedule",
+
+  "search": "Search",
+
+  "second_email": "Secondary email",
+
+  "send_campaign": "Send",
+  "send_expiration_emails": "Send expiration emails",
+  "send_test_email": "Send test email",
+
+  "sending": "Sending",
+
+  "server": "Server",
+  "server_access": "Server access",
+  "server_down": "Server is offline",
+  "server_information": "Server information",
+  "server_name_updated": "Server name updated",
+
+  "server_options": "Server options",
+
+  "server_status_updated": "Server status updated",
+  "server_up": "Server is online",
+  "server_users": "Users with access to this server",
+
+  "servers": "Servers",
+  "servers_libraries": "Servers & Libraries",
+  "servers_libraries_subtitle": "Plex configuration and library management",
+  "servers_libraries_title": "Servers & Libraries",
+
+  "server_type": "Server type",
+
+  "settings": "Settings",
+  "settings_saved": "Settings saved.",
+  "settings_subtitle": "General application configuration",
+
+  "show": "Shows",
+  "size": "Size",
+
+  "snapshot": "Snapshot",
+
+  "smtp_help_custom": "Use the SMTP parameters provided by your hosting provider or email service.",
+  "smtp_help_gmail": "Use your Gmail address and an application-specific password (2-step verification required).",
+  "smtp_help_outlook": "Use your Outlook/Office365 account. SMTP host is smtp.office365.com, port 587 with TLS.",
+  "smtp_help_title": "Help for SMTP configuration",
+  "smtp_help_yahoo": "Use your Yahoo address with an application-specific password. Host smtp.mail.yahoo.com.",
+
+  "smtp_host": "SMTP host",
+  "smtp_pass": "SMTP password",
+  "smtp_port": "SMTP port",
+  "smtp_provider": "SMTP provider",
+
+  "smtp_settings_saved": "SMTP settings saved",
+
+  "smtp_test_body": "This is a test email to verify your SMTP configuration.",
+  "smtp_test_failed": "Error while sending test email",
+  "smtp_test_info": "Test emails are always sent to the admin email address.",
+  "smtp_test_sent": "Test email sent to administrator",
+  "smtp_test_subject": "VODUM SMTP test",
+
+  "smtp_use_tls": "Use TLS (STARTTLS)",
+  "smtp_user": "SMTP login",
+
+  "status": "Status",
+  "status_changed_at": "Status changed at",
+
+  "subject": "Subject",
+
+  "subscription_active": "Subscription active",
+  "subscription_status": "Subscription status",
+  "subscription_plan": "Subscription plan",
+
   "suspended": "Suspended",
+
+  "tautulli_api_key": "Tautulli API key",
+  "tautulli_url": "Tautulli URL",
+
+  "target_server": "Target server",
+
+  "task": "Task",
+  "task.auto_backup": "Automatic backup",
+  "task.cleanup_backups": "Automatic cleanup of backups",
+  "task.cleanup_logs": "Automatic cleanup of logs older than 7 days",
+  "task.check_mailing_status": "Check mailing activation",
+  "task.check_servers": "Checks server availability and updates their real name",
+  "task.cleanup_unfriended": "Cleanup users without libraries",
+  "task_done": "done",
+  "task_description.check_mailing_status": "Checks whether emailing is enabled and automatically activates or deactivates related tasks",
+  "task_description.send_expiration_emails": "Automatically sends pre-expiration, reminder and expired-account emails.",
+  "task_error": "error",
+  "task_logs": "Task logs",
+  "task_running": "running",
+  "task.send_expiration_emails": "Send expiration emails",
+  "task.send_mail_campaigns": "Send campaign emails",
+  "task.sync_plex": "Plex synchronization",
+  "task.update_user_status": "Automatic user status update",
+
+  "tasks": "Tasks",
+  "tasks_enabled": "active tasks",
+  "tasks_error": "in error",
+  "tasks_desc": "Automated jobs and scheduled operations",
+
+  "timezone": "Timezone",
+
+  "type": "Type",
+
   "unknown": "Unknown",
+  "unfriended": "Removed",
+
+  "url": "URL",
+  "url_not_defined": "URL not defined",
+
+  "user": "User",
+  "user_management_subtitle": "Plex user management",
+
+  "users": "Users",
+  "users_subtitle": "Manage Plex users and their access",
+  "users_title": "Users",
+
+  "value": "Value",
+  "view_all": "View all",
+  "view_user": "View user",
+
+  "yes": "Yes",
+
+  "pay_me_a_beer": "Buy VODUM a coffee ☕",
   
-  "menu_home": "📺 Vodum",
-  "menu_users": "👥 Users",
-  "menu_servers": "🖥️ Servers",
-  "menu_libraries": "📚 Libraries",
-  "menu_mail": "📧 Mailing",
-  "menu_settings": "⚙️ Settings",
-  "menu_backup": "💾 Backup",
-  "menu_tasks": "⏱️ Tasks",
-  "menu_about": "ℹ️ About",
+  "template_fin": "End of subscription template",
+"template_preavis": "Expiration warning template",
+"template_relance": "Renewal reminder template",
+"use_for_test": "Use for test",
 
-  "users_sync": "🔄 Sync users",
-  "users_id": "ID",
-  "users_avatar": "Avatar",
-  "users_name": "Username",
-  "users_email": "Email",
-  "users_status": "📌 Status",
-  "users_days_left": "⏳ Days left",
-  "users_end_date": "📅 End date",
-  "users_no_avatar": "❌ No avatar",
-  "users_total": "👥 Total users:",
-  "users_distribution": "📊 Users distribution",
+"mail_from": "Sender email address",
+"task.apply_plex_access_updates": "Apply Plex access updates",
+"available_backups": "Available backups",
+"application_logs": "Application logs",
+"credits_text": "Thank you for using VODUM! Developed with ❤️ to make your media servers easier to manage.",
 
-  "datatable_search": "🔍 Search:",
-  "datatable_first": "First",
-  "datatable_last": "Last",
-  "datatable_next": "Next",
-  "datatable_previous": "Previous",
-  "datatable_export_csv": "📥 Export CSV",
-  "datatable_length_menu": "Show _MENU_ users per page",
-  "datatable_info": "Showing _START_ to _END_ of _TOTAL_ users",
+"support_title": "Support",
+"support_text": "If you need help or want to report an issue, please contact the platform administrator.",
+
+"system_info":"System Info",
+"server_details_subtitle": "Server details",
+"about_desc": "Application information and system details",
+
+  "subscriptions": "Subscriptions",
+  "subscriptions_description": "Offer subscription time to users.",
+  "target_users": "Target users",
+  "all_users": "All users",
+  "users_from_server": "Users from a server",
+  "select_server": "Select a server",
+  "gift_duration": "Gift duration",
+  "one_day": "1 day",
+  "seven_days": "7 days",
+  "one_month": "1 month",
+  "three_months": "3 months",
+  "six_months": "6 months",
+  "one_year": "12 months",
+  "options": "Options",
+  "reason_optional": "Reason (optional)",
+  "reason_placeholder": "e.g. compensation, gift, incident…",
+  "subscription_reset_notice": "Reminders and warnings will be reset if the new expiration date is later than the previous one.",
+  "gift_subscription": "Gift subscription",
+    "subscriptions_all_users_hint": "Apply the gift to all users in the application.",
+  "subscriptions_server_users_hint": "Apply the gift only to users linked to a specific server."
 
 
-  "chart_users_status": "Users by status",
-  "chart_active": "Active",
-  "chart_preavis": "Notice",
-  "chart_reminder": "Reminder",
-  "chart_expired": "Expired",
-  "chart_invited": "Invited",
-  "chart_removed": "Removed",
-  "chart_unknown": "Unknown",
-  "chart_suspended": "Suspended"
 }

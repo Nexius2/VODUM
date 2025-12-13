@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% set active_page = 'servers' %}
+{% set active_tab = 'libraries' %}
+
+{% block title %}Libraries - VODUM{% endblock %}
+{% block header_title %}Libraries{% endblock %}
+{% block header_subtitle %}Manage all libraries across servers{% endblock %}
+
+{% block content %}
+
+{% include "servers_nav.html" with context %}
+
+<form method="post" action="{{ url_for('bulk_grant_libraries') }}" id="lib-form">
+
+<div class="flex justify-between items-center mb-3">
+    <h2 class="text-sm font-semibold">All Libraries</h2>
+
+    <!-- Zone des boutons dynamiques -->
+    <div id="bulk-buttons" class="flex gap-2"></div>
+</div>
+
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+  <table class="w-full text-xs">
+    <thead class="bg-slate-950/60 text-slate-400">
+      <tr>
+        <th class="px-3 py-2">
+          <input type="checkbox" id="check-all">
+        </th>
+        <th class="px-3 py-2 text-left">Server</th>
+        <th class="px-3 py-2 text-left">Name</th>
+        <th class="px-3 py-2 text-left">Type</th>
+        <th class="px-3 py-2 text-left">ID</th>
+        <th class="px-3 py-2 text-left">Users</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for lib in libraries %}
+      <tr class="border-t border-slate-800">
+        <td class="px-3 py-2">
+          <input type="checkbox"
+                 class="lib-check"
+                 data-server="{{ lib.server_id }}"
+                 value="{{ lib.id }}"
+                 name="library_ids">
+        </td>
+        <td class="px-3 py-2 font-semibold">{{ lib.server_name }}</td>
+        <td class="px-3 py-2">{{ lib.name }}</td>
+        <td class="px-3 py-2 text-slate-400">{{ t(lib.type) }}</td>
+        <td class="px-3 py-2 font-mono text-[11px]">{{ lib.section_id }}</td>
+        <td class="px-3 py-2">{{ lib.users_count }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+</form>
+
+<script>
+const checkAll = document.getElementById('check-all');
+const checks = document.querySelectorAll('.lib-check');
+const buttonZone = document.getElementById('bulk-buttons');
+
+checkAll.addEventListener('change', () => {
+  checks.forEach(c => c.checked = checkAll.checked);
+  refreshButtons();
+});
+
+checks.forEach(c => c.addEventListener('change', refreshButtons));
+
+function refreshButtons() {
+  buttonZone.innerHTML = "";
+
+  const byServer = {};
+
+  checks.forEach(c => {
+    if (c.checked) {
+      const sid = c.dataset.server;
+      if (!byServer[sid]) byServer[sid] = [];
+      byServer[sid].push(c.value);
+    }
+  });
+
+  Object.keys(byServer).forEach(serverId => {
+    const btn = document.createElement('button');
+    btn.type = "submit";
+    btn.name = "server_id";
+    btn.value = serverId;
+    btn.className = "px-3 py-1 rounded-lg bg-primary hover:bg-primary-dark text-white text-xs";
+
+    // 🔥 Jinja génère la traduction AVANT que JS n’exécute le code
+    btn.textContent = "{{ t('grant_active_users') }} " + serverId;
+
+    buttonZone.appendChild(btn);
+  });
+}
+</script>
+
+
+{% endblock %}

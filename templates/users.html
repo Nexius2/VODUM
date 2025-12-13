@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% set active_page = 'users' %}
+
+{% block title %}{{ t("users_title") }} - VODUM{% endblock %}
+{% block header_title %}{{ t("users") }}{% endblock %}
+{% block header_subtitle %}{{ t("users_subtitle") }}{% endblock %}
+
+{% block content %}
+
+<style>
+    /* Curseur propre partout dans les colonnes triables */
+    th.sortable, th.sortable * {
+        cursor: pointer !important;
+    }
+
+    /* Style flèche */
+    th .arrow {
+        width: 12px;
+        height: 12px;
+        opacity: 0.35;
+        transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+
+    th.sorted .arrow {
+        opacity: 1;
+        color: rgb(52 211 153); /* emerald-400 */
+    }
+
+    th.sorted-asc .arrow {
+        transform: rotate(0deg);
+    }
+
+    th.sorted-desc .arrow {
+        transform: rotate(180deg);
+    }
+
+    th.sorted span {
+        color: rgb(52 211 153);
+    }
+</style>
+
+
+<!-- Filtres -->
+<form method="get" class="flex flex-wrap items-center gap-3 mb-6">
+    <input type="text" name="q" placeholder="{{ t('search') }}…" value="{{ search }}"
+           class="bg-slate-900 border border-slate-800 rounded-lg text-sm px-3 py-2 w-48">
+
+    <select name="status" class="bg-slate-900 border border-slate-800 rounded-lg text-sm px-3 py-2">
+        <option value="">{{ t("status_all") }}</option>
+        {% for s in ['active','pre_expired','reminder','expired','invited','unfriended','suspended','unknown'] %}
+            <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>
+                {{ t(s) }}
+            </option>
+        {% endfor %}
+    </select>
+
+    <button class="text-sm px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white">
+        {{ t("filter") }}
+    </button>
+
+    <a href="{{ url_for('users_list') }}"
+       class="text-sm px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700">
+        {{ t("reset") }}
+    </a>
+</form>
+
+
+<!-- TABLE USERS -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+<table class="w-full text-sm">
+    <thead class="bg-slate-950/60 text-slate-400">
+        <tr>
+            <!-- NAME -->
+            <th class="px-4 py-3 text-left sortable" onclick="sortTable(0, this)">
+                <div class="flex items-center gap-1 cursor-pointer">
+                    <span>{{ t("name") }}</span>
+                    <svg class="arrow" viewBox="0 0 24 24">
+                        <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </div>
+            </th>
+
+            <!-- EMAIL -->
+            <th class="px-4 py-3 text-left sortable" onclick="sortTable(1, this)">
+                <div class="flex items-center gap-1 cursor-pointer">
+                    <span>{{ t("email") }}</span>
+                    <svg class="arrow" viewBox="0 0 24 24">
+                        <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </div>
+            </th>
+
+            <!-- STATUS -->
+            <th class="px-4 py-3 text-left sortable" onclick="sortTable(2, this)">
+                <div class="flex items-center gap-1 cursor-pointer">
+                    <span>{{ t("status") }}</span>
+                    <svg class="arrow" viewBox="0 0 24 24">
+                        <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </div>
+            </th>
+
+            <!-- EXPIRATION -->
+            <th class="px-4 py-3 text-left sortable" onclick="sortTable(3, this)">
+                <div class="flex items-center gap-1 cursor-pointer">
+                    <span>{{ t("expiration") }}</span>
+                    <svg class="arrow" viewBox="0 0 24 24">
+                        <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </div>
+            </th>
+
+            <!-- SERVERS -->
+            <th class="px-4 py-3 text-left sortable" onclick="sortTable(4, this)">
+                <div class="flex items-center gap-1 cursor-pointer">
+                    <span>{{ t("servers") }}</span>
+                    <svg class="arrow" viewBox="0 0 24 24">
+                        <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </div>
+            </th>
+
+            <!-- LIBRARIES -->
+            <th class="px-4 py-3 text-left sortable" onclick="sortTable(5, this)">
+                <div class="flex items-center gap-1 cursor-pointer">
+                    <span>{{ t("libraries") }}</span>
+                    <svg class="arrow" viewBox="0 0 24 24">
+                        <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </div>
+            </th>
+
+        </tr>
+    </thead>
+
+    <tbody>
+        {% for u in users %}
+        <tr class="border-t border-slate-800 hover:bg-slate-800/50 cursor-pointer"
+            onclick="window.location='{{ url_for('user_detail', user_id=u.id) }}'">
+
+            <td class="px-4 py-3">{{ u.username }}</td>
+            <td class="px-4 py-3 text-slate-300">{{ u.email or '—' }}</td>
+
+            <td class="px-4 py-3">
+                {% set colors = {
+                    'active': 'bg-emerald-900/40 text-emerald-300',
+                    'pre_expired': 'bg-amber-900/40 text-amber-300',
+                    'expired': 'bg-rose-900/40 text-rose-300',
+                    'reminder': 'bg-blue-900/40 text-blue-300',
+                    'invited': 'bg-cyan-900/40 text-cyan-300',
+                    'unfriended': 'bg-slate-700 text-slate-300',
+                    'suspended': 'bg-purple-900/40 text-purple-300',
+                    'unknown': 'bg-slate-800 text-slate-400'
+                } %}
+                <span class="text-xs px-2 py-1 rounded-full {{ colors.get(u.status) }}">
+                    {{ t(u.status) }}
+                </span>
+            </td>
+
+            <td class="px-4 py-3 text-slate-300">{{ u.expiration_date or '—' }}</td>
+            <td class="px-4 py-3 text-slate-300">{{ u.servers_count }}</td>
+            <td class="px-4 py-3 text-slate-300">{{ u.libraries_count }}</td>
+
+        </tr>
+
+        {% else %}
+        <tr>
+            <td colspan="6" class="px-4 py-6 text-center text-slate-500">
+                {{ t("no_user_found") }}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+
+<!-- SCRIPT TRI + MÉMOIRE -->
+<script>
+function sortTable(columnIndex, thElement) {
+    const table = document.querySelector("table");
+    const tbody = table.querySelector("tbody");
+    const rows = Array.from(tbody.querySelectorAll("tr"))
+        .filter(r => !r.querySelector("td[colspan]"));
+
+    const thList = table.querySelectorAll("th.sortable");
+
+    thList.forEach(th => {
+        th.classList.remove("sorted", "sorted-asc", "sorted-desc");
+    });
+
+    const currentOrder = thElement.dataset.order === "asc" ? "desc" : "asc";
+    thElement.dataset.order = currentOrder;
+    thElement.classList.add("sorted", currentOrder === "asc" ? "sorted-asc" : "sorted-desc");
+
+    function convert(v) {
+        v = v.trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return new Date(v).getTime();    // format YYYY-MM-DD
+        if (/^\d{2}\/\d{2}\/\d{4}$/.test(v)) {                              // JJ/MM/AAAA
+            const [d,m,y] = v.split("/").map(Number);
+            return new Date(y, m-1, d).getTime();
+        }
+        if (!isNaN(v)) return Number(v);
+        return v.toLowerCase();
+    }
+
+    const sorted = rows.sort((a, b) => {
+        const A = convert(a.children[columnIndex].innerText);
+        const B = convert(b.children[columnIndex].innerText);
+        if (A > B) return currentOrder === "asc" ? 1 : -1;
+        if (A < B) return currentOrder === "asc" ? -1 : 1;
+        return 0;
+    });
+
+    tbody.innerHTML = "";
+    sorted.forEach(r => tbody.appendChild(r));
+
+    localStorage.setItem("users_sort_col", columnIndex);
+    localStorage.setItem("users_sort_order", currentOrder);
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    const col = localStorage.getItem("users_sort_col");
+    const order = localStorage.getItem("users_sort_order");
+
+    if (col !== null) {
+        const th = document.querySelectorAll("th.sortable")[col];
+        th.dataset.order = order === "asc" ? "desc" : "asc"; 
+        sortTable(Number(col), th);
+    }
+});
+</script>
+
+{% endblock %}

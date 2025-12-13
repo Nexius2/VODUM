@@ -1,0 +1,435 @@
+{
+  "language_name": "Deutsch",
+
+  "about": "Über",
+  "about_description": "VODUM ist ein erweitertes Verwaltungstool für Plex/Jellyfin mit Synchronisation, Benutzerverwaltung, Bibliotheken, Protokollen, geplanten Aufgaben und mehr.",
+  "about_title": "Über VODUM",
+
+  "access": "Zugriff",
+  "actions": "Aktionen",
+  "active": "Aktiv",
+  "add": "Hinzufügen",
+  "add_server": "Server hinzufügen",
+
+  "admin_email": "Administrator-E-Mail",
+  "admin_email_missing": "Administrator-E-Mail ist nicht konfiguriert. Bitte richte sie in den Einstellungen ein, bevor du Test-E-Mails sendest.",
+
+  "all": "Alle",
+  "all_servers": "Alle Server",
+
+  "allow_camera_upload": "Hochladen von Fotos erlauben",
+  "allow_channels": "Kanäle erlauben",
+  "allow_sync": "Synchronisation erlauben",
+
+  "app_logs": "Anwendungsprotokolle",
+  "app_name": "VODUM",
+  "app_version": "Anwendungsversion",
+
+  "artist": "Künstler",
+
+  "auto_retention_info": "Informationen zur automatischen Aufbewahrung",
+
+  "backup": "Sicherung",
+  "backup_restore": "Sicherung & Wiederherstellung",
+  "backup_retention_days": "Aufbewahrungszeit der Sicherungen (Tage)",
+  "backup_retention_desc": "Legt fest, wie viele Tage Sicherungen gespeichert bleiben, bevor sie automatisch gelöscht werden.",
+  "backup_settings": "Sicherungseinstellungen",
+  "backup_subtitle": "Verwaltung der Datenbanksicherungen",
+
+  "body": "Inhalt",
+
+  "campaign_created": "Kampagne erstellt",
+  "campaign_editor": "Kampagnen-Editor",
+  "campaign_help": "Verfügbare Platzhalter: {username}, {email}, {expiration_date}",
+  "campaign_missing_fields": "Betreff und Inhalt sind erforderlich.",
+  "campaign_not_found": "Kampagne nicht gefunden.",
+  "campaign_send_failed": "Fehler beim Senden der Kampagne.",
+  "campaign_sent": "Kampagne gesendet.",
+  "campaign_test_failed": "Fehler beim Senden der Test-E-Mail.",
+  "campaign_test_sent": "Test-E-Mail gesendet.",
+  "cancel": "Abbrechen",
+  "cancelled": "Abgebrochen",
+
+  "checking_servers": "Server werden überprüft…",
+  "check_servers": "Server überprüfen",
+  "check_servers_description": "Überprüft die Serververfügbarkeit und aktualisiert automatisch deren echten Namen",
+
+  "choose_language": "Sprache wählen",
+
+  "cleanup_unfriended_no_users": "Keine Benutzer zu verarbeiten.",
+  "cleanup_unfriended_processed": "{count} Benutzer wurden als ohne Zugriff markiert, da sie keine verfügbaren Bibliotheken mehr hatten.",
+
+  "confirm": "Bestätigen",
+  "confirm_delete_server": "Diesen Server endgültig löschen?",
+
+  "created_at": "Erstellt am",
+  "create_backup": "Sicherung erstellen",
+  "create_backup_btn": "Sicherung erstellen",
+  "create_backup_desc": "Erstellt sofort eine SQLite-Sicherung im konfigurierten Verzeichnis.",
+  "create_campaign": "Kampagne erstellen",
+  "create_campaign_btn": "Kampagne erstellen",
+
+  "creation_date": "Erstellungsdatum",
+
+  "cron_every_day_at": "Jeden Tag um {h}:{m}",
+  "cron_every_hour_at": "Jede Stunde",
+  "cron_every_weekday": "Jeden {day}",
+  "cron_every_weekday_at": "Jeden {day} um {h}:{m}",
+  "cron_every_x_days_at": "Alle {x} Tage um {h}:{m}",
+  "cron_every_x_hours": "Alle {x} Stunden",
+  "cron_every_x_minutes": "Alle {x} Minuten",
+
+  "custom_smtp": "Benutzerdefiniertes SMTP",
+
+  "dashboard": "Dashboard",
+  "dashboard_subtitle": "Übersicht über Benutzer und Plex-Server",
+  "dashboard_title": "Dashboard",
+
+  "date": "Datum",
+  "days_before_expiration": "Tage vor Ablauf",
+
+  "debug_mode": "Debug-Modus aktivieren",
+
+  "default_subscription_days": "Standard-Abonnementdauer (Tage)",
+  "default_subscription_days_help": "Anzahl der Tage, die automatisch neuen Benutzern zugewiesen werden.",
+
+  "delete": "Löschen",
+  "delete_after_expiry_days": "Benutzer X Tage nach Ablauf löschen",
+  "delete_after_expiry_days_help": "Definiert, wie viele Tage ein abgelaufener Benutzer bestehen bleibt, bevor er gelöscht wird.",
+
+  "details": "Details",
+
+  "disable_on_expiry": "Zugriff bei Ablauf deaktivieren",
+
+  "email": "E-Mail",
+  "email_days_before": "Tage vor Ablauf",
+  "email_history": "E-Mail-Verlauf",
+
+  "email_template_body": "Vorlageninhalt",
+  "email_template_fin": "Vorlage: Abonnement abgelaufen",
+  "email_template_preavis": "Vorlage: Vor Ablauf",
+  "email_template_relance": "Vorlage: Erinnerung",
+  "email_template_saved": "Vorlage gespeichert.",
+  "email_template_subject": "Vorlagenbetreff",
+
+  "enable_cron_jobs": "Geplante Aufgaben aktivieren",
+
+  "enter_body": "Inhalt eingeben…",
+  "enter_subject": "Betreff eingeben…",
+
+  "error": "Fehler",
+
+  "expired": "Abgelaufen",
+  "expiring_soon": "Läuft bald ab",
+
+  "filter": "Filtern",
+  "filter_movies": "Filmfilter",
+  "filter_music": "Musikfilter",
+  "filter_television": "Serienfilter",
+
+  "finished": "Abgeschlossen",
+  "finished_at": "Abgeschlossen am",
+
+  "firstname": "Vorname",
+  "flask_version": "Flask-Version",
+
+  "friend": "Freund",
+
+  "general_info": "Allgemeine Informationen",
+
+  "grant_all_users": "Allen Benutzern dieses Servers Zugriff gewähren",
+  "grant_active_users": "Aktiven Benutzern Zugriff gewähren",
+  "grant_access_active_success": "Zugriff für aktive Benutzer gewährt.",
+
+  "home": "Startseite",
+
+  "invited": "Eingeladen",
+  "is_test": "Test",
+
+  "joined_at": "Beigetreten am",
+
+  "language": "Standardsprache",
+
+  "last_check": "Letzte Überprüfung",
+  "last_run": "Letzte Ausführung",
+  "last_status": "Letzter Status",
+
+  "libraries": "Bibliotheken",
+  "libraries_by_server": "Bibliotheken nach Server",
+  "libraries_of": "Bibliotheken von",
+
+  "load": "Laden",
+  "local_url": "Lokale URL",
+
+  "log_mailing_disabled": "Aufgabe {task} automatisch deaktiviert (mailing_enabled=0)",
+  "log_mailing_enabled": "Aufgabe {task} automatisch aktiviert (mailing_enabled=1)",
+  "logs": "Protokolle",
+
+  "mail_campaigns": "Kampagnen",
+  "mail_smtp_config": "SMTP-Konfiguration",
+  "mail_templates": "Vorlagen",
+
+  "mail_type_fin": "E-Mail: Abonnement beendet",
+  "mail_type_preavis": "E-Mail: Vor Ablauf",
+  "mail_type_relance": "E-Mail: Erinnerung",
+
+  "mailing": "Mailing",
+  "mailing_enabled": "Mailing aktiviert",
+  "mailing_enabled_off": "Deaktiviert",
+  "mailing_enabled_on": "Aktiviert",
+  "mailing_disabled_help": "Mailing ist deaktiviert. Aktiviere es, um SMTP zu konfigurieren, Kampagnen zu erstellen oder Vorlagen zu verwalten.",
+  "mailing_subtitle": "E-Mail-Vorlagen und Kampagnenversand",
+
+  "managed": "Verwaltet",
+
+  "maintenance_mode": "Wartungsmodus aktivieren",
+
+  "manual_backup": "Manuelles Backup",
+  "manual_backup_desc": "Erstellt sofort ein SQLite-Backup.",
+
+  "message": "Nachricht",
+
+  "modified_at": "Geändert am",
+
+  "movie": "Filme",
+
+  "name": "Name",
+
+  "new_campaign": "Neue Kampagne",
+
+  "next_run": "Nächste Ausführung",
+
+  "no_access": "Kein Zugriff",
+  "no_app_logs": "Noch keine Anwendungsprotokolle.",
+  "no_backups": "Keine Sicherungen im konfigurierten Verzeichnis gefunden.",
+  "no_campaigns": "Keine Kampagnen gefunden.",
+  "no_campaigns_yet": "Noch keine Kampagnen.",
+  "no_data": "Keine Daten verfügbar.",
+  "no_email_sent": "Keine E-Mails gesendet.",
+  "no_libraries": "Keine Bibliotheken mit diesem Server verknüpft.",
+  "no_library": "Keine Bibliothek für diesen Server.",
+  "no_library_for_server": "Keine Bibliothek für diesen Server",
+  "no_logs": "Noch keine Protokolle.",
+  "no_server": "Noch kein Server konfiguriert.",
+  "no_servers_configured": "Keine Server konfiguriert.",
+  "no_task_logs": "Noch keine Aufgabenprotokolle.",
+  "no_tasks_found": "Keine Aufgaben in der Datenbank gefunden.",
+  "no_user_found": "Keine Benutzer gefunden.",
+  "no_users_for_server": "Keine Benutzer haben Zugriff auf diesen Server.",
+
+  "notes": "Notizen",
+
+  "offline": "Offline",
+  "online": "Online",
+
+  "os_info": "Betriebssystem",
+  "owner": "Besitzer",
+
+  "pending": "Ausstehend",
+
+  "photo": "Fotos",
+  "playlist": "Playlisten",
+
+  "plex_email": "Plex-E-Mail",
+  "plex_id": "Plex-ID",
+  "plex_role": "Plex-Rolle",
+  "plex_servers": "Plex-Server",
+  "plex_token": "Plex-Token",
+
+  "pre_expired": "Läuft bald ab",
+  "preavis": "Vor Ablauf",
+
+  "python_version": "Python-Version",
+
+  "relance": "Erinnerung",
+
+  "remove": "Entfernen",
+
+  "renewal_date": "Erneuerungsdatum",
+  "renewal_method": "Erneuerungsmethode",
+
+  "reset": "Zurücksetzen",
+
+  "restore_backup": "Backup wiederherstellen",
+  "restore_backup_desc": "Lade eine zuvor gespeicherte .db-Datei hoch. Achtung: Dies überschreibt die aktuelle Datenbank.",
+  "restore_btn": "Wiederherstellen",
+
+  "role": "Rolle",
+
+  "run_now": "Jetzt ausführen",
+
+  "save": "Speichern",
+  "save_settings": "Einstellungen speichern",
+  "save_templates": "Vorlagen speichern",
+
+  "schedule": "Planung",
+
+  "search": "Suche",
+
+  "second_email": "Zweit-E-Mail",
+
+  "send_campaign": "Senden",
+  "send_expiration_emails": "Ablauf-E-Mails senden",
+  "send_test_email": "Test-E-Mail senden",
+
+  "sending": "Wird gesendet…",
+
+  "server": "Server",
+  "server_access": "Serverzugang",
+  "server_down": "Server ist offline",
+  "server_information": "Serverinformationen",
+  "server_name_updated": "Servername aktualisiert",
+
+  "server_options": "Serveroptionen",
+
+  "server_status_updated": "Serverstatus aktualisiert",
+  "server_up": "Server ist online",
+  "server_users": "Benutzer mit Serverzugang",
+
+  "servers": "Server",
+  "servers_libraries": "Server & Bibliotheken",
+  "servers_libraries_subtitle": "Plex-Konfiguration und Bibliotheksverwaltung",
+  "servers_libraries_title": "Server & Bibliotheken",
+
+  "server_type": "Servertype",
+
+  "settings": "Einstellungen",
+  "settings_saved": "Einstellungen gespeichert.",
+  "settings_subtitle": "Allgemeine Anwendungskonfiguration",
+
+  "show": "Serien",
+  "size": "Größe",
+
+  "snapshot": "Snapshot",
+
+  "smtp_help_custom": "Verwenden Sie die SMTP-Einstellungen Ihres Hosting- oder E-Mail-Anbieters.",
+  "smtp_help_gmail": "Verwenden Sie Ihre Gmail-Adresse und ein App-Passwort (2-Faktor-Authentifizierung erforderlich).",
+  "smtp_help_outlook": "Verwenden Sie Ihr Outlook/Office365-Konto. SMTP: smtp.office365.com, Port 587, TLS.",
+  "smtp_help_title": "Hilfe zur SMTP-Konfiguration",
+  "smtp_help_yahoo": "Verwenden Sie Ihre Yahoo-Adresse mit einem App-Passwort. SMTP: smtp.mail.yahoo.com.",
+
+  "smtp_host": "SMTP-Host",
+  "smtp_pass": "SMTP-Passwort",
+  "smtp_port": "SMTP-Port",
+  "smtp_provider": "SMTP-Anbieter",
+
+  "smtp_settings_saved": "SMTP-Einstellungen gespeichert",
+
+  "smtp_test_body": "Dies ist eine Test-E-Mail zur Überprüfung Ihrer SMTP-Konfiguration.",
+  "smtp_test_failed": "Fehler beim Senden der Test-E-Mail.",
+  "smtp_test_info": "Test-E-Mails werden immer an die Administrator-E-Mail gesendet.",
+  "smtp_test_sent": "Test-E-Mail an Administrator gesendet",
+  "smtp_test_subject": "VODUM SMTP-Test",
+
+  "smtp_use_tls": "TLS (STARTTLS) verwenden",
+  "smtp_user": "SMTP-Benutzer",
+
+  "status": "Status",
+  "status_changed_at": "Status geändert am",
+
+  "subject": "Betreff",
+
+  "subscription_active": "Abonnement aktiv",
+  "subscription_status": "Abonnementstatus",
+  "subscription_plan": "Abonnementplan",
+
+  "suspended": "Suspendiert",
+
+  "tautulli_api_key": "Tautulli API-Schlüssel",
+  "tautulli_url": "Tautulli-URL",
+
+  "target_server": "Zielserver",
+
+  "task": "Aufgabe",
+  "task.auto_backup": "Automatische Sicherung",
+  "task.cleanup_backups": "Automatische Sicherungsbereinigung",
+  "task.cleanup_logs": "Automatische Bereinigung von Protokollen älter als 7 Tage",
+  "task.check_mailing_status": "Mailingstatus prüfen",
+  "task.check_servers": "Server prüfen und echten Namen aktualisieren",
+  "task.cleanup_unfriended": "Benutzer ohne Bibliotheken bereinigen",
+  "task_done": "fertig",
+
+  "task_description.check_mailing_status": "Prüft, ob Mailing aktiviert ist, und aktiviert/deaktiviert automatisch zugehörige Aufgaben.",
+  "task_description.send_expiration_emails": "Sendet automatisch Vorablauf-, Erinnerungs- und Ablaufe-Mails.",
+
+  "task_error": "Fehler",
+  "task_logs": "Aufgabenprotokolle",
+  "task_running": "läuft",
+
+  "task.send_expiration_emails": "Ablauf-E-Mails senden",
+  "task.send_mail_campaigns": "Kampagnen-E-Mails senden",
+
+  "task.sync_plex": "Plex-Synchronisation",
+  "task.update_user_status": "Benutzerstatus automatisch aktualisieren",
+
+  "tasks": "Aufgaben",
+  "tasks_enabled": "aktive Aufgaben",
+  "tasks_error": "mit Fehler",
+  "tasks_desc": "Automatische Aufgaben und geplante Vorgänge",
+
+  "timezone": "Zeitzone",
+
+  "type": "Typ",
+
+  "unknown": "Unbekannt",
+  "unfriended": "Entfernt",
+
+  "url": "URL",
+  "url_not_defined": "URL nicht definiert",
+
+  "user": "Benutzer",
+  "user_management_subtitle": "Verwaltung von Plex-Benutzern",
+
+  "users": "Benutzer",
+  "users_subtitle": "Plex-Benutzer und deren Zugänge verwalten",
+  "users_title": "Benutzer",
+
+  "value": "Wert",
+  "view_all": "Alle anzeigen",
+  "view_user": "Benutzer anzeigen",
+
+  "yes": "Ja",
+
+  "pay_me_a_beer": "Spendiere VODUM einen Kaffee ☕",
+  
+  "template_fin": "Vorlage Abonnementende",
+"template_preavis": "Vorlage Ablaufwarnung",
+"template_relance": "Vorlage Erinnerung an Verlängerung",
+"use_for_test": "Für Test verwenden",
+
+"mail_from": "Absender-E-Mail-Adresse",
+"task.apply_plex_access_updates": "Plex-Zugriffsaktualisierungen anwenden",
+"available_backups": "Verfügbare Backups",
+"application_logs": "Anwendungsprotokolle",
+"credits_text": "Danke, dass Sie VODUM verwenden! Entwickelt mit ❤️, um die Verwaltung Ihrer Medienserver zu erleichtern.",
+
+"support_title": "Support",
+"support_text": "Wenn Sie Hilfe benötigen oder ein Problem melden möchten, wenden Sie sich bitte an den Plattformadministrator.",
+
+"system_info":"Systeminformationen",
+"server_details_subtitle": "Serverdetails",
+"about_desc": "Anwendungsinformationen und Systemdetails",
+
+  "subscriptions": "Abonnements",
+  "subscriptions_description": "Abonnementzeit an Benutzer verschenken.",
+  "target_users": "Zielbenutzer",
+  "all_users": "Alle Benutzer",
+  "users_from_server": "Benutzer eines Servers",
+  "select_server": "Server auswählen",
+  "gift_duration": "Geschenkte Dauer",
+  "one_day": "1 Tag",
+  "seven_days": "7 Tage",
+  "one_month": "1 Monat",
+  "three_months": "3 Monate",
+  "six_months": "6 Monate",
+  "one_year": "12 Monate",
+  "options": "Optionen",
+  "reason_optional": "Grund (optional)",
+  "reason_placeholder": "z. B. Entschädigung, Geschenk, Vorfall…",
+  "subscription_reset_notice": "Erinnerungen und Vorankündigungen werden zurückgesetzt, wenn das neue Ablaufdatum später ist als das vorherige.",
+  "gift_subscription": "Abonnement verschenken"
+
+
+
+
+}

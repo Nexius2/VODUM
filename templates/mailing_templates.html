@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% set active_page = 'mailing' %}
+
+{% block title %}{{ t("mailing") }} - VODUM{% endblock %}
+{% block header_title %}{{ t("mailing") }}{% endblock %}
+{% block header_subtitle %}{{ t("mailing_subtitle") }}{% endblock %}
+
+{% block header_actions %}
+    {% if settings.mailing_enabled %}
+        <div class="flex flex-col items-end space-y-1">
+
+            <div class="flex space-x-2">
+                <!-- Bouton Test Mail -->
+                <button
+                    type="submit"
+                    form="templates-form"
+                    name="action"
+                    value="test"
+                    class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm"
+                >
+                    {{ t("send_test_email") }}
+                </button>
+
+                <!-- Bouton Save -->
+                <button
+                    type="submit"
+                    form="templates-form"
+                    name="action"
+                    value="save"
+                    class="px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-sm"
+                >
+                    {{ t("save_templates") }}
+                </button>
+            </div>
+
+            <!--<p class="text-xs text-slate-400">
+                {{ t("template_test_help") }}
+            </p>-->
+        </div>
+    {% endif %}
+{% endblock %}
+
+
+{% block content %}
+
+{% set current_subpage = 'templates' %}
+{% include "mailing_nav.html" %}
+
+{% if not templates %}
+  <p class="text-slate-500 text-sm">{{ t("no_templates") }}</p>
+{% else %}
+
+  <form id="templates-form" method="post" class="space-y-6">
+    <input type="hidden" name="action" id="templates_action" value="save">
+    <input type="hidden" id="selected_test_template" name="test_template_id" value="">
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {% for tpl in templates %}
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-xs">
+        <input type="hidden" name="template_ids" value="{{ tpl.id }}">
+
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="font-semibold capitalize">
+            {{ t('template_' ~ tpl.type) }}
+          </h3>
+
+          {% if settings.mailing_enabled %}
+          <!-- Switch pour template de test -->
+          <div class="inline-flex items-center gap-3">
+            <span class="text-[11px] text-slate-400">{{ t("use_for_test") }}</span>
+
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox"
+                     class="sr-only peer test-switch"
+                     data-id="{{ tpl.id }}"
+                     {% if tpl.id == selected_template_id %}checked data-active="1"{% else %}data-active="0"{% endif %}>
+              <div class="w-11 h-6 bg-slate-600 rounded-full peer peer-checked:bg-emerald-500 transition-all"></div>
+              <div class="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5"></div>
+            </label>
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="mb-3">
+          <label class="block mb-1 text-slate-400">{{ t("subject") }}</label>
+          <input type="text" name="subject_{{ tpl.id }}" value="{{ tpl.subject }}"
+                 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+        </div>
+
+        <div class="mb-3">
+          <label class="block mb-1 text-slate-400">{{ t("body") }}</label>
+          <textarea name="body_{{ tpl.id }}" rows="30"
+                    class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">{{ tpl.body }}</textarea>
+        </div>
+
+        {% if tpl.type != "fin" %}
+        <div>
+          <label class="block mb-1 text-slate-400">{{ t("days_before_expiration") }}</label>
+          <input type="number" name="days_before_{{ tpl.id }}" value="{{ tpl.days_before }}"
+                 class="w-24 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </form>
+
+  {% if settings.mailing_enabled %}
+  <script>
+  document.addEventListener("DOMContentLoaded", () => {
+      const switches = document.querySelectorAll(".test-switch");
+      const hidden = document.getElementById("selected_test_template");
+
+      switches.forEach(sw => {
+          if (sw.checked) {
+              hidden.value = sw.dataset.id;
+              sw.dataset.active = "1";
+          }
+
+          sw.addEventListener("change", (e) => {
+              const clicked = e.target;
+
+              if (clicked.dataset.active === "1") {
+                  clicked.checked = false;
+                  clicked.dataset.active = "0";
+                  hidden.value = "";
+                  return;
+              }
+
+              switches.forEach(other => {
+                  if (other !== clicked) {
+                      other.checked = false;
+                      other.dataset.active = "0";
+                  }
+              });
+
+              clicked.dataset.active = "1";
+              hidden.value = clicked.dataset.id;
+          });
+      });
+  });
+  </script>
+  {% endif %}
+
+{% endif %}
+{% endblock %}

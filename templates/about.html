@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block header_title %}
+    {{ t("about") }}
+{% endblock %}
+
+{% block header_subtitle %}
+    {{ t("about_desc") }}
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto py-6 space-y-8">
+
+    <!-- ABOUT CARD -->
+    <div class="bg-slate-900/40 p-6 rounded-xl shadow border border-slate-800">
+        <h2 class="text-2xl font-semibold mb-3">{{ t("about_title") }}</h2>
+        <p class="text-slate-300">
+            {{ t("about_description") }}
+        </p>
+
+        <p class="mt-4 text-slate-400">
+            {{ t("app_version") }} :
+            <span class="font-medium text-slate-100">{{ g.app_version }}</span>
+        </p>
+    </div>
+
+    <!-- SYSTEM INFO -->
+    <div class="bg-slate-900/40 p-6 rounded-xl shadow border border-slate-800">
+        <h2 class="text-xl font-semibold mb-3">{{ t("system_info") }}</h2>
+        <ul class="text-slate-300 space-y-1">
+            <li>{{ t("python_version") }} : <span class="text-white font-medium">{{ python_version }}</span></li>
+            <li>{{ t("flask_version") }} : <span class="text-white font-medium">{{ flask_version }}</span></li>
+            <li>{{ t("os_info") }} : <span class="text-white font-medium">{{ os_info }}</span></li>
+        </ul>
+    </div>
+
+    <!-- CREDITS -->
+    <div class="bg-slate-900/40 p-6 rounded-xl shadow border border-slate-800">
+        <h2 class="text-xl font-semibold mb-3">{{ t("credits") }}</h2>
+        <p class="text-slate-300">{{ t("credits_text") }}</p>
+    </div>
+
+    <!-- SUPPORT -->
+    <div class="bg-slate-900/40 p-6 rounded-xl shadow border border-slate-800 text-center">
+        <h2 class="text-xl font-semibold mb-3">{{ t("support_title") }}</h2>
+        <p class="text-slate-300 mb-4">{{ t("support_text") }}</p>
+
+        <a href="https://buymeacoffee.com/vodum"
+           target="_blank"
+           class="inline-block bg-yellow-500 hover:bg-yellow-600 text-black font-semibold px-5 py-2 rounded-lg transition">
+             {{ t("pay_me_a_beer") }}
+        </a>
+    </div>
+
+</div>
+{% endblock %}
