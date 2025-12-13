@@ -1,0 +1,393 @@
+{% extends "base.html" %}
+{% set active_page = 'users' %}
+
+{% block title %}{{ t("user") }} - {{ user.username }}{% endblock %}
+
+{% block header_title %}
+User: {{ user.username }}
+{% endblock %}
+
+{% block header_actions %}
+<button form="user_main_form"
+        class="px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-sm">
+    {{ t("save") }}
+</button>
+{% endblock %}
+
+{% block header_subtitle %}
+{{ t("user_management_subtitle") }}
+{% endblock %}
+
+
+{% block content %}
+
+<!-- TOP GRID : infos + notes/email -->
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
+
+<!-- ====================== INFOS GÉNÉRALES (2/3) ====================== -->
+<form method="post" id="user_main_form" class="xl:col-span-2">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+    <h2 class="text-sm font-semibold mb-4">{{ t("general_info") }}</h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+      <!-- Plex ID -->
+      <label class="text-sm">
+        {{ t("plex_id") }}
+        <input type="text" value="{{ user.plex_id }}" readonly
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60 cursor-not-allowed">
+      </label>
+
+      <!-- Username -->
+      <label class="text-sm">
+        {{ t("username") }}
+        <input type="text" value="{{ user.username }}" readonly
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60 cursor-not-allowed">
+      </label>
+
+      <!-- Plex email -->
+      <label class="text-sm">
+        {{ t("plex_email") }}
+        <input type="text" value="{{ user.email }}" readonly
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60 cursor-not-allowed">
+      </label>
+
+      <!-- Secondary email -->
+      <label class="text-sm">
+        {{ t("second_email") }}
+        <input type="text" name="second_email" value="{{ user.second_email or '' }}"
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+      </label>
+
+      <!-- First name -->
+      <label class="text-sm">
+        {{ t("firstname") }}
+        <input type="text" name="firstname" value="{{ user.firstname or '' }}"
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+      </label>
+
+      <!-- Last name -->
+      <label class="text-sm">
+        {{ t("lastname") }}
+        <input type="text" name="lastname" value="{{ user.lastname or '' }}"
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+      </label>
+
+    </div>
+
+    <!-- BADGES -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+
+      <!-- Status -->
+      <div class="flex items-center gap-2">
+        <span class="text-sm">{{ t("status") }}:</span>
+
+        {% set colors = {
+          'active': 'bg-emerald-900/40 text-emerald-300',
+          'pre_expired': 'bg-amber-900/40 text-amber-300',
+          'reminder': 'bg-blue-900/40 text-blue-300',
+          'expired': 'bg-rose-900/40 text-rose-300',
+          'invited': 'bg-cyan-900/40 text-cyan-300',
+          'unfriended': 'bg-slate-700 text-slate-300',
+          'suspended': 'bg-purple-900/40 text-purple-300',
+          'unknown': 'bg-slate-800 text-slate-400'
+        } %}
+
+        <span class="px-3 py-1 text-xs rounded-full {{ colors.get(user.status, 'bg-slate-800 text-slate-400') }}">
+          {{ t(user.status) }}
+        </span>
+      </div>
+
+      <!-- Plex role -->
+      <div class="flex items-center gap-2">
+        <span class="text-sm">{{ t("plex_role") }}:</span>
+        <span class="px-3 py-1 text-xs rounded-full bg-slate-800 text-slate-300">
+          {{ t(user.plex_role or "unknown") }}
+        </span>
+      </div>
+
+      <!-- Flags -->
+      <div class="flex flex-wrap items-center gap-2">
+
+        {% if user.home %}
+        <span class="px-3 py-1 text-xs rounded-full bg-emerald-900/40 text-emerald-300">
+          {{ t("home_user") }}
+        </span>
+        {% endif %}
+
+        {% if user.protected %}
+        <span class="px-3 py-1 text-xs rounded-full bg-purple-900/40 text-purple-300">
+          {{ t("protected_account") }}
+        </span>
+        {% endif %}
+
+        {% if user.restricted %}
+        <span class="px-3 py-1 text-xs rounded-full bg-red-900/40 text-red-300 opacity-70">
+          {{ t("restricted") }}
+        </span>
+        {% endif %}
+
+      </div>
+    </div>
+
+    <!-- PLEX PASS -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+
+      <label class="text-sm">
+        {{ t("subscription_active") }}
+        <input type="text" value="{{ user.subscription_active if user.subscription_active is not none else '—' }}"
+               readonly class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60">
+      </label>
+
+      <label class="text-sm">
+        {{ t("subscription_status") }}
+        <input type="text" value="{{ user.subscription_status or '—' }}"
+               readonly class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60">
+      </label>
+
+      <label class="text-sm">
+        {{ t("subscription_plan") }}
+        <input type="text" value="{{ user.subscription_plan or '—' }}"
+               readonly class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60">
+      </label>
+
+    </div>
+
+    <!-- DATES PLEX -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6 opacity-60">
+
+      <label class="text-sm">
+        {{ t("joined_at") }}
+        <input type="text" value="{{ user.joined_at or '—' }}"
+               readonly class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 cursor-not-allowed">
+      </label>
+
+      <label class="text-sm">
+        {{ t("accepted_at") }}
+        <input type="text" value="{{ user.accepted_at or '—' }}"
+               readonly class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 cursor-not-allowed">
+      </label>
+
+    </div>
+
+    <!-- INTERNAL SUBSCRIPTION -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+
+      <label class="text-sm">
+        {{ t("expiration") }}
+        <input type="date" name="expiration_date"
+               value="{{ user.expiration_date }}"
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+      </label>
+
+      <label class="text-sm">
+        {{ t("renewal_date") }}
+        <input type="date" name="renewal_date"
+               value="{{ user.renewal_date or '' }}"
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+      </label>
+
+      <label class="text-sm md:col-span-2">
+        {{ t("renewal_method") }}
+        <input type="text" name="renewal_method"
+               value="{{ user.renewal_method or '' }}"
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+      </label>
+
+      <label class="text-sm">
+        {{ t("creation_date") }}
+        <input type="text" value="{{ user.creation_date or '—' }}" readonly
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60 cursor-not-allowed">
+      </label>
+
+      <label class="text-sm">
+        {{ t("last_status") }}
+        <input type="text" value="{{ user.last_status or '—' }}" readonly
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60 cursor-not-allowed">
+      </label>
+
+      <label class="text-sm md:col-span-2">
+        {{ t("status_changed_at") }}
+        <input type="text" value="{{ user.status_changed_at or '—' }}" readonly
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60 cursor-not-allowed">
+      </label>
+
+    </div>
+
+  </div>
+</form>
+
+
+<!-- ====================== NOTES + EMAIL HISTORY ====================== -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col gap-5">
+
+  <!-- Notes -->
+  <div>
+    <h2 class="text-sm font-semibold mb-2">{{ t("notes") }}</h2>
+    <form method="post">
+      <textarea name="notes" rows="8"
+        class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm resize-vertical">{{ user.notes or '' }}</textarea>
+
+      <div class="mt-3 text-right">
+        <button class="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs">
+          {{ t("save") }}
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Email history -->
+  <div>
+    <h2 class="text-sm font-semibold mb-2">{{ t("email_history") }}</h2>
+
+    {% if sent_emails %}
+    <div class="max-h-48 overflow-y-auto border border-slate-800 rounded-xl">
+      <table class="w-full text-xs">
+        <thead class="bg-slate-950/60 text-slate-400 sticky top-0">
+          <tr>
+            <th class="px-3 py-2 text-left">{{ t("type") }}</th>
+            <th class="px-3 py-2 text-left">{{ t("snapshot") }}</th>
+            <th class="px-3 py-2 text-left">{{ t("date") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in sent_emails %}
+          <tr class="border-t border-slate-800">
+            <td class="px-3 py-2">{{ t(m.type) }}</td>
+            <td class="px-3 py-2 text-slate-400">{{ m.expiration_snapshot }}</td>
+            <td class="px-3 py-2 text-slate-300">{{ m.date_sent }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-xs text-slate-500">{{ t("no_email_sent") }}</p>
+    {% endif %}
+  </div>
+
+</div>
+
+</div>
+
+<!-- ====================== SERVERS + LIBRARIES ====================== -->
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+
+{% for s in servers %}
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col gap-4">
+
+  <!-- Server Header -->
+  <div class="flex items-start justify-between pb-2">
+    <div>
+      <div class="text-sm font-semibold">{{ s.name }}</div>
+      <div class="text-xs text-slate-400 break-all">
+        {{ s.url or s.local_url or s.public_url or "—" }}
+      </div>
+    </div>
+
+    {% if s.has_access %}
+      <span class="px-3 py-1 rounded-full text-xs bg-emerald-900/40 text-emerald-300">
+        {{ t("access") }}
+      </span>
+    {% else %}
+      <span class="px-3 py-1 rounded-full text-xs bg-slate-800 text-slate-300">
+        {{ t("no_access") }}
+      </span>
+    {% endif %}
+  </div>
+
+  <div class="border-t border-slate-700/40"></div>
+
+  <!-- Libraries + Options -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+
+    <!-- Libraries -->
+    <div class="space-y-2 md:pr-4">
+      <div class="font-semibold text-slate-300 text-sm mb-1">{{ t("libraries") }}</div>
+
+      {% set libs_for_server = libraries | selectattr("server_name", "equalto", s.name) | list %}
+
+      {% if libs_for_server|length == 0 %}
+        <p class="text-xs text-slate-500 italic">{{ t("no_library_for_server") }}</p>
+      {% else %}
+        {% for lib in libs_for_server %}
+          <form method="post"
+                action="{{ url_for('user_toggle_library', user_id=user.id) }}"
+                class="flex items-center justify-between py-1">
+
+            <div>
+              <input type="hidden" name="library_id" value="{{ lib.id }}">
+              <span class="text-sm">{{ lib.name }}</span>
+              <span class="text-xs text-slate-400">· {{ t(lib.type) }}</span>
+            </div>
+
+            <button type="submit"
+              class="relative inline-flex h-6 w-11 items-center rounded-full transition
+                     {% if lib.has_access %} bg-emerald-500 {% else %} bg-slate-600 {% endif %}">
+              <span class="inline-block h-4 w-4 transform rounded-full bg-white transition
+                {% if lib.has_access %} translate-x-5 {% else %} translate-x-1 {% endif %}">
+              </span>
+            </button>
+
+          </form>
+        {% endfor %}
+      {% endif %}
+    </div>
+
+    <!-- Server options -->
+    {% set opts = user_servers | selectattr("server_id", "equalto", s.id) | list %}
+    {% set o = opts[0] if opts else None %}
+
+	<div class="md:pl-4 md:border-l md:border-slate-700/30 mt-2 md:mt-0">
+	  <div class="bg-slate-800/40 border border-slate-700 rounded-xl p-3 text-xs space-y-2 h-fit">
+		
+		<div class="font-semibold text-slate-300 mb-1">
+		  {{ t("server_options") }}
+		</div>
+
+		<!-- Editable options -->
+		<label class="flex justify-between items-center gap-2">
+		  {{ t("allow_sync") }}
+		  <input type="checkbox" name="allow_sync_{{ s.id }}" {% if o and o.allow_sync %}checked{% endif %}>
+		</label>
+
+		<label class="flex justify-between items-center gap-2">
+		  {{ t("allow_camera_upload") }}
+		  <input type="checkbox" name="allow_camera_upload_{{ s.id }}" {% if o and o.allow_camera_upload %}checked{% endif %}>
+		</label>
+
+		<label class="flex justify-between items-center gap-2">
+		  {{ t("allow_channels") }}
+		  <input type="checkbox" name="allow_channels_{{ s.id }}" {% if o and o.allow_channels %}checked{% endif %}>
+		</label>
+
+		<label class="flex flex-col">
+		  {{ t("filter_movies") }}
+		  <input type="text" name="filter_movies_{{ s.id }}" value="{{ o.filter_movies if o else '' }}"
+				 class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1">
+		</label>
+
+		<label class="flex flex-col">
+		  {{ t("filter_television") }}
+		  <input type="text" name="filter_television_{{ s.id }}" value="{{ o.filter_television if o else '' }}"
+				 class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1">
+		</label>
+
+		<label class="flex flex-col">
+		  {{ t("filter_music") }}
+		  <input type="text" name="filter_music_{{ s.id }}" value="{{ o.filter_music if o else '' }}"
+				 class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1">
+		</label>
+
+	  </div>
+	</div>
+
+
+  </div>
+
+</div>
+{% endfor %}
+
+</div>
+
+{% endblock %}

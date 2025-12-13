@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% set active_page = 'logs' %}
+
+{% block header_title %}
+    {{ t("logs") }}
+{% endblock %}
+
+{% block header_subtitle %}
+    {{ t("application_logs") }}
+{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+
+    <!-- Barre de filtres -->
+    <form method="get" class="flex items-center gap-4 mb-4">
+
+        <!-- Niveau -->
+        <select name="level" class="bg-slate-900 border border-slate-700 rounded px-2 py-1">
+            <option value="ALL"  {% if level == "ALL" %}selected{% endif %}>{{ t("all_levels") }}</option>
+            <option value="INFO" {% if level == "INFO" %}selected{% endif %}>INFO</option>
+            <option value="WARNING" {% if level == "WARNING" %}selected{% endif %}>WARNING</option>
+            <option value="ERROR" {% if level == "ERROR" %}selected{% endif %}>ERROR</option>
+        </select>
+
+        <!-- Recherche -->
+        <input type="text" name="q" placeholder="{{ t('search') }}"
+               value="{{ search }}"
+               class="bg-slate-900 border border-slate-700 rounded px-3 py-1 w-64">
+
+        <button class="px-4 py-1 bg-primary text-white rounded">
+            {{ t("filter") }}
+        </button>
+    </form>
+
+    <!-- Table logs -->
+    <div class="bg-slate-900 rounded-lg border border-slate-700 overflow-hidden">
+        <table class="w-full text-sm">
+            <thead class="bg-slate-800 text-slate-300">
+                <tr>
+                    <th class="px-4 py-2 text-left">{{ t("date") }}</th>
+                    <th class="px-4 py-2 text-left">{{ t("level") }}</th>
+                    <th class="px-4 py-2 text-left">{{ t("source") }}</th>
+                    <th class="px-4 py-2 text-left">{{ t("message") }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                    <tr class="border-t border-slate-800">
+                        <td class="px-4 py-2 whitespace-nowrap">{{ log.created_at }}</td>
+                        <td class="px-4 py-2">{{ log.level }}</td>
+                        <td class="px-4 py-2">{{ log.source }}</td>
+                        <td class="px-4 py-2 text-slate-300">{{ log.message }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="flex justify-center items-center gap-2 mt-4">
+
+        {% if page > 1 %}
+            <a href="?page={{ page - 1 }}&level={{ level }}&q={{ search }}"
+               class="px-3 py-1 bg-slate-800 rounded text-slate-300">‹</a>
+        {% endif %}
+
+        {% for p in range(page_window_start, page_window_end + 1) %}
+            <a href="?page={{ p }}&level={{ level }}&q={{ search }}"
+               class="px-3 py-1 rounded
+                      {% if p == page %}
+                          bg-primary text-white
+                      {% else %}
+                          bg-slate-800 text-slate-300
+                      {% endif %}">
+                {{ p }}
+            </a>
+        {% endfor %}
+
+        {% if page < total_pages %}
+            <a href="?page={{ page + 1 }}&level={{ level }}&q={{ search }}"
+               class="px-3 py-1 bg-slate-800 rounded text-slate-300">›</a>
+        {% endif %}
+
+    </div>
+
+</div>
+{% endblock %}

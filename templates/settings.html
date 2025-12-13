@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% set active_page = "settings" %}
+
+{% block header_title %}Settings{% endblock %}
+{% block header_subtitle %}Application configuration{% endblock %}
+
+{% block header_actions %}
+<button
+    type="submit"
+    form="settings-save-form"
+    class="px-4 py-2 bg-primary hover:bg-primary-dark rounded text-white text-sm"
+>
+    Save
+</button>
+{% endblock %}
+
+{% block content %}
+
+<form method="POST" id="settings-save-form" class="space-y-10">
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+        <!-- GENERAL SETTINGS -->
+        <div class="bg-slate-900 p-6 rounded-xl border border-slate-800">
+            <h2 class="text-lg font-semibold text-slate-200 mb-4">
+                General Settings
+            </h2>
+
+            <div class="space-y-4">
+                <!-- Language -->
+                <div>
+                    <label class="block text-sm mb-1 text-slate-300">Language</label>
+					<select name="default_language"
+							class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+						{% for code, name in available_languages.items() %}
+							<option value="{{ code }}"
+								{% if settings.default_language == code %}selected{% endif %}>
+								{{ name }}
+							</option>
+						{% endfor %}
+					</select>
+
+                </div>
+
+                <!-- Timezone -->
+                <div>
+                    <label class="block text-sm mb-1 text-slate-300">Timezone</label>
+                    <input type="text" name="timezone"
+                           value="{{ settings.timezone }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm"
+                           placeholder="Europe/Paris">
+                </div>
+
+                <!-- Admin Email -->
+                <div>
+                    <label class="block text-sm mb-1 text-slate-300">Admin email</label>
+                    <input type="email" name="admin_email"
+                           value="{{ settings.admin_email }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+                </div>
+            </div>
+        </div>
+
+
+        <!-- DEFAULT SUBSCRIPTION SETTINGS -->
+        <div class="bg-slate-900 p-6 rounded-xl border border-slate-800">
+            <h2 class="text-lg font-semibold text-slate-200 mb-4">
+                Default Subscription Settings
+            </h2>
+
+            <div class="space-y-4">
+
+                <!-- Default duration -->
+                <div>
+                    <label class="block text-sm mb-1 text-slate-300">
+                        Default subscription duration (days)
+                    </label>
+                    <input type="number"
+                           name="default_expiration_days"
+                           value="{{ settings.default_expiration_days }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+                </div>
+
+                <!-- Auto-delete delay -->
+                <div>
+                    <label class="block text-sm mb-1 text-slate-300">
+                        Delete user X days after expiry
+                    </label>
+                    <input type="number"
+                           name="delete_after_expiry_days"
+                           value="{{ settings.delete_after_expiry_days }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+                </div>
+
+                <!-- Disable on expiry -->
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" name="disable_on_expiry" value="1"
+                           {% if settings.disable_on_expiry %}checked{% endif %}
+                           class="w-4 h-4 rounded border-slate-600 bg-slate-800">
+                    <span class="text-sm text-slate-300">Disable user on expiration</span>
+                </div>
+
+            </div>
+        </div>
+
+
+        <!-- STATUS WARNING DELAYS -->
+        <div class="bg-slate-900 p-6 rounded-xl border border-slate-800">
+            <h2 class="text-lg font-semibold text-slate-200 mb-4">
+                Status Warning Delays
+            </h2>
+
+            <div class="space-y-4">
+
+                <!-- Preavis -->
+                <div>
+                    <label class="block text-sm mb-1 text-slate-300">
+                        Days before expiration (preavis)
+                    </label>
+                    <input type="number" min="0"
+                           name="preavis_days"
+                           value="{{ preavis_days }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+                </div>
+
+                <!-- Relance -->
+                <div>
+                    <label class="block text-sm mb-1 text-slate-300">
+                        Days before expiration (relance)
+                    </label>
+                    <input type="number" min="0"
+                           name="relance_days"
+                           value="{{ relance_days }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+                </div>
+
+            </div>
+        </div>
+
+
+        <!-- SYSTEM SETTINGS -->
+        <div class="bg-slate-900 p-6 rounded-xl border border-slate-800">
+            <h2 class="text-lg font-semibold text-slate-200 mb-4">
+                System Settings
+            </h2>
+
+            <div class="space-y-4">
+
+                <!-- Cron -->
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" name="enable_cron_jobs" value="1"
+                           {% if settings.enable_cron_jobs %}checked{% endif %}
+                           class="w-4 h-4 rounded border-slate-600 bg-slate-800">
+                    <span class="text-sm text-slate-300">Enable scheduled tasks</span>
+                </div>
+
+                <!-- Maintenance -->
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" name="maintenance_mode" value="1"
+                           {% if settings.maintenance_mode %}checked{% endif %}
+                           class="w-4 h-4 rounded border-slate-600 bg-slate-800">
+                    <span class="text-sm text-slate-300">Maintenance mode</span>
+                </div>
+
+                <!-- Debug -->
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" name="debug_mode" value="1"
+                           {% if settings.debug_mode %}checked{% endif %}
+                           class="w-4 h-4 rounded border-slate-600 bg-slate-800">
+                    <span class="text-sm text-slate-300">Debug mode</span>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+</form>
+
+{% endblock %}

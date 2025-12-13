@@ -1,7 +1,7 @@
-Version: 25.12.03 b1531
-Tool: vodum
-Created by: NeXius2
-Python: 3.11.13
-SQLite: 3.50.4
-Container: Docker
-Image: python:3.12-slim
+VERSION=25.12.13 b1108
+TOOL=vodum
+CREATED_BY=NeXius2
+PYTHON=3.11.13
+SQLITE=3.50.4
+CONTAINER=Docker
+IMAGE=

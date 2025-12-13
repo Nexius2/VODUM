@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% set active_page = 'mailing' %}
+
+{% block title %}{{ t("mailing") }} - VODUM{% endblock %}
+{% block header_title %}{{ t("mailing") }}{% endblock %}
+{% block header_subtitle %}{{ t("mailing_subtitle") }}{% endblock %}
+
+{% block content %}
+
+<div class="mb-6 border-b border-slate-800">
+  <nav class="flex gap-4 text-sm">
+    <button data-tab="templates" class="tab-btn border-b-2 border-primary text-primary pb-2">
+      {{ t("templates") }}
+    </button>
+    <button data-tab="campaigns" class="tab-btn border-b-2 border-transparent text-slate-400 pb-2">
+      {{ t("campaigns") }}
+    </button>
+  </nav>
+</div>
+
+<!-- TAB Templates -->
+<div id="tab-templates">
+  {% if not templates %}
+    <p class="text-slate-500 text-sm">{{ t("no_templates") }}</p>
+  {% else %}
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {% for t in templates %}
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+        <h3 class="text-sm font-semibold mb-3 capitalize">{{ t.type }}</h3>
+
+        <div class="mb-2 text-xs text-slate-400">{{ t("subject") }} :</div>
+        <div class="mb-4 text-sm text-slate-200">{{ t.subject }}</div>
+
+        <div class="mb-2 text-xs text-slate-400">{{ t("body") }} :</div>
+        <div class="bg-slate-950/40 border border-slate-800 rounded-lg p-3 text-xs text-slate-300 whitespace-pre-line max-h-40 overflow-y-auto">
+          {{ t.body }}
+        </div>
+
+        <div class="mt-4 text-xs text-slate-400">
+          {{ t("days_before_expiration") }} : {{ t.days_before }}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+
+<!-- TAB Campaigns -->
+<div id="tab-campaigns" class="hidden">
+  {% if not campaigns %}
+    <p class="text-slate-500 text-sm">{{ t("no_campaigns") }}</p>
+  {% else %}
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-950/60 text-slate-400">
+          <tr>
+            <th class="px-4 py-3 text-left">{{ t("subject") }}</th>
+            <th class="px-4 py-3 text-left">{{ t("server") }}</th>
+            <th class="px-4 py-3 text-left">{{ t("status") }}</th>
+            <th class="px-4 py-3 text-left">{{ t("created_at") }}</th>
+            <th class="px-4 py-3 text-left">{{ t("finished_at") }}</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {% for c in campaigns %}
+          <tr class="border-t border-slate-800 hover:bg-slate-800/50">
+            <td class="px-4 py-3">{{ c.subject }}</td>
+
+            <td class="px-4 py-3">
+              {% if c.server_id %}
+                {{ t("server") }} #{{ c.server_id }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+
+            <td class="px-4 py-3">
+              {% set colors = {
+                'pending': 'bg-slate-800 text-slate-300',
+                'sending': 'bg-blue-900/40 text-blue-300',
+                'finished': 'bg-emerald-900/40 text-emerald-300',
+                'cancelled': 'bg-rose-900/40 text-rose-300'
+              } %}
+              <span class="px-2 py-1 rounded-full text-xs {{ colors.get(c.status, 'bg-slate-700 text-slate-300') }}">
+                {{ t(c.status) }}
+              </span>
+            </td>
+
+            <td class="px-4 py-3 text-slate-300 text-xs">
+              {{ c.created_at or '—' }}
+            </td>
+            <td class="px-4 py-3 text-slate-300 text-xs">
+              {{ c.finished_at or '—' }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</div>
+
+<script>
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.getAttribute('data-tab');
+      document.getElementById('tab-templates').classList.toggle('hidden', tab !== 'templates');
+      document.getElementById('tab-campaigns').classList.toggle('hidden', tab !== 'campaigns');
+
+      document.querySelectorAll('.tab-btn').forEach(b => {
+        b.classList.remove('border-primary', 'text-primary');
+        b.classList.add('border-transparent', 'text-slate-400');
+      });
+      btn.classList.remove('border-transparent', 'text-slate-400');
+      btn.classList.add('border-primary', 'text-primary');
+    });
+  });
+</script>
+
+{% endblock %}

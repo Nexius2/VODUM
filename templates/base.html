@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}VODUM{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#6366f1',
+            'primary-dark': '#4f46e5',
+          }
+        }
+      },
+      darkMode: 'class'
+    }
+  </script>
+
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/logo.svg') }}">
+</head>
+<body class="bg-slate-950 text-slate-100">
+  <div class="min-h-screen flex">
+    <!-- Sidebar -->
+	<aside class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col
+				   sticky top-0 h-screen">
+
+	  <!-- Header -->
+	  <div class="h-16 flex items-center px-4 border-b border-slate-800">
+		<span class="text-xl font-bold tracking-tight">VODUM</span>
+	  </div>
+
+	  <!-- Menu (scroll interne si nécessaire) -->
+	  <nav class="flex-1 px-2 py-4 space-y-1 text-sm overflow-y-auto">
+		<a href="{{ url_for('dashboard') }}"
+		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='dashboard' }}">
+		  <span class="material-icons-outlined mr-2 text-base">dashboard</span>
+		  {{ t("dashboard") }}
+		</a>
+		<a href="{{ url_for('users_list') }}"
+		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='users' }}">
+		  <span class="material-icons-outlined mr-2 text-base">group</span>
+		  {{ t("users") }}
+		</a>
+		<a href="{{ url_for('servers_list') }}"
+		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='servers' }}">
+		  <span class="material-icons-outlined mr-2 text-base">dns</span>
+		  {{ t("servers_libraries") }}
+		</a>
+		<a href="{{ url_for('subscriptions') }}"
+		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='subscriptions' }}">
+		  <span class="material-icons-outlined mr-2 text-base">redeem</span>
+		  {{ t("subscriptions") }}
+		</a>
+		<a href="{{ url_for('tasks_page') }}"
+		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='tasks' }}">
+		  <span class="material-icons-outlined mr-2 text-base">schedule</span>
+		  {{ t("tasks") }}
+		</a>
+		<a href="{{ url_for('mailing_page') }}"
+		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='mailing' }}">
+		  <span class="material-icons-outlined mr-2 text-base">email</span>
+		  {{ t("mailing") }}
+		</a>
+		<a href="{{ url_for('backup_page') }}"
+		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='backup' }}">
+		  <span class="material-icons-outlined mr-2 text-base">save</span>
+		  {{ t("backup") }}
+		</a>
+		<a href="{{ url_for('settings_page') }}"
+		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='settings' }}">
+		  <span class="material-icons-outlined mr-2 text-base">settings</span>
+		  {{ t("settings") }}
+		</a>
+		<a href="{{ url_for('logs_page') }}"
+		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='logs' }}">
+		  <span class="material-icons-outlined mr-2 text-base">list</span>
+		  {{ t("logs") }}
+		</a>
+		<a href="{{ url_for('about_page') }}"
+		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='about' }}">
+		  <span class="material-icons-outlined mr-2 text-base">info</span>
+		  {{ t("about") }}
+		</a>
+	  </nav>
+
+	  <!-- Footer version toujours visible -->
+	  <div class="p-3 text-xs text-slate-500 border-t border-slate-800">
+		VODUM · {{ g.app_version|default('dev') }}
+	  </div>
+	</aside>
+
+
+    <!-- Main content -->
+    <div class="flex-1 flex flex-col">
+      <!-- Header -->
+		<header class="h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-950/80 backdrop-blur">
+
+		  <div class="flex flex-col">
+			<h1 class="text-xl font-semibold text-slate-200">
+				{% block header_title %}{% endblock %}
+			</h1>
+			<p class="text-xs text-slate-400">
+				{% block header_subtitle %}{% endblock %}
+			</p>
+		  </div>
+
+		  <!-- Zone à droite du header (pour Save) -->
+		  <div>
+			  {% block header_actions %}{% endblock %}
+		  </div>
+
+		</header>
+
+
+      <!-- Page content -->
+      <main class="flex-1 p-6">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="space-y-2 mb-4">
+            {% for category, message in messages %}
+              <div class="text-xs px-3 py-2 rounded-lg
+                {% if category=='success' %}bg-emerald-900/40 text-emerald-100
+                {% elif category=='error' %}bg-rose-900/40 text-rose-100
+                {% else %}bg-slate-800 text-slate-100{% endif %}">
+                {{ message }}
+              </div>
+            {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
