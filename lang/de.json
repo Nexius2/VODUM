@@ -427,7 +427,17 @@
   "reason_optional": "Grund (optional)",
   "reason_placeholder": "z. B. Entschädigung, Geschenk, Vorfall…",
   "subscription_reset_notice": "Erinnerungen und Vorankündigungen werden zurückgesetzt, wenn das neue Ablaufdatum später ist als das vorherige.",
-  "gift_subscription": "Abonnement verschenken"
+  "gift_subscription": "Abonnement verschenken",
+  
+    "template_test_sent": "Test-E-Mail erfolgreich gesendet",
+  "template_not_found": "Vorlage nicht gefunden",
+
+  "subscriptions_all_users_hint": "Dieser Bereich zeigt alle Benutzer über alle Server hinweg an",
+  "subscriptions_server_users_hint": "Dieser Bereich zeigt nur die Benutzer an, die mit diesem Server verknüpft sind",
+
+  "accepted_at": "Akzeptiert am",
+
+  "task.sync_jellyfin": "Jellyfin-Synchronisierung"
 
 
 
