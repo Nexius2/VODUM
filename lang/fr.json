@@ -427,7 +427,17 @@
   "reason_optional": "Raison (optionnel)",
   "reason_placeholder": "Ex : compensation, cadeau, incident…",
   "subscription_reset_notice": "Les rappels et préavis seront réinitialisés si la nouvelle date dépasse l’ancienne.",
-  "gift_subscription": "Offrir l’abonnement"
+  "gift_subscription": "Offrir l’abonnement",
+  
+  "template_test_sent": "Email de test envoyé avec succès",
+  "template_not_found": "Template introuvable",
+
+  "subscriptions_all_users_hint": "Cette section affiche tous les utilisateurs, tous serveurs confondus",
+  "subscriptions_server_users_hint": "Cette section affiche uniquement les utilisateurs liés à ce serveur",
+
+  "accepted_at": "Date d’acceptation",
+
+  "task.sync_jellyfin": "Synchronisation Jellyfin"
 
 
 }

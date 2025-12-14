@@ -427,7 +427,17 @@
   "reason_optional": "Motivo (opzionale)",
   "reason_placeholder": "Es.: compensazione, regalo, incidente…",
   "subscription_reset_notice": "Promemoria e avvisi verranno reimpostati se la nuova data di scadenza supera quella precedente.",
-  "gift_subscription": "Regala abbonamento"
+  "gift_subscription": "Regala abbonamento",
+  
+    "template_test_sent": "Email di test inviata con successo",
+  "template_not_found": "Modello non trovato",
+
+  "subscriptions_all_users_hint": "Questa sezione mostra tutti gli utenti di tutti i server",
+  "subscriptions_server_users_hint": "Questa sezione mostra solo gli utenti collegati a questo server",
+
+  "accepted_at": "Accettato il",
+
+  "task.sync_jellyfin": "Sincronizzazione Jellyfin"
 
 
 }

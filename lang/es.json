@@ -427,7 +427,17 @@
   "reason_optional": "Motivo (opcional)",
   "reason_placeholder": "Ej.: compensación, regalo, incidente…",
   "subscription_reset_notice": "Los recordatorios y avisos se reiniciarán si la nueva fecha de vencimiento es posterior a la anterior.",
-  "gift_subscription": "Regalar suscripción"
+  "gift_subscription": "Regalar suscripción",
+  
+  "template_test_sent": "Correo de prueba enviado correctamente",
+  "template_not_found": "Plantilla no encontrada",
+
+  "subscriptions_all_users_hint": "Esta sección muestra todos los usuarios de todos los servidores",
+  "subscriptions_server_users_hint": "Esta sección muestra solo los usuarios vinculados a este servidor",
+
+  "accepted_at": "Aceptado el",
+
+  "task.sync_jellyfin": "Sincronización de Jellyfin"
 
 
 

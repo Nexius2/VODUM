@@ -193,24 +193,62 @@ function sortTable(columnIndex, thElement) {
     thElement.dataset.order = currentOrder;
     thElement.classList.add("sorted", currentOrder === "asc" ? "sorted-asc" : "sorted-desc");
 
-    function convert(v) {
-        v = v.trim();
-        if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return new Date(v).getTime();    // format YYYY-MM-DD
-        if (/^\d{2}\/\d{2}\/\d{4}$/.test(v)) {                              // JJ/MM/AAAA
-            const [d,m,y] = v.split("/").map(Number);
-            return new Date(y, m-1, d).getTime();
-        }
-        if (!isNaN(v)) return Number(v);
-        return v.toLowerCase();
-    }
+	// ordre expiration
+	function convert(v) {
+		v = (v || "").trim();
 
-    const sorted = rows.sort((a, b) => {
-        const A = convert(a.children[columnIndex].innerText);
-        const B = convert(b.children[columnIndex].innerText);
-        if (A > B) return currentOrder === "asc" ? 1 : -1;
-        if (A < B) return currentOrder === "asc" ? -1 : 1;
-        return 0;
-    });
+		// ✅ Valeur vide / tiret → toujours un nombre
+		if (v === "—" || v === "-" || v === "") return Number.POSITIVE_INFINITY;
+
+		if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return new Date(v).getTime();    // YYYY-MM-DD
+		if (/^\d{2}\/\d{2}\/\d{4}$/.test(v)) {                              // DD/MM/YYYY
+			const [d,m,y] = v.split("/").map(Number);
+			return new Date(y, m-1, d).getTime();
+		}
+
+		// ✅ Si c’est un nombre (serveurs_count etc.)
+		if (!isNaN(v)) return Number(v);
+
+		// ✅ fallback string
+		return v.toLowerCase();
+	}
+
+
+	// ordre status
+	const STATUS_ORDER = {
+		"active": 1,
+		"pre_expired": 2,
+		"reminder": 3,
+		"expired": 4,
+		"none": 5,
+		"unknown": 5
+	};
+
+	const sorted = rows.sort((a, b) => {
+
+		// 🔥 TRI MÉTIER POUR LA COLONNE STATUS
+		if (columnIndex === 2) {
+			const getStatusKey = (row) => {
+				const span = row.children[2].querySelector("span");
+				if (!span) return "none";
+				return span.textContent.trim().toLowerCase();
+			};
+
+			const A = STATUS_ORDER[getStatusKey(a)] ?? 99;
+			const B = STATUS_ORDER[getStatusKey(b)] ?? 99;
+
+			return currentOrder === "asc" ? A - B : B - A;
+		}
+
+		// 🔹 TRI CLASSIQUE POUR LES AUTRES COLONNES
+		const A = convert(a.children[columnIndex].innerText);
+		const B = convert(b.children[columnIndex].innerText);
+
+		if (A > B) return currentOrder === "asc" ? 1 : -1;
+		if (A < B) return currentOrder === "asc" ? -1 : 1;
+		return 0;
+	});
+
 
     tbody.innerHTML = "";
     sorted.forEach(r => tbody.appendChild(r));

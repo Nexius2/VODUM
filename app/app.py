@@ -29,6 +29,8 @@ from logging_utils import get_logger
 task_logger = get_logger("tasks_ui")
 from api.subscriptions import subscriptions_api, update_user_expiration
 import uuid
+from mailing_utils import build_user_context, render_mail
+
 
 
 
@@ -71,10 +73,9 @@ def create_app():
     # -----------------------------
     def get_db():
         if "db" not in g:
-            conn = open_db()
-            conn.row_factory = sqlite3.Row
-            g.db = conn
+            g.db = open_db(app.config["DATABASE"])
         return g.db
+
 
     def scheduler_db_provider():
         return open_db()
@@ -965,24 +966,21 @@ def create_app():
         db.commit()
 
         # 🔥 Libérer la DB pour éviter le lock
-        if "db" in g and g.db:
-            g.db.close()
-            g.db = None
+        #if "db" in g and g.db:
+        #    g.db.close()
+        #    g.db = None
 
         # 🔥 Lancer les tâches SEULEMENT si c'est un serveur Plex
         if server_type == "plex":
-            db2 = open_db()
-            db2.execute("""
+            db.execute("""
                 UPDATE tasks
                 SET enabled = 1, status = 'queued'
                 WHERE name IN ('check_servers', 'sync_plex', 'update_user_status')
             """)
-            db2.commit()
-            db2.close()
+            db.commit()
 
             flash("Serveur Plex créé. Synchronisation planifiée.", "success")
 
-            flash("Serveur Plex créé et synchronisation lancée.", "success")
         else:
             flash("Serveur créé (non Plex). Aucune synchronisation lancée.", "success")
 
@@ -1513,34 +1511,47 @@ def create_app():
 
     @app.post("/mailing/campaigns/delete")
     def mailing_campaigns_delete():
-        db_path = app.config["DATABASE"]
+        db = get_db()
+        t = get_translator()
 
         ids = request.form.getlist("campaign_ids")
 
         if not ids:
-            flash("Aucune campagne sélectionnée", "error")
+            flash(t("no_campaign_selected"), "error")
             return redirect(url_for("mailing_campaigns_page"))
 
         placeholders = ",".join("?" for _ in ids)
 
-        for attempt in range(5):
-            try:
-                conn = open_db()
-                conn.execute(f"DELETE FROM mail_campaigns WHERE id IN ({placeholders})", ids)
-                conn.commit()
-                conn.close()
+        try:
+            db.execute(
+                f"DELETE FROM mail_campaigns WHERE id IN ({placeholders})",
+                ids
+            )
+            db.commit()
 
-                flash(f"{len(ids)} campagnes supprimées", "success")
-                return redirect(url_for("mailing_campaigns_page"))
+            add_log(
+                "INFO",
+                "mail_campaigns",
+                "Campaigns deleted",
+                {"ids": ids}
+            )
 
-            except sqlite3.OperationalError as e:
-                if "locked" in str(e).lower():
-                    time.sleep(0.2)
-                    continue
-                raise
+            flash(t("campaigns_deleted").format(count=len(ids)), "success")
 
-        flash("Erreur : impossible de supprimer les campagnes (DB locked)", "error")
+        except Exception as e:
+            db.rollback()
+
+            add_log(
+                "ERROR",
+                "mail_campaigns",
+                "Failed to delete campaigns",
+                {"ids": ids, "error": str(e)}
+            )
+
+            flash(t("campaign_delete_failed") + f" ({e})", "error")
+
         return redirect(url_for("mailing_campaigns_page"))
+
 
 
     @app.route("/mailing/templates", methods=["GET", "POST"])
@@ -1548,15 +1559,16 @@ def create_app():
         db = get_db()
         t = get_translator()
 
-        # S’assurer que les 3 templates existent (MIGRATIONS a déjà mis les valeurs par défaut)
+        # ---------------------------------------------------
+        # S’assurer que les 3 templates existent
+        # ---------------------------------------------------
         for type_ in ["preavis", "relance", "fin"]:
             exists = db.execute(
                 "SELECT 1 FROM email_templates WHERE type = ?",
                 (type_,)
             ).fetchone()
+
             if not exists:
-                # On insère UNIQUEMENT les champs vides.
-                # Les valeurs par défaut ont déjà été ajoutées via migrations.py
                 db.execute("""
                     INSERT INTO email_templates(type, subject, body, days_before)
                     VALUES (?, '', '', 0)
@@ -1577,11 +1589,10 @@ def create_app():
                 subject = request.form.get(f"subject_{tid}", "").strip()
                 body = request.form.get(f"body_{tid}", "").strip()
 
-                # conversion manuelle car .get(type=int) ne fonctionne pas sur form
                 days_raw = request.form.get(f"days_before_{tid}", "")
                 try:
                     days_before = int(days_raw)
-                except:
+                except Exception:
                     days_before = tpl["days_before"]
 
                 db.execute("""
@@ -1595,7 +1606,7 @@ def create_app():
             flash(t("templates_saved"), "success")
 
         # ---------------------------------------------------
-        # ENVOI DE TEST
+        # ENVOI DE TEST (AVEC RENDU DES VARIABLES)
         # ---------------------------------------------------
         if request.method == "POST" and request.form.get("action") == "test":
             template_id = request.form.get("test_template_id", type=int)
@@ -1615,23 +1626,50 @@ def create_app():
                     flash(t("template_not_found"), "error")
                 else:
                     try:
-                        send_email_via_settings(tpl["subject"], tpl["body"], admin_email)
-                        add_log("INFO", "mail_templates", f"Test email sent ({tpl['type']})", {})
+                        # 🔥 CONTEXTE DE TEST RÉALISTE
+                        test_user = {
+                            "username": "TestUser",
+                            "email": admin_email,
+                            "expiration_date": "2025-12-31",
+                        }
+
+                        context = build_user_context(test_user)
+
+                        subject = render_mail(tpl["subject"], context)
+                        body = render_mail(tpl["body"], context)
+
+                        send_email_via_settings(subject, body, admin_email)
+
+                        add_log(
+                            "INFO",
+                            "mail_templates",
+                            f"Test email sent ({tpl['type']})",
+                            {"template_id": tpl["id"]}
+                        )
                         flash(t("template_test_sent"), "success")
+
                     except Exception as e:
-                        add_log("ERROR", "mail_templates", "Template test failed", {"error": str(e)})
+                        add_log(
+                            "ERROR",
+                            "mail_templates",
+                            "Template test failed",
+                            {"error": str(e)}
+                        )
                         flash(t("template_test_failed") + f" ({e})", "error")
 
         # ---------------------------------------------------
         # AFFICHAGE
         # ---------------------------------------------------
-        templates = db.execute("SELECT * FROM email_templates ORDER BY type").fetchall()
+        templates = db.execute(
+            "SELECT * FROM email_templates ORDER BY type"
+        ).fetchall()
 
         return render_template(
             "mailing_templates.html",
             templates=templates,
             active_page="mailing"
         )
+
 
 
     @app.route("/mailing/smtp", methods=["GET", "POST"])

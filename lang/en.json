@@ -424,8 +424,16 @@
   "reason_placeholder": "e.g. compensation, gift, incident…",
   "subscription_reset_notice": "Reminders and warnings will be reset if the new expiration date is later than the previous one.",
   "gift_subscription": "Gift subscription",
-    "subscriptions_all_users_hint": "Apply the gift to all users in the application.",
-  "subscriptions_server_users_hint": "Apply the gift only to users linked to a specific server."
+  
+  "template_test_sent": "Test email sent successfully",
+  "template_not_found": "Template not found",
+
+  "subscriptions_all_users_hint": "This section displays all users across all servers",
+  "subscriptions_server_users_hint": "This section displays only users linked to this server",
+
+  "accepted_at": "Accepted at",
+
+  "task.sync_jellyfin": "Jellyfin synchronization"
 
 
 }
