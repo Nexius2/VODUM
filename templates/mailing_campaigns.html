@@ -167,8 +167,8 @@
                   </span>
                 </td>
 
-                <td class="px-4 py-2">{{ c.created_at or "—" }}</td>
-                <td class="px-4 py-2">{{ c.finished_at or "—" }}</td>
+                <td class="px-4 py-2">{{ c.created_at or t("not_available") }}</td>
+                <td class="px-4 py-2">{{ c.finished_at or t("not_available") }}</td>
               </tr>
             {% endfor %}
             </tbody>

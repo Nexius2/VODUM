@@ -139,7 +139,11 @@
             onclick="window.location='{{ url_for('user_detail', user_id=u.id) }}'">
 
             <td class="px-4 py-3">{{ u.username }}</td>
-            <td class="px-4 py-3 text-slate-300">{{ u.email or '—' }}</td>
+            <td class="px-4 py-3 text-slate-300"
+				data-sort-value="{{ u.email or '' }}">
+			  {{ u.email or t("not_available") }}
+			</td>
+
 
             <td class="px-4 py-3">
                 {% set colors = {
@@ -152,12 +156,17 @@
                     'suspended': 'bg-purple-900/40 text-purple-300',
                     'unknown': 'bg-slate-800 text-slate-400'
                 } %}
-                <span class="text-xs px-2 py-1 rounded-full {{ colors.get(u.status) }}">
-                    {{ t(u.status) }}
-                </span>
+                <span class="text-xs px-2 py-1 rounded-full {{ colors.get(u.status) }}"
+					  data-status="{{ u.status }}">
+					{{ t(u.status) }}
+				</span>
+
             </td>
 
-            <td class="px-4 py-3 text-slate-300">{{ u.expiration_date or '—' }}</td>
+            <td class="px-4 py-3 text-slate-300"
+				data-sort-value="{{ u.expiration_date or '' }}">
+			  {{ u.expiration_date or t("not_available") }}
+			</td>
             <td class="px-4 py-3 text-slate-300">{{ u.servers_count }}</td>
             <td class="px-4 py-3 text-slate-300">{{ u.libraries_count }}</td>
 
@@ -191,64 +200,83 @@ function sortTable(columnIndex, thElement) {
 
     const currentOrder = thElement.dataset.order === "asc" ? "desc" : "asc";
     thElement.dataset.order = currentOrder;
-    thElement.classList.add("sorted", currentOrder === "asc" ? "sorted-asc" : "sorted-desc");
+    thElement.classList.add(
+        "sorted",
+        currentOrder === "asc" ? "sorted-asc" : "sorted-desc"
+    );
 
-	// ordre expiration
-	function convert(v) {
-		v = (v || "").trim();
+    /* =========================
+       HELPERS
+       ========================= */
 
-		// ✅ Valeur vide / tiret → toujours un nombre
-		if (v === "—" || v === "-" || v === "") return Number.POSITIVE_INFINITY;
+    // 🔑 Valeur réelle utilisée pour le tri (i18n-safe)
+    function getCellValue(cell) {
+        if (cell?.dataset?.sortValue !== undefined) {
+            return cell.dataset.sortValue;
+        }
+        return cell?.innerText || "";
+    }
 
-		if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return new Date(v).getTime();    // YYYY-MM-DD
-		if (/^\d{2}\/\d{2}\/\d{4}$/.test(v)) {                              // DD/MM/YYYY
-			const [d,m,y] = v.split("/").map(Number);
-			return new Date(y, m-1, d).getTime();
-		}
+    // 🔢 Conversion vers valeur comparable
+    function convert(v) {
+        v = (v || "").trim();
 
-		// ✅ Si c’est un nombre (serveurs_count etc.)
-		if (!isNaN(v)) return Number(v);
+        // valeur absente → toujours à la fin
+        if (v === "") return Number.POSITIVE_INFINITY;
 
-		// ✅ fallback string
-		return v.toLowerCase();
-	}
+        // YYYY-MM-DD
+        if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+            return new Date(v).getTime();
+        }
 
+        // DD/MM/YYYY
+        if (/^\d{2}\/\d{2}\/\d{4}$/.test(v)) {
+            const [d, m, y] = v.split("/").map(Number);
+            return new Date(y, m - 1, d).getTime();
+        }
 
-	// ordre status
-	const STATUS_ORDER = {
-		"active": 1,
-		"pre_expired": 2,
-		"reminder": 3,
-		"expired": 4,
-		"none": 5,
-		"unknown": 5
-	};
+        // nombre simple
+        if (!isNaN(v)) return Number(v);
 
-	const sorted = rows.sort((a, b) => {
+        // fallback string
+        return v.toLowerCase();
+    }
 
-		// 🔥 TRI MÉTIER POUR LA COLONNE STATUS
-		if (columnIndex === 2) {
-			const getStatusKey = (row) => {
-				const span = row.children[2].querySelector("span");
-				if (!span) return "none";
-				return span.textContent.trim().toLowerCase();
-			};
+    /* =========================
+       STATUS ORDER (métier)
+       ========================= */
+    const STATUS_ORDER = {
+        "active": 1,
+        "pre_expired": 2,
+        "reminder": 3,
+        "expired": 4,
+        "none": 5,
+        "unknown": 5
+    };
 
-			const A = STATUS_ORDER[getStatusKey(a)] ?? 99;
-			const B = STATUS_ORDER[getStatusKey(b)] ?? 99;
+    const sorted = rows.sort((a, b) => {
 
-			return currentOrder === "asc" ? A - B : B - A;
-		}
+        /* 🔥 TRI MÉTIER POUR STATUS */
+        if (columnIndex === 2) {
+            const getStatusKey = (row) => {
+                const span = row.children[2].querySelector("span");
+                return span?.dataset?.status || "none";
+            };
 
-		// 🔹 TRI CLASSIQUE POUR LES AUTRES COLONNES
-		const A = convert(a.children[columnIndex].innerText);
-		const B = convert(b.children[columnIndex].innerText);
+            const A = STATUS_ORDER[getStatusKey(a)] ?? 99;
+            const B = STATUS_ORDER[getStatusKey(b)] ?? 99;
 
-		if (A > B) return currentOrder === "asc" ? 1 : -1;
-		if (A < B) return currentOrder === "asc" ? -1 : 1;
-		return 0;
-	});
+            return currentOrder === "asc" ? A - B : B - A;
+        }
 
+        /* 🔹 TRI CLASSIQUE */
+        const A = convert(getCellValue(a.children[columnIndex]));
+        const B = convert(getCellValue(b.children[columnIndex]));
+
+        if (A > B) return currentOrder === "asc" ? 1 : -1;
+        if (A < B) return currentOrder === "asc" ? -1 : 1;
+        return 0;
+    });
 
     tbody.innerHTML = "";
     sorted.forEach(r => tbody.appendChild(r));
@@ -257,16 +285,23 @@ function sortTable(columnIndex, thElement) {
     localStorage.setItem("users_sort_order", currentOrder);
 }
 
+/* =========================
+   RESTORE SORT STATE
+   ========================= */
 document.addEventListener("DOMContentLoaded", () => {
     const col = localStorage.getItem("users_sort_col");
     const order = localStorage.getItem("users_sort_order");
 
     if (col !== null) {
         const th = document.querySelectorAll("th.sortable")[col];
-        th.dataset.order = order === "asc" ? "desc" : "asc"; 
+        if (!th) return;
+
+        // inversion volontaire car sortTable toggle l’ordre
+        th.dataset.order = order === "asc" ? "desc" : "asc";
         sortTable(Number(col), th);
     }
 });
 </script>
+
 
 {% endblock %}

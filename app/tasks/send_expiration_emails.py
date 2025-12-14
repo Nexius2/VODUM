@@ -71,40 +71,6 @@ def send_email(subject, body, to_email):
 
 
 
-# --------------------------------------------------------
-# Suppression automatique des accès Plex (après FIN)
-# --------------------------------------------------------
-def remove_all_plex_access(uid, conn):
-    cur = conn.cursor()
-
-    log.info(f"[USER #{uid}] Suppression totale des accès Plex…")
-
-    # 1) Supprimer toutes les bibliothèques
-    cur.execute("DELETE FROM shared_libraries WHERE user_id = ?", (uid,))
-    log.info(f"[USER #{uid}] shared_libraries vidé pour cet utilisateur")
-
-    # 2) Ajouter un job SYNC pour chaque serveur Plex
-    plex_servers = cur.execute(
-        "SELECT id, name FROM servers WHERE type='plex'"
-    ).fetchall()
-
-    for s in plex_servers:
-        cur.execute("""
-            INSERT INTO plex_jobs(action, user_id, server_id, library_id, processed)
-            VALUES ('sync', ?, ?, NULL, 0)
-        """, (uid, s["id"]))
-
-        log.info(f"[USER #{uid}] Job SYNC ajouté pour serveur {s['name']}")
-
-    conn.commit()
-
-    # 3) Lancer apply_plex_access_updates
-    log.info(f"[USER #{uid}] → Lancement de apply_plex_access_updates")
-    try:
-        run_task("apply_plex_access_updates")
-    except Exception as e:
-        log.error(f"[USER #{uid}] Erreur lancement apply_plex_access_updates: {e}")
-
 
 
 # --------------------------------------------------------
@@ -210,8 +176,7 @@ def run(task_id=None, db=None):
                             """, (uid, exp_date))
                             sent_count += 1
 
-                            # Retirer tous les accès Plex
-                            remove_all_plex_access(uid, conn)
+                            
 
                         else:
                             log.error(f"[USER] #{uid} → échec ENVOI FIN")

@@ -18,9 +18,9 @@
         <!-- Niveau -->
         <select name="level" class="bg-slate-900 border border-slate-700 rounded px-2 py-1">
             <option value="ALL"  {% if level == "ALL" %}selected{% endif %}>{{ t("all_levels") }}</option>
-            <option value="INFO" {% if level == "INFO" %}selected{% endif %}>INFO</option>
-            <option value="WARNING" {% if level == "WARNING" %}selected{% endif %}>WARNING</option>
-            <option value="ERROR" {% if level == "ERROR" %}selected{% endif %}>ERROR</option>
+            <option value="INFO" {% if level == "INFO" %}selected{% endif %}>{{ t("info") }}</option>
+            <option value="WARNING" {% if level == "WARNING" %}selected{% endif %}>{{ t("warning") }}</option>
+            <option value="ERROR" {% if level == "ERROR" %}selected{% endif %}>{{ t("error") }}</option>
         </select>
 
         <!-- Recherche -->

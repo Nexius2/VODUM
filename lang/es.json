@@ -437,7 +437,114 @@
 
   "accepted_at": "Aceptado el",
 
-  "task.sync_jellyfin": "Sincronización de Jellyfin"
+  "task.sync_jellyfin": "Sincronización de Jellyfin",
+  
+    "user_not_found": "Usuario no encontrado",
+  "user_saved_and_plex_sync_started": "Cambios guardados y sincronización de Plex iniciada",
+  "invalid_library": "Biblioteca no válida",
+  "library_access_added": "Acceso concedido",
+  "library_access_removed": "Acceso retirado",
+
+  "server_name_required": "El nombre del servidor es obligatorio",
+  "plex_server_created_sync_planned": "Servidor Plex creado. Sincronización programada",
+  "server_created_no_sync": "Servidor creado (no Plex). No se inició ninguna sincronización",
+  "server_not_found": "Servidor no encontrado",
+  "server_deleted": "Servidor eliminado",
+  "server_updated": "Servidor actualizado",
+
+  "no_server_or_library_selected": "No se seleccionó ningún servidor o biblioteca",
+  "no_active_users_for_server": "No hay usuarios activos para este servidor",
+
+  "task_not_found": "Tarea no encontrada",
+  "task_disabled": "La tarea está desactivada",
+  "task_already_running": "La tarea ya está en ejecución",
+  "task_started": "Tarea iniciada",
+  "invalid_task": "Tarea no válida",
+  "task_updated": "Tarea actualizada",
+  
+  
+  "dashboard_subtitle": "Resumen de tus usuarios y servidores",
+  "active": "Activo",
+  "expiring_soon": "Próxima expiración",
+  "expired": "Expirado",
+  "total": "total",
+  "last_check": "Última comprobación",
+  "latest_logs": "Últimos registros",
+  "view_all": "Ver todo",
+  "no_logs_yet": "Aún no hay registros",
+  "no_servers_configured": "No hay servidores configurados",
+
+  "libraries_subtitle": "Gestionar todas las bibliotecas entre servidores",
+  "all_libraries": "Todas las bibliotecas",
+  "id": "ID",
+
+  "active_tasks": "Tareas activas",
+  "in_error": "Con error",
+
+  "send_test_email": "Enviar correo de prueba",
+
+  "smtp_gmail_requires": "Gmail requiere:",
+  "smtp_gmail_2fa": "Autenticación de dos factores activada",
+  "smtp_gmail_app_password": "Contraseña de aplicación creada",
+  "smtp_gmail_password_warning": "Las contraseñas normales de Google no funcionan con SMTP.",
+  "smtp_gmail_create_app_password": "Crear una contraseña de aplicación",
+
+  "smtp_outlook_requires": "SMTP de Outlook requiere:",
+  "smtp_outlook_account_required": "Una cuenta activa de Outlook / Office365",
+  "smtp_outlook_smtp_enabled": "SMTP habilitado en la cuenta de Microsoft",
+
+  "smtp_yahoo_requires": "Yahoo requiere una contraseña de aplicación",
+  "smtp_yahoo_requires_app_password": "Yahoo requiere una contraseña de aplicación.",
+
+  "smtp_custom_help_title": "SMTP personalizado",
+  "smtp_custom_help_intro": "Selecciona un proveedor para ver la ayuda detallada",
+  "smtp_custom_help_requirements": "Para un servidor SMTP personalizado, introduce:",
+
+  "mailing_disabled_help": "El envío de correos está desactivado. Actívalo para configurar SMTP, crear campañas o gestionar plantillas.",
+
+  "smtp_server": "Servidor SMTP",
+  "smtp_tls_recommended": "TLS recomendado",
+  "smtp_tls_required": "TLS obligatorio",
+
+  "smtp_custom_select_provider_help": "Selecciona un proveedor de la lista para ver la ayuda detallada.",
+  "smtp_custom_requirements_intro": "Para un servidor SMTP personalizado, introduce:",
+  "smtp_custom_host": "Nombre de host del servidor SMTP",
+  "smtp_custom_port": "Puerto 465 o 587",
+  "smtp_custom_tls_ssl": "TLS o SSL según el proveedor",
+
+  "settings": "Configuración",
+  "settings_subtitle": "Configuración de la aplicación",
+
+  "general_settings": "Configuración general",
+  "language": "Idioma",
+  "timezone": "Zona horaria",
+  "timezone_placeholder": "Europe/Madrid",
+  "admin_email": "Correo del administrador",
+
+  "default_subscription_settings": "Configuración de suscripción predeterminada",
+  "default_subscription_duration_days": "Duración de suscripción predeterminada (días)",
+  "delete_user_after_expiry": "Eliminar usuario X días después de la expiración",
+  "disable_user_on_expiration": "Desactivar usuario al expirar",
+
+  "status_warning_delays": "Retrasos de advertencia de estado",
+  "days_before_expiration_preavis": "Días antes de la expiración (aviso)",
+  "days_before_expiration_relance": "Días antes de la expiración (recordatorio)",
+
+  "system_settings": "Configuración del sistema",
+  "enable_scheduled_tasks": "Habilitar tareas programadas",
+  "maintenance_mode": "Modo mantenimiento",
+  "debug_mode": "Modo depuración",
+
+  "gift_success": "Suscripción otorgada correctamente",
+  "users_updated": "usuarios actualizados",
+  "days_added": "días añadidos",
+  "unknown_error": "Error desconocido",
+  "request_failed": "La solicitud falló",
+
+"not_available": "No disponible",
+
+ "task_disable_expired_users": "Desactivar usuarios expirados"
+ 
 
 
 

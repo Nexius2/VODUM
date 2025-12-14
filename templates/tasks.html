@@ -41,24 +41,24 @@
                 <td class="p-2">
                     {% if not task.enabled %}
                         <span class="px-2 py-1 rounded bg-gray-700 text-gray-300 text-xs">
-                            Disabled
+                            {{ t("disabled") }}
                         </span>
                     {% else %}
                         {% if task.status == "running" %}
                             <span class="px-2 py-1 rounded bg-blue-700 text-blue-100 text-xs">
-                                Running
+                                {{ t("running") }}
                             </span>
                         {% elif task.status == "done" %}
                             <span class="px-2 py-1 rounded bg-green-700 text-green-100 text-xs">
-                                Done
+                                {{ t("done") }}
                             </span>
                         {% elif task.status == "error" %}
                             <span class="px-2 py-1 rounded bg-red-700 text-red-100 text-xs">
-                                Error
+                                {{ t("error") }}
                             </span>
                         {% else %}
                             <span class="px-2 py-1 rounded bg-gray-600 text-gray-200 text-xs">
-                                Idle
+                                {{ t("idle") }}
                             </span>
                         {% endif %}
                     {% endif %}
@@ -68,20 +68,29 @@
                 <td class="p-2">{{ task.next_run | tz if task.next_run else "-" }}</td>
 
                 {# ---------- ACTIONS ---------- #}
-                <td class="p-2 text-center">
-                    {% if not task.enabled %}
-                        <button disabled
-                                class="px-3 py-1 rounded bg-gray-700 text-gray-400 opacity-50 cursor-not-allowed">
-                            {{ t("run_now") }}
-                        </button>
-                    {% else %}
-                        <form action="/tasks/run/{{ task.id }}" method="post">
-                            <button class="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white">
-                                {{ t("run_now") }}
-                            </button>
-                        </form>
-                    {% endif %}
-                </td>
+				<td class="p-2 text-center">
+
+					{% if not task.enabled %}
+						<button disabled
+								class="px-3 py-1 rounded bg-gray-700 text-gray-400 opacity-50 cursor-not-allowed">
+							{{ t("run_now") }}
+						</button>
+
+					{% elif task.status in ("queued", "running") %}
+						<button disabled class="px-3 py-1 rounded bg-slate-600 text-slate-300 opacity-50 cursor-wait">
+							{{ t("running") }}
+						</button>
+
+					{% else %}
+						<form action="/tasks/run/{{ task.id }}" method="post">
+							<button class="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white">
+								{{ t("run_now") }}
+							</button>
+						</form>
+					{% endif %}
+
+				</td>
+
 
             </tr>
             {% endfor %}

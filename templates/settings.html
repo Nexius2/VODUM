@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% set active_page = "settings" %}
 
-{% block header_title %}Settings{% endblock %}
-{% block header_subtitle %}Application configuration{% endblock %}
+{% block header_title %}{{ t("settings") }}{% endblock %}
+{% block header_subtitle %}{{ t("settings_subtitle") }}{% endblock %}
 
 {% block header_actions %}
 <button
@@ -10,7 +10,7 @@
     form="settings-save-form"
     class="px-4 py-2 bg-primary hover:bg-primary-dark rounded text-white text-sm"
 >
-    Save
+    {{ t("save") }}
 </button>
 {% endblock %}
 
@@ -23,13 +23,13 @@
         <!-- GENERAL SETTINGS -->
         <div class="bg-slate-900 p-6 rounded-xl border border-slate-800">
             <h2 class="text-lg font-semibold text-slate-200 mb-4">
-                General Settings
+                {{ t("general_settings") }}
             </h2>
 
             <div class="space-y-4">
                 <!-- Language -->
                 <div>
-                    <label class="block text-sm mb-1 text-slate-300">Language</label>
+                    <label class="block text-sm mb-1 text-slate-300">{{ t("language") }}</label>
 					<select name="default_language"
 							class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
 						{% for code, name in available_languages.items() %}
@@ -44,7 +44,7 @@
 
                 <!-- Timezone -->
                 <div>
-                    <label class="block text-sm mb-1 text-slate-300">Timezone</label>
+                    <label class="block text-sm mb-1 text-slate-300">{{ t("timezone") }}</label>
                     <input type="text" name="timezone"
                            value="{{ settings.timezone }}"
                            class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm"
@@ -53,7 +53,7 @@
 
                 <!-- Admin Email -->
                 <div>
-                    <label class="block text-sm mb-1 text-slate-300">Admin email</label>
+                    <label class="block text-sm mb-1 text-slate-300">{{ t("admin_email") }}</label>
                     <input type="email" name="admin_email"
                            value="{{ settings.admin_email }}"
                            class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
@@ -65,7 +65,7 @@
         <!-- DEFAULT SUBSCRIPTION SETTINGS -->
         <div class="bg-slate-900 p-6 rounded-xl border border-slate-800">
             <h2 class="text-lg font-semibold text-slate-200 mb-4">
-                Default Subscription Settings
+                {{ t("default_subscription_settings") }}
             </h2>
 
             <div class="space-y-4">
@@ -73,7 +73,7 @@
                 <!-- Default duration -->
                 <div>
                     <label class="block text-sm mb-1 text-slate-300">
-                        Default subscription duration (days)
+                        {{ t("default_subscription_duration_days") }}
                     </label>
                     <input type="number"
                            name="default_expiration_days"
@@ -84,7 +84,7 @@
                 <!-- Auto-delete delay -->
                 <div>
                     <label class="block text-sm mb-1 text-slate-300">
-                        Delete user X days after expiry
+                        {{ t("delete_user_after_expiry") }}
                     </label>
                     <input type="number"
                            name="delete_after_expiry_days"
@@ -97,7 +97,7 @@
                     <input type="checkbox" name="disable_on_expiry" value="1"
                            {% if settings.disable_on_expiry %}checked{% endif %}
                            class="w-4 h-4 rounded border-slate-600 bg-slate-800">
-                    <span class="text-sm text-slate-300">Disable user on expiration</span>
+                    <span class="text-sm text-slate-300">{{ t("disable_user_on_expiration") }}</span>
                 </div>
 
             </div>
@@ -107,7 +107,7 @@
         <!-- STATUS WARNING DELAYS -->
         <div class="bg-slate-900 p-6 rounded-xl border border-slate-800">
             <h2 class="text-lg font-semibold text-slate-200 mb-4">
-                Status Warning Delays
+                {{ t("status_warning_delays") }}
             </h2>
 
             <div class="space-y-4">
@@ -115,7 +115,7 @@
                 <!-- Preavis -->
                 <div>
                     <label class="block text-sm mb-1 text-slate-300">
-                        Days before expiration (preavis)
+                        {{ t("days_before_expiration_preavis") }}
                     </label>
                     <input type="number" min="0"
                            name="preavis_days"
@@ -126,7 +126,7 @@
                 <!-- Relance -->
                 <div>
                     <label class="block text-sm mb-1 text-slate-300">
-                        Days before expiration (relance)
+                        {{ t("days_before_expiration_relance") }}
                     </label>
                     <input type="number" min="0"
                            name="relance_days"
@@ -141,7 +141,7 @@
         <!-- SYSTEM SETTINGS -->
         <div class="bg-slate-900 p-6 rounded-xl border border-slate-800">
             <h2 class="text-lg font-semibold text-slate-200 mb-4">
-                System Settings
+                {{ t("system_settings") }}
             </h2>
 
             <div class="space-y-4">
@@ -151,7 +151,7 @@
                     <input type="checkbox" name="enable_cron_jobs" value="1"
                            {% if settings.enable_cron_jobs %}checked{% endif %}
                            class="w-4 h-4 rounded border-slate-600 bg-slate-800">
-                    <span class="text-sm text-slate-300">Enable scheduled tasks</span>
+                    <span class="text-sm text-slate-300">{{ t("enable_scheduled_tasks") }}</span>
                 </div>
 
                 <!-- Maintenance -->
@@ -159,7 +159,7 @@
                     <input type="checkbox" name="maintenance_mode" value="1"
                            {% if settings.maintenance_mode %}checked{% endif %}
                            class="w-4 h-4 rounded border-slate-600 bg-slate-800">
-                    <span class="text-sm text-slate-300">Maintenance mode</span>
+                    <span class="text-sm text-slate-300">{{ t("maintenance_mode") }}</span>
                 </div>
 
                 <!-- Debug -->
@@ -167,7 +167,7 @@
                     <input type="checkbox" name="debug_mode" value="1"
                            {% if settings.debug_mode %}checked{% endif %}
                            class="w-4 h-4 rounded border-slate-600 bg-slate-800">
-                    <span class="text-sm text-slate-300">Debug mode</span>
+                    <span class="text-sm text-slate-300">{{ t("debug_mode") }}</span>
                 </div>
 
             </div>

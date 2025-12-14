@@ -15,7 +15,7 @@ from flask import (
 )
 from config import Config
 #from tasks import create_task, run_task
-from tasks_engine import set_db_provider, run_task, start_scheduler, run_task_sequence
+from tasks_engine import set_db_provider, run_task, start_scheduler, run_task_sequence, run_task_by_name
 import json
 from zoneinfo import ZoneInfo
 import smtplib
@@ -30,6 +30,9 @@ task_logger = get_logger("tasks_ui")
 from api.subscriptions import subscriptions_api, update_user_expiration
 import uuid
 from mailing_utils import build_user_context, render_mail
+import threading
+
+
 
 
 
@@ -651,7 +654,7 @@ def create_app():
         # Charger l’utilisateur
         user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         if not user:
-            flash("Utilisateur introuvable", "error")
+            flash("user_not_found", "error")
             return redirect(url_for("users_list"))
 
         # --------------------------------------------------------------------
@@ -767,9 +770,9 @@ def create_app():
             db.commit()
 
             # 4) --- Lancer la tâche apply_plex_access_updates ---
-            run_task("apply_plex_access_updates")
+            run_task_by_name("apply_plex_access_updates")
 
-            flash("Modifications enregistrées et synchronisation Plex lancée.", "success")
+            flash("user_saved_and_plex_sync_started", "success")
             return redirect(url_for("user_detail", user_id=user_id))
 
         # --------------------------------------------------------------------
@@ -846,7 +849,7 @@ def create_app():
         library_id = request.form.get("library_id", type=int)
 
         if not library_id:
-            flash("Bibliothèque invalide", "error")
+            flash("invalid_library", "error")
             return redirect(url_for("user_detail", user_id=user_id))
 
         # Vérifie si l'accès existe déjà
@@ -862,7 +865,7 @@ def create_app():
                 (user_id, library_id),
             )
             db.commit()
-            flash("Accès retiré", "success")
+            flash("library_access_removed", "success")
         else:
             # AJOUTER
             db.execute(
@@ -873,7 +876,7 @@ def create_app():
                 (user_id, library_id),
             )
             db.commit()
-            flash("Accès ajouté", "success")
+            flash("library_access_added", "success")
 
         return redirect(url_for("user_detail", user_id=user_id))
 
@@ -884,9 +887,22 @@ def create_app():
     
     @app.route("/servers/<int:server_id>/sync")
     def sync_server(server_id):
-        run_task("sync_server", {"server_id": server_id})
+        db = get_db()
+
+        db.execute(
+            """
+            INSERT INTO plex_jobs (action, server_id)
+            VALUES ('sync', ?)
+            """,
+            (server_id,)
+        )
+        db.commit()
+
+        run_task_by_name("check_servers")
 
         return redirect(url_for("server_detail", server_id=server_id))
+
+
     
     @app.route("/servers", methods=["GET"])
     def servers_list():
@@ -951,7 +967,7 @@ def create_app():
 
 
         if not name:
-            flash("Le nom du serveur est obligatoire", "error")
+            flash("server_name_required", "error")
             return redirect(url_for("servers_list"))
 
         # Enregistrer le serveur
@@ -979,10 +995,10 @@ def create_app():
             """)
             db.commit()
 
-            flash("Serveur Plex créé. Synchronisation planifiée.", "success")
+            flash("plex_server_created_sync_planned", "success")
 
         else:
-            flash("Serveur créé (non Plex). Aucune synchronisation lancée.", "success")
+            flash("server_created_no_sync", "success")
 
         return redirect(url_for("servers_list"))
 
@@ -994,14 +1010,14 @@ def create_app():
         # Vérifier que le serveur existe
         server = db.execute("SELECT * FROM servers WHERE id = ?", (server_id,)).fetchone()
         if not server:
-            flash("Serveur introuvable", "error")
+            flash("server_not_found", "error")
             return redirect(url_for("servers_list"))
 
         # Suppression
         db.execute("DELETE FROM servers WHERE id = ?", (server_id,))
         db.commit()
 
-        flash("Serveur supprimé", "success")
+        flash("server_deleted", "success")
 
         return redirect(url_for("servers_list"))
 
@@ -1037,7 +1053,7 @@ def create_app():
             )
             db.commit()
 
-            flash("Serveur mis à jour", "success")
+            flash("server_updated", "success")
             return redirect(url_for("server_detail", server_id=server_id))
 
         # GET
@@ -1095,7 +1111,7 @@ def create_app():
         library_ids = request.form.getlist("library_ids")
 
         if not server_id or not library_ids:
-            flash("Aucun serveur ou bibliothèque sélectionné", "error")
+            flash("no_server_or_library_selected", "error")
             return redirect(url_for("servers_list", server_id=server_id))
 
         # 1️⃣ Récupère seulement les utilisateurs ACTIFS sur ce serveur
@@ -1113,7 +1129,7 @@ def create_app():
         user_ids = [u["user_id"] for u in users]
 
         if not user_ids:
-            flash("Aucun utilisateur actif pour ce serveur", "warning")
+            flash("no_active_users_for_server", "warning")
             return redirect(url_for("servers_list", server_id=server_id))
 
         # 2️⃣ Met à jour la table interne shared_libraries (comme avant)
@@ -1149,7 +1165,7 @@ def create_app():
 
         db.commit()
 
-        flash(t("grant_access_active_success"), "success")
+        flash("grant_access_active_success", "success")
         return redirect(url_for("servers_list", server_id=server_id))
 
     # -----------------------------
@@ -1169,10 +1185,35 @@ def create_app():
     
     @app.route("/tasks/run/<int:task_id>", methods=["POST"])
     def task_run(task_id):
-        run_task(task_id)
-        flash("Tâche lancée.", "success")
+        db = get_db()
+
+        row = db.execute("SELECT status, enabled FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        if not row:
+            flash("task_not_found", "error")
+            return redirect("/tasks")
+
+        if not row["enabled"]:
+            flash("task_disabled", "warning")
+            return redirect("/tasks")
+
+        if row["status"] in ("queued", "running"):
+            flash("task_already_running", "warning")
+            return redirect("/tasks")
+
+        # 1) Marquer queued tout de suite (pour que l'UI se mette à jour)
+        now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        db.execute(
+            "UPDATE tasks SET status = ?, last_run = ? WHERE id = ?",
+            ("queued", now, task_id),
+        )
+        db.commit()
+
+        # 2) Lancer l'exécution réelle en arrière-plan
+        threading.Thread(target=run_task, args=(task_id,), daemon=True).start()
+
+        flash("task_started", "success")
         return redirect("/tasks")
-    
+        
 
 
 
@@ -1188,7 +1229,7 @@ def create_app():
             action = request.form.get("action")
 
             if not task_id:
-                flash("Tâche invalide", "error")
+                flash("invalid_task", "error")
                 task_logger.error("POST /tasks → task_id manquant")
                 return redirect(url_for("tasks_page"))
 
@@ -1213,7 +1254,7 @@ def create_app():
                 task_logger.info(
                     f"Tâche {task_id} → toggle → enabled={new_state['enabled']}"
                 )
-                flash("Tâche mise à jour", "success")
+                flash("task_updated", "success")
 
             # --------------------------------------------------------------
             # 2) run_now → marque la tâche comme queued

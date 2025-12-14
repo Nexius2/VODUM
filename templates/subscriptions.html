@@ -140,10 +140,24 @@
 </form>
 
 <script>
-function toggleServerSelect(show) {
-  document.getElementById("server-select").classList.toggle("hidden", !show);
+/* =========================
+   I18N STRINGS (injectées)
+   ========================= */
+const I18N = {
+  users_updated: "{{ t('users_updated') }}",
+  days_added: "{{ t('days_added') }}",
+  unknown_error: "{{ t('unknown_error') }}",
+  request_failed: "{{ t('request_failed') }}"
+};
 
-  // reset styles
+/* =========================
+   UI HELPERS
+   ========================= */
+
+function toggleServerSelect(show) {
+  document.getElementById("server-select")
+          .classList.toggle("hidden", !show);
+
   const all = document.getElementById("card-all");
   const srv = document.getElementById("card-server");
 
@@ -176,14 +190,20 @@ function showAlert(type, html) {
   alertBox.classList.remove("hidden");
 
   if (type === "success") {
-    alertBox.className = "mb-6 rounded-lg bg-emerald-500/10 border border-emerald-500 text-emerald-300 px-4 py-3";
+    alertBox.className =
+      "mb-6 rounded-lg bg-emerald-500/10 border border-emerald-500 text-emerald-300 px-4 py-3";
   } else {
-    alertBox.className = "mb-6 rounded-lg bg-red-500/10 border border-red-500 text-red-300 px-4 py-3";
+    alertBox.className =
+      "mb-6 rounded-lg bg-red-500/10 border border-red-500 text-red-300 px-4 py-3";
   }
 
   alertBox.innerHTML = html;
   alertBox.scrollIntoView({ behavior: "smooth", block: "start" });
 }
+
+/* =========================
+   FORM SUBMIT
+   ========================= */
 
 function submitGift() {
   const form = document.getElementById("gift-form");
@@ -193,15 +213,26 @@ function submitGift() {
     .then(r => r.json())
     .then(res => {
       if (res.status === "ok") {
-        showAlert("success", `🎁 <strong>${res.users_updated}</strong> users updated (+${res.days_added} days)`);
+        showAlert(
+          "success",
+          `🎁 <strong>${res.users_updated}</strong> ${I18N.users_updated}
+           (+${res.days_added} ${I18N.days_added})`
+        );
       } else {
-        showAlert("error", `❌ ${res.error || "Unknown error"}`);
+        showAlert(
+          "error",
+          `❌ ${res.error || I18N.unknown_error}`
+        );
       }
     })
     .catch(() => {
-      showAlert("error", "❌ Request failed");
+      showAlert(
+        "error",
+        `❌ ${I18N.request_failed}`
+      );
     });
 }
 </script>
+
 
 {% endblock %}

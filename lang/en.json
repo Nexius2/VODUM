@@ -433,7 +433,123 @@
 
   "accepted_at": "Accepted at",
 
-  "task.sync_jellyfin": "Jellyfin synchronization"
+  "task.sync_jellyfin": "Jellyfin synchronization",
+  
+    "user_not_found": "User not found",
+  "user_saved_and_plex_sync_started": "Changes saved and Plex synchronization started",
+  "invalid_library": "Invalid library",
+  "library_access_added": "Access granted",
+  "library_access_removed": "Access removed",
+
+  "server_name_required": "Server name is required",
+  "plex_server_created_sync_planned": "Plex server created. Synchronization scheduled",
+  "server_created_no_sync": "Server created (non-Plex). No synchronization started",
+  "server_not_found": "Server not found",
+  "server_deleted": "Server deleted",
+  "server_updated": "Server updated",
+
+  "no_server_or_library_selected": "No server or library selected",
+  "no_active_users_for_server": "No active users for this server",
+
+  "task_not_found": "Task not found",
+  "task_disabled": "Task is disabled",
+  "task_already_running": "Task is already running",
+  "task_started": "Task started",
+  "invalid_task": "Invalid task",
+  "task_updated": "Task updated",
+  
+    "dashboard_subtitle": "Overview of your users and servers",
+  "active": "Active",
+  "expiring_soon": "Expiring soon",
+  "expired": "Expired",
+  "total": "total",
+  "last_check": "Last check",
+  "latest_logs": "Latest logs",
+  "view_all": "View all",
+  "no_logs_yet": "No logs yet",
+  "no_servers_configured": "No servers configured yet",
+    "libraries_subtitle": "Manage all libraries across servers",
+  "all_libraries": "All libraries",
+  "id": "ID",
+    "total": "total",
+  "active_tasks": "Active tasks",
+  "in_error": "In error",
+  
+  
+  "send_test_email": "Send test email",
+  "smtp_gmail_requires": "Gmail requires:",
+  "smtp_gmail_2fa": "Two-factor authentication enabled",
+  "smtp_gmail_app_password": "Application password created",
+  "smtp_gmail_password_warning": "Regular Google passwords do not work for SMTP",
+  "smtp_create_app_password": "Create an application password",
+
+  "smtp_outlook_requires": "Outlook SMTP requires:",
+  "smtp_outlook_account": "An active Outlook / Office365 account",
+  "smtp_outlook_smtp_enabled": "SMTP enabled in Microsoft account",
+
+  "smtp_yahoo_requires": "Yahoo requires an application password",
+
+  "smtp_custom_help_title": "Custom SMTP",
+  "smtp_custom_help_intro": "Select a provider to see detailed help",
+  "smtp_custom_help_requirements": "For a custom SMTP server, enter:",
+
+  "mailing_disabled_help": "Mailing is disabled. Enable it to configure SMTP, create campaigns or manage templates.",
+  
+  
+  "smtp_gmail_requires": "Gmail requires:",
+  "smtp_gmail_2fa": "Two-step verification enabled",
+  "smtp_gmail_app_password": "Application password created",
+  "smtp_gmail_password_warning": "Regular Google passwords do not work for SMTP.",
+  "smtp_gmail_create_app_password": "Create an application password",
+
+  "smtp_server": "SMTP server",
+  "smtp_tls_recommended": "TLS recommended",
+  
+    "smtp_outlook_requires": "Outlook SMTP requires:",
+  "smtp_outlook_account_required": "An active Outlook / Office365 account",
+  "smtp_outlook_smtp_enabled": "SMTP enabled in the Microsoft account",
+  "smtp_tls_required": "TLS required",
+  
+    "smtp_yahoo_requires_app_password": "Yahoo requires an application password.",
+
+  "smtp_custom_select_provider_help": "Select a provider from the list to see detailed help.",
+  "smtp_custom_requirements_intro": "For a custom SMTP server, enter:",
+  "smtp_custom_host": "SMTP server hostname",
+  "smtp_custom_port": "Port 465 or 587",
+  "smtp_custom_tls_ssl": "TLS or SSL depending on the provider",
+  
+    "settings": "Settings",
+  "settings_subtitle": "Application configuration",
+
+  "general_settings": "General settings",
+  "language": "Language",
+  "timezone": "Timezone",
+  "timezone_placeholder": "Europe/Paris",
+  "admin_email": "Admin email",
+
+  "default_subscription_settings": "Default subscription settings",
+  "default_subscription_duration_days": "Default subscription duration (days)",
+  "delete_user_after_expiry": "Delete user X days after expiration",
+  "disable_user_on_expiration": "Disable user on expiration",
+
+  "status_warning_delays": "Status warning delays",
+  "days_before_expiration_preavis": "Days before expiration (pre-notice)",
+  "days_before_expiration_relance": "Days before expiration (reminder)",
+
+  "system_settings": "System settings",
+  "enable_scheduled_tasks": "Enable scheduled tasks",
+  "maintenance_mode": "Maintenance mode",
+  "debug_mode": "Debug mode",
+  
+    "gift_success": "Gift applied successfully",
+  "users_updated": "users updated",
+  "days_added": "days added",
+  "unknown_error": "Unknown error",
+  "request_failed": "Request failed",
+  
+"not_available": "Not available",
+
+"task_disable_expired_users": "Disable expired users"
 
 
 }

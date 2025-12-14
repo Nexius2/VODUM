@@ -17,7 +17,7 @@
                     value="test"
                     class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded text-sm"
                 >
-                    Send test email
+                    {{ t("send_test_email") }}
                 </button>
 
                 <!-- Bouton Save -->
@@ -26,7 +26,7 @@
                     form="smtp-form"
                     class="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded text-sm"
                 >
-                    Save
+                    {{ t("save") }}
                 </button>
             </div>
 
@@ -79,7 +79,7 @@
 <!-- Message quand mailing est désactivé -->
 {% if not settings.mailing_enabled %}
 <div class="p-4 rounded-xl bg-slate-800 border border-slate-700 text-slate-200 text-sm mb-5">
-    {{ t("mailing_disabled_help") or "Le mailing est désactivé. Activez-le pour configurer le SMTP, créer des campagnes ou gérer les templates." }}
+    {{ t("mailing_disabled_help") }}
 </div>
 {% endif %}
 
@@ -92,67 +92,104 @@
 
     <h2 class="text-sm font-semibold mb-2">{{ t("smtp_help_title") }}</h2>
 
-    <!-- AIDE GMAIL -->
-    <div id="help_gmail" class="smtp-help hidden">
-      <div class="font-semibold mb-1 text-red-300">Gmail</div>
-      <p class="text-slate-400">Gmail nécessite :</p>
-      <ul class="list-disc list-inside text-slate-400 space-y-1 mt-1">
-        <li>✔ Activation de la validation en 2 étapes</li>
-        <li>✔ Création d’un mot de passe d’application</li>
-      </ul>
-      <p class="text-slate-400 mt-2">
-        Les mots de passe Google classiques ne fonctionnent pas pour SMTP.
-      </p>
-      <a href="https://myaccount.google.com/apppasswords"
-         target="_blank"
-         class="inline-block mt-3 px-3 py-1.5 rounded-lg bg-yellow-600 hover:bg-yellow-500 text-xs font-semibold text-black">
-        🔐 Créer un mot de passe d’application
-      </a>
-      <p class="text-slate-400 mt-3">
-        Serveur SMTP : <strong>smtp.gmail.com</strong><br>
-        Port : <strong>587</strong> — TLS recommandé
-      </p>
-    </div>
+	<!-- AIDE GMAIL -->
+	<div id="help_gmail" class="smtp-help hidden">
+	  <div class="font-semibold mb-1 text-red-300">
+		{{ t("gmail") }}
+	  </div>
 
-    <!-- AIDE OUTLOOK -->
-    <div id="help_outlook" class="smtp-help hidden">
-      <div class="font-semibold mb-1 text-blue-300">Outlook / Office365</div>
-      <p class="text-slate-400 mb-2">Le SMTP Outlook nécessite :</p>
-      <ul class="list-disc list-inside text-slate-400 space-y-1">
-        <li>✔ Un compte Outlook / Office365 actif</li>
-        <li>✔ L’autorisation SMTP activée dans le compte Microsoft</li>
-      </ul>
-      <p class="text-slate-400 mt-3">
-        Serveur SMTP : <strong>smtp.office365.com</strong><br>
-        Port : <strong>587</strong> — TLS obligatoire
-      </p>
-    </div>
+	  <p class="text-slate-400">
+		{{ t("smtp_gmail_requires") }}
+	  </p>
 
-    <!-- AIDE YAHOO -->
-    <div id="help_yahoo" class="smtp-help hidden">
-      <div class="font-semibold mb-1 text-purple-300">Yahoo Mail</div>
-      <p class="text-slate-400">
-        Yahoo requiert un <strong>mot de passe d’application</strong>.
-      </p>
-      <p class="text-slate-400 mt-3">
-        Serveur SMTP : <strong>smtp.mail.yahoo.com</strong><br>
-        Port : <strong>587</strong> — TLS recommandé
-      </p>
-    </div>
+	  <ul class="list-disc list-inside text-slate-400 space-y-1 mt-1">
+		<li>✔ {{ t("smtp_gmail_2fa") }}</li>
+		<li>✔ {{ t("smtp_gmail_app_password") }}</li>
+	  </ul>
 
-    <!-- AIDE PAR DÉFAUT -->
-    <div id="help_custom" class="smtp-help">
-      <div class="font-semibold mb-1">{{ t("smtp_provider") }} : {{ t("custom_smtp") }}</div>
-      <p class="text-slate-400">
-        Sélectionnez un fournisseur dans la liste pour obtenir l’aide détaillée.
-      </p>
-      <p class="text-slate-400 mt-3">Pour un serveur SMTP personnalisé, entrez :</p>
-      <ul class="list-disc list-inside text-slate-400 space-y-1 mt-1">
-        <li>✔ Nom d’hôte du serveur SMTP</li>
-        <li>✔ Port 465 ou 587</li>
-        <li>✔ TLS ou SSL selon fournisseur</li>
-      </ul>
-    </div>
+	  <p class="text-slate-400 mt-2">
+		{{ t("smtp_gmail_password_warning") }}
+	  </p>
+
+	  <a href="https://myaccount.google.com/apppasswords"
+		 target="_blank"
+		 class="inline-block mt-3 px-3 py-1.5 rounded-lg bg-yellow-600 hover:bg-yellow-500 text-xs font-semibold text-black">
+		🔐 {{ t("smtp_gmail_create_app_password") }}
+	  </a>
+
+	  <p class="text-slate-400 mt-3">
+		{{ t("smtp_server") }} :
+		<strong>smtp.gmail.com</strong><br>
+		{{ t("smtp_port") }} :
+		<strong>587</strong> — {{ t("smtp_tls_recommended") }}
+	  </p>
+	</div>
+
+
+	<!-- AIDE OUTLOOK -->
+	<div id="help_outlook" class="smtp-help hidden">
+	  <div class="font-semibold mb-1 text-blue-300">
+		{{ t("outlook") }}
+	  </div>
+
+	  <p class="text-slate-400 mb-2">
+		{{ t("smtp_outlook_requires") }}
+	  </p>
+
+	  <ul class="list-disc list-inside text-slate-400 space-y-1">
+		<li>✔ {{ t("smtp_outlook_account_required") }}</li>
+		<li>✔ {{ t("smtp_outlook_smtp_enabled") }}</li>
+	  </ul>
+
+	  <p class="text-slate-400 mt-3">
+		{{ t("smtp_server") }} :
+		<strong>smtp.office365.com</strong><br>
+		{{ t("smtp_port") }} :
+		<strong>587</strong> — {{ t("smtp_tls_required") }}
+	  </p>
+	</div>
+
+
+	<!-- AIDE YAHOO -->
+	<div id="help_yahoo" class="smtp-help hidden">
+	  <div class="font-semibold mb-1 text-purple-300">
+		{{ t("yahoo") }}
+	  </div>
+
+	  <p class="text-slate-400">
+		{{ t("smtp_yahoo_requires_app_password") }}
+	  </p>
+
+	  <p class="text-slate-400 mt-3">
+		{{ t("smtp_server") }} :
+		<strong>smtp.mail.yahoo.com</strong><br>
+		{{ t("smtp_port") }} :
+		<strong>587</strong> — {{ t("smtp_tls_recommended") }}
+	  </p>
+	</div>
+
+
+	<!-- AIDE PAR DÉFAUT -->
+	<div id="help_custom" class="smtp-help">
+	  <div class="font-semibold mb-1">
+		{{ t("smtp_provider") }} : {{ t("custom_smtp") }}
+	  </div>
+
+	  <p class="text-slate-400">
+		{{ t("smtp_custom_select_provider_help") }}
+	  </p>
+
+	  <p class="text-slate-400 mt-3">
+		{{ t("smtp_custom_requirements_intro") }}
+	  </p>
+
+	  <ul class="list-disc list-inside text-slate-400 space-y-1 mt-1">
+		<li>✔ {{ t("smtp_custom_host") }}</li>
+		<li>✔ {{ t("smtp_custom_port") }}</li>
+		<li>✔ {{ t("smtp_custom_tls_ssl") }}</li>
+	  </ul>
+	</div>
+
 
   </div>
 
@@ -170,9 +207,10 @@
           <select id="smtp_provider"
                   class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
             <option value="custom">{{ t("custom_smtp") }}</option>
-            <option value="gmail">Gmail</option>
-            <option value="outlook">Outlook / Office365</option>
-            <option value="yahoo">Yahoo</option>
+            <option value="gmail">{{ t("gmail") }}</option>
+			<option value="outlook">{{ t("outlook") }}</option>
+			<option value="yahoo">{{ t("yahoo") }}</option>
+
           </select>
         </div>
 
@@ -258,7 +296,7 @@ toggle.addEventListener("change", async () => {
 		// refresh page
 		setTimeout(() => location.reload(), 200);
     } catch (e) {
-        console.error("Erreur sauvegarde mailing_enabled :", e);
+        console.error(t("mailing_toggle_error"), e);
     }
 
     // Optionnel : recharger la nav automatiquement  
