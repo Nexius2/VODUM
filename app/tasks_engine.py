@@ -52,6 +52,66 @@ def safe_execute(cur, query, params=(), retries=10, delay=0.2):
             raise
     raise sqlite3.OperationalError("Database locked after multiple retries")
 
+
+def run_task_by_name(task_name: str):
+    conn = get_db()
+    cur = conn.cursor()
+
+    safe_execute(cur, "SELECT id, status, enabled FROM tasks WHERE name = ?", (task_name,))
+    row = cur.fetchone()
+    conn.close()
+
+    if not row:
+        logger.error(f"Tâche inconnue : {task_name}")
+        return False
+
+    if not row["enabled"]:
+        logger.warning(f"Tâche désactivée : {task_name}")
+        return False
+
+    if row["status"] in ("queued", "running"):
+        logger.info(f"Tâche déjà en cours : {task_name}")
+        return False
+
+    task_id = row["id"]
+
+    threading.Thread(
+        target=run_task,
+        args=(task_id,),
+        daemon=True
+    ).start()
+
+    return True
+
+# -------------------------------------------------------------------
+# Watchdog
+# -------------------------------------------------------------------
+def recover_stuck_tasks(max_minutes=30):
+    conn = get_db()
+    cur = conn.cursor()
+
+    safe_execute(
+        cur,
+        """
+        UPDATE tasks
+        SET status='error',
+            last_error='Task timeout / recovered automatically'
+        WHERE status='running'
+          AND last_run IS NOT NULL
+          AND last_run < datetime('now', ?)
+        """,
+        (f'-{max_minutes} minutes',)
+    )
+
+    conn.commit()
+    conn.close()
+
+def _watchdog_loop():
+    while True:
+        recover_stuck_tasks()
+        time.sleep(30)
+
+
 # -------------------------------------------------------------------
 # Logging DB existant (NON SUPPRIMÉ)
 # -------------------------------------------------------------------
@@ -425,6 +485,8 @@ def scheduler_loop():
 # -------------------------------------------------------------------
 def start_scheduler():
     logger.info("Activation du scheduler…")
-    t = threading.Thread(target=scheduler_loop, daemon=True)
-    t.start()
-    logger.info("Scheduler démarré.")
+    threading.Thread(target=scheduler_loop, daemon=True).start()
+    threading.Thread(target=_watchdog_loop, daemon=True).start()
+    logger.info("Scheduler et watchdog démarrés.")
+
+

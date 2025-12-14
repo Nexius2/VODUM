@@ -437,7 +437,114 @@
 
   "accepted_at": "Accettato il",
 
-  "task.sync_jellyfin": "Sincronizzazione Jellyfin"
+  "task.sync_jellyfin": "Sincronizzazione Jellyfin",
+  
+    "user_not_found": "Utente non trovato",
+  "user_saved_and_plex_sync_started": "Modifiche salvate e sincronizzazione Plex avviata",
+  "invalid_library": "Libreria non valida",
+  "library_access_added": "Accesso concesso",
+  "library_access_removed": "Accesso rimosso",
+
+  "server_name_required": "Il nome del server è obbligatorio",
+  "plex_server_created_sync_planned": "Server Plex creato. Sincronizzazione pianificata",
+  "server_created_no_sync": "Server creato (non Plex). Nessuna sincronizzazione avviata",
+  "server_not_found": "Server non trovato",
+  "server_deleted": "Server eliminato",
+  "server_updated": "Server aggiornato",
+
+  "no_server_or_library_selected": "Nessun server o libreria selezionata",
+  "no_active_users_for_server": "Nessun utente attivo per questo server",
+
+  "task_not_found": "Attività non trovata",
+  "task_disabled": "Attività disabilitata",
+  "task_already_running": "Attività già in esecuzione",
+  "task_started": "Attività avviata",
+  "invalid_task": "Attività non valida",
+  "task_updated": "Attività aggiornata",
+  
+
+  "dashboard_subtitle": "Panoramica di utenti e server",
+  "active": "Attivo",
+  "expiring_soon": "In scadenza",
+  "expired": "Scaduto",
+  "total": "totale",
+  "last_check": "Ultimo controllo",
+  "latest_logs": "Log recenti",
+  "view_all": "Visualizza tutto",
+  "no_logs_yet": "Nessun log disponibile",
+  "no_servers_configured": "Nessun server configurato",
+
+  "libraries_subtitle": "Gestisci tutte le librerie sui server",
+  "all_libraries": "Tutte le librerie",
+  "id": "ID",
+
+  "active_tasks": "Attività attive",
+  "in_error": "In errore",
+
+  "send_test_email": "Invia email di test",
+
+  "smtp_gmail_requires": "Gmail richiede:",
+  "smtp_gmail_2fa": "Verifica in due passaggi attivata",
+  "smtp_gmail_app_password": "Password dell’applicazione creata",
+  "smtp_gmail_password_warning": "Le password Google standard non funzionano con SMTP.",
+  "smtp_gmail_create_app_password": "Crea una password per applicazione",
+
+  "smtp_outlook_requires": "SMTP Outlook richiede:",
+  "smtp_outlook_account_required": "Un account Outlook / Office365 attivo",
+  "smtp_outlook_smtp_enabled": "SMTP abilitato nell’account Microsoft",
+
+  "smtp_yahoo_requires": "Yahoo richiede una password per applicazione",
+  "smtp_yahoo_requires_app_password": "Yahoo richiede una password per applicazione.",
+
+  "smtp_custom_help_title": "SMTP personalizzato",
+  "smtp_custom_help_intro": "Seleziona un provider per visualizzare l’aiuto dettagliato",
+  "smtp_custom_help_requirements": "Per un server SMTP personalizzato, inserisci:",
+
+  "mailing_disabled_help": "L’invio delle email è disattivato. Attivalo per configurare SMTP, creare campagne o gestire i modelli.",
+
+  "smtp_server": "Server SMTP",
+  "smtp_tls_recommended": "TLS consigliato",
+  "smtp_tls_required": "TLS obbligatorio",
+
+  "smtp_custom_select_provider_help": "Seleziona un provider dall’elenco per visualizzare l’aiuto dettagliato.",
+  "smtp_custom_requirements_intro": "Per un server SMTP personalizzato, inserisci:",
+  "smtp_custom_host": "Nome host del server SMTP",
+  "smtp_custom_port": "Porta 465 o 587",
+  "smtp_custom_tls_ssl": "TLS o SSL in base al provider",
+
+  "settings": "Impostazioni",
+  "settings_subtitle": "Configurazione dell’applicazione",
+
+  "general_settings": "Impostazioni generali",
+  "language": "Lingua",
+  "timezone": "Fuso orario",
+  "timezone_placeholder": "Europe/Rome",
+  "admin_email": "Email amministratore",
+
+  "default_subscription_settings": "Impostazioni di abbonamento predefinite",
+  "default_subscription_duration_days": "Durata predefinita dell’abbonamento (giorni)",
+  "delete_user_after_expiry": "Elimina l’utente X giorni dopo la scadenza",
+  "disable_user_on_expiration": "Disabilita l’utente alla scadenza",
+
+  "status_warning_delays": "Ritardi di avviso dello stato",
+  "days_before_expiration_preavis": "Giorni prima della scadenza (preavviso)",
+  "days_before_expiration_relance": "Giorni prima della scadenza (promemoria)",
+
+  "system_settings": "Impostazioni di sistema",
+  "enable_scheduled_tasks": "Abilita attività pianificate",
+  "maintenance_mode": "Modalità manutenzione",
+  "debug_mode": "Modalità debug",
+
+  "gift_success": "Abbonamento assegnato con successo",
+  "users_updated": "utenti aggiornati",
+  "days_added": "giorni aggiunti",
+  "unknown_error": "Errore sconosciuto",
+  "request_failed": "Richiesta non riuscita",
+  
+   "not_available": "Non disponibile",
+   
+   "task_disable_expired_users": "Disattiva utenti scaduti"
+
 
 
 }

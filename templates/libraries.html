@@ -2,9 +2,9 @@
 {% set active_page = 'servers' %}
 {% set active_tab = 'libraries' %}
 
-{% block title %}Libraries - VODUM{% endblock %}
-{% block header_title %}Libraries{% endblock %}
-{% block header_subtitle %}Manage all libraries across servers{% endblock %}
+{% block title %}{{ t("libraries") }} - VODUM{% endblock %}
+{% block header_title %}{{ t("libraries") }}{% endblock %}
+{% block header_subtitle %}{{ t("libraries_subtitle") }}{% endblock %}
 
 {% block content %}
 
@@ -13,7 +13,7 @@
 <form method="post" action="{{ url_for('bulk_grant_libraries') }}" id="lib-form">
 
 <div class="flex justify-between items-center mb-3">
-    <h2 class="text-sm font-semibold">All Libraries</h2>
+    <h2 class="text-sm font-semibold">{{ t("all_libraries") }}</h2>
 
     <!-- Zone des boutons dynamiques -->
     <div id="bulk-buttons" class="flex gap-2"></div>
@@ -26,11 +26,11 @@
         <th class="px-3 py-2">
           <input type="checkbox" id="check-all">
         </th>
-        <th class="px-3 py-2 text-left">Server</th>
-        <th class="px-3 py-2 text-left">Name</th>
-        <th class="px-3 py-2 text-left">Type</th>
-        <th class="px-3 py-2 text-left">ID</th>
-        <th class="px-3 py-2 text-left">Users</th>
+        <th class="px-3 py-2 text-left">{{ t("server") }}</th>
+        <th class="px-3 py-2 text-left">{{ t("name") }}</th>
+        <th class="px-3 py-2 text-left">{{ t("type") }}</th>
+        <th class="px-3 py-2 text-left">{{ t("id") }}</th>
+        <th class="px-3 py-2 text-left">{{ t("users") }}</th>
       </tr>
     </thead>
     <tbody>

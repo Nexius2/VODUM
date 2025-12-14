@@ -14,9 +14,9 @@
     {{ t("server_information") }}
 
     {% if server.type == 'plex' %}
-      <span class="px-2 py-0.5 rounded-full bg-amber-700/40 text-amber-300 text-[10px]">Plex</span>
+      <span class="px-2 py-0.5 rounded-full bg-amber-700/40 text-amber-300 text-[10px]">{{ t("plex") }}</span>
     {% elif server.type == 'jellyfin' %}
-      <span class="px-2 py-0.5 rounded-full bg-blue-700/30 text-blue-300 text-[10px]">Jellyfin</span>
+      <span class="px-2 py-0.5 rounded-full bg-blue-700/30 text-blue-300 text-[10px]">{{ t("jellyfin") }}</span>
     {% else %}
       <span class="px-2 py-0.5 rounded-full bg-slate-700/40 text-slate-300 text-[10px]">{{ server.type }}</span>
     {% endif %}
@@ -34,8 +34,8 @@
       {{ t("server_type") }}
       <select name="type"
               class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-        <option value="plex" {% if server.type == 'plex' %}selected{% endif %}>Plex</option>
-        <option value="jellyfin" {% if server.type == 'jellyfin' %}selected{% endif %}>Jellyfin</option>
+        <option value="plex" {% if server.type == 'plex' %}selected{% endif %}>{{ t("plex") }}</option>
+        <option value="jellyfin" {% if server.type == 'jellyfin' %}selected{% endif %}>{{ t("jellyfin") }}</option>
         <option value="other" {% if server.type == 'other' %}selected{% endif %}>{{ t("other") }}</option>
       </select>
     </label>

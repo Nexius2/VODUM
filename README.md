@@ -123,6 +123,8 @@ docker run -d \
 - All configuration is managed through the web interface
 - Settings are stored in the database
 
+---
+
 ### 🛣️ Roadmap (excerpt)
 
 - Full Jellyfin integration
@@ -131,6 +133,8 @@ docker run -d \
 - Role-based permission profiles
 - Public API
 - UI / UX improvements
+
+---
 
 ### 📄 License
 

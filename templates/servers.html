@@ -42,8 +42,9 @@
         {{ t("server_type") }}*
         <select name="type"
                 class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm">
-          <option value="plex">Plex</option>
-          <option value="jellyfin">Jellyfin</option>
+          <option value="plex">{{ t("plex") }}</option>
+		  <option value="jellyfin">{{ t("jellyfin") }}</option>
+
           <!-- <option value="other">{{ t("other") }}</option>-->
         </select>
       </label>

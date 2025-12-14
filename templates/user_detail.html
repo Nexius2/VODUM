@@ -4,7 +4,7 @@
 {% block title %}{{ t("user") }} - {{ user.username }}{% endblock %}
 
 {% block header_title %}
-User: {{ user.username }}
+{{ t("user") }}: {{ user.username }}
 {% endblock %}
 
 {% block header_actions %}
@@ -135,7 +135,7 @@ User: {{ user.username }}
 
       <label class="text-sm">
         {{ t("subscription_active") }}
-        <input type="text" value="{{ user.subscription_active if user.subscription_active is not none else '—' }}"
+        <input type="text" value="{{ user.subscription_active if user.subscription_active is not none else t("not_available") }}"
                readonly class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60">
       </label>
 
@@ -281,7 +281,7 @@ User: {{ user.username }}
     <div>
       <div class="text-sm font-semibold">{{ s.name }}</div>
       <div class="text-xs text-slate-400 break-all">
-        {{ s.url or s.local_url or s.public_url or "—" }}
+        {{ s.url or s.local_url or s.public_url or t("not_available") }}
       </div>
     </div>
 

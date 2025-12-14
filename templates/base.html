@@ -127,7 +127,7 @@
                 {% if category=='success' %}bg-emerald-900/40 text-emerald-100
                 {% elif category=='error' %}bg-rose-900/40 text-rose-100
                 {% else %}bg-slate-800 text-slate-100{% endif %}">
-                {{ message }}
+                {{ t(message) }}
               </div>
             {% endfor %}
             </div>

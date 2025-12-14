@@ -299,6 +299,15 @@ def run_migrations():
         "status": "disabled"
     })
 
+    # Tâche disable_expired_users (désactivation des accès Plex à l'expiration)
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "disable_expired_users",
+        "description": "Désactive les accès Plex des utilisateurs expirés",
+        "schedule": "0 */12 * * *",  # toutes les 12 heures
+        "enabled": 0,                # pilotée par settings.disable_on_expiry
+        "status": "idle"
+    })
+
 
     # Paramètres de base
     cursor.execute("SELECT default_language FROM settings WHERE id = 1")
