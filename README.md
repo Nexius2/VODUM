@@ -1,36 +1,139 @@
-VODUM — Media Server Subscription Manager (Beta)
+VODUM — Media Server Subscription & Access Manager (Beta)
 
-VODUM is a self-hosted tool to manage Plex users (Jellyfin coming soon), track subscriptions, control library access, and automate notifications — designed with Docker and Unraid in mind.
+VODUM is a self-hosted web application designed to manage users, libraries and subscriptions for media servers such as Plex (Jellyfin support in progress).
 
-⚠️ Beta: features and database schema may evolve. Backups are recommended.
+It acts as a central control panel to:
 
-✨ Highlights
+manage who has access to your servers,
 
-🎬 User management: users, servers, libraries, access rights — all centralized
+control which libraries are shared,
 
-📆 Subscription lifecycle: expiration tracking, status automation (active, reminder, expired…)
+track subscription status,
 
-✉️ Email notifications: customizable templates, pre-expiry reminders & post-expiry actions
+and automate follow-up emails and access restrictions.
 
-🧱 Unraid-friendly: persistent appdata, clean startup, auto DB init, migrations, logs
+⚠️ Beta: database structure and features may evolve. Regular backups are recommended.
+
+🎯 What is VODUM for?
+
+VODUM is built for Plex administrators who:
+
+share their server with friends, family or paying users,
+
+need a clear view of active / expired users,
+
+want to automate access management and notifications,
+
+and avoid manual tracking in spreadsheets or notes.
+
+✨ Core Features
+👤 User Management (Plex / Jellyfin)
+
+Centralized list of all users
+
+Plex users retrieved via the official API
+
+Users can exist even without an active share
+
+User status automatically derived from subscription state
+
+🟡 Jellyfin support is currently in development
+
+🗂️ Server & Library Management
+
+Manage multiple media servers
+
+Associate users with specific servers
+
+Control which libraries are shared per user
+
+Store advanced Plex sharing options:
+
+sync permissions
+
+camera upload
+
+channel access
+
+media filters (movies / TV / music)
+
+Designed to reflect real Plex access, not just local metadata.
+
+💳 Subscription Management
+
+User-based subscription system
+
+Start date / end date tracking
+
+Automatic subscription status:
+
+Active
+
+Upcoming expiration
+
+Expired
+
+Subscription state drives access and notifications
+
+✉️ Email Automation
+
+Configurable email templates stored in database
+
+Multiple email types:
+
+upcoming expiration reminder
+
+renewal reminder
+
+subscription expired notice
+
+Per-template delay configuration (number of days before/after expiration)
+
+Daily automated mail processing
+
+Planned:
+
+Simple SMTP presets (Gmail, Outlook…)
+
+Advanced OAuth authentication
+
+🔒 Automated Access Control
+
+Automatic restriction of library access for expired users
+
+Access removal is done directly on Plex servers
+
+No user deletion — access can be restored instantly
+
+Multi-server aware logic
+
+Designed to be safe, reversible and auditable.
+
+🧱 Docker & Unraid Friendly
+
+Fully containerized
+
+Persistent /appdata structure
+
+Automatic database initialization
+
+One-time schema creation
+
+Versioned migrations
+
+Timestamped logs
 
 🚀 Quick Start (Docker / Unraid)
 Persistent storage
 
-VODUM uses a single persistent root directory (recommended on Unraid):
+VODUM uses a single persistent directory:
 
 /appdata
  ├── database.db
  ├── backups/
  └── logs/
 
-
-✅ Make sure /appdata is mapped to a persistent volume.
-
 Docker run
-
-Replace the image name with your actual published image.
-
 docker run -d \
   --name vodum \
   -p 5000:5000 \
@@ -39,47 +142,25 @@ docker run -d \
 
 ⚙️ Configuration
 
-No mandatory environment variables for now.
+No mandatory environment variables
 
-All configuration is stored in the database and editable via the UI.
+All settings are managed through the web interface
 
-🧩 Unraid notes
+Configuration is stored in the database
 
-VODUM is designed to behave nicely on Unraid:
+🛣️ Roadmap (excerpt)
 
-Persistent /appdata
-
-Clean startup logic
-
-Automatic DB initialization
-
-Automatic V1 → V2 migration
-
-Logs visible via docker logs
-
-📦 An Unraid Community Apps template is planned.
-
-🔐 Security
-
-No credentials are hardcoded
-
-Sensitive data is stored only locally in the database
-
-Intended for private / self-hosted deployments
-
-🛣️ Roadmap (non-exhaustive)
-
-Jellyfin integration
+Jellyfin full integration
 
 Multi-language UI
 
-OAuth-based email providers (Gmail, Outlook…)
+OAuth mail providers
 
-Advanced permission profiles
+Role-based permission profiles
 
-API endpoints
+Public API
 
-UI improvements
+UI & UX improvements
 
 🤝 Contributing
 
@@ -87,11 +168,11 @@ Contributions are welcome.
 
 Please:
 
-keep migrations backward-safe
+keep database migrations backward-safe
 
-respect the database architecture
+document schema changes
 
-document any schema changes
+respect existing access logic
 
 📄 License
 
