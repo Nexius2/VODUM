@@ -1,32 +1,23 @@
-VODUM –  Media server Subscription Manager (BETA)
+VODUM — Media Server Subscription Manager (Beta)
 
-VODUM is a self-hosted management tool designed to monitor Plex & jellyfin (on it's way) users, manage subscriptions, control library access, and automate notifications.
+VODUM is a self-hosted tool to manage Plex users (Jellyfin coming soon), track subscriptions, control library access, and automate notifications — designed with Docker and Unraid in mind.
 
+⚠️ Beta: features and database schema may evolve. Backups are recommended.
 
-✨ Key Features
+✨ Highlights
 
-🎬 user management
+🎬 User management: users, servers, libraries, access rights — all centralized
 
-Track users, servers, libraries, and access rights
+📆 Subscription lifecycle: expiration tracking, status automation (active, reminder, expired…)
 
-Centralized view of all media servers
+✉️ Email notifications: customizable templates, pre-expiry reminders & post-expiry actions
 
-📆 Subscription lifecycle
-
-Expiration tracking
-
-Status automation (active, reminder, expired…)
-
-✉️ Email notifications
-
-Customizable templates
-
-Pre-expiry reminders & post-expiry actions
+🧱 Unraid-friendly: persistent appdata, clean startup, auto DB init, migrations, logs
 
 🚀 Quick Start (Docker / Unraid)
-Persistent directories
+Persistent storage
 
-VODUM uses the following persistent paths:
+VODUM uses a single persistent root directory (recommended on Unraid):
 
 /appdata
  ├── database.db
@@ -34,16 +25,11 @@ VODUM uses the following persistent paths:
  └── logs/
 
 
-Make sure /appdata is mapped to a persistent volume in Docker / Unraid.
+✅ Make sure /appdata is mapped to a persistent volume.
 
-Environment
+Docker run
 
-No mandatory environment variables for now.
-All configuration is stored in the database and editable via the UI.
-
-🐳 Docker Image
-
-(Replace with your actual image name once published)
+Replace the image name with your actual published image.
 
 docker run -d \
   --name vodum \
@@ -51,9 +37,15 @@ docker run -d \
   -v /mnt/user/appdata/vodum:/appdata \
   vodum/vodum:latest
 
-🧩 Unraid Support
+⚙️ Configuration
 
-VODUM is designed to be Unraid-friendly:
+No mandatory environment variables for now.
+
+All configuration is stored in the database and editable via the UI.
+
+🧩 Unraid notes
+
+VODUM is designed to behave nicely on Unraid:
 
 Persistent /appdata
 
@@ -63,27 +55,25 @@ Automatic DB initialization
 
 Automatic V1 → V2 migration
 
-Logs visible via Docker logs
+Logs visible via docker logs
 
-An Unraid Community App template is planned.
+📦 An Unraid Community Apps template is planned.
 
-
-
-🔐 Security Notes
+🔐 Security
 
 No credentials are hardcoded
 
-Sensitive data is stored only in the local database
+Sensitive data is stored only locally in the database
 
-Designed for private / self-hosted environments
+Intended for private / self-hosted deployments
 
-🛣️ Roadmap (Non-exhaustive)
+🛣️ Roadmap (non-exhaustive)
 
 Jellyfin integration
 
 Multi-language UI
 
-OAuth-based email providers
+OAuth-based email providers (Gmail, Outlook…)
 
 Advanced permission profiles
 
@@ -93,7 +83,7 @@ UI improvements
 
 🤝 Contributing
 
-Contributions are welcome!
+Contributions are welcome.
 
 Please:
 
@@ -106,4 +96,3 @@ document any schema changes
 📄 License
 
 MIT
-
