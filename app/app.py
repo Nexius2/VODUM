@@ -1787,8 +1787,64 @@ def create_app():
     # -----------------------------
     # BACKUP
     # -----------------------------
+
+    def restore_db_file(backup_path: Path):
+        db_path = Path(app.config["DATABASE"])
+
+        if not backup_path.exists():
+            raise FileNotFoundError(str(backup_path))
+
+        # Sauvegarde de précaution
+        backup_dir = ensure_backup_dir()
+        timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+        if db_path.exists():
+            shutil.copy2(db_path, backup_dir / f"pre-restore-{timestamp}.db")
+
+        shutil.copy2(backup_path, db_path)
+
+
+    def safe_restore(backup_path: Path):
+        db = get_db()
+
+        # 1️⃣ Désactiver toutes les tâches
+        db.execute("UPDATE tasks SET enabled = 0")
+        db.commit()
+
+        # 2️⃣ Attendre que toutes les tâches soient arrêtées
+        for _ in range(30):
+            running = db.execute(
+                "SELECT COUNT(*) FROM tasks WHERE status = 'running'"
+            ).fetchone()[0]
+
+            if running == 0:
+                break
+            time.sleep(1)
+        else:
+            raise RuntimeError("Some tasks are still running")
+
+        # 3️⃣ Passer l’application en maintenance
+        db.execute(
+            "UPDATE settings SET maintenance_mode = 1 WHERE id = 1"
+        )
+        db.commit()
+
+        # 4️⃣ Fermer TOUTES les connexions Flask
+        if "db" in g:
+            g.db.close()
+            g.db = None
+
+        # 5️⃣ Restaurer le fichier DB (SANS SQL)
+        restore_db_file(backup_path)
+
+        # 6️⃣ STOP
+        # 👉 l’app est volontairement inutilisable
+        # 👉 l’utilisateur DOIT redémarrer le conteneur
+
+
+
     @app.route("/backup", methods=["GET", "POST"])
     def backup_page():
+        t = get_translator()
         conn = get_db()
         cursor = conn.cursor()
 
@@ -1807,30 +1863,74 @@ def create_app():
             if action == "create":
                 try:
                     name = create_backup_file()
-                    flash(f"Backup créé : {name}", "success")
+                    flash(
+                        t("backup_created").format(name=name),
+                        "success"
+                    )
                 except Exception as e:
-                    flash(f"Erreur lors de la création du backup : {e}", "error")
+                    flash(
+                        t("backup_create_error").format(error=str(e)),
+                        "error"
+                    )
 
             # ───────────────────────────────
             #  Restauration d'un backup
             # ───────────────────────────────
             elif action == "restore":
-                file = request.files.get("backup_file")
-                if not file or file.filename == "":
-                    flash("Aucun fichier fourni", "error")
+                selected = request.form.get("selected_backup")
+
+                # 1️⃣ Restore depuis un backup existant
+                if selected:
+                    backup_path = Path(app.config["BACKUP_DIR"]) / selected
+
+                    if not backup_path.exists():
+                        flash(
+                            t("backup_not_found"),
+                            "error"
+                        )
+                    else:
+                        try:
+                            safe_restore(backup_path)
+                            flash(
+                                t("backup_restore_success_restart"),
+                                "success"
+                            )
+                        except Exception as e:
+                            flash(
+                                t("backup_restore_error").format(error=str(e)),
+                                "error"
+                            )
+
+                # 2️⃣ Restore par upload
                 else:
-                    temp_dir = Path("/tmp")
-                    temp_dir.mkdir(exist_ok=True)
-                    temp_path = temp_dir / f"restore-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.db"
-                    file.save(temp_path)
-                    try:
-                        restore_backup_file(temp_path)
-                        flash("Backup restauré. Redémarrez le conteneur pour prendre en compte la base restaurée.", "success")
-                    except Exception as e:
-                        flash(f"Erreur lors de la restauration : {e}", "error")
-                    finally:
-                        if temp_path.exists():
-                            temp_path.unlink(missing_ok=True)
+                    file = request.files.get("backup_file")
+
+                    if not file or file.filename == "":
+                        flash(
+                            t("backup_no_file"),
+                            "error"
+                        )
+                    else:
+                        temp_dir = Path("/tmp")
+                        temp_dir.mkdir(exist_ok=True)
+                        temp_path = temp_dir / f"restore-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.db"
+
+                        file.save(temp_path)
+
+                        try:
+                            restore_backup_file(temp_path)
+                            flash(
+                                t("backup_restore_success_restart"),
+                                "success"
+                            )
+                        except Exception as e:
+                            flash(
+                                t("backup_restore_error").format(error=str(e)),
+                                "error"
+                            )
+                        finally:
+                            if temp_path.exists():
+                                temp_path.unlink(missing_ok=True)
 
             # ───────────────────────────────
             #  Sauvegarde des paramètres (rétention)
@@ -1838,11 +1938,21 @@ def create_app():
             elif action == "save_settings":
                 try:
                     days = int(request.form.get("backup_retention_days", "30"))
-                    cursor.execute("UPDATE settings SET backup_retention_days = ?", (days,))
+                    cursor.execute(
+                        "UPDATE settings SET backup_retention_days = ?",
+                        (days,)
+                    )
                     conn.commit()
-                    flash("Paramètres sauvegardés.", "success")
+
+                    flash(
+                        t("backup_settings_saved"),
+                        "success"
+                    )
                 except Exception as e:
-                    flash(f"Erreur lors de la sauvegarde des paramètres : {e}", "error")
+                    flash(
+                        t("backup_settings_error").format(error=str(e)),
+                        "error"
+                    )
 
             backups = list_backups()
 
@@ -1855,9 +1965,35 @@ def create_app():
 
 
 
+
+
     # -----------------------------
     # SETTINGS / PARAMÈTRES
     # -----------------------------
+
+    @app.before_request
+    def maintenance_guard():
+        # Routes toujours autorisées
+        allowed = (
+            request.path.startswith("/static"),
+            request.path.startswith("/set_language"),
+        )
+
+        if any(allowed):
+            return
+
+        db = get_db()
+        row = db.execute(
+            "SELECT maintenance_mode FROM settings WHERE id = 1"
+        ).fetchone()
+
+        if row and row["maintenance_mode"] == 1:
+            return render_template(
+                "maintenance.html",
+                active_page=None
+            ), 503
+
+
     @app.route("/settings", methods=["GET", "POST"])
     def settings_page():
         db = get_db()

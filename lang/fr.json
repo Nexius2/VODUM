@@ -234,7 +234,7 @@
   "plex_id": "ID Plex",
   "plex_role": "Rôle Plex",
   "plex_servers": "Serveurs Plex",
-  "plex_token": "Token Plex",
+  "server_token": "Token",
 
   "pre_expired": "Expire bientôt",
   "preavis": "Pré-expiration",
@@ -543,7 +543,32 @@
   
   "not_available": "Non disponible",
   
-  "task_disable_expired_users": "Désactivation des utilisateurs expirés"
+  "task.disable_expired_users": "Désactivation des utilisateurs expirés",
+
+
+  "maintenance_title": "Maintenance",
+  "maintenance_subtitle": "Application temporairement indisponible",
+
+  "maintenance_restore_done_title": "Restauration terminée",
+  "maintenance_restore_done_desc": "La base de données a été restaurée avec succès.",
+  "maintenance_restart_required": "Merci de redémarrer le conteneur pour reprendre l'utilisation de l'application.",
+
+"backup_created": "Backup créé : {name}",
+  "backup_created": "Backup créé : {name}",
+  "backup_create_error": "Erreur lors de la création du backup : {error}",
+
+  "backup_not_found": "Backup introuvable",
+  "backup_no_file": "Aucun fichier fourni",
+
+  "backup_restore_success_restart": "Backup restauré. Merci de redémarrer le conteneur pour prendre en compte la base restaurée.",
+  "backup_restore_error": "Erreur lors de la restauration : {error}",
+
+  "backup_settings_saved": "Paramètres sauvegardés.",
+  "backup_settings_error": "Erreur lors de la sauvegarde des paramètres : {error}",
+
+"confirm_restore": "⚠️ Cette action va écraser la base de données actuelle. Continuer ?",
+"public_url": "URL publique"
+
 
 
 
