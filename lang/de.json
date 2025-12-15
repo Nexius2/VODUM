@@ -234,7 +234,7 @@
   "plex_id": "Plex-ID",
   "plex_role": "Plex-Rolle",
   "plex_servers": "Plex-Server",
-  "plex_token": "Plex-Token",
+  "server_token": "Token",
 
   "pre_expired": "Läuft bald ab",
   "preavis": "Vor Ablauf",
@@ -543,7 +543,33 @@
   
   "not_available": "Nicht verfügbar",
   
-   "task_disable_expired_users": "Abgelaufene Benutzer deaktivieren"
+   "task.disable_expired_users": "Abgelaufene Benutzer deaktivieren",
+
+  "maintenance_title": "Wartung",
+  "maintenance_subtitle": "Anwendung vorübergehend nicht verfügbar",
+
+  "maintenance_restore_done_title": "Wiederherstellung abgeschlossen",
+  "maintenance_restore_done_desc": "Die Datenbank wurde erfolgreich wiederhergestellt.",
+  "maintenance_restart_required": "Bitte starten Sie den Container neu, um die Anwendung wieder verwenden zu können.",
+
+  "backup_created": "Backup erstellt: {name}",
+  "backup_create_error": "Fehler beim Erstellen des Backups: {error}",
+
+  "backup_not_found": "Backup nicht gefunden",
+  "backup_no_file": "Keine Datei bereitgestellt",
+
+  "backup_restore_success_restart": "Backup wiederhergestellt. Bitte starten Sie den Container neu, damit die wiederhergestellte Datenbank übernommen wird.",
+  "backup_restore_error": "Fehler bei der Wiederherstellung des Backups: {error}",
+
+  "backup_settings_saved": "Einstellungen gespeichert.",
+  "backup_settings_error": "Fehler beim Speichern der Einstellungen: {error}",
+
+  "confirm_restore": "⚠️ Diese Aktion überschreibt die aktuelle Datenbank. Fortfahren?",
+  
+  "public_url": "Öffentliche URL"
+
+
+
 
 
 

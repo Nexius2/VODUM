@@ -234,7 +234,7 @@
   "plex_id": "Plex ID",
   "plex_role": "Plex role",
   "plex_servers": "Plex Servers",
-  "plex_token": "Plex token",
+  "server_token": "Token",
 
   "pre_expired": "Expiring soon",
   "preavis": "Pre-expiration",
@@ -549,7 +549,32 @@
   
 "not_available": "Not available",
 
-"task_disable_expired_users": "Disable expired users"
+"task.disable_expired_users": "Disable expired users",
+
+
+  "maintenance_title": "Maintenance",
+  "maintenance_subtitle": "Application temporarily unavailable",
+
+  "maintenance_restore_done_title": "Restore completed",
+  "maintenance_restore_done_desc": "The database has been successfully restored.",
+  "maintenance_restart_required": "Please restart the container to resume using the application.",
+
+"backup_created": "Backup created: {name}",
+  "backup_created": "Backup created: {name}",
+  "backup_create_error": "Error while creating backup: {error}",
+
+  "backup_not_found": "Backup not found",
+  "backup_no_file": "No file provided",
+
+  "backup_restore_success_restart": "Backup restored. Please restart the container to apply the restored database.",
+  "backup_restore_error": "Error while restoring backup: {error}",
+
+  "backup_settings_saved": "Settings saved.",
+  "backup_settings_error": "Error while saving settings: {error}",
+"confirm_restore": "⚠️ This will overwrite the current database. Continue?",
+
+"public_url": "Public URL"
+
 
 
 }

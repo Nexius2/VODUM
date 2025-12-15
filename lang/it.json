@@ -234,7 +234,7 @@
   "plex_id": "ID Plex",
   "plex_role": "Ruolo Plex",
   "plex_servers": "Server Plex",
-  "plex_token": "Token Plex",
+  "server_token": "Token",
 
   "pre_expired": "In scadenza",
   "preavis": "Pre-scadenza",
@@ -543,7 +543,33 @@
   
    "not_available": "Non disponibile",
    
-   "task_disable_expired_users": "Disattiva utenti scaduti"
+   "task.disable_expired_users": "Disattiva utenti scaduti",
+
+  "maintenance_title": "Manutenzione",
+  "maintenance_subtitle": "Applicazione temporaneamente non disponibile",
+
+  "maintenance_restore_done_title": "Ripristino completato",
+  "maintenance_restore_done_desc": "Il database è stato ripristinato con successo.",
+  "maintenance_restart_required": "Riavviare il container per riprendere l'utilizzo dell'applicazione.",
+
+  "backup_created": "Backup creato: {name}",
+  "backup_create_error": "Errore durante la creazione del backup: {error}",
+
+  "backup_not_found": "Backup non trovato",
+  "backup_no_file": "Nessun file fornito",
+
+  "backup_restore_success_restart": "Backup ripristinato. Riavviare il container per applicare il database ripristinato.",
+  "backup_restore_error": "Errore durante il ripristino del backup: {error}",
+
+  "backup_settings_saved": "Impostazioni salvate.",
+  "backup_settings_error": "Errore durante il salvataggio delle impostazioni: {error}",
+
+  "confirm_restore": "⚠️ Questa operazione sovrascriverà il database corrente. Continuare?",
+  
+  "public_url": "URL pública"
+
+
+
 
 
 

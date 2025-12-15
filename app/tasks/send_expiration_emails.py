@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
 """
-send_expiration_emails.py — VERSION AMÉLIORÉE
+send_expiration_emails.py — VERSION CORRIGÉE
 -----------------------------------------------
-✓ Envoi aux emails secondaires
-✓ Suppression auto des accès Plex après mail FIN
-✓ Création jobs SYNC + lancement apply_plex_access_updates
-✓ Logging complet (TXT + tasks_engine)
-✓ Anti-doublons 100% fiable
+✓ Rendu correct des variables {username}, {days_left}, {expiration_date}
+✓ Utilise build_user_context + render_mail (comme l’UI)
+✓ Emails secondaires conservés
+✓ Anti-doublons fiable
+✓ Logging fichier + tasks_engine
 """
 
 import smtplib
@@ -15,8 +15,9 @@ from datetime import datetime, date, timedelta
 from email.message import EmailMessage
 
 from db_utils import open_db
-from tasks_engine import task_logs, run_task
+from tasks_engine import task_logs
 from logging_utils import get_logger
+from mailing_utils import build_user_context, render_mail
 
 log = get_logger("send_expiration_emails")
 
@@ -70,9 +71,6 @@ def send_email(subject, body, to_email):
         return False
 
 
-
-
-
 # --------------------------------------------------------
 # Tâche principale
 # --------------------------------------------------------
@@ -92,10 +90,9 @@ def run(task_id=None, db=None):
             msg = "Mailing désactivé → aucune action."
             log.warning(msg)
             task_logs(task_id, "info", msg)
-            conn.close()
             return
 
-        log.debug("Mailing activé. Lecture des templates email…")
+        log.debug("Mailing activé. Chargement des templates…")
 
         # --------------------------------------------------------
         # 2) Charger tous les templates
@@ -114,36 +111,41 @@ def run(task_id=None, db=None):
             WHERE expiration_date IS NOT NULL
         """).fetchall()
 
-        log.info(f"{len(users)} utilisateurs à analyser")
-        task_logs(task_id, "info", f"{len(users)} utilisateurs analysés")
-
         today = date.today()
         sent_count = 0
+
+        log.info(f"{len(users)} utilisateurs analysés")
+        task_logs(task_id, "info", f"{len(users)} utilisateurs analysés")
 
         # --------------------------------------------------------
         # 4) Boucle utilisateurs
         # --------------------------------------------------------
         for u in users:
             uid = u["id"]
+            username = u["username"]
             email1 = u["email"]
             email2 = u["second_email"]
-            username = u["username"]
             exp_raw = u["expiration_date"]
 
-            log.debug(f"[USER] #{uid} username={username} emails={[email1, email2]} exp={exp_raw}")
+            log.debug(
+                f"[USER] #{uid} username={username} "
+                f"emails={[email1, email2]} exp={exp_raw}"
+            )
 
             if not email1 and not email2:
-                log.debug(f"[USER] #{uid} ignoré → aucun email renseigné")
+                log.debug(f"[USER] #{uid} ignoré → aucun email")
                 continue
 
-            # Décodage de la date
+            # Parsing date expiration
             try:
                 exp_date = datetime.fromisoformat(exp_raw).date()
-            except:
+            except Exception:
                 log.error(f"[USER] #{uid} date expiration invalide : {exp_raw}")
                 continue
 
-            # Rassemble les emails du user
+            days_left = (exp_date - today).days
+
+            # Emails destinataires
             recipients = []
             if email1:
                 recipients.append(email1)
@@ -166,7 +168,17 @@ def run(task_id=None, db=None):
 
                         success_any = False
                         for r in recipients:
-                            if send_email(tpl["subject"], tpl["body"], r):
+                            context = build_user_context({
+                                "username": username,
+                                "email": r,
+                                "expiration_date": exp_date.isoformat(),
+                                "days_left": days_left,
+                            })
+
+                            subject = render_mail(tpl["subject"], context)
+                            body = render_mail(tpl["body"], context)
+
+                            if send_email(subject, body, r):
                                 success_any = True
 
                         if success_any:
@@ -175,9 +187,6 @@ def run(task_id=None, db=None):
                                 VALUES (?, 'fin', ?)
                             """, (uid, exp_date))
                             sent_count += 1
-
-                            
-
                         else:
                             log.error(f"[USER] #{uid} → échec ENVOI FIN")
 
@@ -190,10 +199,7 @@ def run(task_id=None, db=None):
                     continue
 
                 days_before = tpl["days_before"]
-                #target_date = today + timedelta(days=days_before)
-                days_left = (exp_date - today).days
 
-                #if exp_date == target_date:
                 if 0 < days_left <= days_before:
                     already = cur.execute("""
                         SELECT 1 FROM sent_emails
@@ -205,7 +211,17 @@ def run(task_id=None, db=None):
 
                         success_any = False
                         for r in recipients:
-                            if send_email(tpl["subject"], tpl["body"], r):
+                            context = build_user_context({
+                                "username": username,
+                                "email": r,
+                                "expiration_date": exp_date.isoformat(),
+                                "days_left": days_left,
+                            })
+
+                            subject = render_mail(tpl["subject"], context)
+                            body = render_mail(tpl["body"], context)
+
+                            if send_email(subject, body, r):
                                 success_any = True
 
                         if success_any:
@@ -233,7 +249,7 @@ def run(task_id=None, db=None):
     finally:
         try:
             conn.close()
-        except:
+        except Exception:
             pass
 
         log.info("=== SEND EXPIRATION EMAILS : FIN ===")

@@ -234,7 +234,7 @@
   "plex_id": "ID Plex",
   "plex_role": "Rol Plex",
   "plex_servers": "Servidores Plex",
-  "plex_token": "Token Plex",
+  "server_token": "Token",
 
   "pre_expired": "Expira pronto",
   "preavis": "Pre-expiración",
@@ -543,8 +543,33 @@
 
 "not_available": "No disponible",
 
- "task_disable_expired_users": "Desactivar usuarios expirados"
- 
+ "task.disable_expired_users": "Desactivar usuarios expirados",
+
+   "maintenance_title": "Mantenimiento",
+  "maintenance_subtitle": "Aplicación temporalmente no disponible",
+
+  "maintenance_restore_done_title": "Restauración completada",
+  "maintenance_restore_done_desc": "La base de datos se ha restaurado correctamente.",
+  "maintenance_restart_required": "Por favor, reinicie el contenedor para volver a utilizar la aplicación.",
+
+  "backup_created": "Copia de seguridad creada: {name}",
+  "backup_create_error": "Error al crear la copia de seguridad: {error}",
+
+  "backup_not_found": "Copia de seguridad no encontrada",
+  "backup_no_file": "No se proporcionó ningún archivo",
+
+  "backup_restore_success_restart": "Copia de seguridad restaurada. Por favor, reinicie el contenedor para aplicar la base de datos restaurada.",
+  "backup_restore_error": "Error al restaurar la copia de seguridad: {error}",
+
+  "backup_settings_saved": "Configuración guardada.",
+  "backup_settings_error": "Error al guardar la configuración: {error}",
+
+  "confirm_restore": "⚠️ Esta acción sobrescribirá la base de datos actual. ¿Continuar?",
+  
+"public_url": "URL pública"
+
+
+
 
 
 

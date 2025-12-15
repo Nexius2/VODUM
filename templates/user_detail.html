@@ -141,13 +141,13 @@
 
       <label class="text-sm">
         {{ t("subscription_status") }}
-        <input type="text" value="{{ user.subscription_status or '—' }}"
+        <input type="text" value="{{ user.subscription_status or t("not_available") }}"
                readonly class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60">
       </label>
 
       <label class="text-sm">
         {{ t("subscription_plan") }}
-        <input type="text" value="{{ user.subscription_plan or '—' }}"
+        <input type="text" value="{{ user.subscription_plan or t("not_available") }}"
                readonly class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60">
       </label>
 
@@ -158,13 +158,13 @@
 
       <label class="text-sm">
         {{ t("joined_at") }}
-        <input type="text" value="{{ user.joined_at or '—' }}"
+        <input type="text" value="{{ user.joined_at or t("not_available") }}"
                readonly class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 cursor-not-allowed">
       </label>
 
       <label class="text-sm">
         {{ t("accepted_at") }}
-        <input type="text" value="{{ user.accepted_at or '—' }}"
+        <input type="text" value="{{ user.accepted_at or t("not_available") }}"
                readonly class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 cursor-not-allowed">
       </label>
 
@@ -196,19 +196,19 @@
 
       <label class="text-sm">
         {{ t("creation_date") }}
-        <input type="text" value="{{ user.creation_date or '—' }}" readonly
+        <input type="text" value="{{ user.creation_date or t("not_available") }}" readonly
                class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60 cursor-not-allowed">
       </label>
 
       <label class="text-sm">
         {{ t("last_status") }}
-        <input type="text" value="{{ user.last_status or '—' }}" readonly
+        <input type="text" value="{{ t(user.last_status) if user.last_status else t('not_available') }}" readonly
                class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60 cursor-not-allowed">
       </label>
 
       <label class="text-sm md:col-span-2">
         {{ t("status_changed_at") }}
-        <input type="text" value="{{ user.status_changed_at or '—' }}" readonly
+        <input type="text" value="{{ user.status_changed_at or t("not_available") }}" readonly
                class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60 cursor-not-allowed">
       </label>
 
@@ -225,13 +225,13 @@
   <div>
     <h2 class="text-sm font-semibold mb-2">{{ t("notes") }}</h2>
     <form method="post">
-      <textarea name="notes" rows="8"
+      <textarea id="notes_field" name="notes" rows="8"
         class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm resize-vertical">{{ user.notes or '' }}</textarea>
 
       <div class="mt-3 text-right">
-        <button class="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs">
+        <!-- <button class="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs">
           {{ t("save") }}
-        </button>
+        </button>-->
       </div>
     </form>
   </div>
@@ -389,5 +389,37 @@
 {% endfor %}
 
 </div>
+
+<script>
+document.querySelector('[form="user_main_form"]')
+  .addEventListener('click', function () {
+
+    const mainForm = document.getElementById('user_main_form');
+
+    // 🔹 NOTES
+    const notes = document.getElementById('notes_field');
+    if (notes && !mainForm.querySelector('input[name="notes"]')) {
+      const hiddenNotes = document.createElement('input');
+      hiddenNotes.type = 'hidden';
+      hiddenNotes.name = 'notes';
+      hiddenNotes.value = notes.value;
+      mainForm.appendChild(hiddenNotes);
+    }
+
+    // 🔹 BIBLIOTHÈQUES (toggles)
+    document.querySelectorAll('form[action*="toggle_library"]').forEach(f => {
+      const libId = f.querySelector('input[name="library_id"]').value;
+      const enabled = f.querySelector('button').classList.contains('bg-emerald-500');
+
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'library_' + libId;
+      input.value = enabled ? '1' : '0';
+      mainForm.appendChild(input);
+    });
+
+  });
+</script>
+
 
 {% endblock %}

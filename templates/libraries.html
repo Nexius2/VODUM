@@ -40,6 +40,7 @@
           <input type="checkbox"
                  class="lib-check"
                  data-server="{{ lib.server_id }}"
+				 data-server-name="{{ lib.server_name }}"
                  value="{{ lib.id }}"
                  name="library_ids">
         </td>
@@ -76,8 +77,15 @@ function refreshButtons() {
   checks.forEach(c => {
     if (c.checked) {
       const sid = c.dataset.server;
-      if (!byServer[sid]) byServer[sid] = [];
-      byServer[sid].push(c.value);
+      const sname = c.dataset.serverName;
+
+      if (!byServer[sid]) {
+        byServer[sid] = {
+          name: sname,
+          libs: []
+        };
+      }
+      byServer[sid].libs.push(c.value);
     }
   });
 
@@ -88,12 +96,13 @@ function refreshButtons() {
     btn.value = serverId;
     btn.className = "px-3 py-1 rounded-lg bg-primary hover:bg-primary-dark text-white text-xs";
 
-    // 🔥 Jinja génère la traduction AVANT que JS n’exécute le code
-    btn.textContent = "{{ t('grant_active_users') }} " + serverId;
+    btn.textContent =
+      "{{ t('grant_active_users') }} " + byServer[serverId].name;
 
     buttonZone.appendChild(btn);
   });
 }
+
 </script>
 
 

@@ -1,21 +1,24 @@
 #!/usr/bin/env python3
 
 """
-send_mail_campaigns.py — VERSION TXT LOGGING (PRO)
+send_mail_campaigns.py — VERSION CORRIGÉE
 --------------------------------------------------
-✓ Tous les logs → fichiers TXT (/logs/app.log)
-✓ ZERO log en DB sauf task_logs()
-✓ Très verbeux : DEBUG, INFO, WARNING, ERROR
-✓ Connexion DB locale, jamais celle du scheduler
-✓ Envoi SMTP robuste et logué
+✓ Rendu correct des variables ({username}, {email}, {expiration_date}, {days_left}, etc.)
+✓ Utilise build_user_context + render_mail (moteur unique du projet)
+✓ Logs TXT uniquement (/logs/app.log)
+✓ ZERO log DB hors task_logs()
+✓ DB locale uniquement
+✓ SMTP robuste et logué
 """
 
 import smtplib
 from email.mime.text import MIMEText
+from datetime import datetime, date
 
 from db_utils import open_db
 from tasks_engine import task_logs
 from logging_utils import get_logger
+from mailing_utils import build_user_context, render_mail
 
 log = get_logger("send_mail_campaigns")
 
@@ -59,7 +62,6 @@ def send_email(settings, to_email, subject, body):
         return False
 
 
-
 # --------------------------------------------------------
 # Task principale
 # --------------------------------------------------------
@@ -67,7 +69,6 @@ def run(task_id=None, db=None):
     task_logs(task_id, "info", "Tâche send_mail_campaigns démarrée")
     log.info("=== SEND MAIL CAMPAIGNS : DÉMARRAGE ===")
 
-    # Toujours utiliser une DB locale
     conn = open_db()
     conn.row_factory = __import__("sqlite3").Row
     cur = conn.cursor()
@@ -108,34 +109,46 @@ def run(task_id=None, db=None):
         # --------------------------------------------------------
         for camp in campaigns:
             camp_id = camp["id"]
-            subject = camp["subject"]
-            body = camp["body"]
+            raw_subject = camp["subject"]
+            raw_body = camp["body"]
             server_id = camp["server_id"]
             is_test = camp["is_test"]
 
             log.info(f"--- Campagne #{camp_id} ---")
-            log.debug(f"sujet={subject}, server_id={server_id}, test={is_test}")
+            log.debug(f"sujet={raw_subject}, server_id={server_id}, test={is_test}")
 
             task_logs(task_id, "info", f"Traitement campagne #{camp_id}")
 
             # Passer la campagne en "sending"
-            cur.execute("UPDATE mail_campaigns SET status='sending' WHERE id=?", (camp_id,))
+            cur.execute(
+                "UPDATE mail_campaigns SET status='sending' WHERE id=?",
+                (camp_id,)
+            )
             conn.commit()
 
             # --------------------------------------------------------
             # Destinataires
             # --------------------------------------------------------
             if is_test:
-                recipients = [{"id": 0, "email": settings["admin_email"], "username": "ADMIN"}]
+                recipients = [{
+                    "id": 0,
+                    "email": settings["admin_email"],
+                    "username": "ADMIN",
+                    "expiration_date": None
+                }]
                 log.info(f"Mode test → destinataire unique : {settings['admin_email']}")
             else:
-                if server_id == 0:
-                    cur.execute("SELECT id, email, username FROM users WHERE email IS NOT NULL")
+                if not server_id:
+                    cur.execute("""
+                        SELECT id, email, username, expiration_date
+                        FROM users
+                        WHERE email IS NOT NULL
+                    """)
                 else:
                     cur.execute("""
-                        SELECT u.id, u.email, u.username
+                        SELECT u.id, u.email, u.username, u.expiration_date
                         FROM users u
-                        JOIN user_servers us ON us.user_id=u.id
+                        JOIN user_servers us ON us.user_id = u.id
                         WHERE us.server_id=? AND u.email IS NOT NULL
                     """, (server_id,))
                 recipients = cur.fetchall()
@@ -144,6 +157,7 @@ def run(task_id=None, db=None):
 
             sent_count = 0
             error_count = 0
+            today = date.today()
 
             # --------------------------------------------------------
             # Boucle envoi mails
@@ -152,19 +166,36 @@ def run(task_id=None, db=None):
                 uid = user["id"]
                 email = user["email"]
                 username = user["username"]
+                exp_raw = user["expiration_date"]
+
+                # Calcul days_left si possible
+                days_left = None
+                if exp_raw:
+                    try:
+                        exp_date = datetime.fromisoformat(exp_raw).date()
+                        days_left = (exp_date - today).days
+                    except Exception:
+                        pass
 
                 log.debug(f"[USER] #{uid} email={email} username={username}")
 
-                # Substitutions du corps
-                final_body = (
-                    body.replace("{username}", username or "")
-                        .replace("{email}", email or "")
-                )
+                # ----------------------------------------------------
+                # CONTEXTE DE RENDU UNIFIÉ
+                # ----------------------------------------------------
+                context = build_user_context({
+                    "username": username,
+                    "email": email,
+                    "expiration_date": exp_raw,
+                    "days_left": days_left,
+                })
 
-                # Log body final en DEBUG (optionnel)
-                log.debug(f"[MAIL] Corps final pour {email}:\n{final_body}")
+                subject = render_mail(raw_subject, context)
+                body = render_mail(raw_body, context)
 
-                ok = send_email(settings, email, subject, final_body)
+                log.debug(f"[MAIL] Sujet rendu → {subject}")
+                log.debug(f"[MAIL] Corps rendu pour {email}:\n{body}")
+
+                ok = send_email(settings, email, subject, body)
 
                 if ok:
                     sent_count += 1
@@ -184,10 +215,14 @@ def run(task_id=None, db=None):
             log.info(
                 f"Campagne {camp_id} terminée → envoyés={sent_count}, erreurs={error_count}"
             )
-            task_logs(task_id, "info", f"Campagne {camp_id} OK={sent_count}, ERR={error_count}")
+            task_logs(
+                task_id,
+                "info",
+                f"Campagne {camp_id} OK={sent_count}, ERR={error_count}"
+            )
 
         # --------------------------------------------------------
-        # Fin
+        # Fin globale
         # --------------------------------------------------------
         task_logs(task_id, "success", "Toutes les campagnes pending traitées.")
         log.info("=== SEND MAIL CAMPAIGNS : TERMINÉ ===")
@@ -199,5 +234,5 @@ def run(task_id=None, db=None):
     finally:
         try:
             conn.close()
-        except:
+        except Exception:
             pass
