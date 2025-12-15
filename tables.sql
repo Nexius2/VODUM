@@ -4,7 +4,8 @@
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-    plex_id TEXT UNIQUE NOT NULL,
+    plex_id TEXT UNIQUE,
+	jellyfin_id TEXT UNIQUE,
     username TEXT NOT NULL,
 
     firstname TEXT,
