@@ -231,6 +231,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     last_run TIMESTAMP,
     next_run TIMESTAMP,
     last_error TEXT,
+	queued_count INTEGER NOT NULL DEFAULT 0,
 
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
