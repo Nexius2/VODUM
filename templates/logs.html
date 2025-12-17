@@ -8,6 +8,22 @@
 {% block header_subtitle %}
     {{ t("application_logs") }}
 {% endblock %}
+{% block header_actions %}
+<a href="{{ url_for('download_logs') }}"
+   class="inline-flex items-center gap-2 px-3 py-2 rounded-lg
+          bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm">
+
+    <!-- Icône download -->
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4"
+         fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
+    </svg>
+
+    {{ t("download_logs") }}
+</a>
+{% endblock %}
+
 
 {% block content %}
 <div class="p-6 space-y-6">

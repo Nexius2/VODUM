@@ -10,14 +10,14 @@ cleanup_unfriended.py — VERSION TXT LOGGING
 ✓ Connexion DB locale isolée (db_utils.open_db)
 """
 
-from db_utils import open_db
 from tasks_engine import task_logs
 from logging_utils import get_logger
 
+
+
 log = get_logger("cleanup_unfriended")
 
-
-def run(task_id: int, db=None):
+def run(task_id: int, db):
     """
     - Trouve les users avec plex_role='friend'
     - Qui n'ont AUCUNE bibliothèque sur un serveur Plex
@@ -27,15 +27,10 @@ def run(task_id: int, db=None):
     task_logs(task_id, "info", "Tâche cleanup_unfriended démarrée")
     log.info("=== CLEANUP UNFRIENDED : DÉMARRAGE ===")
 
-    # On n'utilise jamais la connexion du scheduler → on ouvre la nôtre
-    conn = open_db()
-    conn.row_factory = __import__("sqlite3").Row
-    cur = conn.cursor()
-
     try:
         log.debug("Recherche des utilisateurs 'friend' sans bibliothèque Plex…")
 
-        cur.execute(
+        rows = db.query(
             """
             SELECT u.id, u.username
             FROM users u
@@ -50,12 +45,10 @@ def run(task_id: int, db=None):
             """
         )
 
-        rows = cur.fetchall()
-
         if not rows:
             msg = "Aucun utilisateur 'friend' sans bibliothèque Plex."
             log.info(msg)
-            task_logs(task_id, "success", msg)
+            task_logs(task_id, "info", msg)
             log.info("=== CLEANUP UNFRIENDED : FIN ===")
             return
 
@@ -65,7 +58,7 @@ def run(task_id: int, db=None):
         # Mise à jour en base
         log.debug("Mise à jour des statuts des utilisateurs concernés…")
 
-        cur.executemany(
+        db.executemany(
             """
             UPDATE users
             SET
@@ -77,8 +70,6 @@ def run(task_id: int, db=None):
             [(uid,) for uid in user_ids],
         )
 
-        conn.commit()
-
         msg = (
             f"{len(user_ids)} utilisateur(s) passé(s) en 'unfriended' "
             f"(aucune bibliothèque Plex trouvée)."
@@ -89,13 +80,9 @@ def run(task_id: int, db=None):
         log.info("=== CLEANUP UNFRIENDED : TERMINÉ ===")
 
     except Exception as e:
-        conn.rollback()
-
         log.error(f"Erreur dans cleanup_unfriended : {e}", exc_info=True)
         task_logs(task_id, "error", f"Erreur cleanup_unfriended : {e}")
+        raise
 
-    finally:
-        try:
-            conn.close()
-        except:
-            pass
+
+

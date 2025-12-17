@@ -566,7 +566,10 @@
 
   "confirm_restore": "⚠️ Questa operazione sovrascriverà il database corrente. Continuare?",
   
-  "public_url": "URL pública"
+  "public_url": "URL pública",
+  
+  "jellyfin_server_created_sync_planned": "Server Jellyfin creato. Sincronizzazione iniziale pianificata."
+
 
 
 

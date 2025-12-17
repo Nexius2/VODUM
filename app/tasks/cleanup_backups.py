@@ -12,47 +12,20 @@ cleanup_backups.py — VERSION TXT LOGGING
 import os
 from pathlib import Path
 from datetime import datetime, timedelta
-
-from db_utils import open_db
 from tasks_engine import task_logs
 from logging_utils import get_logger
+
+
 
 log = get_logger("cleanup_backups")
 
 BACKUP_DIR = os.environ.get("VODUM_BACKUP_DIR", "/appdata/backups")
-
-
-# -----------------------------------------------------
-# Lire la rétention
-# -----------------------------------------------------
-def get_retention_days():
+def run(task_id: int, db):
     """
-    Lecture du paramètre "backup_retention_days".
-    Utilise open_db() → connexion locale, jamais celle du scheduler.
+    Tâche cleanup_backups — version UNIFORME et FINALE
+    DBManager fourni par tasks_engine
     """
-    try:
-        conn = open_db()
-        cur = conn.cursor()
 
-        cur.execute("SELECT backup_retention_days FROM settings LIMIT 1")
-        row = cur.fetchone()
-
-        conn.close()
-
-        value = row[0] if row and row[0] else 30
-        log.debug(f"Rétention lue : {value} jours")
-        return value
-
-    except Exception as e:
-        log.error(f"Erreur lecture settings.backup_retention_days : {e}", exc_info=True)
-        return 30
-
-
-
-# -----------------------------------------------------
-# Main task
-# -----------------------------------------------------
-def run(task_id=None, db=None):
     task_logs(task_id, "info", "Tâche cleanup_backups démarrée")
     log.info("=== CLEANUP BACKUPS : DÉMARRAGE ===")
 
@@ -61,10 +34,17 @@ def run(task_id=None, db=None):
     if not base.exists():
         msg = "Dossier de backup introuvable, aucune action effectuée."
         log.warning(msg)
-        task_logs(task_id, "success", msg)
+        task_logs(task_id, "info", msg)
         return
 
-    retention = get_retention_days()
+    # -------------------------------------------------
+    # Lecture de la rétention depuis la DB
+    # -------------------------------------------------
+    row = db.query_one(
+        "SELECT backup_retention_days FROM settings LIMIT 1"
+    )
+
+    retention = row["backup_retention_days"] if row and row["backup_retention_days"] else 30
     cutoff = datetime.utcnow() - timedelta(days=retention)
 
     log.debug(f"Rétention = {retention} jours -> Date limite = {cutoff}")
@@ -87,7 +67,10 @@ def run(task_id=None, db=None):
                     log.debug(f"Conservé : {f.name}")
 
             except Exception as e:
-                log.error(f"Erreur lors de la suppression du fichier {f}: {e}", exc_info=True)
+                log.error(
+                    f"Erreur lors de la suppression du fichier {f}: {e}",
+                    exc_info=True
+                )
 
         msg = f"{deleted} backup(s) supprimé(s) — rétention {retention} jours."
         log.info(msg)
@@ -95,7 +78,8 @@ def run(task_id=None, db=None):
         log.info("=== CLEANUP BACKUPS : TERMINÉ ===")
 
     except Exception as e:
-        log.error(f"Erreur inattendue : {e}", exc_info=True)
+        log.error("Erreur inattendue pendant cleanup_backups", exc_info=True)
         task_logs(task_id, "error", f"cleanup_backups error : {e}")
+        raise
 
-    return
+

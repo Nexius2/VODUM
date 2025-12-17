@@ -573,7 +573,13 @@
   "backup_settings_error": "Error while saving settings: {error}",
 "confirm_restore": "⚠️ This will overwrite the current database. Continue?",
 
-"public_url": "Public URL"
+"public_url": "Public URL",
+
+"download_logs": "Download logs",
+
+"jellyfin_server_created_sync_planned": "Jellyfin server created. Initial synchronization scheduled."
+
+
 
 
 

@@ -566,7 +566,10 @@
 
   "confirm_restore": "⚠️ Diese Aktion überschreibt die aktuelle Datenbank. Fortfahren?",
   
-  "public_url": "Öffentliche URL"
+  "public_url": "Öffentliche URL",
+  
+  "jellyfin_server_created_sync_planned": "Jellyfin-Server erstellt. Erste Synchronisierung geplant."
+
 
 
 

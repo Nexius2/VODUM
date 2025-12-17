@@ -188,7 +188,7 @@ CREATE TABLE IF NOT EXISTS settings (
     delete_after_expiry_days INTEGER DEFAULT 30,
     send_reminders INTEGER DEFAULT 1,
 
-    default_language TEXT DEFAULT 'en',
+    default_language TEXT DEFAULT NULL,
     timezone TEXT DEFAULT 'Europe/Paris',
     admin_email TEXT,
 
