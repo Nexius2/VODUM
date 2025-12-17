@@ -571,7 +571,13 @@
 
 "download_logs": "Télécharger les logs",
 
-"jellyfin_server_created_sync_planned": "Serveur Jellyfin créé. Synchronisation initiale planifiée."
+"jellyfin_server_created_sync_planned": "Serveur Jellyfin créé. Synchronisation initiale planifiée.",
+
+"task_queued": "Tâche en attente",
+
+  "home_user": "Utilisateur Plex Home",
+  "protected_account": "Compte protégé",
+  "restricted": "Compte restreint"
 
 
 

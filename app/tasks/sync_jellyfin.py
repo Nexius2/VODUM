@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 
 from logging_utils import get_logger
+from datetime import datetime, timedelta
 
 
 logger = get_logger("sync_jellyfin")
@@ -32,9 +33,49 @@ def _build_api_url(base: str, path: str, token: str) -> str:
 
 
 # ----------------------------
-# DB helpers
+#  helpers
 # ----------------------------
 
+
+
+def ensure_expiration_date_on_first_access(db, user_id: int) -> bool:
+    """
+    Initialise expiration_date UNIQUEMENT si :
+      - expiration_date est NULL
+      - default_subscription_days > 0
+    """
+    row = db.query_one(
+        "SELECT expiration_date FROM users WHERE id = ?",
+        (user_id,)
+    )
+
+    if not row or row["expiration_date"] is not None:
+        return False
+
+    row = db.query_one(
+        "SELECT default_subscription_days FROM settings LIMIT 1"
+    )
+
+    try:
+        days = int(row["default_subscription_days"]) if row else 0
+    except Exception:
+        days = 0
+
+    if days <= 0:
+        return False
+
+    today = datetime.utcnow().date()
+    expiration = (today + timedelta(days=days)).isoformat()
+
+    db.execute(
+        "UPDATE users SET expiration_date = ? WHERE id = ?",
+        (expiration, user_id)
+    )
+
+    logger.info(
+        f"[SUBSCRIPTION] expiration_date initialisée pour user_id={user_id} → {expiration}"
+    )
+    return True
 
 
 def _get_jellyfin_servers(db):
@@ -262,12 +303,19 @@ def _sync_users_and_policies_for_server(
             last_seen_at=last_seen_at,
         )
 
-        # shared_libraries: sync de l’état réel
+        # ----------------------------------------------------
+        # shared_libraries : sync de l’état réel
+        # ----------------------------------------------------
         allowed_db_lib_ids: List[int] = []
 
         if enable_all:
-            # accès global -> on nettoie les entrées spécifiques pour ce serveur
-            _refresh_shared_libraries_for_server(db, user_id, server_id, allowed_db_lib_ids)
+            _refresh_shared_libraries_for_server(
+                db, user_id, server_id, allowed_db_lib_ids
+            )
+
+            # ⬅️ AJOUT : accès réel → init expiration_date
+            ensure_expiration_date_on_first_access(db, user_id)
+
         else:
             if isinstance(enabled_folders, list):
                 for folder_item_id in enabled_folders:
@@ -276,15 +324,22 @@ def _sync_users_and_policies_for_server(
                     if lib_db_id:
                         allowed_db_lib_ids.append(lib_db_id)
 
-            _refresh_shared_libraries_for_server(db, user_id, server_id, allowed_db_lib_ids)
+            _refresh_shared_libraries_for_server(
+                db, user_id, server_id, allowed_db_lib_ids
+            )
+
+            # ⬅️ AJOUT : accès réel → init expiration_date
+            if allowed_db_lib_ids:
+                ensure_expiration_date_on_first_access(db, user_id)
 
         processed += 1
 
     logger.info(
-        f"Jellyfin users/policies: {processed} users traités, policy récupérée pour {policy_ok} users "
-        f"(server_id={server_id})"
+        f"Jellyfin users/policies: {processed} users traités, "
+        f"policy récupérée pour {policy_ok} users (server_id={server_id})"
     )
     return processed, policy_ok
+
 
 
 

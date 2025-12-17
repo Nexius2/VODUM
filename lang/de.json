@@ -568,7 +568,13 @@
   
   "public_url": "Öffentliche URL",
   
-  "jellyfin_server_created_sync_planned": "Jellyfin-Server erstellt. Erste Synchronisierung geplant."
+  "jellyfin_server_created_sync_planned": "Jellyfin-Server erstellt. Erste Synchronisierung geplant.",
+  
+  "task_queued": "Aufgabe in Warteschlange",
+  
+    "home_user": "Plex-Home-Nutzer",
+  "protected_account": "Geschütztes Konto",
+  "restricted": "Eingeschränktes Konto"
 
 
 

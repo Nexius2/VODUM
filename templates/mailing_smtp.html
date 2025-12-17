@@ -4,12 +4,22 @@
 {% block title %}{{ t("mailing") }} - VODUM{% endblock %}
 {% block header_title %}{{ t("mailing") }}{% endblock %}
 {% block header_subtitle %}{{ t("mailing_subtitle") }}{% endblock %}
+{% set smtp_ready =
+      settings.mailing_enabled
+  and settings.smtp_host
+  and settings.smtp_port
+  and settings.smtp_user
+  and settings.smtp_pass
+  and settings.mail_from
+%}
+
 {% block header_actions %}
     {% if settings.mailing_enabled %}
         <div class="flex flex-col items-end space-y-1">
             <div class="flex space-x-2">
 
                 <!-- Bouton Test Email -->
+				{% if smtp_ready %}
                 <button
                     type="submit"
                     form="smtp-form"
@@ -19,6 +29,7 @@
                 >
                     {{ t("send_test_email") }}
                 </button>
+				{% endif %}
 
                 <!-- Bouton Save -->
                 <button

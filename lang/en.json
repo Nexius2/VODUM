@@ -577,7 +577,13 @@
 
 "download_logs": "Download logs",
 
-"jellyfin_server_created_sync_planned": "Jellyfin server created. Initial synchronization scheduled."
+"jellyfin_server_created_sync_planned": "Jellyfin server created. Initial synchronization scheduled.",
+
+"task_queued": "Task queued",
+
+  "home_user": "Plex Home user",
+  "protected_account": "Protected account",
+  "restricted": "Restricted account"
 
 
 
