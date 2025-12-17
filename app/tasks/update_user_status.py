@@ -22,27 +22,6 @@ log = get_logger("update_user_status")
 # ----------------------------------------------------
 # Helpers
 # ----------------------------------------------------
-def get_days_before(db, tpl_type, default_value):
-    """
-    Récupère days_before depuis email_templates.
-    Fallback propre si absent ou invalide.
-    """
-    try:
-        row = db.query_one(
-            "SELECT days_before FROM email_templates WHERE type=?",
-            (tpl_type,),
-        )
-
-        val = row["days_before"] if row else None
-        log.debug(f"Template '{tpl_type}' → days_before = {val}")
-
-        return int(val) if val is not None else default_value
-
-    except Exception as e:
-        log.error(f"Erreur get_days_before({tpl_type}): {e}", exc_info=True)
-        return default_value
-
-
 def compute_status(expiration_date, today, preavis_days, reminder_days):
     """
     Calcul du statut VODUM (contractuel uniquement).
@@ -95,10 +74,17 @@ def run(task_id: int, db):
 
     try:
         # ----------------------------------------------------
-        # Paramètres mail (préavis / relance)
+        # Chargement des délais depuis SETTINGS (source unique)
         # ----------------------------------------------------
-        preavis_days = get_days_before(db, "preavis", 30)
-        reminder_days = get_days_before(db, "relance", 7)
+        settings = db.query_one(
+            "SELECT preavis_days, reminder_days FROM settings WHERE id = 1"
+        )
+
+        if not settings:
+            raise RuntimeError("Settings manquants (id=1)")
+
+        preavis_days = int(settings["preavis_days"])
+        reminder_days = int(settings["reminder_days"])
 
         log.info(
             f"Paramètres chargés → preavis={preavis_days}j | reminder={reminder_days}j"

@@ -90,6 +90,13 @@ def run(task_id: int, db):
             return
 
         log.debug("Mailing activé. Chargement des templates…")
+        preavis_days = int(settings["preavis_days"])
+        reminder_days = int(settings["reminder_days"])
+
+        log.info(
+            f"Délais mailing → preavis={preavis_days}j | reminder={reminder_days}j"
+        )
+
 
         # --------------------------------------------------------
         # 2) Charger tous les templates
@@ -191,8 +198,12 @@ def run(task_id: int, db):
                 if not tpl:
                     continue
 
-                days_before = tpl.get("days_before")
-                if not days_before:
+                if type_ == "preavis":
+                    days_before = preavis_days
+                else:  # relance
+                    days_before = reminder_days
+
+                if days_before <= 0:
                     continue
 
                 if 0 < days_left <= days_before:
@@ -231,6 +242,7 @@ def run(task_id: int, db):
                             (uid, type_, exp_date),
                         )
                         sent_count += 1
+
 
         msg = f"send_expiration_emails terminé — {sent_count} email(s) envoyé(s)"
         log.info(msg)

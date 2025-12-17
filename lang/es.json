@@ -568,9 +568,14 @@
   
 "public_url": "URL pública",
 
-"jellyfin_server_created_sync_planned": "Servidor Jellyfin creado. Sincronización inicial programada."
+"jellyfin_server_created_sync_planned": "Servidor Jellyfin creado. Sincronización inicial programada.",
 
 
+"task_queued": "Tarea en cola",
+
+  "home_user": "Usuario de Plex Home",
+  "protected_account": "Cuenta protegida",
+  "restricted": "Cuenta restringida"
 
 
 

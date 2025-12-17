@@ -911,25 +911,30 @@ def create_app():
         # --------------------------
         latest_logs = []
 
-        lines = read_last_logs(10)
+        lines = read_last_logs(30)  # on lit plus large, on filtre après
 
+        ALLOWED_LEVELS = {"INFO", "ERROR", "CRITICAL"}
 
         for line in lines:
             parts = line.split("|", 3)
-            if len(parts) == 4:
-                latest_logs.append({
-                    "created_at": parts[0].strip(),
-                    "level": parts[1].strip(),
-                    "source": parts[2].strip(),
-                    "message": parts[3].strip(),
-                })
-            else:
-                latest_logs.append({
-                    "created_at": "",
-                    "level": "INFO",
-                    "source": "system",
-                    "message": line.strip(),
-                })
+            if len(parts) != 4:
+                continue
+
+            level = parts[1].strip().upper()
+
+            if level not in ALLOWED_LEVELS:
+                continue  # ⬅️ filtre ici
+
+            latest_logs.append({
+                "created_at": parts[0].strip(),
+                "level": level,
+                "source": parts[2].strip(),
+                "message": parts[3].strip(),
+            })
+
+        # limiter l'affichage final
+        latest_logs = latest_logs[:10]
+
 
         # --------------------------
         # PAGE RENDERING
@@ -1061,6 +1066,15 @@ def create_app():
             flash("user_not_found", "error")
             return redirect(url_for("users_list"))
 
+        # --------------------------------------------------
+        # Déterminer les types de serveurs autorisés
+        # --------------------------------------------------
+        allowed_types = []
+        if user["plex_id"]:
+            allowed_types.append("plex")
+        if user["jellyfin_id"]:
+            allowed_types.append("jellyfin")
+
         # ==================================================
         # POST → Mise à jour utilisateur + options serveur
         # ==================================================
@@ -1074,10 +1088,7 @@ def create_app():
             expiration_date = form.get("expiration_date") or user["expiration_date"]
             renewal_date    = form.get("renewal_date") or user["renewal_date"]
             renewal_method  = form.get("renewal_method") or user["renewal_method"]
-
-            notes = user["notes"]
-            if "notes" in form:
-                notes = form.get("notes") or user["notes"]
+            notes           = form.get("notes") if "notes" in form else user["notes"]
 
             db.execute(
                 """
@@ -1102,10 +1113,24 @@ def create_app():
                 )
 
             # 2) --- Mise à jour options serveur ---
-            servers = db.query("SELECT id FROM servers")
+            # ⚠️ uniquement les serveurs :
+            #   - liés à l’utilisateur
+            #   - du bon type (plex / jellyfin)
+            placeholders = ",".join("?" * len(allowed_types))
 
-            for s in servers:
-                sid = s["id"]
+            user_servers = db.query(
+                f"""
+                SELECT us.server_id
+                FROM user_servers us
+                JOIN servers s ON s.id = us.server_id
+                WHERE us.user_id = ?
+                  AND s.type IN ({placeholders})
+                """,
+                (user_id, *allowed_types),
+            )
+
+            for us in user_servers:
+                sid = us["server_id"]
 
                 allow_sync     = 1 if form.get(f"allow_sync_{sid}") else 0
                 allow_camera   = 1 if form.get(f"allow_camera_upload_{sid}") else 0
@@ -1115,88 +1140,79 @@ def create_app():
                 filter_television = form.get(f"filter_television_{sid}") or None
                 filter_music      = form.get(f"filter_music_{sid}") or None
 
-                exists = db.query_one(
-                    """
-                    SELECT 1
-                    FROM user_servers
-                    WHERE user_id = ? AND server_id = ?
-                    """,
-                    (user_id, sid),
-                )
-
-                if exists:
-                    db.execute(
-                        """
-                        UPDATE user_servers
-                        SET allow_sync = ?, allow_camera_upload = ?, allow_channels = ?,
-                            filter_movies = ?, filter_television = ?, filter_music = ?
-                        WHERE user_id = ? AND server_id = ?
-                        """,
-                        (
-                            allow_sync, allow_camera, allow_channels,
-                            filter_movies, filter_television, filter_music,
-                            user_id, sid,
-                        ),
-                    )
-                else:
-                    db.execute(
-                        """
-                        INSERT INTO user_servers(
-                            user_id, server_id,
-                            allow_sync, allow_camera_upload, allow_channels,
-                            filter_movies, filter_television, filter_music
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            user_id, sid,
-                            allow_sync, allow_camera, allow_channels,
-                            filter_movies, filter_television, filter_music,
-                        ),
-                    )
-
-            # 3) --- Ajouter jobs SYNC Plex ---
-            plex_servers = db.query(
-                "SELECT id FROM servers WHERE type = 'plex'"
-            )
-
-            for s in plex_servers:
                 db.execute(
                     """
-                    INSERT INTO plex_jobs(action, user_id, server_id, library_id, processed)
-                    VALUES ('sync', ?, ?, NULL, 0)
+                    UPDATE user_servers
+                    SET allow_sync = ?,
+                        allow_camera_upload = ?,
+                        allow_channels = ?,
+                        filter_movies = ?,
+                        filter_television = ?,
+                        filter_music = ?
+                    WHERE user_id = ? AND server_id = ?
                     """,
-                    (user_id, s["id"]),
+                    (
+                        allow_sync,
+                        allow_camera,
+                        allow_channels,
+                        filter_movies,
+                        filter_television,
+                        filter_music,
+                        user_id,
+                        sid,
+                    ),
                 )
 
-            # 4) --- Lancer tâche apply_plex_access_updates ---
-            run_task_by_name("apply_plex_access_updates")
+            # 3) --- Ajouter jobs SYNC Plex (uniquement si user Plex)
+            if "plex" in allowed_types:
+                plex_servers = db.query(
+                    "SELECT id FROM servers WHERE type = 'plex'"
+                )
 
-            flash("user_saved_and_plex_sync_started", "success")
+                for s in plex_servers:
+                    db.execute(
+                        """
+                        INSERT INTO plex_jobs(action, user_id, server_id, library_id, processed)
+                        VALUES ('sync', ?, ?, NULL, 0)
+                        """,
+                        (user_id, s["id"]),
+                    )
+
+                # 4) --- Lancer tâche apply_plex_access_updates
+                run_task_by_name("apply_plex_access_updates")
+
+            flash("user_saved", "success")
             return redirect(url_for("user_detail", user_id=user_id))
 
         # ==================================================
         # GET → Chargement complet user + serveurs + libs
         # ==================================================
 
-        servers = db.query(
-            """
-            SELECT
-                s.*,
-                us.allow_sync,
-                us.allow_camera_upload,
-                us.allow_channels,
-                us.filter_movies,
-                us.filter_television,
-                us.filter_music,
-                CASE WHEN us.user_id IS NOT NULL THEN 1 ELSE 0 END AS has_access
-            FROM servers s
-            LEFT JOIN user_servers us
-                   ON us.server_id = s.id AND us.user_id = ?
-            ORDER BY s.name
-            """,
-            (user_id,),
-        )
+        if allowed_types:
+            placeholders = ",".join("?" * len(allowed_types))
+
+            servers = db.query(
+                f"""
+                SELECT
+                    s.*,
+                    us.allow_sync,
+                    us.allow_camera_upload,
+                    us.allow_channels,
+                    us.filter_movies,
+                    us.filter_television,
+                    us.filter_music,
+                    1 AS has_access
+                FROM servers s
+                JOIN user_servers us
+                     ON us.server_id = s.id
+                    AND us.user_id = ?
+                WHERE s.type IN ({placeholders})
+                ORDER BY s.name
+                """,
+                (user_id, *allowed_types),
+            )
+        else:
+            servers = []
 
         libraries = db.query(
             """
@@ -1231,6 +1247,7 @@ def create_app():
             user_servers=servers,
             sent_emails=sent_emails,
         )
+
 
 
 
@@ -1382,8 +1399,9 @@ def create_app():
     def server_create():
         db = get_db()
 
-        name = request.form.get("name", "").strip()
-        server_type = request.form.get("type", "plex")
+        
+        server_type = (request.form.get("type") or "generic").lower()
+        name = f"{server_type.upper()} - pending"
         url = request.form.get("url") or None
         local_url = request.form.get("local_url") or None
         public_url = request.form.get("public_url") or None
@@ -1392,9 +1410,7 @@ def create_app():
         tautulli_api_key = request.form.get("tautulli_api_key") or None
         server_identifier = str(uuid.uuid4())
 
-        if not name:
-            flash("server_name_required", "error")
-            return redirect(url_for("servers_list"))
+
 
         # Création du serveur (WRITE)
         db.execute(
@@ -1749,6 +1765,25 @@ def create_app():
     # -----------------------------
     # MAILING
     # -----------------------------
+    
+    def is_smtp_ready(settings) -> bool:
+        if not settings:
+            return False
+
+        try:
+            return bool(
+                settings["mailing_enabled"]
+                and settings["smtp_host"]
+                and settings["smtp_port"]
+                and settings["smtp_user"]
+                and settings["smtp_pass"]
+                and settings["mail_from"]
+            )
+        except (KeyError, TypeError):
+            return False
+
+
+    
     @app.post("/api/mailing/toggle")
     def api_mailing_toggle():
         db = get_db()
@@ -1800,17 +1835,11 @@ def create_app():
             "SELECT * FROM settings WHERE id = 1"
         )
 
-        enabled = False
-        if settings:
-            try:
-                enabled = settings["mailing_enabled"] == 1
-            except (KeyError, IndexError):
-                enabled = False
-
-        if enabled:
+        if is_smtp_ready(settings):
             return redirect(url_for("mailing_campaigns_page"))
-        else:
-            return redirect(url_for("mailing_smtp_page"))
+
+        return redirect(url_for("mailing_smtp_page"))
+
 
 
 
@@ -1818,6 +1847,10 @@ def create_app():
     @app.route("/mailing/campaigns", methods=["GET", "POST"])
     def mailing_campaigns_page():
         db = get_db()
+        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        if not is_smtp_ready(settings):
+            return redirect(url_for("mailing_smtp_page"))
+
         t = get_translator()
 
         # Fetch list of servers for dropdown (READ)
@@ -1844,11 +1877,36 @@ def create_app():
             subject = (request.form.get("subject") or "").strip()
             body = (request.form.get("body") or "").strip()
             server_id = request.form.get("server_id", type=int)
+            
+            # "All servers" ou valeur vide → NULL
+            raw_server_id = request.form.get("server_id")
+            server_id = None
+
+            if raw_server_id:
+                try:
+                    sid = int(raw_server_id)
+                    exists = db.query_one(
+                        "SELECT 1 FROM servers WHERE id = ?",
+                        (sid,),
+                    )
+                    if exists:
+                        server_id = sid
+                except ValueError:
+                    server_id = None
+            
             is_test = 1 if request.form.get("is_test") == "1" else 0
 
             if not subject or not body:
                 flash(t("campaign_missing_fields"), "error")
                 return redirect(url_for("mailing_campaigns_page"))
+
+            add_log(
+                "debug",
+                "mail_campaigns",
+                "Normalized server_id",
+                {"raw": raw_server_id, "final": server_id},
+            )
+
 
             db.execute(
                 """
@@ -2097,6 +2155,10 @@ def create_app():
     @app.route("/mailing/templates", methods=["GET", "POST"])
     def mailing_templates_page():
         db = get_db()
+        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        if not is_smtp_ready(settings):
+            return redirect(url_for("mailing_smtp_page"))
+
         t = get_translator()
 
         # ---------------------------------------------------
@@ -2120,6 +2182,36 @@ def create_app():
         # SAUVEGARDE DES MODIFICATIONS
         # ---------------------------------------------------
         if request.method == "POST" and request.form.get("action") == "save":
+
+            # -----------------------------
+            # Délais globaux (settings)
+            # -----------------------------
+            settings = db.query_one(
+                "SELECT preavis_days, reminder_days FROM settings WHERE id = 1"
+            )
+
+            try:
+                preavis_days = int(request.form.get("preavis_days"))
+            except Exception:
+                preavis_days = settings["preavis_days"]
+
+            try:
+                reminder_days = int(request.form.get("reminder_days"))
+            except Exception:
+                reminder_days = settings["reminder_days"]
+
+            db.execute(
+                """
+                UPDATE settings
+                SET preavis_days = ?, reminder_days = ?
+                WHERE id = 1
+                """,
+                (preavis_days, reminder_days),
+            )
+
+            # -----------------------------
+            # Mise à jour des templates
+            # -----------------------------
             templates = db.query(
                 "SELECT * FROM email_templates"
             )
@@ -2130,26 +2222,29 @@ def create_app():
                 subject = request.form.get(f"subject_{tid}", "").strip()
                 body = request.form.get(f"body_{tid}", "").strip()
 
-                days_raw = request.form.get(f"days_before_{tid}", "")
-                try:
-                    days_before = int(days_raw)
-                except Exception:
-                    days_before = tpl["days_before"]
-
                 db.execute(
                     """
                     UPDATE email_templates
-                    SET subject = ?, body = ?, days_before = ?
+                    SET subject = ?, body = ?
                     WHERE id = ?
                     """,
-                    (subject, body, days_before, tid),
+                    (subject, body, tid),
                 )
 
-            add_log("info", "mail_templates", "Templates updated", None)
+            add_log(
+                "info",
+                "mail_templates",
+                "Templates updated",
+                {
+                    "preavis_days": preavis_days,
+                    "reminder_days": reminder_days,
+                },
+            )
+
             flash(t("templates_saved"), "success")
 
         # ---------------------------------------------------
-        # ENVOI DE TEST (AVEC RENDU DES VARIABLES)
+        # ENVOI DE TEST (INCHANGÉ)
         # ---------------------------------------------------
         if request.method == "POST" and request.form.get("action") == "test":
             template_id = request.form.get("test_template_id", type=int)
@@ -2220,6 +2315,7 @@ def create_app():
             templates=templates,
             active_page="mailing",
         )
+
 
     @app.route("/mailing/smtp", methods=["GET", "POST"])
     def mailing_smtp_page():
@@ -2533,24 +2629,15 @@ def create_app():
     def settings_page():
         db = get_db()
 
-        # Charger settings
+        # ------------------------------
+        # Charger settings (source unique)
+        # ------------------------------
         settings = db.query_one(
             "SELECT * FROM settings WHERE id = 1"
         )
         if not settings:
             flash("Settings row missing in DB", "error")
             return redirect("/")
-
-        # Charger les valeurs days_before pour preavis & relance
-        tpl_preavis = db.query_one(
-            "SELECT days_before FROM email_templates WHERE type = 'preavis'"
-        )
-        tpl_relance = db.query_one(
-            "SELECT days_before FROM email_templates WHERE type = 'relance'"
-        )
-
-        preavis_days = tpl_preavis["days_before"] if tpl_preavis else 0
-        relance_days = tpl_relance["days_before"] if tpl_relance else 0
 
         # ------------------------------------------------------------
         # POST → SAVE ALL SETTINGS
@@ -2575,28 +2662,40 @@ def create_app():
                     "delete_after_expiry_days",
                     settings["delete_after_expiry_days"],
                 ),
+
+                # ✅ délais statut (settings ONLY)
+                "preavis_days": request.form.get(
+                    "preavis_days",
+                    settings["preavis_days"],
+                ),
+                "reminder_days": request.form.get(
+                    "relance_days",
+                    settings["reminder_days"],
+                ),
+
                 "disable_on_expiry": 1 if request.form.get("disable_on_expiry") == "1" else 0,
                 "enable_cron_jobs": 1 if request.form.get("enable_cron_jobs") == "1" else 0,
                 "maintenance_mode": 1 if request.form.get("maintenance_mode") == "1" else 0,
                 "debug_mode": 1 if request.form.get("debug_mode") == "1" else 0,
             }
 
-            # Conversions int propres
-            try:
-                new_values["default_subscription_days"] = int(
-                    new_values["default_subscription_days"]
-                )
-            except Exception:
-                pass
+            # --------------------------------------------------
+            # Conversions INT (uniformes)
+            # --------------------------------------------------
+            for key in (
+                "default_subscription_days",
+                "delete_after_expiry_days",
+                "preavis_days",
+                "reminder_days",
+            ):
+                try:
+                    new_values[key] = int(new_values[key])
+                except Exception:
+                    new_values[key] = settings[key]
 
-            try:
-                new_values["delete_after_expiry_days"] = int(
-                    new_values["delete_after_expiry_days"]
-                )
-            except Exception:
-                pass
-
-            # UPDATE settings
+            # --------------------------------------------------
+            # UPDATE settings (source unique)
+            # --------------------------------------------------
             db.execute(
                 """
                 UPDATE settings SET
@@ -2605,6 +2704,8 @@ def create_app():
                     admin_email = :admin_email,
                     default_subscription_days = :default_subscription_days,
                     delete_after_expiry_days = :delete_after_expiry_days,
+                    preavis_days = :preavis_days,
+                    reminder_days = :reminder_days,
                     disable_on_expiry = :disable_on_expiry,
                     enable_cron_jobs = :enable_cron_jobs,
                     maintenance_mode = :maintenance_mode,
@@ -2614,26 +2715,9 @@ def create_app():
                 new_values,
             )
 
-            # UPDATE email_templates.days_before
-            try:
-                new_preavis = int(request.form.get("preavis_days", preavis_days))
-            except Exception:
-                new_preavis = preavis_days
-
-            try:
-                new_relance = int(request.form.get("relance_days", relance_days))
-            except Exception:
-                new_relance = relance_days
-
-            db.execute(
-                "UPDATE email_templates SET days_before = ? WHERE type = 'preavis'",
-                (new_preavis,),
-            )
-            db.execute(
-                "UPDATE email_templates SET days_before = ? WHERE type = 'relance'",
-                (new_relance,),
-            )
-
+            # --------------------------------------------------
+            # Log cohérent
+            # --------------------------------------------------
             add_log(
                 "info",
                 "settings",
@@ -2641,8 +2725,8 @@ def create_app():
                 {
                     "default_language": new_values["default_language"],
                     "default_subscription_days": new_values["default_subscription_days"],
-                    "preavis_days": new_preavis,
-                    "relance_days": new_relance,
+                    "preavis_days": new_values["preavis_days"],
+                    "reminder_days": new_values["reminder_days"],
                 },
             )
 
@@ -2656,14 +2740,13 @@ def create_app():
         # ------------------------------
         return render_template(
             "settings.html",
-            settings=settings,
-            preavis_days=preavis_days,
-            relance_days=relance_days,
+            settings=settings,   # ✅ source unique
             active_page="settings",
             current_lang=session.get("lang", settings["default_language"]),
             available_languages=get_available_languages(),
             app_version=g.get("app_version", "dev"),
         )
+
 
 
     # -----------------------------
@@ -2776,6 +2859,8 @@ def create_app():
 
 
 
+
+
     @app.route("/logs/download")
     def download_logs():
         log_path = "/logs/app.log"
@@ -2808,13 +2893,18 @@ def create_app():
         except FileNotFoundError:
             output.append("No logs available.\n")
 
+        # 🆕 Nom de fichier avec date en préfixe
+        today = datetime.now().strftime("%Y-%m-%d")
+        filename = f"{today}_vodum-logs-anonymized.log"
+
         return Response(
             "".join(output),
             mimetype="text/plain",
             headers={
-                "Content-Disposition": "attachment; filename=vodum-logs-anonymized.log"
+                "Content-Disposition": f"attachment; filename={filename}"
             }
         )
+
 
 
 
