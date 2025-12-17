@@ -187,6 +187,8 @@ CREATE TABLE IF NOT EXISTS settings (
     disable_on_expiry INTEGER DEFAULT 0,
     delete_after_expiry_days INTEGER DEFAULT 30,
     send_reminders INTEGER DEFAULT 1,
+	preavis_days INTEGER NOT NULL DEFAULT 30,
+	reminder_days INTEGER NOT NULL DEFAULT 7,
 
     default_language TEXT DEFAULT NULL,
     timezone TEXT DEFAULT 'Europe/Paris',
