@@ -14,10 +14,10 @@ import requests
 import urllib3
 from datetime import datetime
 from plexapi.server import PlexServer
-
-from db_utils import open_db
-from tasks_engine import safe_execute, task_logs
+from tasks_engine import task_logs
 from logging_utils import get_logger
+
+
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -94,23 +94,19 @@ def check_generic_server(url):
         return "down"
 
 
-# ------------------------------------------------------------
-# MAIN TASK
-# ------------------------------------------------------------
 
-def check_servers(task_id=None):
-    """Version stable, verbeuse et sans logs DB internes."""
 
-    task_logs(task_id, "info", "Tâche check_servers démarrée")
+def run(task_id: int, db):
+    """
+    Tâche check_servers — version UNIFORME et FINALE
+    DBManager fourni par tasks_engine
+    """
+
+    task_logs(task_id, "start", "Tâche check_servers démarrée")
     log.info("=== CHECK SERVERS : DÉMARRAGE ===")
 
-    db = open_db()
-    cur = db.cursor()
-
     try:
-        # Charger les serveurs
-        safe_execute(cur, "SELECT * FROM servers")
-        servers = cur.fetchall()
+        servers = db.query("SELECT * FROM servers")
 
         if not servers:
             log.warning("Aucun serveur trouvé dans la DB.")
@@ -128,111 +124,81 @@ def check_servers(task_id=None):
             base_url = choose_server_base_url(s)
             if not base_url:
                 log.warning(f"Serveur #{sid} : aucune URL valide.")
+                db.execute(
+                    """
+                    UPDATE servers
+                    SET status=?, last_checked=?
+                    WHERE id=?
+                    """,
+                    ("down", now, sid)
+                )
                 continue
-
-            log.debug(f"URL choisie pour test : {base_url}")
 
             new_name = old_name
             machine_id = s["server_identifier"]
             status = "unknown"
 
-            # ---------------------------------------------
+            # -----------------------------
             # SERVEUR PLEX
-            # ---------------------------------------------
+            # -----------------------------
             if s["type"] == "plex" and s["token"]:
-                log.debug("Serveur reconnu comme PLEX, test via plexapi…")
-
-                status, found_name, found_mid, meta = plex_get_info(base_url, s["token"])
-
-                log.info(
-                    f"Résultat Plex : status={status}, name={found_name}, mid={found_mid}, meta={meta}"
+                status, found_name, found_mid, meta = plex_get_info(
+                    base_url, s["token"]
                 )
 
                 if status == "up":
                     if found_name:
                         new_name = found_name
-
                     if found_mid and found_mid != machine_id:
-                        log.info(
-                            f"MachineIdentifier mis à jour pour serveur #{sid}: "
-                            f"{machine_id} → {found_mid}"
-                        )
-                        safe_execute(
-                            cur,
+                        db.execute(
                             "UPDATE servers SET server_identifier=? WHERE id=?",
                             (found_mid, sid)
                         )
 
-            # ---------------------------------------------------------
+            # -----------------------------
             # SERVEUR JELLYFIN
-            # ---------------------------------------------------------
+            # -----------------------------
             elif s["type"] == "jellyfin":
-                log.debug("Serveur reconnu comme JELLYFIN, test via /System/Ping…")
-
-                status, found_name, found_mid, meta = jellyfin_get_status(base_url, s["token"])
-
-                log.info(
-                    f"Résultat Jellyfin : status={status}, name={found_name}, mid={found_mid}, meta={meta}"
+                status, found_name, found_mid, meta = jellyfin_get_status(
+                    base_url, s["token"]
                 )
 
                 if status == "up":
                     if found_name:
                         new_name = found_name
-
                     if found_mid and found_mid != machine_id:
-                        safe_execute(
-                            cur,
+                        db.execute(
                             "UPDATE servers SET server_identifier=? WHERE id=?",
                             (found_mid, sid)
                         )
 
-
-            # ---------------------------------------------
-            # SERVEUR GENERIQUE
-            # ---------------------------------------------
+            # -----------------------------
+            # SERVEUR GÉNÉRIQUE
+            # -----------------------------
             else:
-                log.debug("Serveur non-Plex → test générique HTTP…")
                 status = check_generic_server(base_url)
-                log.info(f"Résultat générique HTTP: status={status}")
 
-            # ---------------------------------------------
-            # Mise à jour du statut
-            # ---------------------------------------------
-            safe_execute(
-                cur,
-                "UPDATE servers SET status=?, last_checked=?, name=? WHERE id=?",
+            # -----------------------------
+            # Mise à jour DB
+            # -----------------------------
+            db.execute(
+                """
+                UPDATE servers
+                SET status=?, last_checked=?, name=?
+                WHERE id=?
+                """,
                 (status, now, new_name, sid)
             )
 
-            if new_name != old_name:
-                log.info(f"Serveur #{sid} : nom mis à jour '{old_name}' → '{new_name}'")
-            else:
-                log.debug(f"Serveur #{sid} : nom inchangé ('{new_name}')")
-
-        db.commit()
         log.info("=== CHECK SERVERS : TERMINÉ AVEC SUCCÈS ===")
         task_logs(task_id, "success", "Vérification des serveurs terminée")
 
     except Exception as e:
-        log.error(f"Erreur pendant check_servers : {e}", exc_info=True)
+        log.error("Erreur pendant check_servers", exc_info=True)
         task_logs(task_id, "error", f"Erreur check_servers : {e}")
-
-    finally:
-        try:
-            db.close()
-        except:
-            pass
+        raise
 
 
 
-def run(task_id=None, db=None):
-    """
-    Le scheduler passe parfois une DB, mais on ne l'utilise pas ici
-    pour éviter les locks → on ouvre toujours notre propre DB.
-    """
-    check_servers(task_id)
-    return "OK"
 
 
-if __name__ == "__main__":
-    check_servers()

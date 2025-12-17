@@ -95,8 +95,8 @@ def run_migrations():
         "name": "sync_plex",
         "description": "Synchronisation Plex",
         "schedule": "0 */6 * * *",  # toutes les 6h
-        "enabled": 1,
-        "status": "idle"
+        "enabled": 0,
+        "status": "disabled"
     })
     
     # Tâche cleanup_logs (suppression logs > 7 jours)
@@ -309,10 +309,10 @@ def run_migrations():
     })
 
 
-    # Paramètres de base
-    cursor.execute("SELECT default_language FROM settings WHERE id = 1")
-    row = cursor.fetchone()
-    existing_lang = row[0] if row else "en"
+    # -------------------------------------------------
+    # Paramètres de base (settings)
+    # -------------------------------------------------
+
     ensure_row(cursor, "settings", "id = :id", {
         "id": 1,
         "mail_from": "noreply@example.com",
@@ -321,8 +321,10 @@ def run_migrations():
         "smtp_tls": 1,
         "smtp_user": "",
         "smtp_pass": "",
-        # obtenir langue existante si ligne présente
-        "default_language": existing_lang,
+
+        # ⛔ NE PAS FORCER LA LANGUE
+        "default_language": None,
+
         "timezone": "Europe/Paris",
         "admin_email": "",
         "enable_cron_jobs": 1,
@@ -330,6 +332,7 @@ def run_migrations():
         "maintenance_mode": 0,
         "debug_mode": 0
     })
+
 
 
 
@@ -342,14 +345,6 @@ def run_migrations():
 
 
 
-def ensure_settings_defaults(cursor):
-    cursor.execute("SELECT id FROM settings WHERE id = 1")
-    if cursor.fetchone() is None:
-        cursor.execute("""
-            INSERT INTO settings (
-                id, default_language
-            ) VALUES (1, 'en')
-        """)
 
 
 

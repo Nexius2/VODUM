@@ -2,13 +2,19 @@ import time
 from plexapi.server import PlexServer
 from logging_utils import get_logger
 
+
+
 logger = get_logger("apply_plex_access_updates")
 
 
 def wait_for_task_idle(db, name):
     """Attend que la tâche <name> ne soit plus en cours."""
     while True:
-        row = db.execute("SELECT status FROM tasks WHERE name = ?", (name,)).fetchone()
+        row = db.query_one(
+            "SELECT status FROM tasks WHERE name = ?",
+            (name,)
+        )
+
         if not row or row["status"] != "running":
             return
         logger.info(f"⏳ En attente que la tâche {name} termine…")
@@ -16,13 +22,19 @@ def wait_for_task_idle(db, name):
 
 
 def disable_task(db, name):
-    db.execute("UPDATE tasks SET enabled = 0 WHERE name = ?", (name,))
-    db.commit()
+    db.execute(
+        "UPDATE tasks SET enabled = 0 WHERE name = ?",
+        (name,)
+    )
 
 
 def enable_task(db, name):
-    db.execute("UPDATE tasks SET enabled = 1 WHERE name = ?", (name,))
-    db.commit()
+    db.execute(
+        "UPDATE tasks SET enabled = 1 WHERE name = ?",
+        (name,)
+    )
+
+  
 
 
 def get_plex(server_row):
@@ -42,18 +54,12 @@ def get_plex(server_row):
 def cleanup_old_jobs(db):
     """
     Supprime les anciens jobs terminés ou en erreur.
-    - Jobs processed = 1  (déjà traités)
-    - Jobs en erreur = ceux avec processed = 0 et qui ont une action qui a échoué auparavant
-      → dans notre cas, on considère tout job non traité et ancien comme "en erreur".
     """
 
-    # 1. Supprimer tous les jobs traités
     deleted_processed = db.execute(
         "DELETE FROM plex_jobs WHERE processed = 1"
     ).rowcount
 
-    # 2. Supprimer les jobs en erreur (processed = 0 mais anciens)
-    # On supprime tous les jobs non traités PLUS ANCIENS qu'une minute
     deleted_failed = db.execute(
         """
         DELETE FROM plex_jobs
@@ -62,12 +68,11 @@ def cleanup_old_jobs(db):
         """
     ).rowcount
 
-    db.commit()
-
     logger.info(
         f"🧹 Nettoyage jobs : {deleted_processed} traités supprimés, "
         f"{deleted_failed} en erreur supprimés."
     )
+
 
 
 def apply_grant_job(db, job):
@@ -82,9 +87,21 @@ def apply_grant_job(db, job):
     user_id   = job["user_id"]
 
     # --- RÉCUP DATA DB ----------------------------------------------------
-    server = db.execute("SELECT * FROM servers WHERE id=?", (server_id,)).fetchone()
-    library = db.execute("SELECT * FROM libraries WHERE id=?", (lib_id,)).fetchone()
-    user = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+    server = db.query_one(
+        "SELECT * FROM servers WHERE id=?",
+        (server_id,)
+    )
+
+    library = db.query_one(
+        "SELECT * FROM libraries WHERE id=?",
+        (lib_id,)
+    )
+
+    user = db.query_one(
+        "SELECT * FROM users WHERE id=?",
+        (user_id,)
+    )
+
 
     if not server or not library or not user:
         raise RuntimeError("Serveur / bibliothèque / user introuvable")
@@ -123,14 +140,15 @@ def apply_grant_job(db, job):
     logger.info(f"Sections finales envoyées : {current_sections}")
 
     # --- PERMISSIONS (0/1 plutôt que True/False) --------------------------
-    perms = db.execute(
+    perms = db.query_one(
         """
         SELECT *
         FROM user_servers
         WHERE user_id=? AND server_id=?
         """,
         (user_id, server_id),
-    ).fetchone()
+    )
+
 
     if perms:
         allowSync = 1 if perms["allow_sync"] else 0
@@ -180,8 +198,16 @@ def apply_sync_job(db, job):
     user_id   = job["user_id"]
 
     # Récup serveur + user
-    server = db.execute("SELECT * FROM servers WHERE id=?", (server_id,)).fetchone()
-    user = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+    server = db.query_one(
+        "SELECT * FROM servers WHERE id=?",
+        (server_id,)
+    )
+
+    user = db.query_one(
+        "SELECT * FROM users WHERE id=?",
+        (user_id,)
+    )
+
 
     if not server or not user:
         raise RuntimeError("Serveur ou utilisateur introuvable (sync)")
@@ -199,7 +225,7 @@ def apply_sync_job(db, job):
         raise
 
     # Récup ALL libraries autorisées pour cet user + serveur
-    rows = db.execute(
+    rows = db.query(
         """
         SELECT l.name
         FROM shared_libraries sl
@@ -207,17 +233,19 @@ def apply_sync_job(db, job):
         WHERE sl.user_id = ? AND l.server_id = ?
         """,
         (user_id, server_id),
-    ).fetchall()
+    )
+
 
     sections = [r["name"] for r in rows]
 
     logger.info(f"Bibliothèques appliquées au user ({len(sections)}): {sections}")
 
     # Récup permissions user_servers
-    perms = db.execute(
+    perms = db.query_one(
         "SELECT * FROM user_servers WHERE user_id=? AND server_id=?",
         (user_id, server_id),
-    ).fetchone()
+    )
+
 
     if perms:
         allowSync          = 1 if perms["allow_sync"] else 0
@@ -251,24 +279,16 @@ def apply_sync_job(db, job):
 
 
 
-def run(task_id, db):
-    # delete old jobs
-    cleanup_old_jobs(db)
+def run(task_id: int, db):
+    """
+    Tâche apply_plex_access_updates — version UNIFORME et FINALE
+    DBManager fourni par tasks_engine
+    """
 
-
-
-    """Tâche principale appelée par tasks_engine."""
     logger.info("=== APPLY PLEX ACCESS UPDATES : DÉBUT ===")
 
-    # Désactiver sync_plex
-    disable_task(db, "sync_plex")
-    logger.info("⛔ sync_plex désactivée temporairement")
-
-    # Attendre que sync_plex ne soit plus running
-    wait_for_task_idle(db, "sync_plex")
-
     # Récupération des jobs non traités
-    jobs = db.execute(
+    jobs = db.query(
         """
         SELECT *
         FROM plex_jobs
@@ -276,16 +296,14 @@ def run(task_id, db):
         ORDER BY id ASC
         LIMIT 50
         """
-    ).fetchall()
+    )
 
     if not jobs:
         logger.info("Aucun job à traiter.")
-        enable_task(db, "sync_plex")
         return
 
     logger.info(f"{len(jobs)} job(s) à traiter…")
 
-    # Traitement individuel
     for job in jobs:
         try:
             if job["action"] == "grant":
@@ -294,25 +312,20 @@ def run(task_id, db):
             elif job["action"] == "sync":
                 apply_sync_job(db, job)
 
-
             # Suppression du job après traitement
-            db.execute("DELETE FROM plex_jobs WHERE id = ?", (job["id"],))
-            db.commit()
+            db.execute(
+                "DELETE FROM plex_jobs WHERE id = ?",
+                (job["id"],)
+            )
 
-            logger.info(f"Job {job['id']} supprimé ✔")
+            logger.info(f"Job {job['id']} traité ✔")
 
         except Exception:
-            # On loggue mais on ne supprime pas → permet retry manuel
             logger.exception(f"❌ Erreur dans le job {job['id']}")
-            # On laisse processed=0 pour pouvoir inspecter ensuite
+            # on laisse le job pour retry manuel
             continue
 
-    # Réactiver sync_plex
-    enable_task(db, "sync_plex")
-    logger.info("✅ sync_plex réactivée")
-
-    # Désactivation de la tâche
-    disable_task(db, "apply_plex_access_updates")
-    logger.info("🔕 Tâche apply_plex_access_updates désactivée")
+    cleanup_old_jobs(db)
 
     logger.info("=== APPLY PLEX ACCESS UPDATES : FIN ===")
+

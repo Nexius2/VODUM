@@ -6,13 +6,17 @@ from pathlib import Path
 
 from logging_utils import get_logger
 from tasks_engine import task_logs
-from db_utils import open_db
-from config import Config     # <--- LA solution propre
+from config import Config     
+
+
 
 log = get_logger("auto_backup")
 
-
-def run(task_id, db=None):
+def run(task_id: int, db):
+    """
+    Tâche auto_backup — version UNIFORME et FINALE
+    DBManager fourni par tasks_engine
+    """
 
     log.info("=== AUTO BACKUP : démarrage ===")
     log.debug(f"task_id={task_id}, db fourni={db is not None}")
@@ -24,16 +28,14 @@ def run(task_id, db=None):
         # ---------------------------------
         # 1) Lire configuration depuis settings
         # ---------------------------------
-        conn = db or open_db()
-        cur = conn.cursor()
-
         log.debug("Lecture des paramètres dans settings…")
 
-        row = cur.execute(
+        row = db.query_one(
             "SELECT backup_retention_days FROM settings WHERE id = 1"
-        ).fetchone()
+        )
 
         retention_days = row["backup_retention_days"] if row else 30
+
         log.info(f"Rétention configurée : {retention_days} jours")
 
         # ---------------------------------
@@ -77,7 +79,7 @@ def run(task_id, db=None):
         # ---------------------------------
         # 5) Log DB pour la tâche
         # ---------------------------------
-        task_logs(task_id, "success", f"Backup créé : {backup_name}")
+        task_logs(task_id, "info", f"Backup créé : {backup_name}")
 
         duration = time.monotonic() - start
         log.info(f"=== AUTO BACKUP : terminé OK en {duration:.2f}s ===")
@@ -85,6 +87,5 @@ def run(task_id, db=None):
     except Exception as e:
         log.error("Erreur dans AUTO BACKUP", exc_info=True)
         task_logs(task_id, "error", f"Erreur auto-backup : {e}")
+        raise
 
-        duration = time.monotonic() - start
-        log.error(f"=== AUTO BACKUP : ÉCHEC après {duration:.2f}s ===")

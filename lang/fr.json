@@ -567,7 +567,13 @@
   "backup_settings_error": "Erreur lors de la sauvegarde des paramètres : {error}",
 
 "confirm_restore": "⚠️ Cette action va écraser la base de données actuelle. Continuer ?",
-"public_url": "URL publique"
+"public_url": "URL publique",
+
+"download_logs": "Télécharger les logs",
+
+"jellyfin_server_created_sync_planned": "Serveur Jellyfin créé. Synchronisation initiale planifiée."
+
+
 
 
 

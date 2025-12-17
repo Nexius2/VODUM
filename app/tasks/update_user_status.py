@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 """
-update_user_status.py — VODUM CONTRACT STATUS
----------------------------------------------
-✓ Statut PUREMENT contractuel (VODUM)
-✓ Aucun lien avec Plex / Jellyfin / Kodi
-✓ Logs détaillés → /logs/app.log
-✓ ZÉRO log DB dans la boucle
+update_user_status.py — VODUM CONTRACT STATUS (DBManager)
+--------------------------------------------------------
+✓ Statut purement contractuel
+✓ Aucune dépendance Plex / Jellyfin
+✓ DBManager (connexion unique, sérialisée)
+✓ ZÉRO open_db / close / commit / rollback manuel
+✓ finally propre (log uniquement)
 ✓ Compatible tasks_engine / scheduler
 """
 
 from datetime import datetime, date
 
-from db_utils import open_db
 from tasks_engine import task_logs
 from logging_utils import get_logger
+
 
 log = get_logger("update_user_status")
 
@@ -21,16 +22,16 @@ log = get_logger("update_user_status")
 # ----------------------------------------------------
 # Helpers
 # ----------------------------------------------------
-def get_days_before(cur, tpl_type, default_value):
+def get_days_before(db, tpl_type, default_value):
     """
     Récupère days_before depuis email_templates.
     Fallback propre si absent ou invalide.
     """
     try:
-        row = cur.execute(
+        row = db.query_one(
             "SELECT days_before FROM email_templates WHERE type=?",
             (tpl_type,),
-        ).fetchone()
+        )
 
         val = row["days_before"] if row else None
         log.debug(f"Template '{tpl_type}' → days_before = {val}")
@@ -50,13 +51,13 @@ def compute_status(expiration_date, today, preavis_days, reminder_days):
 
     # 1️⃣ Pas de date → actif
     if not expiration_date:
-        return None  
+        return None
 
     # 2️⃣ Parsing date
     try:
         exp_date = datetime.strptime(expiration_date, "%Y-%m-%d").date()
     except Exception:
-        # Donnée invalide = on NE bloque PAS → actif + log
+        # Donnée invalide = actif (on ne bloque pas)
         log.warning(f"Date expiration invalide ignorée: {expiration_date}")
         return "active"
 
@@ -79,35 +80,44 @@ def compute_status(expiration_date, today, preavis_days, reminder_days):
 
 
 # ----------------------------------------------------
-# Main task
+# Tâche principale
 # ----------------------------------------------------
-def run(task_id=None, db=None):
+def run(task_id: int, db):
+    """
+    Mise à jour du statut contractuel des utilisateurs
+    (active / pre_expired / reminder / expired)
+    """
+
     task_logs(task_id, "info", "Tâche update_user_status démarrée")
     log.info("=== UPDATE USER STATUS : START ===")
-
-    conn = open_db()
-    conn.row_factory = __import__("sqlite3").Row
-    cur = conn.cursor()
 
     today = date.today()
 
     try:
-        # Chargement paramètres mail
-        preavis_days = get_days_before(cur, "preavis", 30)
-        reminder_days = get_days_before(cur, "relance", 7)
+        # ----------------------------------------------------
+        # Paramètres mail (préavis / relance)
+        # ----------------------------------------------------
+        preavis_days = get_days_before(db, "preavis", 30)
+        reminder_days = get_days_before(db, "relance", 7)
 
         log.info(
             f"Paramètres chargés → preavis={preavis_days}j | reminder={reminder_days}j"
         )
 
-        users = cur.execute(
+        # ----------------------------------------------------
+        # Utilisateurs
+        # ----------------------------------------------------
+        users = db.query(
             "SELECT id, status, expiration_date FROM users"
-        ).fetchall()
+        )
 
         log.info(f"{len(users)} utilisateurs chargés")
 
         updated = 0
 
+        # ----------------------------------------------------
+        # Boucle principale
+        # ----------------------------------------------------
         for user in users:
             uid = user["id"]
             old_status = user["status"]
@@ -124,7 +134,7 @@ def run(task_id=None, db=None):
                     f"[USER {uid}] statut {old_status} → {new_status}"
                 )
 
-                cur.execute(
+                db.execute(
                     """
                     UPDATE users
                     SET status = ?,
@@ -134,23 +144,24 @@ def run(task_id=None, db=None):
                     """,
                     (new_status, old_status, uid),
                 )
+
                 updated += 1
 
-        conn.commit()
-
-        msg = f"{updated} utilisateurs mis à jour"
+        # ----------------------------------------------------
+        # Fin normale
+        # ----------------------------------------------------
+        msg = f"{updated} utilisateur(s) mis à jour"
         log.info(msg)
-        task_logs(task_id, "success", msg)
+
+        if updated > 0:
+            task_logs(task_id, "success", msg)
+        else:
+            task_logs(task_id, "info", msg)
 
     except Exception as e:
         log.error("Erreur globale update_user_status", exc_info=True)
         task_logs(task_id, "error", f"Erreur update_user_status: {e}")
-        conn.rollback()
+        raise
 
     finally:
-        try:
-            conn.close()
-        except Exception:
-            pass
-
         log.info("=== UPDATE USER STATUS : END ===")
