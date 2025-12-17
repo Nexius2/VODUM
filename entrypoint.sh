@@ -119,6 +119,26 @@ EOF
 fi
 
 # ---------------------------------------------------------------------------
+# 3️⃣.1️⃣ Migrations V2 incrémentales
+# ---------------------------------------------------------------------------
+
+#log INFO "Vérification des migrations V2"
+
+#HAS_JELLYFIN_MIGRATION=$(sqlite3 "$DB_PATH" \
+#  "SELECT 1 FROM schema_migrations WHERE version = '2025_07_add_jellyfin_id_and_nullable_plex_id';" \
+#  2>/dev/null || true)
+
+#if [ -z "$HAS_JELLYFIN_MIGRATION" ]; then
+#  log INFO "Application migration Jellyfin (plex_id nullable + jellyfin_id)"
+#  python3 /app/migrations/20251215_add_jellyfin_id_and_nullable_plex_id.py "$DB_PATH"
+#  log INFO "Migration Jellyfin appliquée avec succès"
+#else
+#  log INFO "Migration Jellyfin déjà appliquée"
+#fi
+
+
+
+# ---------------------------------------------------------------------------
 # 4️⃣ Bootstrap DB (idempotent)
 #
 # Rôle :
