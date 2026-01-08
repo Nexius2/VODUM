@@ -46,17 +46,18 @@ def run_migrations():
     # -------------------------------------------------
 
     REQUIRED_TABLES = {
-        "users": [],
+        "vodum_users": [],
+        "media_users": [],
         "servers": [],
         "libraries": [],
-        "user_servers": [],
-        "shared_libraries": [],
+        "media_user_libraries": [],
         "email_templates": [],
         "sent_emails": [],
         "settings": [],
         "logs": [],
         "tasks": []
     }
+
 
     for table in REQUIRED_TABLES:
         if not table_exists(cursor, table):

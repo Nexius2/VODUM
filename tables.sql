@@ -1,44 +1,80 @@
+
 -----------------------------------------------------------------------
---  TABLE USERS (Plex only)
+--  TABLE VODUM USERS 
 -----------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE IF NOT EXISTS vodum_users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-    plex_id TEXT UNIQUE,
-	jellyfin_id TEXT UNIQUE,
-    username TEXT NOT NULL,
-
+    username TEXT,
     firstname TEXT,
     lastname TEXT,
     email TEXT,
     second_email TEXT,
-    avatar TEXT,
+    --avatar TEXT,
 
-    plex_role TEXT DEFAULT 'unknown',
+    expiration_date TIMESTAMP,
+    renewal_method TEXT,
+    renewal_date TEXT,
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	
     notes TEXT,
 
-    protected INTEGER DEFAULT 0,
-    home INTEGER DEFAULT 0,
-    restricted INTEGER DEFAULT 0,
+	status TEXT DEFAULT 'expired' CHECK (status IN ('active','pre_expired','reminder','expired')),
+	last_status TEXT,
+    status_changed_at TIMESTAMP
+);
 
+
+-----------------------------------------------------------------------
+--  USERS Identities
+-----------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_identities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    vodum_user_id INTEGER NOT NULL,
+
+    type TEXT NOT NULL,                 -- 'plex', 'jellyfin', ...
+    server_id INTEGER,                  -- NULL pour Plex (ID global plex.tv), NON-NULL pour providers server-scoped
+    external_user_id TEXT NOT NULL,     -- id natif (plex_id, jellyfin_user_id, ...)
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE(type, server_id, external_user_id),
+
+    FOREIGN KEY(vodum_user_id) REFERENCES vodum_users(id) ON DELETE CASCADE,
+    FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_identities_vodum
+ON user_identities(vodum_user_id);
+
+
+-----------------------------------------------------------------------
+--  TABLE USERS (media servers only)
+-----------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS media_users (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    server_id INTEGER NOT NULL,           -- sur quel serveur existe ce compte
+    vodum_user_id INTEGER,                -- lien vers vodum_users (toujours rempli chez toi)
+
+    external_user_id TEXT,                -- id natif Plex/Jellyfin
+    username TEXT NOT NULL,
+    email TEXT,
+    avatar TEXT,
+
+    type TEXT,                            -- 'plex', 'jellyfin', …
+
+    role TEXT,
     joined_at TEXT,
     accepted_at TEXT,
 
-    subscription_active INTEGER DEFAULT 0,
-    subscription_status TEXT,
-    subscription_plan TEXT,
+    raw_json TEXT,                        -- on garde brut l'objet renvoyé par l'API
 
-    expiration_date TIMESTAMP DEFAULT NULL,
-    renewal_method TEXT,
-    renewal_date TEXT,
-    creation_date TEXT,
+	details_json TEXT,
 
-    status TEXT DEFAULT 'expired' CHECK (status IN ('active','pre_expired','reminder','expired')),
-
-    last_status TEXT,
-    status_changed_at TIMESTAMP,
-
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    FOREIGN KEY(server_id) REFERENCES servers(id),
+    FOREIGN KEY(vodum_user_id) REFERENCES vodum_users(id)
 );
 
 
@@ -50,17 +86,14 @@ CREATE TABLE IF NOT EXISTS servers (
 
     name TEXT,
     server_identifier TEXT UNIQUE NOT NULL,      --  machineIdentifier
-	type TEXT,
+	type TEXT NOT NULL,              -- plex / jellyfin / autre
 
     url TEXT,
     local_url TEXT,
     public_url TEXT,
     token TEXT,
 
-    -- Tautulli (optional)
-    tautulli_url TEXT,
-    tautulli_api_key TEXT,
-
+	settings_json TEXT,              -- pour les trucs spécifiques
     last_checked TIMESTAMP,
     status TEXT                         -- up/down/unknown
 );
@@ -78,48 +111,19 @@ CREATE TABLE IF NOT EXISTS libraries (
     FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE
 );
 
------------------------------------------------------------------------
---  ACCESS : USER ↔ SERVER
------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS user_servers (
-    user_id INTEGER NOT NULL,
-    server_id INTEGER NOT NULL,
 
-    owned INTEGER DEFAULT 0,
-    all_libraries INTEGER DEFAULT 0,
-    num_libraries INTEGER DEFAULT 0,
-    pending INTEGER DEFAULT 0,
-    last_seen_at TEXT,
-
-    allow_sync INTEGER DEFAULT 0,
-    allow_camera_upload INTEGER DEFAULT 0,
-    allow_channels INTEGER DEFAULT 0,
-    allow_tuners INTEGER DEFAULT 0,
-    allow_subtitle_admin INTEGER DEFAULT 0,
-
-    filter_all TEXT,
-    filter_movies TEXT,
-    filter_music TEXT,
-    filter_photos TEXT,
-    filter_television TEXT,
-    recommendations_playlist_id TEXT,
-
-    source TEXT DEFAULT 'plex_api',
-
-    PRIMARY KEY (user_id, server_id),
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
-);
 
 
 -----------------------------------------------------------------------
 --  ACCESS : USER ↔ LIBRARY
 -----------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS shared_libraries (
-    user_id INTEGER NOT NULL,
+CREATE TABLE media_user_libraries (
+    media_user_id INTEGER NOT NULL,
     library_id INTEGER NOT NULL,
-    PRIMARY KEY(user_id, library_id),
-    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+
+    PRIMARY KEY(media_user_id, library_id),
+
+    FOREIGN KEY(media_user_id) REFERENCES media_users(id) ON DELETE CASCADE, 
     FOREIGN KEY(library_id) REFERENCES libraries(id) ON DELETE CASCADE
 );
 
@@ -151,7 +155,7 @@ CREATE TABLE IF NOT EXISTS sent_emails (
     sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
     UNIQUE(user_id, template_type, expiration_date),
-    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY(user_id) REFERENCES vodum_users(id) ON DELETE CASCADE
 );
 
 
@@ -250,7 +254,7 @@ CREATE TABLE IF NOT EXISTS plex_jobs (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     processed INTEGER DEFAULT 0,   -- 0 = en attente, 1 = traité
 
-    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY(user_id) REFERENCES media_users(id) ON DELETE CASCADE,
     FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE,
     FOREIGN KEY(library_id) REFERENCES libraries(id) ON DELETE CASCADE
 );

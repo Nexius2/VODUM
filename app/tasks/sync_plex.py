@@ -19,16 +19,16 @@ from plexapi.server import PlexServer
 
 log = get_logger("sync_plex")
 
-
-def ensure_expiration_date_on_first_access(db, user_id):
+def ensure_expiration_date_on_first_access(db, vodum_user_id):
     """
     Initialise expiration_date UNIQUEMENT si :
       - expiration_date est NULL
       - default_subscription_days > 0
     """
+
     row = db.query_one(
-        "SELECT expiration_date FROM users WHERE id = ?",
-        (user_id,)
+        "SELECT expiration_date FROM vodum_users WHERE id = ?",
+        (vodum_user_id,)
     )
 
     if not row or row["expiration_date"] is not None:
@@ -50,14 +50,16 @@ def ensure_expiration_date_on_first_access(db, user_id):
     expiration = (today + timedelta(days=days)).isoformat()
 
     db.execute(
-        "UPDATE users SET expiration_date = ? WHERE id = ?",
-        (expiration, user_id)
+        "UPDATE vodum_users SET expiration_date = ? WHERE id = ?",
+        (expiration, vodum_user_id)
     )
 
     log.info(
-        f"[SUBSCRIPTION] expiration_date initialisée pour user_id={user_id} → {expiration}"
+        f"[SUBSCRIPTION] expiration_date initialisée pour vodum_user_id={vodum_user_id} → {expiration}"
     )
+
     return True
+
 
 
 
@@ -66,7 +68,7 @@ def ensure_expiration_date_on_first_access(db, user_id):
 # ---------------------------------------------------------------------------
 def choose_account_token(db) -> Optional[str]:
     """
-    Retourne un token Plex (account) trouvé dans la table 'servers'.
+    Retourne un token Plex trouvé dans la table 'servers'.
     On prend le premier serveur Plex avec un token non vide.
     """
     row = db.query_one(
@@ -97,23 +99,44 @@ def choose_account_token(db) -> Optional[str]:
 # ---------------------------------------------------------------------------
 # Récupération Libraries Plex (JSON local API)
 # ---------------------------------------------------------------------------
-
-
-
-
-
-
-def plex_get_user_access(plex, server_name, user_email):
+def plex_get_user_access(db, plex, server_name, media_user_id: int):
     """
-    Retourne les libraries réellement partagées avec un user donné.
-    Utilise la méthode fiable démontrée dans plex_backup.py.
+    Retourne les bibliothèques réellement partagées
+    avec un utilisateur Plex (media_users).
+
+    - nécessite media_users.type = 'plex'
+    - utilise le champ media_users.email
     """
+
+    media_user = db.query_one(
+        """
+        SELECT email, type
+        FROM media_users
+        WHERE id = ?
+        """,
+        (media_user_id,)
+    )
+
+    if not media_user:
+        log.error(f"[ACCESS] media_user {media_user_id} introuvable")
+        return []
+
+    if media_user["type"] != "plex":
+        log.error(f"[ACCESS] media_user {media_user_id} n'est pas un compte Plex")
+        return []
+
+    user_email = media_user["email"]
+
+    if not user_email:
+        log.error(f"[ACCESS] media_user {media_user_id} n'a pas d'email Plex")
+        return []
+
     account = plex.myPlexAccount()
 
     try:
         user_acct = account.user(user_email)
     except Exception as e:
-        log.error(f"[ACCESS] Impossible d'obtenir les infos pour {user_email}: {e}")
+        log.error(f"[ACCESS] Impossible d'obtenir infos Plex pour {user_email}: {e}")
         return []
 
     out = []
@@ -124,51 +147,51 @@ def plex_get_user_access(plex, server_name, user_email):
 
         try:
             for section in srv.sections():
-                if getattr(section, "shared", False) is True:
+                if getattr(section, "shared", False):
                     out.append({
                         "title": section.title,
-                        "key": str(section.key)
+                        "key": str(section.key),
                     })
         except Exception as e:
-            log.error(f"[ACCESS] Erreur en parcourant sections user {user_email}: {e}")
+            log.error(
+                f"[ACCESS] Erreur en parcourant sections user {user_email}: {e}"
+            )
 
     return out
 
 
-def sync_plex_user_library_access(db, plex, server):
-    """
-    Synchronise l'accès réel (shared_libraries) pour un serveur Plex donné,
-    en se basant sur PlexAPI (plex_get_user_access).
 
-    - DBManager only (query/query_one/execute)
-    - Aucun commit/rollback/close ici
-    - Déclenche l'initialisation expiration_date si l'user a au moins 1 accès
-    """
+def sync_plex_user_library_access(db, plex, server):
     server_id = server["id"]
     server_name = server["name"]
 
-    # ----------------------------------------------------
-    # 1) Mapping libraries du serveur : section_id -> library_id (DB)
-    # ----------------------------------------------------
+    # 1️⃣ Mapping libraries du serveur
     libraries = db.query(
-        "SELECT id, section_id FROM libraries WHERE server_id = ?",
+        """
+        SELECT id, section_id
+        FROM libraries
+        WHERE server_id = ?
+        """,
         (server_id,),
     )
+
     lib_map = {str(row["section_id"]): row["id"] for row in libraries}
 
     if not lib_map:
         log.warning(f"[SYNC ACCESS] Aucune library en base pour server={server_name} (id={server_id})")
         return
 
-    # ----------------------------------------------------
-    # 2) Users liés à ce serveur (via user_servers)
-    # ----------------------------------------------------
+    # 2️⃣ Users liés à ce serveur
     users = db.query(
         """
-        SELECT u.email, u.id AS user_id
-        FROM users u
-        JOIN user_servers us ON us.user_id = u.id
-        WHERE us.server_id = ?
+        SELECT
+            vu.email,
+            mu.id AS media_user_id,
+            mu.vodum_user_id AS vodum_user_id
+        FROM media_users mu
+        JOIN vodum_users vu ON vu.id = mu.vodum_user_id
+        WHERE mu.server_id = ?
+          AND mu.type = 'plex'
         """,
         (server_id,),
     )
@@ -177,32 +200,36 @@ def sync_plex_user_library_access(db, plex, server):
         log.info(f"[SYNC ACCESS] Aucun user lié à server={server_name} (id={server_id})")
         return
 
+    processed_users = 0
     updated_users = 0
+    skipped_no_email = 0
 
-    # ----------------------------------------------------
-    # 3) Pour chaque user : on resync shared_libraries sur CE serveur
-    # ----------------------------------------------------
+    # 3️⃣ Resync accès pour chaque user
     for u in users:
         email = u["email"]
-        user_id = u["user_id"]
+        media_user_id = u["media_user_id"]
+        vodum_user_id = u["vodum_user_id"]
 
-        # Nettoyer les anciens accès pour CE serveur
+        processed_users += 1
+
+        # Nettoyer les anciens accès pour CE serveur (toujours)
         db.execute(
             """
-            DELETE FROM shared_libraries
-            WHERE user_id = ?
+            DELETE FROM media_user_libraries
+            WHERE media_user_id = ?
               AND library_id IN (
                   SELECT id FROM libraries WHERE server_id = ?
               )
             """,
-            (user_id, server_id),
+            (media_user_id, server_id),
         )
 
+        # Si pas d'email, on ne peut pas demander à Plex les accès (ta fonction plex_get_user_access est basée sur l'email)
         if not email:
+            skipped_no_email += 1
             continue
 
-        # Données réelles côté Plex
-        access = plex_get_user_access(plex, server_name, email)
+        access = plex_get_user_access(db, plex, server_name, media_user_id)
 
         has_access = False
         for entry in access:
@@ -216,20 +243,26 @@ def sync_plex_user_library_access(db, plex, server):
 
             db.execute(
                 """
-                INSERT OR IGNORE INTO shared_libraries(user_id, library_id)
+                INSERT OR IGNORE INTO media_user_libraries(media_user_id, library_id)
                 VALUES (?, ?)
                 """,
-                (user_id, lib_id),
+                (media_user_id, lib_id),
             )
+
             has_access = True
 
-        # Déclencheur abonnement
+        # ✅ ici on passe bien vodum_user_id (pas media_user_id)
         if has_access:
-            ensure_expiration_date_on_first_access(db, user_id)
+            ensure_expiration_date_on_first_access(db, vodum_user_id)
 
         updated_users += 1
 
-    log.info(f"[SYNC ACCESS] Accès mis à jour pour serveur {server_name} (users traités={updated_users})")
+    log.info(
+        f"[SYNC ACCESS] Accès mis à jour pour serveur {server_name} "
+        f"(users en base={len(users)}, traités={processed_users}, maj={updated_users}, sans_email={skipped_no_email})"
+    )
+
+
 
 
 
@@ -313,11 +346,21 @@ def sync_plex_libraries(db, server, libraries):
                 (server_id, sid, lib["name"], lib["type"]),
             )
 
+    # suppression des libraries disparues
     for sid, lib_id in existing.items():
         if sid not in found:
             log.info(f"[SYNC LIBRARIES] Suppression library {lib_id} (section={sid})")
-            db.execute("DELETE FROM shared_libraries WHERE library_id = ?", (lib_id,))
-            db.execute("DELETE FROM libraries WHERE id = ?", (lib_id,))
+
+            # 🔥 ancien : shared_libraries → nouveau : media_user_libraries
+            db.execute(
+                "DELETE FROM media_user_libraries WHERE library_id = ?",
+                (lib_id,),
+            )
+
+            db.execute(
+                "DELETE FROM libraries WHERE id = ?",
+                (lib_id,),
+            )
 
 
   
@@ -516,9 +559,9 @@ def sync_users_from_api(db) -> None:
     """
     Synchronise les utilisateurs Plex à partir de l'API Plex.tv (/api/users)
 
-    - Upsert table users
-    - Upsert table user_servers (source = plex_api)
-    - Nettoie les liens user_servers obsolètes
+    - Upsert table vodum_users (identité VODUM, via email)
+    - Upsert table media_users (un compte Plex par serveur)
+    - Nettoie les media_users Plex obsolètes
     - NE fait AUCUN commit / rollback / close
     """
     log.info("=== [SYNC USERS] Début synchronisation utilisateurs Plex (API Plex.tv) ===")
@@ -530,14 +573,12 @@ def sync_users_from_api(db) -> None:
     if not token:
         raise RuntimeError("[SYNC USERS] Aucun token Plex disponible")
 
-
     # ----------------------------------------------------
     # 2) Appel API Plex.tv
     # ----------------------------------------------------
     users_data = fetch_users_from_plex_api(token, db=db)
     if not users_data:
         raise RuntimeError("[SYNC USERS] Aucun utilisateur renvoyé par Plex.tv")
-
 
     # ----------------------------------------------------
     # 3) Mapping serveurs Plex (machineIdentifier → id)
@@ -558,16 +599,17 @@ def sync_users_from_api(db) -> None:
 
     today = datetime.utcnow().date()
     seen_plex_ids: Set[str] = set()
-    seen_user_servers: Set[Tuple[int, int]] = set()
+    # (external_user_id, server_id)
+    seen_media_pairs: Set[Tuple[str, int]] = set()
 
     # ----------------------------------------------------
-    # 4) Upsert USERS + user_servers
+    # 4) Upsert vodum_users + media_users
     # ----------------------------------------------------
     for plex_id, data in users_data.items():
         seen_plex_ids.add(plex_id)
 
         username = data["username"]
-        email = data["email"]
+        email = data["email"] or None
         avatar = data["avatar"]
         plex_role = data["plex_role"]
 
@@ -578,95 +620,66 @@ def sync_users_from_api(db) -> None:
         joined_at = data.get("joined_at")
         accepted_at = data.get("accepted_at")
 
-        subscription_active = data.get("subscription_active")
-        subscription_status = data.get("subscription_status")
-        subscription_plan = data.get("subscription_plan")
+        # ------------------------------------------------
+        # 4.1) VODUM_USERS : on cherche d'abord via user_identities (plex_id), sinon par email
+        # ------------------------------------------------
+        vodum_user_id = None
 
-        # ------------------------------------------------
-        # USERS : SELECT
-        # ------------------------------------------------
+        # 4.1.1) Priorité: identité externe (même si email vide)
         row = db.query_one(
-            "SELECT id FROM users WHERE plex_id = ?",
-            (plex_id,)
+            """
+            SELECT vodum_user_id
+            FROM user_identities
+            WHERE type = 'plex'
+              AND server_id IS NULL
+              AND external_user_id = ?
+            """,
+            (plex_id,),
+        )
+        if row:
+            vodum_user_id = row["vodum_user_id"]
+
+        # 4.1.2) Sinon: fallback par email
+        if vodum_user_id is None and email:
+            row = db.query_one(
+                "SELECT id FROM vodum_users WHERE email = ?",
+                (email,),
+            )
+            if row:
+                vodum_user_id = row["id"]
+                db.execute(
+                    """
+                    UPDATE vodum_users
+                    SET username = COALESCE(username, ?)
+                    WHERE id = ?
+                    """,
+                    (username, vodum_user_id),
+                )
+
+        # 4.1.3) Sinon: création
+        if vodum_user_id is None:
+            cur_v = db.execute(
+                """
+                INSERT INTO vodum_users(username, email, created_at, status)
+                VALUES (?, ?, ?, 'active')
+                """,
+                (username, email, today.isoformat()),
+            )
+            vodum_user_id = cur_v.lastrowid
+            log.info(f"[SYNC USERS] Nouvel vodum_user créé vodum_user_id={vodum_user_id} (plex_id={plex_id})")
+
+        # 4.1.4) S'assure que l'identité plex est enregistrée (idempotent)
+        db.execute(
+            """
+            INSERT OR IGNORE INTO user_identities(vodum_user_id, type, server_id, external_user_id)
+            VALUES (?, 'plex', NULL, ?)
+            """,
+            (vodum_user_id, plex_id),
         )
 
-        # ------------------------------------------------
-        # UPDATE EXISTANT
-        # ------------------------------------------------
-        if row:
-            user_id = row["id"]
-
-            db.execute(
-                """
-                UPDATE users
-                SET username            = ?,
-                    email               = ?,
-                    avatar              = ?,
-                    plex_role           = ?,
-                    home                = ?,
-                    protected           = ?,
-                    restricted          = ?,
-                    joined_at           = ?,
-                    accepted_at         = ?,
-                    subscription_active = ?,
-                    subscription_status = ?,
-                    subscription_plan   = ?
-                WHERE id = ?
-                """,
-                (
-                    username,
-                    email,
-                    avatar,
-                    plex_role or "unknown",
-                    home_flag,
-                    protected_flag,
-                    restricted_flag,
-                    joined_at,
-                    accepted_at,
-                    subscription_active,
-                    subscription_status,
-                    subscription_plan,
-                    user_id,
-                ),
-            )
 
         # ------------------------------------------------
-        # INSERT NOUVEAU
-        # ------------------------------------------------
-        else:
-            cur = db.execute(
-                """
-                INSERT INTO users(
-                    plex_id, username, email, avatar, plex_role,
-                    home, protected, restricted,
-                    joined_at, accepted_at,
-                    subscription_active, subscription_status, subscription_plan,
-                    creation_date
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    plex_id,
-                    username,
-                    email,
-                    avatar,
-                    plex_role or "unknown",
-                    home_flag,
-                    protected_flag,
-                    restricted_flag,
-                    joined_at,
-                    accepted_at,
-                    subscription_active,
-                    subscription_status,
-                    subscription_plan,
-                    today.isoformat(),
-                ),
-            )
-            user_id = cur.lastrowid
-            log.info(f"[SYNC USERS] Nouvel utilisateur créé user_id={user_id} plex_id={plex_id}")
-
-        # ------------------------------------------------
-        # USER_SERVERS
+        # 4.2) MEDIA_USERS : un compte Plex par serveur
         # ------------------------------------------------
         for srv in data.get("servers", []):
             machine_id = srv.get("machineIdentifier")
@@ -677,100 +690,116 @@ def sync_users_from_api(db) -> None:
             if not server_id:
                 continue
 
-            seen_user_servers.add((user_id, server_id))
+            seen_media_pairs.add((plex_id, server_id))
 
-            db.execute(
+            # existe déjà ?
+            row_mu = db.query_one(
                 """
-                INSERT INTO user_servers(
-                    user_id, server_id,
-                    owned, all_libraries, num_libraries, pending, last_seen_at,
-
-                    allow_sync, allow_camera_upload, allow_channels,
-                    allow_tuners, allow_subtitle_admin,
-
-                    filter_all, filter_movies, filter_music,
-                    filter_photos, filter_television,
-                    recommendations_playlist_id,
-
-                    source
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'plex_api')
-                ON CONFLICT(user_id, server_id) DO UPDATE SET
-                    owned                       = excluded.owned,
-                    all_libraries               = excluded.all_libraries,
-                    num_libraries               = excluded.num_libraries,
-                    pending                     = excluded.pending,
-                    last_seen_at                = excluded.last_seen_at,
-
-                    allow_sync                  = excluded.allow_sync,
-                    allow_camera_upload         = excluded.allow_camera_upload,
-                    allow_channels              = excluded.allow_channels,
-                    allow_tuners                = excluded.allow_tuners,
-                    allow_subtitle_admin        = excluded.allow_subtitle_admin,
-
-                    filter_all                  = excluded.filter_all,
-                    filter_movies               = excluded.filter_movies,
-                    filter_music                = excluded.filter_music,
-                    filter_photos               = excluded.filter_photos,
-                    filter_television           = excluded.filter_television,
-                    recommendations_playlist_id = excluded.recommendations_playlist_id,
-
-                    source = 'plex_api'
+                SELECT id
+                FROM media_users
+                WHERE server_id = ?
+                  AND external_user_id = ?
+                  AND type = 'plex'
                 """,
-                (
-                    user_id,
-                    server_id,
-                    srv.get("owned", 0),
-                    srv.get("allLibraries", 0),
-                    srv.get("numLibraries", 0),
-                    srv.get("pending", 0),
-                    srv.get("lastSeenAt"),
-
-                    data.get("allow_sync", 0),
-                    data.get("allow_camera_upload", 0),
-                    data.get("allow_channels", 0),
-                    0,  # allow_tuners (non exposé par Plex.tv)
-                    0,  # allow_subtitle_admin (non exposé par Plex.tv)
-
-                    data.get("filter_all"),
-                    data.get("filter_movies"),
-                    data.get("filter_music"),
-                    data.get("filter_photos"),
-                    data.get("filter_television"),
-                    data.get("recommendations_playlist_id"),
-                ),
+                (server_id, plex_id),
             )
 
+            if row_mu:
+                media_user_id = row_mu["id"]
+
+                db.execute(
+                    """
+                    UPDATE media_users
+                    SET vodum_user_id = ?,
+                        username       = ?,
+                        email          = ?,
+                        avatar         = ?,
+                        type           = 'plex',
+                        role           = ?,
+                        joined_at      = ?,
+                        accepted_at    = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        vodum_user_id,
+                        username,
+                        email,
+                        avatar,
+                        plex_role or "unknown",
+                        joined_at,
+                        accepted_at,
+                        media_user_id,
+                    ),
+                )
+
+            else:
+                cur_mu = db.execute(
+                    """
+                    INSERT INTO media_users(
+                        server_id,
+                        vodum_user_id,
+                        external_user_id,
+                        username,
+                        email,
+                        avatar,
+                        type,
+                        role,
+                        joined_at,
+                        accepted_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, 'plex', ?, ?, ?)
+                    """,
+                    (
+                        server_id,
+                        vodum_user_id,
+                        plex_id,
+                        username,
+                        email,
+                        avatar,
+                        plex_role or "unknown",
+                        joined_at,
+                        accepted_at,
+                    ),
+                )
+                media_user_id = cur_mu.lastrowid
+                log.info(
+                    f"[SYNC USERS] Nouveau media_user créé id={media_user_id} "
+                    f"(server_id={server_id}, plex_id={plex_id})"
+                )
+
     # ----------------------------------------------------
-    # 5) Nettoyage user_servers obsolètes (plex_api)
+    # 5) Nettoyage media_users obsolètes (Plex)
     # ----------------------------------------------------
     rows = db.query(
         """
-        SELECT us.user_id, us.server_id
-        FROM user_servers us
-        JOIN servers s ON s.id = us.server_id
-        WHERE us.source = 'plex_api'
-          AND s.type    = 'plex'
+        SELECT mu.external_user_id, mu.server_id
+        FROM media_users mu
+        JOIN servers s ON s.id = mu.server_id
+        WHERE mu.type = 'plex'
+          AND s.type  = 'plex'
         """
     )
 
     removed = 0
     for r in rows:
-        key = (r["user_id"], r["server_id"])
-        if key not in seen_user_servers:
+        key = (str(r["external_user_id"]), r["server_id"])
+        if key not in seen_media_pairs:
             db.execute(
                 """
-                DELETE FROM user_servers
-                WHERE user_id = ? AND server_id = ? AND source = 'plex_api'
+                DELETE FROM media_users
+                WHERE external_user_id = ?
+                  AND server_id        = ?
+                  AND type             = 'plex'
                 """,
-                (r["user_id"], r["server_id"]),
+                (r["external_user_id"], r["server_id"]),
             )
             removed += 1
 
     log.info(
         f"=== [SYNC USERS] Fin sync Plex.tv : users={len(seen_plex_ids)}, "
-        f"liens actifs={len(seen_user_servers)}, liens supprimés={removed} ==="
+        f"liens actifs={len(seen_media_pairs)}, media_users supprimés={removed} ==="
     )
+
 
 
 
@@ -781,34 +810,42 @@ def sync_users_from_api(db) -> None:
 def sync_all(task_id=None, db=None) -> None:
     """
     Synchronisation complète Plex :
-      - users / user_servers via Plex.tv
-      - libraries via API locale
-      - accès users → libraries via PlexAPI
 
-    DBManager ONLY :
+      - Synchronise les utilisateurs Plex (création/MAJ media_users)
+      - Synchronise les libraries Plex
+      - Synchronise les accès users → libraries
+
+    IMPORTANT :
+      - DBManager uniquement
+      - aucun commit / rollback
       - aucune ouverture / fermeture DB
-      - aucun commit
     """
+
     if db is None:
         raise RuntimeError("sync_all() doit recevoir un DBManager")
 
     log.info("=== [SYNC ALL] Début synchronisation Plex ===")
 
-    # -------------------------------------------------
-    # 1) Users + user_servers (API Plex.tv)
-    # -------------------------------------------------
+    #
+    # 1) Sync utilisateurs depuis Plex.tv (/api/users)
+    #
     sync_users_from_api(db)
 
-    # -------------------------------------------------
-    # 2) Serveurs Plex
-    # -------------------------------------------------
-    servers = db.query("SELECT * FROM servers WHERE type='plex'")
+    #
+    # 2) Récupération des serveurs Plex
+    #
+    servers = db.query(
+        "SELECT * FROM servers WHERE type='plex'"
+    )
 
     if not servers:
         raise RuntimeError("Aucun serveur Plex trouvé en base")
 
     any_success = False
 
+    #
+    # 3) Pour chaque serveur → sync libraries + accès users
+    #
     for server in servers:
         server_name = server["name"]
         log.info(f"[SYNC ALL] Serveur Plex : {server_name}")
@@ -817,6 +854,7 @@ def sync_all(task_id=None, db=None) -> None:
         try:
             libs = plex_get_libraries(server)
             sync_plex_libraries(db, server, libs)
+
         except Exception as e:
             log.error(
                 f"[SYNC LIBS] Erreur synchronisation bibliothèques pour {server_name}: {e}",
@@ -837,6 +875,7 @@ def sync_all(task_id=None, db=None) -> None:
         try:
             plex = PlexServer(base_url, token)
             sync_plex_user_library_access(db, plex, server)
+
             any_success = True
 
         except Exception as e:
@@ -853,10 +892,10 @@ def sync_all(task_id=None, db=None) -> None:
 
 
 
+
 # ---------------------------------------------------------------------------
 # API POUR LE SCHEDULER (tasks_engine)
 # ---------------------------------------------------------------------------
-
 def run(task_id: int, db):
     """
     Point d'entrée pour le scheduler VODUM.
@@ -875,7 +914,8 @@ def run(task_id: int, db):
         duration = time.monotonic() - start
         log.info(f"=== [SYNC_PLEX] Terminé OK en {duration:.2f}s ===")
 
-        if db.query_one("SELECT 1 FROM users LIMIT 1"):
+        # 🔥 nouvelle vérification
+        if db.query_one("SELECT 1 FROM media_users LIMIT 1"):
             task_logs(task_id, "success", "Synchronisation Plex terminée avec succès.")
         else:
             task_logs(task_id, "info", "Synchronisation Plex terminée — aucun utilisateur trouvé.")

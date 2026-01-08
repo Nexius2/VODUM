@@ -815,20 +815,20 @@ def create_app():
         stats = {}
 
         stats["total_users"] = db.query_one(
-            "SELECT COUNT(*) AS cnt FROM users"
+            "SELECT COUNT(*) AS cnt FROM vodum_users"
         )["cnt"]
 
         stats["active_users"] = db.query_one(
-            "SELECT COUNT(*) AS cnt FROM users WHERE status = 'active'"
+            "SELECT COUNT(*) AS cnt FROM vodum_users WHERE status = 'active'"
         )["cnt"]
 
         # expiring soon = reminder + pre_expired
         stats["expiring_soon"] = db.query_one(
-            "SELECT COUNT(*) AS cnt FROM users WHERE status IN ('pre_expired', 'reminder')"
+            "SELECT COUNT(*) AS cnt FROM vodum_users WHERE status IN ('pre_expired', 'reminder')"
         )["cnt"]
 
         stats["expired_users"] = db.query_one(
-            "SELECT COUNT(*) AS cnt FROM users WHERE status = 'expired'"
+            "SELECT COUNT(*) AS cnt FROM vodum_users WHERE status = 'expired'"
         )["cnt"]
 
         # --------------------------
@@ -952,48 +952,47 @@ def create_app():
     # -----------------------------
     # UTILISATEURS
     # -----------------------------
-    
-    def get_user_servers_with_access(user_id):
-        """
-        Retourne la liste des serveurs liés à un utilisateur, avec :
-        - serveur
-        - bibliothèques auxquelles il a accès (shared_libraries)
 
-        Compatible DBManager
-        READ only
+    def get_user_servers_with_access(vodum_user_id):
         """
+        Retourne les serveurs associés à un utilisateur VODUM, avec
+        la liste des bibliothèques auxquelles ses comptes media ont accès.
+        """
+
         db = get_db()
-
-        # --------------------------------------------------
-        # 1) Récupération des serveurs liés à l’utilisateur
-        # --------------------------------------------------
-        servers = db.query(
-            """
-            SELECT s.*
-            FROM servers s
-            JOIN user_servers us ON us.server_id = s.id
-            WHERE us.user_id = ?
-            ORDER BY s.name
-            """,
-            (user_id,),
-        )
 
         server_list = []
 
         # --------------------------------------------------
-        # 2) Pour chaque serveur, récupérer les bibliothèques accessibles
+        # 1) Serveurs sur lesquels l'utilisateur possède un media_user
         # --------------------------------------------------
+        servers = db.query(
+            """
+            SELECT DISTINCT s.*
+            FROM servers s
+            JOIN media_users mu ON mu.server_id = s.id
+            WHERE mu.vodum_user_id = ?
+            ORDER BY s.name
+            """,
+            (vodum_user_id,),
+        )
+
         for s in servers:
+
+            # --------------------------------------------------
+            # 2) Bibliothèques accessibles via ses comptes media
+            # --------------------------------------------------
             libraries = db.query(
                 """
-                SELECT l.*
+                SELECT DISTINCT l.*
                 FROM libraries l
-                JOIN shared_libraries sl ON sl.library_id = l.id
-                WHERE sl.user_id = ?
+                JOIN media_user_libraries mul ON mul.library_id = l.id
+                JOIN media_users mu ON mu.id = mul.media_user_id
+                WHERE mu.vodum_user_id = ?
                   AND l.server_id = ?
                 ORDER BY l.name
                 """,
-                (user_id, s["id"]),
+                (vodum_user_id, s["id"]),
             )
 
             server_list.append({
@@ -1002,9 +1001,10 @@ def create_app():
             })
 
         return server_list
-
-
     
+
+
+        
     @app.route("/users")
     def users_list():
         db = get_db()
@@ -1015,11 +1015,19 @@ def create_app():
         query = """
             SELECT
                 u.*,
-                COUNT(DISTINCT l.server_id) AS servers_count,
-                COUNT(DISTINCT sl.library_id) AS libraries_count
-            FROM users u
-            LEFT JOIN shared_libraries sl ON sl.user_id = u.id
-            LEFT JOIN libraries l ON l.id = sl.library_id
+
+                -- nombre de serveurs où l'utilisateur a un compte
+                COUNT(DISTINCT mu.server_id) AS servers_count,
+
+                -- nombre de bibliothèques auxquelles il a accès
+                COUNT(DISTINCT mul.library_id) AS libraries_count
+
+            FROM vodum_users u
+            LEFT JOIN media_users mu
+                ON mu.vodum_user_id = u.id
+
+            LEFT JOIN media_user_libraries mul
+                ON mul.media_user_id = mu.id
         """
 
         conditions = []
@@ -1037,9 +1045,11 @@ def create_app():
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
 
-        query += " GROUP BY u.id ORDER BY u.username ASC"
+        query += """
+            GROUP BY u.id
+            ORDER BY u.username ASC
+        """
 
-        # READ ONLY via DBManager
         users = db.query(query, params)
 
         return render_template(
@@ -1051,37 +1061,46 @@ def create_app():
         )
 
 
+
     @app.route("/users/<int:user_id>", methods=["GET", "POST"])
     def user_detail(user_id):
         db = get_db()
 
         # --------------------------------------------------
-        # Charger l’utilisateur
+        # Charger l’utilisateur (VODUM)
         # --------------------------------------------------
         user = db.query_one(
-            "SELECT * FROM users WHERE id = ?",
+            "SELECT * FROM vodum_users WHERE id = ?",
             (user_id,),
         )
+
         if not user:
             flash("user_not_found", "error")
             return redirect(url_for("users_list"))
 
         # --------------------------------------------------
-        # Déterminer les types de serveurs autorisés
+        # Types de serveurs réellement liés à l'utilisateur
         # --------------------------------------------------
-        allowed_types = []
-        if user["plex_id"]:
-            allowed_types.append("plex")
-        if user["jellyfin_id"]:
-            allowed_types.append("jellyfin")
+        allowed_types = [
+            row["type"]
+            for row in db.query(
+                """
+                SELECT DISTINCT s.type
+                FROM servers s
+                JOIN media_users mu ON mu.server_id = s.id
+                WHERE mu.vodum_user_id = ?
+                """,
+                (user_id,),
+            )
+            if row["type"]
+        ]
 
         # ==================================================
-        # POST → Mise à jour utilisateur + options serveur
+        # POST → Mise à jour utilisateur + sync plex
         # ==================================================
         if request.method == "POST":
             form = request.form
 
-            # 1) --- Mise à jour infos utilisateur ---
             firstname       = form.get("firstname") or user["firstname"]
             lastname        = form.get("lastname") or user["lastname"]
             second_email    = form.get("second_email") or user["second_email"]
@@ -1090,9 +1109,10 @@ def create_app():
             renewal_method  = form.get("renewal_method") or user["renewal_method"]
             notes           = form.get("notes") if "notes" in form else user["notes"]
 
+            # --- MAJ infos Vodum ---
             db.execute(
                 """
-                UPDATE users
+                UPDATE vodum_users
                 SET firstname = ?, lastname = ?, second_email = ?,
                     renewal_date = ?, renewal_method = ?, notes = ?
                 WHERE id = ?
@@ -1104,7 +1124,7 @@ def create_app():
                 ),
             )
 
-            # Logique métier expiration
+            # Gestion expiration
             if expiration_date != user["expiration_date"]:
                 update_user_expiration(
                     user_id,
@@ -1112,123 +1132,88 @@ def create_app():
                     reason="ui_manual",
                 )
 
-            # 2) --- Mise à jour options serveur ---
-            # ⚠️ uniquement les serveurs :
-            #   - liés à l’utilisateur
-            #   - du bon type (plex / jellyfin)
-            placeholders = ",".join("?" * len(allowed_types))
-
-            user_servers = db.query(
-                f"""
-                SELECT us.server_id
-                FROM user_servers us
-                JOIN servers s ON s.id = us.server_id
-                WHERE us.user_id = ?
-                  AND s.type IN ({placeholders})
-                """,
-                (user_id, *allowed_types),
-            )
-
-            for us in user_servers:
-                sid = us["server_id"]
-
-                allow_sync     = 1 if form.get(f"allow_sync_{sid}") else 0
-                allow_camera   = 1 if form.get(f"allow_camera_upload_{sid}") else 0
-                allow_channels = 1 if form.get(f"allow_channels_{sid}") else 0
-
-                filter_movies     = form.get(f"filter_movies_{sid}") or None
-                filter_television = form.get(f"filter_television_{sid}") or None
-                filter_music      = form.get(f"filter_music_{sid}") or None
-
-                db.execute(
-                    """
-                    UPDATE user_servers
-                    SET allow_sync = ?,
-                        allow_camera_upload = ?,
-                        allow_channels = ?,
-                        filter_movies = ?,
-                        filter_television = ?,
-                        filter_music = ?
-                    WHERE user_id = ? AND server_id = ?
-                    """,
-                    (
-                        allow_sync,
-                        allow_camera,
-                        allow_channels,
-                        filter_movies,
-                        filter_television,
-                        filter_music,
-                        user_id,
-                        sid,
-                    ),
-                )
-
-            # 3) --- Ajouter jobs SYNC Plex (uniquement si user Plex)
+            # -----------------------------------------------
+            # SYNC Plex : pour chaque media_user plex
+            # -----------------------------------------------
             if "plex" in allowed_types:
-                plex_servers = db.query(
-                    "SELECT id FROM servers WHERE type = 'plex'"
+                plex_media = db.query(
+                    """
+                    SELECT mu.id, mu.server_id
+                    FROM media_users mu
+                    JOIN servers s ON s.id = mu.server_id
+                    WHERE mu.vodum_user_id = ?
+                      AND s.type = 'plex'
+                    """,
+                    (user_id,),
                 )
 
-                for s in plex_servers:
+                for mu in plex_media:
                     db.execute(
                         """
                         INSERT INTO plex_jobs(action, user_id, server_id, library_id, processed)
                         VALUES ('sync', ?, ?, NULL, 0)
                         """,
-                        (user_id, s["id"]),
+                        (mu["id"], mu["server_id"]),
                     )
 
-                # 4) --- Lancer tâche apply_plex_access_updates
                 run_task_by_name("apply_plex_access_updates")
 
             flash("user_saved", "success")
             return redirect(url_for("user_detail", user_id=user_id))
 
         # ==================================================
-        # GET → Chargement complet user + serveurs + libs
+        # GET → Chargement infos complètes
         # ==================================================
 
-        if allowed_types:
-            placeholders = ",".join("?" * len(allowed_types))
+        # -----------------------------------------------
+        # Comptes media + serveurs
+        # -----------------------------------------------
+        servers = db.query(
+            """
+            SELECT
+                s.*,
+                mu.id AS media_user_id,
+                mu.username AS media_username,
+                mu.type AS media_type
+            FROM media_users mu
+            JOIN servers s ON s.id = mu.server_id
+            WHERE mu.vodum_user_id = ?
+            ORDER BY s.name
+            """,
+            (user_id,),
+        )
 
-            servers = db.query(
-                f"""
-                SELECT
-                    s.*,
-                    us.allow_sync,
-                    us.allow_camera_upload,
-                    us.allow_channels,
-                    us.filter_movies,
-                    us.filter_television,
-                    us.filter_music,
-                    1 AS has_access
-                FROM servers s
-                JOIN user_servers us
-                     ON us.server_id = s.id
-                    AND us.user_id = ?
-                WHERE s.type IN ({placeholders})
-                ORDER BY s.name
-                """,
-                (user_id, *allowed_types),
-            )
-        else:
-            servers = []
-
+        # -----------------------------------------------
+        # Bibliothèques + accès
+        # -----------------------------------------------
         libraries = db.query(
             """
             SELECT
                 l.*,
                 s.name AS server_name,
-                CASE WHEN sl.user_id IS NOT NULL THEN 1 ELSE 0 END AS has_access
+                CASE
+                    WHEN mul.media_user_id IS NOT NULL THEN 1
+                    ELSE 0
+                END AS has_access
             FROM libraries l
             JOIN servers s ON s.id = l.server_id
-            LEFT JOIN shared_libraries sl
-                   ON sl.library_id = l.id AND sl.user_id = ?
+
+            LEFT JOIN media_user_libraries mul
+                   ON mul.library_id = l.id
+                  AND mul.media_user_id IN (
+                        SELECT id
+                        FROM media_users
+                        WHERE vodum_user_id = ?
+                   )
+
             ORDER BY s.name, l.name
             """,
             (user_id,),
         )
 
+        # -----------------------------------------------
+        # Mails envoyés (table conserve vodum_users.id)
+        # -----------------------------------------------
         sent_emails = db.query(
             """
             SELECT *
@@ -1244,7 +1229,7 @@ def create_app():
             user=user,
             servers=servers,
             libraries=libraries,
-            user_servers=servers,
+            user_servers=servers,   # compatibilité template
             sent_emails=sent_emails,
         )
 
@@ -1264,58 +1249,85 @@ def create_app():
             return redirect(url_for("user_detail", user_id=user_id))
 
         # --------------------------------------------------
-        # Vérifier si l'accès existe déjà (READ)
+        # Trouver TOUS les media_users de cet utilisateur
         # --------------------------------------------------
-        exists = db.query_one(
+        media_users = db.query(
             """
-            SELECT 1
-            FROM shared_libraries
-            WHERE user_id = ? AND library_id = ?
+            SELECT id
+            FROM media_users
+            WHERE vodum_user_id = ?
             """,
-            (user_id, library_id),
+            (user_id,),
+        )
+
+        if not media_users:
+            flash("no_media_accounts_for_user", "error")
+            return redirect(url_for("user_detail", user_id=user_id))
+
+        media_user_ids = [mu["id"] for mu in media_users]
+
+        # --------------------------------------------------
+        # Vérifier si l'accès existe déjà pour AU MOINS un compte
+        # --------------------------------------------------
+        placeholders = ",".join("?" * len(media_user_ids))
+
+        exists = db.query_one(
+            f"""
+            SELECT 1
+            FROM media_user_libraries
+            WHERE library_id = ?
+              AND media_user_id IN ({placeholders})
+            LIMIT 1
+            """,
+            (library_id, *media_user_ids),
         )
 
         # --------------------------------------------------
-        # Toggle accès
+        # TOGGLE
         # --------------------------------------------------
         if exists:
-            # RETIRER
+            # RETIRER pour tous les comptes media
             db.execute(
-                """
-                DELETE FROM shared_libraries
-                WHERE user_id = ? AND library_id = ?
+                f"""
+                DELETE FROM media_user_libraries
+                WHERE library_id = ?
+                  AND media_user_id IN ({placeholders})
                 """,
-                (user_id, library_id),
+                (library_id, *media_user_ids),
             )
+
             flash("library_access_removed", "success")
+
         else:
-            # AJOUTER
-            db.execute(
-                """
-                INSERT INTO shared_libraries(user_id, library_id)
-                VALUES (?, ?)
-                """,
-                (user_id, library_id),
-            )
+            # AJOUTER pour tous les comptes media
+            for mid in media_user_ids:
+                db.execute(
+                    """
+                    INSERT OR IGNORE INTO media_user_libraries(media_user_id, library_id)
+                    VALUES (?, ?)
+                    """,
+                    (mid, library_id),
+                )
+
             flash("library_access_added", "success")
 
         return redirect(url_for("user_detail", user_id=user_id))
 
 
 
+
     # -----------------------------
     # SERVEURS & BIBLIO
     # -----------------------------
-        
     @app.route("/servers/<int:server_id>/sync")
     def sync_server(server_id):
         db = get_db()
 
         # --------------------------------------------------
-        # Vérifier que le serveur existe (READ)
+        # Vérifier que le serveur existe
         # --------------------------------------------------
         server = db.query_one(
-            "SELECT id FROM servers WHERE id = ?",
+            "SELECT id, type FROM servers WHERE id = ?",
             (server_id,),
         )
 
@@ -1324,22 +1336,30 @@ def create_app():
             return redirect(url_for("servers_list"))
 
         # --------------------------------------------------
-        # Ajouter un job de synchronisation (WRITE)
+        # Si ce n'est pas un serveur Plex, ne pas créer de job Plex
+        # --------------------------------------------------
+        if server["type"] != "plex":
+            flash("sync_not_supported_for_server_type", "warning")
+            return redirect(url_for("server_detail", server_id=server_id))
+
+        # --------------------------------------------------
+        # Ajouter un job de synchronisation
         # --------------------------------------------------
         db.execute(
             """
-            INSERT INTO plex_jobs (action, server_id)
-            VALUES ('sync', ?)
+            INSERT INTO plex_jobs (action, server_id, processed)
+            VALUES ('sync', ?, 0)
             """,
             (server_id,),
         )
 
         # --------------------------------------------------
-        # Lancer la tâche de traitement
+        # Lancer la tâche de vérification
         # --------------------------------------------------
         run_task_by_name("check_servers")
 
         return redirect(url_for("server_detail", server_id=server_id))
+
 
 
     @app.route("/servers", methods=["GET"])
@@ -1350,11 +1370,20 @@ def create_app():
             """
             SELECT
                 s.*,
+
+                -- nb bibliothèques
                 COUNT(DISTINCT l.id) AS libraries_count,
-                COUNT(DISTINCT us.user_id) AS users_count
+
+                -- nb d'utilisateurs Vodum ayant au moins un compte sur ce serveur
+                COUNT(DISTINCT mu.vodum_user_id) AS users_count
+
             FROM servers s
-            LEFT JOIN libraries l ON l.server_id = s.id
-            LEFT JOIN user_servers us ON us.server_id = s.id
+            LEFT JOIN libraries l
+                   ON l.server_id = s.id
+
+            LEFT JOIN media_users mu
+                   ON mu.server_id = s.id
+
             GROUP BY s.id
             ORDER BY s.name
             """
@@ -1368,6 +1397,7 @@ def create_app():
         )
 
 
+
     @app.route("/libraries", methods=["GET"])
     def libraries_list():
         db = get_db()
@@ -1377,10 +1407,20 @@ def create_app():
             SELECT
                 l.*,
                 s.name AS server_name,
-                COUNT(sl.user_id) AS users_count
+
+                -- nb d'utilisateurs Vodum ayant accès
+                COUNT(DISTINCT mu.vodum_user_id) AS users_count
+
             FROM libraries l
-            JOIN servers s ON s.id = l.server_id
-            LEFT JOIN shared_libraries sl ON sl.library_id = l.id
+            JOIN servers s
+                ON s.id = l.server_id
+
+            LEFT JOIN media_user_libraries mul
+                ON mul.library_id = l.id
+
+            LEFT JOIN media_users mu
+                ON mu.id = mul.media_user_id
+
             GROUP BY l.id
             ORDER BY s.name, l.name
             """
@@ -1395,43 +1435,72 @@ def create_app():
 
 
 
+
     @app.route("/servers/new", methods=["POST"])
     def server_create():
         db = get_db()
 
-        
         server_type = (request.form.get("type") or "generic").lower()
         name = f"{server_type.upper()} - pending"
+
         url = request.form.get("url") or None
         local_url = request.form.get("local_url") or None
         public_url = request.form.get("public_url") or None
         token = request.form.get("token") or None
+
+        # options spécifiques (comme avant, mais on les mettra dans JSON)
         tautulli_url = request.form.get("tautulli_url") or None
         tautulli_api_key = request.form.get("tautulli_api_key") or None
+
         server_identifier = str(uuid.uuid4())
 
+        # ---------------------------------------
+        # settings_json (clé/valeurs extensibles)
+        # ---------------------------------------
+        settings = {}
 
+        if tautulli_url or tautulli_api_key:
+            settings["tautulli"] = {
+                "url": tautulli_url,
+                "api_key": tautulli_api_key,
+            }
 
-        # Création du serveur (WRITE)
+        settings_json = json.dumps(settings) if settings else None
+
+        # ---------------------------------------
+        # INSERT serveur (NOUVEAU SCHÉMA)
+        # ---------------------------------------
         db.execute(
             """
             INSERT INTO servers (
-                name, type, server_identifier,
-                url, local_url, public_url, token,
-                tautulli_url, tautulli_api_key, status
+                name,
+                type,
+                server_identifier,
+                url,
+                local_url,
+                public_url,
+                token,
+                settings_json,
+                status
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                name, server_type, server_identifier,
-                url, local_url, public_url, token,
-                tautulli_url, tautulli_api_key, "unknown",
+                name,
+                server_type,
+                server_identifier,
+                url,
+                local_url,
+                public_url,
+                token,
+                settings_json,
+                "unknown",
             ),
         )
 
-        # Toujours activer check_servers + update_user_status (si présents),
-        # puis check_servers mettra à jour le status des serveurs,
-        # et tasks_engine.auto_enable_sync_tasks activera sync_plex/sync_jellyfin selon les serveurs UP.
+        # --------------------------------------------------
+        # Activation des tâches système
+        # --------------------------------------------------
         db.execute(
             """
             UPDATE tasks
@@ -1440,15 +1509,10 @@ def create_app():
             """
         )
 
-        # On ne force PAS sync_plex/sync_jellyfin ici :
-        # -> c'est auto_enable_sync_tasks() qui décide en fonction des serveurs réellement UP.
-        # Mais on déclenche immédiatement check_servers pour éviter "base vide" après ajout.
         try:
-            # ✅ File d’attente: on empile une exécution de check_servers
             row = db.query_one("SELECT id FROM tasks WHERE name='check_servers'")
             if row:
                 enqueue_task(row["id"])
-
         except Exception:
             pass
 
@@ -1464,20 +1528,20 @@ def create_app():
 
 
 
+
     @app.route("/servers/<int:server_id>/delete", methods=["POST"])
     def server_delete(server_id):
         db = get_db()
 
-        # Vérifier que le serveur existe (READ)
         server = db.query_one(
-            "SELECT id FROM servers WHERE id = ?",
+            "SELECT id, name FROM servers WHERE id = ?",
             (server_id,),
         )
+
         if not server:
             flash("server_not_found", "error")
             return redirect(url_for("servers_list"))
 
-        # Suppression (WRITE)
         db.execute(
             "DELETE FROM servers WHERE id = ?",
             (server_id,),
@@ -1488,10 +1552,14 @@ def create_app():
 
 
 
+
     @app.route("/servers/<int:server_id>", methods=["GET", "POST"])
     def server_detail(server_id):
         db = get_db()
 
+        # ======================================================
+        # POST : mise à jour d'un serveur
+        # ======================================================
         if request.method == "POST":
             name = request.form.get("name", "").strip()
             server_type = request.form.get("type") or "other"
@@ -1499,48 +1567,90 @@ def create_app():
             local_url = request.form.get("local_url") or None
             public_url = request.form.get("public_url") or None
             token = request.form.get("token") or None
+            status = request.form.get("status") or None
+
+            # paramètres spécifiques (ex : Tautulli — stockés en JSON)
             tautulli_url = request.form.get("tautulli_url") or None
             tautulli_api_key = request.form.get("tautulli_api_key") or None
-            status = request.form.get("status") or None
 
             if not name:
                 flash("Le nom du serveur est obligatoire", "error")
                 return redirect(url_for("server_detail", server_id=server_id))
 
-            # UPDATE (WRITE)
+            # charger l'ancien JSON pour le merger proprement
+            row = db.query_one(
+                "SELECT settings_json FROM servers WHERE id = ?",
+                (server_id,),
+            )
+
+            settings = {}
+            if row and row["settings_json"]:
+                try:
+                    settings = json.loads(row["settings_json"])
+                except Exception:
+                    settings = {}
+
+            # MAJ éventuelle des paramètres spéciaux
+            if tautulli_url or tautulli_api_key:
+                settings["tautulli"] = {
+                    "url": tautulli_url,
+                    "api_key": tautulli_api_key,
+                }
+
+            settings_json = json.dumps(settings) if settings else None
+
+            # UPDATE (nouveau schéma)
             db.execute(
                 """
                 UPDATE servers
-                SET name = ?, type = ?, url = ?, local_url = ?, public_url = ?, token = ?,
-                    tautulli_url = ?, tautulli_api_key = ?, status = ?
+                SET name = ?,
+                    type = ?,
+                    url = ?,
+                    local_url = ?,
+                    public_url = ?,
+                    token = ?,
+                    settings_json = ?,
+                    status = ?
                 WHERE id = ?
                 """,
                 (
-                    name, server_type, url, local_url, public_url, token,
-                    tautulli_url, tautulli_api_key, status, server_id,
+                    name,
+                    server_type,
+                    url,
+                    local_url,
+                    public_url,
+                    token,
+                    settings_json,
+                    status,
+                    server_id,
                 ),
             )
 
             flash("server_updated", "success")
             return redirect(url_for("server_detail", server_id=server_id))
 
-        # --------------------------
-        # GET
-        # --------------------------
+        # ======================================================
+        # GET : affichage du serveur
+        # ======================================================
         server = db.query_one(
             "SELECT * FROM servers WHERE id = ?",
             (server_id,),
         )
+
         if not server:
             return "Serveur introuvable", 404
 
+        # --- bibliothèques ---
         libraries = db.query(
             """
             SELECT
                 l.*,
-                COUNT(DISTINCT sl.user_id) AS users_count
+                COUNT(DISTINCT mu.vodum_user_id) AS users_count
             FROM libraries l
-            LEFT JOIN shared_libraries sl ON sl.library_id = l.id
+            LEFT JOIN media_user_libraries mul
+                   ON mul.library_id = l.id
+            LEFT JOIN media_users mu
+                   ON mu.id = mul.media_user_id
             WHERE l.server_id = ?
             GROUP BY l.id
             ORDER BY l.name
@@ -1548,17 +1658,19 @@ def create_app():
             (server_id,),
         )
 
+        # --- utilisateurs reliés au serveur ---
         users = db.query(
             """
             SELECT
-                u.id,
-                u.username,
-                u.email,
-                us.server_id
-            FROM users u
-            JOIN user_servers us ON us.user_id = u.id
-            WHERE us.server_id = ?
-            ORDER BY u.username
+                vu.id,
+                vu.username,
+                vu.email
+            FROM vodum_users vu
+            JOIN media_users mu
+                ON mu.vodum_user_id = vu.id
+            WHERE mu.server_id = ?
+            GROUP BY vu.id
+            ORDER BY vu.username
             """,
             (server_id,),
         )
@@ -1573,6 +1685,7 @@ def create_app():
 
 
 
+
     @app.route("/servers/bulk_grant", methods=["POST"])
     def bulk_grant_libraries():
         db = get_db()
@@ -1584,47 +1697,58 @@ def create_app():
             flash("no_server_or_library_selected", "error")
             return redirect(url_for("servers_list", server_id=server_id))
 
-        # 1️⃣ Utilisateurs ACTIFS sur ce serveur (READ)
+        # --------------------------------------------------
+        # 1️⃣ Utilisateurs ACTIFS liés à ce serveur
+        #    (via media_users → vodum_users)
+        # --------------------------------------------------
         users = db.query(
             """
-            SELECT us.user_id
-            FROM user_servers us
-            JOIN users u ON u.id = us.user_id
-            WHERE us.server_id = ?
-              AND u.status = 'active'
+            SELECT mu.id AS media_user_id
+            FROM media_users mu
+            JOIN vodum_users vu
+                 ON vu.id = mu.vodum_user_id
+            WHERE mu.server_id = ?
+              AND vu.status = 'active'
             """,
             (server_id,),
         )
 
-        user_ids = [u["user_id"] for u in users]
+        media_user_ids = [u["media_user_id"] for u in users]
 
-        if not user_ids:
+        if not media_user_ids:
             flash("no_active_users_for_server", "warning")
             return redirect(url_for("servers_list", server_id=server_id))
 
-        # 2️⃣ Mise à jour shared_libraries (WRITE)
+        # --------------------------------------------------
+        # 2️⃣ Donner accès aux bibliothèques
+        #    (media_user_libraries)
+        # --------------------------------------------------
         for lib_id in library_ids:
-            for uid in user_ids:
+            for mu_id in media_user_ids:
                 db.execute(
                     """
-                    INSERT OR IGNORE INTO shared_libraries(user_id, library_id)
+                    INSERT OR IGNORE INTO media_user_libraries(media_user_id, library_id)
                     VALUES (?, ?)
                     """,
-                    (uid, lib_id),
+                    (mu_id, lib_id),
                 )
 
-        # 3️⃣ Jobs Plex (WRITE)
+        # --------------------------------------------------
+        # 3️⃣ Jobs Plex (user_id = media_user_id désormais)
+        # --------------------------------------------------
         for lib_id in library_ids:
-            for uid in user_ids:
+            for mu_id in media_user_ids:
                 db.execute(
                     """
                     INSERT INTO plex_jobs(action, user_id, server_id, library_id, processed)
                     VALUES ('grant', ?, ?, ?, 0)
                     """,
-                    (uid, server_id, lib_id),
+                    (mu_id, server_id, lib_id),
                 )
 
-        # 4️⃣ Activer la tâche apply_plex_access_updates
+        # --------------------------------------------------
+        # 4️⃣ Activer la tâche d’application
+        # --------------------------------------------------
         db.execute(
             """
             UPDATE tasks
@@ -1635,6 +1759,7 @@ def create_app():
 
         flash("grant_access_active_success", "success")
         return redirect(url_for("servers_list", server_id=server_id))
+
 
 
     # -----------------------------
@@ -2024,18 +2149,31 @@ def create_app():
             # REAL MASS SENDING
             # -----------------------------------------------------
             if campaign["server_id"]:
+                # utilisateurs ayant AU MOINS un compte sur ce serveur
                 users = db.query(
                     """
-                    SELECT u.email, u.username, u.expiration_date
-                    FROM users u
-                    JOIN user_servers us ON us.user_id = u.id
-                    WHERE us.server_id = ?
+                    SELECT DISTINCT
+                        vu.email,
+                        vu.username,
+                        vu.expiration_date
+                    FROM vodum_users vu
+                    JOIN media_users mu
+                          ON mu.vodum_user_id = vu.id
+                    WHERE mu.server_id = ?
                     """,
                     (campaign["server_id"],),
                 )
+
             else:
+                # toutes les personnes dans Vodum
                 users = db.query(
-                    "SELECT email, username, expiration_date FROM users"
+                    """
+                    SELECT
+                        email,
+                        username,
+                        expiration_date
+                    FROM vodum_users
+                    """
                 )
 
             errors = 0
@@ -2046,8 +2184,8 @@ def create_app():
 
                 formatted_body = (
                     campaign["body"]
-                    .replace("{username}", u["username"])
-                    .replace("{email}", u["email"])
+                    .replace("{username}", u["username"] or "")
+                    .replace("{email}", u["email"] or "")
                     .replace("{expiration_date}", u["expiration_date"] or "")
                 )
 
@@ -2084,6 +2222,7 @@ def create_app():
             flash(t("campaign_sent"), "success")
             return redirect(url_for("mailing_campaigns_page"))
 
+
         # -----------------------------------------------------------------------------
         # 4. DISPLAY PAGE
         # -----------------------------------------------------------------------------
@@ -2103,6 +2242,10 @@ def create_app():
             loaded_campaign=loaded_campaign,
             active_page="mailing",
         )
+
+
+
+
 
     @app.post("/mailing/campaigns/delete")
     def mailing_campaigns_delete():

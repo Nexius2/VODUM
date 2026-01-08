@@ -112,7 +112,7 @@ def run(task_id: int, db):
         users = db.query(
             """
             SELECT id, username, email, second_email, expiration_date
-            FROM users
+            FROM vodum_users
             WHERE expiration_date IS NOT NULL
             """
         )
