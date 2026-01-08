@@ -28,7 +28,7 @@ def compute_status(expiration_date, today, preavis_days, reminder_days):
     """
     log.debug(f"[STATUS DEBUG] expiration_date='{expiration_date}'")
 
-    # 1️⃣ Pas de date → actif
+    # 1️⃣ Pas de date → pas de changement (on ne force pas "active")
     if not expiration_date:
         return None
 
@@ -94,7 +94,7 @@ def run(task_id: int, db):
         # Utilisateurs
         # ----------------------------------------------------
         users = db.query(
-            "SELECT id, status, expiration_date FROM users"
+            "SELECT id, status, expiration_date FROM vodum_users"
         )
 
         log.info(f"{len(users)} utilisateurs chargés")
@@ -107,22 +107,26 @@ def run(task_id: int, db):
         for user in users:
             uid = user["id"]
             old_status = user["status"]
+            expiration_date = user["expiration_date"]
 
+            # ✅ correction : on appelle compute_status (existante) + on passe today
             new_status = compute_status(
-                user["expiration_date"],
+                expiration_date,
                 today,
                 preavis_days,
                 reminder_days,
             )
 
+            # compute_status retourne None si on ne change rien
+            if new_status is None:
+                continue
+
             if new_status != old_status:
-                log.info(
-                    f"[USER {uid}] statut {old_status} → {new_status}"
-                )
+                log.info(f"[USER {uid}] statut {old_status} → {new_status}")
 
                 db.execute(
                     """
-                    UPDATE users
+                    UPDATE vodum_users
                     SET status = ?,
                         last_status = ?,
                         status_changed_at = datetime('now')
