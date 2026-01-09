@@ -41,16 +41,51 @@
     </div>
 
     <!-- SUPPORT -->
-    <div class="bg-slate-900/40 p-6 rounded-xl shadow border border-slate-800 text-center">
-        <h2 class="text-xl font-semibold mb-3">{{ t("support_title") }}</h2>
-        <p class="text-slate-300 mb-4">{{ t("support_text") }}</p>
+	<div class="bg-slate-900/40 p-8 rounded-2xl shadow border border-slate-800 text-center max-w-2xl mx-auto">
 
-        <a href="https://buymeacoffee.com/vodum"
-           target="_blank"
-           class="inline-block bg-yellow-500 hover:bg-yellow-600 text-black font-semibold px-5 py-2 rounded-lg transition">
-             {{ t("pay_me_a_beer") }}
-        </a>
-    </div>
+		<!-- Title -->
+		<h2 class="text-2xl font-semibold mb-4">
+			{{ t("support_title") }}
+		</h2>
+
+		<!-- Main text -->
+		<p class="text-slate-200 mb-2">
+			{{ t("support_text") }}
+		</p>
+
+		<!-- Secondary explanation -->
+		<p class="text-sm text-slate-400 mb-6">
+			{{ t("support_github_help") }}
+		</p>
+
+		<!-- Actions -->
+		<div class="flex flex-col sm:flex-row justify-center items-center gap-4 mb-6">
+
+			<!-- GitHub -->
+			<a href="https://github.com/Nexius2/VODUM/issues"
+			   target="_blank"
+			   class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg
+					  bg-primary hover:bg-primary-dark text-white text-sm font-medium transition">
+				🐛 {{ t("open_an_issue") }}
+			</a>
+
+			<!-- Coffee -->
+			<a href="https://buymeacoffee.com/vodum"
+			   target="_blank"
+			   class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg
+					  bg-yellow-500 hover:bg-yellow-600 text-black text-sm font-semibold transition">
+				☕ {{ t("pay_me_a_beer") }}
+			</a>
+
+		</div>
+
+		<!-- Optional subtle footer -->
+		<p class="text-xs text-slate-500">
+			{{ t("support_thanks") }}
+		</p>
+
+	</div>
+
 
 </div>
 {% endblock %}

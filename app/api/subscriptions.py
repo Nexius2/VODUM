@@ -20,8 +20,9 @@ def update_user_expiration(user_id, new_expiration_date, reason="manual"):
     """
     db = DBManager()
 
+    # ✅ users -> vodum_users
     row = db.query_one(
-        "SELECT expiration_date FROM users WHERE id = ?",
+        "SELECT expiration_date FROM vodum_users WHERE id = ?",
         (user_id,)
     )
 
@@ -38,7 +39,7 @@ def update_user_expiration(user_id, new_expiration_date, reason="manual"):
     # Mise à jour de la date
     db.execute(
         """
-        UPDATE users
+        UPDATE vodum_users
         SET expiration_date = ?
         WHERE id = ?
         """,
@@ -106,12 +107,13 @@ def api_gift_time_to_server(server_id):
 
     db = DBManager()
 
+    # ✅ users + user_servers -> vodum_users + media_users
     users = db.query(
         """
-        SELECT DISTINCT u.id, u.expiration_date
-        FROM users u
-        JOIN user_servers us ON us.user_id = u.id
-        WHERE us.server_id = ?
+        SELECT DISTINCT vu.id, vu.expiration_date
+        FROM vodum_users vu
+        JOIN media_users mu ON mu.vodum_user_id = vu.id
+        WHERE mu.server_id = ?
         """,
         (server_id,)
     )
@@ -177,9 +179,14 @@ def api_gift_subscription():
     if target_type == "all":
         users = db.query(
             """
-            SELECT id, expiration_date
-            FROM users
-            WHERE status IN ('active', 'pre_expired', 'reminder')
+            SELECT u.id, u.expiration_date
+            FROM vodum_users u
+            WHERE u.status IN ('active', 'pre_expired', 'reminder')
+              AND EXISTS (
+                SELECT 1
+                FROM media_users mu
+                WHERE mu.vodum_user_id = u.id
+              )
             """
         )
 
@@ -189,11 +196,11 @@ def api_gift_subscription():
 
         users = db.query(
             """
-            SELECT u.id, u.expiration_date
-            FROM users u
-            JOIN user_servers us ON us.user_id = u.id
-            WHERE us.server_id = ?
-              AND u.status IN ('active', 'pre_expired', 'reminder')
+            SELECT DISTINCT vu.id, vu.expiration_date
+            FROM vodum_users vu
+            JOIN media_users mu ON mu.vodum_user_id = vu.id
+            WHERE mu.server_id = ?
+              AND vu.status IN ('active', 'pre_expired', 'reminder')
             """,
             (server_id,)
         )

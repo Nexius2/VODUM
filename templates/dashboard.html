@@ -10,17 +10,69 @@
 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
 
     <!-- Users -->
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-        <div class="text-xs uppercase text-slate-400 mb-2">{{ t("users") }}</div>
-        <div class="flex items-baseline justify-between">
-            <div class="text-3xl font-semibold">{{ stats.total_users }}</div>
-            <div class="text-xs text-slate-400">
-                {{ stats.active_users }} {{ t("active") }}
-                {{ stats.expiring_soon }} {{ t("expiring_soon") }}
-                {{ stats.expired_users }} {{ t("expired") }}
-            </div>
-        </div>
-    </div>
+	<div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+	  <div class="flex items-center justify-between mb-4">
+		<div class="text-xs uppercase tracking-wide text-slate-400">
+		  {{ t("users") }}
+		</div>
+	  </div>
+
+	  <!-- STATS ROW -->
+	  <div class="flex flex-wrap items-end gap-6">
+
+		<!-- ACTIVE (main focus) -->
+		<div class="flex flex-col">
+		  <div class="text-4xl font-bold text-emerald-400 leading-none">
+			{{ users_stats.active }}
+		  </div>
+		  <div class="text-xs text-slate-300 mt-1">
+			{{ t("active_users") }}
+		  </div>
+		</div>
+
+		<!-- EXPIRING SOON -->
+		<div class="flex flex-col">
+		  <div class="text-xl font-semibold text-amber-400 leading-none">
+			{{ users_stats.pre_expired }}
+		  </div>
+		  <div class="text-xs text-slate-400 mt-1">
+			{{ t("expiring_soon") }}
+		  </div>
+		</div>
+
+		<!-- REMINDER -->
+		<div class="flex flex-col">
+		  <div class="text-xl font-semibold text-blue-400 leading-none">
+			{{ users_stats.reminder }}
+		  </div>
+		  <div class="text-xs text-slate-400 mt-1">
+			{{ t("reminder") }}
+		  </div>
+		</div>
+
+		<!-- EXPIRED -->
+		<div class="flex flex-col">
+		  <div class="text-lg font-semibold text-rose-400 leading-none">
+			{{ users_stats.expired }}
+		  </div>
+		  <div class="text-xs text-slate-400 mt-1">
+			{{ t("expired") }}
+		  </div>
+		</div>
+
+		<!-- TOTAL (least important) -->
+		<div class="flex flex-col ml-auto text-right">
+		  <div class="text-sm font-medium text-slate-300 leading-none">
+			{{ users_stats.total }}
+		  </div>
+		  <div class="text-xs text-slate-500 mt-1">
+			{{ t("users_total") }}
+		  </div>
+		</div>
+
+	  </div>
+	</div>
+
 
     <!-- Servers (compact global, colored badges) -->
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">

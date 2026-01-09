@@ -574,7 +574,22 @@
   
     "home_user": "Utente Plex Home",
   "protected_account": "Account protetto",
-  "restricted": "Account con restrizioni"
+  "restricted": "Account con restrizioni",
+  
+  "user_saved": "Utente salvato con successo",
+  "status_all": "Tutti gli stati",
+  
+  "language_auto": "Automatico",
+"language_auto_hint": "Usa la lingua del browser",
+
+"templates_saved": "Modelli salvati",
+
+  "active_users": "Utenti attivi",
+  "users_total": "totali",
+  
+    "support_github_help": "Se hai bisogno di aiuto, vuoi segnalare un bug o suggerire un miglioramento, apri una issue nel repository GitHub di VODUM.",
+  "Open_an_issue": "Apri una issue su GitHub"
+
 
 
 

@@ -36,11 +36,21 @@ def run(task_id: int, db):
             dict(full_settings) if full_settings else "Aucun"
         )
 
+        if not full_settings:
+            msg = "Settings manquants (id=1) : aucune modification des tâches mailing."
+            log.error(msg)
+            task_logs(task_id, "error", msg)
+            return
+
         # --------------------------------------------------------
         # 2 - Lecture mailing_enabled
         # --------------------------------------------------------
-        raw_value = full_settings["mailing_enabled"] if full_settings else None
-        mailing_enabled = (raw_value == 1)
+        raw_value = full_settings["mailing_enabled"]
+        try:
+            mailing_enabled = int(raw_value or 0) == 1
+        except Exception:
+            mailing_enabled = False
+
 
         log.debug(
             "Valeur récupérée → raw=%s | interprété=%s",

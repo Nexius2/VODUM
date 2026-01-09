@@ -1,65 +1,45 @@
-
 from typing import Any, Dict, List, Optional, Tuple
 
+import json
 import requests
+from datetime import datetime, timedelta
 
 from logging_utils import get_logger
-from datetime import datetime, timedelta
 
 
 logger = get_logger("sync_jellyfin")
 
 
 # ----------------------------
-# Jellyfin API helpers
+# helpers
 # ----------------------------
 
-def _base_url(url: str) -> str:
-    return (url or "").rstrip("/")
-
-
-def _get_json(session: requests.Session, url: str, timeout: int = 20) -> Any:
-    resp = session.get(url, timeout=timeout)
-    resp.raise_for_status()
-    return resp.json()
-
-
-def _build_api_url(base: str, path: str, token: str) -> str:
-    base = _base_url(base)
-    if not path.startswith("/"):
-        path = "/" + path
-    # Jellyfin accepte api_key en query
-    return f"{base}{path}?api_key={token}"
-
-
-# ----------------------------
-#  helpers
-# ----------------------------
-
-
-
-def ensure_expiration_date_on_first_access(db, user_id: int) -> bool:
+def ensure_expiration_date_on_first_access(db, vodum_user_id: int) -> bool:
     """
     Initialise expiration_date UNIQUEMENT si :
       - expiration_date est NULL
       - default_subscription_days > 0
+
+    ⚠️ Sur la DB v2, l'expiration est portée par vodum_users (contractuel),
+    pas par media_users.
     """
     row = db.query_one(
-        "SELECT expiration_date FROM users WHERE id = ?",
-        (user_id,)
+        "SELECT expiration_date FROM vodum_users WHERE id = ?",
+        (vodum_user_id,),
     )
-
-    if not row or row["expiration_date"] is not None:
+    if not row:
         return False
 
-    row = db.query_one(
-        "SELECT default_subscription_days FROM settings LIMIT 1"
-    )
+    # Déjà une date → on ne touche pas
+    if row["expiration_date"]:
+        return False
 
+    settings = db.query_one("SELECT default_subscription_days FROM settings WHERE id = 1")
     try:
-        days = int(row["default_subscription_days"]) if row else 0
+        days = int(settings["default_subscription_days"]) if settings else 0
     except Exception:
         days = 0
+
 
     if days <= 0:
         return False
@@ -68,15 +48,35 @@ def ensure_expiration_date_on_first_access(db, user_id: int) -> bool:
     expiration = (today + timedelta(days=days)).isoformat()
 
     db.execute(
-        "UPDATE users SET expiration_date = ? WHERE id = ?",
-        (expiration, user_id)
+        "UPDATE vodum_users SET expiration_date = ? WHERE id = ?",
+        (expiration, vodum_user_id),
     )
 
     logger.info(
-        f"[SUBSCRIPTION] expiration_date initialisée pour user_id={user_id} → {expiration}"
+        f"[SUBSCRIPTION] expiration_date initialisée pour vodum_user_id={vodum_user_id} → {expiration}"
     )
     return True
 
+
+# ----------------------------
+# Jellyfin API helpers
+# ----------------------------
+
+def _build_api_url(base_url: str, path: str, token: str) -> str:
+    base_url = (base_url or "").rstrip("/")
+    path = "/" + (path or "").lstrip("/")
+    return f"{base_url}{path}?api_key={token}"
+
+
+def _get_json(session: requests.Session, url: str, timeout: int = 20) -> Any:
+    resp = session.get(url, timeout=timeout)
+    resp.raise_for_status()
+    return resp.json()
+
+
+# ----------------------------
+# DB helpers (DB v2)
+# ----------------------------
 
 def _get_jellyfin_servers(db):
     return db.query(
@@ -84,30 +84,78 @@ def _get_jellyfin_servers(db):
     )
 
 
-
-def _upsert_user_by_jellyfin_id(db, jellyfin_id: str, username: str) -> int:
+def _ensure_vodum_user_for_username(db, username: str) -> int:
+    """
+    Sur Jellyfin, on n'a pas forcément d'email.
+    On crée donc (si besoin) un vodum_user "placeholder" basé sur le username.
+    (Comportement historique: l'ancien script créait l'user en 'active')
+    """
     row = db.query_one(
-        "SELECT id FROM users WHERE jellyfin_id = ?",
-        (jellyfin_id,),
+        "SELECT id FROM vodum_users WHERE username = ? LIMIT 1",
+        (username,),
     )
-
     if row:
-        user_id = row["id"]
-        db.execute(
-            "UPDATE users SET username = ? WHERE id = ?",
-            (username, user_id),
-        )
-        return user_id
+        return int(row["id"])
 
     cur = db.execute(
-        """
-        INSERT INTO users (jellyfin_id, username, status)
-        VALUES (?, ?, 'active')
-        """,
-        (jellyfin_id, username),
+        "INSERT INTO vodum_users (username, status) VALUES (?, 'active')",
+        (username,),
     )
     return int(cur.lastrowid)
 
+
+def _upsert_media_user_by_jellyfin_id(
+    db,
+    server_id: int,
+    jellyfin_id: str,
+    username: str,
+) -> Tuple[int, int]:
+    """
+    Upsert d'un compte Jellyfin dans media_users.
+
+    Retourne (media_user_id, vodum_user_id)
+    """
+    # 1) Cherche un compte existant sur CE serveur
+    row = db.query_one(
+        """
+        SELECT id, vodum_user_id
+        FROM media_users
+        WHERE server_id = ?
+          AND type = 'jellyfin'
+          AND external_user_id = ?
+        LIMIT 1
+        """,
+        (server_id, jellyfin_id),
+    )
+
+    # 2) Assure un vodum_user
+    if row and row["vodum_user_id"]:
+        vodum_user_id = int(row["vodum_user_id"])
+    else:
+        vodum_user_id = _ensure_vodum_user_for_username(db, username)
+
+    if row:
+        media_user_id = int(row["id"])
+        db.execute(
+            """
+            UPDATE media_users
+            SET username = ?,
+                vodum_user_id = COALESCE(vodum_user_id, ?)
+            WHERE id = ?
+            """,
+            (username, vodum_user_id, media_user_id),
+        )
+        return media_user_id, vodum_user_id
+
+    # 3) Insert nouveau media_user
+    cur = db.execute(
+        """
+        INSERT INTO media_users (server_id, vodum_user_id, external_user_id, username, type)
+        VALUES (?, ?, ?, ?, 'jellyfin')
+        """,
+        (server_id, vodum_user_id, jellyfin_id, username),
+    )
+    return int(cur.lastrowid), vodum_user_id
 
 
 def _upsert_library(db, server_id, section_id, name, lib_type) -> int:
@@ -129,59 +177,65 @@ def _upsert_library(db, server_id, section_id, name, lib_type) -> int:
     return int(row["id"])
 
 
-
-def _set_user_server_state(
+def _set_media_user_state(
     db,
-    user_id,
-    server_id,
-    owned,
-    all_libraries,
-    num_libraries,
-    last_seen_at,
+    media_user_id: int,
+    server_id: int,
+    owned: int,
+    all_libraries: int,
+    num_libraries: int,
+    last_seen_at: Optional[str],
 ):
+    """
+    Anciennement: user_servers (DB v1).
+    DB v2: on stocke l'état dans media_users.details_json pour garder l'info,
+    sans recréer une table user_servers.
+    """
+    details = {
+        "owned": int(owned),
+        "all_libraries": int(all_libraries),
+        "num_libraries": int(num_libraries),
+        "pending": 0,
+        "last_seen_at": last_seen_at,
+        "source": "jellyfin_api",
+        "server_id": int(server_id),
+    }
+
     db.execute(
-        """
-        INSERT INTO user_servers (
-            user_id, server_id,
-            owned, all_libraries, num_libraries,
-            pending, last_seen_at,
-            source
-        )
-        VALUES (?, ?, ?, ?, ?, 0, ?, 'jellyfin_api')
-        ON CONFLICT(user_id, server_id) DO UPDATE SET
-            owned = excluded.owned,
-            all_libraries = excluded.all_libraries,
-            num_libraries = excluded.num_libraries,
-            pending = excluded.pending,
-            last_seen_at = COALESCE(excluded.last_seen_at, user_servers.last_seen_at),
-            source = excluded.source
-        """,
-        (user_id, server_id, owned, all_libraries, num_libraries, last_seen_at),
+        "UPDATE media_users SET details_json = ? WHERE id = ?",
+        (json.dumps(details, ensure_ascii=False), media_user_id),
     )
 
 
-
-def _refresh_shared_libraries_for_server(db, user_id, server_id, allowed_library_ids):
+def _refresh_shared_libraries_for_server(
+    db,
+    media_user_id: int,
+    server_id: int,
+    allowed_library_ids: List[int],
+):
+    """
+    Anciennement: shared_libraries (DB v1).
+    DB v2: media_user_libraries.
+    """
     db.execute(
         """
-        DELETE FROM shared_libraries
-        WHERE user_id = ?
+        DELETE FROM media_user_libraries
+        WHERE media_user_id = ?
           AND library_id IN (
               SELECT id FROM libraries WHERE server_id = ?
           )
         """,
-        (user_id, server_id),
+        (media_user_id, server_id),
     )
 
     for lib_id in allowed_library_ids:
         db.execute(
             """
-            INSERT OR IGNORE INTO shared_libraries (user_id, library_id)
+            INSERT OR IGNORE INTO media_user_libraries (media_user_id, library_id)
             VALUES (?, ?)
             """,
-            (user_id, lib_id),
+            (media_user_id, lib_id),
         )
-
 
 
 # ----------------------------
@@ -205,17 +259,21 @@ def _sync_libraries_for_server(
     data = _get_json(session, api_url, timeout=30)
     mapping: Dict[str, int] = {}
 
-    for vf in data or []:
-        item_id = vf.get("ItemId")
-        name = vf.get("Name")
+    if not isinstance(data, list):
+        return mapping
 
-        opts = vf.get("LibraryOptions") or {}
-        lib_type = opts.get("CollectionType")
+    for entry in data:
+        if not isinstance(entry, dict):
+            continue
+
+        item_id = entry.get("ItemId")
+        name = entry.get("Name") or ""
+        lib_type = entry.get("CollectionType") or entry.get("Type") or ""
 
         if not item_id or not name:
             continue
 
-        lib_db_id = _upsert_library(db, server_id, str(item_id), str(name), lib_type)
+        lib_db_id = _upsert_library(db, server_id, str(item_id), str(name), str(lib_type))
         mapping[str(item_id)] = lib_db_id
 
     logger.info(
@@ -233,9 +291,9 @@ def _sync_users_and_policies_for_server(
     lib_map_itemid_to_dbid: Dict[str, int],
 ) -> Tuple[int, int]:
     """
-    - Récupère tous les users
+    - Récupère tous les users Jellyfin
     - Pour chacun, récupère /Users/{id} pour Policy
-    - Met à jour users, user_servers, shared_libraries
+    - Met à jour media_users + media_user_libraries (DB v2)
     """
     users_url = _build_api_url(url, "/Users", token)
     logger.info(f"Jellyfin users: GET {users_url}")
@@ -244,7 +302,13 @@ def _sync_users_and_policies_for_server(
     processed = 0
     policy_ok = 0
 
+    if not isinstance(users, list):
+        return 0, 0
+
     for u in users:
+        if not isinstance(u, dict):
+            continue
+
         jellyfin_id = u.get("Id")
         username = u.get("Name")
         if not jellyfin_id or not username:
@@ -253,7 +317,9 @@ def _sync_users_and_policies_for_server(
         jellyfin_id = str(jellyfin_id)
         username = str(username)
 
-        user_id = _upsert_user_by_jellyfin_id(db, jellyfin_id, username)
+        media_user_id, vodum_user_id = _upsert_media_user_by_jellyfin_id(
+            db, server_id, jellyfin_id, username
+        )
 
         # Policy (plus fiable via /Users/{id})
         detail_url = _build_api_url(url, f"/Users/{jellyfin_id}", token)
@@ -273,7 +339,6 @@ def _sync_users_and_policies_for_server(
             else {}
         )
 
-        is_admin = 1 if policy.get("IsAdministrator") else 0
         enable_all = 1 if policy.get("EnableAllFolders") else 0
         enabled_folders = policy.get("EnabledFolders") or []
 
@@ -283,54 +348,39 @@ def _sync_users_and_policies_for_server(
             last_seen_at = (
                 detail.get("LastActivityDate")
                 or detail.get("LastLoginDate")
-                or u.get("LastActivityDate")
-                or u.get("LastLoginDate")
+                or None
             )
 
-        # num_libraries
-        if enable_all:
-            num_libs = len(lib_map_itemid_to_dbid)
-        else:
-            num_libs = len(enabled_folders) if isinstance(enabled_folders, list) else 0
-
-        _set_user_server_state(
-            db=db,
-            user_id=user_id,
-            server_id=server_id,
-            owned=is_admin,
-            all_libraries=enable_all,
-            num_libraries=num_libs,
-            last_seen_at=last_seen_at,
-        )
-
-        # ----------------------------------------------------
-        # shared_libraries : sync de l’état réel
-        # ----------------------------------------------------
+        # Calcul libraries autorisées
         allowed_db_lib_ids: List[int] = []
-
         if enable_all:
-            _refresh_shared_libraries_for_server(
-                db, user_id, server_id, allowed_db_lib_ids
-            )
-
-            # ⬅️ AJOUT : accès réel → init expiration_date
-            ensure_expiration_date_on_first_access(db, user_id)
-
+            allowed_db_lib_ids = list(lib_map_itemid_to_dbid.values())
         else:
             if isinstance(enabled_folders, list):
-                for folder_item_id in enabled_folders:
-                    key = str(folder_item_id)
-                    lib_db_id = lib_map_itemid_to_dbid.get(key)
+                for folder_id in enabled_folders:
+                    if not folder_id:
+                        continue
+                    lib_db_id = lib_map_itemid_to_dbid.get(str(folder_id))
                     if lib_db_id:
                         allowed_db_lib_ids.append(lib_db_id)
 
-            _refresh_shared_libraries_for_server(
-                db, user_id, server_id, allowed_db_lib_ids
-            )
+        _set_media_user_state(
+            db,
+            media_user_id=media_user_id,
+            server_id=server_id,
+            owned=0,
+            all_libraries=enable_all,
+            num_libraries=len(allowed_db_lib_ids),
+            last_seen_at=last_seen_at,
+        )
 
-            # ⬅️ AJOUT : accès réel → init expiration_date
-            if allowed_db_lib_ids:
-                ensure_expiration_date_on_first_access(db, user_id)
+        _refresh_shared_libraries_for_server(
+            db, media_user_id, server_id, allowed_db_lib_ids
+        )
+
+        # Si accès réel → init expiration_date sur le vodum_user
+        if allowed_db_lib_ids:
+            ensure_expiration_date_on_first_access(db, vodum_user_id)
 
         processed += 1
 
@@ -341,28 +391,22 @@ def _sync_users_and_policies_for_server(
     return processed, policy_ok
 
 
-
-
 # ----------------------------
 # Public task entrypoint
 # ----------------------------
+
 def run(task_id: int, db):
     """
     Synchronisation complète Jellyfin (lecture seule côté Jellyfin)
-    - Users
-    - Libraries (VirtualFolders)
-    - Policies
-    - user_servers + shared_libraries côté DB
+    - Users (media_users)
+    - Libraries (libraries)
+    - Policies → media_user_libraries
     """
-
-    #task_logs(task_id, "info", "Tâche sync_jellyfin démarrée")
     logger.info("=== SYNC JELLYFIN : START ===")
 
     servers = _get_jellyfin_servers(db)
     if not servers:
-        msg = "Aucun serveur Jellyfin configuré."
-        logger.info(msg)
-        #task_logs(task_id, "info", msg)
+        logger.warning("Aucun serveur Jellyfin en base.")
         logger.info("=== SYNC JELLYFIN : END ===")
         return
 
@@ -376,61 +420,43 @@ def run(task_id: int, db):
         any_success = False
 
         for srv in servers:
+            srv = dict(srv)
             server_id = int(srv["id"])
-            name = srv["name"] or f"server_{server_id}"
-            url = srv["url"]
-            token = srv["token"]
+            name = srv.get("name") or f"server_{server_id}"
+            url = (srv.get("url") or "").strip()
+            token = (srv.get("token") or "").strip()
 
             if not url or not token:
-                logger.warning(
-                    f"Serveur Jellyfin '{name}' incomplet (URL/token manquant)."
-                )
+                logger.warning(f"[SYNC JELLYFIN] serveur {name} (id={server_id}) URL/TOKEN manquant")
                 continue
 
-            logger.info(f"--- Sync Jellyfin: {name} (server_id={server_id}) ---")
-
             try:
-                # 1) Libraries
-                lib_map = _sync_libraries_for_server(
-                    session, db, server_id, url, token
-                )
+                lib_map = _sync_libraries_for_server(session, db, server_id, url, token)
                 total_libraries += len(lib_map)
 
-                # 2) Users + Policies + Access sync
-                processed, policy_ok = _sync_users_and_policies_for_server(
-                    session=session,
-                    db=db,
-                    server_id=server_id,
-                    url=url,
-                    token=token,
-                    lib_map_itemid_to_dbid=lib_map,
+                users_count, policy_ok = _sync_users_and_policies_for_server(
+                    session, db, server_id, url, token, lib_map
                 )
-
-                total_users += processed
+                total_users += users_count
                 total_policy_ok += policy_ok
 
-                logger.info(f"Sync Jellyfin OK pour '{name}'.")
                 any_success = True
+                logger.info(f"[SYNC JELLYFIN] OK server={name} (users={users_count}, libs={len(lib_map)})")
 
             except Exception as e:
                 logger.error(
-                    f"Erreur sync Jellyfin sur '{name}' (server_id={server_id}): {e}",
-                    exc_info=True
+                    f"[SYNC JELLYFIN] Connexion ou synchronisation impossible pour {name} : {e}",
+                    exc_info=True,
                 )
                 continue
 
         if not any_success:
             raise RuntimeError("Aucun serveur Jellyfin n'a pu être synchronisé")
 
-        # ✔ Succès scheduler
-        logger.info(
-            f"Sync Jellyfin OK — users={total_users}, libraries={total_libraries}"
-        )
+        logger.info(f"Sync Jellyfin OK — users={total_users}, libraries={total_libraries}")
 
-
-    except Exception as e:
+    except Exception:
         logger.error("Erreur globale sync_jellyfin", exc_info=True)
-        #task_logs(task_id, "error", f"Erreur sync_jellyfin : {e}")
         raise
 
     finally:

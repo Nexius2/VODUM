@@ -120,7 +120,7 @@
       <label class="text-sm">
         {{ t("expiration") }}
         <input type="date" name="expiration_date"
-               value="{{ user.expiration_date }}"
+               value="{{ user.expiration_date or '' }}"
                class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
       </label>
 
@@ -140,7 +140,7 @@
 
       <label class="text-sm">
         {{ t("creation_date") }}
-        <input type="text" value="{{ user.creation_date or t("not_available") }}" readonly
+        <input type="text" value="{{ user.created_at or t("not_available") }}" readonly
                class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60 cursor-not-allowed">
       </label>
 
@@ -167,7 +167,12 @@
 <div class="flex flex-col gap-6">
 
   <!-- ========== PLEX BUBBLE (read-only) ========== -->
-{% if user.plex_id %}
+{% set plex_accounts = servers | selectattr("media_type", "equalto", "plex") | list %}
+{% if plex_accounts %}
+
+{# On prend le 1er compte Plex (si plusieurs serveurs Plex, tu pourras faire une boucle plus tard) #}
+{% set p = plex_accounts[0] %}
+
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
 
   <!-- HEADER -->
@@ -178,7 +183,12 @@
 <div class="flex items-center justify-between mb-3">
   <h2 class="text-sm font-semibold">Plex</h2>
 
-  {% if user.avatar %}
+  {# DB v2: avatar vient du media_user (p.media_avatar). Fallback sur user.avatar si présent #}
+  {% if p.media_avatar %}
+    <img src="{{ p.media_avatar }}"
+         alt="Plex avatar"
+         class="w-10 h-10 rounded-full border border-slate-700">
+  {% elif user.avatar %}
     <img src="{{ user.avatar }}"
          alt="Plex avatar"
          class="w-10 h-10 rounded-full border border-slate-700">
@@ -188,6 +198,8 @@
 
   <!-- Plex flags (inchangés, juste déplacés) -->
   <div class="flex flex-wrap gap-2 mt-2">
+    {# DB v2: ces flags sont souvent dans raw_json côté media_users, pas dans vodum_users.
+       On ne supprime rien: on garde tes conditions, mais elles risquent d'être fausses tant que tu ne les importes pas. #}
     {% if user.home %}
       <span class="px-2 py-0.5 text-xs rounded bg-emerald-900/40 text-emerald-300">
         🏠 {{ t("home_user") }}
@@ -213,19 +225,23 @@
   <!-- INFOS PRINCIPALES -->
   <div class="grid grid-cols-2 gap-y-2 text-sm mt-4">
     <div class="text-slate-400">{{ t("plex_id") }}</div>
-    <div class="font-mono text-slate-200">{{ user.plex_id }}</div>
+    {# DB v2: plex id = external_user_id sur media_users #}
+    <div class="font-mono text-slate-200">{{ p.external_user_id or t("not_available") }}</div>
 
     <div class="text-slate-400">{{ t("plex_role") }}</div>
-    <div class="text-slate-200">{{ user.plex_role}}</div>
+    {# DB v2: role = media_role sur ta query (alias) #}
+    <div class="text-slate-200">{{ p.media_role or t("not_available") }}</div>
 
     <div class="text-slate-400">{{ t("joined_at") }}</div>
-    <div class="text-slate-200">{{ user.joined_at or t("not_available") }}</div>
+    <div class="text-slate-200">{{ p.joined_at or t("not_available") }}</div>
 
     <div class="text-slate-400">{{ t("accepted_at") }}</div>
-    <div class="text-slate-200">{{ user.accepted_at or t("not_available") }}</div>
+    <div class="text-slate-200">{{ p.accepted_at or t("not_available") }}</div>
   </div>
 
   <!-- PLEX PASS FLAG -->
+  {# DB v2: subscription_* n'est pas dans ton query media_users actuellement.
+     On garde ton bloc sans le supprimer, mais il ne s'affichera que si tu importes ces champs plus tard. #}
   {% if user.subscription_active %}
     <div class="mt-4">
       <span class="px-3 py-1 text-xs rounded-full bg-amber-900/40 text-amber-300">
@@ -259,7 +275,10 @@
 
 
   <!-- ========== JELLYFIN BUBBLE (placeholder read-only) ========== -->
-  {% if user.jellyfin_id %}
+  {# DB v2: jellyfin_id n'est pas sur vodum_users. On garde ton code,
+     mais on ajoute la détection via servers pour que ça s'affiche. #}
+  {% set jellyfin_accounts = servers | selectattr("media_type", "equalto", "jellyfin") | list %}
+  {% if user.jellyfin_id or jellyfin_accounts %}
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
     <h2 class="text-sm font-semibold mb-2">Jellyfin</h2>
     <p class="text-xs text-slate-500">
@@ -267,6 +286,7 @@
     </p>
   </div>
   {% endif %}
+
 
   <!-- ========== EMAIL HISTORY (unchanged content, just moved) ========== -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
@@ -285,9 +305,9 @@
         <tbody>
           {% for m in sent_emails %}
           <tr class="border-t border-slate-800">
-            <td class="px-3 py-2">{{ t(m.type) }}</td>
-            <td class="px-3 py-2 text-slate-400">{{ m.expiration_snapshot }}</td>
-            <td class="px-3 py-2 text-slate-300">{{ m.date_sent }}</td>
+		  <td class="px-3 py-2">{{ t(m.template_type) }}</td>
+		  <td class="px-3 py-2 text-slate-400">{{ m.expiration_date }}</td>
+		  <td class="px-3 py-2 text-slate-300">{{ m.sent_at }}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -367,49 +387,68 @@
     </div>
 
     <!-- Server options -->
-    {% set opts = user_servers | selectattr("server_id", "equalto", s.id) | list %}
-    {% set o = opts[0] if opts else None %}
+    {# DB v2: on utilise directement s (déjà enrichi côté app.py) #}
+    {% set o = s %}
 
 	<div class="md:pl-4 md:border-l md:border-slate-700/30 mt-2 md:mt-0">
 	  <div class="bg-slate-800/40 border border-slate-700 rounded-xl p-3 text-xs space-y-2 h-fit">
-		
+
 		<div class="font-semibold text-slate-300 mb-1">
 		  {{ t("server_options") }}
 		</div>
 
-		<!-- Editable options -->
-		<label class="flex justify-between items-center gap-2">
-		  {{ t("allow_sync") }}
-		  <input type="checkbox" name="allow_sync_{{ s.id }}" {% if o and o.allow_sync %}checked{% endif %}>
-		</label>
+        {# Les options ci-dessous sont spécifiques Plex. Pour Jellyfin, on affiche "Not available". #}
+        {% if s.media_type == 'plex' %}
 
-		<label class="flex justify-between items-center gap-2">
-		  {{ t("allow_camera_upload") }}
-		  <input type="checkbox" name="allow_camera_upload_{{ s.id }}" {% if o and o.allow_camera_upload %}checked{% endif %}>
-		</label>
+          <!-- Editable options -->
+          <label class="flex justify-between items-center gap-2">
+            {{ t("allow_sync") }}
+            <input type="checkbox"
+                   name="allow_sync_{{ s.media_user_id }}"
+                   {% if o.allow_sync %}checked{% endif %}>
+          </label>
 
-		<label class="flex justify-between items-center gap-2">
-		  {{ t("allow_channels") }}
-		  <input type="checkbox" name="allow_channels_{{ s.id }}" {% if o and o.allow_channels %}checked{% endif %}>
-		</label>
+          <label class="flex justify-between items-center gap-2">
+            {{ t("allow_camera_upload") }}
+            <input type="checkbox"
+                   name="allow_camera_upload_{{ s.media_user_id }}"
+                   {% if o.allow_camera_upload %}checked{% endif %}>
+          </label>
 
-		<label class="flex flex-col">
-		  {{ t("filter_movies") }}
-		  <input type="text" name="filter_movies_{{ s.id }}" value="{{ o.filter_movies if o else '' }}"
-				 class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1">
-		</label>
+          <label class="flex justify-between items-center gap-2">
+            {{ t("allow_channels") }}
+            <input type="checkbox"
+                   name="allow_channels_{{ s.media_user_id }}"
+                   {% if o.allow_channels %}checked{% endif %}>
+          </label>
 
-		<label class="flex flex-col">
-		  {{ t("filter_television") }}
-		  <input type="text" name="filter_television_{{ s.id }}" value="{{ o.filter_television if o else '' }}"
-				 class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1">
-		</label>
+          <label class="flex flex-col">
+            {{ t("filter_movies") }}
+            <input type="text"
+                   name="filter_movies_{{ s.media_user_id }}"
+                   value="{{ o.filter_movies }}"
+                   class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1">
+          </label>
 
-		<label class="flex flex-col">
-		  {{ t("filter_music") }}
-		  <input type="text" name="filter_music_{{ s.id }}" value="{{ o.filter_music if o else '' }}"
-				 class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1">
-		</label>
+          <label class="flex flex-col">
+            {{ t("filter_television") }}
+            <input type="text"
+                   name="filter_television_{{ s.media_user_id }}"
+                   value="{{ o.filter_television }}"
+                   class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1">
+          </label>
+
+          <label class="flex flex-col">
+            {{ t("filter_music") }}
+            <input type="text"
+                   name="filter_music_{{ s.media_user_id }}"
+                   value="{{ o.filter_music }}"
+                   class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1">
+          </label>
+
+        {% else %}
+          <p class="text-xs text-slate-500 italic">{{ t("not_available") }}</p>
+        {% endif %}
 
 	  </div>
 	</div>
@@ -427,6 +466,9 @@ document.querySelector('[form="user_main_form"]')
 
     const mainForm = document.getElementById('user_main_form');
 
+    // Nettoie les anciens champs dynamiques (évite doublons)
+    mainForm.querySelectorAll('input[data-dyn="1"]').forEach(el => el.remove());
+
     // 🔹 BIBLIOTHÈQUES (toggles)
     document.querySelectorAll('form[action*="toggle_library"]').forEach(f => {
       const libId = f.querySelector('input[name="library_id"]').value;
@@ -436,6 +478,32 @@ document.querySelector('[form="user_main_form"]')
       input.type = 'hidden';
       input.name = 'library_' + libId;
       input.value = enabled ? '1' : '0';
+      input.setAttribute('data-dyn', '1');
+      mainForm.appendChild(input);
+    });
+
+    // 🔹 OPTIONS SERVEUR (hors form) -> on copie en hidden pour le POST
+    const selectors = [
+      'input[name^="allow_sync_"]',
+      'input[name^="allow_camera_upload_"]',
+      'input[name^="allow_channels_"]',
+      'input[name^="filter_movies_"]',
+      'input[name^="filter_television_"]',
+      'input[name^="filter_music_"]'
+    ];
+
+    document.querySelectorAll(selectors.join(',')).forEach(el => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = el.name;
+      input.setAttribute('data-dyn', '1');
+
+      if (el.type === 'checkbox') {
+        input.value = el.checked ? '1' : '0';
+      } else {
+        input.value = el.value || '';
+      }
+
       mainForm.appendChild(input);
     });
 

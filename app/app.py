@@ -779,17 +779,30 @@ def create_app():
         db = get_db()
 
         # READ ONLY via DBManager
-        row = db.query_one(
-            "SELECT * FROM settings WHERE id = 1"
-        )
+        row = db.query_one("SELECT * FROM settings WHERE id = 1")
 
         # Toujours un dict pour un comportement homogène
         settings = dict(row) if row else {}
 
+        # -----------------------------
+        # Sync langue session <- settings (si session vide)
+        # -----------------------------
+        available_langs = tuple(get_available_languages().keys())
+
+        if not session.get("lang"):
+            default_lang = settings.get("default_language")
+            if default_lang in available_langs:
+                session["lang"] = default_lang
+
+        # Sécurité : si langue invalide, fallback en
+        if session.get("lang") not in available_langs:
+            session["lang"] = "en"
+
         return {
-            "t": get_translator(),
+            "t": get_translator(),  # <= pas d'argument
             "settings": settings,
         }
+
 
 
 
@@ -804,32 +817,57 @@ def create_app():
     # -----------------------------
     # ROUTES
     # -----------------------------
-
     @app.route("/")
     def dashboard():
         db = get_db()
 
         # --------------------------
-        # USER STATS
+        # USER STATS (legacy: stats)
         # --------------------------
         stats = {}
 
         stats["total_users"] = db.query_one(
             "SELECT COUNT(*) AS cnt FROM vodum_users"
-        )["cnt"]
+        )["cnt"] or 0
 
         stats["active_users"] = db.query_one(
             "SELECT COUNT(*) AS cnt FROM vodum_users WHERE status = 'active'"
-        )["cnt"]
+        )["cnt"] or 0
 
-        # expiring soon = reminder + pre_expired
+        # expiring soon = reminder + pre_expired (legacy view)
         stats["expiring_soon"] = db.query_one(
             "SELECT COUNT(*) AS cnt FROM vodum_users WHERE status IN ('pre_expired', 'reminder')"
-        )["cnt"]
+        )["cnt"] or 0
 
         stats["expired_users"] = db.query_one(
             "SELECT COUNT(*) AS cnt FROM vodum_users WHERE status = 'expired'"
-        )["cnt"]
+        )["cnt"] or 0
+
+        # --------------------------
+        # USER STATS (new: users_stats used by dashboard.html)
+        # --------------------------
+        row = db.query_one(
+            """
+            SELECT
+              COUNT(*) AS total,
+              SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active,
+              SUM(CASE WHEN status = 'pre_expired' THEN 1 ELSE 0 END) AS pre_expired,
+              SUM(CASE WHEN status = 'reminder' THEN 1 ELSE 0 END) AS reminder,
+              SUM(CASE WHEN status = 'expired' THEN 1 ELSE 0 END) AS expired
+            FROM vodum_users
+            """
+        )
+
+        # db.query_one renvoie souvent sqlite3.Row -> pas de .get()
+        row = dict(row) if row else {}
+
+        users_stats = {
+            "total": int(row.get("total") or 0),
+            "active": int(row.get("active") or 0),
+            "pre_expired": int(row.get("pre_expired") or 0),
+            "reminder": int(row.get("reminder") or 0),
+            "expired": int(row.get("expired") or 0),
+        }
 
         # --------------------------
         # SERVER STATS (tous types)
@@ -851,22 +889,22 @@ def create_app():
             total = db.query_one(
                 "SELECT COUNT(*) AS cnt FROM servers WHERE type = ?",
                 (stype,),
-            )["cnt"]
+            )["cnt"] or 0
 
             online = db.query_one(
                 "SELECT COUNT(*) AS cnt FROM servers WHERE type = ? AND status = 'up'",
                 (stype,),
-            )["cnt"]
+            )["cnt"] or 0
 
             offline = db.query_one(
                 "SELECT COUNT(*) AS cnt FROM servers WHERE type = ? AND status = 'down'",
                 (stype,),
-            )["cnt"]
+            )["cnt"] or 0
 
             stats["server_types"][stype] = {
-                "total": total,
-                "online": online,
-                "offline": offline,
+                "total": int(total),
+                "online": int(online),
+                "offline": int(offline),
             }
 
         # --------------------------
@@ -875,15 +913,15 @@ def create_app():
         if table_exists(db, "tasks"):
             stats["total_tasks"] = db.query_one(
                 "SELECT COUNT(*) AS cnt FROM tasks"
-            )["cnt"]
+            )["cnt"] or 0
 
             stats["active_tasks"] = db.query_one(
                 "SELECT COUNT(*) AS cnt FROM tasks WHERE enabled = 1"
-            )["cnt"]
+            )["cnt"] or 0
 
             stats["error_tasks"] = db.query_one(
                 "SELECT COUNT(*) AS cnt FROM tasks WHERE status = 'error'"
-            )["cnt"]
+            )["cnt"] or 0
         else:
             stats["total_tasks"] = 0
             stats["active_tasks"] = 0
@@ -912,7 +950,6 @@ def create_app():
         latest_logs = []
 
         lines = read_last_logs(30)  # on lit plus large, on filtre après
-
         ALLOWED_LEVELS = {"INFO", "ERROR", "CRITICAL"}
 
         for line in lines:
@@ -921,9 +958,8 @@ def create_app():
                 continue
 
             level = parts[1].strip().upper()
-
             if level not in ALLOWED_LEVELS:
-                continue  # ⬅️ filtre ici
+                continue
 
             latest_logs.append({
                 "created_at": parts[0].strip(),
@@ -932,20 +968,20 @@ def create_app():
                 "message": parts[3].strip(),
             })
 
-        # limiter l'affichage final
         latest_logs = latest_logs[:10]
-
 
         # --------------------------
         # PAGE RENDERING
         # --------------------------
         return render_template(
             "dashboard.html",
-            stats=stats,
+            stats=stats,              # ✅ conservé (rien perdu)
+            users_stats=users_stats,  # ✅ nouveau (pour ton template)
             servers=servers,
             latest_logs=latest_logs,
             active_page="dashboard",
         )
+
 
 
 
@@ -1004,22 +1040,36 @@ def create_app():
     
 
 
-        
+            
     @app.route("/users")
     def users_list():
         db = get_db()
 
-        status_filter = request.args.get("status")
+        # Multi-status (checkboxes): ?status=active&status=reminder...
+        selected_statuses = request.args.getlist("status")
+
+        # Toggle: show archived statuses (expired/unfriended/suspended)
+        # (On garde la variable pour compat / futur, mais on ne cache plus par défaut)
+        show_archived = request.args.get("show_archived", "0") == "1"
+
+        # Search query
         search = request.args.get("q", "").strip()
+
+        # Default view (daily): hide expired unless explicitly selected or show_archived enabled
+        # -> CHANGÉ : on ne cache plus rien par défaut.
+        # On conserve ces variables pour ne rien perdre / compat, mais on ne les applique plus automatiquement.
+        default_excluded = {"expired"}
+        all_statuses = ["active", "pre_expired", "reminder", "expired", "invited", "unfriended", "suspended", "unknown"]
+
+        # AVANT: si pas de sélection -> on excluait expired automatiquement
+        # MAINTENANT: si pas de sélection -> on ne filtre PAS par status (donc on affiche tout le monde)
+        # Donc: on ne touche pas selected_statuses ici.
 
         query = """
             SELECT
                 u.*,
 
-                -- nombre de serveurs où l'utilisateur a un compte
                 COUNT(DISTINCT mu.server_id) AS servers_count,
-
-                -- nombre de bibliothèques auxquelles il a accès
                 COUNT(DISTINCT mul.library_id) AS libraries_count
 
             FROM vodum_users u
@@ -1033,14 +1083,27 @@ def create_app():
         conditions = []
         params = []
 
-        if status_filter:
-            conditions.append("u.status = ?")
-            params.append(status_filter)
+        # Status filter (IN)
+        # -> On filtre uniquement si l’admin a explicitement coché au moins 1 status
+        if selected_statuses:
+            placeholders = ",".join(["?"] * len(selected_statuses))
+            conditions.append(f"u.status IN ({placeholders})")
+            params.extend(selected_statuses)
 
+        # Global search across multiple fields
         if search:
-            conditions.append("(u.username LIKE ? OR u.email LIKE ?)")
             like = f"%{search}%"
-            params.extend([like, like])
+            conditions.append(
+                "("
+                "COALESCE(u.username,'') LIKE ? OR "
+                "COALESCE(u.email,'') LIKE ? OR "
+                "COALESCE(u.second_email,'') LIKE ? OR "
+                "COALESCE(u.firstname,'') LIKE ? OR "
+                "COALESCE(u.lastname,'') LIKE ? OR "
+                "COALESCE(u.notes,'') LIKE ?"
+                ")"
+            )
+            params.extend([like, like, like, like, like, like])
 
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
@@ -1055,10 +1118,13 @@ def create_app():
         return render_template(
             "users.html",
             users=users,
-            status_filter=status_filter,
+            selected_statuses=selected_statuses,
+            show_archived=show_archived,
             search=search,
             active_page="users",
         )
+
+
 
 
 
@@ -1078,8 +1144,12 @@ def create_app():
             flash("user_not_found", "error")
             return redirect(url_for("users_list"))
 
+        # on convertit en dict pour éviter les surprises sqlite3.Row
+        user = dict(user)
+
         # --------------------------------------------------
         # Types de serveurs réellement liés à l'utilisateur
+        # (basé sur media_users + servers)
         # --------------------------------------------------
         allowed_types = [
             row["type"]
@@ -1096,18 +1166,18 @@ def create_app():
         ]
 
         # ==================================================
-        # POST → Mise à jour utilisateur + sync plex
+        # POST → Mise à jour utilisateur + options + jobs plex
         # ==================================================
         if request.method == "POST":
             form = request.form
 
-            firstname       = form.get("firstname") or user["firstname"]
-            lastname        = form.get("lastname") or user["lastname"]
-            second_email    = form.get("second_email") or user["second_email"]
-            expiration_date = form.get("expiration_date") or user["expiration_date"]
-            renewal_date    = form.get("renewal_date") or user["renewal_date"]
-            renewal_method  = form.get("renewal_method") or user["renewal_method"]
-            notes           = form.get("notes") if "notes" in form else user["notes"]
+            firstname       = form.get("firstname") or user.get("firstname")
+            lastname        = form.get("lastname") or user.get("lastname")
+            second_email    = form.get("second_email") or user.get("second_email")
+            expiration_date = form.get("expiration_date") or user.get("expiration_date")
+            renewal_date    = form.get("renewal_date") or user.get("renewal_date")
+            renewal_method  = form.get("renewal_method") or user.get("renewal_method")
+            notes           = form.get("notes") if "notes" in form else user.get("notes")
 
             # --- MAJ infos Vodum ---
             db.execute(
@@ -1124,8 +1194,8 @@ def create_app():
                 ),
             )
 
-            # Gestion expiration
-            if expiration_date != user["expiration_date"]:
+            # Gestion expiration (vodum_users.expiration_date est contractuel)
+            if expiration_date != user.get("expiration_date"):
                 update_user_expiration(
                     user_id,
                     expiration_date,
@@ -1133,21 +1203,72 @@ def create_app():
                 )
 
             # -----------------------------------------------
-            # SYNC Plex : pour chaque media_user plex
+            # Sauvegarde des options Plex en JSON (details_json)
+            # -> 1 details_json par media_user (donc par serveur)
+            # -----------------------------------------------
+            # On ne fait ça que pour les comptes plex de cet user
+            plex_media = db.query(
+                """
+                SELECT mu.id, mu.details_json
+                FROM media_users mu
+                JOIN servers s ON s.id = mu.server_id
+                WHERE mu.vodum_user_id = ?
+                  AND s.type = 'plex'
+                  AND mu.type = 'plex'
+                """,
+                (user_id,),
+            )
+
+            for mu in plex_media:
+                mu_id = int(mu["id"])
+
+                # Charge le JSON existant
+                try:
+                    details = json.loads(mu["details_json"] or "{}")
+                except Exception:
+                    details = {}
+
+                if not isinstance(details, dict):
+                    details = {}
+
+                plex_share = details.get("plex_share", {})
+                if not isinstance(plex_share, dict):
+                    plex_share = {}
+
+                # Les champs sont attendus en "1"/"0"
+                plex_share["allowSync"] = 1 if form.get(f"allow_sync_{mu_id}") == "1" else 0
+                plex_share["allowCameraUpload"] = 1 if form.get(f"allow_camera_upload_{mu_id}") == "1" else 0
+                plex_share["allowChannels"] = 1 if form.get(f"allow_channels_{mu_id}") == "1" else 0
+
+                plex_share["filterMovies"] = (form.get(f"filter_movies_{mu_id}") or "").strip()
+                plex_share["filterTelevision"] = (form.get(f"filter_television_{mu_id}") or "").strip()
+                plex_share["filterMusic"] = (form.get(f"filter_music_{mu_id}") or "").strip()
+
+                details["plex_share"] = plex_share
+
+                db.execute(
+                    "UPDATE media_users SET details_json = ? WHERE id = ?",
+                    (json.dumps(details, ensure_ascii=False), mu_id),
+                )
+
+            # -----------------------------------------------
+            # SYNC Plex : pour chaque media_user plex, créer un job
+            # (si tu veux que l'appli ré-applique les droits)
             # -----------------------------------------------
             if "plex" in allowed_types:
-                plex_media = db.query(
+                plex_media_for_jobs = db.query(
                     """
                     SELECT mu.id, mu.server_id
                     FROM media_users mu
                     JOIN servers s ON s.id = mu.server_id
                     WHERE mu.vodum_user_id = ?
                       AND s.type = 'plex'
+                      AND mu.type = 'plex'
                     """,
                     (user_id,),
                 )
 
-                for mu in plex_media:
+                for mu in plex_media_for_jobs:
                     db.execute(
                         """
                         INSERT INTO plex_jobs(action, user_id, server_id, library_id, processed)
@@ -1167,24 +1288,90 @@ def create_app():
 
         # -----------------------------------------------
         # Comptes media + serveurs
+        #  - 1 ligne = 1 compte media sur 1 serveur
+        #  - has_access basé sur media_user_libraries
         # -----------------------------------------------
         servers = db.query(
             """
             SELECT
                 s.*,
+                s.id AS server_id,
+
                 mu.id AS media_user_id,
+                mu.external_user_id,
                 mu.username AS media_username,
-                mu.type AS media_type
+                mu.email AS media_email,
+                mu.avatar AS media_avatar,
+                mu.type AS media_type,
+                mu.role AS media_role,
+                mu.joined_at,
+                mu.accepted_at,
+                mu.details_json,
+
+                CASE
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM media_user_libraries mul
+                        WHERE mul.media_user_id = mu.id
+                        LIMIT 1
+                    ) THEN 1
+                    ELSE 0
+                END AS has_access
             FROM media_users mu
             JOIN servers s ON s.id = mu.server_id
             WHERE mu.vodum_user_id = ?
-            ORDER BY s.name
+            ORDER BY s.type, s.name
             """,
             (user_id,),
         )
 
+        # --------------------------------------------------
+        # Déplier options depuis details_json
+        #  - Plex: details_json["plex_share"]
+        #  - Jellyfin: tu peux afficher ce que sync_jellyfin écrit (owned/all_libraries/num_libraries…)
+        # --------------------------------------------------
+        enriched = []
+        for row in servers:
+            r = dict(row)
+
+            # defaults pour le template
+            r["allow_sync"] = 0
+            r["allow_camera_upload"] = 0
+            r["allow_channels"] = 0
+            r["filter_movies"] = ""
+            r["filter_television"] = ""
+            r["filter_music"] = ""
+
+            try:
+                details = json.loads(r.get("details_json") or "{}")
+            except Exception:
+                details = {}
+
+            if not isinstance(details, dict):
+                details = {}
+
+            # Plex
+            if r.get("media_type") == "plex":
+                plex_share = details.get("plex_share", {})
+                if not isinstance(plex_share, dict):
+                    plex_share = {}
+
+                r["allow_sync"] = 1 if plex_share.get("allowSync") else 0
+                r["allow_camera_upload"] = 1 if plex_share.get("allowCameraUpload") else 0
+                r["allow_channels"] = 1 if plex_share.get("allowChannels") else 0
+                r["filter_movies"] = plex_share.get("filterMovies") or ""
+                r["filter_television"] = plex_share.get("filterTelevision") or ""
+                r["filter_music"] = plex_share.get("filterMusic") or ""
+
+            # Jellyfin (état calculé par sync_jellyfin)
+            r["_details_obj"] = details
+
+            enriched.append(r)
+
+        servers = enriched
+
         # -----------------------------------------------
-        # Bibliothèques + accès
+        # Bibliothèques + accès (par utilisateur Vodum)
         # -----------------------------------------------
         libraries = db.query(
             """
@@ -1197,7 +1384,6 @@ def create_app():
                 END AS has_access
             FROM libraries l
             JOIN servers s ON s.id = l.server_id
-
             LEFT JOIN media_user_libraries mul
                    ON mul.library_id = l.id
                   AND mul.media_user_id IN (
@@ -1205,14 +1391,13 @@ def create_app():
                         FROM media_users
                         WHERE vodum_user_id = ?
                    )
-
             ORDER BY s.name, l.name
             """,
             (user_id,),
         )
 
         # -----------------------------------------------
-        # Mails envoyés (table conserve vodum_users.id)
+        # Mails envoyés (DB v2: template_type / expiration_date / sent_at)
         # -----------------------------------------------
         sent_emails = db.query(
             """
@@ -1229,8 +1414,9 @@ def create_app():
             user=user,
             servers=servers,
             libraries=libraries,
-            user_servers=servers,   # compatibilité template
             sent_emails=sent_emails,
+            allowed_types=allowed_types,
+            user_servers=servers,  # si tu as encore des restes dans le template
         )
 
 
