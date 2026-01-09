@@ -27,35 +27,40 @@
     <label class="flex flex-col">
       {{ t("name") }}
       <input type="text" name="name" value="{{ server.name }}"
-             class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+             class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60" readonly>
     </label>
 
-    <label class="flex flex-col">
-      {{ t("server_type") }}
-      <select name="type"
-              class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-        <option value="plex" {% if server.type == 'plex' %}selected{% endif %}>{{ t("plex") }}</option>
-        <option value="jellyfin" {% if server.type == 'jellyfin' %}selected{% endif %}>{{ t("jellyfin") }}</option>
-        <option value="other" {% if server.type == 'other' %}selected{% endif %}>{{ t("other") }}</option>
-      </select>
-    </label>
+	<label class="flex flex-col">
+	  {{ t("server_type") }}
+	  <input type="text"
+			 class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 opacity-60"
+			 value="{% if server.type == 'plex' %}{{ t('plex') }}
+					{% elif server.type == 'jellyfin' %}{{ t('jellyfin') }}
+					{% elif server.type == 'other' %}{{ t('other') }}
+					{% endif %}"
+			 readonly>
+	</label>
 
-    <label class="flex flex-col">
-      {{ t("status") }}
-      <select name="status"
-              class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-        {% for st in ['up','down','unknown'] %}
-          <option value="{{ st }}" {% if server.status == st %}selected{% endif %}>
-            {{ t(st) }}
-          </option>
-        {% endfor %}
-      </select>
-    </label>
+
+	<label class="flex flex-col">
+	  {{ t("status") }}
+	  <input type="text"
+			 class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 opacity-60"
+			 value="{{ t(server.status) }}"
+			 readonly>
+	</label>
+
 
     <label class="flex flex-col">
       {{ t("url") }}
       <input type="text" name="url" value="{{ server.url or '' }}"
              class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+    </label>
+
+    <label class="flex flex-col">
+      {{ t("server_token") }}
+      <input type="text" name="token" value="{{ server.token or '' }}"
+             class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 font-mono text-xs">
     </label>
 
     <label class="flex flex-col">
@@ -70,12 +75,8 @@
              class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
     </label>
 
-    <label class="flex flex-col">
-      {{ t("server_token") }}
-      <input type="text" name="token" value="{{ server.token or '' }}"
-             class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 font-mono text-xs">
-    </label>
 
+<!--
     <label class="flex flex-col">
       {{ t("tautulli_url") }}
       <input type="text" name="tautulli_url" value="{{ server.tautulli_url or '' }}"
@@ -87,7 +88,7 @@
       <input type="text" name="tautulli_api_key" value="{{ server.tautulli_api_key or '' }}"
              class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 font-mono text-xs">
     </label>
-
+-->
   </div>
 
   <!-- Barre d'actions -->

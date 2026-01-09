@@ -5,6 +5,7 @@ from typing import Dict, Any, List, Set, Tuple, Optional
 
 import requests
 import xml.etree.ElementTree as ET
+import json
 
 from logging_utils import get_logger
 from tasks_engine import task_logs
@@ -692,6 +693,26 @@ def sync_users_from_api(db) -> None:
 
             seen_media_pairs.add((plex_id, server_id))
 
+            # ------------------------------------------------
+            # DB v2: on stocke les options Plex (fidèles au serveur) dans media_users.details_json
+            # -> overwrite à chaque sync (read-only UI pour l’instant)
+            # ------------------------------------------------
+            details_json = json.dumps(
+                {
+                    "plex_share": {
+                        "allowSync": 1 if data.get("allow_sync") else 0,
+                        "allowCameraUpload": 1 if data.get("allow_camera_upload") else 0,
+                        "allowChannels": 1 if data.get("allow_channels") else 0,
+                        "filterMovies": data.get("filter_movies") or "",
+                        "filterTelevision": data.get("filter_television") or "",
+                        "filterMusic": data.get("filter_music") or "",
+                    }
+                },
+                ensure_ascii=False
+            )
+
+
+
             # existe déjà ?
             row_mu = db.query_one(
                 """
@@ -717,7 +738,8 @@ def sync_users_from_api(db) -> None:
                         type           = 'plex',
                         role           = ?,
                         joined_at      = ?,
-                        accepted_at    = ?
+                        accepted_at    = ?,
+                        details_json   = ?
                     WHERE id = ?
                     """,
                     (
@@ -728,6 +750,7 @@ def sync_users_from_api(db) -> None:
                         plex_role or "unknown",
                         joined_at,
                         accepted_at,
+                        details_json,
                         media_user_id,
                     ),
                 )
@@ -745,9 +768,10 @@ def sync_users_from_api(db) -> None:
                         type,
                         role,
                         joined_at,
-                        accepted_at
+                        accepted_at,
+                        details_json
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, 'plex', ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, 'plex', ?, ?, ?, ?)
                     """,
                     (
                         server_id,
@@ -759,6 +783,7 @@ def sync_users_from_api(db) -> None:
                         plex_role or "unknown",
                         joined_at,
                         accepted_at,
+                        details_json,
                     ),
                 )
                 media_user_id = cur_mu.lastrowid

@@ -41,19 +41,59 @@
 
 
 <!-- Filtres -->
-<form method="get" class="flex flex-wrap items-center gap-3 mb-6">
-    <input type="text" name="q" placeholder="{{ t('search') }}…" value="{{ search }}"
-           class="bg-slate-900 border border-slate-800 rounded-lg text-sm px-3 py-2 w-48">
+<form method="get" id="users_filter_form" class="flex flex-wrap items-center gap-3 mb-6">
 
-    <select name="status" class="bg-slate-900 border border-slate-800 rounded-lg text-sm px-3 py-2">
-        <option value="">{{ t("status_all") }}</option>
-        {% for s in ['active','pre_expired','reminder','expired','invited','unfriended','suspended','unknown'] %}
-            <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>
-                {{ t(s) }}
-            </option>
-        {% endfor %}
-    </select>
+    <!-- Search -->
+    <input type="text"
+           name="q"
+           placeholder="{{ t('search') }}…"
+           value="{{ search }}"
+           class="bg-slate-900 border border-slate-800 rounded-lg text-sm px-3 py-2 w-56">
 
+    <!-- Status multiselect -->
+	<details class="relative">
+	  <summary class="list-none cursor-pointer bg-slate-900 border border-slate-800 rounded-lg text-sm px-3 py-2 flex items-center gap-2">
+		<span>{{ t("status") }}</span>
+		<span class="text-xs text-slate-400">
+		  ({{ (selected_statuses|length) if selected_statuses else "all" }})
+		</span>
+		<svg class="w-4 h-4 opacity-70" viewBox="0 0 24 24">
+		  <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
+		</svg>
+	  </summary>
+
+	  <div class="absolute z-20 mt-2 w-64 bg-slate-950 border border-slate-800 rounded-xl p-3 shadow-xl">
+		{% set all_statuses = ['active','pre_expired','reminder','expired','invited','unfriended','suspended','unknown'] %}
+
+		<!-- Quick actions -->
+		<div class="flex items-center justify-between mb-2">
+		  <button type="button"
+				  class="text-xs text-slate-300 hover:text-white underline"
+				  onclick="this.closest('details').querySelectorAll('input[name=status]').forEach(i => i.checked = true);">
+			Select all
+		  </button>
+
+		  <button type="button"
+				  class="text-xs text-slate-300 hover:text-white underline"
+				  onclick="this.closest('details').querySelectorAll('input[name=status]').forEach(i => i.checked = false);">
+			Select none
+		  </button>
+		</div>
+
+		<div class="space-y-2 max-h-56 overflow-y-auto pr-1">
+		  {% for s in all_statuses %}
+			<label class="flex items-center justify-between gap-2 text-sm">
+			  <span class="text-slate-200">{{ t(s) }}</span>
+			  <input type="checkbox" name="status" value="{{ s }}"
+					 {# ✅ si rien n'est sélectionné -> on coche tout par défaut #}
+					 {% if (not selected_statuses) or (s in selected_statuses) %}checked{% endif %}>
+			</label>
+		  {% endfor %}
+		</div>
+	  </div>
+	</details>
+
+<!-- 
     <button class="text-sm px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white">
         {{ t("filter") }}
     </button>
@@ -61,8 +101,9 @@
     <a href="{{ url_for('users_list') }}"
        class="text-sm px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700">
         {{ t("reset") }}
-    </a>
+    </a>-->
 </form>
+
 
 
 <!-- TABLE USERS -->
@@ -188,7 +229,11 @@
 <script>
 function sortTable(columnIndex, thElement) {
     const table = document.querySelector("table");
+    if (!table) return;
+
     const tbody = table.querySelector("tbody");
+    if (!tbody) return;
+
     const rows = Array.from(tbody.querySelectorAll("tr"))
         .filter(r => !r.querySelector("td[colspan]"));
 
@@ -250,21 +295,24 @@ function sortTable(columnIndex, thElement) {
         "pre_expired": 2,
         "reminder": 3,
         "expired": 4,
-        "none": 5,
-        "unknown": 5
+        "invited": 5,
+        "unfriended": 6,
+        "suspended": 7,
+        "none": 98,
+        "unknown": 99
     };
 
     const sorted = rows.sort((a, b) => {
 
-        /* 🔥 TRI MÉTIER POUR STATUS */
+        /* 🔥 TRI MÉTIER POUR STATUS (col index 2) */
         if (columnIndex === 2) {
             const getStatusKey = (row) => {
-                const span = row.children[2].querySelector("span");
+                const span = row.children[2]?.querySelector("span");
                 return span?.dataset?.status || "none";
             };
 
-            const A = STATUS_ORDER[getStatusKey(a)] ?? 99;
-            const B = STATUS_ORDER[getStatusKey(b)] ?? 99;
+            const A = STATUS_ORDER[getStatusKey(a)] ?? 999;
+            const B = STATUS_ORDER[getStatusKey(b)] ?? 999;
 
             return currentOrder === "asc" ? A - B : B - A;
         }
@@ -281,27 +329,121 @@ function sortTable(columnIndex, thElement) {
     tbody.innerHTML = "";
     sorted.forEach(r => tbody.appendChild(r));
 
-    localStorage.setItem("users_sort_col", columnIndex);
+    localStorage.setItem("users_sort_col", String(columnIndex));
     localStorage.setItem("users_sort_order", currentOrder);
 }
 
 /* =========================
-   RESTORE SORT STATE
+   RESTORE SORT + AUTO FILTER
    ========================= */
 document.addEventListener("DOMContentLoaded", () => {
+    // -------------------------
+    // 1) RESTORE SORT STATE
+    // -------------------------
     const col = localStorage.getItem("users_sort_col");
     const order = localStorage.getItem("users_sort_order");
 
     if (col !== null) {
-        const th = document.querySelectorAll("th.sortable")[col];
-        if (!th) return;
-
-        // inversion volontaire car sortTable toggle l’ordre
-        th.dataset.order = order === "asc" ? "desc" : "asc";
-        sortTable(Number(col), th);
+        const th = document.querySelectorAll("th.sortable")[Number(col)];
+        if (th) {
+            // inversion volontaire car sortTable toggle l’ordre
+            th.dataset.order = order === "asc" ? "desc" : "asc";
+            sortTable(Number(col), th);
+        }
     }
+
+    // -------------------------
+    // 2) AUTO FILTER + PERSIST
+    // -------------------------
+    const form = document.getElementById("users_filter_form");
+    if (!form) return;
+
+    const searchInput = form.querySelector('input[name="q"]');
+    const statusCheckboxes = form.querySelectorAll('input[name="status"]');
+
+    const STORAGE_KEY = "vodum_users_filters_v1";
+    let timer = null;
+
+    function saveFilters() {
+        try {
+            const statuses = Array.from(statusCheckboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.value);
+
+            const q = searchInput ? (searchInput.value || "") : "";
+
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({ statuses, q }));
+        } catch (e) {
+            console.warn("saveFilters failed", e);
+        }
+    }
+
+    function submitForm() {
+        saveFilters();
+        if (form.requestSubmit) form.requestSubmit();
+        else form.submit();
+    }
+
+    // Restore uniquement si l’URL n’a pas déjà des filtres
+    (function restoreFilters() {
+        const url = new URL(window.location.href);
+        if (url.searchParams.has("status") || url.searchParams.has("q")) return;
+
+        try {
+            const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+
+            // Status : si rien sauvegardé -> on coche tout
+            if (Array.isArray(saved.statuses) && saved.statuses.length > 0) {
+                statusCheckboxes.forEach(cb => {
+                    cb.checked = saved.statuses.includes(cb.value);
+                });
+            } else {
+                statusCheckboxes.forEach(cb => cb.checked = true);
+            }
+
+            // Search
+            if (searchInput && typeof saved.q === "string") {
+                searchInput.value = saved.q;
+            }
+
+            // Applique seulement si on a qqch à restaurer
+            const hasSomething =
+                (Array.isArray(saved.statuses) && saved.statuses.length > 0) ||
+                (typeof saved.q === "string" && saved.q.trim() !== "");
+
+            if (hasSomething) submitForm();
+        } catch (e) {
+            console.warn("restoreFilters failed", e);
+        }
+    })();
+
+    // Search debounce
+    if (searchInput) {
+        searchInput.addEventListener("input", () => {
+            clearTimeout(timer);
+            timer = setTimeout(submitForm, 350);
+        });
+
+        searchInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                clearTimeout(timer);
+                submitForm();
+            }
+        });
+    }
+
+    // Status checkboxes -> submit immédiat
+    statusCheckboxes.forEach(cb => {
+        cb.addEventListener("change", () => {
+            clearTimeout(timer);
+            submitForm();
+        });
+    });
 });
 </script>
+
+
 
 
 {% endblock %}

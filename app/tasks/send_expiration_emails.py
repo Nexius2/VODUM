@@ -112,8 +112,13 @@ def run(task_id: int, db):
         users = db.query(
             """
             SELECT id, username, email, second_email, expiration_date
-            FROM vodum_users
-            WHERE expiration_date IS NOT NULL
+            FROM vodum_users u
+            WHERE u.expiration_date IS NOT NULL
+              AND EXISTS (
+                SELECT 1
+                FROM media_users mu
+                WHERE mu.vodum_user_id = u.id
+              )
             """
         )
 

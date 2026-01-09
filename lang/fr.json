@@ -439,7 +439,7 @@
 
   "task.sync_jellyfin": "Synchronisation Jellyfin",
   
-    "user_not_found": "Utilisateur introuvable",
+  "user_not_found": "Utilisateur introuvable",
   "user_saved_and_plex_sync_started": "Modifications enregistrées et synchronisation Plex lancée",
   "invalid_library": "Bibliothèque invalide",
   "library_access_added": "Accès ajouté",
@@ -577,7 +577,21 @@
 
   "home_user": "Utilisateur Plex Home",
   "protected_account": "Compte protégé",
-  "restricted": "Compte restreint"
+  "restricted": "Compte restreint",
+  
+  "user_saved": "Utilisateur enregistré avec succès",
+  "status_all": "Tous les statuts",
+  
+  "language_auto": "Automatique",
+"language_auto_hint": "Utilise la langue du navigateur",
+
+"templates_saved": "Modèles enregistrés",
+  "active_users": "Utilisateurs actifs",
+  "users_total": "au total",
+  
+    "support_github_help": "En cas de besoin, pour signaler un bug ou proposer une amélioration, merci d’ouvrir une issue sur le dépôt GitHub de VODUM.",
+  "Open_an_issue": "Ouvrir une issue sur GitHub"
+
 
 
 

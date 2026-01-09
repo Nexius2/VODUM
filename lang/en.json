@@ -583,7 +583,22 @@
 
   "home_user": "Plex Home user",
   "protected_account": "Protected account",
-  "restricted": "Restricted account"
+  "restricted": "Restricted account",
+  
+  "user_saved": "User saved successfully",
+  "status_all": "All statuses",
+  
+  "language_auto": "Auto",
+"language_auto_hint": "Use the browser language",
+
+"templates_saved": "Templates saved",
+
+  "active_users": "Active users",
+  "users_total": "total",
+  
+    "support_github_help": "If you need help, want to report a bug, or suggest an improvement, please open an issue on the VODUM GitHub repository.",
+  "Open_an_issue": "Open an issue on GitHub"
+
 
 
 

@@ -140,16 +140,27 @@ def run(task_id: int, db):
                 if not server_id:
                     recipients = db.query("""
                         SELECT id, email, username, expiration_date
-                        FROM users
-                        WHERE email IS NOT NULL
+                        FROM vodum_users vu
+                        WHERE vu.email IS NOT NULL
+                          AND EXISTS (
+                            SELECT 1
+                            FROM media_users mu
+                            WHERE mu.vodum_user_id = vu.id
+                          )
                     """)
                 else:
                     recipients = db.query("""
-                        SELECT u.id, u.email, u.username, u.expiration_date
-                        FROM users u
-                        JOIN user_servers us ON us.user_id = u.id
-                        WHERE us.server_id=? AND u.email IS NOT NULL
+                        SELECT DISTINCT
+                            vu.id AS id,
+                            vu.email AS email,
+                            vu.username AS username,
+                            vu.expiration_date AS expiration_date
+                        FROM vodum_users vu
+                        JOIN media_users mu ON mu.vodum_user_id = vu.id
+                        WHERE mu.server_id = ?
+                          AND vu.email IS NOT NULL
                     """, (server_id,))
+
 
                 log.info(f"{len(recipients)} destinataire(s) sélectionné(s)")
 
