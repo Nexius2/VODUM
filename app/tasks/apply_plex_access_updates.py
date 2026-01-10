@@ -214,6 +214,12 @@ def resolve_media_user(db, vodum_user_id: int, server_id: int):
 
     return user
 
+def is_owner_media_user(user_row) -> bool:
+    try:
+        return (user_row["role"] or "").strip().lower() == "owner"
+    except Exception:
+        return False
+
 
 def _get_plex_share_settings_from_user(user_row):
     """
@@ -285,6 +291,13 @@ def apply_grant_job(db, job):
     # Résolution user canonique -> media_users (lié au serveur)
     user = resolve_media_user(db, vodum_user_id, server_id)
     user_id = user["id"]
+    if is_owner_media_user(user):
+    logger.info(
+        f"⏭️ Skip GRANT (owner) : username={user['username']} "
+        f"server_id={server_id} library_id={lib_id}"
+    )
+    return
+
 
 
     # --- RÉCUP DATA DB ----------------------------------------------------
@@ -397,6 +410,11 @@ def apply_sync_job(db, job):
     # Résolution user canonique -> media_users (lié au serveur)
     user = resolve_media_user(db, vodum_user_id, server_id)
     user_id = user["id"]
+    if is_owner_media_user(user):
+        logger.info(
+            f"⏭️ Skip SYNC (owner) : username={user['username']} server_id={server_id}"
+        )
+        return
 
 
     # Récup serveur + user
@@ -559,6 +577,12 @@ def apply_revoke_job(db, job):
     vodum_user_id = job["vodum_user_id"]
 
     user = resolve_media_user(db, vodum_user_id, server_id)
+    if is_owner_media_user(user):
+        logger.info(
+            f"⏭️ Skip REVOKE (owner) : username={user['username']} server_id={server_id}"
+        )
+        return
+
 
     server = db.query_one(
         "SELECT * FROM servers WHERE id=?",
