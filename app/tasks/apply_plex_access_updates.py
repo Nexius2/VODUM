@@ -292,11 +292,11 @@ def apply_grant_job(db, job):
     user = resolve_media_user(db, vodum_user_id, server_id)
     user_id = user["id"]
     if is_owner_media_user(user):
-    logger.info(
-        f"⏭️ Skip GRANT (owner) : username={user['username']} "
-        f"server_id={server_id} library_id={lib_id}"
-    )
-    return
+        logger.info(
+            f"⏭️ Skip GRANT (owner) : username={user['username']} "
+            f"server_id={server_id} library_id={lib_id}"
+        )
+        return
 
 
 
