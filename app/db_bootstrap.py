@@ -285,7 +285,7 @@ def run_migrations():
     # Tâche apply_plex_access_updates (pour appliquer les jobs Plex)
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "apply_plex_access_updates",
-        "description": "Applique les mises à jour d'accès Plex en attente (plex_jobs)",
+        "description": "Applique les mises à jour d'accès Plex en attente (media_jobs)",
         "schedule": "*/2 * * * *",   # toutes les 2 minutes
         "enabled": 0,                # activée uniquement quand un job est ajouté
         "status": "idle"

@@ -3175,6 +3175,7 @@ def create_app():
         allowed = (
             request.path.startswith("/static"),
             request.path.startswith("/set_language"),
+            request.path.startswith("/settings"),
         )
 
         if any(allowed):
@@ -3189,7 +3190,7 @@ def create_app():
             return (
                 render_template(
                     "maintenance.html",
-                    active_page=None,
+                    active_page="settings",
                 ),
                 503,
             )
@@ -3544,4 +3545,3 @@ with app.app_context():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
-

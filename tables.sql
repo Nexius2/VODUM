@@ -295,7 +295,29 @@ ON media_jobs(dedupe_key)
 WHERE dedupe_key IS NOT NULL;
 
 
+-- ---------------------------------------------------------------------
+-- Schema versioning (source de vérité)
+-- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS schema_migrations (
-    version TEXT PRIMARY KEY,
-    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  version INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  applied_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(version),
+  UNIQUE(name)
 );
+
+-- Version courante du schéma (1 ligne)
+CREATE TABLE IF NOT EXISTS schema_version (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  version INTEGER NOT NULL
+);
+
+-- Initialisation version V2 (idempotent)
+INSERT OR IGNORE INTO schema_version (id, version) VALUES (1, 2);
+
+-- (optionnel mais utile) journaliser l'init si pas déjà présent
+INSERT OR IGNORE INTO schema_migrations (version, name)
+VALUES (2, 'init_v2');
+
+

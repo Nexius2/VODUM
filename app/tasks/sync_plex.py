@@ -199,7 +199,8 @@ def sync_plex_user_library_access(db, plex, server):
         SELECT
             vu.email,
             mu.id AS media_user_id,
-            mu.vodum_user_id AS vodum_user_id
+            mu.vodum_user_id AS vodum_user_id,
+            mu.role AS role
         FROM media_users mu
         JOIN vodum_users vu ON vu.id = mu.vodum_user_id
         WHERE mu.server_id = ?
@@ -207,6 +208,7 @@ def sync_plex_user_library_access(db, plex, server):
         """,
         (server_id,),
     )
+
 
     if not users:
         log.info(f"[SYNC ACCESS] Aucun user lié à server={server_name} (id={server_id})")
@@ -221,6 +223,7 @@ def sync_plex_user_library_access(db, plex, server):
         email = u["email"]
         media_user_id = u["media_user_id"]
         vodum_user_id = u["vodum_user_id"]
+        role = (u["role"] or "").strip().lower()
 
         processed_users += 1
 
@@ -236,32 +239,44 @@ def sync_plex_user_library_access(db, plex, server):
             (media_user_id, server_id),
         )
 
-        # Si pas d'email, on ne peut pas demander à Plex les accès (ta fonction plex_get_user_access est basée sur l'email)
-        if not email:
-            skipped_no_email += 1
-            continue
-
-        access = plex_get_user_access(db, plex, server_name, media_user_id)
 
         has_access = False
-        for entry in access:
-            sec_id = str(entry.get("key") or "")
-            if not sec_id:
-                continue
 
-            lib_id = lib_map.get(sec_id)
-            if not lib_id:
-                continue
-
-            db.execute(
-                """
-                INSERT OR IGNORE INTO media_user_libraries(media_user_id, library_id)
-                VALUES (?, ?)
-                """,
-                (media_user_id, lib_id),
-            )
-
+        # ✅ Cas spécial OWNER : on force toutes les libraries du serveur en ON
+        if role == "owner":
+            for lib_id in lib_map.values():
+                db.execute(
+                    """
+                    INSERT OR IGNORE INTO media_user_libraries(media_user_id, library_id)
+                    VALUES (?, ?)
+                    """,
+                    (media_user_id, lib_id),
+                )
             has_access = True
+
+        else:
+            # Sinon, logique normale basée sur l'API Plex (nécessite un email)
+            if not email:
+                skipped_no_email += 1
+                continue
+
+            access = plex_get_user_access(db, plex, server_name, media_user_id)
+
+            for lib in access:
+                sec_id = str(lib.get("key") or "")
+                lib_id = lib_map.get(sec_id)
+                if not lib_id:
+                    continue
+
+                db.execute(
+                    """
+                    INSERT OR IGNORE INTO media_user_libraries(media_user_id, library_id)
+                    VALUES (?, ?)
+                    """,
+                    (media_user_id, lib_id),
+                )
+
+                has_access = True
 
         # ✅ ici on passe bien vodum_user_id (pas media_user_id)
         if has_access:
@@ -414,6 +429,66 @@ def fetch_xml(url: str, token: str) -> Optional[ET.Element]:
     except Exception as e:
         log.error(f"[API] XML invalide pour {url}: {e}")
         return None
+
+def fetch_admin_account_from_token(token: str) -> Optional[Dict[str, Any]]:
+    """
+    Récupère le compte Plex lié au token (owner/admin) via Plex.tv /users/account.
+    Renvoie un dict au même format que fetch_users_from_plex_api() (sans servers).
+    """
+    url = "https://plex.tv/users/account"
+    root = fetch_xml(url, token)
+    if root is None:
+        log.error("[API] Impossible de récupérer /users/account")
+        return None
+
+    # Selon les réponses Plex, ça peut être <user ...> ou autre, on prend les attribs
+    plex_id = root.get("id")
+    if not plex_id:
+        log.error("[API] /users/account ne contient pas d'id")
+        return None
+
+    username = root.get("username") or root.get("title") or f"user_{plex_id}"
+    email = (root.get("email") or "").strip() or None
+
+    # L’attribut le plus courant est "thumb"
+    avatar = root.get("thumb") or root.get("avatar")
+
+    return {
+        "plex_id": str(plex_id),
+        "username": username,
+        "email": email,
+        "avatar": avatar,
+
+        # On marque distinctement, tu trieras après
+        "plex_role": "owner",
+
+        # Flags inconnus ici, on met 0 par défaut
+        "home": 0,
+        "protected": 0,
+        "restricted": 0,
+
+        # Options Plex inconnues sur /users/account
+        "allow_sync": 1,
+        "allow_camera_upload": 1,
+        "allow_channels": 1,
+
+        "filter_all": None,
+        "filter_movies": None,
+        "filter_television": None,
+        "filter_music": None,
+        "filter_photos": None,
+        "recommendations_playlist_id": None,
+
+        "joined_at": None,
+        "accepted_at": None,
+
+        "subscription_active": None,
+        "subscription_status": None,
+        "subscription_plan": None,
+
+        # IMPORTANT: sera rempli plus bas avec tous les serveurs
+        "servers": [],
+    }
 
 
 def fetch_users_from_plex_api(token: str, db=None) -> Dict[str, Dict[str, Any]]:
@@ -596,7 +671,7 @@ def sync_users_from_api(db) -> None:
     # 3) Mapping serveurs Plex (machineIdentifier → id)
     # ----------------------------------------------------
     rows = db.query(
-        "SELECT id, server_identifier FROM servers WHERE type='plex'"
+        "SELECT id, server_identifier, name FROM servers WHERE type='plex'"
     )
 
     server_id_by_machine = {
@@ -613,6 +688,56 @@ def sync_users_from_api(db) -> None:
     seen_plex_ids: Set[str] = set()
     # (external_user_id, server_id)
     seen_media_pairs: Set[Tuple[str, int]] = set()
+
+    # ----------------------------------------------------
+    # 3.1) Injecter le compte owner/admin (lié au token)
+    #      comme un user normal, présent sur tous les serveurs Plex.
+    # ----------------------------------------------------
+    admin_data = fetch_admin_account_from_token(token)
+    if admin_data:
+        admin_plex_id = admin_data["plex_id"]
+
+        # On lui associe tous les serveurs Plex connus
+        admin_data["servers"] = [
+            {
+                "machineIdentifier": r["server_identifier"],
+                "name": r["name"],
+                "home": 0,
+                "owned": 1,
+                "allLibraries": 1,
+                "numLibraries": 0,
+                "lastSeenAt": None,
+                "pending": 0,
+            }
+            for r in rows
+            if r["server_identifier"]
+        ]
+
+        existing = users_data.get(admin_plex_id)
+
+        if existing:
+            # force role owner (tu trieras après mais au moins c'est fiable)
+            existing["plex_role"] = "owner"
+
+            # merge servers: on ajoute ceux manquants
+            existing_servers = {s.get("machineIdentifier") for s in existing.get("servers", []) if s.get("machineIdentifier")}
+            for s in admin_data["servers"]:
+                mid = s.get("machineIdentifier")
+                if mid and mid not in existing_servers:
+                    existing.setdefault("servers", []).append(s)
+
+            log.info(
+                f"[SYNC USERS] Admin token merge: plex_id={admin_plex_id} "
+                f"servers={len(existing.get('servers', []))}"
+            )
+        else:
+            users_data[admin_plex_id] = admin_data
+            log.info(
+                f"[SYNC USERS] Admin token injecté: plex_id={admin_plex_id} "
+                f"username={admin_data.get('username')!r}, servers={len(admin_data['servers'])}"
+            )
+
+
 
     # ----------------------------------------------------
     # 4) Upsert vodum_users + media_users
