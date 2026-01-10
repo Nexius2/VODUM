@@ -354,7 +354,7 @@ def apply_grant_job(db, job):
         user_row=user,
         plex_obj=plex,
         plex_user_obj=plex_user,
-        sections=sections,
+        sections=list(current_sections),
         allowSync=allowSync,
         allowCameraUpload=allowCameraUpload,
         allowChannels=allowChannels,
