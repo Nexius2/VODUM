@@ -40,51 +40,55 @@
         <p class="text-slate-300">{{ t("credits_text") }}</p>
     </div>
 
-    <!-- SUPPORT -->
-	<div class="bg-slate-900/40 p-8 rounded-2xl shadow border border-slate-800 text-center max-w-2xl mx-auto">
+<!-- SUPPORT / THANKS -->
+<div class="bg-slate-900/40 p-8 rounded-xl shadow border border-slate-800">
+  <div class="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-8 items-center">
 
-		<!-- Title -->
-		<h2 class="text-2xl font-semibold mb-4">
-			{{ t("support_title") }}
-		</h2>
+    <!-- LEFT : SUPPORT -->
+    <div class="text-center">
+      <h2 class="text-xl font-semibold mb-3">
+        {{ t("support_title") }}
+      </h2>
 
-		<!-- Main text -->
-		<p class="text-slate-200 mb-2">
-			{{ t("support_text") }}
-		</p>
+      <p class="text-slate-300 mb-6 max-w-sm mx-auto">
+        {{ t("support_text") }}
+      </p>
 
-		<!-- Secondary explanation -->
-		<p class="text-sm text-slate-400 mb-6">
-			{{ t("support_github_help") }}
-		</p>
+      <a href="https://github.com/Nexius2/VODUM/issues"
+         target="_blank"
+         class="inline-flex items-center gap-2 px-6 py-3 rounded-lg
+                bg-primary hover:bg-primary-dark text-white text-sm font-medium transition">
+        🐛 {{ t("open_an_issue") }}
+      </a>
+    </div>
 
-		<!-- Actions -->
-		<div class="flex flex-col sm:flex-row justify-center items-center gap-4 mb-6">
+    <!-- SEPARATOR (desktop only) -->
+    <div class="hidden md:flex justify-center">
+      <div class="w-px h-24 bg-emerald-500/40 rounded"></div>
+    </div>
 
-			<!-- GitHub -->
-			<a href="https://github.com/Nexius2/VODUM/issues"
-			   target="_blank"
-			   class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg
-					  bg-primary hover:bg-primary-dark text-white text-sm font-medium transition">
-				🐛 {{ t("open_an_issue") }}
-			</a>
+    <!-- RIGHT : THANKS -->
+    <div class="text-center">
+      <h2 class="text-xl font-semibold mb-3">
+        {{ t("credits") }}
+      </h2>
 
-			<!-- Coffee -->
-			<a href="https://buymeacoffee.com/vodum"
-			   target="_blank"
-			   class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg
-					  bg-yellow-500 hover:bg-yellow-600 text-black text-sm font-semibold transition">
-				☕ {{ t("pay_me_a_beer") }}
-			</a>
+      <p class="text-slate-300 mb-6 max-w-sm mx-auto">
+        {{ t("support_thanks") }}
+      </p>
 
-		</div>
+      <a href="https://buymeacoffee.com/vodum"
+         target="_blank"
+         class="inline-flex items-center gap-2 px-6 py-3 rounded-lg
+                bg-yellow-500 hover:bg-yellow-600 text-black text-sm font-semibold transition">
+        ☕ {{ t("pay_me_a_beer") }}
+      </a>
+    </div>
 
-		<!-- Optional subtle footer -->
-		<p class="text-xs text-slate-500">
-			{{ t("support_thanks") }}
-		</p>
+  </div>
+</div>
 
-	</div>
+
 
 
 </div>

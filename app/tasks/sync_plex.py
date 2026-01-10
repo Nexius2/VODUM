@@ -11,6 +11,17 @@ from logging_utils import get_logger
 from tasks_engine import task_logs
 from plexapi.server import PlexServer  
 
+class TimeoutSession(requests.Session):
+    """Session requests qui force un timeout par défaut."""
+    def __init__(self, timeout=10, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._timeout = timeout
+
+    def request(self, method, url, **kwargs):
+        kwargs.setdefault("timeout", self._timeout)
+        return super().request(method, url, **kwargs)
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -898,8 +909,25 @@ def sync_all(task_id=None, db=None) -> None:
             continue
 
         try:
-            plex = PlexServer(base_url, token)
+            # 🔎 logs ciblage + garde-fou réseau
+            log.info(f"[SYNC ACCESS] Tentative connexion PlexAPI → {server_name} base_url={base_url}")
+
+            # ⏱️ timeout forcé pour plexapi
+            session = TimeoutSession(timeout=10)
+
+            # petit ping très parlant (et timeout)
+            try:
+                r = session.get(f"{base_url}/identity")
+                log.info(f"[SYNC ACCESS] /identity OK ({server_name}) HTTP={r.status_code}")
+            except Exception as e:
+                log.error(f"[SYNC ACCESS] /identity KO ({server_name}) : {e}")
+                raise
+
+            plex = PlexServer(base_url, token, session=session)
+
+            log.info(f"[SYNC ACCESS] PlexAPI connecté ({server_name}) → début sync accès users")
             sync_plex_user_library_access(db, plex, server)
+            log.info(f"[SYNC ACCESS] Sync accès users terminé ({server_name})")
 
             any_success = True
 
@@ -909,6 +937,7 @@ def sync_all(task_id=None, db=None) -> None:
                 exc_info=True
             )
             continue
+
 
     if not any_success:
         raise RuntimeError("Aucun serveur Plex n'a pu être synchronisé")

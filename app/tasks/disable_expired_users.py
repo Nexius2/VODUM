@@ -68,7 +68,7 @@ def run(task_id: int, db):
         vodum_ids = sorted({r["vodum_user_id"] for r in rows})
         log.info(f"{len(vodum_ids)} utilisateur(s) expiré(s) à désactiver (Plex)")
 
-        # 2️⃣ Pour chaque compte Plex (media_user) → supprimer accès en base + créer job sync
+        # 2️⃣ Pour chaque compte Plex (media_user) → supprimer accès en base + créer job revoke
         processed_media = 0
         created_jobs = 0
 
@@ -97,29 +97,44 @@ def run(task_id: int, db):
 
             processed_media += 1
 
-            # Crée un job 'sync' pour appliquer la révocation côté Plex via apply_plex_access_updates
-            # On évite d'empiler les mêmes jobs non traités.
+            # Crée un job 'revoke' générique pour appliquer la révocation côté Plex via apply_media_access_updates
+            # IMPORTANT: on stocke l'utilisateur CANONIQUE (vodum_user_id), pas media_user_id.
+            dedupe_key = f"plex:revoke:server={server_id}:vodum_user={vodum_user_id}"
+
             exists = db.query_one(
                 """
                 SELECT 1
-                FROM plex_jobs
-                WHERE action = 'sync'
-                  AND user_id = ?
+                FROM media_jobs
+                WHERE provider = 'plex'
+                  AND action = 'revoke'
                   AND server_id = ?
+                  AND vodum_user_id = ?
                   AND library_id IS NULL
                   AND processed = 0
                 LIMIT 1
                 """,
-                (media_user_id, server_id),
+                (server_id, vodum_user_id),
             )
 
             if not exists:
                 db.execute(
                     """
-                    INSERT INTO plex_jobs(action, user_id, server_id, library_id, processed)
-                    VALUES ('sync', ?, ?, NULL, 0)
+                    INSERT OR IGNORE INTO media_jobs(
+                        provider, action,
+                        vodum_user_id, server_id, library_id,
+                        payload_json,
+                        processed, success, attempts,
+                        dedupe_key
+                    )
+                    VALUES (
+                        'plex', 'revoke',
+                        ?, ?, NULL,
+                        NULL,
+                        0, 0, 0,
+                        ?
+                    )
                     """,
-                    (media_user_id, server_id),
+                    (vodum_user_id, server_id, dedupe_key),
                 )
                 created_jobs += 1
 

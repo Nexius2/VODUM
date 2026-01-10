@@ -595,6 +595,40 @@ def auto_enable_sync_tasks():
     )
 
 
+def auto_enable_plex_jobs_worker():
+    """
+    Active/désactive apply_plex_access_updates automatiquement :
+    - ON si au moins 1 serveur Plex UP OU si des plex_jobs non traités existent
+    - OFF sinon
+    """
+    plex_up = db.query_one(
+        """
+        SELECT COUNT(*) AS cnt
+        FROM servers
+        WHERE type = 'plex'
+          AND LOWER(status) = 'up'
+        """
+    )["cnt"]
+
+    pending_jobs = db.query_one(
+        """
+        SELECT COUNT(*) AS cnt
+        FROM plex_jobs
+        WHERE processed = 0
+        """
+    )["cnt"]
+
+    should_enable = 1 if (plex_up > 0 or pending_jobs > 0) else 0
+
+    db.execute(
+        """
+        UPDATE tasks
+        SET enabled = ?,
+            status  = CASE WHEN ? = 1 THEN 'idle' ELSE 'disabled' END
+        WHERE name = 'apply_plex_access_updates'
+        """,
+        (should_enable, should_enable),
+    )
 
 
 
@@ -608,6 +642,47 @@ def scheduler_loop():
         now = datetime.now()
 
         try:
+            # -------------------------------------------------
+            # 0) Auto-enable / disable des tâches dépendantes
+            #    (avant de charger WHERE enabled = 1)
+            # -------------------------------------------------
+            try:
+                # --- apply_plex_access_updates : utile seulement si Plex UP ou jobs en attente
+                plex_up = db.query_one(
+                    """
+                    SELECT COUNT(*) AS cnt
+                    FROM servers
+                    WHERE type = 'plex'
+                      AND LOWER(status) = 'up'
+                    """
+                )["cnt"]
+
+                pending_jobs = db.query_one(
+                    """
+                    SELECT COUNT(*) AS cnt
+                    FROM plex_jobs
+                    WHERE processed = 0
+                    """
+                )["cnt"]
+
+                should_enable = 1 if (plex_up > 0 or pending_jobs > 0) else 0
+
+                db.execute(
+                    """
+                    UPDATE tasks
+                    SET enabled = ?,
+                        status  = CASE WHEN ? = 1 THEN 'idle' ELSE 'disabled' END
+                    WHERE name = 'apply_plex_access_updates'
+                    """,
+                    (should_enable, should_enable),
+                )
+
+            except Exception as e:
+                logger.warning(
+                    f"Erreur auto-enable apply_plex_access_updates: {e}",
+                    exc_info=True
+                )
+
             # -------------------------------------------------
             # 1) Charger les tâches actives
             # -------------------------------------------------
@@ -641,7 +716,6 @@ def scheduler_loop():
                 # Le worker gère l'ordre via queued_count
                 if status == "running":
                     continue
-
 
                 # ---------------------------
                 # Calcul du prochain run
@@ -691,6 +765,7 @@ def scheduler_loop():
             logger.error(f"Erreur scheduler (global): {e}", exc_info=True)
 
         time.sleep(30)
+
 
 
 
