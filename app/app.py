@@ -1244,7 +1244,7 @@ def create_app():
                 )
 
                 # On déduplique par serveur : un sync par serveur suffit (il applique toutes les libs de l'user)
-                plex_server_ids = sorted({int(mu["server_id"]) for mu in plex_media_for_jobs if mu.get("server_id") is not None})
+                plex_server_ids = sorted({int(mu["server_id"]) for mu in plex_media_for_jobs if mu["server_id"] is not None})
 
                 for server_id in plex_server_ids:
                     dedupe_key = f"plex:sync:server={server_id}:vodum_user={user_id}:user_detail_save"
