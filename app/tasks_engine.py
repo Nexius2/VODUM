@@ -598,7 +598,7 @@ def auto_enable_sync_tasks():
 def auto_enable_plex_jobs_worker():
     """
     Active/désactive apply_plex_access_updates automatiquement :
-    - ON si au moins 1 serveur Plex UP OU si des plex_jobs non traités existent
+    - ON si au moins 1 serveur Plex UP OU si des media_jobs non traités existent
     - OFF sinon
     """
     plex_up = db.query_one(
@@ -613,7 +613,7 @@ def auto_enable_plex_jobs_worker():
     pending_jobs = db.query_one(
         """
         SELECT COUNT(*) AS cnt
-        FROM plex_jobs
+        FROM media_jobs
         WHERE processed = 0
         """
     )["cnt"]
@@ -660,7 +660,7 @@ def scheduler_loop():
                 pending_jobs = db.query_one(
                     """
                     SELECT COUNT(*) AS cnt
-                    FROM plex_jobs
+                    FROM media_jobs
                     WHERE processed = 0
                     """
                 )["cnt"]

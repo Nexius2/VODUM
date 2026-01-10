@@ -5,7 +5,7 @@ disable_expired_users.py
 ✓ Désactive les accès Plex des utilisateurs expirés
 ✓ Indépendant du mailing
 ✓ Compatible multi-serveurs Plex
-✓ S'appuie sur media_user_libraries + plex_jobs
+✓ S'appuie sur media_user_libraries + media_jobs
 ✓ Lance apply_plex_access_updates (via jobs 'sync')
 """
 
@@ -20,7 +20,7 @@ def run(task_id: int, db):
     """
     Désactive les accès Plex des utilisateurs expirés
     - Compatible multi-serveurs Plex
-    - S'appuie sur media_user_libraries + plex_jobs
+    - S'appuie sur media_user_libraries + media_jobs
     """
 
     task_logs(task_id, "info", "Tâche disable_expired_users démarrée")
