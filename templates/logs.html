@@ -28,26 +28,68 @@
 {% block content %}
 <div class="p-6 space-y-6">
 
-    <!-- Barre de filtres -->
-    <form method="get" class="flex items-center gap-4 mb-4">
 
-        <!-- Niveau -->
-        <select name="level" class="bg-slate-900 border border-slate-700 rounded px-2 py-1">
-            <option value="ALL"  {% if level == "ALL" %}selected{% endif %}>{{ t("all_levels") }}</option>
-            <option value="INFO" {% if level == "INFO" %}selected{% endif %}>{{ t("info") }}</option>
-            <option value="WARNING" {% if level == "WARNING" %}selected{% endif %}>{{ t("warning") }}</option>
-            <option value="ERROR" {% if level == "ERROR" %}selected{% endif %}>{{ t("error") }}</option>
-        </select>
+	<!-- Barre de filtres -->
+	<form id="logsFilterForm" method="get" class="flex items-center gap-4 mb-4">
+		<!-- On force le retour page 1 dès qu’on change un filtre -->
+		<input type="hidden" id="pageInput" name="page" value="1">
 
-        <!-- Recherche -->
-        <input type="text" name="q" placeholder="{{ t('search') }}"
-               value="{{ search }}"
-               class="bg-slate-900 border border-slate-700 rounded px-3 py-1 w-64">
+		<!-- Niveau -->
+		<select id="levelSelect" name="level" class="bg-slate-900 border border-slate-700 rounded px-2 py-1">
+			<option value="ALL"  {% if level == "ALL" %}selected{% endif %}>{{ t("all_levels") }}</option>
+			<option value="INFO" {% if level == "INFO" %}selected{% endif %}>{{ t("info") }}</option>
+			<option value="WARNING" {% if level == "WARNING" %}selected{% endif %}>{{ t("warning") }}</option>
+			<option value="ERROR" {% if level == "ERROR" %}selected{% endif %}>{{ t("error") }}</option>
+		</select>
 
-        <button class="px-4 py-1 bg-primary text-white rounded">
-            {{ t("filter") }}
-        </button>
-    </form>
+		<!-- Recherche -->
+		<input
+			id="searchInput"
+			type="text"
+			name="q"
+			placeholder="{{ t('search') }}"
+			value="{{ search }}"
+			class="bg-slate-900 border border-slate-700 rounded px-3 py-1 w-64"
+			autocomplete="off"
+		>
+	</form>
+
+	<script>
+	(function () {
+	  const form = document.getElementById("logsFilterForm");
+	  const searchInput = document.getElementById("searchInput");
+	  const levelSelect = document.getElementById("levelSelect");
+	  const pageInput = document.getElementById("pageInput");
+
+	  if (!form || !searchInput || !levelSelect || !pageInput) return;
+
+	  // Petit debounce pour éviter un GET à chaque touche instantanément
+	  let t = null;
+	  const DEBOUNCE_MS = 350;
+
+	  function submitAndResetPage() {
+		pageInput.value = "1";
+		form.submit();
+	  }
+
+	  searchInput.addEventListener("input", () => {
+		clearTimeout(t);
+		t = setTimeout(submitAndResetPage, DEBOUNCE_MS);
+	  });
+
+	  levelSelect.addEventListener("change", submitAndResetPage);
+
+	  // Optionnel : ENTER submit direct (sans attendre le debounce)
+	  searchInput.addEventListener("keydown", (e) => {
+		if (e.key === "Enter") {
+		  e.preventDefault();
+		  clearTimeout(t);
+		  submitAndResetPage();
+		}
+	  });
+	})();
+	</script>
+
 
     <!-- Table logs -->
     <div class="bg-slate-900 rounded-lg border border-slate-700 overflow-hidden">
