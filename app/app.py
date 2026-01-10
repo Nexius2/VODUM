@@ -38,6 +38,7 @@ from db_manager import DBManager
 from typing import Optional
 
 
+_I18N_CACHE: dict[str, dict] = {}
 
 
 
@@ -605,62 +606,32 @@ def create_app():
     # ======================
     #   MULTILINGUAL SYSTEM
     # ======================
-
     def load_language_dict(lang_code: str) -> dict:
         """
         Charge le dictionnaire de traduction pour une langue donnée.
 
-        - Priorité : base de données (table translations)
-        - Fallback : fichiers JSON du dossier lang/
-        - Compatible DBManager
-        - Aucun cursor()
-        - Aucun commit / rollback
+        - Source unique : fichiers JSON du dossier lang/
+        - Mise en cache en mémoire par langue
         """
         logger = get_logger("i18n")
-        db = get_db()
+
+        # --------------------------------------------------
+        # Cache en mémoire
+        # --------------------------------------------------
+        if lang_code in _I18N_CACHE:
+            return _I18N_CACHE[lang_code]
 
         translations: dict[str, str] = {}
 
         # --------------------------------------------------
-        # 1) Chargement depuis la DB (READ ONLY)
-        # --------------------------------------------------
-        try:
-            rows = db.query(
-                """
-                SELECT key, value
-                FROM translations
-                WHERE lang = ?
-                """,
-                (lang_code,),
-            )
-
-            for row in rows:
-                # DBManager renvoie des rows indexables
-                key = row["key"]
-                value = row["value"]
-
-                if key and value is not None:
-                    translations[key] = value
-
-            if translations:
-                logger.debug(
-                    f"[i18n] {len(translations)} traductions chargées depuis la DB ({lang_code})"
-                )
-                return translations
-
-        except Exception as e:
-            logger.warning(
-                f"[i18n] Impossible de charger les traductions depuis la DB ({lang_code}): {e}"
-            )
-
-        # --------------------------------------------------
-        # 2) Fallback fichiers JSON
+        # Chargement fichiers JSON
         # --------------------------------------------------
         lang_dir = os.path.join(current_app.root_path, "lang")
         json_path = os.path.join(lang_dir, f"{lang_code}.json")
 
         if not os.path.exists(json_path):
             logger.warning(f"[i18n] Fichier de langue introuvable: {json_path}")
+            _I18N_CACHE[lang_code] = translations
             return translations
 
         try:
@@ -679,7 +650,12 @@ def create_app():
                 exc_info=True,
             )
 
+        # --------------------------------------------------
+        # Mise en cache
+        # --------------------------------------------------
+        _I18N_CACHE[lang_code] = translations
         return translations
+
 
 
     def get_available_languages():
@@ -3045,6 +3021,27 @@ def create_app():
             )
 
             # --------------------------------------------------
+            # Sync TASKS from SETTINGS (source unique)
+            # --------------------------------------------------
+            task_enabled = 1 if (
+                new_values["enable_cron_jobs"] == 1
+                and new_values["disable_on_expiry"] == 1
+            ) else 0
+
+            db.execute(
+                """
+                UPDATE tasks
+                SET enabled = ?,
+                    status  = CASE WHEN ? = 1 THEN 'idle' ELSE 'disabled' END
+                WHERE name = 'disable_expired_users'
+                """,
+                (task_enabled, task_enabled),
+            )
+
+
+
+
+            # --------------------------------------------------
             # Log cohérent
             # --------------------------------------------------
             add_log(
@@ -3123,6 +3120,8 @@ def create_app():
             lines.append(line)
 
         total_logs = len(lines)
+        lines.reverse()  # ✅ plus récents d'abord
+
 
         # Pagination
         total_pages = max(1, math.ceil(total_logs / per_page))

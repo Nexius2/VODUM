@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS libraries (
 -----------------------------------------------------------------------
 --  ACCESS : USER ↔ LIBRARY
 -----------------------------------------------------------------------
-CREATE TABLE media_user_libraries (
+CREATE TABLE IF NOT EXISTS media_user_libraries (
     media_user_id INTEGER NOT NULL,
     library_id INTEGER NOT NULL,
 
@@ -242,22 +242,58 @@ CREATE TABLE IF NOT EXISTS tasks (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
------------------------------------------------------------------------
---  PLEX JOBS (file d'attente pour les mises à jour d'accès)
------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS plex_jobs (
+-- ------------------------------------------------------------
+-- MEDIA JOBS (queue générique Plex/Jellyfin/Autre)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS media_jobs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    action TEXT NOT NULL,          -- 'grant' / 'revoke' / 'sync' ...
-    user_id INTEGER,               -- NULL = tous les users concernés
-    server_id INTEGER,             -- NULL possible pour certains jobs globaux
-    library_id INTEGER,            -- NULL = toutes les libs du serveur
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    processed INTEGER DEFAULT 0,   -- 0 = en attente, 1 = traité
 
-    FOREIGN KEY(user_id) REFERENCES media_users(id) ON DELETE CASCADE,
+    -- Cible du job
+    provider TEXT NOT NULL CHECK (provider IN ('plex', 'jellyfin')),   -- extensible plus tard
+    action   TEXT NOT NULL CHECK (action IN ('grant', 'revoke', 'sync', 'refresh')),
+
+    -- Références CANONIQUES (internes)
+    vodum_user_id INTEGER,      -- NULL si job global (ex: sync all users)
+    server_id     INTEGER,      -- souvent NOT NULL ; peut être NULL si provider global (rare)
+    library_id    INTEGER,      -- NULL = toutes les libs concernées
+
+    -- Données libres (options, liste de sections, flags, etc.)
+    payload_json  TEXT,
+
+    -- Statuts d’exécution
+    processed     INTEGER NOT NULL DEFAULT 0 CHECK (processed IN (0, 1)),
+    success       INTEGER NOT NULL DEFAULT 0 CHECK (success IN (0, 1)),
+    attempts      INTEGER NOT NULL DEFAULT 0,
+    last_error    TEXT,
+
+    created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    processed_at  TIMESTAMP,
+    executed_at   TIMESTAMP,
+
+    -- Optionnel mais très pratique : empêcher certains doublons en file
+    -- Exemple: "plex:sync:server=1:user=12"
+    dedupe_key TEXT,
+
+    FOREIGN KEY(vodum_user_id) REFERENCES vodum_users(id) ON DELETE CASCADE,
     FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE,
     FOREIGN KEY(library_id) REFERENCES libraries(id) ON DELETE CASCADE
 );
+
+-- Index utiles
+CREATE INDEX IF NOT EXISTS idx_media_jobs_pending
+ON media_jobs(processed, provider, action, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_media_jobs_user
+ON media_jobs(vodum_user_id);
+
+CREATE INDEX IF NOT EXISTS idx_media_jobs_server
+ON media_jobs(server_id);
+
+-- Dédoublonnage optionnel (si tu utilises dedupe_key)
+CREATE UNIQUE INDEX IF NOT EXISTS uq_media_jobs_dedupe
+ON media_jobs(dedupe_key)
+WHERE dedupe_key IS NOT NULL;
+
 
 CREATE TABLE IF NOT EXISTS schema_migrations (
     version TEXT PRIMARY KEY,

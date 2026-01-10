@@ -521,7 +521,7 @@
   "timezone_placeholder": "Europe/Rome",
   "admin_email": "Email amministratore",
 
-  "default_subscription_settings": "Impostazioni di abbonamento predefinite",
+  "default_subscription_settings": "Impostazioni di abbonamento",
   "default_subscription_duration_days": "Durata predefinita dell’abbonamento (giorni)",
   "delete_user_after_expiry": "Elimina l’utente X giorni dopo la scadenza",
   "disable_user_on_expiration": "Disabilita l’utente alla scadenza",
@@ -587,7 +587,8 @@
   "active_users": "Utenti attivi",
   "users_total": "totali",
   
-    "support_github_help": "Se hai bisogno di aiuto, vuoi segnalare un bug o suggerire un miglioramento, apri una issue nel repository GitHub di VODUM.",
+  "credits": "Supporto",
+  "support_thanks": "Se ti piace VODUM e vuoi supportarne lo sviluppo, puoi offrirmi un caffè.",
   "Open_an_issue": "Apri una issue su GitHub"
 
 
