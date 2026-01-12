@@ -590,7 +590,35 @@
   
   "credits": "Apoyo",
   "support_thanks": "Si te gusta VODUM y quieres apoyar su desarrollo, puedes invitarme a un café.",
-  "open_an_issue": "Abrir una incidencia en GitHub"
+  "open_an_issue": "Abrir una incidencia en GitHub",
+  
+  
+  "task.sync_plex": "Sincronización de Plex",
+  "task.auto_backup": "Copia de seguridad automática",
+  "task.cleanup_backups": "Limpieza de copias de seguridad",
+  "task.update_user_status": "Actualización de usuarios",
+  "task.check_servers": "Comprobación de servidores",
+  "task.cleanup_unfriended": "Limpieza de amigos sin acceso",
+  "task.send_expiration_emails": "Correos de expiración",
+
+  "task_description.sync_plex": "Sincroniza usuarios, servidores y bibliotecas de Plex.",
+  "task_description.auto_backup": "Crea automáticamente copias de seguridad de la base de datos.",
+  "task_description.cleanup_backups": "Elimina copias de seguridad más antiguas que el período de retención.",
+  "task_description.update_user_status": "Actualiza automáticamente el estado de suscripción de los usuarios.",
+  "task_description.check_servers": "Comprueba la disponibilidad de los servidores y actualiza su nombre real.",
+  "task_description.cleanup_unfriended": "Detecta amigos sin bibliotecas compartidas y los marca como no amigos.",
+  "task_description.send_expiration_emails": "Envía automáticamente correos de aviso, recordatorio y expiración.",
+  
+  
+  "task_description.send_campaign_emails": "Envía las campañas de correo electrónico pendientes.",
+  "task_description.apply_plex_access_updates": "Aplica las actualizaciones de acceso de Plex pendientes (media_jobs).",
+  "task_description.sync_jellyfin_users": "Sincroniza los usuarios de Jellyfin.",
+  "task_description.disable_expired_users": "Desactiva el acceso de los usuarios con suscripción caducada.",
+  
+  "task_description.apply_jellyfin_access_updates": "Aplica las actualizaciones de acceso de Jellyfin pendientes (media_jobs)",
+
+  "task.apply_jellyfin_access_updates": "Aplicar accesos Jellyfin"
+
 
 
 

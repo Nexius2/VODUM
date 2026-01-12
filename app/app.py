@@ -47,9 +47,20 @@ _I18N_CACHE: dict[str, dict] = {}
 
 
 
-
-
-
+def fromjson_safe(value):
+    if value is None:
+        return None
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        value = value.strip()
+        if not value:
+            return None
+        try:
+            return json.loads(value)
+        except Exception:
+            return None
+    return None
 
 def load_version():
     info_path = "/app/INFO"
@@ -70,7 +81,9 @@ APP_VERSION = load_version()
 
 def create_app():
     app = Flask(__name__)
-    # Injecte la version globale dans tous les templates
+    # Injecte la version globale dans tous les 
+    
+    app.jinja_env.filters["fromjson"] = fromjson_safe
 
     @app.before_request
     def inject_version():
@@ -1599,6 +1612,70 @@ def create_app():
                 # pas bloquant si enqueue échoue, le scheduler le prendra plus tard
                 pass
 
+        elif server["type"] == "jellyfin":
+            # --------------------------------------------------
+            # Jellyfin : on fait un job "SYNC" (source de vérité = DB)
+            # -> 1 seul job par user+server, réarmé à chaque toggle
+            # --------------------------------------------------
+
+            action = "sync"
+            job_library_id = None
+
+            # Dedupe par user+server (pas par lib)
+            dedupe_key = f"jellyfin:sync:server={lib['server_id']}:user={user_id}"
+
+            payload = {
+                "reason": "library_toggle",
+                "toggled_library_id": library_id,
+                "toggled_library_name": lib["name"],
+                "removed": removed,
+            }
+
+            # IMPORTANT:
+            # - tables.sql: dedupe_key n'est pas UNIQUE => pas de ON CONFLICT possible
+            # - on réarme le job en supprimant l'existant (processed ou non), puis insert
+            db.execute(
+                "DELETE FROM media_jobs WHERE dedupe_key = ?",
+                (dedupe_key,),
+            )
+
+            # Laisse SQLite appliquer les DEFAULT (processed=0, success=0, attempts=0)
+            db.execute(
+                """
+                INSERT INTO media_jobs
+                    (provider, action, vodum_user_id, server_id, library_id, payload_json, dedupe_key)
+                VALUES
+                    ('jellyfin', ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    action,
+                    user_id,
+                    lib["server_id"],
+                    job_library_id,
+                    json.dumps(payload, ensure_ascii=False),
+                    dedupe_key,
+                ),
+            )
+
+            # Activer + queue la tâche Jellyfin
+            db.execute(
+                """
+                UPDATE tasks
+                SET enabled = 1, status = 'queued'
+                WHERE name = 'apply_jellyfin_access_updates'
+                """
+            )
+
+            try:
+                row = db.query_one("SELECT id FROM tasks WHERE name='apply_jellyfin_access_updates'")
+                if row:
+                    enqueue_task(row["id"])
+            except Exception:
+                pass
+
+
+
+
         return redirect(url_for("user_detail", user_id=user_id))
 
 
@@ -1897,13 +1974,23 @@ def create_app():
             flash("server_not_found", "error")
             return redirect(url_for("servers_list"))
 
-        db.execute(
-            "DELETE FROM servers WHERE id = ?",
-            (server_id,),
-        )
+        try:
+            # IMPORTANT: on supprime uniquement les entrées "par serveur" (media_users),
+            # pas les utilisateurs globaux vodum_users.
+            db.execute("DELETE FROM media_users WHERE server_id = ?", (server_id,))
 
-        flash("server_deleted", "success")
+            # Ensuite on peut supprimer le serveur.
+            # Les tables liées en ON DELETE CASCADE (libraries, media_jobs, user_identities, etc.)
+            # seront nettoyées automatiquement.
+            db.execute("DELETE FROM servers WHERE id = ?", (server_id,))
+
+            flash("server_deleted", "success")
+
+        except Exception as e:
+            flash(f"server_delete_failed ({e})", "error")
+
         return redirect(url_for("servers_list"))
+
 
 
 
@@ -3355,7 +3442,16 @@ def create_app():
     @app.route("/logs")
     def logs_page():
         # Filtres
-        level = request.args.get("level", "INFO").upper()   # ← INFO par défaut
+        level = request.args.get("level")
+        if not level:
+            # Pas de filtre demandé => on choisit le défaut selon debug_mode
+            db = get_db()
+            row = db.query_one("SELECT debug_mode FROM settings WHERE id = 1")
+            debug_mode = int(row["debug_mode"]) if row and row.get("debug_mode") is not None else 0
+            level = "ALL" if debug_mode == 1 else "INFO"
+
+        level = level.upper()
+
         search = request.args.get("q", "").strip()
 
         # Pagination

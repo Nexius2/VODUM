@@ -589,7 +589,34 @@
   
   "credits": "Unterstützung",
   "support_thanks": "Wenn dir VODUM gefällt und du die Entwicklung unterstützen möchtest, kannst du mir einen Kaffee spendieren.",
-  "open_an_issue": "Issue auf GitHub eröffnen"
+  "open_an_issue": "Issue auf GitHub eröffnen",
+  
+  
+  "task.sync_plex": "Plex-Synchronisation",
+  "task.auto_backup": "Automatische Sicherung",
+  "task.cleanup_backups": "Bereinigung der Sicherungen",
+  "task.update_user_status": "Benutzerstatus aktualisieren",
+  "task.check_servers": "Serverprüfung",
+  "task.cleanup_unfriended": "Freunde ohne Zugriff bereinigen",
+  "task.send_expiration_emails": "Ablauf-E-Mails",
+
+  "task_description.sync_plex": "Synchronisiert Plex-Benutzer, Server und Bibliotheken.",
+  "task_description.auto_backup": "Erstellt automatisch Sicherungen der Datenbank.",
+  "task_description.cleanup_backups": "Löscht Sicherungen, die älter als die definierte Aufbewahrungszeit sind.",
+  "task_description.update_user_status": "Aktualisiert automatisch den Abonnementstatus der Benutzer.",
+  "task_description.check_servers": "Überprüft die Verfügbarkeit der Server und aktualisiert deren tatsächlichen Namen.",
+  "task_description.cleanup_unfriended": "Erkennt Freunde ohne geteilte Bibliotheken und markiert sie als nicht befreundet.",
+  "task_description.send_expiration_emails": "Sendet automatisch Vorwarnungs-, Erinnerungs- und Ablauf-E-Mails.",
+
+
+
+  "task_description.send_campaign_emails": "Sendet ausstehende E-Mail-Kampagnen.",
+  "task_description.apply_plex_access_updates": "Wendet ausstehende Plex-Zugriffsaktualisierungen an (media_jobs).",
+  "task_description.sync_jellyfin_users": "Synchronisiert Jellyfin-Benutzer.",
+  "task_description.disable_expired_users": "Deaktiviert den Zugriff für Benutzer mit abgelaufenem Abonnement.",
+    "task_description.apply_jellyfin_access_updates": "Wendet ausstehende Jellyfin-Zugriffsaktualisierungen an (media_jobs)",
+
+  "task.apply_jellyfin_access_updates": "Jellyfin-Zugriff aktualisieren"
 
 
 

@@ -350,7 +350,29 @@
   "task_done": "terminé",
 
   "task_description.check_mailing_status": "Vérifie si le mailing est activé et active/désactive automatiquement les tâches liées.",
-  "task_description.send_expiration_emails": "Envoie automatiquement les emails de pré-expiration, relance et expiration.",
+
+
+  "task.sync_plex": "Synchronisation Plex",
+  "task.auto_backup": "Sauvegarde automatique",
+  "task.cleanup_backups": "Nettoyage des sauvegardes",
+  "task.update_user_status": "Mise à jour des utilisateurs",
+  "task.check_servers": "Vérification des serveurs",
+  "task.cleanup_unfriended": "Nettoyage des amis sans accès",
+  "task.send_expiration_emails": "Emails de fin d’abonnement",
+
+  "task_description.sync_plex": "Synchronise les utilisateurs, serveurs et bibliothèques Plex.",
+  "task_description.auto_backup": "Crée automatiquement des sauvegardes de la base de données.",
+  "task_description.cleanup_backups": "Supprime les sauvegardes plus anciennes que la durée de rétention définie.",
+  "task_description.update_user_status": "Met à jour automatiquement le statut des abonnements utilisateurs.",
+  "task_description.check_servers": "Vérifie la disponibilité des serveurs et met à jour leur nom réel.",
+  "task_description.cleanup_unfriended": "Détecte les amis sans aucune bibliothèque partagée et les marque comme non amis.",
+  "task_description.send_expiration_emails": "Envoie automatiquement les emails de préavis, de rappel et de fin d’abonnement.",
+  "task_description.send_campaign_emails": "Envoie les campagnes email en attente",
+  "task_description.apply_plex_access_updates": "Applique les mises à jour d'accès Plex en attente (media_jobs)",
+  "task_description.sync_jellyfin_users": "Synchronise les utilisateurs Jellyfin",
+  "task_description.disable_expired_users": "Désactive les accès des utilisateurs expirés",
+
+
 
   "task_error": "erreur",
   "task_logs": "Journaux des tâches",
@@ -592,7 +614,10 @@
   "credits": "Soutien",
   "support_thanks": "Si vous appréciez VODUM et souhaitez soutenir son développement, vous pouvez m’offrir un café.",
 
-  "open_an_issue": "Ouvrir une issue sur GitHub"
+  "open_an_issue": "Ouvrir une issue sur GitHub",
+  
+  "task.apply_jellyfin_access_updates": "Application des accès Jellyfin",
+"task_description.apply_jellyfin_access_updates": "Applique les mises à jour d’accès Jellyfin en attente (media_jobs)."
 
 
 

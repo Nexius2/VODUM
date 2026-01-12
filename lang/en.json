@@ -357,6 +357,13 @@
   "task.send_mail_campaigns": "Send campaign emails",
   "task.sync_plex": "Plex synchronization",
   "task.update_user_status": "Automatic user status update",
+  "task_description.sync_plex": "Synchronizes Plex users, servers and libraries.",
+  "task_description.auto_backup": "Creates automatic database backups.",
+  "task_description.cleanup_backups": "Deletes backups older than the retention period.",
+  "task_description.update_user_status": "Automatically updates user subscription statuses.",
+  "task_description.check_servers": "Checks server availability and updates their real name.",
+  "task_description.cleanup_unfriended": "Detects friends without any library and marks them as unfriended.",
+  
 
   "tasks": "Tasks",
   "tasks_enabled": "active tasks",
@@ -598,7 +605,22 @@
   
   "credits": "Support",
   "support_thanks": "If you enjoy VODUM and want to support its development, you can buy me a coffee.",
-  "open_an_issue": "Open an issue on GitHub"
+  "open_an_issue": "Open an issue on GitHub",
+  
+  
+  "task_description.send_campaign_emails": "Sends pending email campaigns.",
+  "task_description.apply_plex_access_updates": "Applies pending Plex access updates (media_jobs).",
+  "task_description.sync_jellyfin_users": "Synchronizes Jellyfin users.",
+  "task_description.disable_expired_users": "Disables access for users with expired subscriptions.",
+  
+"task.apply_jellyfin_access_updates": "Application des accès Jellyfin",
+"task_description.apply_jellyfin_access_updates": "Applique les mises à jour d’accès Jellyfin en attente (media_jobs)."
+
+
+  
+  
+
+
 
 
 

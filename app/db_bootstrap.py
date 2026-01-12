@@ -94,7 +94,7 @@ def run_migrations():
     # Tâche sync_plex
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "sync_plex",
-        "description": "Synchronisation Plex",
+        "description": "task_description.sync_plex",
         "schedule": "0 */6 * * *",  # toutes les 6h
         "enabled": 0,
         "status": "disabled"
@@ -112,7 +112,7 @@ def run_migrations():
     # Tâche backup automatique (tous les 3 jours à 03:00)
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "auto_backup",
-        "description": "Backup automatique de la base",
+        "description": "task_description.auto_backup",
         "schedule": "0 3 */3 * *",   # tous les 3 jours
         "enabled": 1,
         "status": "idle"
@@ -121,7 +121,7 @@ def run_migrations():
     # Tâche cleanup des backups (supprime backups > 30 jours)
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "cleanup_backups",
-        "description": "Suppression des backups trop anciens",
+        "description": "task_description.cleanup_backups",
         "schedule": "30 3 * * *",  # tous les jours à 03:30
         "enabled": 1,
         "status": "idle"
@@ -130,7 +130,7 @@ def run_migrations():
     # Tâche update_user_status
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "update_user_status",
-        "description": "Met à jour automatiquement le statut des utilisateurs",
+        "description": "task_description.update_user_status",
         "schedule": "0 * * * *",  # Toutes les heures
         "enabled": 1,
         "status": "idle"
@@ -139,7 +139,7 @@ def run_migrations():
     # Tâche check_servers (ping léger des serveurs toutes les 10 minutes)
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "check_servers",
-        "description": "check_servers_description",
+        "description": "task_description.check_servers",
         "schedule": "*/30 * * * *",  # toutes les 30 minutes
         "enabled": 1,
         "status": "idle"
@@ -148,7 +148,7 @@ def run_migrations():
     # Tâche daily_unfriend_cleanup
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "cleanup_unfriended",
-        "description": "Détecte les friends sans aucune bibliothèque et les passe en unfriended",
+        "description": "task_description.cleanup_unfriended",
         "schedule": "0 4 * * *",  # tous les jours à 04h00
         "enabled": 1,
         "status": "idle"
@@ -267,7 +267,7 @@ def run_migrations():
     # Tâche d'envoi des campagnes email
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "send_mail_campaigns",
-        "description": "Envoie les campagnes email en attente",
+        "description": "task_description.send_campaign_emails",
         "schedule": "*/5 * * * *",  # toutes les 5 minutes
         "enabled": 0,
         "status": "disabled"
@@ -285,7 +285,7 @@ def run_migrations():
     # Tâche apply_plex_access_updates (pour appliquer les jobs Plex)
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "apply_plex_access_updates",
-        "description": "Applique les mises à jour d'accès Plex en attente (media_jobs)",
+        "description": "task_description.apply_plex_access_updates",
         "schedule": "*/2 * * * *",   # toutes les 2 minutes
         "enabled": 0,                # activée uniquement quand un job est ajouté
         "status": "idle"
@@ -294,7 +294,7 @@ def run_migrations():
     # Tâche sync_Jellyfin
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "sync_jellyfin",
-        "description": "Synchronise les utilisateurs Jellyfin",
+        "description": "task_description.sync_jellyfin_users",
         "schedule": "0 */6 * * *",  # toutes les 6 heures (comme Plex)
         "enabled": 0,
         "status": "disabled"
@@ -303,11 +303,22 @@ def run_migrations():
     # Tâche disable_expired_users (désactivation des accès Plex à l'expiration)
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "disable_expired_users",
-        "description": "Désactive les accès Plex des utilisateurs expirés",
+        "description": "task_description.disable_expired_users",
         "schedule": "0 */12 * * *",  # toutes les 12 heures
         "enabled": 0,                # pilotée par settings.disable_on_expiry
         "status": "idle"
     })
+
+    # Tâche apply_jellyfin_access_updates (désactivation des accès Jellyfin à l'expiration)
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "apply_jellyfin_access_updates",
+        "description": "task_description.apply_jellyfin_access_updates",
+        "schedule": "*/2 * * * *",   # toutes les 2 minutes
+        "enabled": 0,
+        "status": "idle"
+    })
+
+
 
 
     # -------------------------------------------------
