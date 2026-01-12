@@ -3447,7 +3447,7 @@ def create_app():
             # Pas de filtre demandé => on choisit le défaut selon debug_mode
             db = get_db()
             row = db.query_one("SELECT debug_mode FROM settings WHERE id = 1")
-            debug_mode = int(row["debug_mode"]) if row and row.get("debug_mode") is not None else 0
+            debug_mode = int(row["debug_mode"]) if row and row["debug_mode"] is not None else 0
             level = "ALL" if debug_mode == 1 else "INFO"
 
         level = level.upper()
