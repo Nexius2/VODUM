@@ -96,6 +96,7 @@ Planned:
 - One-time schema creation
 - Versioned migrations
 - Timestamped logs
+- while in beta, run ./get-container.sh to install on unraid.
 
 ---
 
