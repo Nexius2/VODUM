@@ -105,170 +105,13 @@ def choose_account_token(db) -> Optional[str]:
 
     return token
 
-# ---------------------------------------------------------------------------
-# Récupération Owner Plex
-# ---------------------------------------------------------------------------
-def sync_plex_owner_for_server(db, server):
-    """
-    Synchronise le OWNER du serveur Plex donné.
-    - 1 serveur = 1 owner
-    - ne touche PAS aux users
-    """
-
-    log.info(f"[OWNER] Sync owner pour serveur {server['name']}")
-
-    token = (server["token"] or "").strip()
-    if not token:
-        log.warning(f"[OWNER] {server['name']}: pas de token")
-        return
-
-    owner = fetch_admin_account_from_token(token)
-    if not owner:
-        log.error(f"[OWNER] {server['name']}: impossible de récupérer l'owner")
-        return
-
-    plex_id = owner["plex_id"]
-    username = owner.get("username") or f"user_{plex_id}"
-    email = owner.get("email")
-    avatar = owner.get("avatar")
-    today = datetime.utcnow().date().isoformat()
-
-    # -------------------------------------------------
-    # 1) Résoudre / créer le vodum_user (GLOBAL)
-    # -------------------------------------------------
-    row = db.query_one(
-        """
-        SELECT vodum_user_id
-        FROM user_identities
-        WHERE type='plex'
-          AND server_id IS NULL
-          AND external_user_id = ?
-        """,
-        (plex_id,),
-    )
-
-    if row:
-        vodum_user_id = row["vodum_user_id"]
-    elif email:
-        row = db.query_one(
-            "SELECT id FROM vodum_users WHERE lower(email)=lower(?)",
-            (email,),
-        )
-        if row:
-            vodum_user_id = row["id"]
-        else:
-            vodum_user_id = db.execute(
-                """
-                INSERT INTO vodum_users(username, email, created_at, status)
-                VALUES (?, ?, ?, 'active')
-                """,
-                (username, email, today),
-            ).lastrowid
-    else:
-        vodum_user_id = db.execute(
-            """
-            INSERT INTO vodum_users(username, created_at, status)
-            VALUES (?, ?, 'active')
-            """,
-            (username, today),
-        ).lastrowid
-
-    # identité plex globale
-    db.execute(
-        """
-        INSERT OR IGNORE INTO user_identities(vodum_user_id, type, server_id, external_user_id)
-        VALUES (?, 'plex', NULL, ?)
-        """,
-        (vodum_user_id, plex_id),
-    )
-
-    # -------------------------------------------------
-    # 2) media_users POUR CE SERVEUR UNIQUEMENT
-    # -------------------------------------------------
-    row = db.query_one(
-        """
-        SELECT id, details_json
-        FROM media_users
-        WHERE server_id = ?
-          AND type = 'plex'
-          AND external_user_id = ?
-        """,
-        (server["id"], plex_id),
-    )
-
-    # ✅ Forcer options UI/logique pour l'owner
-    # (cochées dans l'UI, filtres vides par défaut)
-    owner_plex_share = {
-        "allowSync": 1,
-        "allowCameraUpload": 1,
-        "allowChannels": 1,
-        "filterMovies": "",
-        "filterTelevision": "",
-        "filterMusic": "",
-    }
-
-    if row:
-        # Merge safe du JSON existant (ne pas casser d'autres clés)
-        try:
-            details = json.loads(row["details_json"] or "{}")
-        except Exception:
-            details = {}
-
-        if not isinstance(details, dict):
-            details = {}
-
-        plex_share = details.get("plex_share", {})
-        if not isinstance(plex_share, dict):
-            plex_share = {}
-
-        plex_share.update(owner_plex_share)
-        details["plex_share"] = plex_share
-
-        db.execute(
-            """
-            UPDATE media_users
-            SET vodum_user_id = ?,
-                username       = ?,
-                email          = ?,
-                avatar         = ?,
-                role           = 'owner',
-                details_json   = ?
-            WHERE id = ?
-            """,
-            (vodum_user_id, username, email, avatar, json.dumps(details, ensure_ascii=False), row["id"]),
-        )
-    else:
-        details = {"plex_share": owner_plex_share}
-
-        db.execute(
-            """
-            INSERT INTO media_users(
-                server_id,
-                vodum_user_id,
-                external_user_id,
-                username,
-                email,
-                avatar,
-                type,
-                role,
-                details_json
-            )
-            VALUES (?, ?, ?, ?, ?, ?, 'plex', 'owner', ?)
-            """,
-            (server["id"], vodum_user_id, plex_id, username, email, avatar, json.dumps(details, ensure_ascii=False)),
-        )
-
-    log.info(
-        f"[OWNER] {server['name']}: owner OK "
-        f"(plex_id={plex_id}, vodum_user_id={vodum_user_id})"
-    )
 
 
 
 # ---------------------------------------------------------------------------
 # Récupération Libraries Plex (JSON local API)
 # ---------------------------------------------------------------------------
-def plex_get_user_access(db, plex, server_name, media_user_id: int):
+def plex_get_user_access(db, plex, server_machine_id, media_user_id: int):
     """
     Retourne les bibliothèques réellement partagées
     avec un utilisateur Plex (media_users).
@@ -311,8 +154,11 @@ def plex_get_user_access(db, plex, server_name, media_user_id: int):
     out = []
 
     for srv in user_acct.servers:
-        if srv.name != server_name:
+        # ⚠️ plexapi expose souvent machineIdentifier sous différents noms
+        mid = getattr(srv, "machineIdentifier", None) or getattr(srv, "clientIdentifier", None)
+        if mid != server_machine_id:
             continue
+
 
         try:
             for section in srv.sections():
@@ -354,7 +200,7 @@ def sync_plex_user_library_access(db, plex, server):
     users = db.query(
         """
         SELECT
-            vu.email,
+            COALESCE(NULLIF(mu.email, ''), NULLIF(vu.email, '')) AS email,
             mu.id AS media_user_id,
             mu.vodum_user_id AS vodum_user_id,
             mu.role AS role
@@ -365,6 +211,7 @@ def sync_plex_user_library_access(db, plex, server):
         """,
         (server_id,),
     )
+
 
 
     if not users:
@@ -417,7 +264,7 @@ def sync_plex_user_library_access(db, plex, server):
                 skipped_no_email += 1
                 continue
 
-            access = plex_get_user_access(db, plex, server_name, media_user_id)
+            access = plex_get_user_access(db, plex, server["server_identifier"], media_user_id)
 
             for lib in access:
                 sec_id = str(lib.get("key") or "")
@@ -793,157 +640,156 @@ def fetch_users_from_plex_api(token: str, db=None) -> Dict[str, Dict[str, Any]]:
     log.info(f"[API] /api/users → {len(users)} utilisateur(s) récupéré(s).")
     return users
 
+def fetch_users_for_one_server(token: str, machine_id: str, server_name: str, db=None) -> Dict[str, Dict[str, Any]]:
+    """
+    Récupère les users Plex.tv via /api/users avec CE token,
+    mais ne garde que l'entrée <Server> correspondant à machine_id.
+    Retourne un dict { plex_id: user_data } où user_data["servers"] contient 1 seul serveur.
+    """
+    users_data = fetch_users_from_plex_api(token, db=db)
+    if not users_data:
+        return {}
+
+    filtered: Dict[str, Dict[str, Any]] = {}
+
+    for plex_id, data in users_data.items():
+        # Cherche l'entrée serveur correspondant à CE machine_id
+        srv_entry = None
+        for s in data.get("servers", []):
+            if s.get("machineIdentifier") == machine_id:
+                srv_entry = s
+                break
+
+        # Si le user n'a pas ce serveur dans sa liste, on ignore (important)
+        if not srv_entry:
+            continue
+
+        # On garde 1 seule entrée serveur (celle-ci)
+        new_data = dict(data)
+        new_data["servers"] = [srv_entry]
+
+        filtered[plex_id] = new_data
+
+    return filtered
+
+
 
 
 # ---------------------------------------------------------------------------
 # Sync USERS + user_servers (à partir de /api/users)
 # ---------------------------------------------------------------------------
 def sync_users_from_api(db) -> None:
-    log.info("=== [SYNC USERS] Début synchronisation utilisateurs Plex (API Plex.tv) ===")
+    """
+    Synchronise les utilisateurs Plex en agrégeant /api/users pour CHAQUE serveur Plex qui a un token.
+    Objectif: role PAR SERVEUR (owner/home/pending/friend) => media_users.role dépend du couple (plex_id, server_id)
+    """
 
-    # ----------------------------------------------------
-    # 1) Récupérer TOUS les serveurs Plex avec token
-    #    (PAS de dédupe par token : on exécute /api/users par serveur)
-    # ----------------------------------------------------
-    server_rows = db.query(
+    log.info("=== [SYNC USERS] Début synchronisation utilisateurs Plex (multi-tokens) ===")
+
+    def flag_is_1(v) -> bool:
+        # Plex renvoie souvent "1"/"0", parfois int/bool
+        return str(v).strip().lower() in ("1", "true", "yes")
+
+    # 1) Liste des serveurs Plex + token
+    servers = db.query(
         """
-        SELECT id, name, token
+        SELECT id, name, server_identifier, token
         FROM servers
-        WHERE type='plex'
-          AND token IS NOT NULL
-          AND token != ''
-        ORDER BY id
+        WHERE type = 'plex'
         """
     )
-    if not server_rows:
-        raise RuntimeError("[SYNC USERS] Aucun serveur Plex avec token en base.")
+    if not servers:
+        raise RuntimeError("[SYNC USERS] Aucun serveur Plex trouvé en base")
 
-    # ----------------------------------------------------
-    # 2) Mapping serveurs Plex (machineIdentifier → id)
-    # ----------------------------------------------------
-    rows = db.query("SELECT id, server_identifier, name FROM servers WHERE type='plex'")
+    # 2) Fusion globale
+    users_data_global: Dict[str, Dict[str, Any]] = {}
 
-    server_id_by_machine = {
-        (r["server_identifier"] or "").strip(): r["id"]
-        for r in rows
-        if (r["server_identifier"] or "").strip()
-    }
-
-    log.info(f"[SYNC USERS] Serveurs Plex connus (server_identifier non vide) : {len(server_id_by_machine)}")
-
-    # ----------------------------------------------------
-    # 3) Appeler /api/users pour CHAQUE serveur, puis MERGER
-    # ----------------------------------------------------
-    users_data: Dict[str, Dict[str, Any]] = {}
-    servers_ok = 0
-
-    def merge_user(dst: Dict[str, Any], src: Dict[str, Any]) -> Dict[str, Any]:
-        # Identité : garder le plus complet
-        for k in ("username", "email", "avatar"):
-            if not (dst.get(k) or "").strip():
-                dst[k] = src.get(k)
-
-        # Flags : garder le plus "vrai"
-        for k in ("home", "protected", "restricted",
-                  "allow_sync", "allow_camera_upload", "allow_channels"):
-            if src.get(k) and not dst.get(k):
-                dst[k] = src.get(k)
-
-        # Rôle : home > friend > unknown (on ne force PAS owner ici)
-        def rank(role: str) -> int:
-            role = (role or "").lower()
-            if role == "home":
-                return 2
-            if role == "friend":
-                return 1
-            return 0
-
-        if rank(src.get("plex_role")) > rank(dst.get("plex_role")):
-            dst["plex_role"] = src.get("plex_role")
-
-        # Serveurs : union par machineIdentifier
-        dst_servers = dst.get("servers") or []
-        src_servers = src.get("servers") or []
-
-        dst_mids = {s.get("machineIdentifier") for s in dst_servers if s.get("machineIdentifier")}
-        for s in src_servers:
-            mid = s.get("machineIdentifier")
-            if mid and mid not in dst_mids:
-                dst_servers.append(s)
-                dst_mids.add(mid)
-
-        dst["servers"] = dst_servers
-        return dst
-
-    for idx, srv in enumerate(server_rows, start=1):
+    for srv in servers:
+        server_name = srv["name"]
+        machine_id = srv["server_identifier"]
         token = (srv["token"] or "").strip()
+
+        if not machine_id:
+            log.warning(f"[SYNC USERS] Serveur {server_name} sans server_identifier -> ignoré")
+            continue
+
         if not token:
+            log.warning(f"[SYNC USERS] Serveur {server_name} sans token -> impossible de récupérer ses users")
             continue
 
-        log.info(f"[SYNC USERS] serveur #{idx}/{len(server_rows)}: {srv['name']} (server_id={srv['id']}) -> /api/users")
+        log.info(f"[SYNC USERS] Récupération users Plex.tv pour serveur={server_name} machine_id={machine_id}")
 
-        data = fetch_users_from_plex_api(token, db=db)
-        if not data:
-            log.warning(f"[SYNC USERS] {srv['name']}: /api/users vide ou erreur")
-            continue
+        # 2.1) Users partagés sur CE serveur via /api/users (filtré)
+        per_server_users = fetch_users_for_one_server(token, machine_id, server_name, db=db)
 
-        servers_ok += 1
-        log.info(f"[SYNC USERS] {srv['name']}: {len(data)} user(s) récupérés")
+        # 2.2) Injecter aussi le OWNER du token pour CE serveur
+        owner_data = fetch_admin_account_from_token(token)
+        if owner_data:
+            owner_plex_id = str(owner_data["plex_id"])
+            owner_entry = {
+                "machineIdentifier": machine_id,
+                "name": server_name,
+                "home": 0,
+                "owned": 1,
+                "allLibraries": 1,
+                "numLibraries": 0,
+                "lastSeenAt": None,
+                "pending": 0,
+            }
 
-        for plex_id, u in data.items():
-            if plex_id in users_data:
-                users_data[plex_id] = merge_user(users_data[plex_id], u)
+            if owner_plex_id in per_server_users:
+                per_server_users[owner_plex_id]["servers"] = [owner_entry]
+                per_server_users[owner_plex_id]["plex_role"] = "owner"
             else:
-                users_data[plex_id] = u
+                od = dict(owner_data)
+                od["servers"] = [owner_entry]
+                per_server_users[owner_plex_id] = od
 
-    if not users_data:
-        raise RuntimeError("[SYNC USERS] Aucun utilisateur renvoyé par Plex.tv (tous serveurs).")
+        # 2.3) Fusion dans le global
+        for plex_id, data in per_server_users.items():
+            if plex_id not in users_data_global:
+                users_data_global[plex_id] = dict(data)
+                continue
 
-    log.info(
-        f"[SYNC USERS] /api/users MERGE global : {len(users_data)} user(s) uniques "
-        f"(serveurs_ok={servers_ok}/{len(server_rows)})"
-    )
+            g = users_data_global[plex_id]
 
-    # ----------------------------------------------------
-    # 3.b) Owner par serveur (server_id -> owner_plex_id)
-    # ----------------------------------------------------
-    owner_plex_id_by_server_id: Dict[int, str] = {}
+            # Merge infos user (sans écraser email/avatar/username déjà présents)
+            if not (g.get("email") or "").strip() and (data.get("email") or "").strip():
+                g["email"] = data.get("email")
+            if not (g.get("avatar") or "").strip() and (data.get("avatar") or "").strip():
+                g["avatar"] = data.get("avatar")
+            if not (g.get("username") or "").strip() and (data.get("username") or "").strip():
+                g["username"] = data.get("username")
 
-    for srv in server_rows:
-        sid = int(srv["id"])
-        token = (srv["token"] or "").strip()
-        if not token:
-            continue
+            # Merge serveurs sans doublons
+            existing_mids = {s.get("machineIdentifier") for s in g.get("servers", []) if s.get("machineIdentifier")}
+            for s in data.get("servers", []):
+                mid = s.get("machineIdentifier")
+                if mid and mid not in existing_mids:
+                    g.setdefault("servers", []).append(s)
 
-        owner = fetch_admin_account_from_token(token)
-        if not owner or not owner.get("plex_id"):
-            log.warning(f"[SYNC USERS] {srv['name']}: impossible de déterminer owner via /users/account")
-            continue
+    if not users_data_global:
+        raise RuntimeError("[SYNC USERS] Aucun user récupéré (tokens manquants ? serveurs injoignables ?)")
 
-        owner_plex_id_by_server_id[sid] = str(owner["plex_id"])
-        log.info(f"[SYNC USERS] {srv['name']}: owner plex_id={owner_plex_id_by_server_id[sid]}")
+    # 3) Mapping machineIdentifier -> server_id
+    rows = db.query("SELECT id, server_identifier FROM servers WHERE type='plex'")
+    server_id_by_machine = {r["server_identifier"]: r["id"] for r in rows if r["server_identifier"]}
 
-
-    # ----------------------------------------------------
-    # 4) Upsert vodum_users + media_users (IDENTIQUE à ton code)
-    #     + logs si machineIdentifier non mappable
-    # ----------------------------------------------------
     today = datetime.utcnow().date()
     seen_plex_ids: Set[str] = set()
     seen_media_pairs: Set[Tuple[str, int]] = set()
 
-    for plex_id, data in users_data.items():
+    # 4) Upsert vodum_users + media_users
+    for plex_id, data in users_data_global.items():
         seen_plex_ids.add(plex_id)
 
-        username = data["username"]
-        email = data["email"] or None
-        avatar = data["avatar"]
-        plex_role = data["plex_role"]
-
+        username = data.get("username") or f"user_{plex_id}"
+        email = (data.get("email") or "").strip() or None
+        avatar = data.get("avatar")
         joined_at = data.get("joined_at")
         accepted_at = data.get("accepted_at")
 
-        # 4.1) VODUM_USERS (identique)
+        # 4.1) vodum_user_id via user_identities d'abord, sinon par email, sinon create
         vodum_user_id = None
 
         row = db.query_one(
@@ -987,39 +833,30 @@ def sync_users_from_api(db) -> None:
             (vodum_user_id, plex_id),
         )
 
-        # 4.2) MEDIA_USERS (identique + log mismatch)
+        # 4.2) media_users par serveur (ROLE PAR SERVEUR)
         for srv in data.get("servers", []):
-            machine_id = (srv.get("machineIdentifier") or "").strip()
+            machine_id = srv.get("machineIdentifier")
             if not machine_id:
                 continue
 
             server_id = server_id_by_machine.get(machine_id)
             if not server_id:
-                # 🔥 log crucial : tu verras immédiatement quel machineIdentifier ne matche pas ta DB
-                log.warning(
-                    f"[SYNC USERS] machineIdentifier non mappé en DB: {machine_id} "
-                    f"(user plex_id={plex_id}, username={username!r})"
-                )
                 continue
 
-            seen_media_pairs.add((plex_id, server_id))
+            owned = 1 if flag_is_1(srv.get("owned", 0)) else 0
+            home_srv = 1 if flag_is_1(srv.get("home", 0)) else 0
+            pending = 1 if flag_is_1(srv.get("pending", 0)) else 0
 
-            # Rôle PAR SERVEUR (source de vérité)
-            # - owner : uniquement si plex_id == owner du serveur (via /users/account du token serveur)
-            # - home  : si user est home (ou srv.home)
-            # - friend: sinon
-            srv_home = 1 if str(srv.get("home") or "0") == "1" else 0
-
-            server_owner_plex_id = owner_plex_id_by_server_id.get(int(server_id))
-            if server_owner_plex_id and str(plex_id) == str(server_owner_plex_id):
+            if owned:
                 role_for_server = "owner"
-            elif (data.get("home") or 0) == 1 or srv_home == 1 or (data.get("plex_role") or "").lower() == "home":
+            elif home_srv:
                 role_for_server = "home"
+            elif pending:
+                role_for_server = "pending"
             else:
                 role_for_server = "friend"
 
-
-
+            seen_media_pairs.add((plex_id, server_id))
 
             details_json = json.dumps(
                 {
@@ -1030,9 +867,17 @@ def sync_users_from_api(db) -> None:
                         "filterMovies": data.get("filter_movies") or "",
                         "filterTelevision": data.get("filter_television") or "",
                         "filterMusic": data.get("filter_music") or "",
-                    }
+                    },
+                    "server_flags": {
+                        "owned": owned,
+                        "home": home_srv,
+                        "pending": pending,
+                        "allLibraries": 1 if flag_is_1(srv.get("allLibraries", 0)) else 0,
+                        "numLibraries": int(srv.get("numLibraries") or 0),
+                        "lastSeenAt": srv.get("lastSeenAt"),
+                    },
                 },
-                ensure_ascii=False
+                ensure_ascii=False,
             )
 
             row_mu = db.query_one(
@@ -1054,47 +899,91 @@ def sync_users_from_api(db) -> None:
                         username       = ?,
                         email          = ?,
                         avatar         = ?,
-                        type           = 'plex',
                         role           = ?,
                         joined_at      = ?,
                         accepted_at    = ?,
                         details_json   = ?
                     WHERE id = ?
                     """,
-                    (vodum_user_id, username, email, avatar, role_for_server,
-                     joined_at, accepted_at, details_json, row_mu["id"]),
+                    (
+                        vodum_user_id,
+                        username,
+                        email,
+                        avatar,
+                        role_for_server,
+                        joined_at,
+                        accepted_at,
+                        details_json,
+                        row_mu["id"],
+                    ),
                 )
             else:
                 cur_mu = db.execute(
                     """
                     INSERT INTO media_users(
-                        server_id, vodum_user_id, external_user_id,
-                        username, email, avatar,
-                        type, role, joined_at, accepted_at, details_json
+                        server_id,
+                        vodum_user_id,
+                        external_user_id,
+                        username,
+                        email,
+                        avatar,
+                        type,
+                        role,
+                        joined_at,
+                        accepted_at,
+                        details_json
                     )
                     VALUES (?, ?, ?, ?, ?, ?, 'plex', ?, ?, ?, ?)
                     """,
-                    (server_id, vodum_user_id, plex_id,
-                     username, email, avatar,
-                     role_for_server, joined_at, accepted_at, details_json),
+                    (
+                        server_id,
+                        vodum_user_id,
+                        plex_id,
+                        username,
+                        email,
+                        avatar,
+                        role_for_server,
+                        joined_at,
+                        accepted_at,
+                        details_json,
+                    ),
                 )
                 log.info(
                     f"[SYNC USERS] Nouveau media_user créé id={cur_mu.lastrowid} "
-                    f"(server_id={server_id}, plex_id={plex_id})"
+                    f"(server_id={server_id}, plex_id={plex_id}, role={role_for_server})"
                 )
 
-    log.info(
-        f"=== [SYNC USERS] Terminé : users_uniques={len(seen_plex_ids)}, liens_media_users={len(seen_media_pairs)} ==="
+    # 5) Nettoyage : supprimer les couples (plex_id, server_id) qui n'existent plus
+    rows = db.query(
+        """
+        SELECT mu.external_user_id, mu.server_id
+        FROM media_users mu
+        JOIN servers s ON s.id = mu.server_id
+        WHERE mu.type = 'plex'
+          AND s.type  = 'plex'
+        """
     )
 
+    removed = 0
+    for r in rows:
+        key = (str(r["external_user_id"]), r["server_id"])
+        if key not in seen_media_pairs:
+            db.execute(
+                """
+                DELETE FROM media_users
+                WHERE external_user_id = ?
+                  AND server_id        = ?
+                  AND type             = 'plex'
+                """,
+                (r["external_user_id"], r["server_id"]),
+            )
+            removed += 1
 
-
-
-
-
-# ---------------------------------------------------------------------------
-# SYNC GLOBALE (pour compat avec l'ancien sync_all)
-# ---------------------------------------------------------------------------
+    log.info(
+        f"=== [SYNC USERS] Fin sync Plex (multi-tokens) : users={len(seen_plex_ids)}, "
+        f"liens actifs={len(seen_media_pairs)}, media_users supprimés={removed} ==="
+    )
+    return
 
 def sync_all(task_id=None, db=None) -> None:
     """
@@ -1143,7 +1032,6 @@ def sync_all(task_id=None, db=None) -> None:
         try:
             libs = plex_get_libraries(server)
             sync_plex_libraries(db, server, libs)
-            sync_plex_owner_for_server(db, server)
 
         except Exception as e:
             log.error(

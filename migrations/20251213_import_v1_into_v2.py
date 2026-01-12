@@ -186,7 +186,7 @@ def main() -> None:
                     u["email"],
                     u["second_email"],
                     u["expiration_date"],
-                    None,  # created_at absent en V1
+                    u["status_changed_at"],  # created_at absent en V1
                     normalize_status(u["status"]),
                     u["last_status"],
                     u["status_changed_at"],

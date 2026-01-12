@@ -57,6 +57,84 @@ def ensure_expiration_date_on_first_access(db, vodum_user_id: int) -> bool:
     )
     return True
 
+def _extract_joined_at(detail: Dict[str, Any]) -> Optional[str]:
+    """
+    Jellyfin ne fournit pas toujours une date de création dans UserDto selon versions/config.
+    On tente plusieurs champs courants ; sinon None.
+    """
+    for key in ("DateCreated", "CreatedDate", "CreatedAt", "CreationDate", "DateCreatedUtc"):
+        val = detail.get(key)
+        if val:
+            return str(val)
+    return None
+
+
+def _extract_role_from_policy(policy: Dict[str, Any]) -> Optional[str]:
+    """
+    Rôle simple, adapté à ton champ `media_users.role` :
+    - admin si IsAdministrator
+    - user sinon
+    Tu peux étendre ensuite (disabled/hidden/etc).
+    """
+    if not isinstance(policy, dict):
+        return None
+    if policy.get("IsAdministrator"):
+        return "admin"
+    return "user"
+
+
+def _extract_avatar_path(jellyfin_user_id: str, detail: Dict[str, Any]) -> Optional[str]:
+    """
+    On stocke une URL *relative* (sans api_key) : le front pourra l’appeler avec l’auth habituelle.
+    PrimaryImageTag existe dans UserDto. :contentReference[oaicite:1]{index=1}
+    """
+    tag = detail.get("PrimaryImageTag")
+    if not tag:
+        return None
+    # Route généralement supportée : /Users/{id}/Images/Primary
+    # On met tag pour cache-busting.
+    return f"/Users/{jellyfin_user_id}/Images/Primary?tag={tag}"
+
+
+def _store_full_user_json_and_fields(
+    db,
+    media_user_id: int,
+    jellyfin_user_id: str,
+    detail: Dict[str, Any],
+):
+    """
+    Stocke :
+      - raw_json = JSON complet renvoyé par Jellyfin (/Users/{id})
+      - role (admin/user)
+      - joined_at (si dispo)
+      - avatar (optionnel)
+    """
+    if not isinstance(detail, dict):
+        detail = {}
+
+    policy = detail.get("Policy") if isinstance(detail.get("Policy"), dict) else {}
+    role = _extract_role_from_policy(policy)
+    joined_at = _extract_joined_at(detail)
+    avatar = _extract_avatar_path(jellyfin_user_id, detail)
+
+    db.execute(
+        """
+        UPDATE media_users
+        SET raw_json = ?,
+            role = COALESCE(?, role),
+            joined_at = COALESCE(?, joined_at),
+            avatar = COALESCE(?, avatar)
+        WHERE id = ?
+        """,
+        (
+            json.dumps(detail, ensure_ascii=False),
+            role,
+            joined_at,
+            avatar,
+            media_user_id,
+        ),
+    )
+
 
 # ----------------------------
 # Jellyfin API helpers
@@ -332,6 +410,17 @@ def _sync_users_and_policies_for_server(
                 f"sur server_id={server_id}: {e}"
             )
             detail = {}
+
+        # Stockage "max info" : JSON brut + champs utiles (role/joined_at/avatar)
+        try:
+            if isinstance(detail, dict):
+                _store_full_user_json_and_fields(db, media_user_id, jellyfin_id, detail)
+        except Exception as e:
+            logger.warning(
+                f"Impossible de stocker raw_json/role/joined_at pour user={username} ({jellyfin_id}) "
+                f"sur server_id={server_id}: {e}"
+            )
+
 
         policy = (
             (detail.get("Policy") or u.get("Policy") or {})

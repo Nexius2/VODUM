@@ -31,10 +31,14 @@
             {% for task in tasks %}
             <tr class="border-b border-slate-800">
                 <td class="p-2">{{ task.id }}</td>
-                <td class="p-2">{{ task.name }}</td>
-                <td class="p-2">
-                    {{ t("task." ~ task.name) or task.description }}
-                </td>
+				<td class="p-2">
+					{{ t("task." ~ task.name) or task.name }}
+				</td>
+
+				<td class="p-2">
+					{{ t("task_description." ~ task.name) or task.description or "-" }}
+				</td>
+
                 <td class="p-2">{{ task.schedule | cron_human }}</td>
 
                 {# ---------- STATUS ---------- #}
