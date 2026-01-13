@@ -638,6 +638,24 @@ def auto_enable_plex_jobs_worker():
 def scheduler_loop():
     logger.info("Scheduler VODUM démarré…")
 
+    # ✅ RECOVERY AU BOOT : évite les tasks bloquées après crash/restart
+    try:
+        db.execute(
+            """
+            UPDATE tasks
+            SET status = CASE
+                WHEN enabled = 0 THEN status
+                WHEN queued_count > 0 THEN 'queued'
+                ELSE 'idle'
+            END,
+            updated_at = CURRENT_TIMESTAMP
+            WHERE status IN ('running', 'queued', 'idle', 'error')
+            """
+        )
+        logger.info("Recovery tasks: reset running/queued states OK")
+    except Exception as e:
+        logger.warning(f"Recovery tasks failed: {e}", exc_info=True)
+
     while True:
         now = datetime.now()
 

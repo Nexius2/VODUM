@@ -37,6 +37,7 @@ import re
 from db_manager import DBManager
 from typing import Optional
 
+import time  
 
 _I18N_CACHE: dict[str, dict] = {}
 
@@ -793,6 +794,36 @@ def create_app():
         }
 
 
+
+    @app.route("/api/tasks/activity", methods=["GET"])
+    def api_tasks_activity():
+        db = get_db()
+
+        if not table_exists(db, "tasks"):
+            return {"active": 0, "running": 0, "queued": 0}
+
+        row = db.query_one(
+            """
+            SELECT
+              SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) AS running,
+              SUM(CASE WHEN status = 'queued'  THEN 1 ELSE 0 END) AS queued
+            FROM tasks
+            WHERE status IN ('running', 'queued')
+            """
+        )
+
+        if row is None:
+            return {"active": 0, "running": 0, "queued": 0}
+
+        running = row["running"] or 0
+        queued  = row["queued"]  or 0
+        active  = running + queued
+
+        return {
+            "active": active,
+            "running": running,
+            "queued": queued
+        }
 
 
 
@@ -1868,6 +1899,8 @@ def create_app():
 
 
 
+
+
     @app.route("/servers/new", methods=["POST"])
     def server_create():
         db = get_db()
@@ -1880,74 +1913,103 @@ def create_app():
         public_url = request.form.get("public_url") or None
         token = request.form.get("token") or None
 
-        # options spécifiques (comme avant, mais on les mettra dans JSON)
+        # Options spécifiques (stockées dans settings_json)
         tautulli_url = request.form.get("tautulli_url") or None
         tautulli_api_key = request.form.get("tautulli_api_key") or None
 
         server_identifier = str(uuid.uuid4())
 
-        # ---------------------------------------
         # settings_json (clé/valeurs extensibles)
-        # ---------------------------------------
         settings = {}
-
         if tautulli_url or tautulli_api_key:
-            settings["tautulli"] = {
-                "url": tautulli_url,
-                "api_key": tautulli_api_key,
-            }
-
+            settings["tautulli"] = {"url": tautulli_url, "api_key": tautulli_api_key}
         settings_json = json.dumps(settings) if settings else None
 
-        # ---------------------------------------
-        # INSERT serveur (NOUVEAU SCHÉMA)
-        # ---------------------------------------
-        db.execute(
-            """
-            INSERT INTO servers (
-                name,
-                type,
-                server_identifier,
-                url,
-                local_url,
-                public_url,
-                token,
-                settings_json,
-                status
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                name,
-                server_type,
-                server_identifier,
-                url,
-                local_url,
-                public_url,
-                token,
-                settings_json,
-                "unknown",
-            ),
-        )
-
-        # --------------------------------------------------
-        # Activation des tâches système
-        # --------------------------------------------------
-        db.execute(
-            """
-            UPDATE tasks
-            SET enabled = 1, status = 'queued'
-            WHERE name IN ('check_servers', 'update_user_status')
-            """
-        )
-
         try:
-            row = db.query_one("SELECT id FROM tasks WHERE name='check_servers'")
-            if row:
-                enqueue_task(row["id"])
-        except Exception:
-            pass
+            # --------------------------------------------------
+            # 1) INSERT serveur
+            # --------------------------------------------------
+            cur = db.execute(
+                """
+                INSERT INTO servers (
+                    name,
+                    type,
+                    server_identifier,
+                    url,
+                    local_url,
+                    public_url,
+                    token,
+                    settings_json,
+                    status
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    name,
+                    server_type,
+                    server_identifier,
+                    url,
+                    local_url,
+                    public_url,
+                    token,
+                    settings_json,
+                    "unknown",
+                ),
+            )
+            server_id = getattr(cur, "lastrowid", None)
 
+            # --------------------------------------------------
+            # 2) Activation des tâches système
+            # --------------------------------------------------
+            db.execute(
+                """
+                UPDATE tasks
+                SET enabled = 1, status = 'queued'
+                WHERE name IN ('check_servers', 'update_user_status')
+                """
+            )
+
+            # --------------------------------------------------
+            # 3) Commit avant enqueue (évite des incohérences + locks)
+            # --------------------------------------------------
+            try:
+                db.commit()
+            except Exception:
+                # Si ton get_db() auto-commit déjà, ce commit peut ne pas exister
+                # ou lever selon ton wrapper. Dans ce cas, on ignore.
+                pass
+
+            # --------------------------------------------------
+            # 4) Enqueue check_servers avec retry (SQLite lock-friendly)
+            # --------------------------------------------------
+            # Utilise app.logger si tu n'as pas task_logger ici
+            logger = globals().get("task_logger", app.logger)
+
+            for attempt in range(1, 6):  # 5 tentatives
+                try:
+                    row = db.query_one("SELECT id FROM tasks WHERE name='check_servers'")
+                    if row:
+                        enqueue_task(row["id"])
+                        logger.info(
+                            "Enqueued task 'check_servers' after server creation"
+                            + (f" (server_id={server_id})" if server_id else "")
+                        )
+                    break
+                except Exception as e:
+                    logger.warning(f"Failed to enqueue check_servers (attempt {attempt}/5): {e}")
+                    time.sleep(0.2)
+            else:
+                logger.exception("Failed to enqueue check_servers after 5 retries")
+
+        except Exception as e:
+            # Si l'insert serveur ou l'update tasks a planté
+            app.logger.exception(f"Server creation failed: {e}")
+            flash("server_create_failed", "error")
+            return redirect(url_for("servers_list"))
+
+        # --------------------------------------------------
+        # 5) Message UI
+        # --------------------------------------------------
         if server_type == "plex":
             flash("plex_server_created_sync_planned", "success")
         elif server_type == "jellyfin":
@@ -1956,6 +2018,7 @@ def create_app():
             flash("server_created_no_sync", "success")
 
         return redirect(url_for("servers_list"))
+
 
 
 

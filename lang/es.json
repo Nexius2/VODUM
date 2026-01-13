@@ -617,7 +617,12 @@
   
   "task_description.apply_jellyfin_access_updates": "Aplica las actualizaciones de acceso de Jellyfin pendientes (media_jobs)",
 
-  "task.apply_jellyfin_access_updates": "Aplicar accesos Jellyfin"
+  "task.apply_jellyfin_access_updates": "Aplicar accesos Jellyfin",
+  
+    "task_description.send_mail_campaigns": "Envía automáticamente correos electrónicos de preexpiración, recordatorio y cuenta expirada.",
+"task_description.sync_jellyfin": "Sincroniza los usuarios, servidores y bibliotecas de Jellyfin.",
+
+"documentation": "Documentación"
 
 
 

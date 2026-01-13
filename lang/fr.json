@@ -617,7 +617,12 @@
   "open_an_issue": "Ouvrir une issue sur GitHub",
   
   "task.apply_jellyfin_access_updates": "Application des accès Jellyfin",
-"task_description.apply_jellyfin_access_updates": "Applique les mises à jour d’accès Jellyfin en attente (media_jobs)."
+"task_description.apply_jellyfin_access_updates": "Applique les mises à jour d’accès Jellyfin en attente (media_jobs).",
+
+"task_description.send_mail_campaigns": "Envoie automatiquement les e-mails de pré-expiration, de rappel et de compte expiré.",
+"task_description.sync_jellyfin": "Synchronise les utilisateurs, serveurs et bibliothèques Jellyfin.",
+
+"documentation": "Documentation"
 
 
 
