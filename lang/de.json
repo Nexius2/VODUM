@@ -616,7 +616,12 @@
   "task_description.disable_expired_users": "Deaktiviert den Zugriff für Benutzer mit abgelaufenem Abonnement.",
     "task_description.apply_jellyfin_access_updates": "Wendet ausstehende Jellyfin-Zugriffsaktualisierungen an (media_jobs)",
 
-  "task.apply_jellyfin_access_updates": "Jellyfin-Zugriff aktualisieren"
+  "task.apply_jellyfin_access_updates": "Jellyfin-Zugriff aktualisieren",
+  
+  "task_description.send_mail_campaigns": "Versendet automatisch E-Mails zur Vorabablaufbenachrichtigung, Erinnerung und Kontenablauf.",
+"task_description.sync_jellyfin": "Synchronisiert Jellyfin-Benutzer, Server und Bibliotheken.",
+
+"documentation": "Dokumentation"
 
 
 

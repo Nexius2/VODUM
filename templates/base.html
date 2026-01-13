@@ -84,12 +84,28 @@
 		  <span class="material-icons-outlined mr-2 text-base">list</span>
 		  {{ t("logs") }}
 		</a>
+		<a href="https://nexius2.github.io/vodum-docs/"
+		   target="_blank"
+		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800">
+		  <span class="material-icons-outlined mr-2 text-base">
+			help_outline
+		  </span>
+		  {{ t("documentation") }}
+		</a>
 		<a href="{{ url_for('about_page') }}"
 		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='about' }}">
 		  <span class="material-icons-outlined mr-2 text-base">info</span>
 		  {{ t("about") }}
 		</a>
 	  </nav>
+
+	<!-- Indicateur activité tâches (visible seulement si active > 0) -->
+	<div id="taskActivity" class="px-3 pb-2 text-xs text-slate-400 hidden">
+	  <span class="inline-flex items-center gap-2">
+		<span class="inline-block h-3 w-3 rounded-full border-2 border-slate-600 border-t-slate-200 animate-spin"></span>
+		<span>Running <span id="taskActivityCount">0</span> tasks</span>
+	  </span>
+	</div>
 
 	  <!-- Footer version toujours visible -->
 	  <div class="p-3 text-xs text-slate-500 border-t border-slate-800">

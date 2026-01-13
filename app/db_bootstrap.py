@@ -267,7 +267,7 @@ def run_migrations():
     # Tâche d'envoi des campagnes email
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "send_mail_campaigns",
-        "description": "task_description.send_campaign_emails",
+        "description": "task_description.send_mail_campaigns",
         "schedule": "*/5 * * * *",  # toutes les 5 minutes
         "enabled": 0,
         "status": "disabled"
@@ -294,7 +294,7 @@ def run_migrations():
     # Tâche sync_Jellyfin
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "sync_jellyfin",
-        "description": "task_description.sync_jellyfin_users",
+        "description": "task_description.sync_jellyfin",
         "schedule": "0 */6 * * *",  # toutes les 6 heures (comme Plex)
         "enabled": 0,
         "status": "disabled"

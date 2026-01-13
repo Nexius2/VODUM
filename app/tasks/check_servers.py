@@ -29,35 +29,42 @@ log = get_logger("check_servers")   # Logger TXT haut niveau
 # ------------------------------------------------------------
 
 def jellyfin_get_status(base_url, token=None):
-    """
-    Retourne (status, server_name, machine_id, meta)
-    meta contiendra la version Jellyfin si trouvée.
-    """
     try:
-        # /System/Ping → juste un test UP/DOWN
+        log.debug(f"[JELLYFIN] ping url={base_url}/System/Ping")
         r = requests.get(f"{base_url}/System/Ping", timeout=5)
+        log.debug(f"[JELLYFIN] ping status_code={r.status_code}")
+
         if r.status_code != 200:
             return ("down", None, None, f"Ping returned {r.status_code}")
 
-        # Si on a un token → on peut récupérer plus d'infos
         if token:
-            info = requests.get(
+            log.debug(f"[JELLYFIN] info url={base_url}/System/Info (with api_key)")
+            r2 = requests.get(
                 f"{base_url}/System/Info",
                 params={"api_key": token},
                 timeout=5
-            ).json()
+            )
+            log.debug(f"[JELLYFIN] info status_code={r2.status_code}")
+
+            try:
+                info = r2.json()
+            except Exception as e:
+                log.error("[JELLYFIN] invalid json from /System/Info", exc_info=True)
+                return ("down", None, None, f"Invalid JSON: {e}")
 
             name = info.get("ServerName")
             mid = info.get("Id")
             version = info.get("Version")
+            log.debug(f"[JELLYFIN] info parsed name={name} id={mid} version={version}")
 
             return ("up", name, mid, version)
 
-        # Sinon seulement up/down
         return ("up", None, None, None)
 
     except Exception as e:
+        log.error("[JELLYFIN] exception", exc_info=True)
         return ("down", None, None, f"Jellyfin error: {e}")
+
 
 
 def choose_server_base_url(server_row):
@@ -71,19 +78,21 @@ def choose_server_base_url(server_row):
 
 
 def plex_get_info(base_url, token):
-    """Retourne (status, name, machine_id, meta)"""
     try:
+        log.debug(f"[PLEX] connecting base_url={base_url} token_present={bool(token)}")
         session = requests.Session()
         session.verify = False
         plex = PlexServer(base_url, token, session=session)
-        return (
-            "up",
-            plex.friendlyName,
-            plex.machineIdentifier,
-            plex.version
+        log.debug(
+            f"[PLEX] connected friendlyName={plex.friendlyName} "
+            f"machineId={plex.machineIdentifier} version={plex.version}"
         )
+        return ("up", plex.friendlyName, plex.machineIdentifier, plex.version)
+
     except Exception as e:
+        log.error(f"[PLEX] failed base_url={base_url}", exc_info=True)
         return ("down", None, None, f"PlexAPI error: {e}")
+
 
 
 def check_generic_server(url):
@@ -116,14 +125,31 @@ def run(task_id: int, db):
         now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
         for s in servers:
+            s = dict(s) 
             sid = s["id"]
             old_name = s["name"]
 
             log.info(f"--- Analyse du serveur #{sid} ({old_name}) ---")
 
             base_url = choose_server_base_url(s)
+            log.debug(
+                f"[SERVER #{sid}] raw_urls="
+                f"url={s.get('url')} local={s.get('local_url')} public={s.get('public_url')}"
+            )
+            log.debug(
+                f"[SERVER #{sid}] chosen_base_url={base_url} type={s.get('type')} "
+                f"has_token={bool(s.get('token'))} verify_ssl=disabled_for_plexapi"
+            )
+
             if not base_url:
                 log.warning(f"Serveur #{sid} : aucune URL valide.")
+                
+                log.debug(
+                    f"[SERVER #{sid}] result status={status} old_name={old_name} new_name={new_name} "
+                    f"machine_id(old)={machine_id} meta={meta}"
+                )
+
+                
                 db.execute(
                     """
                     UPDATE servers

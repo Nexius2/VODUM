@@ -474,7 +474,7 @@ def plex_get_libraries(server):
     }
 
     try:
-        resp = requests.get(url, headers=headers, timeout=20)
+        resp = requests.get(url, headers=headers, timeout=30)
         resp.raise_for_status()
     except Exception as e:
         log.error(f"[SYNC LIBRARIES] Erreur API {url}: {e}")
@@ -571,7 +571,7 @@ def fetch_xml(url: str, token: str) -> Optional[ET.Element]:
     log.debug(f"[API] GET {url}")
 
     try:
-        resp = requests.get(url, headers=headers, timeout=15)
+        resp = requests.get(url, headers=headers, timeout=20)
     except Exception as e:
         log.error(f"[API] Erreur réseau sur {url}: {e}")
         return None
@@ -1167,7 +1167,7 @@ def sync_all(task_id=None, db=None) -> None:
             log.info(f"[SYNC ACCESS] Tentative connexion PlexAPI → {server_name} base_url={base_url}")
 
             # ⏱️ timeout forcé pour plexapi
-            session = TimeoutSession(timeout=10)
+            session = TimeoutSession(timeout=20)
 
             # petit ping très parlant (et timeout)
             try:

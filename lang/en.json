@@ -613,8 +613,14 @@
   "task_description.sync_jellyfin_users": "Synchronizes Jellyfin users.",
   "task_description.disable_expired_users": "Disables access for users with expired subscriptions.",
   
-"task.apply_jellyfin_access_updates": "Application des accès Jellyfin",
-"task_description.apply_jellyfin_access_updates": "Applique les mises à jour d’accès Jellyfin en attente (media_jobs)."
+"task.apply_jellyfin_access_updates": "Apply Jellyfin access updates",
+"task_description.apply_jellyfin_access_updates": "Applies pending Jellyfin access updates (media_jobs).",
+
+"task_description.send_mail_campaigns": "Automatically sends pre-expiration, reminder and expired-account emails.",
+"task_description.sync_jellyfin": "Synchronizes Jellyfin users, servers and libraries.",
+
+"documentation": "Help & Documentation"
+
 
 
   
