@@ -18,17 +18,17 @@ def run(task_id: int, db):
     DBManager fourni par tasks_engine
     """
 
-    log.info("=== AUTO BACKUP : démarrage ===")
+    log.info("=== AUTO BACKUP : starting ===")
     log.debug(f"task_id={task_id}, db fourni={db is not None}")
 
     start = time.monotonic()
-    task_logs(task_id, "info", "Auto-backup démarré")
+    task_logs(task_id, "info", "Auto-backup started")
 
     try:
         # ---------------------------------
         # 1) Lire configuration depuis settings
         # ---------------------------------
-        log.debug("Lecture des paramètres dans settings…")
+        log.debug("Reading settings configuration…")
 
         row = db.query_one(
             "SELECT backup_retention_days FROM settings WHERE id = 1"
@@ -36,7 +36,7 @@ def run(task_id: int, db):
 
         retention_days = row["backup_retention_days"] if row else 30
 
-        log.info(f"Rétention configurée : {retention_days} jours")
+        log.info(f"Configured retention: {retention_days} days")
 
         # ---------------------------------
         # 2) Récupérer le chemin DB depuis Config
@@ -44,11 +44,11 @@ def run(task_id: int, db):
         database_path = Path(Config.DATABASE)
         backup_dir = Path("/backups")
 
-        log.debug(f"Chemin DB fourni par Config : {database_path}")
-        log.debug(f"Backup dir                   : {backup_dir}")
+        log.debug(f"Database path from Config: {database_path}")
+        log.debug(f"Backup directory            : {backup_dir}")
 
         if not database_path.exists():
-            raise FileNotFoundError(f"Database introuvable : {database_path}")
+            raise FileNotFoundError(f"Database not found : {database_path}")
 
         backup_dir.mkdir(parents=True, exist_ok=True)
 
@@ -59,7 +59,7 @@ def run(task_id: int, db):
         backup_name = f"vodum-{timestamp}.db"
         backup_path = backup_dir / backup_name
 
-        log.info(f"Création du backup : {backup_name}")
+        log.info(f"Creating backup: {backup_name}")
         shutil.copy2(database_path, backup_path)
 
         # ---------------------------------
@@ -70,22 +70,22 @@ def run(task_id: int, db):
 
         for f in backup_dir.glob("vodum-*.db"):
             if f.stat().st_mtime < cutoff_ts:
-                log.debug(f"Suppression ancien backup : {f.name}")
+                log.debug(f"Deleting old backup: {f.name}")
                 f.unlink()
                 deleted += 1
 
-        log.info(f"{deleted} backup(s) supprimé(s)")
+        log.info(f"{deleted} backup(s) deleted")
 
         # ---------------------------------
         # 5) Log DB pour la tâche
         # ---------------------------------
-        task_logs(task_id, "info", f"Backup créé : {backup_name}")
+        task_logs(task_id, "info", f"Backup created: {backup_name}")
 
         duration = time.monotonic() - start
-        log.info(f"=== AUTO BACKUP : terminé OK en {duration:.2f}s ===")
+        log.info(f"=== AUTO BACKUP : COMPLETED SUCCESSFULLY IN {duration:.2f}s ===")
 
     except Exception as e:
-        log.error("Erreur dans AUTO BACKUP", exc_info=True)
-        task_logs(task_id, "error", f"Erreur auto-backup : {e}")
+        log.error("Error during AUTO BACKUP", exc_info=True)
+        task_logs(task_id, "error", f"Auto-backup error: {e}")
         raise
 

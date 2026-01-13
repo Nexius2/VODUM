@@ -18,13 +18,8 @@ def _redact_headers(headers: dict):
 
 
 def install_plex_http_logger(session, label: str):
-    """
-    Wrap requests.Session.request utilisé par plexapi, pour logger EXACTEMENT
-    ce qui est envoyé (method/url/params/data/json) + code retour.
-    Les logs passent dans logging_utils (donc fichier app.log).
-    """
     if not session or not hasattr(session, "request"):
-        logger.warning(f"[{label}] session invalide, impossible d'installer le logger HTTP")
+        logger.warning(f"[{label}] invalid session, unable to install HTTP logger")
         return
 
     if getattr(session, "_vodum_http_logger_installed", False):
@@ -56,13 +51,13 @@ def install_plex_http_logger(session, label: str):
                 f"text_preview={(txt[:800] if txt else None)}"
             )
         except Exception:
-            logger.exception(f"[{label}] impossible de logger la réponse HTTP")
+            logger.exception(f"[{label}] failed to log HTTP response")
 
         return resp
 
     session.request = wrapped_request
     session._vodum_http_logger_installed = True
-    logger.warning(f"[{label}] logger HTTP installé ✅")
+    logger.warning(f"[{label}] HTTP logger installed")
 
 def row_get(row, key, default=None):
     """
@@ -126,7 +121,7 @@ def wait_for_task_idle(db, name):
 
         if not row or row["status"] != "running":
             return
-        logger.info(f"⏳ En attente que la tâche {name} termine…")
+        logger.info(f"⏳ Waiting for task {name} to finish…")
         time.sleep(2)
 
 
@@ -154,7 +149,7 @@ def get_plex(server_row):
     token = server_row["token"]
 
     if not baseurl or not token:
-        raise RuntimeError(f"Serveur incomplet (URL/token) : {server_row['name']}")
+        raise RuntimeError(f"Incomplete server configuration (URL/token) : {server_row['name']}")
 
     return PlexServer(baseurl, token)
 
@@ -166,7 +161,7 @@ def get_all_plex_section_titles(plex):
     try:
         return [s.title for s in plex.library.sections()]
     except Exception:
-        logger.exception("❌ Impossible de lire plex.library.sections()")
+        logger.exception("❌ Unable to read plex.library.sections()")
         raise
 
 
@@ -186,7 +181,7 @@ def cleanup_old_jobs(db):
         """
     ).rowcount
 
-    logger.info(f"🧹 Nettoyage jobs : {deleted} job(s) Plex success supprimé(s) (>7 jours).")
+    logger.info(f"🧹 Jobs cleanup: {deleted} successful Plex job(s) deleted")
 
 
 def resolve_media_user(db, vodum_user_id: int, server_id: int):
@@ -195,7 +190,7 @@ def resolve_media_user(db, vodum_user_id: int, server_id: int):
     C'est indispensable depuis le passage à media_jobs.
     """
     if vodum_user_id is None:
-        raise RuntimeError("Job invalide: vodum_user_id est NULL")
+        raise RuntimeError("Invalid job: vodum_user_id is NULL")
 
     user = db.query_one(
         """
@@ -209,7 +204,7 @@ def resolve_media_user(db, vodum_user_id: int, server_id: int):
 
     if not user:
         raise RuntimeError(
-            f"Aucun media_user trouvé pour vodum_user_id={vodum_user_id} sur server_id={server_id}"
+            f"No media_user found for vodum_user_id={vodum_user_id} on server_id={server_id}"
         )
 
     return user
@@ -317,10 +312,10 @@ def apply_grant_job(db, job):
 #    )
 
     if not server or not library or not user:
-        raise RuntimeError("Serveur / bibliothèque / user introuvable")
+        raise RuntimeError("Server / library / user not found")
 
     logger.info(
-        f"➡ Mise à jour accès : {user['username']} ← {library['name']} sur {server['name']}"
+        f"➡ Updating access: {user['username']} ← {library['name']} sur {server['name']}"
     )
 
     plex = get_plex(server)
@@ -332,7 +327,7 @@ def apply_grant_job(db, job):
     try:
         plex_user = account.user(user["username"])
     except Exception:
-        logger.error(f"Impossible de récupérer MyPlexUser pour {user['username']}")
+        logger.error(f"Unable to retrieve MyPlexUser for {user['username']}")
         raise
 
     # --- RÉCUP PARTAGES EXISTANTS (JBOPS) ---------------------------------
@@ -346,13 +341,13 @@ def apply_grant_job(db, job):
                     if getattr(section, "shared", False):
                         current_sections.add(section.title)
     except Exception:
-        logger.exception("Erreur lecture des sections existantes")
+        logger.exception("Error while reading existing shared sections")
         raise
 
     # --- AJOUTER LA NOUVELLE BIBLIOTHÈQUE (NOM!) --------------------------
     current_sections.add(library["name"])
 
-    logger.info(f"Sections finales envoyées : {current_sections}")
+    logger.info(f"Final sections sent: {current_sections}")
 
     # --- PERMISSIONS (depuis media_users.details_json) --------------------
     allowSync, allowCameraUpload, allowChannels, filterMovies, filterTelevision, filterMusic = (
@@ -390,10 +385,10 @@ def apply_grant_job(db, job):
             filterMusic=filterMusic,
         )
 
-        logger.info("✔ Accès modifié avec succès (méthode JBOPS)")
+        logger.info("✔ Access updated successfully")
 
     except Exception:
-        logger.exception("❌ updateFriend() a échoué")
+        logger.exception("❌ updateFriend() failed")
         raise
 
 
@@ -429,9 +424,9 @@ def apply_sync_job(db, job):
     )
 
     if not server or not user:
-        raise RuntimeError("Serveur ou utilisateur introuvable (sync)")
+        raise RuntimeError("Server or user not found (sync)")
 
-    logger.info(f"🔄 SYNC accès complet : {user['username']} sur {server['name']} (server_id={server_id}, user_id={user_id})")
+    logger.info(f"🔄 FULL ACCESS SYNC: {user['username']} on {server['name']} (server_id={server_id}, user_id={user_id})")
 
     # Connexion Plex
     plex = get_plex(server)
@@ -447,7 +442,7 @@ def apply_sync_job(db, job):
             f"friendlyName='{plex.friendlyName}' baseurl='{baseurl}'"
         )
     except Exception:
-        logger.exception("⚠️ Impossible de logger les infos serveur Plex (debug)")
+        logger.exception("⚠️ Unable to log Plex server debug info")
 
     # Récup MyPlexUser
     try:
@@ -461,7 +456,7 @@ def apply_sync_job(db, job):
             f"plex_id='{getattr(plex_user, 'id', None)}'"
         )
     except Exception:
-        logger.exception(f"❌ Impossible de récupérer MyPlexUser pour {user['username']}")
+        logger.exception(f"❌ Unable to retrieve MyPlexUser for {user['username']}")
         raise
 
     # Récup ALL libraries autorisées pour cet user + serveur
@@ -479,9 +474,9 @@ def apply_sync_job(db, job):
     sections = [r["name"] for r in rows]
     if not sections:
         raise RuntimeError(
-            f"Aucune bibliothèque trouvée en DB pour media_user_id={user_id} "
+            f"No library found in DB for media_user_id={user_id} "
             f"(vodum_user_id={vodum_user_id}) server_id={server_id}. "
-            "Sync bloqué pour éviter de retirer tous les accès."
+            "Sync aborted to avoid removing all access."
         )
     logger.info(f"📚 Sections DB (expected) ({len(sections)}): {sections}")
 
@@ -491,7 +486,7 @@ def apply_sync_job(db, job):
             _get_plex_share_settings_from_user(user)
         )
     except Exception:
-        logger.exception("❌ Impossible de lire les paramètres plex_share depuis details_json")
+        logger.exception("❌ Unable to read plex_share settings from details_json")
         raise
 
     logger.info(
@@ -534,10 +529,10 @@ def apply_sync_job(db, job):
             filterTelevision=filterTelevision,
             filterMusic=filterMusic,
         )
-        logger.info("✔ SYNC appliqué avec succès (updateFriend OK)")
+        logger.info("✔ SYNC applied successfully (updateFriend OK)")
 
     except Exception:
-        logger.exception("❌ updateFriend() a échoué lors du sync")
+        logger.exception("❌ updateFriend() failed during sync")
         raise
 
     # --- POST-CHECK : relire ce que Plex croit vraiment après updateFriend ---
@@ -566,7 +561,7 @@ def apply_sync_job(db, job):
         )
 
     except Exception:
-        logger.exception("⚠️ POST-CHECK failed: impossible de relire l’état de partage après updateFriend()")
+        logger.exception("⚠️ POST-CHECK failed: unable to reload share state after updateFriend()")
 
 def apply_revoke_job(db, job):
     """
@@ -589,7 +584,7 @@ def apply_revoke_job(db, job):
         (server_id,)
     )
     if not server:
-        raise RuntimeError(f"Serveur introuvable (id={server_id})")
+        raise RuntimeError(f"Server not found (id={server_id})")
 
     plex = get_plex(server)
 
@@ -600,7 +595,7 @@ def apply_revoke_job(db, job):
         install_plex_http_logger(getattr(account, "_session", None), "PLEX_ACCOUNT")
         plex_user = account.user(user["username"])
     except Exception:
-        logger.exception(f"❌ Impossible de récupérer MyPlexUser pour {user['username']}")
+        logger.exception(f"❌ Unable to retrieve MyPlexUser for {user['username']}")
         raise
 
     allowSync, allowCameraUpload, allowChannels, filterMovies, filterTelevision, filterMusic = (
@@ -661,15 +656,15 @@ def apply_revoke_job(db, job):
             filterTelevision=filterTelevision,
             filterMusic=filterMusic,
         )
-        logger.info("✔ REVOKE appliqué avec succès (méthode JBOPS : removeSections=True + sections_titles)")
+        logger.info("✔ REVOKE applied successfully (removeSections=True + sections_titles)")
     except Exception:
-        logger.exception("❌ updateFriend() a échoué lors du revoke (méthode JBOPS)")
+        logger.exception("❌ updateFriend() failed during revoke")
         raise
 
 
 
 def run(task_id: int, db):
-    logger.info("=== APPLY PLEX ACCESS UPDATES : DÉBUT ===")
+    logger.info("=== APPLY PLEX ACCESS UPDATES : START ===")
 
     jobs = db.query(
         """
@@ -683,10 +678,10 @@ def run(task_id: int, db):
     )
 
     if not jobs:
-        logger.info("Aucun job à traiter.")
+        logger.info("No jobs to process.")
         return
 
-    logger.info(f"{len(jobs)} job(s) à traiter...")
+    logger.info(f"{len(jobs)} job(s) to process...")
 
     for job in jobs:
         job_id = job["id"]
@@ -712,7 +707,7 @@ def run(task_id: int, db):
             elif job["action"] == "revoke":
                 apply_revoke_job(db, job)
             else:
-                raise ValueError(f"Action inconnue '{job['action']}'")
+                raise ValueError(f"Unknown action '{job['action']}'")
 
 
             # 3) Succès
@@ -732,10 +727,10 @@ def run(task_id: int, db):
                 (job_id,)
             )
 
-            logger.info(f"Job {job_id} OK ✔ (success=1) -> supprimé")
+            logger.info(f"Job {job_id} OK ✔ (success=1) -> deleted")
 
         except Exception as e:
-            logger.exception(f"❌ Erreur dans le job {job_id}: {e}")
+            logger.exception(f"❌ Error while processing job {job_id}: {e}")
 
             # Job conservé pour debug/retry + remis en pending
             db.execute(
@@ -753,5 +748,5 @@ def run(task_id: int, db):
 
 
     cleanup_old_jobs(db)
-    logger.info("=== APPLY PLEX ACCESS UPDATES : FIN ===")
+    logger.info("=== APPLY PLEX ACCESS UPDATES : END ===")
 

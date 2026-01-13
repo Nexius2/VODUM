@@ -180,3 +180,31 @@ window.addEventListener("DOMContentLoaded", () => {
     initTabs();
     refreshActiveTab();
 });
+
+(function taskActivityIndicator() {
+  const box = document.getElementById("taskActivity");
+  const countEl = document.getElementById("taskActivityCount");
+
+  if (!box || !countEl) return;
+
+  async function refresh() {
+    try {
+      const r = await fetch("/api/tasks/activity", { cache: "no-store" });
+      if (!r.ok) throw new Error("bad status");
+      const data = await r.json();
+      const n = Number(data.active || 0);
+
+      if (n > 0) {
+        countEl.textContent = n;
+        box.classList.remove("hidden");
+      } else {
+        box.classList.add("hidden");
+      }
+    } catch {
+      box.classList.add("hidden");
+    }
+  }
+
+  refresh();
+  setInterval(refresh, 2500);
+})();
