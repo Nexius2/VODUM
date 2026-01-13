@@ -11,10 +11,10 @@
   <Support>https://github.com/Nexius2/VODUM/issues</Support>
   <Project>https://github.com/Nexius2/VODUM</Project>
 
-  <Overview>
-    VODUM – VOD user subscription manager.
-    Gestion des utilisateurs, abonnements et accès aux bibliothèques.
-  </Overview>
+<Overview>
+VODUM is a self-hosted subscription management tool for Plex and Jellyfin, designed to centrally manage users, subscriptions, and media library access.
+</Overview>
+
 
   <!-- Web UI -->
   <WebUI>http://[IP]:[PORT:5000]</WebUI>
