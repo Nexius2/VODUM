@@ -21,7 +21,7 @@ def _pick_server_base_url(server_row: Dict[str, Any]) -> str:
         or (server_row.get("public_url") or "")
     ).strip().rstrip("/")
     if not base:
-        raise RuntimeError("Jellyfin: aucune URL serveur (url/local_url/public_url) n'est définie.")
+        raise RuntimeError("Jellyfin: missing server URL (url/local_url/public_url) defined.")
     return base
 
 
@@ -32,7 +32,7 @@ def _get_jellyfin_api_key(server_row: Dict[str, Any]) -> str:
     """
     token = (server_row.get("token") or "").strip()
     if not token:
-        raise RuntimeError("Jellyfin: token manquant (servers.token).")
+        raise RuntimeError("Jellyfin: token missing (servers.token).")
     return token
 
 
@@ -214,21 +214,21 @@ def _process_job(db, job: Dict[str, Any]) -> None:
     server_id = job.get("server_id")
 
     if vodum_user_id is None or server_id is None:
-        raise RuntimeError("Job invalide: vodum_user_id ou server_id manquant.")
+        raise RuntimeError("invalide job: vodum_user_id or server_id missing.")
 
     vodum_user_id = int(vodum_user_id)
     server_id = int(server_id)
 
     server = _get_server(db, server_id)
     if not server:
-        raise RuntimeError(f"Serveur introuvable (id={server_id}).")
+        raise RuntimeError(f"Server missing (id={server_id}).")
 
     base_url = _pick_server_base_url(server)
     api_key = _get_jellyfin_api_key(server)
 
     accounts = _get_jellyfin_accounts(db, vodum_user_id, server_id)
     if not accounts:
-        logger.info(f"Aucun compte Jellyfin pour vodum_user_id={vodum_user_id} sur server_id={server_id}.")
+        logger.info(f"No Jellyfin account for vodum_user_id={vodum_user_id} on server_id={server_id}.")
         return
 
     enabled_folders = _get_desired_enabled_folders(db, vodum_user_id, server_id)
@@ -242,7 +242,7 @@ def _process_job(db, job: Dict[str, Any]) -> None:
         jf_user_id = (acc.get("external_user_id") or "").strip()
         if not jf_user_id:
             logger.warning(
-                f"Compte Jellyfin sans external_user_id (vodum_user_id={vodum_user_id}, server_id={server_id})."
+                f"Jellyfin account without external_user_id (vodum_user_id={vodum_user_id}, server_id={server_id})."
             )
             continue
 
@@ -253,12 +253,12 @@ def _process_job(db, job: Dict[str, Any]) -> None:
 # Entry point expected by tasks_engine: run(task_id, db)
 # ---------------------------------------------------------------------
 def run(task_id: int, db) -> None:
-    logger.info("=== APPLY JELLYFIN ACCESS UPDATES : DÉBUT ===")
+    logger.info("=== APPLY JELLYFIN ACCESS UPDATES : START ===")
 
     jobs = _fetch_pending_jobs(db, limit=50)
     if not jobs:
-        logger.info("Aucun job à traiter.")
-        logger.info("=== APPLY JELLYFIN ACCESS UPDATES : FIN ===")
+        logger.info("No jobs to process.")
+        logger.info("=== APPLY JELLYFIN ACCESS UPDATES : END ===")
         return
 
     for job_row in jobs:
@@ -278,7 +278,7 @@ def run(task_id: int, db) -> None:
             _mark_success(db, job_id)
 
         except Exception as e:
-            logger.error(f"Job Jellyfin {job_id} en échec: {e}", exc_info=True)
+            logger.error(f"Jellyfin job {job_id} failed: {e}", exc_info=True)
             _mark_failure(db, job_id, str(e))
 
-    logger.info("=== APPLY JELLYFIN ACCESS UPDATES : FIN ===")
+    logger.info("=== APPLY JELLYFIN ACCESS UPDATES : END ===")

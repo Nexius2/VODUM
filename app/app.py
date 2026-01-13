@@ -841,6 +841,11 @@ def create_app():
     def dashboard():
         db = get_db()
 
+        row = db.query_one("SELECT COUNT(*) AS cnt FROM servers")
+        if row and int(row["cnt"] or 0) == 0:
+            return redirect(url_for("servers_list"))
+
+
         # --------------------------
         # USER STATS (legacy: stats)
         # --------------------------
@@ -1964,10 +1969,16 @@ def create_app():
             db.execute(
                 """
                 UPDATE tasks
-                SET enabled = 1, status = 'queued'
+                SET enabled = 1,
+                    status = CASE
+                        WHEN status = 'disabled' THEN 'idle'
+                        WHEN status IN ('idle','error','running','queued') THEN status
+                        ELSE 'idle'
+                    END
                 WHERE name IN ('check_servers', 'update_user_status')
                 """
             )
+
 
             # --------------------------------------------------
             # 3) Commit avant enqueue (évite des incohérences + locks)
@@ -1980,26 +1991,18 @@ def create_app():
                 pass
 
             # --------------------------------------------------
-            # 4) Enqueue check_servers avec retry (SQLite lock-friendly)
+            # 4) Enchaîner check + sync (FIFO, jamais perdu)
             # --------------------------------------------------
-            # Utilise app.logger si tu n'as pas task_logger ici
-            logger = globals().get("task_logger", app.logger)
+            try:
+                if server_type == "plex":
+                    run_task_sequence(["check_servers", "sync_plex"])
+                elif server_type == "jellyfin":
+                    run_task_sequence(["check_servers", "sync_jellyfin"])
+                else:
+                    run_task_sequence(["check_servers"])
+            except Exception as e:
+                app.logger.warning(f"Failed to queue sequence after server creation: {e}")
 
-            for attempt in range(1, 6):  # 5 tentatives
-                try:
-                    row = db.query_one("SELECT id FROM tasks WHERE name='check_servers'")
-                    if row:
-                        enqueue_task(row["id"])
-                        logger.info(
-                            "Enqueued task 'check_servers' after server creation"
-                            + (f" (server_id={server_id})" if server_id else "")
-                        )
-                    break
-                except Exception as e:
-                    logger.warning(f"Failed to enqueue check_servers (attempt {attempt}/5): {e}")
-                    time.sleep(0.2)
-            else:
-                logger.exception("Failed to enqueue check_servers after 5 retries")
 
         except Exception as e:
             # Si l'insert serveur ou l'update tasks a planté
@@ -3320,6 +3323,53 @@ def create_app():
     # SETTINGS / PARAMÈTRES
     # -----------------------------
     @app.before_request
+    def setup_guard_no_servers():
+        """
+        Mode "setup" : si aucun serveur n'est configuré, on force l'accès
+        uniquement à la page serveurs pour permettre l'initialisation.
+
+        Ne rentre pas en conflit avec un futur système d'auth admin :
+        - on laisse passer /login (si tu l'ajoutes plus tard)
+        - et on peut ajuster facilement une whitelist.
+        """
+        # Routes toujours autorisées (setup)
+        allowed_prefixes = (
+            "/static",
+            "/set_language",
+            "/servers",       # liste + detail
+            "/servers/new",   # création
+            "/api/tasks/activity",  # optionnel (évite du bruit console UI)
+            "/health",        # optionnel si tu as un healthcheck
+            "/login",         # futur admin login
+            "/logout",        # futur admin logout
+        )
+
+        if request.path.startswith(allowed_prefixes):
+            return
+
+        # On évite de bloquer les fichiers favicon & co
+        if request.path in ("/favicon.ico",):
+            return
+
+        db = get_db()
+
+        # Si la table servers n'existe pas encore, on considère "setup"
+        try:
+            exists = db.query_one(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='servers'"
+            )
+            if not exists:
+                return redirect(url_for("servers_list"))
+        except Exception:
+            # si DB indispo, on ne force pas ici
+            return
+
+        # Si aucun serveur → setup mode actif
+        row = db.query_one("SELECT COUNT(*) AS cnt FROM servers")
+        if row and int(row["cnt"] or 0) == 0:
+            return redirect(url_for("servers_list"))
+    
+    @app.before_request
     def maintenance_guard():
         # Routes toujours autorisées
         allowed = (
@@ -3697,10 +3747,13 @@ def create_app():
 
 app = create_app()
 
-with app.app_context():
-    
-    start_scheduler()
+# ✅ Evite double démarrage du scheduler en mode debug (reloader)
+# - En debug: Flask lance 2 process (parent + enfant). WERKZEUG_RUN_MAIN='true' seulement dans l'enfant.
+# - En prod (sans reloader): la variable n'est pas définie => on démarre.
+if (not app.debug) or (os.environ.get("WERKZEUG_RUN_MAIN") == "true"):
+    with app.app_context():
+        start_scheduler()
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=5000, use_reloader=False)

@@ -59,11 +59,11 @@ def run_task_by_name(task_name: str):
 
 
     if not row:
-        logger.error(f"Tâche inconnue : {task_name}")
+        logger.error(f"Unknown task: {task_name}")
         return False
 
     if not row["enabled"]:
-        logger.warning(f"Tâche désactivée : {task_name}")
+        logger.warning(f"disabled task: {task_name}")
         return False
 
    
@@ -163,7 +163,7 @@ def enqueue_task(task_id: int):
         (task_id,)
     )
     if not row or not row["enabled"]:
-        logger.info(f"Tâche {task_id} ignorée (disabled)")
+        logger.info(f"Task {task_id} ignored (disabled)")
         return
 
 
@@ -221,7 +221,7 @@ def _task_worker():
                 run_task(row["id"])
             except Exception as e:
                 logger.error(
-                    f"[WORKER] Erreur exécution task {row['id']}",
+                    f"[WORKER] Error running task {row['id']}",
                     exc_info=True
                 )
 
@@ -242,16 +242,16 @@ def run_task(task_id: int):
     )
 
     if not row:
-        logger.error(f"TASK {task_id} introuvable.")
-        task_logs(task_id, "error", "Tâche introuvable en base")
+        logger.error(f"TASK {task_id} missing.")
+        task_logs(task_id, "error", "task missing in DB")
         return
 
     name = row["name"]
     schedule = row["schedule"]
     module_name = f"tasks.{name}"
 
-    logger.info(f"Lancement tâche '{name}' (id={task_id})")
-    task_logs(task_id, "start", f"Lancement tâche '{name}'")
+    logger.info(f"Starting task '{name}' (id={task_id})")
+    task_logs(task_id, "start", f"Starting task '{name}'")
 
     task_success = False
     start_time = time.time()
@@ -291,7 +291,7 @@ def run_task(task_id: int):
             raise AttributeError(f"Le module {module_name} n'expose pas run()")
         run_func = module.run
     except Exception as e:
-        msg = f"Impossible de charger {module_name}: {e}"
+        msg = f"Unable to load {module_name}: {e}"
         logger.error(msg)
         task_logs(task_id, "error", msg)
 
@@ -309,7 +309,7 @@ def run_task(task_id: int):
     # Exécution réelle
     # -------------------------------------------------
     try:
-        logger.debug(f"Appel run() pour tâche '{name}'")
+        logger.debug(f"Calling run() for task '{name}'")
 
         # 🔒 APPEL UNIFORME — règle officielle
         run_func(task_id, db)
@@ -317,7 +317,7 @@ def run_task(task_id: int):
         duration = time.time() - start_time
         if duration > max_duration:
             raise TimeoutError(
-                f"Tâche {name} trop longue ({int(duration)}s > {max_duration}s)"
+                f"Task {name} exceeded maximum duration ({int(duration)}s > {max_duration}s)"
             )
 
         # ---- SUCCÈS ----
@@ -334,21 +334,21 @@ def run_task(task_id: int):
             (task_id,)
         )
 
-        logger.info(f"Tâche '{name}' terminée avec succès.")
-        task_logs(task_id, "success", f"Tâche '{name}' terminée avec succès")
+        logger.info(f"Task '{name}' completed successfully.")
+        task_logs(task_id, "success", f"Task '{name}' completed successfully")
 
         # -------------------------------------------------
         # Post-traitement check_servers
         # -------------------------------------------------
         if name == "check_servers":
-            logger.info("Réévaluation auto des tâches sync après check_servers")
-            task_logs(task_id, "info", "Réévaluation auto des tâches sync")
+            logger.info("Auto re-evaluating sync tasks after check_servers")
+            task_logs(task_id, "info", "Sync tasks auto re-evaluation")
 
             try:
                 auto_enable_sync_tasks()
             except Exception as e:
-                logger.error(f"Erreur réévaluation sync: {e}", exc_info=True)
-                task_logs(task_id, "warning", f"Réévaluation sync a échoué: {e}")
+                logger.error(f"Sync re-evaluation failed: {e}", exc_info=True)
+                task_logs(task_id, "warning", f"Sync re-evaluation failed: {e}")
 
         # -------------------------------------------------
         # Calcul du prochain run (sécurisé)
@@ -363,14 +363,14 @@ def run_task(task_id: int):
                     (next_exec, task_id)
                 )
 
-                logger.info(f"Prochain run '{name}' → {next_exec}")
-                task_logs(task_id, "info", f"Prochain run '{name}' → {next_exec}")
+                logger.info(f"Next run '{name}' → {next_exec}")
+                task_logs(task_id, "info", f"Next run '{name}' → {next_exec}")
             except Exception as e:
-                logger.error(f"Erreur cron après exécution: {e}")
-                task_logs(task_id, "warning", f"Erreur cron après exécution: {e}")
+                logger.error(f"Cron error after execution: {e}")
+                task_logs(task_id, "warning", f"Cron error after execution: {e}")
 
     except Exception as e:
-        msg = f"Erreur pendant l'exécution de {name}: {e}"
+        msg = f"Error while running {name}: {e}"
         logger.error(msg, exc_info=True)
         task_logs(task_id, "error", msg)
 
@@ -391,7 +391,7 @@ def run_task(task_id: int):
 
 
     except Exception as e:
-        msg = f"Erreur pendant l'exécution de {name}: {e}"
+        msg = f"Error while running {name}: {e}"
         logger.error(msg, exc_info=True)
         task_logs(task_id, "error", msg)
 
@@ -438,14 +438,14 @@ def run_task(task_id: int):
                 )
 
                 logger.warning(
-                    f"[FAILSAFE] Tâche {task_id} corrigée (restée en RUNNING)"
+                    f"[FAILSAFE] Task {task_id} fixed (left in RUNNING state)"
                 )
 
         except Exception as e:
             logger.error(
-                f"[FAILSAFE] Impossible de corriger la tâche {task_id}: {e}"
+                f"[FAILSAFE] Unable to fix task {task_id}: {e}"
             )
-            task_logs(task_id, "warning", f"Failsafe final a échoué: {e}")
+            task_logs(task_id, "warning", f"Failsafe final failed: {e}")
 
 
 
@@ -456,24 +456,43 @@ def run_task(task_id: int):
 
 
 
-def wait_for_task_completion(task_name, poll_interval=10):
+def wait_for_task_completion(task_name, last_run_before=None, poll_interval=2, timeout=1800):
     """
-    Attend qu'une tâche donnée soit idle ou error.
+    Attend qu'une tâche ait VRAIMENT exécuté au moins une fois après un enqueue.
+
+    - Si last_run_before est fourni : on attend que last_run change (recommandé).
+    - Sinon : fallback historique (idle/error), mais moins fiable.
     """
+    start = time.time()
+
     while True:
         row = db.query_one(
-            "SELECT status FROM tasks WHERE name=?",
+            "SELECT status, last_run FROM tasks WHERE name=?",
             (task_name,)
         )
 
-
         if not row:
-            return  # tâche inconnue = considérer comme terminée
-            
-        status = row["status"]
+            return  # tâche inconnue => on considère terminé
 
-        if status in ("idle", "error"):
+        status = (row["status"] or "").lower().strip()
+        last_run = row["last_run"]
+
+        # si erreur, on stop
+        if status == "error":
             return
+
+        # ✅ mode fiable: on attend un changement de last_run
+        if last_run_before is not None:
+            if last_run is not None and str(last_run) != str(last_run_before):
+                return
+        else:
+            # fallback ancien comportement
+            if status in ("idle", "error", "disabled"):
+                return
+
+        if time.time() - start > timeout:
+            raise TimeoutError(f"Timeout waiting for task '{task_name}' to complete")
+
         time.sleep(poll_interval)
 
 def run_task_sequence(task_names):
@@ -483,7 +502,7 @@ def run_task_sequence(task_names):
     """
     global sequence_thread_running
 
-    logger.info(f"[QUEUE] Séquence ajoutée : {task_names}")
+    logger.info(f"[QUEUE] Sequence added: {task_names}")
 
     with queue_lock:
         sequence_queue.append(task_names)
@@ -491,7 +510,7 @@ def run_task_sequence(task_names):
         # Si aucun worker ne tourne, on le démarre
         if not sequence_thread_running:
             sequence_thread_running = True
-            logger.info("[QUEUE] Démarrage du worker de séquences")
+            logger.info("[QUEUE] starting Sequence worker")
             threading.Thread(target=_sequence_worker, daemon=True).start()
 
 
@@ -502,67 +521,63 @@ def _sequence_worker():
     """
     global sequence_thread_running
 
-    logger.info("[QUEUE] Worker de séquence démarré")
+    logger.info("[QUEUE] Sequence worker started")
 
     while True:
         with queue_lock:
             if not sequence_queue:
-                logger.info("[QUEUE] File vide → arrêt du worker")
+                logger.info("[QUEUE] empty queue → worker stopping")
                 sequence_thread_running = False
                 return
 
             tasks = sequence_queue.pop(0)
 
-        logger.info(f"[QUEUE] Exécution d'une nouvelle séquence : {tasks}")
+        logger.info(f"[QUEUE] Executing new sequence : {tasks}")
 
         # Exécute la séquence (bloquant)
         try:
             _run_task_sequence_internal(tasks)
-            logger.info(f"[QUEUE] Séquence terminée : {tasks}")
+            logger.info(f"[QUEUE] Sequence ended : {tasks}")
         except Exception as e:
-            logger.error(f"[QUEUE] Erreur lors de l'exécution de la séquence {tasks}: {e}")
+            logger.error(f"[QUEUE] Erreur while running sequence {tasks}: {e}")
 
 
 
 def _run_task_sequence_internal(task_names):
     """
-    Version interne : exécution SÉQUENTIELLE et BLOQUANTE
-    (dans un thread dédié, donc sans bloquer Flask).
+    Exécution SÉQUENTIELLE et BLOQUANTE d'une séquence.
+    IMPORTANT: on n'ignore jamais une séquence.
+    Le worker de séquence exécute déjà en FIFO.
     """
-    if not sequence_lock.acquire(blocking=False):
-        logger.warning("Une séquence est déjà en cours → nouvelle séquence ignorée.")
-        return False
+    logger.info(f"Sequence start : {task_names}")
 
-    logger.info(f"Début séquence : {task_names}")
-
-    try:
+    # ✅ Lock BLOQUANT (au lieu de drop la séquence)
+    with sequence_lock:
         for name in task_names:
-            logger.info(f"[SEQ] Lancement de la tâche : {name}")
+            logger.info(f"[SEQ] starting task : {name}")
 
             row = db.query_one(
                 "SELECT id FROM tasks WHERE name=?",
                 (name,)
             )
-
-
             if not row:
-                logger.error(f"[SEQ] Tâche inconnue : {name}")
+                logger.error(f"[SEQ] Task unknown: {name}")
                 continue
 
             task_id = row["id"]
 
-            # Lancer la tâche asynchrone
+            # Capture last_run avant enqueue (permet de détecter 1 exécution)
+            before = db.query_one("SELECT last_run FROM tasks WHERE id=?", (task_id,))
+            last_run_before = before["last_run"] if before else None
+
             enqueue_task(task_id)
 
+            # Attend une exécution réelle (même si la tâche reste 'queued' après)
+            wait_for_task_completion(name, last_run_before=last_run_before, timeout=1800)
 
-            # Attendre que la tâche soit terminée
-            wait_for_task_completion(name)
+    logger.info(f"Sequence ended : {task_names}")
+    return True
 
-        logger.info("Séquence terminée.")
-        return True
-
-    finally:
-        sequence_lock.release()
 
 
 def auto_enable_sync_tasks():
@@ -636,7 +651,7 @@ def auto_enable_plex_jobs_worker():
 # Scheduler cron
 # -------------------------------------------------------------------
 def scheduler_loop():
-    logger.info("Scheduler VODUM démarré…")
+    logger.info("VODUM scheduler started…")
 
     # ✅ RECOVERY AU BOOT : évite les tasks bloquées après crash/restart
     try:
@@ -713,7 +728,7 @@ def scheduler_loop():
                     """
                 )
             except Exception as e:
-                logger.error(f"Erreur scheduler (load tasks): {e}", exc_info=True)
+                logger.error(f"Scheduler error (load tasks): {e}", exc_info=True)
                 time.sleep(30)
                 continue
 
@@ -763,24 +778,24 @@ def scheduler_loop():
                     except Exception as e:
                         if "locked" in str(e).lower():
                             logger.warning(
-                                f"DB locked lors calcul next_run pour '{name}'"
+                                f"DB locked during count next_run for '{name}'"
                             )
                             continue
                         raise
 
                 # 🔑 Première exécution forcée
                 if last_run is None:
-                    logger.info(f"Première exécution forcée : {name}")
+                    logger.info(f"First forced execution: {name}")
                     enqueue_task(task_id)
                     continue
 
                 # 🔑 Exécution planifiée
                 if next_exec <= now:
-                    logger.info(f"Tâche programmée/en retard : {name}")
+                    logger.info(f"Programed task late: {name}")
                     enqueue_task(task_id)
 
         except Exception as e:
-            logger.error(f"Erreur scheduler (global): {e}", exc_info=True)
+            logger.error(f"Error scheduler (global): {e}", exc_info=True)
 
         time.sleep(30)
 
@@ -798,7 +813,7 @@ def start_scheduler():
     - le scheduler principal
     """
 
-    logger.info("Démarrage du scheduler VODUM")
+    logger.info("starting VODUM scheduler")
 
     # -------------------------------------------------
     # 1) Démarrage du WATCHDOG
@@ -810,7 +825,7 @@ def start_scheduler():
     )
     watchdog_thread.start()
 
-    logger.info("Watchdog démarré")
+    logger.info("Watchdog started")
 
     # -------------------------------------------------
     # 2) Auto-enable / disable des tâches de sync au boot
@@ -822,11 +837,11 @@ def start_scheduler():
 
 
 
-        logger.info("Auto-enable des tâches de sync effectué au démarrage")
+        logger.info("Sync task auto-enable run at startup")
 
     except Exception as e:
         logger.error(
-            f"Auto-enable sync tasks au démarrage échoué: {e}",
+            f"sync tasks auto-enable at startup failed: {e}",
             exc_info=True
         )
 
@@ -841,7 +856,7 @@ def start_scheduler():
     )
     scheduler_thread.start()
 
-    logger.info("Scheduler lancé")
+    logger.info("Scheduler started")
 
 
 
