@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""
-update_user_status.py — VODUM CONTRACT STATUS (DBManager)
---------------------------------------------------------
-✓ Statut purement contractuel
-✓ Aucune dépendance Plex / Jellyfin
-✓ DBManager (connexion unique, sérialisée)
-✓ ZÉRO open_db / close / commit / rollback manuel
-✓ finally propre (log uniquement)
-✓ Compatible tasks_engine / scheduler
-"""
-
 from datetime import datetime, date
 
 from tasks_engine import task_logs
@@ -24,7 +13,7 @@ log = get_logger("update_user_status")
 # ----------------------------------------------------
 def compute_status(expiration_date, today, preavis_days, reminder_days):
     """
-    Calcul du statut VODUM (contractuel uniquement).
+    Calcul du statut VODUM 
     """
     log.debug(f"[STATUS DEBUG] expiration_date='{expiration_date}'")
 
@@ -67,7 +56,7 @@ def run(task_id: int, db):
     (active / pre_expired / reminder / expired)
     """
 
-    task_logs(task_id, "info", "Tâche update_user_status démarrée")
+    task_logs(task_id, "info", "Task update_user_status started")
     log.info("=== UPDATE USER STATUS : START ===")
 
     today = date.today()
@@ -81,13 +70,13 @@ def run(task_id: int, db):
         )
 
         if not settings:
-            raise RuntimeError("Settings manquants (id=1)")
+            raise RuntimeError("Missing settings (id=1)")
 
         preavis_days = int(settings["preavis_days"])
         reminder_days = int(settings["reminder_days"])
 
         log.info(
-            f"Paramètres chargés → preavis={preavis_days}j | reminder={reminder_days}j"
+            f"Settings loaded → preavis={preavis_days}j | reminder={reminder_days}j"
         )
 
         # ----------------------------------------------------
@@ -97,9 +86,46 @@ def run(task_id: int, db):
             "SELECT id, status, expiration_date FROM vodum_users"
         )
 
-        log.info(f"{len(users)} utilisateurs chargés")
+        log.info(f"{len(users)} users loaded chargés")
 
         updated = 0
+
+
+        # Utilisateurs orphelins : pas d'expiration + aucun serveur associé => expired
+        orphans = db.query(
+            """
+            SELECT u.id, u.status
+            FROM vodum_users u
+            LEFT JOIN media_users mu ON mu.vodum_user_id = u.id
+            WHERE (u.expiration_date IS NULL OR u.expiration_date = '')
+            GROUP BY u.id
+            HAVING COUNT(mu.id) = 0
+            """
+        )
+
+        updated = 0
+        for o in orphans:
+            uid = o["id"]
+            old_status = o["status"] or "active"
+
+            if old_status == "expired":
+                continue
+
+            db.execute(
+                """
+                UPDATE vodum_users
+                SET status = ?,
+                    last_status = ?,
+                    status_changed_at = datetime('now')
+                WHERE id = ?
+                """,
+                ("expired", old_status, uid),
+            )
+            updated += 1
+
+        if updated:
+            log.info(f"{updated} orphan user(s) marked as expired")
+
 
         # ----------------------------------------------------
         # Boucle principale
@@ -122,7 +148,7 @@ def run(task_id: int, db):
                 continue
 
             if new_status != old_status:
-                log.info(f"[USER {uid}] statut {old_status} → {new_status}")
+                log.info(f"[USER {uid}] status {old_status} → {new_status}")
 
                 db.execute(
                     """
@@ -140,7 +166,7 @@ def run(task_id: int, db):
         # ----------------------------------------------------
         # Fin normale
         # ----------------------------------------------------
-        msg = f"{updated} utilisateur(s) mis à jour"
+        msg = f"{updated} user(s) updated"
         log.info(msg)
 
         if updated > 0:
@@ -149,7 +175,7 @@ def run(task_id: int, db):
             task_logs(task_id, "info", msg)
 
     except Exception as e:
-        log.error("Erreur globale update_user_status", exc_info=True)
+        log.error("Global error in update_user_status", exc_info=True)
         task_logs(task_id, "error", f"Erreur update_user_status: {e}")
         raise
 

@@ -8,10 +8,7 @@
 {% endblock %}
 
 {% block header_actions %}
-<button form="user_main_form"
-        class="px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-sm">
-    {{ t("save") }}
-</button>
+
 {% endblock %}
 
 {% block header_subtitle %}
@@ -27,7 +24,32 @@
 <!-- ====================== INFOS GÉNÉRALES (2/3) ====================== -->
 <form method="post" id="user_main_form" class="xl:col-span-2">
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-    <h2 class="text-sm font-semibold mb-4">{{ t("general_info") }}</h2>
+  
+	<div class="flex items-center justify-between mb-4">
+	  <h2 class="text-sm font-semibold">{{ t("general_info") }}</h2>
+
+	  <div class="flex items-center gap-3">
+		<!-- MERGE -->
+		<button type="button"
+				class="px-3 py-2 rounded-lg border border-amber-700 text-amber-400 hover:bg-amber-900/20 text-sm"
+				onclick="openMergeOverlay()">
+		  {{ t("merge_user") }}
+		</button>
+		
+		<!-- SAVE (submit le form #user_main_form) -->
+		<button type="submit"
+				form="user_main_form"
+				class="px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-sm">
+		  {{ t("save") }}
+		</button>
+	  </div>
+	</div>
+
+
+
+
+
+
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 
@@ -66,38 +88,39 @@
                class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
       </label>
 
-<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+	<div class="md:col-span-2">
+	  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+		<!-- Status -->
+		<div class="flex items-center gap-2">
+		  <span class="text-sm text-slate-400">{{ t("status") }}:</span>
 
-  <!-- Status -->
-  <div class="flex items-center gap-2">
-    <span class="text-sm text-slate-400">{{ t("status") }}:</span>
+		  {% set colors = {
+			'active': 'bg-emerald-900/40 text-emerald-300',
+			'pre_expired': 'bg-amber-900/40 text-amber-300',
+			'reminder': 'bg-blue-900/40 text-blue-300',
+			'expired': 'bg-rose-900/40 text-rose-300',
+			'invited': 'bg-cyan-900/40 text-cyan-300',
+			'unfriended': 'bg-slate-700 text-slate-300',
+			'suspended': 'bg-purple-900/40 text-purple-300',
+			'unknown': 'bg-slate-800 text-slate-400'
+		  } %}
 
-    {% set colors = {
-      'active': 'bg-emerald-900/40 text-emerald-300',
-      'pre_expired': 'bg-amber-900/40 text-amber-300',
-      'reminder': 'bg-blue-900/40 text-blue-300',
-      'expired': 'bg-rose-900/40 text-rose-300',
-      'invited': 'bg-cyan-900/40 text-cyan-300',
-      'unfriended': 'bg-slate-700 text-slate-300',
-      'suspended': 'bg-purple-900/40 text-purple-300',
-      'unknown': 'bg-slate-800 text-slate-400'
-    } %}
+		  <span class="px-3 py-1 text-xs rounded-full {{ colors.get(user.status, 'bg-slate-800 text-slate-400') }}">
+			{{ t(user.status) }}
+		  </span>
+		</div>
 
-    <span class="px-3 py-1 text-xs rounded-full {{ colors.get(user.status, 'bg-slate-800 text-slate-400') }}">
-      {{ t(user.status) }}
-    </span>
-  </div>
+		<!-- Last status -->
+		<div class="flex items-center gap-2">
+		  <span class="text-sm text-slate-400">{{ t("last_status") }}:</span>
 
-  <!-- Last status -->
-  <div class="flex items-center gap-2">
-    <span class="text-sm text-slate-400">{{ t("last_status") }}:</span>
+		  <span class="px-3 py-1 text-xs rounded-full bg-slate-800 text-slate-300">
+			{{ t(user.last_status) if user.last_status else t("not_available") }}
+		  </span>
+		</div>
+	  </div>
+	</div>
 
-    <span class="px-3 py-1 text-xs rounded-full bg-slate-800 text-slate-300">
-      {{ t(user.last_status) if user.last_status else t("not_available") }}
-    </span>
-  </div>
-
-</div>
 
 
 
@@ -275,6 +298,9 @@
       <div class="text-slate-200">{{ user.subscription_plan or t("not_available") }}</div>
     </div>
   </div>
+
+
+
 
 </div>
 {% endif %}
@@ -706,55 +732,670 @@
 {% endfor %}
 
 </div>
+<div id="mergeOverlay" class="fixed inset-0 z-50 hidden bg-black/70 backdrop-blur-sm">
+  <div class="absolute inset-0 flex items-center justify-center p-4 md:p-10">
+	<div class="w-full max-w-4xl lg:max-w-5xl max-h-[85vh] bg-slate-900 rounded-2xl border border-slate-800 shadow-xl flex flex-col overflow-hidden">
+
+
+
+    <!-- Header -->
+    <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800">
+      <div>
+        <h2 class="text-lg font-semibold text-amber-400">{{ t("merge.title") }}</h2>
+        <p class="text-xs text-slate-400">
+          {{ t("merge.warning") }}
+        </p>
+      </div>
+      <button type="button" onclick="closeMergeOverlay()" class="text-slate-400 hover:text-white">✕</button>
+    </div>
+
+    <!-- Body -->
+    <d<div class="flex-1 flex flex-col min-h-0">
+
+  <!-- ====================== ZONE FIXE (MASTER + ACTIONS) ====================== -->
+  <div class="shrink-0 px-6 pt-6 pb-4 space-y-6 border-b border-slate-800 bg-slate-900">
+
+    <!-- Master -->
+    <div>
+      <div class="text-xs uppercase tracking-wide text-slate-400 mb-2">
+        {{ t("merge.master.label") }}
+      </div>
+      <div class="rounded-xl border border-emerald-700/40 bg-emerald-900/10 p-4">
+        <div class="font-medium text-emerald-300">
+          {{ user.firstname }} {{ user.lastname }}
+          <span class="text-slate-400 text-sm">@{{ user.username }}</span>
+        </div>
+        <div class="text-sm text-slate-400">{{ user.email or '—' }}</div>
+        <div class="text-xs text-slate-500 mt-1">
+          {{ t("merge.master.expiration") }} : {{ user.expiration_date or t("merge.common.unknown") }}
+        </div>
+      </div>
+    </div>
+
+    {# --- BARRE D'ACTIONS FIXE (Show all / Merge / Annuler alignés) --- #}
+    <div class="flex items-center justify-between gap-3">
+
+      <!-- Left: Show all / Show top (uniquement si > 5) -->
+      <div class="flex items-center gap-3">
+        {% if merge_suggestions|length > 5 %}
+          <button type="button"
+                  class="px-3 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 text-sm"
+                  onclick="toggleAllMergeCandidates()"
+                  id="mergeMoreBtn">
+            {{ t("merge_show_all") }} ({{ merge_suggestions|length }})
+          </button>
+        {% endif %}
+      </div>
+
+      <!-- Right: Annuler + Merge -->
+      <div class="flex items-center gap-3">
+
+        <button type="button"
+                class="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
+                onclick="closeMergeOverlay()">
+          {{ t("cancel") }}
+        </button>
+
+        <form method="post"
+              id="mergeForm"
+              action="{{ url_for('user_merge', user_id=user.id) }}"
+              class="flex items-center">
+          <input type="hidden" name="other_id" id="mergeOtherId" value="">
+
+          <button type="submit"
+                  id="mergeConfirmBtn"
+                  disabled
+                  class="px-4 py-2 rounded-lg bg-amber-700 text-white text-sm opacity-50 cursor-not-allowed">
+            {{ t("merge_action") }}
+          </button>
+        </form>
+
+      </div>
+    </div>
+
+  </div>
+
+
+  <!-- ====================== ZONE SCROLL (LISTE CANDIDATS UNIQUEMENT) ====================== -->
+  <div class="flex-1 min-h-0 overflow-y-auto px-6 py-6">
+
+    <!-- Candidates -->
+    <div>
+      <div class="text-xs uppercase tracking-wide text-slate-400 mb-2">
+        {{ t("merge_choose_user") }}
+      </div>
+
+      <div class="space-y-3">
+
+        {# --- LISTE TOP 5 --- #}
+        <div id="mergeCandidatesTop" class="space-y-3">
+          {% for cand in merge_suggestions[:5] %}
+            <div
+              class="merge-candidate cursor-pointer flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3 hover:border-amber-700"
+              data-other-id="{{ cand.id }}"
+              tabindex="0"
+              role="button"
+              aria-selected="false"
+            >
+              <div>
+                <div class="font-medium">
+                  {{ cand.firstname or '' }} {{ cand.lastname or '' }}
+                  <span class="text-slate-400 text-sm">@{{ cand.username }}</span>
+                </div>
+                <div class="text-xs text-slate-400">
+                  {{ cand.email or '—' }}
+                  · score {{ cand.merge_score }}
+                </div>
+              </div>
+
+              <!--<div class="text-xs text-slate-500">
+                {{ t("merge_action") }}
+              </div>-->
+            </div>
+          {% endfor %}
+        </div>
+
+        {# --- LISTE COMPLETE (cachée par défaut) --- #}
+        {% if merge_suggestions|length > 5 %}
+          <div id="mergeAllCandidates" class="hidden space-y-3">
+            {% for cand in merge_suggestions[5:] %}
+              <div
+                class="merge-candidate cursor-pointer flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3 hover:border-amber-700"
+                data-other-id="{{ cand.id }}"
+                tabindex="0"
+                role="button"
+                aria-selected="false"
+              >
+                <div>
+                  <div class="font-medium">
+                    {{ cand.firstname or '' }} {{ cand.lastname or '' }}
+                    <span class="text-slate-400 text-sm">@{{ cand.username }}</span>
+                  </div>
+                  <div class="text-xs text-slate-400">
+                    {{ cand.email or '—' }}
+                    · score {{ cand.merge_score }}
+                  </div>
+                </div>
+
+                <div class="text-xs text-slate-500">
+                  {{ t("merge_action") }}
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+      </div>
+    </div>
+
+    <!-- ====================== MERGE CONFIRM MODAL (WIDE + SCROLL) ====================== -->
+    <div id="mergeConfirmModal"
+         class="fixed inset-0 z-[60] hidden bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 md:p-8"
+         role="dialog"
+         aria-modal="true"
+         aria-labelledby="mergeConfirmTitle">
+
+      <!-- Panel -->
+      <div class="w-full max-w-[1100px]">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+
+          <!-- Header (fixed) -->
+          <div class="px-5 py-4 border-b border-slate-800 flex items-start justify-between">
+            <div>
+              <div id="mergeConfirmTitle" class="text-sm font-semibold text-amber-300">
+                ⚠️ {{ t("merge_confirm_title") }}
+              </div>
+              <div class="text-xs text-slate-400 mt-1">
+                {{ t("merge_confirm_subtitle") }}
+              </div>
+            </div>
+
+            <button type="button"
+                    class="text-slate-400 hover:text-white"
+                    onclick="closeMergeConfirmModal()"
+                    aria-label="Close">
+              ✕
+            </button>
+          </div>
+
+          <!-- Body (scrollable) -->
+          <div class="p-5 overflow-y-auto">
+            <div class="text-xs text-slate-400 mb-4">
+              {{ t("merge_confirm_warning") }}
+            </div>
+
+            <!-- Layout: left summary / right preview -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+              <!-- LEFT: Summary + Tip -->
+              <div class="lg:col-span-1 space-y-4">
+
+                <!-- Summary cards -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
+
+                  <!-- Master card -->
+                  <div class="rounded-xl border border-emerald-700/40 bg-emerald-900/10 p-4">
+                    <div class="text-xs uppercase tracking-wide text-emerald-300/90 mb-2">
+                      {{ t("merge_master_user") }}
+                    </div>
+                    <div class="font-medium text-emerald-200">
+                      {{ user.firstname }} {{ user.lastname }}
+                      <span class="text-slate-400 text-sm">@{{ user.username }}</span>
+                    </div>
+                    <div class="text-xs text-slate-400 mt-1">{{ user.email or '—' }}</div>
+                  </div>
+
+                  <!-- Target card -->
+                  <div class="rounded-xl border border-amber-700/40 bg-amber-900/10 p-4">
+                    <div class="text-xs uppercase tracking-wide text-amber-300/90 mb-2">
+                      {{ t("merge_target_user") }}
+                    </div>
+
+                    <!-- Filled by JS -->
+                    <div id="mergeTargetName" class="font-medium text-amber-200">—</div>
+                    <div id="mergeTargetEmail" class="text-xs text-slate-400 mt-1">—</div>
+                    <div id="mergeTargetScore" class="text-[11px] text-slate-500 mt-2">—</div>
+                  </div>
+
+                </div>
+
+                <!-- Tip bubble -->
+                <div class="rounded-xl border border-slate-800 bg-slate-950/40 p-4 text-xs text-slate-400">
+                  <div class="flex items-start gap-2">
+                    <span class="mt-0.5">🧬</span>
+                    <div>
+                      <div class="text-slate-300 font-semibold">{{ t("merge_confirm_tip_title") }}</div>
+                      <div class="mt-1">{{ t("merge_confirm_tip_text") }}</div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              <!-- RIGHT: Preview -->
+              <div class="lg:col-span-2">
+                <div class="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+                  <div class="flex items-center justify-between mb-3">
+                    <div class="text-sm font-semibold text-slate-200">
+                      {{ t("merge_preview_title") if t("merge_preview_title") else "Résultat après fusion" }}
+                    </div>
+                    <div id="mergePreviewLoading" class="text-xs text-slate-500 hidden">Loading…</div>
+                  </div>
+
+                  <div id="mergePreviewError" class="hidden text-xs text-rose-300"></div>
+
+                  <div id="mergePreviewContent" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 text-sm">
+                    <!-- rempli par JS -->
+                  </div>
+
+                  <div id="mergePreviewChanges" class="mt-4 text-xs text-slate-400 hidden"></div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Footer (fixed) -->
+          <div class="px-5 py-4 border-t border-slate-800 flex items-center justify-end gap-3">
+            <button type="button"
+                    class="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
+                    onclick="closeMergeConfirmModal()">
+              {{ t("cancel") }}
+            </button>
+
+            <button type="button"
+                    id="mergeFinalConfirmBtn"
+                    class="px-4 py-2 rounded-lg bg-amber-700 hover:bg-amber-800 text-white text-sm">
+              {{ t("merge_confirm_cta") }}
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+    <!-- ====================== /MERGE CONFIRM MODAL ====================== -->
+
+  </div>
+</div>
+      </div></div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+</div>
+</div>
 
 <script>
-document.querySelector('[form="user_main_form"]')
-  .addEventListener('click', function () {
+(() => {
+  console.log("merge overlay js loaded");
+  // -----------------------
+  // Helpers
+  // -----------------------
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
-    const mainForm = document.getElementById('user_main_form');
 
-    // Nettoie les anciens champs dynamiques (évite doublons)
-    mainForm.querySelectorAll('input[data-dyn="1"]').forEach(el => el.remove());
+  
+  const mergePreviewContent = $('#mergePreviewContent');
+  const mergePreviewLoading = $('#mergePreviewLoading');
+  const mergePreviewError = $('#mergePreviewError');
+  const mergePreviewChanges = $('#mergePreviewChanges');
+const TXT_PREVIEW_MOVED_TITLE = {{ t('merge.preview.title')|tojson }};
+const TXT_PREVIEW_MEDIA_USERS = {{ t('merge.preview.media_users')|tojson }};
+const TXT_PREVIEW_USER_IDENTITIES = {{ t('merge.preview.user_identities')|tojson }};
+const TXT_PREVIEW_SENT_EMAILS = {{ t('merge.preview.sent_emails')|tojson }};
+const TXT_PREVIEW_MEDIA_JOBS = {{ t('merge.preview.media_jobs')|tojson }};
 
-    // 🔹 BIBLIOTHÈQUES (toggles)
-    document.querySelectorAll('form[action*="toggle_library"]').forEach(f => {
-      const libId = f.querySelector('input[name="library_id"]').value;
-      const enabled = f.querySelector('button').classList.contains('bg-emerald-500');
 
-      const input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = 'library_' + libId;
-      input.value = enabled ? '1' : '0';
-      input.setAttribute('data-dyn', '1');
-      mainForm.appendChild(input);
-    });
 
-    // 🔹 OPTIONS SERVEUR (hors form) -> on copie en hidden pour le POST
-    const selectors = [
-      'input[name^="allow_sync_"]',
-      'input[name^="allow_camera_upload_"]',
-      'input[name^="allow_channels_"]',
-      'input[name^="filter_movies_"]',
-      'input[name^="filter_television_"]',
-      'input[name^="filter_music_"]'
-    ];
 
-    document.querySelectorAll(selectors.join(',')).forEach(el => {
-      const input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = el.name;
-      input.setAttribute('data-dyn', '1');
+  function badge(source) {
+    if (source === 'master') return `<span class="px-2 py-0.5 text-[11px] rounded bg-emerald-900/40 text-emerald-300">master</span>`;
+    if (source === 'target') return `<span class="px-2 py-0.5 text-[11px] rounded bg-amber-900/40 text-amber-300">target</span>`;
+    return `<span class="px-2 py-0.5 text-[11px] rounded bg-slate-800 text-slate-300">computed</span>`;
+  }
 
-      if (el.type === 'checkbox') {
-        input.value = el.checked ? '1' : '0';
-      } else {
-        input.value = el.value || '';
+  function row(label, value, source) {
+    const v = (value === null || value === undefined || value === '') ? '—' : String(value);
+    return `
+      <div class="rounded-lg border border-slate-800 bg-slate-950/60 p-3">
+        <div class="flex items-center justify-between gap-2">
+          <div class="text-xs text-slate-400">${label}</div>
+          ${badge(source)}
+        </div>
+        <div class="mt-1 text-slate-200 break-words">${v}</div>
+      </div>
+    `;
+  }
+
+  async function loadMergePreview(otherId) {
+    if (!mergePreviewContent) return;
+
+    mergePreviewError?.classList.add('hidden');
+    mergePreviewChanges?.classList.add('hidden');
+    mergePreviewContent.innerHTML = '';
+    mergePreviewLoading?.classList.remove('hidden');
+
+    try {
+      const url = `/users/{{ user.id }}/merge/preview?other_id=${encodeURIComponent(otherId)}`;
+      const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'preview_failed');
+
+      const u = data.result || {};
+      const s = data.sources || {};
+
+      // Champs que tu veux “comme user details”
+      mergePreviewContent.innerHTML = [
+        row('{{ t("firstname") }}', u.firstname, s.firstname),
+        row('{{ t("lastname") }}', u.lastname, s.lastname),
+        row('{{ t("email") }}', u.email, s.email),
+        row('{{ t("second_email") }}', u.second_email, s.second_email),
+        row('{{ t("expiration") }}', u.expiration_date, s.expiration_date),
+        row('{{ t("renewal_date") }}', u.renewal_date, s.renewal_date),
+        row('{{ t("renewal_method") }}', u.renewal_method, s.renewal_method),
+        row('{{ t("notes") }}', u.notes, s.notes),
+      ].join('');
+
+		// Bonus “ce qui bouge”
+		if (mergePreviewChanges && data.changes) {
+		  const c = data.changes;
+
+		  mergePreviewChanges.innerHTML = `
+			<div class="mt-2">
+			  <div class="text-slate-300 font-semibold mb-1">
+				${TXT_PREVIEW_MOVED_TITLE} :
+			  </div>
+			  <ul class="list-disc pl-5 space-y-1">
+				<li>${TXT_PREVIEW_MEDIA_USERS}: ${c.media_users_to_move}</li>
+				<li>${TXT_PREVIEW_USER_IDENTITIES}: ${c.identities_to_move}</li>
+				<li>${TXT_PREVIEW_SENT_EMAILS}: ${c.sent_emails_to_move}</li>
+				<li>${TXT_PREVIEW_MEDIA_JOBS}: ${c.media_jobs_to_move}</li>
+			  </ul>
+			</div>
+		  `;
+
+		  mergePreviewChanges.classList.remove('hidden');
+		}
+
+
+
+    } catch (e) {
+      if (mergePreviewError) {
+        mergePreviewError.textContent = `Preview error: ${e.message || e}`;
+        mergePreviewError.classList.remove('hidden');
       }
+    } finally {
+      mergePreviewLoading?.classList.add('hidden');
+    }
+  }
 
-      mainForm.appendChild(input);
+
+
+  // -----------------------
+  // Elements
+  // -----------------------
+  const overlay = $('#mergeOverlay');
+  const mainForm = $('#user_main_form');
+
+  const mergeAllBox = $('#mergeAllCandidates');
+  const mergeMoreBtn = $('#mergeMoreBtn');
+
+  const mergeForm = $('#mergeForm');
+  const mergeOtherIdInput = $('#mergeOtherId');
+  const mergeConfirmBtn = $('#mergeConfirmBtn');
+
+  // Confirm modal elements
+  const mergeConfirmModal = $('#mergeConfirmModal');
+  const mergeFinalConfirmBtn = $('#mergeFinalConfirmBtn');
+  const mergeTargetName = $('#mergeTargetName');
+  const mergeTargetEmail = $('#mergeTargetEmail');
+  const mergeTargetScore = $('#mergeTargetScore');
+
+  let selectedCandidateEl = null;
+
+  // Texts (Jinja inside JS = OK)
+  const TXT_SHOW_TOP = {{ t('merge_show_top')|tojson }};
+  const TXT_SHOW_ALL = {{ (t('merge_show_all') ~ " (" ~ (merge_suggestions|length) ~ ")")|tojson }};
+
+  // -----------------------
+  // Overlay open/close
+  // -----------------------
+  function openMergeOverlay() {
+    if (!overlay) return;
+    overlay.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+    clearMergeSelection();
+  }
+
+  function closeMergeOverlay() {
+    if (!overlay) return;
+    overlay.classList.add('hidden');
+    document.body.classList.remove('overflow-hidden');
+    closeMergeConfirmModal(); // sécurité
+  }
+
+  window.openMergeOverlay = openMergeOverlay;
+  window.closeMergeOverlay = closeMergeOverlay;
+
+  // Close overlay when clicking backdrop
+  if (overlay) {
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeMergeOverlay();
+    });
+  }
+
+  // -----------------------
+  // Confirm modal open/close
+  // -----------------------
+  
+
+  
+  function openMergeConfirmModal() {
+    if (!mergeConfirmModal) return;
+    mergeConfirmModal.classList.remove('hidden');
+    // on laisse overflow-hidden actif (overlay déjà ouvert)
+  }
+
+  function closeMergeConfirmModal() {
+    if (!mergeConfirmModal) return;
+    mergeConfirmModal.classList.add('hidden');
+  }
+
+  window.closeMergeConfirmModal = closeMergeConfirmModal;
+
+  if (mergeConfirmModal) {
+    mergeConfirmModal.addEventListener('click', (e) => {
+      if (e.target === mergeConfirmModal) closeMergeConfirmModal();
+    });
+  }
+
+  // -----------------------
+  // Prevent Enter submit in main form inputs (except textarea)
+  // -----------------------
+  if (mainForm) {
+    mainForm.addEventListener('keydown', (e) => {
+      const tag = (e.target && e.target.tagName) ? e.target.tagName.toUpperCase() : '';
+      if (e.key === 'Enter' && tag === 'INPUT') e.preventDefault();
+    });
+  }
+
+  // -----------------------
+  // Inject dynamic fields on submit (libraries + options)
+  // -----------------------
+  if (mainForm) {
+    mainForm.addEventListener('submit', () => {
+      $$('input[data-dyn="1"]', mainForm).forEach(el => el.remove());
+
+      // Libraries toggles
+      $$('form[action*="toggle_library"]').forEach(f => {
+        const libInput = $('input[name="library_id"]', f);
+        if (!libInput) return;
+
+        const libId = libInput.value;
+        const btn = $('button', f);
+        const enabled = !!(btn && btn.classList.contains('bg-emerald-500'));
+
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'library_' + libId;
+        input.value = enabled ? '1' : '0';
+        input.setAttribute('data-dyn', '1');
+        mainForm.appendChild(input);
+      });
+
+      // Server options
+      const selectors = [
+        'input[name^="allow_sync_"]',
+        'input[name^="allow_camera_upload_"]',
+        'input[name^="allow_channels_"]',
+        'input[name^="filter_movies_"]',
+        'input[name^="filter_television_"]',
+        'input[name^="filter_music_"]'
+      ];
+
+      $$(selectors.join(',')).forEach(el => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = el.name;
+        input.value = (el.type === 'checkbox') ? (el.checked ? '1' : '0') : (el.value || '');
+        input.setAttribute('data-dyn', '1');
+        mainForm.appendChild(input);
+      });
+    });
+  }
+
+  // -----------------------
+  // Merge selection
+  // -----------------------
+  function clearMergeSelection() {
+    $$('.merge-candidate').forEach(x => {
+      x.classList.remove('border-amber-700', 'bg-amber-900/10');
+      x.classList.add('border-slate-800');
+      x.setAttribute('aria-selected', 'false');
     });
 
+    selectedCandidateEl = null;
+
+    if (mergeOtherIdInput) mergeOtherIdInput.value = '';
+
+    if (mergeConfirmBtn) {
+      mergeConfirmBtn.disabled = true;
+      mergeConfirmBtn.classList.add('opacity-50', 'cursor-not-allowed');
+      mergeConfirmBtn.classList.remove('hover:bg-amber-800');
+    }
+  }
+
+  function fillConfirmModalFromCandidate(el) {
+    if (!el) return;
+
+    // name line (contains firstname lastname + @username)
+    if (mergeTargetName) {
+      const nameLine = (el.querySelector('.font-medium')?.innerText || '—').trim();
+      mergeTargetName.textContent = nameLine;
+    }
+
+    // email + score line
+    const info = (el.querySelector('.text-xs.text-slate-400')?.innerText || '').trim();
+    const parts = info.split('·').map(x => x.trim());
+
+    if (mergeTargetEmail) mergeTargetEmail.textContent = parts[0] || '—';
+    if (mergeTargetScore) mergeTargetScore.textContent = parts[1] ? `(${parts[1]})` : '—';
+  }
+
+  function selectMergeCandidate(el) {
+    if (!el) return;
+
+    clearMergeSelection();
+    selectedCandidateEl = el;
+
+    el.classList.remove('border-slate-800');
+    el.classList.add('border-amber-700', 'bg-amber-900/10');
+    el.setAttribute('aria-selected', 'true');
+
+    const otherId = el.getAttribute('data-other-id') || '';
+    if (mergeOtherIdInput) mergeOtherIdInput.value = otherId;
+
+    if (mergeConfirmBtn && otherId) {
+      mergeConfirmBtn.disabled = false;
+      mergeConfirmBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+      mergeConfirmBtn.classList.add('hover:bg-amber-800');
+    }
+
+    fillConfirmModalFromCandidate(el);
+  }
+
+  // Single click handler (NO DOUBLE)
+  document.addEventListener('click', (e) => {
+    const item = e.target.closest && e.target.closest('.merge-candidate');
+    if (!item) return;
+    selectMergeCandidate(item);
   });
+
+  // Keyboard accessibility: Enter/Space
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const active = document.activeElement;
+    if (!active) return;
+    if (active.classList && active.classList.contains('merge-candidate')) {
+      e.preventDefault();
+      selectMergeCandidate(active);
+    }
+  });
+
+  // -----------------------
+  // Toggle show all / show top
+  // -----------------------
+  function toggleAllMergeCandidates() {
+    if (!mergeAllBox || !mergeMoreBtn) return;
+    const willShow = mergeAllBox.classList.contains('hidden');
+    mergeAllBox.classList.toggle('hidden');
+    mergeMoreBtn.textContent = willShow ? TXT_SHOW_TOP : TXT_SHOW_ALL;
+  }
+
+  window.toggleAllMergeCandidates = toggleAllMergeCandidates;
+
+  // -----------------------
+  // Merge submit -> open confirm modal (no browser confirm)
+  // -----------------------
+  if (mergeForm) {
+    mergeForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+
+      // No selection? do nothing
+      if (!mergeOtherIdInput || !mergeOtherIdInput.value) return;
+
+      // Make sure modal displays latest selected candidate
+      fillConfirmModalFromCandidate(selectedCandidateEl);
+
+	  loadMergePreview(mergeOtherIdInput.value);
+      openMergeConfirmModal();
+    });
+  }
+
+  // Final confirm button actually submits
+  if (mergeFinalConfirmBtn && mergeForm) {
+    mergeFinalConfirmBtn.addEventListener('click', () => {
+      if (!mergeOtherIdInput || !mergeOtherIdInput.value) return;
+      closeMergeConfirmModal();
+      mergeForm.submit();
+    });
+  }
+
+})();
 </script>
 
 {% endblock %}

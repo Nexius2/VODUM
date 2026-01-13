@@ -345,7 +345,7 @@
   "task.cleanup_backups": "Automatic cleanup of backups",
   "task.cleanup_logs": "Automatic cleanup of logs older than 7 days",
   "task.check_mailing_status": "Check mailing activation",
-  "task.check_servers": "Checks server availability and updates their real name",
+  "task.check_servers": "Check servers",
   "task.cleanup_unfriended": "Cleanup users without libraries",
   "task_done": "done",
   "task_description.check_mailing_status": "Checks whether emailing is enabled and automatically activates or deactivates related tasks",
@@ -479,8 +479,8 @@
   "all_libraries": "All libraries",
   "id": "ID",
     "total": "total",
-  "active_tasks": "Active tasks",
-  "in_error": "In error",
+  "active_tasks": "active tasks",
+  "in_error": "in error",
   
   
   "send_test_email": "Send test email",
@@ -616,10 +616,45 @@
 "task.apply_jellyfin_access_updates": "Apply Jellyfin access updates",
 "task_description.apply_jellyfin_access_updates": "Applies pending Jellyfin access updates (media_jobs).",
 
-"task_description.send_mail_campaigns": "Automatically sends pre-expiration, reminder and expired-account emails.",
+"task_description.send_mail_campaigns": "Automatically sends campaign emails.",
 "task_description.sync_jellyfin": "Synchronizes Jellyfin users, servers and libraries.",
 
-"documentation": "Help & Documentation"
+"documentation": "Help & Documentation",
+
+"merge_user": "Merge user",
+  "merge_action": "Merge",
+  "merge_show_all": "Show all",
+  "merge_show_top": "Show only top 5",
+  "merge_confirm": "Do you confirm merging this user?",
+  "merge_user": "Merge user",
+  "merge_choose_user": "Choose user to merge",
+  "merge_action": "Merge",
+  "merge_show_all": "Show all",
+  "merge_show_top": "Show only top 5",
+
+  "merge_confirm_title": "Confirm merge",
+  "merge_confirm_subtitle": "Review the result before confirming.",
+  "merge_confirm_warning": "Warning: this action is irreversible. The target account will be merged into the master account.",
+  "merge_master_user": "Master user",
+  "merge_target_user": "Target user",
+  "merge_preview_title": "Post-merge preview",
+  "merge_confirm_tip_title": "Tip",
+  "merge_confirm_tip_text": "Select the user to merge, then click “Merge” to load the preview. Then confirm the final step.",
+  "merge_confirm_cta": "Confirm merge",
+    
+  "merge.title": "User merge mode",
+  "merge.warning": "This action is irreversible. The displayed user will be kept.",
+  "merge.master.label": "Master user (kept)",
+  "merge.master.expiration": "Expiration",
+  
+  "merge.preview.title": "What will be moved",
+  "merge.preview.media_users": "Media users",
+  "merge.preview.user_identities": "User identities",
+  "merge.preview.sent_emails": "Sent emails",
+  "merge.preview.media_jobs": "Media tasks",
+  "merge_failed": "Merge failed",
+  "user_merged": "User merged"
+  
 
 
 

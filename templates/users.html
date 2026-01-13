@@ -402,9 +402,12 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
             // Search
-            if (searchInput && typeof saved.q === "string") {
-                searchInput.value = saved.q;
-            }
+            //if (searchInput && typeof saved.q === "string") {
+            //    searchInput.value = saved.q;
+            //}
+			if (searchInput) {
+			  searchInput.value = "";
+			}
 
             // Applique seulement si on a qqch à restaurer
             const hasSomething =
@@ -421,7 +424,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (searchInput) {
         searchInput.addEventListener("input", () => {
             clearTimeout(timer);
-            timer = setTimeout(submitForm, 350);
+            timer = setTimeout(submitForm, 800);
         });
 
         searchInput.addEventListener("keydown", (e) => {

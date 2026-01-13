@@ -345,7 +345,7 @@
   "task.cleanup_backups": "Nettoyage automatique des sauvegardes",
   "task.cleanup_logs": "Nettoyage automatique des journaux de plus de 7 jours",
   "task.check_mailing_status": "Vérification de l’état du mailing",
-  "task.check_servers": "Vérification des serveurs et mise à jour du nom réel",
+  "task.check_servers": "Vérification des serveurs",
   "task.cleanup_unfriended": "Nettoyage des utilisateurs sans bibliothèques",
   "task_done": "terminé",
 
@@ -500,8 +500,8 @@
   "all_libraries": "Toutes les bibliothèques",
   "id": "ID",
 
-  "active_tasks": "Tâches actives",
-  "in_error": "En erreur",
+  "active_tasks": "tâches actives",
+  "in_error": "en erreur",
 
   "send_test_email": "Envoyer un email de test",
 
@@ -619,11 +619,46 @@
   "task.apply_jellyfin_access_updates": "Application des accès Jellyfin",
 "task_description.apply_jellyfin_access_updates": "Applique les mises à jour d’accès Jellyfin en attente (media_jobs).",
 
-"task_description.send_mail_campaigns": "Envoie automatiquement les e-mails de pré-expiration, de rappel et de compte expiré.",
+"task_description.send_mail_campaigns": "Envoie automatiquement les campagnes d'e-mails.",
 "task_description.sync_jellyfin": "Synchronise les utilisateurs, serveurs et bibliothèques Jellyfin.",
 
-"documentation": "Documentation"
+"documentation": "Documentation",
 
+"merge_user": "Fusionner l'utilisateur",
+  "merge_action": "Fusionner",
+  "merge_show_all": "Tout afficher",
+  "merge_show_top": "Afficher seulement le top 5",
+  "merge_confirm": "Confirmez-vous la fusion de cet utilisateur ?",
+
+  
+    "merge_user": "Fusionner l’utilisateur",
+  "merge_choose_user": "Choisir l’utilisateur à fusionner",
+  "merge_action": "Fusionner",
+  "merge_show_all": "Afficher tous",
+  "merge_show_top": "Afficher seulement le top 5",
+
+  "merge_confirm_title": "Confirmer la fusion",
+  "merge_confirm_subtitle": "Vérifie le résultat avant de valider.",
+  "merge_confirm_warning": "Attention : cette action est irréversible. Le compte cible sera fusionné dans le compte maître.",
+  "merge_master_user": "Utilisateur maître",
+  "merge_target_user": "Utilisateur cible",
+  "merge_preview_title": "Aperçu après fusion",
+  "merge_confirm_tip_title": "Astuce",
+  "merge_confirm_tip_text": "Sélectionne l’utilisateur à fusionner, puis clique sur “Fusionner” pour afficher l’aperçu. Valide ensuite la confirmation finale.",
+  "merge_confirm_cta": "Confirmer la fusion",
+  
+    "merge.title": "Mode fusion utilisateur",
+  "merge.warning": "Cette action est irréversible. L’utilisateur affiché sera conservé. ",
+  "merge.master.label": "Utilisateur maître (conservé) ",
+  "merge.master.expiration": "Expiration",
+  "merge.preview.title": "Ce qui sera déplacé",
+  "merge.preview.media_users": "Utilisateurs média",
+  "merge.preview.user_identities": "Identités utilisateur",
+  "merge.preview.sent_emails": "Emails envoyés",
+  "merge.preview.media_jobs": "Tâches média",
+  
+  "merge_failed": "Échec de la fusion",
+  "user_merged": "Utilisateur fusionné"
 
 
 
