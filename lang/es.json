@@ -478,8 +478,8 @@
   "all_libraries": "Todas las bibliotecas",
   "id": "ID",
 
-  "active_tasks": "Tareas activas",
-  "in_error": "Con error",
+  "active_tasks": "tareas activas",
+  "in_error": "con error",
 
   "send_test_email": "Enviar correo de prueba",
 
@@ -619,10 +619,46 @@
 
   "task.apply_jellyfin_access_updates": "Aplicar accesos Jellyfin",
   
-    "task_description.send_mail_campaigns": "Envía automáticamente correos electrónicos de preexpiración, recordatorio y cuenta expirada.",
+    "task_description.send_mail_campaigns": "Envía automáticamente las campañas de correos electrónicos.",
 "task_description.sync_jellyfin": "Sincroniza los usuarios, servidores y bibliotecas de Jellyfin.",
 
-"documentation": "Documentación"
+"documentation": "Documentación",
+
+"merge_user": "Fusionar usuarios",
+"merge_action": "Fusionar",
+"merge_show_all": "Mostrar todos",
+"merge_show_top": "Mostrar solo los 5 mejores",
+"merge_confirm": "¿Confirmas fusionar este usuario?",
+
+  "merge_user": "Fusionar usuario",
+  "merge_choose_user": "Elegir usuario para fusionar",
+  "merge_action": "Fusionar",
+  "merge_show_all": "Mostrar todos",
+  "merge_show_top": "Mostrar solo el top 5",
+
+  "merge_confirm_title": "Confirmar fusión",
+  "merge_confirm_subtitle": "Revisa el resultado antes de confirmar.",
+  "merge_confirm_warning": "Atención: esta acción es irreversible. La cuenta objetivo se fusionará en la cuenta maestra.",
+  "merge_master_user": "Usuario maestro",
+  "merge_target_user": "Usuario objetivo",
+  "merge_preview_title": "Vista previa tras la fusión",
+  "merge_confirm_tip_title": "Consejo",
+  "merge_confirm_tip_text": "Selecciona el usuario a fusionar y luego pulsa “Fusionar” para cargar la vista previa. Después confirma el paso final.",
+  "merge_confirm_cta": "Confirmar fusión",
+  
+    "merge.title": "Modo de fusión de usuarios",
+  "merge.warning": "Esta acción es irreversible. El usuario mostrado se conservará.",
+  "merge.master.label": "Usuario maestro (conservavo)",
+  "merge.master.expiration": "Expiración",
+  
+    "merge.preview.title": "Qué se moverá",
+  "merge.preview.media_users": "Usuarios de medios",
+  "merge.preview.user_identities": "Identidades de usuario",
+  "merge.preview.sent_emails": "Correos enviados",
+  "merge.preview.media_jobs": "Tareas de medios",
+  
+    "merge_failed": "Error al fusionar",
+  "user_merged": "Usuario fusionado"
 
 
 

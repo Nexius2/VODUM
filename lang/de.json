@@ -478,8 +478,8 @@
   "all_libraries": "Alle Bibliotheken",
   "id": "ID",
 
-  "active_tasks": "Aktive Aufgaben",
-  "in_error": "Fehlerhaft",
+  "active_tasks": "aktive Aufgaben",
+  "in_error": "fehlerhaft",
 
   "send_test_email": "Test-E-Mail senden",
 
@@ -618,14 +618,46 @@
 
   "task.apply_jellyfin_access_updates": "Jellyfin-Zugriff aktualisieren",
   
-  "task_description.send_mail_campaigns": "Versendet automatisch E-Mails zur Vorabablaufbenachrichtigung, Erinnerung und Kontenablauf.",
+  "task_description.send_mail_campaigns": "Versendet automatisch Kampagnen-E-Mails.",
 "task_description.sync_jellyfin": "Synchronisiert Jellyfin-Benutzer, Server und Bibliotheken.",
 
-"documentation": "Dokumentation"
+"documentation": "Dokumentation",
 
+"merge_user": "Benutzer zusammenführen",
+"merge_action": "Zusammenführen",
+"merge_show_all": "Alle anzeigen",
+"merge_show_top": "Nur Top 5 anzeigen",
+"merge_confirm": "Möchtest du diesen Benutzer wirklich zusammenführen?",
 
+  "merge_user": "Benutzer zusammenführen",
+  "merge_choose_user": "Benutzer zum Zusammenführen auswählen",
+  "merge_action": "Zusammenführen",
+  "merge_show_all": "Alle anzeigen",
+  "merge_show_top": "Nur Top 5 anzeigen",
 
-
+  "merge_confirm_title": "Zusammenführung bestätigen",
+  "merge_confirm_subtitle": "Prüfe das Ergebnis, bevor du bestätigst.",
+  "merge_confirm_warning": "Achtung: Diese Aktion ist irreversibel. Das Zielkonto wird in das Masterkonto zusammengeführt.",
+  "merge_master_user": "Master-Benutzer",
+  "merge_target_user": "Zielbenutzer",
+  "merge_preview_title": "Vorschau nach der Zusammenführung",
+  "merge_confirm_tip_title": "Tipp",
+  "merge_confirm_tip_text": "Wähle den Benutzer aus und klicke auf „Zusammenführen“, um die Vorschau zu laden. Bestätige anschließend den letzten Schritt.",
+  "merge_confirm_cta": "Zusammenführung bestätigen",
+  
+    "merge.title": "Benutzerzusammenführung",
+  "merge.warning": "Diese Aktion ist nicht rückgängig zu machen. Der angezeigte Benutzer bleibt erhalten.",
+  "merge.master.label": "Hauptbenutzer (behalten)",
+  "merge.master.expiration": "Ablaufdatum",
+  
+    "merge.preview.title": "Was verschoben wird",
+  "merge.preview.media_users": "Medienbenutzer",
+  "merge.preview.user_identities": "Benutzeridentitäten",
+  "merge.preview.sent_emails": "Gesendete E-Mails",
+  "merge.preview.media_jobs": "Medienaufgaben",
+  
+    "merge_failed": "Zusammenführen fehlgeschlagen",
+  "user_merged": "Benutzer zusammengeführt"
 
 
 

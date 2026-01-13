@@ -345,7 +345,7 @@
   "task.cleanup_backups": "Pulizia automatica backup",
   "task.cleanup_logs": "Pulizia automatica log più vecchi di 7 giorni",
   "task.check_mailing_status": "Controllo stato mailing",
-  "task.check_servers": "Controllo server e aggiornamento nome reale",
+  "task.check_servers": "Controllo server",
   "task.cleanup_unfriended": "Pulizia utenti senza librerie",
   "task_done": "fatto",
 
@@ -478,8 +478,8 @@
   "all_libraries": "Tutte le librerie",
   "id": "ID",
 
-  "active_tasks": "Attività attive",
-  "in_error": "In errore",
+  "active_tasks": "attività attive",
+  "in_error": "in errore",
 
   "send_test_email": "Invia email di test",
 
@@ -618,11 +618,47 @@
 
   "task.apply_jellyfin_access_updates": "Applica accessi Jellyfin",
   
-    "task_description.send_mail_campaigns": "Invia automaticamente email di pre-scadenza, promemoria e account scaduto.",
+    "task_description.send_mail_campaigns": "Invia automaticamente le campagne email.",
 "task_description.sync_jellyfin": "Sincronizza utenti, server e librerie Jellyfin.",
 
-"documentation": "Documentazione"
+"documentation": "Documentazione",
 
+"merge_user": "Unisci utenti",
+"merge_action": "Unisci",
+"merge_show_all": "Mostra tutti",
+"merge_show_top": "Mostra solo i migliori 5",
+"merge_confirm": "Confermi l’unione di questo utente?",
+
+  "merge_user": "Unisci utente",
+  "merge_choose_user": "Scegli l’utente da unire",
+  "merge_action": "Unisci",
+  "merge_show_all": "Mostra tutti",
+  "merge_show_top": "Mostra solo i primi 5",
+
+  "merge_confirm_title": "Conferma unione",
+  "merge_confirm_subtitle": "Controlla il risultato prima di confermare.",
+  "merge_confirm_warning": "Attenzione: questa azione è irreversibile. L’account di destinazione verrà unito all’account principale.",
+  "merge_master_user": "Utente principale",
+  "merge_target_user": "Utente di destinazione",
+  "merge_preview_title": "Anteprima dopo l’unione",
+  "merge_confirm_tip_title": "Suggerimento",
+  "merge_confirm_tip_text": "Seleziona l’utente da unire, poi clicca su “Unisci” per caricare l’anteprima. Infine conferma l’ultimo passaggio.",
+  "merge_confirm_cta": "Conferma unione",
+  
+    "merge.title": "Modalità fusione utente",
+  "merge.warning": "Questa azione è irreversibile. L’utente visualizzato verrà mantenuto.",
+  "merge.master.label": "Utente principale (mantenuto)",
+  "merge.master.expiration": "Scadenza",
+  
+  
+  "merge.preview.title": "Cosa verrà spostato",
+  "merge.preview.media_users": "Utenti multimediali",
+  "merge.preview.user_identities": "Identità utente",
+  "merge.preview.sent_emails": "Email inviate",
+  "merge.preview.media_jobs": "Attività multimediali",
+  
+    "merge_failed": "Unione non riuscita",
+  "user_merged": "Utente unito"
 
 
 

@@ -162,12 +162,61 @@ def _get_jellyfin_servers(db):
     )
 
 
-def _ensure_vodum_user_for_username(db, username: str) -> int:
+def _ensure_vodum_user_for_username(
+    db,
+    username: str,
+    *,
+    provider_type: Optional[str] = None,
+    server_id: Optional[int] = None,
+    external_user_id: Optional[str] = None,
+) -> int:
     """
-    Sur Jellyfin, on n'a pas forcément d'email.
-    On crée donc (si besoin) un vodum_user "placeholder" basé sur le username.
-    (Comportement historique: l'ancien script créait l'user en 'active')
+    Assure l'existence d'un vodum_user.
+
+    - Pour Jellyfin (et tout provider server-scoped) :
+      on DOIT utiliser une identité (type, server_id, external_user_id) via user_identities,
+      car un même username peut exister sur plusieurs serveurs.
+
+    - Fallback legacy :
+      si provider_type/server_id/external_user_id ne sont pas fournis,
+      on garde le comportement historique basé sur username.
     """
+
+    # --- Mode identity-first (recommandé pour Jellyfin) ---
+    if provider_type and server_id is not None and external_user_id:
+        row = db.query_one(
+            """
+            SELECT vodum_user_id
+            FROM user_identities
+            WHERE type = ?
+              AND server_id = ?
+              AND external_user_id = ?
+            LIMIT 1
+            """,
+            (provider_type, int(server_id), str(external_user_id)),
+        )
+        if row and row.get("vodum_user_id"):
+            return int(row["vodum_user_id"])
+
+        # Crée un vodum_user placeholder
+        cur = db.execute(
+            "INSERT INTO vodum_users (username, status) VALUES (?, 'active')",
+            (username,),
+        )
+        vodum_user_id = int(cur.lastrowid)
+
+        # Crée l'identité liée (clé unique)
+        db.execute(
+            """
+            INSERT INTO user_identities (vodum_user_id, type, server_id, external_user_id)
+            VALUES (?, ?, ?, ?)
+            """,
+            (vodum_user_id, provider_type, int(server_id), str(external_user_id)),
+        )
+
+        return vodum_user_id
+
+    # --- Fallback legacy (username only) ---
     row = db.query_one(
         "SELECT id FROM vodum_users WHERE username = ? LIMIT 1",
         (username,),
@@ -210,7 +259,21 @@ def _upsert_media_user_by_jellyfin_id(
     if row and row["vodum_user_id"]:
         vodum_user_id = int(row["vodum_user_id"])
     else:
-        vodum_user_id = _ensure_vodum_user_for_username(db, username)
+        vodum_user_id = _ensure_vodum_user_for_username(
+            db,
+            username,
+            provider_type="jellyfin",
+            server_id=server_id,
+            external_user_id=jellyfin_id,
+        )
+        db.execute(
+            """
+            INSERT OR IGNORE INTO user_identities (vodum_user_id, type, server_id, external_user_id)
+            VALUES (?, 'jellyfin', ?, ?)
+            """,
+            (vodum_user_id, server_id, jellyfin_id),
+        )
+
 
     if row:
         media_user_id = int(row["id"])
