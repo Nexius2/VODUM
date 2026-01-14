@@ -1,75 +1,34 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Container>
+<?xml version="1.0"?>
+<Container version="2">
   <Name>VODUM</Name>
   <Repository>nexius2/vodum:latest</Repository>
-  <Registry>https://hub.docker.com/r/nexius2/vodum</Registry>
+  <Registry/>
   <Network>bridge</Network>
-
-  <Shell>bash</Shell>
+  <MyIP/>
+  <Shell>sh</Shell>
   <Privileged>false</Privileged>
-
-  <Support>https://github.com/Nexius2/VODUM/issues</Support>
-  <Project>https://github.com/Nexius2/VODUM</Project>
-
-<Overview>
-VODUM is a self-hosted subscription management tool for Plex and Jellyfin, designed to centrally manage users, subscriptions, and media library access.
-</Overview>
-
-
-  <!-- Web UI -->
-  <WebUI>http://[IP]:[PORT:5000]</WebUI>
-
-  <!-- Port -->
-  <Config>
-    <Type>Port</Type>
-    <Target>5000</Target>
-    <Published>5000</Published>
-    <Protocol>tcp</Protocol>
-    <Mode>host</Mode>
-    <Description>VODUM Web UI</Description>
-  </Config>
-
-  <!-- Paths -->
-  <Config>
-    <Type>Path</Type>
-    <Target>/appdata</Target>
-    <Default>/mnt/user/appdata/vodum</Default>
-    <Mode>rw</Mode>
-    <Description>Application Data (SQLite, cache)</Description>
-  </Config>
-
-  <Config>
-    <Type>Path</Type>
-    <Target>/logs</Target>
-    <Default>/mnt/user/appdata/vodum/logs</Default>
-    <Mode>rw</Mode>
-    <Description>Application Logs</Description>
-  </Config>
-
-  <Config>
-    <Type>Path</Type>
-    <Target>/backups</Target>
-    <Default>/mnt/user/appdata/vodum/backups</Default>
-    <Mode>rw</Mode>
-    <Description>Database Backups</Description>
-  </Config>
-
-  <!-- Environment -->
-  <Config>
-    <Type>Variable</Type>
-    <Target>DATABASE_PATH</Target>
-    <Default>/appdata/database.db</Default>
-    <Description>Database Path</Description>
-  </Config>
-
-  <Config>
-    <Type>Variable</Type>
-    <Target>TZ</Target>
-    <Default>Europe/Paris</Default>
-    <Description>Timezone</Description>
-  </Config>
-
-  <WebUI>http://[iP]:[PORT:5000]/</WebUI>
-  <!-- Icon -->
+  <ReadMe/>
+  <Category>MediaApp: Tools</Category>
+  <WebUI>http://[IP]:[PORT:8097]/</WebUI>
+  <TemplateURL/>
   <Icon>https://raw.githubusercontent.com/Nexius2/VODUM/main/static/icon.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled>1768377799</DateInstalled>
+  <DonateText/>
+  <DonateLink/>
+  <Support>https://forums.unraid.net/topic/196501-support-nexius2-vodum/</Support>
+  <Project>https://github.com/Nexius2/VODUM</Project>
+  <Overview>VODUM is a self-hosted subscription management tool for Plex and Jellyfin, designed to centrally manage users, subscriptions, and media library access.</Overview>
+  <Requires/>
+  <Config Name="Appdata" Target="/appdata" Default="/mnt/user/appdata/vodum" Mode="rw" Description="" Type="Path" Display="always" Required="false" Mask="false">/mnt/user/appdata/vodum</Config>
+  <Config Name="TZ" Target="TZ" Default="" Mode="" Description="" Type="Variable" Display="always" Required="false" Mask="false">Europe/Paris</Config>
+  <Config Name="Host Key 2" Target="UID" Default="99" Mode="" Description="" Type="Variable" Display="always" Required="false" Mask="false">99</Config>
+  <Config Name="Host Key 3" Target="GID" Default="100" Mode="" Description="" Type="Variable" Display="always" Required="false" Mask="false">100</Config>
+  <Config Name="WebUI Port" Target="5000" Default="8097" Mode="tcp" Description="" Type="Port" Display="always" Required="false" Mask="false">8097</Config>
+  <Config Name="Logs" Target="/logs" Default="/mnt/user/appdata/vodum/logs" Mode="rw" Description="" Type="Path" Display="always" Required="false" Mask="false">/mnt/user/appdata/vodum/logs</Config>
+  <Config Name="Backups" Target="/backups" Default="/mnt/user/appdata/vodum/backups" Mode="rw" Description="" Type="Path" Display="always" Required="false" Mask="false">/mnt/user/appdata/vodum/backups</Config>
+  <Config Name="SQLite Database Path" Target="DATABASE_PATH" Default="/appdata/database.db" Mode="" Description="" Type="Variable" Display="always" Required="false" Mask="false">/appdata/database.db</Config>
+  <TailscaleStateDir/>
 </Container>
