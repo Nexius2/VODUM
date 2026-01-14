@@ -1,5 +1,5 @@
-<?xml version="1.0"?>
-<Container version="2">
+<?xml version="1.0" encoding="utf-8"?>
+<Container>
   <Name>VODUM</Name>
   <Repository>nexius2/vodum:latest</Repository>
   <Registry>https://hub.docker.com/r/nexius2/vodum</Registry>
@@ -26,7 +26,7 @@ VODUM is a self-hosted subscription management tool for Plex and Jellyfin, desig
     <Published>5000</Published>
     <Protocol>tcp</Protocol>
     <Mode>host</Mode>
-    <Description>Interface Web VODUM</Description>
+    <Description>VODUM Web UI</Description>
   </Config>
 
   <!-- Paths -->
@@ -35,7 +35,7 @@ VODUM is a self-hosted subscription management tool for Plex and Jellyfin, desig
     <Target>/appdata</Target>
     <Default>/mnt/user/appdata/vodum</Default>
     <Mode>rw</Mode>
-    <Description>Données applicatives (SQLite, cache)</Description>
+    <Description>Application Data (SQLite, cache)</Description>
   </Config>
 
   <Config>
@@ -43,7 +43,7 @@ VODUM is a self-hosted subscription management tool for Plex and Jellyfin, desig
     <Target>/logs</Target>
     <Default>/mnt/user/appdata/vodum/logs</Default>
     <Mode>rw</Mode>
-    <Description>Logs applicatifs</Description>
+    <Description>Application Logs</Description>
   </Config>
 
   <Config>
@@ -51,7 +51,7 @@ VODUM is a self-hosted subscription management tool for Plex and Jellyfin, desig
     <Target>/backups</Target>
     <Default>/mnt/user/appdata/vodum/backups</Default>
     <Mode>rw</Mode>
-    <Description>Sauvegardes base de données</Description>
+    <Description>Database Backups</Description>
   </Config>
 
   <!-- Environment -->
@@ -59,7 +59,7 @@ VODUM is a self-hosted subscription management tool for Plex and Jellyfin, desig
     <Type>Variable</Type>
     <Target>DATABASE_PATH</Target>
     <Default>/appdata/database.db</Default>
-    <Description>Chemin de la base SQLite</Description>
+    <Description>Database Path</Description>
   </Config>
 
   <Config>
@@ -69,6 +69,7 @@ VODUM is a self-hosted subscription management tool for Plex and Jellyfin, desig
     <Description>Timezone</Description>
   </Config>
 
+  <WebUI>http://[iP]:[PORT:5000]/</WebUI>
   <!-- Icon -->
   <Icon>https://raw.githubusercontent.com/Nexius2/VODUM/main/static/icon.png</Icon>
 </Container>
