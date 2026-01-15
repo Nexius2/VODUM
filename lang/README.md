@@ -1,13 +1,17 @@
-# Fichiers de langue pour VODUM V2
+## Language files for VODUM
 
-Format : JSON clé → valeur.
+Format: JSON **key → value**.
 
-Langues disponibles :
-- fr.json : Français (par défaut)
-- en.json : Anglais
+### Available languages:
 
-Pour ajouter une langue :
-1. Créer un fichier xx.json (ex: es.json)
-2. Ajouter les traductions
-3. Choisir la langue dans la configuration utilisateur ou globale
+- `en.json` : English (default / reference)
+- `fr.json` : French  
+- `de.json` : German  
+- `es.json` : Spanish  
+- `it.json` : Italian  
 
+### Adding a new language:
+
+1. Create a file named `xx.json` (e.g. `pt.json`)
+2. Add the translations
+3. Select the language in the user or global configuration
