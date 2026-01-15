@@ -1,90 +1,96 @@
 # VODUM
 ### Media Server Subscription & Access Manager (Beta)
 
-VODUM is a **self-hosted web application** designed to manage **users, libraries and subscriptions**
-for media servers such as **Plex** (*Jellyfin support in progress*).
+VODUM is a **self-hosted web application** designed to **centralize the management of users, libraries and subscriptions**
+for media servers such as **Plex and Jellyfin**.
 
-It provides a **central control panel** to manage access, subscriptions and automation.
+It provides a **single control panel** to handle access rights, subscriptions, notifications and automation,
+without relying on external spreadsheets or manual reminders.
 
-> ⚠️ Beta: database structure and features may evolve. Regular backups are recommended.
-
----
-
-## 🎯 What is VODUM for?
-
-VODUM is built for **Plex administrators** who:
-
-- share their server with friends, family or paying users
-- need a clear view of **active / expiring / expired users**
-- want to **automate access management**
-- want to **automate email notifications**
-- want to avoid manual tracking (spreadsheets, notes, reminders)
+> ⚠️ **Beta notice**: the database schema and features may evolve. Regular backups are strongly recommended.
 
 ---
 
-## ✨ Core Features
+## 🎯 Purpose
 
-### 👤 User Management (Plex / Jellyfin)
+VODUM is built for media server administrators who:
+
+- share their server with friends, family or subscribers
+- need a clear overview of **active, expiring and expired users**
+- want to **automate access control** instead of managing shares manually
+- want to **automate subscription-related email notifications**
+- want a reliable alternative to manual tracking (notes, spreadsheets, reminders)
+
+---
+
+## ✨ Main Features
+
+### 👤 User Management (Plex & Jellyfin)
 
 - Centralized list of all users
-- Plex users retrieved via the official API
-- Users can exist even without an active library share
+- Plex and Jellyfin users retrieved via their respective APIs
+- Users can exist in the database even without active library shares
 - User status automatically derived from subscription state
 
-> Jellyfin support is currently in development
+Both **Plex and Jellyfin are fully supported**.
 
 ---
 
 ### 🗂️ Server & Library Management
 
-- Manage multiple media servers
-- Associate users with specific servers
+- Manage **multiple media servers**
+- Associate users with one or more servers
 - Control which libraries are shared per user
 - Store advanced Plex sharing options:
-  - sync permissions
-  - camera upload
-  - channel access
-  - media filters (movies / TV / music)
+  - Sync permissions
+  - Camera upload
+  - Channel access
+  - Media filters (Movies / TV / Music)
 
-Designed to reflect **real Plex access**, not just local metadata.
+Designed to reflect **real server access configuration**, not just local metadata.
 
 ---
 
 ### 💳 Subscription Management
 
-- User-based subscription system
+- Subscription system linked to users
 - Start and end date tracking
 - Automatic subscription states:
   - Active
   - Expiring soon
   - Expired
-- Subscription status drives access and notifications
+- Subscription state drives both **access control** and **notifications**
 
 ---
 
 ### ✉️ Email Automation
 
-- Configurable email templates stored in database
-- Multiple email types:
-  - upcoming expiration reminder
-  - renewal reminder
-  - subscription expired notice
+- Email templates stored directly in the database
+- Multiple email types supported:
+  - Upcoming expiration reminder
+  - Renewal reminder
+  - Subscription expired notification
 - Per-template delay configuration
 - Daily automated email processing
-
-Planned:
-- SMTP presets (Gmail, Outlook…)
-- OAuth authentication
 
 ---
 
 ### 🔒 Automated Access Control
 
 - Automatic restriction of library access for expired users
-- Access removal performed directly on Plex servers
+- Access removal performed **directly on Plex and Jellyfin servers**
 - Users are never deleted
-- Access can be restored instantly
-- Multi-server aware logic
+- Access can be restored instantly if a subscription is renewed
+- Fully **multi-server aware** logic
+
+---
+
+### 🌍 Multi-language Interface
+
+- Built-in multi-language support
+- Language automatically detected from the browser
+- Manual language selection available in settings
+- Translation system based on JSON language files
 
 ---
 
@@ -95,48 +101,27 @@ Planned:
 - Automatic database initialization
 - One-time schema creation
 - Versioned migrations
-- Timestamped logs
-- while in beta, run ./get-container.sh to install on unraid.
+- Timestamped log files
+- Until it becomes available through Community Applications (CA), the XML file can be found at the root of the GitHub repository.
 
 ---
 
 ## 🚀 Quick Start (Docker / Unraid)
 
-### Persistent storage
+### Persistent storage structure
 
 /appdata
 ├── database.db
 ├── backups/
 └── logs/
 
+---
 
-### Docker
+### Docker example
 
+```bash
 docker run -d \
   --name vodum \
   -p 5000:5000 \
   -v /mnt/user/appdata/vodum:/appdata \
   vodum/vodum:latest
-
-### ⚙️ Configuration
-
-- No mandatory environment variables
-- All configuration is managed through the web interface
-- Settings are stored in the database
-
----
-
-### 🛣️ Roadmap (excerpt)
-
-- Full Jellyfin integration
-- Multi-language UI
-- OAuth mail providers
-- Role-based permission profiles
-- Public API
-- UI / UX improvements
-
----
-
-### 📄 License
-
-MIT
