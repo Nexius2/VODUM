@@ -1,43 +1,32 @@
 {
   "language_name": "Français",
-
   "about": "À propos",
   "about_description": "VODUM est un outil avancé de gestion pour Plex/Jellyfin incluant la synchronisation, la gestion des utilisateurs, des bibliothèques, des journaux, des tâches planifiées et plus encore.",
   "about_title": "À propos de VODUM",
-
   "access": "Accès",
   "actions": "Actions",
   "active": "Actif",
   "add": "Ajouter",
   "add_server": "Ajouter un serveur",
-
   "admin_email": "Email administrateur",
   "admin_email_missing": "L’email administrateur n’est pas configuré. Merci de le définir dans les paramètres avant d’envoyer des emails de test.",
-
   "all": "Tous",
   "all_servers": "Tous les serveurs",
-
   "allow_camera_upload": "Autoriser l’envoi de photos",
   "allow_channels": "Autoriser les chaînes",
   "allow_sync": "Autoriser la synchronisation",
-
   "app_logs": "Journaux de l’application",
   "app_name": "VODUM",
   "app_version": "Version de l’application",
-
   "artist": "Artistes",
-
   "auto_retention_info": "Informations sur la rétention automatique",
-
   "backup": "Sauvegarde",
   "backup_restore": "Sauvegarde & Restauration",
   "backup_retention_days": "Durée de conservation des sauvegardes (jours)",
   "backup_retention_desc": "Définit combien de jours les sauvegardes sont conservées avant suppression automatique.",
   "backup_settings": "Paramètres de sauvegarde",
   "backup_subtitle": "Gérer les sauvegardes de la base de données",
-
   "body": "Contenu",
-
   "campaign_created": "Campagne créée",
   "campaign_editor": "Éditeur de campagne",
   "campaign_help": "Variables disponibles : {username}, {email}, {expiration_date}",
@@ -49,28 +38,21 @@
   "campaign_test_sent": "Email de test envoyé.",
   "cancel": "Annuler",
   "cancelled": "Annulé",
-
   "checking_servers": "Vérification des serveurs…",
   "check_servers": "Vérifier les serveurs",
   "check_servers_description": "Vérifie la disponibilité des serveurs et met automatiquement à jour leur nom réel",
-
   "choose_language": "Choisir la langue",
-
   "cleanup_unfriended_no_users": "Aucun utilisateur à traiter.",
   "cleanup_unfriended_processed": "{count} utilisateur(s) ont été marqués sans accès car ils n’avaient plus aucune bibliothèque accessible.",
-
   "confirm": "Confirmer",
   "confirm_delete_server": "Supprimer définitivement ce serveur ?",
-
   "created_at": "Créé le",
   "create_backup": "Créer une sauvegarde",
   "create_backup_btn": "Créer la sauvegarde",
   "create_backup_desc": "Génère immédiatement une sauvegarde SQLite dans le dossier de sauvegardes.",
   "create_campaign": "Créer une campagne",
   "create_campaign_btn": "Créer la campagne",
-
   "creation_date": "Date de création",
-
   "cron_every_day_at": "Chaque jour à {h}:{m}",
   "cron_every_hour_at": "Chaque heure",
   "cron_every_weekday": "Chaque {day}",
@@ -78,127 +60,86 @@
   "cron_every_x_days_at": "Tous les {x} jours à {h}:{m}",
   "cron_every_x_hours": "Toutes les {x} heures",
   "cron_every_x_minutes": "Toutes les {x} minutes",
-
   "custom_smtp": "SMTP personnalisé",
-
   "dashboard": "Tableau de bord",
-  "dashboard_subtitle": "Vue d’ensemble des utilisateurs et serveurs Plex",
+  "dashboard_subtitle": "Vue d’ensemble de vos utilisateurs et serveurs",
   "dashboard_title": "Tableau de bord",
-
   "date": "Date",
   "days_before_expiration": "Jours avant expiration",
-
-  "debug_mode": "Activer le mode debug",
-
+  "debug_mode": "Mode debug",
   "default_subscription_days": "Durée d’abonnement par défaut (jours)",
   "default_subscription_days_help": "Nombre de jours appliqués automatiquement aux nouveaux utilisateurs.",
-
   "delete": "Supprimer",
   "delete_after_expiry_days": "Supprimer l’utilisateur X jours après expiration",
   "delete_after_expiry_days_help": "Définit combien de jours un utilisateur expiré reste avant suppression.",
-
   "details": "Détails",
-
   "disable_on_expiry": "Désactiver l’accès à l’expiration",
-
   "email": "Email",
   "email_days_before": "Jours avant expiration",
   "email_history": "Historique des emails",
-
   "email_template_body": "Corps du modèle",
   "email_template_fin": "Modèle fin d’abonnement",
   "email_template_preavis": "Modèle pré-expiration",
   "email_template_relance": "Modèle de relance",
   "email_template_saved": "Modèle sauvegardé.",
   "email_template_subject": "Sujet du modèle",
-
   "enable_cron_jobs": "Activer les tâches planifiées",
-
   "enter_body": "Saisir le contenu…",
   "enter_subject": "Saisir le sujet…",
-
   "error": "Erreur",
-
   "expired": "Expiré",
-  "expiring_soon": "Expire bientôt",
-
+  "expiring_soon": "Expiration proche",
   "filter": "Filtrer",
   "filter_movies": "Filtre Films",
   "filter_music": "Filtre Musique",
   "filter_television": "Filtre Séries",
-
   "finished": "Terminé",
   "finished_at": "Terminé le",
-
   "firstname": "Prénom",
   "flask_version": "Version de Flask",
-
   "friend": "Ami",
-
   "general_info": "Informations générales",
-
   "grant_all_users": "Donner l’accès à tous les utilisateurs du serveur",
   "grant_active_users": "Donner l’accès aux utilisateurs actifs",
   "grant_access_active_success": "Accès accordé aux utilisateurs actifs du serveur.",
-
   "home": "Accueil",
-
   "invited": "Invité",
   "is_test": "Test",
-
   "joined_at": "Inscrit le",
-
-  "language": "Langue par défaut",
-
+  "language": "Langue",
   "last_check": "Dernière vérification",
   "last_run": "Dernière exécution",
   "last_status": "Dernier statut",
-
   "libraries": "Bibliothèques",
   "libraries_by_server": "Bibliothèques par serveur",
   "libraries_of": "Bibliothèques de",
-
   "load": "Charger",
   "local_url": "URL locale",
-
   "log_mailing_disabled": "Tâche {task} automatiquement désactivée (mailing_enabled=0)",
   "log_mailing_enabled": "Tâche {task} automatiquement activée (mailing_enabled=1)",
   "logs": "Journaux",
-
   "mail_campaigns": "Campagnes",
   "mail_smtp_config": "Configuration SMTP",
   "mail_templates": "Modèles",
-
   "mail_type_fin": "Email fin d’abonnement",
   "mail_type_preavis": "Email pré-expiration",
   "mail_type_relance": "Email de relance",
-
   "mailing": "Mailing",
   "mailing_enabled": "Mailing activé",
   "mailing_enabled_off": "Désactivé",
   "mailing_enabled_on": "Activé",
   "mailing_disabled_help": "Le mailing est désactivé. Activez-le pour configurer le SMTP, créer des campagnes ou gérer les modèles.",
   "mailing_subtitle": "Modèles d’emails et envoi de campagnes",
-
   "managed": "Géré",
-
-  "maintenance_mode": "Activer le mode maintenance",
-
+  "maintenance_mode": "Mode maintenance",
   "manual_backup": "Sauvegarde manuelle",
   "manual_backup_desc": "Crée immédiatement une sauvegarde SQLite.",
-
   "message": "Message",
-
   "modified_at": "Modifié le",
-
   "movie": "Films",
-
   "name": "Nom",
-
   "new_campaign": "Nouvelle campagne",
-
   "next_run": "Prochaine exécution",
-
   "no_access": "Pas d’accès",
   "no_app_logs": "Aucun journal d’application.",
   "no_backups": "Aucune sauvegarde trouvée dans le dossier configuré.",
@@ -211,227 +152,151 @@
   "no_library_for_server": "Aucune bibliothèque pour ce serveur",
   "no_logs": "Aucun journal pour le moment.",
   "no_server": "Aucun serveur configuré.",
-  "no_servers_configured": "Aucun serveur configuré.",
+  "no_servers_configured": "Aucun serveur configuré",
   "no_task_logs": "Aucun journal de tâche.",
   "no_tasks_found": "Aucune tâche trouvée dans la base de données.",
   "no_user_found": "Aucun utilisateur trouvé.",
   "no_users_for_server": "Aucun utilisateur n’a accès à ce serveur.",
-
   "notes": "Notes",
-
   "offline": "Hors ligne",
   "online": "En ligne",
-
   "os_info": "Système d’exploitation",
   "owner": "Propriétaire",
-
   "pending": "En attente",
-
   "photo": "Photos",
   "playlist": "Playlists",
-
   "plex_email": "Adresse email Plex",
   "plex_id": "ID Plex",
   "plex_role": "Rôle Plex",
   "plex_servers": "Serveurs Plex",
   "server_token": "Token",
-
   "pre_expired": "Expire bientôt",
   "preavis": "Pré-expiration",
-
   "python_version": "Version Python",
-
   "relance": "Relance",
-
   "remove": "Retirer",
-
   "renewal_date": "Date de renouvellement",
   "renewal_method": "Méthode de renouvellement",
-
   "reset": "Réinitialiser",
-
   "restore_backup": "Restaurer une sauvegarde",
   "restore_backup_desc": "Importer un fichier .db sauvegardé précédemment. Attention : cela remplacera la base actuelle.",
   "restore_btn": "Restaurer",
-
   "role": "Rôle",
-
   "run_now": "Exécuter maintenant",
-
   "save": "Sauvegarder",
   "save_settings": "Sauvegarder les paramètres",
   "save_templates": "Sauvegarder les modèles",
-
   "schedule": "Planification",
-
   "search": "Rechercher",
-
   "second_email": "Email secondaire",
-
   "send_campaign": "Envoyer",
   "send_expiration_emails": "Envoyer les emails d’expiration",
   "send_test_email": "Envoyer un email de test",
-
   "sending": "Envoi en cours",
-
   "server": "Serveur",
   "server_access": "Accès au serveur",
   "server_down": "Le serveur est hors ligne",
   "server_information": "Informations du serveur",
   "server_name_updated": "Nom du serveur mis à jour",
-
   "server_options": "Options du serveur",
-
   "server_status_updated": "Statut du serveur mis à jour",
   "server_up": "Le serveur est en ligne",
   "server_users": "Utilisateurs ayant accès à ce serveur",
-
   "servers": "Serveurs",
   "servers_libraries": "Serveurs & Bibliothèques",
   "servers_libraries_subtitle": "Configuration Plex et gestion des bibliothèques",
   "servers_libraries_title": "Serveurs & Bibliothèques",
-
   "server_type": "Type de serveur",
-
   "settings": "Paramètres",
   "settings_saved": "Paramètres sauvegardés.",
-  "settings_subtitle": "Configuration générale de l’application",
-
+  "settings_subtitle": "Configuration de l’application",
   "show": "Séries",
   "size": "Taille",
-
   "snapshot": "Capture",
-
   "smtp_help_custom": "Utilisez les paramètres SMTP fournis par votre hébergeur ou votre service email.",
   "smtp_help_gmail": "Utilisez votre adresse Gmail et un mot de passe d’application (authentification à deux facteurs requise).",
   "smtp_help_outlook": "Utilisez votre compte Outlook/Office365. Hôte SMTP : smtp.office365.com, port 587 avec TLS.",
   "smtp_help_title": "Aide à la configuration SMTP",
   "smtp_help_yahoo": "Utilisez votre adresse Yahoo avec un mot de passe d’application. Hôte smtp.mail.yahoo.com.",
-
   "smtp_host": "Hôte SMTP",
   "smtp_pass": "Mot de passe SMTP",
   "smtp_port": "Port SMTP",
   "smtp_provider": "Fournisseur SMTP",
-
   "smtp_settings_saved": "Paramètres SMTP sauvegardés",
-
   "smtp_test_body": "Ceci est un email de test pour vérifier votre configuration SMTP.",
   "smtp_test_failed": "Erreur lors de l’envoi de l’email de test.",
   "smtp_test_info": "Les emails de test sont toujours envoyés à l’email administrateur.",
   "smtp_test_sent": "Email de test envoyé à l’administrateur",
   "smtp_test_subject": "Test SMTP VODUM",
-
   "smtp_use_tls": "Utiliser TLS (STARTTLS)",
   "smtp_user": "Identifiant SMTP",
-
   "status": "Statut",
   "status_changed_at": "Statut modifié le",
-
   "subject": "Sujet",
-
   "subscription_active": "Abonnement actif",
   "subscription_status": "Statut de l’abonnement",
   "subscription_plan": "Formule d’abonnement",
-
   "suspended": "Suspendu",
-
   "tautulli_api_key": "Clé API Tautulli",
   "tautulli_url": "URL Tautulli",
-
   "target_server": "Serveur cible",
-
   "task": "Tâche",
   "task.auto_backup": "Sauvegarde automatique",
-  "task.cleanup_backups": "Nettoyage automatique des sauvegardes",
+  "task.cleanup_backups": "Nettoyage des sauvegardes",
   "task.cleanup_logs": "Nettoyage automatique des journaux de plus de 7 jours",
   "task.check_mailing_status": "Vérification de l’état du mailing",
   "task.check_servers": "Vérification des serveurs",
-  "task.cleanup_unfriended": "Nettoyage des utilisateurs sans bibliothèques",
-  "task_done": "terminé",
-
-  "task_description.check_mailing_status": "Vérifie si le mailing est activé et active/désactive automatiquement les tâches liées.",
-
-
-  "task.sync_plex": "Synchronisation Plex",
-  "task.auto_backup": "Sauvegarde automatique",
-  "task.cleanup_backups": "Nettoyage des sauvegardes",
-  "task.update_user_status": "Mise à jour des utilisateurs",
-  "task.check_servers": "Vérification des serveurs",
   "task.cleanup_unfriended": "Nettoyage des amis sans accès",
-  "task.send_expiration_emails": "Emails de fin d’abonnement",
-
+  "task_done": "terminé",
+  "task_description.check_mailing_status": "Vérifie si le mailing est activé et active/désactive automatiquement les tâches liées.",
+  "task_description.send_expiration_emails": "Envoie automatiquement les emails de préavis, de rappel et de fin d’abonnement.",
+  "task_error": "erreur",
+  "task_logs": "Journaux des tâches",
+  "task_running": "en cours",
+  "task.send_expiration_emails": "Envoi des emails d’expiration",
+  "task.send_mail_campaigns": "Envoi des campagnes email",
+  "task.sync_plex": "Synchronisation Plex",
+  "task.update_user_status": "Mise à jour automatique du statut utilisateur",
   "task_description.sync_plex": "Synchronise les utilisateurs, serveurs et bibliothèques Plex.",
   "task_description.auto_backup": "Crée automatiquement des sauvegardes de la base de données.",
   "task_description.cleanup_backups": "Supprime les sauvegardes plus anciennes que la durée de rétention définie.",
   "task_description.update_user_status": "Met à jour automatiquement le statut des abonnements utilisateurs.",
   "task_description.check_servers": "Vérifie la disponibilité des serveurs et met à jour leur nom réel.",
   "task_description.cleanup_unfriended": "Détecte les amis sans aucune bibliothèque partagée et les marque comme non amis.",
-  "task_description.send_expiration_emails": "Envoie automatiquement les emails de préavis, de rappel et de fin d’abonnement.",
-  "task_description.send_campaign_emails": "Envoie les campagnes email en attente",
-  "task_description.apply_plex_access_updates": "Applique les mises à jour d'accès Plex en attente (media_jobs)",
-  "task_description.sync_jellyfin_users": "Synchronise les utilisateurs Jellyfin",
-  "task_description.disable_expired_users": "Désactive les accès des utilisateurs expirés",
-
-
-
-  "task_error": "erreur",
-  "task_logs": "Journaux des tâches",
-  "task_running": "en cours",
-
-  "task.send_expiration_emails": "Envoi des emails d’expiration",
-  "task.send_mail_campaigns": "Envoi des campagnes email",
-
-  "task.sync_plex": "Synchronisation Plex",
-  "task.update_user_status": "Mise à jour automatique du statut utilisateur",
-
   "tasks": "Tâches",
   "tasks_enabled": "tâches actives",
   "tasks_error": "en erreur",
   "tasks_desc": "Tâches automatiques et opérations planifiées",
-
   "timezone": "Fuseau horaire",
-
   "type": "Type",
-
   "unknown": "Inconnu",
   "unfriended": "Retiré",
-
   "url": "URL",
   "url_not_defined": "URL non définie",
-
   "user": "Utilisateur",
   "user_management_subtitle": "Gestion des utilisateurs Plex",
-
   "users": "Utilisateurs",
   "users_subtitle": "Gérer les utilisateurs Plex et leurs accès",
   "users_title": "Utilisateurs",
-
   "value": "Valeur",
   "view_all": "Voir tout",
   "view_user": "Voir l’utilisateur",
-
   "yes": "Oui",
-
   "pay_me_a_beer": "Achète un café à VODUM ☕",
-  
   "template_fin": "Modèle fin d'abonnement",
-"template_preavis": "Modèle préavis d'expiration",
-"template_relance": "Modèle de relance",
-"use_for_test": "Utiliser pour test",
-
-"mail_from": "Adresse email d’envoi",
-"task.apply_plex_access_updates": "Appliquer les mises à jour d’accès Plex",
-"available_backups": "Sauvegardes disponibles",
-"application_logs": "Journaux de l’application",
-"credits_text": "Merci d'utiliser VODUM ! Développé avec ❤️ pour simplifier la gestion de vos serveurs médias.",
-
-"support_title": "Support",
-"support_text": "Si vous avez besoin d’aide ou souhaitez signaler un problème, contactez l’administrateur de la plateforme.",
-
-"system_info":"Informations système",
-"server_details_subtitle": "Détails du serveur",
-"about_desc": "Informations sur l'application et détails système",
-
+  "template_preavis": "Modèle préavis d'expiration",
+  "template_relance": "Modèle de relance",
+  "use_for_test": "Utiliser pour test",
+  "mail_from": "Adresse email d’envoi",
+  "task.apply_plex_access_updates": "Appliquer les mises à jour d’accès Plex",
+  "available_backups": "Sauvegardes disponibles",
+  "application_logs": "Journaux de l’application",
+  "credits_text": "Merci d'utiliser VODUM ! Développé avec ❤️ pour simplifier la gestion de vos serveurs médias.",
+  "support_title": "Support",
+  "support_text": "Si vous avez besoin d’aide ou souhaitez signaler un problème, contactez l’administrateur de la plateforme.",
+  "system_info": "Informations système",
+  "server_details_subtitle": "Détails du serveur",
+  "about_desc": "Informations sur l'application et détails système",
   "subscriptions": "Abonnements",
   "subscriptions_description": "Offrir du temps d’abonnement aux utilisateurs.",
   "target_users": "Ciblage des utilisateurs",
@@ -450,193 +315,126 @@
   "reason_placeholder": "Ex : compensation, cadeau, incident…",
   "subscription_reset_notice": "Les rappels et préavis seront réinitialisés si la nouvelle date dépasse l’ancienne.",
   "gift_subscription": "Offrir l’abonnement",
-  
   "template_test_sent": "Email de test envoyé avec succès",
   "template_not_found": "Template introuvable",
-
   "subscriptions_all_users_hint": "Cette section affiche tous les utilisateurs, tous serveurs confondus",
   "subscriptions_server_users_hint": "Cette section affiche uniquement les utilisateurs liés à ce serveur",
-
   "accepted_at": "Date d’acceptation",
-
   "task.sync_jellyfin": "Synchronisation Jellyfin",
-  
   "user_not_found": "Utilisateur introuvable",
   "user_saved_and_plex_sync_started": "Modifications enregistrées et synchronisation Plex lancée",
   "invalid_library": "Bibliothèque invalide",
   "library_access_added": "Accès ajouté",
   "library_access_removed": "Accès retiré",
-
   "server_name_required": "Le nom du serveur est obligatoire",
   "plex_server_created_sync_planned": "Serveur Plex créé. Synchronisation planifiée",
   "server_created_no_sync": "Serveur créé (non Plex). Aucune synchronisation lancée",
   "server_not_found": "Serveur introuvable",
   "server_deleted": "Serveur supprimé",
   "server_updated": "Serveur mis à jour",
-
   "no_server_or_library_selected": "Aucun serveur ou bibliothèque sélectionné",
   "no_active_users_for_server": "Aucun utilisateur actif pour ce serveur",
-
   "task_not_found": "Tâche introuvable",
   "task_disabled": "Tâche désactivée",
   "task_already_running": "Tâche déjà en cours",
   "task_started": "Tâche lancée",
   "invalid_task": "Tâche invalide",
   "task_updated": "Tâche mise à jour",
-  
-  
-  "dashboard_subtitle": "Vue d’ensemble de vos utilisateurs et serveurs",
-  "active": "Actif",
-  "expiring_soon": "Expiration proche",
-  "expired": "Expiré",
   "total": "total",
-  "last_check": "Dernière vérification",
   "latest_logs": "Derniers logs",
-  "view_all": "Voir tout",
   "no_logs_yet": "Aucun log pour le moment",
-  "no_servers_configured": "Aucun serveur configuré",
-
   "libraries_subtitle": "Gérer toutes les bibliothèques sur les serveurs",
   "all_libraries": "Toutes les bibliothèques",
   "id": "ID",
-
   "active_tasks": "tâches actives",
   "in_error": "en erreur",
-
-  "send_test_email": "Envoyer un email de test",
-
   "smtp_gmail_requires": "Gmail nécessite :",
   "smtp_gmail_2fa": "Validation en deux étapes activée",
   "smtp_gmail_app_password": "Mot de passe d’application créé",
   "smtp_gmail_password_warning": "Les mots de passe Google classiques ne fonctionnent pas avec SMTP.",
-  "smtp_gmail_create_app_password": "Créer un mot de passe d’application",
-
+  "smtp_create_app_password": "Create an application password",
   "smtp_outlook_requires": "Le SMTP Outlook nécessite :",
-  "smtp_outlook_account_required": "Un compte Outlook / Office365 actif",
+  "smtp_outlook_account": "An active Outlook / Office365 account",
   "smtp_outlook_smtp_enabled": "SMTP activé dans le compte Microsoft",
-
   "smtp_yahoo_requires": "Yahoo nécessite un mot de passe d’application",
-  "smtp_yahoo_requires_app_password": "Yahoo nécessite un mot de passe d’application.",
-
   "smtp_custom_help_title": "SMTP personnalisé",
   "smtp_custom_help_intro": "Sélectionnez un fournisseur pour afficher l’aide détaillée",
   "smtp_custom_help_requirements": "Pour un serveur SMTP personnalisé, renseignez :",
-
-  "mailing_disabled_help": "Le mailing est désactivé. Activez-le pour configurer le SMTP, créer des campagnes ou gérer les modèles.",
-
+  "smtp_gmail_create_app_password": "Créer un mot de passe d’application",
   "smtp_server": "Serveur SMTP",
   "smtp_tls_recommended": "TLS recommandé",
+  "smtp_outlook_account_required": "Un compte Outlook / Office365 actif",
   "smtp_tls_required": "TLS obligatoire",
-
+  "smtp_yahoo_requires_app_password": "Yahoo nécessite un mot de passe d’application.",
   "smtp_custom_select_provider_help": "Sélectionnez un fournisseur dans la liste pour afficher l’aide détaillée.",
   "smtp_custom_requirements_intro": "Pour un serveur SMTP personnalisé, renseignez :",
   "smtp_custom_host": "Nom d’hôte du serveur SMTP",
   "smtp_custom_port": "Port 465 ou 587",
   "smtp_custom_tls_ssl": "TLS ou SSL selon le fournisseur",
-
-  "settings": "Paramètres",
-  "settings_subtitle": "Configuration de l’application",
-
   "general_settings": "Paramètres généraux",
-  "language": "Langue",
-  "timezone": "Fuseau horaire",
   "timezone_placeholder": "Europe/Paris",
-  "admin_email": "Email administrateur",
-
   "default_subscription_settings": "Paramètres d’abonnement",
   "default_subscription_duration_days": "Durée d’abonnement par défaut (jours)",
   "delete_user_after_expiry": "Supprimer l’utilisateur X jours après expiration",
   "disable_user_on_expiration": "Désactiver l’utilisateur à l’expiration",
-
   "status_warning_delays": "Délais d’avertissement de statut",
   "days_before_expiration_preavis": "Jours avant expiration (préavis)",
   "days_before_expiration_relance": "Jours avant expiration (relance)",
-
   "system_settings": "Paramètres système",
   "enable_scheduled_tasks": "Activer les tâches planifiées",
-  "maintenance_mode": "Mode maintenance",
-  "debug_mode": "Mode debug",
-
   "gift_success": "Abonnement offert avec succès",
   "users_updated": "utilisateurs mis à jour",
   "days_added": "jours ajoutés",
   "unknown_error": "Erreur inconnue",
   "request_failed": "Échec de la requête",
-  
   "not_available": "Non disponible",
-  
   "task.disable_expired_users": "Désactivation des utilisateurs expirés",
-
-
   "maintenance_title": "Maintenance",
   "maintenance_subtitle": "Application temporairement indisponible",
-
   "maintenance_restore_done_title": "Restauration terminée",
   "maintenance_restore_done_desc": "La base de données a été restaurée avec succès.",
   "maintenance_restart_required": "Merci de redémarrer le conteneur pour reprendre l'utilisation de l'application.",
-
-"backup_created": "Backup créé : {name}",
   "backup_created": "Backup créé : {name}",
   "backup_create_error": "Erreur lors de la création du backup : {error}",
-
   "backup_not_found": "Backup introuvable",
   "backup_no_file": "Aucun fichier fourni",
-
   "backup_restore_success_restart": "Backup restauré. Merci de redémarrer le conteneur pour prendre en compte la base restaurée.",
   "backup_restore_error": "Erreur lors de la restauration : {error}",
-
   "backup_settings_saved": "Paramètres sauvegardés.",
   "backup_settings_error": "Erreur lors de la sauvegarde des paramètres : {error}",
-
-"confirm_restore": "⚠️ Cette action va écraser la base de données actuelle. Continuer ?",
-"public_url": "URL publique",
-
-"download_logs": "Télécharger les logs",
-
-"jellyfin_server_created_sync_planned": "Serveur Jellyfin créé. Synchronisation initiale planifiée.",
-
-"task_queued": "Tâche en attente",
-
+  "confirm_restore": "Cette action va écraser la base de données actuelle. Continuer ?",
+  "public_url": "URL publique",
+  "download_logs": "Télécharger les logs",
+  "jellyfin_server_created_sync_planned": "Serveur Jellyfin créé. Synchronisation initiale planifiée.",
+  "task_queued": "Tâche en attente",
   "home_user": "Utilisateur Plex Home",
   "protected_account": "Compte protégé",
   "restricted": "Compte restreint",
-  
   "user_saved": "Utilisateur enregistré avec succès",
   "status_all": "Tous les statuts",
-  
   "language_auto": "Automatique",
-"language_auto_hint": "Utilise la langue du navigateur",
-
-"templates_saved": "Modèles enregistrés",
+  "language_auto_hint": "Utilise la langue du navigateur",
+  "templates_saved": "Modèles enregistrés",
   "active_users": "Utilisateurs actifs",
   "users_total": "au total",
-  
   "credits": "Soutien",
   "support_thanks": "Si vous appréciez VODUM et souhaitez soutenir son développement, vous pouvez m’offrir un café.",
-
   "open_an_issue": "Ouvrir une issue sur GitHub",
-  
+  "task_description.send_campaign_emails": "Envoie les campagnes email en attente",
+  "task_description.apply_plex_access_updates": "Applique les mises à jour d'accès Plex en attente (media_jobs)",
+  "task_description.sync_jellyfin_users": "Synchronise les utilisateurs Jellyfin",
+  "task_description.disable_expired_users": "Désactive les accès des utilisateurs expirés",
   "task.apply_jellyfin_access_updates": "Application des accès Jellyfin",
-"task_description.apply_jellyfin_access_updates": "Applique les mises à jour d’accès Jellyfin en attente (media_jobs).",
-
-"task_description.send_mail_campaigns": "Envoie automatiquement les campagnes d'e-mails.",
-"task_description.sync_jellyfin": "Synchronise les utilisateurs, serveurs et bibliothèques Jellyfin.",
-
-"documentation": "Documentation",
-
-"merge_user": "Fusionner l'utilisateur",
-  "merge_action": "Fusionner",
-  "merge_show_all": "Tout afficher",
-  "merge_show_top": "Afficher seulement le top 5",
-  "merge_confirm": "Confirmez-vous la fusion de cet utilisateur ?",
-
-  
-    "merge_user": "Fusionner l’utilisateur",
-  "merge_choose_user": "Choisir l’utilisateur à fusionner",
+  "task_description.apply_jellyfin_access_updates": "Applique les mises à jour d’accès Jellyfin en attente (media_jobs).",
+  "task_description.send_mail_campaigns": "Envoie automatiquement les campagnes d'e-mails.",
+  "task_description.sync_jellyfin": "Synchronise les utilisateurs, serveurs et bibliothèques Jellyfin.",
+  "documentation": "Documentation",
+  "merge_user": "Fusionner l’utilisateur",
   "merge_action": "Fusionner",
   "merge_show_all": "Afficher tous",
   "merge_show_top": "Afficher seulement le top 5",
-
+  "merge_confirm": "Confirmez-vous la fusion de cet utilisateur ?",
+  "merge_choose_user": "Choisir l’utilisateur à fusionner",
   "merge_confirm_title": "Confirmer la fusion",
   "merge_confirm_subtitle": "Vérifie le résultat avant de valider.",
   "merge_confirm_warning": "Attention : cette action est irréversible. Le compte cible sera fusionné dans le compte maître.",
@@ -646,8 +444,7 @@
   "merge_confirm_tip_title": "Astuce",
   "merge_confirm_tip_text": "Sélectionne l’utilisateur à fusionner, puis clique sur “Fusionner” pour afficher l’aperçu. Valide ensuite la confirmation finale.",
   "merge_confirm_cta": "Confirmer la fusion",
-  
-    "merge.title": "Mode fusion utilisateur",
+  "merge.title": "Mode fusion utilisateur",
   "merge.warning": "Cette action est irréversible. L’utilisateur affiché sera conservé. ",
   "merge.master.label": "Utilisateur maître (conservé) ",
   "merge.master.expiration": "Expiration",
@@ -656,14 +453,6 @@
   "merge.preview.user_identities": "Identités utilisateur",
   "merge.preview.sent_emails": "Emails envoyés",
   "merge.preview.media_jobs": "Tâches média",
-  
   "merge_failed": "Échec de la fusion",
   "user_merged": "Utilisateur fusionné"
-
-
-
-
-
-
-
 }
