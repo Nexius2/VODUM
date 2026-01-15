@@ -13,13 +13,9 @@ from config import Config
 log = get_logger("auto_backup")
 
 def run(task_id: int, db):
-    """
-    Tâche auto_backup — version UNIFORME et FINALE
-    DBManager fourni par tasks_engine
-    """
 
     log.info("=== AUTO BACKUP : starting ===")
-    log.debug(f"task_id={task_id}, db fourni={db is not None}")
+    log.debug(f"task_id={task_id}, db Provided={db is not None}")
 
     start = time.monotonic()
     task_logs(task_id, "info", "Auto-backup started")

@@ -22,11 +22,11 @@ log = get_logger("cleanup_unfriended")
 
 
 def run(task_id: int, db):
-    task_logs(task_id, "info", "Tâche cleanup_unfriended démarrée")
-    log.info("=== CLEANUP UNFRIENDED : DÉMARRAGE ===")
+    task_logs(task_id, "info", "Task cleanup_unfriended started")
+    log.info("=== CLEANUP UNFRIENDED : STRATING ===")
 
     try:
-        log.debug("Recherche des comptes Plex 'friend' sans bibliothèque Plex…")
+        log.debug("Searching for Plex 'friend' accounts without any Plex libraries…")
 
         # On travaille sur media_users (comptes sur serveurs)
         # car le rôle Plex est porté par media_users.role, pas par vodum_users.
@@ -54,17 +54,17 @@ def run(task_id: int, db):
         )
 
         if not rows:
-            msg = "Aucun compte Plex 'friend' sans bibliothèque Plex."
+            msg = "No Plex 'friend' accounts without any Plex libraries."
             log.info(msg)
             task_logs(task_id, "info", msg)
-            log.info("=== CLEANUP UNFRIENDED : FIN ===")
+            log.info("=== CLEANUP UNFRIENDED : END ===")
             return
 
         media_user_ids = [r["media_user_id"] for r in rows]
-        log.debug(f"{len(media_user_ids)} compte(s) détecté(s) : {media_user_ids}")
+        log.debug(f"{len(media_user_ids)} Account(s) detected : {media_user_ids}")
 
         # Mise à jour en base : on passe le ROLE du compte Plex en 'unfriended'
-        log.debug("Mise à jour du rôle des comptes Plex concernés…")
+        log.debug("Updating the role of the affected Plex accounts…")
 
         db.executemany(
             """
@@ -77,14 +77,14 @@ def run(task_id: int, db):
         )
 
         msg = (
-            f"{len(media_user_ids)} compte(s) Plex passé(s) en 'unfriended' "
-            f"(aucune bibliothèque Plex trouvée)."
+            f"{len(media_user_ids)} Plex account(s) set to 'unfriended' "
+            f"(No Plex libraries found)."
         )
         log.info(msg)
         task_logs(task_id, "success", msg)
-        log.info("=== CLEANUP UNFRIENDED : TERMINÉ ===")
+        log.info("=== CLEANUP UNFRIENDED : FINISHED ===")
 
     except Exception as e:
-        log.error(f"Erreur dans cleanup_unfriended : {e}", exc_info=True)
-        task_logs(task_id, "error", f"Erreur cleanup_unfriended : {e}")
+        log.error(f"Error in cleanup_unfriended : {e}", exc_info=True)
+        task_logs(task_id, "error", f"Error cleanup_unfriended : {e}")
         raise

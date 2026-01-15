@@ -37,7 +37,7 @@ def send_email(subject, body, to_email, smtp_settings):
     mail_from = smtp_settings["mail_from"] or smtp_user
 
     log.debug(
-        f"[SMTP] Envoi email → to={to_email}, "
+        f"[SMTP] Sending email → to={to_email}, "
         f"host={smtp_host}:{smtp_port}, tls={smtp_tls}, user={smtp_user}"
     )
 
@@ -57,11 +57,11 @@ def send_email(subject, body, to_email, smtp_settings):
 
             server.send_message(msg)
 
-        log.info(f"[SMTP] Email envoyé → {to_email}")
+        log.info(f"[SMTP] Email sent → {to_email}")
         return True
 
     except Exception as e:
-        log.error(f"[SMTP] Erreur lors de l'envoi à {to_email}: {e}", exc_info=True)
+        log.error(f"[SMTP] Error while sending to {to_email}: {e}", exc_info=True)
         return False
 
 
@@ -76,7 +76,7 @@ def run(task_id: int, db):
     """
 
     task_logs(task_id, "info", "Tâche send_expiration_emails démarrée…")
-    log.info("=== SEND EXPIRATION EMAILS : DÉMARRAGE ===")
+    log.info("=== SEND EXPIRATION EMAILS : STARTING ===")
 
     try:
         # --------------------------------------------------------
@@ -84,17 +84,17 @@ def run(task_id: int, db):
         # --------------------------------------------------------
         settings = db.query_one("SELECT * FROM settings WHERE id = 1")
         if not settings or not settings["mailing_enabled"]:
-            msg = "Mailing désactivé → aucune action."
+            msg = "Mailing disabled → no action."
             log.warning(msg)
             task_logs(task_id, "info", msg)
             return
 
-        log.debug("Mailing activé. Chargement des templates…")
+        log.debug("Mailing enabled. Loading templates…")
         preavis_days = int(settings["preavis_days"])
         reminder_days = int(settings["reminder_days"])
 
         log.info(
-            f"Délais mailing → preavis={preavis_days}j | reminder={reminder_days}j"
+            f"Mailing delays → preavis={preavis_days}j | reminder={reminder_days}j"
         )
 
 
@@ -125,8 +125,8 @@ def run(task_id: int, db):
         today = date.today()
         sent_count = 0
 
-        log.info(f"{len(users)} utilisateurs analysés")
-        task_logs(task_id, "info", f"{len(users)} utilisateurs analysés")
+        log.info(f"{len(users)} Users analyzed")
+        task_logs(task_id, "info", f"{len(users)} Users analyzed")
 
         # --------------------------------------------------------
         # 4) Boucle utilisateurs
@@ -144,7 +144,7 @@ def run(task_id: int, db):
             try:
                 exp_date = datetime.fromisoformat(exp_raw).date()
             except Exception:
-                log.error(f"[USER] #{uid} date expiration invalide : {exp_raw}")
+                log.error(f"[USER] #{uid} Invalid expiration date : {exp_raw}")
                 continue
 
             days_left = (exp_date - today).days
@@ -249,7 +249,7 @@ def run(task_id: int, db):
                         sent_count += 1
 
 
-        msg = f"send_expiration_emails terminé — {sent_count} email(s) envoyé(s)"
+        msg = f"send_expiration_emails finished — {sent_count} Email(s) sent"
         log.info(msg)
 
         if sent_count > 0:
@@ -258,9 +258,9 @@ def run(task_id: int, db):
             task_logs(task_id, "info", msg)
 
     except Exception as e:
-        log.error("Erreur dans send_expiration_emails", exc_info=True)
-        task_logs(task_id, "error", f"Erreur send_expiration_emails : {e}")
+        log.error("Error in send_expiration_emails", exc_info=True)
+        task_logs(task_id, "error", f"Error send_expiration_emails : {e}")
         raise
 
     finally:
-        log.info("=== SEND EXPIRATION EMAILS : FIN ===")
+        log.info("=== SEND EXPIRATION EMAILS : END ===")

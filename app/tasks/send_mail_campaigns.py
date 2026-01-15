@@ -31,7 +31,7 @@ def send_email(settings, to_email, subject, body):
         raise ValueError("Email vide")
 
     log.debug(
-        f"[SMTP] Envoi email → to={to_email}, subject={subject}, "
+        f"[SMTP] Email sending → to={to_email}, subject={subject}, "
         f"host={settings['smtp_host']}:{settings['smtp_port']}, tls={settings['smtp_tls']}"
     )
 
@@ -55,11 +55,11 @@ def send_email(settings, to_email, subject, body):
 
             server.send_message(msg)
 
-        log.info(f"[SMTP] Email envoyé → {to_email}")
+        log.info(f"[SMTP] Email sent → {to_email}")
         return True
 
     except Exception as e:
-        log.error(f"[SMTP] Échec envoi → {to_email} : {e}")
+        log.error(f"[SMTP] Send failed → {to_email} : {e}")
         return False
 
 
@@ -72,8 +72,8 @@ def run(task_id: int, db):
     Envoi des campagnes d'email programmées
     """
 
-    task_logs(task_id, "info", "Tâche send_mail_campaigns démarrée")
-    log.info("=== SEND MAIL CAMPAIGNS : DÉMARRAGE ===")
+    task_logs(task_id, "info", "Task send_mail_campaigns started")
+    log.info("=== SEND MAIL CAMPAIGNS : STARTING ===")
 
     total_campaigns = 0
 
@@ -84,7 +84,7 @@ def run(task_id: int, db):
         settings = db.query_one("SELECT * FROM settings WHERE id = 1")
 
         if not settings or not settings["mailing_enabled"]:
-            msg = "Mailing désactivé → aucune action."
+            msg = "Mailing disabled → no action taken."
             log.warning(msg)
             task_logs(task_id, "info", msg)
             return
@@ -99,13 +99,13 @@ def run(task_id: int, db):
         """)
 
         if not campaigns:
-            msg = "Aucune campagne en attente."
+            msg = "No pending campaigns."
             log.info(msg)
             task_logs(task_id, "info", msg)
             return
 
         total_campaigns = len(campaigns)
-        log.info(f"{total_campaigns} campagne(s) en attente")
+        log.info(f"{total_campaigns} pending campaign(s)")
 
         # --------------------------------------------------------
         # 3) Traitement des campagnes
@@ -117,8 +117,8 @@ def run(task_id: int, db):
             server_id = camp["server_id"]
             is_test = camp["is_test"]
 
-            log.info(f"--- Campagne #{camp_id} ---")
-            task_logs(task_id, "info", f"Traitement campagne #{camp_id}")
+            log.info(f"--- campaign #{camp_id} ---")
+            task_logs(task_id, "info", f"Campaign processing #{camp_id}")
 
             db.execute(
                 "UPDATE mail_campaigns SET status='sending' WHERE id=?",
@@ -135,7 +135,7 @@ def run(task_id: int, db):
                     "username": "ADMIN",
                     "expiration_date": None
                 }]
-                log.info(f"Mode test → {settings['admin_email']}")
+                log.info(f"Test mode → {settings['admin_email']}")
             else:
                 if not server_id:
                     recipients = db.query("""
@@ -162,7 +162,7 @@ def run(task_id: int, db):
                     """, (server_id,))
 
 
-                log.info(f"{len(recipients)} destinataire(s) sélectionné(s)")
+                log.info(f"{len(recipients)} selected recipient(s)")
 
             sent_count = 0
             error_count = 0
@@ -209,26 +209,26 @@ def run(task_id: int, db):
             """, (camp_id,))
 
             log.info(
-                f"Campagne {camp_id} terminée → OK={sent_count}, ERR={error_count}"
+                f"campaign {camp_id} ended → OK={sent_count}, ERR={error_count}"
             )
 
             task_logs(
                 task_id,
                 "info",
-                f"Campagne {camp_id} → OK={sent_count}, ERR={error_count}"
+                f"campaign {camp_id} → OK={sent_count}, ERR={error_count}"
             )
 
         task_logs(
             task_id,
             "success",
-            f"{total_campaigns} campagne(s) traitée(s)"
+            f"{total_campaigns} processed campaign(s)"
         )
 
     except Exception as e:
-        log.error("Erreur générale dans send_mail_campaigns", exc_info=True)
-        task_logs(task_id, "error", f"Erreur send_mail_campaigns : {e}")
+        log.error("General error in send_mail_campaigns", exc_info=True)
+        task_logs(task_id, "error", f"Erreor send_mail_campaigns : {e}")
         raise
 
     finally:
-        log.info("=== SEND MAIL CAMPAIGNS : FIN ===")
+        log.info("=== SEND MAIL CAMPAIGNS : END ===")
 

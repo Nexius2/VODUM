@@ -10,13 +10,9 @@ set -euo pipefail
 #  - Migrer V1 → V2 via une reconstruction propre
 #  - Lancer le bootstrap (idempotent)
 #  - Démarrer l'application Flask
-#
-# IMPORTANT :
-#  - AUCUNE table V1 ne doit survivre dans la DB V2 finale
-#  - La DB V1 est toujours conservée (backup)
 ###############################################################################
 
-echo "🚀 Démarrage VODUM..."
+echo "🚀 Starting VODUM..."
 
 # ---------------------------------------------------------------------------
 # Chemins standards (UNIQUE source de vérité)
@@ -47,7 +43,7 @@ log() {
 # ---------------------------------------------------------------------------
 
 if [ ! -f "$DB_PATH" ]; then
-  log INFO "Base absente → création d'une base V2 neuve"
+  log INFO "Database missing → creating a new V2 database"
 
   sqlite3 "$DB_PATH" < /app/tables.sql
 
@@ -57,10 +53,10 @@ INSERT OR IGNORE INTO schema_migrations (version)
 VALUES ('20250330_initial_v2_schema');
 EOF
 
-  log INFO "Base V2 initialisée avec succès"
+  log INFO "V2 database initialized successfully"
 
 else
-  log INFO "Base existante détectée"
+  log INFO "Existing database detected"
 fi
 
 # ---------------------------------------------------------------------------
@@ -82,25 +78,25 @@ HAS_TASKS_TABLE=$(sqlite3 "$DB_PATH" \
 # ---------------------------------------------------------------------------
 
 if [ -n "$HAS_TASKS_TABLE" ]; then
-  log INFO "Base déjà en V2 → aucune migration structurelle nécessaire"
+  log INFO "Database already in V2 → no structural migration required"
 else
 
-  log WARN "Base V1 détectée → lancement de la migration rebuild V1 → V2"
+  log WARN "V1 database detected → starting V1 → V2 rebuild migration"
 
   TS=$(date '+%Y%m%d_%H%M%S')
   V1_BACKUP="$BACKUP_DIR/database_v1_$TS.db"
 
   # Sauvegarde intégrale de la DB V1 (intouchable)
   cp "$DB_PATH" "$V1_BACKUP"
-  log INFO "Backup V1 créé : $V1_BACKUP"
+  log INFO "Backup V1 created : $V1_BACKUP"
 
   # Suppression de la DB active (on repart de zéro)
   rm -f "$DB_PATH"
-  log INFO "Ancienne DB supprimée (reconstruction V2)"
+  log INFO "Old database removed (V2 rebuild)"
 
   # Création du schéma V2 propre
   sqlite3 "$DB_PATH" < /app/tables.sql
-  log INFO "Schéma V2 recréé"
+  log INFO "V2 schema recreated"
 
   # Import des données depuis la DB V1
   # NOTE :
@@ -115,7 +111,7 @@ INSERT INTO schema_migrations (version)
 VALUES ('20250402_rebuild_from_v1');
 EOF
 
-  log INFO "Migration V1 → V2 terminée avec succès"
+  log INFO "V1 → V2 migration completed successfully"
 fi
 
 # ---------------------------------------------------------------------------
@@ -149,13 +145,13 @@ fi
 # Peut être exécuté À CHAQUE démarrage sans risque
 # ---------------------------------------------------------------------------
 
-log INFO "Lancement du bootstrap DB"
+log INFO "Starting DB bootstrap"
 python3 /app/db_bootstrap.py
-log INFO "Bootstrap DB terminé"
+log INFO "DB bootstrap completed"
 
 # ---------------------------------------------------------------------------
 # 5️⃣ Démarrage de l'application
 # ---------------------------------------------------------------------------
 
-log INFO "Lancement du serveur Flask"
+log INFO "Starting Flask server"
 exec python3 /app/app.py

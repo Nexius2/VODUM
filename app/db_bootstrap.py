@@ -61,10 +61,10 @@ def run_migrations():
 
     for table in REQUIRED_TABLES:
         if not table_exists(cursor, table):
-            raise RuntimeError(f"❌ ERREUR : la table '{table}' n'existe pas ! "
-                               f"-> Vérifie que tables.sql a été importé correctement.")
+            raise RuntimeError(f"❌ ERROR: table '{table}' does not exist ! "
+                               f"-> Check that tables.sql has been imported correctly.")
 
-    print("✔ Toutes les tables existent.")
+    print("✔ All tables exist.")
 
     # -------------------------------------------------
     # 2. Vérifier que toutes les colonnes obligatoires existent
@@ -85,7 +85,7 @@ def run_migrations():
     for col, definition in TASK_COLUMNS.items():
         ensure_column(cursor, "tasks", col, definition)
 
-    print("✔ Colonnes des tasks vérifiées.")
+    print("✔ Task columns verified.")
 
     # -------------------------------------------------
     # 3. Injecter les données par défaut
@@ -165,10 +165,10 @@ def run_migrations():
             INSERT INTO tasks (name, schedule, enabled, status)
             VALUES ('send_expiration_emails', '0 * * * *', 0, 'disabled')
         """)
-        print("➕ Tâche send_expiration_emails ajoutée.")
+        print("➕ Task send_expiration_emails added.")
 
     # -------------------------------------------------
-    # 4. Templates email par défaut (anglais) si absents
+    # 4. Templates email par défaut 
     # -------------------------------------------------
 
     DEFAULT_TEMPLATES = {
@@ -249,7 +249,7 @@ def run_migrations():
             body = row[1] if row else ""
 
             if not subject or not body:
-                print(f"🛠 Mise à jour du template email vide : {tpl_type}")
+                print(f"🛠 Updating empty email template : {tpl_type}")
                 cursor.execute(
                     """
                     UPDATE email_templates
@@ -351,7 +351,7 @@ def run_migrations():
     conn.commit()
     conn.close()
 
-    print("✔ Migrations terminées avec succès !")
+    print("✔ Migrations completed successfully !")
 
 
 

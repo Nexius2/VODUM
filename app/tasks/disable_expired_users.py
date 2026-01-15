@@ -23,7 +23,7 @@ def run(task_id: int, db):
     - S'appuie sur media_user_libraries + media_jobs
     """
 
-    task_logs(task_id, "info", "Tâche disable_expired_users démarrée")
+    task_logs(task_id, "info", "Task disable_expired_users started")
     log.info("=== DISABLE EXPIRED USERS : START ===")
 
     today = date.today()
@@ -59,14 +59,14 @@ def run(task_id: int, db):
         )
 
         if not rows:
-            msg = "Aucun utilisateur expiré avec accès Plex."
+            msg = "No expired users with Plex access."
             log.info(msg)
             task_logs(task_id, "info", msg)
             return
 
         # Pour message final (compter les vodum_users uniques)
         vodum_ids = sorted({r["vodum_user_id"] for r in rows})
-        log.info(f"{len(vodum_ids)} utilisateur(s) expiré(s) à désactiver (Plex)")
+        log.info(f"{len(vodum_ids)} Expired user(s) to disable (Plex)")
 
         # 2️⃣ Pour chaque compte Plex (media_user) → supprimer accès en base + créer job revoke
         processed_media = 0
@@ -79,7 +79,7 @@ def run(task_id: int, db):
             server_id = r["server_id"]
 
             log.info(
-                f"[VODUM #{vodum_user_id}] Suppression accès Plex en base "
+                f"[VODUM #{vodum_user_id}] Removing Plex access from database "
                 f"(media_user_id={media_user_id}, server_id={server_id}, user={vodum_username})"
             )
 
@@ -139,15 +139,15 @@ def run(task_id: int, db):
                 created_jobs += 1
 
         msg = (
-            f"{len(vodum_ids)} utilisateur(s) Plex désactivé(s) "
-            f"(comptes plex traités={processed_media}, jobs créés={created_jobs})"
+            f"{len(vodum_ids)} Plex user(s) disabled "
+            f"(Plex accounts processed={processed_media}, Jobs created={created_jobs})"
         )
         log.info(msg)
         task_logs(task_id, "success", msg)
 
     except Exception as e:
-        log.error("Erreur dans disable_expired_users", exc_info=True)
-        task_logs(task_id, "error", f"Erreur disable_expired_users : {e}")
+        log.error("Error in disable_expired_users", exc_info=True)
+        task_logs(task_id, "error", f"Error disable_expired_users : {e}")
         raise
 
     finally:

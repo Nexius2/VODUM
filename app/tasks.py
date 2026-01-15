@@ -45,26 +45,26 @@ def task_sync_server(params, task_id):
     server = db.execute("SELECT * FROM servers WHERE id=?", (server_id,)).fetchone()
 
     if not server:
-        update_task(task_id, "error", message="Serveur introuvable")
+        update_task(task_id, "error", message="Server not found")
         return
 
-    update_task(task_id, "running", 5, "Connexion au serveur Plex...")
+    update_task(task_id, "running", 5, "Connecting to Plex server...")
 
     try:
         plex = PlexServer(server["url"], server["token"])
     except Exception as e:
-        update_task(task_id, "error", message=f"Erreur de connexion : {e}")
+        update_task(task_id, "error", message=f"Connection error : {e}")
         return
 
     # USERS
-    update_task(task_id, progress=20, message="Synchronisation des utilisateurs...")
+    update_task(task_id, progress=20, message="User synchronization...")
     sync_users_from_plex(plex, server_id)
 
     # LIBRARIES
-    update_task(task_id, progress=60, message="Synchronisation des bibliothèques...")
+    update_task(task_id, progress=60, message="Library synchronization...")
     sync_libraries_from_plex(plex, server_id)
 
-    update_task(task_id, status="done", progress=100, message="Terminé")
+    update_task(task_id, status="done", progress=100, message="Completed")
 
 
 # =====================
@@ -87,7 +87,7 @@ def run_task(task_id):
     handler = TASK_HANDLERS.get(task["task_type"])
 
     if not handler:
-        update_task(task_id, "error", message="Type de tâche inconnu")
+        update_task(task_id, "error", message="Unknown task type")
         return False
 
     try:
