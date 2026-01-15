@@ -12,7 +12,7 @@ set -euo pipefail
 #  - Démarrer l'application Flask
 ###############################################################################
 
-echo "🚀 Starting VODUM..."
+echo "Starting VODUM..."
 
 # ---------------------------------------------------------------------------
 # Chemins standards (UNIQUE source de vérité)
