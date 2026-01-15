@@ -112,14 +112,14 @@ def run(task_id: int, db):
     """
 
     task_logs(task_id, "start", "Tâche check_servers démarrée")
-    log.info("=== CHECK SERVERS : DÉMARRAGE ===")
+    log.info("=== CHECK SERVERS : STARTING ===")
 
     try:
         servers = db.query("SELECT * FROM servers")
 
         if not servers:
-            log.warning("Aucun serveur trouvé dans la DB.")
-            task_logs(task_id, "warning", "Aucun serveur trouvé.")
+            log.warning("No server found in the database.")
+            task_logs(task_id, "warning", "No server found.")
             return
 
         now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
@@ -129,7 +129,7 @@ def run(task_id: int, db):
             sid = s["id"]
             old_name = s["name"]
 
-            log.info(f"--- Analyse du serveur #{sid} ({old_name}) ---")
+            log.info(f"--- Server analysis #{sid} ({old_name}) ---")
 
             base_url = choose_server_base_url(s)
             log.debug(
@@ -142,7 +142,7 @@ def run(task_id: int, db):
             )
 
             if not base_url:
-                log.warning(f"Serveur #{sid} : aucune URL valide.")
+                log.warning(f"Server #{sid} : No valid URL.")
                 
                 log.debug(
                     f"[SERVER #{sid}] result status={status} old_name={old_name} new_name={new_name} "
@@ -216,12 +216,12 @@ def run(task_id: int, db):
                 (status, now, new_name, sid)
             )
 
-        log.info("=== CHECK SERVERS : TERMINÉ AVEC SUCCÈS ===")
-        task_logs(task_id, "success", "Vérification des serveurs terminée")
+        log.info("=== CHECK SERVERS : COMPLETED SUCCESSFULLY ===")
+        task_logs(task_id, "success", "Server check completed")
 
     except Exception as e:
-        log.error("Erreur pendant check_servers", exc_info=True)
-        task_logs(task_id, "error", f"Erreur check_servers : {e}")
+        log.error("Error while check_servers", exc_info=True)
+        task_logs(task_id, "error", f"Error check_servers : {e}")
         raise
 
 

@@ -26,13 +26,13 @@ def run(task_id: int, db):
     DBManager fourni par tasks_engine
     """
 
-    task_logs(task_id, "info", "Tâche cleanup_backups démarrée")
-    log.info("=== CLEANUP BACKUPS : DÉMARRAGE ===")
+    task_logs(task_id, "info", "Task cleanup_backups started")
+    log.info("=== CLEANUP BACKUPS : STARTING ===")
 
     base = Path(BACKUP_DIR)
 
     if not base.exists():
-        msg = "Dossier de backup introuvable, aucune action effectuée."
+        msg = "Backup directory not found, no action performed."
         log.warning(msg)
         task_logs(task_id, "info", msg)
         return
@@ -47,8 +47,8 @@ def run(task_id: int, db):
     retention = row["backup_retention_days"] if row and row["backup_retention_days"] else 30
     cutoff = datetime.utcnow() - timedelta(days=retention)
 
-    log.debug(f"Rétention = {retention} jours -> Date limite = {cutoff}")
-    log.debug(f"Analyse du dossier : {base}")
+    log.debug(f"Retention = {retention} days -> Deadline = {cutoff}")
+    log.debug(f"Directory analysis : {base}")
 
     deleted = 0
 
@@ -57,28 +57,28 @@ def run(task_id: int, db):
             try:
                 mtime = datetime.utcfromtimestamp(f.stat().st_mtime)
 
-                log.debug(f"Fichier trouvé : {f.name} | Dernière modif = {mtime}")
+                log.debug(f"File found : {f.name} | Last modified = {mtime}")
 
                 if mtime < cutoff:
-                    log.info(f"Suppression du backup ancien : {f.name}")
+                    log.info(f"Deleting old backup : {f.name}")
                     f.unlink()
                     deleted += 1
                 else:
-                    log.debug(f"Conservé : {f.name}")
+                    log.debug(f"Kept : {f.name}")
 
             except Exception as e:
                 log.error(
-                    f"Erreur lors de la suppression du fichier {f}: {e}",
+                    f"Error while deleting file {f}: {e}",
                     exc_info=True
                 )
 
-        msg = f"{deleted} backup(s) supprimé(s) — rétention {retention} jours."
+        msg = f"{deleted} Backup(s) deleted — retention {retention} days."
         log.info(msg)
         task_logs(task_id, "success", msg)
-        log.info("=== CLEANUP BACKUPS : TERMINÉ ===")
+        log.info("=== CLEANUP BACKUPS : FINISHED ===")
 
     except Exception as e:
-        log.error("Erreur inattendue pendant cleanup_backups", exc_info=True)
+        log.error("Unexpected error during cleanup_backups", exc_info=True)
         task_logs(task_id, "error", f"cleanup_backups error : {e}")
         raise
 

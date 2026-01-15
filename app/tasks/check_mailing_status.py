@@ -18,26 +18,26 @@ def run(task_id: int, db):
     selon settings.mailing_enabled
     """
 
-    task_logs(task_id, "info", "Tâche check_mailing_status démarrée")
-    log.info("=== CHECK MAILING STATUS : DÉBUT ===")
+    task_logs(task_id, "info", "Task check_mailing_status started")
+    log.info("=== CHECK MAILING STATUS : START ===")
 
     try:
         # --------------------------------------------------------
         # 1 - Lecture complète settings (diagnostic)
         # --------------------------------------------------------
-        log.debug("[DIAG] Lecture complète de la table settings…")
+        log.debug("[DIAG] Full read of the settings table…")
 
         full_settings = db.query_one(
             "SELECT * FROM settings WHERE id = 1"
         )
 
         log.debug(
-            "[DIAG] Contenu brut de settings : %s",
+            "[DIAG] Raw settings content : %s",
             dict(full_settings) if full_settings else "Aucun"
         )
 
         if not full_settings:
-            msg = "Settings manquants (id=1) : aucune modification des tâches mailing."
+            msg = "Missing settings (id=1): no mailing task changes."
             log.error(msg)
             task_logs(task_id, "error", msg)
             return
@@ -53,7 +53,7 @@ def run(task_id: int, db):
 
 
         log.debug(
-            "Valeur récupérée → raw=%s | interprété=%s",
+            "Retrieved value → raw=%s | interpreted=%s",
             raw_value,
             mailing_enabled
         )
@@ -73,7 +73,7 @@ def run(task_id: int, db):
             )
 
             if not trow:
-                log.warning("Tâche '%s' introuvable dans la table tasks.", name)
+                log.warning("Task '%s' not found in the tasks table.", name)
                 continue
 
             old = trow["enabled"]
@@ -105,27 +105,27 @@ def run(task_id: int, db):
         # --------------------------------------------------------
         # 4 - Résultat
         # --------------------------------------------------------
-        log.info("✔ Mailing %s", "activé" if mailing_enabled else "désactivé")
-        log.debug("Tâches affectées : %s", updated)
+        log.info("✔ Mailing %s", "Enabled" if mailing_enabled else "disabled")
+        log.debug("Affected tasks : %s", updated)
 
         if changes:
             task_logs(
                 task_id,
                 "success",
-                f"Mailing {'activé' if mailing_enabled else 'désactivé'} ({changes} tâche(s))"
+                f"Mailing {'Enabled' if mailing_enabled else 'disabled'} ({changes} task(s))"
             )
         else:
             task_logs(
                 task_id,
                 "info",
-                "Aucun changement de statut des tâches mailing"
+                "No mailing task status changes"
             )
 
-        log.info("=== CHECK MAILING STATUS : FIN ===")
+        log.info("=== CHECK MAILING STATUS : END ===")
 
     except Exception as e:
-        log.error("❌ Exception pendant check_mailing_status", exc_info=True)
-        task_logs(task_id, "error", f"Erreur check_mailing_status : {e}")
+        log.error("❌ Exception during check_mailing_status", exc_info=True)
+        task_logs(task_id, "error", f"Error check_mailing_status : {e}")
         raise
 
 

@@ -27,7 +27,7 @@ def update_user_expiration(user_id, new_expiration_date, reason="manual"):
     )
 
     if not row:
-        return False, "Utilisateur introuvable"
+        return False, "User not found"
 
     try:
         old_exp = date.fromisoformat(row["expiration_date"])
@@ -58,11 +58,11 @@ def update_user_expiration(user_id, new_expiration_date, reason="manual"):
         )
 
         log.info(
-            f"[USER #{user_id}] Renouvellement détecté "
+            f"[USER #{user_id}] Renewal detected "
             f"({old_exp} → {new_exp}) | reset sent_emails"
         )
 
-    return True, "Expiration mise à jour"
+    return True, "Expiration updated"
 
 
 # ------------------------------------------------------------------
@@ -77,12 +77,12 @@ def api_update_user_expiration(user_id):
     reason = data.get("reason", "api")
 
     if not new_exp:
-        return jsonify({"error": "expiration_date manquante"}), 400
+        return jsonify({"error": "Missing expiration_date"}), 400
 
     try:
         date.fromisoformat(new_exp)
     except ValueError:
-        return jsonify({"error": "Format de date invalide (YYYY-MM-DD)"}), 400
+        return jsonify({"error": "Invalid date format (YYYY-MM-DD)"}), 400
 
     ok, msg = update_user_expiration(user_id, new_exp, reason)
 
@@ -103,7 +103,7 @@ def api_gift_time_to_server(server_id):
     days = data.get("days")
 
     if not isinstance(days, int) or days <= 0:
-        return jsonify({"error": "days doit être un entier > 0"}), 400
+        return jsonify({"error": "days must be an integer > 0"}), 400
 
     db = DBManager()
 
