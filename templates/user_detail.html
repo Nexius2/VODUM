@@ -195,133 +195,185 @@
 <!-- ====================== RIGHT COLUMN : PLEX / JELLYFIN / EMAIL ====================== -->
 <div class="flex flex-col gap-6">
 
+  <!-- ========== EMAIL HISTORY (unchanged content, just moved) ========== -->
+	<div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+	  <h2 class="text-sm font-semibold mb-2">{{ t("email_history") }}</h2>
+
+	  {% if sent_emails %}
+		{# Zone compactable #}
+		<div id="emailsBox"
+			 class="relative overflow-hidden transition-all duration-300 max-h-48 border border-slate-800 rounded-xl">
+
+		  <div id="emailsInner" class="overflow-y-auto">
+			<table class="w-full text-xs">
+			  <thead class="bg-slate-950/60 text-slate-400 sticky top-0">
+				<tr>
+				  <th class="px-3 py-2 text-left">{{ t("type") }}</th>
+				  <th class="px-3 py-2 text-left">{{ t("snapshot") }}</th>
+				  <th class="px-3 py-2 text-left">{{ t("date") }}</th>
+				</tr>
+			  </thead>
+			  <tbody>
+				{% for m in sent_emails %}
+				  <tr class="border-t border-slate-800">
+					<td class="px-3 py-2">{{ t(m.template_type) }}</td>
+					<td class="px-3 py-2 text-slate-400">{{ m.expiration_date }}</td>
+					<td class="px-3 py-2 text-slate-300">{{ m.sent_at }}</td>
+				  </tr>
+				{% endfor %}
+			  </tbody>
+			</table>
+		  </div>
+
+		  {# Dégradé bas (visible seulement quand replié) #}
+		  <div id="emailsFade"
+			   class="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-slate-900 to-transparent">
+		  </div>
+		</div>
+
+		{# Bouton (masqué par défaut, affiché en JS si nécessaire) #}
+		<div id="emailsToggleWrap" class="mt-3 hidden">
+		  <button type="button"
+				  id="emailsToggle"
+				  class="w-full px-3 py-2 text-xs rounded-xl border border-slate-800 bg-slate-950/40 text-slate-200 hover:bg-slate-950/70">
+			{{ t("collapse_show_more") }}
+		  </button>
+		</div>
+
+	  {% else %}
+		<p class="text-xs text-slate-500">{{ t("no_email_sent") }}</p>
+	  {% endif %}
+	</div>
+
+
   <!-- ========== PLEX BUBBLE (read-only) ========== -->
 {% set plex_accounts = servers | selectattr("media_type", "equalto", "plex") | list %}
-{% if plex_accounts %}
-
-{# On prend le 1er compte Plex (si plusieurs serveurs Plex, tu pourras faire une boucle plus tard) #}
-{% set p = plex_accounts[0] %}
-
+{% set p = plex_accounts[0] if plex_accounts else None %}
+{% if p %}
+<!-- ========== PLEX BUBBLE (read-only) ========== -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
 
-  <!-- HEADER -->
+  {# CONTENU COMPACTABLE #}
+  <div id="plexBox" class="relative overflow-hidden transition-all duration-300 max-h-48">
 
-<div class="flex flex-col mb-3">
+    <!-- HEADER -->
+    <div class="flex flex-col mb-3">
 
-  <!-- Ligne unique : titre + rôle + avatar -->
-<div class="flex items-center justify-between mb-3">
-  <h2 class="text-sm font-semibold">Plex</h2>
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold">Plex</h2>
 
-  {# DB v2: avatar vient du media_user (p.media_avatar). Fallback sur user.avatar si présent #}
-  {% if p.media_avatar %}
-    <img src="{{ p.media_avatar }}"
-         alt="Plex avatar"
-         class="w-10 h-10 rounded-full border border-slate-700">
-  {% elif user.avatar %}
-    <img src="{{ user.avatar }}"
-         alt="Plex avatar"
-         class="w-10 h-10 rounded-full border border-slate-700">
-  {% endif %}
-</div>
-
-
-  <!-- Plex flags (inchangés, juste déplacés) -->
-  <div class="flex flex-wrap gap-2 mt-2">
-    {# DB v2: ces flags sont souvent dans raw_json côté media_users, pas dans vodum_users.
-       On ne supprime rien: on garde tes conditions, mais elles risquent d'être fausses tant que tu ne les importes pas. #}
-    {% if user.home %}
-      <span class="px-2 py-0.5 text-xs rounded bg-emerald-900/40 text-emerald-300">
-        🏠 {{ t("home_user") }}
-      </span>
-    {% endif %}
-
-    {% if user.protected %}
-      <span class="px-2 py-0.5 text-xs rounded bg-purple-900/40 text-purple-300">
-        🔒 {{ t("protected_account") }}
-      </span>
-    {% endif %}
-
-    {% if user.restricted %}
-      <span class="px-2 py-0.5 text-xs rounded bg-red-900/40 text-red-300 opacity-90">
-        ⛔ {{ t("restricted") }}
-      </span>
-    {% endif %}
-  </div>
-
-</div>
-
-
-  <!-- INFOS PRINCIPALES -->
-  <div class="grid grid-cols-2 gap-y-2 text-sm mt-4">
-    <div class="text-slate-400">{{ t("plex_id") }}</div>
-    {# DB v2: plex id = external_user_id sur media_users #}
-    <div class="font-mono text-slate-200">{{ p.external_user_id or t("not_available") }}</div>
-
-    <div class="text-slate-400">{{ t("plex_role") }}</div>
-    {# DB v2: role = media_role sur ta query (alias) #}
-    <div class="text-slate-200">{{ p.media_role or t("not_available") }}</div>
-
-    <div class="text-slate-400">{{ t("joined_at") }}</div>
-    <div class="text-slate-200">{{ p.joined_at or t("not_available") }}</div>
-
-    <div class="text-slate-400">{{ t("accepted_at") }}</div>
-    <div class="text-slate-200">{{ p.accepted_at or t("not_available") }}</div>
-  </div>
-
-  <!-- PLEX PASS FLAG -->
-  {# DB v2: subscription_* n'est pas dans ton query media_users actuellement.
-     On garde ton bloc sans le supprimer, mais il ne s'affichera que si tu importes ces champs plus tard. #}
-  {% if user.subscription_active %}
-    <div class="mt-4">
-      <span class="px-3 py-1 text-xs rounded-full bg-amber-900/40 text-amber-300">
-        ⭐ Plex Pass
-      </span>
-    </div>
-  {% endif %}
-
-  <!-- PLEX PASS DETAILS -->
-  <div class="mt-3 bg-slate-950/60 border border-slate-800 rounded-xl p-4">
-    <div class="text-xs font-semibold text-slate-300 mb-3">
-      Plex Pass
-    </div>
-
-    <div class="grid grid-cols-2 gap-y-2 text-sm">
-      <div class="text-slate-400">{{ t("subscription_active") }}</div>
-      <div class="text-slate-200">
-        {{ user.subscription_active if user.subscription_active is not none else t("not_available") }}
+        {% if p.media_avatar %}
+          <img src="{{ p.media_avatar }}"
+               alt="Plex avatar"
+               class="w-10 h-10 rounded-full border border-slate-700">
+        {% elif user.avatar %}
+          <img src="{{ user.avatar }}"
+               alt="Plex avatar"
+               class="w-10 h-10 rounded-full border border-slate-700">
+        {% endif %}
       </div>
 
-      <div class="text-slate-400">{{ t("subscription_status") }}</div>
-      <div class="text-slate-200">{{ user.subscription_status or t("not_available") }}</div>
+      <!-- Plex flags -->
+      <div class="flex flex-wrap gap-2 mt-2">
+        {% if user.home %}
+          <span class="px-2 py-0.5 text-xs rounded bg-emerald-900/40 text-emerald-300">
+            🏠 {{ t("home_user") }}
+          </span>
+        {% endif %}
 
-      <div class="text-slate-400">{{ t("subscription_plan") }}</div>
-      <div class="text-slate-200">{{ user.subscription_plan or t("not_available") }}</div>
+        {% if user.protected %}
+          <span class="px-2 py-0.5 text-xs rounded bg-purple-900/40 text-purple-300">
+            🔒 {{ t("protected_account") }}
+          </span>
+        {% endif %}
+
+        {% if user.restricted %}
+          <span class="px-2 py-0.5 text-xs rounded bg-red-900/40 text-red-300 opacity-90">
+            ⛔ {{ t("restricted") }}
+          </span>
+        {% endif %}
+      </div>
     </div>
+
+    <!-- INFOS PRINCIPALES -->
+    <div class="grid grid-cols-2 gap-y-2 text-sm mt-4">
+      <div class="text-slate-400">{{ t("plex_id") }}</div>
+      <div class="font-mono text-slate-200">{{ p.external_user_id or t("not_available") }}</div>
+
+      <div class="text-slate-400">{{ t("plex_role") }}</div>
+      <div class="text-slate-200">{{ p.media_role or t("not_available") }}</div>
+
+      <div class="text-slate-400">{{ t("joined_at") }}</div>
+      <div class="text-slate-200">{{ p.joined_at or t("not_available") }}</div>
+
+      <div class="text-slate-400">{{ t("accepted_at") }}</div>
+      <div class="text-slate-200">{{ p.accepted_at or t("not_available") }}</div>
+    </div>
+
+    {% if user.subscription_active %}
+      <div class="mt-4">
+        <span class="px-3 py-1 text-xs rounded-full bg-amber-900/40 text-amber-300">
+          ⭐ Plex Pass
+        </span>
+      </div>
+    {% endif %}
+
+    <div class="mt-3 bg-slate-950/60 border border-slate-800 rounded-xl p-4">
+      <div class="text-xs font-semibold text-slate-300 mb-3">Plex Pass</div>
+
+      <div class="grid grid-cols-2 gap-y-2 text-sm">
+        <div class="text-slate-400">{{ t("subscription_active") }}</div>
+        <div class="text-slate-200">
+          {{ user.subscription_active if user.subscription_active is not none else t("not_available") }}
+        </div>
+
+        <div class="text-slate-400">{{ t("subscription_status") }}</div>
+        <div class="text-slate-200">{{ user.subscription_status or t("not_available") }}</div>
+
+        <div class="text-slate-400">{{ t("subscription_plan") }}</div>
+        <div class="text-slate-200">{{ user.subscription_plan or t("not_available") }}</div>
+      </div>
+    </div>
+
+    <div id="plexFade"
+         class="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-slate-900 to-transparent">
+    </div>
+
   </div>
 
-
-
+  <div class="mt-3">
+    <button type="button"
+            id="plexToggle"
+            class="w-full px-3 py-2 text-xs rounded-xl border border-slate-800 bg-slate-950/40 text-slate-200 hover:bg-slate-950/70">
+      {{ t("collapse_show_more") }}
+    </button>
+  </div>
 
 </div>
 {% endif %}
 
 
 
+
+
   <!-- ========== JELLYFIN BUBBLE (read-only, enriched) ========== -->
-  {% set jellyfin_accounts = servers | selectattr("media_type", "equalto", "jellyfin") | list %}
-  {% if jellyfin_accounts %}
-    {% set j = jellyfin_accounts[0] %}
+{% set jellyfin_accounts = servers | selectattr("media_type", "equalto", "jellyfin") | list %}
+{% if jellyfin_accounts %}
+  {% set j = jellyfin_accounts[0] %}
 
-    {# raw_json peut être déjà un dict OU une string JSON. On tente de parser si besoin. #}
-    {% set jraw = j.raw_json %}
-    {% if jraw is string and jraw %}
-      {% set jraw = jraw | fromjson %}
-    {% endif %}
+  {# raw_json peut être déjà un dict OU une string JSON. On tente de parser si besoin. #}
+  {% set jraw = j.raw_json %}
+  {% if jraw is string and jraw %}
+    {% set jraw = jraw | fromjson %}
+  {% endif %}
 
-    {% set policy = (jraw.Policy if jraw and jraw.Policy is defined else {}) %}
-    {% set config = (jraw.Configuration if jraw and jraw.Configuration is defined else {}) %}
+  {% set policy = (jraw.Policy if jraw and jraw.Policy is defined else {}) %}
+  {% set config = (jraw.Configuration if jraw and jraw.Configuration is defined else {}) %}
 
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+
+    {# CONTENU COMPACTABLE #}
+    <div id="jellyfinBox" class="relative overflow-hidden transition-all duration-300 max-h-48">
 
       <!-- HEADER (title + role badge + avatar) -->
       <div class="flex items-center justify-between mb-3">
@@ -338,19 +390,19 @@
           {# Admin badge from policy if present #}
           {% if policy and policy.IsAdministrator %}
             <span class="px-2 py-0.5 text-xs rounded bg-amber-900/40 text-amber-300">
-              👑 admin
+              admin
             </span>
           {% endif %}
 
           {% if policy and policy.IsDisabled %}
             <span class="px-2 py-0.5 text-xs rounded bg-rose-900/40 text-rose-300">
-              ⛔ disabled
+              disabled
             </span>
           {% endif %}
 
           {% if policy and policy.IsHidden %}
             <span class="px-2 py-0.5 text-xs rounded bg-slate-800 text-slate-400">
-              🙈 hidden
+              hidden
             </span>
           {% endif %}
         </div>
@@ -486,50 +538,29 @@
         </div>
       </div>
 
-      <!-- FULL RAW JSON (no limits)
-      <details class="mt-4">
-        <summary class="text-xs text-slate-400 cursor-pointer select-none">
-          JSON complet
-        </summary>
-        <pre class="mt-2 text-xs whitespace-pre-wrap break-words bg-slate-950/60 border border-slate-800 rounded-xl p-3 text-slate-200">
-{{ (jraw | tojson(indent=2)) if jraw else (j.raw_json or t("not_available")) }}
-        </pre>
-      </details> -->
+      {# Dégradé bas visible seulement quand replié #}
+      <div id="jellyfinFade"
+           class="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-slate-900 to-transparent">
+      </div>
 
     </div>
-  {% endif %}
 
-
-
-  <!-- ========== EMAIL HISTORY (unchanged content, just moved) ========== -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-    <h2 class="text-sm font-semibold mb-2">{{ t("email_history") }}</h2>
-
-    {% if sent_emails %}
-    <div class="max-h-48 overflow-y-auto border border-slate-800 rounded-xl">
-      <table class="w-full text-xs">
-        <thead class="bg-slate-950/60 text-slate-400 sticky top-0">
-          <tr>
-            <th class="px-3 py-2 text-left">{{ t("type") }}</th>
-            <th class="px-3 py-2 text-left">{{ t("snapshot") }}</th>
-            <th class="px-3 py-2 text-left">{{ t("date") }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for m in sent_emails %}
-          <tr class="border-t border-slate-800">
-		  <td class="px-3 py-2">{{ t(m.template_type) }}</td>
-		  <td class="px-3 py-2 text-slate-400">{{ m.expiration_date }}</td>
-		  <td class="px-3 py-2 text-slate-300">{{ m.sent_at }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+    {# BOUTON #}
+    <div class="mt-3">
+      <button type="button"
+              id="jellyfinToggle"
+              class="w-full px-3 py-2 text-xs rounded-xl border border-slate-800 bg-slate-950/40 text-slate-200 hover:bg-slate-950/70">
+        {{ t("collapse_show_more") }}
+      </button>
     </div>
-    {% else %}
-    <p class="text-xs text-slate-500">{{ t("no_email_sent") }}</p>
-    {% endif %}
+
   </div>
+{% endif %}
+
+
+
+
+
 
 </div>
 
@@ -658,65 +689,64 @@
         {% if s.media_type == 'plex' %}
 
           <!-- Editable options -->
-			<label class="flex justify-between items-center gap-2
-						  {% if is_owner_plex  %} opacity-60 cursor-not-allowed {% endif %}">
+			{% set debug_disabled = (not settings.debug_mode) %}
+			{% set disable_checkbox = (is_owner_plex or debug_disabled) %}
+			{% set readonly_text = (is_owner_plex or debug_disabled) %}
+			{% set dim_class = "opacity-60 cursor-not-allowed" if (is_owner_plex or debug_disabled) else "" %}
+
+			<label class="flex justify-between items-center gap-2 {{ dim_class }}">
 			  {{ t("allow_sync") }}
 			  <input type="checkbox"
 					 name="allow_sync_{{ s.media_user_id }}"
 					 {% if o.allow_sync %}checked{% endif %}
-					 {% if is_owner_plex  %}disabled{% endif %}>
+					 {% if disable_checkbox %}disabled{% endif %}>
 			</label>
 
-			<label class="flex justify-between items-center gap-2
-						  {% if is_owner_plex  %} opacity-60 cursor-not-allowed {% endif %}">
+			<label class="flex justify-between items-center gap-2 {{ dim_class }}">
 			  {{ t("allow_camera_upload") }}
 			  <input type="checkbox"
 					 name="allow_camera_upload_{{ s.media_user_id }}"
 					 {% if o.allow_camera_upload %}checked{% endif %}
-					 {% if is_owner_plex  %}disabled{% endif %}>
+					 {% if disable_checkbox %}disabled{% endif %}>
 			</label>
 
-			<label class="flex justify-between items-center gap-2
-						  {% if is_owner_plex  %} opacity-60 cursor-not-allowed {% endif %}">
+			<label class="flex justify-between items-center gap-2 {{ dim_class }}">
 			  {{ t("allow_channels") }}
 			  <input type="checkbox"
 					 name="allow_channels_{{ s.media_user_id }}"
 					 {% if o.allow_channels %}checked{% endif %}
-					 {% if is_owner_plex  %}disabled{% endif %}>
+					 {% if disable_checkbox %}disabled{% endif %}>
 			</label>
-
-			<label class="flex flex-col
-						  {% if is_owner_plex  %} opacity-60 {% endif %}">
+			<label class="flex flex-col {{ "opacity-60" if (is_owner_plex or debug_disabled) else "" }}">
 			  {{ t("filter_movies") }}
 			  <input type="text"
 					 name="filter_movies_{{ s.media_user_id }}"
 					 value="{{ o.filter_movies }}"
-					 {% if is_owner_plex  %}readonly{% endif %}
+					 {% if readonly_text %}readonly{% endif %}
 					 class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1
-							{% if is_owner_plex %} cursor-not-allowed {% endif %}">
+							{% if readonly_text %} cursor-not-allowed {% endif %}">
 			</label>
 
-			<label class="flex flex-col
-						  {% if is_owner_plex  %} opacity-60 {% endif %}">
+			<label class="flex flex-col {{ "opacity-60" if (is_owner_plex or debug_disabled) else "" }}">
 			  {{ t("filter_television") }}
 			  <input type="text"
 					 name="filter_television_{{ s.media_user_id }}"
 					 value="{{ o.filter_television }}"
-					 {% if is_owner_plex  %}readonly{% endif %}
+					 {% if readonly_text %}readonly{% endif %}
 					 class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1
-							{% if is_owner_plex %} cursor-not-allowed {% endif %}">
+							{% if readonly_text %} cursor-not-allowed {% endif %}">
 			</label>
 
-			<label class="flex flex-col
-						  {% if is_owner_plex  %} opacity-60 {% endif %}">
+			<label class="flex flex-col {{ "opacity-60" if (is_owner_plex or debug_disabled) else "" }}">
 			  {{ t("filter_music") }}
 			  <input type="text"
 					 name="filter_music_{{ s.media_user_id }}"
 					 value="{{ o.filter_music }}"
-					 {% if is_owner_plex  %}readonly{% endif %}
+					 {% if readonly_text %}readonly{% endif %}
 					 class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1
-							{% if is_owner_plex %} cursor-not-allowed {% endif %}">
+							{% if readonly_text %} cursor-not-allowed {% endif %}">
 			</label>
+
 
 
         {% else %}
@@ -1397,5 +1427,139 @@ const TXT_PREVIEW_MEDIA_JOBS = {{ t('merge.preview.media_jobs')|tojson }};
 
 })();
 </script>
+<script>
+  (function () {
+    const box = document.getElementById("plexBox");
+    const btn = document.getElementById("plexToggle");
+    const fade = document.getElementById("plexFade");
+    if (!box || !btn) return;
+
+    // Traductions injectées depuis Jinja
+    const TXT_SHOW_MORE = {{ t("collapse_show_more") | tojson }};
+    const TXT_SHOW_LESS = {{ t("collapse_show_less") | tojson }};
+
+    let expanded = false;
+
+    btn.addEventListener("click", () => {
+      expanded = !expanded;
+
+      if (expanded) {
+        box.classList.remove("max-h-48");
+        box.classList.add("max-h-[9999px]");
+        if (fade) fade.classList.add("hidden");
+        btn.textContent = TXT_SHOW_LESS;
+      } else {
+        box.classList.add("max-h-48");
+        box.classList.remove("max-h-[9999px]");
+        if (fade) fade.classList.remove("hidden");
+        btn.textContent = TXT_SHOW_MORE;
+      }
+    });
+  })();
+</script>
+<script>
+  (function () {
+    const box = document.getElementById("jellyfinBox");
+    const btn = document.getElementById("jellyfinToggle");
+    const fade = document.getElementById("jellyfinFade");
+    if (!box || !btn) return;
+
+    const TXT_MORE = {{ t("collapse_show_more") | tojson }};
+    const TXT_LESS = {{ t("collapse_show_less") | tojson }};
+
+    let expanded = false;
+
+    btn.addEventListener("click", () => {
+      expanded = !expanded;
+
+      if (expanded) {
+        box.classList.remove("max-h-48");
+        box.classList.add("max-h-[9999px]");
+        if (fade) fade.classList.add("hidden");
+        btn.textContent = TXT_LESS;
+      } else {
+        box.classList.add("max-h-48");
+        box.classList.remove("max-h-[9999px]");
+        if (fade) fade.classList.remove("hidden");
+        btn.textContent = TXT_MORE;
+      }
+    });
+  })();
+</script>
+<script>
+  (function () {
+    const box = document.getElementById("emailsBox");
+    const inner = document.getElementById("emailsInner");
+    const fade = document.getElementById("emailsFade");
+    const btn = document.getElementById("emailsToggle");
+    const btnWrap = document.getElementById("emailsToggleWrap");
+    if (!box || !inner || !btn || !btnWrap) return;
+
+    const TXT_MORE = {{ t("collapse_show_more") | tojson }};
+    const TXT_LESS = {{ t("collapse_show_less") | tojson }};
+
+    // Hauteur "repliée" (doit matcher max-h-48 = 12rem = ~192px)
+    const COLLAPSED_PX = 192;
+
+    let expanded = false;
+
+    function needsToggle() {
+      // Si le contenu total dépasse la hauteur repliée -> on affiche le bouton
+      return inner.scrollHeight > COLLAPSED_PX + 1;
+    }
+
+    function applyState() {
+      if (expanded) {
+        box.classList.remove("max-h-48");
+        box.classList.add("max-h-[9999px]");
+        inner.classList.remove("overflow-y-auto");
+        if (fade) fade.classList.add("hidden");
+        btn.textContent = TXT_LESS;
+      } else {
+        box.classList.add("max-h-48");
+        box.classList.remove("max-h-[9999px]");
+        inner.classList.add("overflow-y-auto");
+        if (fade) fade.classList.remove("hidden");
+        btn.textContent = TXT_MORE;
+      }
+    }
+
+    // Affiche/masque le bouton uniquement si nécessaire
+    if (needsToggle()) {
+      btnWrap.classList.remove("hidden");
+      applyState();
+    } else {
+      // pas besoin de bouton, pas de fade non plus
+      btnWrap.classList.add("hidden");
+      if (fade) fade.classList.add("hidden");
+      // et on enlève la limite si tu veux (optionnel)
+      box.classList.remove("max-h-48");
+      box.classList.add("max-h-[9999px]");
+      inner.classList.remove("overflow-y-auto");
+    }
+
+    btn.addEventListener("click", () => {
+      expanded = !expanded;
+      applyState();
+    });
+
+    // Optionnel: si la page se redimensionne (responsive), on recheck
+    window.addEventListener("resize", () => {
+      if (needsToggle()) {
+        btnWrap.classList.remove("hidden");
+        // si on était "expanded", on laisse expanded
+        applyState();
+      } else {
+        btnWrap.classList.add("hidden");
+        if (fade) fade.classList.add("hidden");
+        box.classList.remove("max-h-48");
+        box.classList.add("max-h-[9999px]");
+        inner.classList.remove("overflow-y-auto");
+      }
+    });
+  })();
+</script>
+
+
 
 {% endblock %}

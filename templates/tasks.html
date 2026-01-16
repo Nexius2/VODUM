@@ -16,7 +16,9 @@
     <table class="w-full text-left text-sm">
         <thead>
             <tr class="border-b border-slate-800">
-                <th class="p-2">ID</th>
+				{% if (settings.debug_mode|default(0)|int) == 1 %}
+				  <th class="p-2">ID</th>
+				{% endif %}
                 <th class="p-2">{{ t("name") }}</th>
                 <th class="p-2">{{ t("description") }}</th>
                 <th class="p-2">{{ t("schedule") }}</th>
@@ -30,7 +32,9 @@
         <tbody>
             {% for task in tasks %}
             <tr class="border-b border-slate-800">
-                <td class="p-2">{{ task.id }}</td>
+				{% if (settings.debug_mode|default(0)|int) == 1 %}
+				  <td class="p-2">{{ task.id }}</td>
+				{% endif %}
 				<td class="p-2">
 					{{ t("task." ~ task.name) or task.name }}
 				</td>

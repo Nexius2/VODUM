@@ -164,6 +164,89 @@ def get_all_plex_section_titles(plex):
         logger.exception("❌ Unable to read plex.library.sections()")
         raise
 
+def update_shared_server(account, plex, plex_user, section_titles,
+                         allowSync=None, allowCameraUpload=None, allowChannels=None,
+                         filterMovies=None, filterTelevision=None, filterMusic=None):
+    """
+    Met à jour le partage Plex via /api/servers/{machineId}/shared_servers/{sharedServerId}
+    en envoyant :
+      - library_section_ids (obligatoire)
+      - allowSync (Allow Downloads) + autres flags (optionnels)
+      - filterMovies/filterTelevision/filterMusic (optionnels)
+    """
+    machine_id = plex.machineIdentifier
+
+    # Trouver le shared_server id correspondant à CE serveur
+    shared_srv = None
+    for srv in getattr(plex_user, "servers", []) or []:
+        if getattr(srv, "machineIdentifier", None) == machine_id:
+            shared_srv = srv
+            break
+
+    if not shared_srv:
+        raise RuntimeError(
+            f"No shared_server found for user='{plex_user.username}' on machineIdentifier='{machine_id}'"
+        )
+
+    # Convertir titres -> ids (méthode PlexAPI)
+    section_ids = account._getSectionIds(machine_id, section_titles)
+
+    payload = {
+        "server_id": machine_id,
+        "shared_server": {
+            "library_section_ids": section_ids
+        }
+    }
+
+    # IMPORTANT: n'ajoute que ce qui est défini (évite d'écraser par accident)
+    if allowSync is not None:
+        payload["shared_server"]["allowSync"] = 1 if bool(allowSync) else 0
+    if allowCameraUpload is not None:
+        payload["shared_server"]["allowCameraUpload"] = 1 if bool(allowCameraUpload) else 0
+    if allowChannels is not None:
+        payload["shared_server"]["allowChannels"] = 1 if bool(allowChannels) else 0
+
+    if filterMovies is not None:
+        payload["shared_server"]["filterMovies"] = filterMovies or ""
+    if filterTelevision is not None:
+        payload["shared_server"]["filterTelevision"] = filterTelevision or ""
+    if filterMusic is not None:
+        payload["shared_server"]["filterMusic"] = filterMusic or ""
+
+    url = account.FRIENDSERVERS.format(machineId=machine_id, serverId=shared_srv.id)
+    headers = {"Content-Type": "application/json"}
+
+    return account.query(url, account._session.put, json=payload, headers=headers)
+
+
+def update_friend_safe(account, plex, username, sections, removeSections=False):
+    """
+    Wrapper anti-404:
+    - 1) essaie updateFriend() avec sections + flags (appel normal)
+    - 2) si ça plante (404 sur /api/v2/sharings/...), retry en "libs only"
+         => on n'envoie PAS allowSync/allowCameraUpload/allowChannels/filter*
+    """
+    try:
+        # Appel normal (comme aujourd'hui)
+        return account.updateFriend(
+            user=username,
+            server=plex,
+            sections=sections,
+            removeSections=removeSections,
+        )
+    except Exception as e:
+        logger.warning(f"updateFriend() failed (likely Plex v2 sharings 404): {e}")
+        logger.warning("Retry updateFriend() in LIBS-ONLY mode (no allow*/filters)")
+
+        # Retry: libs only (ça évite le second call cassé chez toi)
+        return account.updateFriend(
+            user=username,
+            server=plex,
+            sections=sections,
+            removeSections=removeSections,
+            # SURTOUT: ne pas passer allowSync/allowCameraUpload/allowChannels/filter*
+        )
+
 
 def cleanup_old_jobs(db):
     """
@@ -181,7 +264,7 @@ def cleanup_old_jobs(db):
         """
     ).rowcount
 
-    logger.info(f"🧹 Jobs cleanup: {deleted} successful Plex job(s) deleted")
+    logger.info(f"Jobs cleanup: {deleted} successful Plex job(s) deleted")
 
 
 def resolve_media_user(db, vodum_user_id: int, server_id: int):
@@ -214,6 +297,25 @@ def is_owner_media_user(user_row) -> bool:
         return (user_row["role"] or "").strip().lower() == "owner"
     except Exception:
         return False
+
+def _parse_bool(v, default=False) -> bool:
+    if v is None:
+        return default
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return v != 0
+    if isinstance(v, str):
+        s = v.strip().lower()
+        if s in ("1", "true", "yes", "on"):
+            return True
+        if s in ("0", "false", "no", "off", ""):
+            return False
+    return default
+
+
+def _parse_int01(v, default=0) -> int:
+    return 1 if _parse_bool(v, default=bool(default)) else 0
 
 
 def _get_plex_share_settings_from_user(user_row):
@@ -258,12 +360,22 @@ def _get_plex_share_settings_from_user(user_row):
         details = {}
 
     plex_share = details.get("plex_share", {})
+    
+    logger.warning(
+        f"[plex_share debug] raw_allowSync={plex_share.get('allowSync')!r} "
+        f"raw_allowCameraUpload={plex_share.get('allowCameraUpload')!r} "
+        f"raw_allowChannels={plex_share.get('allowChannels')!r}"
+    )
+
+    
     if not isinstance(plex_share, dict):
         plex_share = {}
 
-    allowSync = 1 if plex_share.get("allowSync") else 0
-    allowCameraUpload = 1 if plex_share.get("allowCameraUpload") else 0
-    allowChannels = 1 if plex_share.get("allowChannels") else 0
+    allowSync = _parse_int01(plex_share.get("allowSync"), default=0)
+    allowCameraUpload = _parse_int01(plex_share.get("allowCameraUpload"), default=0)
+    allowChannels = _parse_int01(plex_share.get("allowChannels"), default=0)
+
+
 
     filterMovies = plex_share.get("filterMovies") or ""
     filterTelevision = plex_share.get("filterTelevision") or ""
@@ -288,7 +400,7 @@ def apply_grant_job(db, job):
     user_id = user["id"]
     if is_owner_media_user(user):
         logger.info(
-            f"⏭️ Skip GRANT (owner) : username={user['username']} "
+            f"Skip GRANT (owner) : username={user['username']} "
             f"server_id={server_id} library_id={lib_id}"
         )
         return
@@ -315,7 +427,7 @@ def apply_grant_job(db, job):
         raise RuntimeError("Server / library / user not found")
 
     logger.info(
-        f"➡ Updating access: {user['username']} ← {library['name']} sur {server['name']}"
+        f"Updating access: {user['username']} ← {library['name']} sur {server['name']}"
     )
 
     plex = get_plex(server)
@@ -373,10 +485,17 @@ def apply_grant_job(db, job):
 
     
     try:
-        account.updateFriend(
-            user=plex_user,
-            server=plex,
-            sections=list(current_sections),  # liste de noms
+        sections = list(current_sections)
+
+        # 1) Met à jour les LIBS (JBOPS)
+        account.updateFriend(user=user["username"], server=plex, sections=sections)
+
+        # 2) Met à jour les FLAGS + FILTERS via shared_servers
+        update_shared_server(
+            account=account,
+            plex=plex,
+            plex_user=plex_user,
+            section_titles=sections,
             allowSync=allowSync,
             allowCameraUpload=allowCameraUpload,
             allowChannels=allowChannels,
@@ -384,12 +503,13 @@ def apply_grant_job(db, job):
             filterTelevision=filterTelevision,
             filterMusic=filterMusic,
         )
-
-        logger.info("✔ Access updated successfully")
+        logger.info("Access updated successfully (libs + shared_server flags)")
 
     except Exception:
-        logger.exception("❌ updateFriend() failed")
+        logger.exception("apply_grant_job failed")
         raise
+
+
 
 
 def apply_sync_job(db, job):
@@ -407,7 +527,7 @@ def apply_sync_job(db, job):
     user_id = user["id"]
     if is_owner_media_user(user):
         logger.info(
-            f"⏭️ Skip SYNC (owner) : username={user['username']} server_id={server_id}"
+            f"Skip SYNC (owner) : username={user['username']} server_id={server_id}"
         )
         return
 
@@ -426,7 +546,7 @@ def apply_sync_job(db, job):
     if not server or not user:
         raise RuntimeError("Server or user not found (sync)")
 
-    logger.info(f"🔄 FULL ACCESS SYNC: {user['username']} on {server['name']} (server_id={server_id}, user_id={user_id})")
+    logger.info(f"FULL ACCESS SYNC: {user['username']} on {server['name']} (server_id={server_id}, user_id={user_id})")
 
     # Connexion Plex
     plex = get_plex(server)
@@ -438,17 +558,17 @@ def apply_sync_job(db, job):
     try:
         baseurl = getattr(plex, "_baseurl", None) or getattr(plex, "baseurl", None)
         logger.info(
-            f"🧪 Plex debug server: db_name='{server['name']}' "
+            f"Plex debug server: db_name='{server['name']}' "
             f"friendlyName='{plex.friendlyName}' baseurl='{baseurl}'"
         )
     except Exception:
-        logger.exception("⚠️ Unable to log Plex server debug info")
+        logger.exception("Unable to log Plex server debug info")
 
     # Récup MyPlexUser
     try:
         plex_user = account.user(user["username"])
         logger.info(
-            "🧪 Plex debug user: "
+            "Plex debug user: "
             f"db_username='{user['username']}' "
             f"plex_username='{getattr(plex_user, 'username', None)}' "
             f"plex_title='{getattr(plex_user, 'title', None)}' "
@@ -456,7 +576,7 @@ def apply_sync_job(db, job):
             f"plex_id='{getattr(plex_user, 'id', None)}'"
         )
     except Exception:
-        logger.exception(f"❌ Unable to retrieve MyPlexUser for {user['username']}")
+        logger.exception(f"Unable to retrieve MyPlexUser for {user['username']}")
         raise
 
     # Récup ALL libraries autorisées pour cet user + serveur
@@ -473,12 +593,16 @@ def apply_sync_job(db, job):
 
     sections = [r["name"] for r in rows]
     if not sections:
-        raise RuntimeError(
-            f"No library found in DB for media_user_id={user_id} "
-            f"(vodum_user_id={vodum_user_id}) server_id={server_id}. "
-            "Sync aborted to avoid removing all access."
+        logger.warning(
+            f"SYNC with 0 libraries: user='{user['username']}' server_id={server_id} "
+            f"→ applying flags with sections=[]"
         )
-    logger.info(f"📚 Sections DB (expected) ({len(sections)}): {sections}")
+        sections = []
+
+
+
+    logger.info(f"Sections DB (expected) ({len(sections)}): {sections}")
+
 
     # --- PERMISSIONS (depuis media_users.details_json) --------------------
     try:
@@ -486,18 +610,18 @@ def apply_sync_job(db, job):
             _get_plex_share_settings_from_user(user)
         )
     except Exception:
-        logger.exception("❌ Unable to read plex_share settings from details_json")
+        logger.exception("Unable to read plex_share settings from details_json")
         raise
 
     logger.info(
-        "🧾 Plex share settings: "
+        "Plex share settings: "
         f"allowSync={allowSync} allowCameraUpload={allowCameraUpload} allowChannels={allowChannels} "
         f"filterMovies='{filterMovies}' filterTelevision='{filterTelevision}' filterMusic='{filterMusic}'"
     )
 
     # Application
     logger.warning(
-        f"🚫 APPLY SYNC intent: user='{user['username']}' "
+        f"APPLY SYNC intent: user='{user['username']}' "
         f"server_friendly='{plex.friendlyName}' sections={sections}"
     )
 
@@ -518,10 +642,15 @@ def apply_sync_job(db, job):
 
 
     try:
-        account.updateFriend(
-            user=plex_user,
-            server=plex,
-            sections=sections,  # liste de noms !
+        # 1) Met à jour les LIBS 
+        account.updateFriend(user=user["username"], server=plex, sections=sections)
+
+        # 2) Met à jour les FLAGS + FILTERS via shared_servers (Allow Downloads etc.)
+        update_shared_server(
+            account=account,
+            plex=plex,
+            plex_user=plex_user,
+            section_titles=sections,
             allowSync=allowSync,
             allowCameraUpload=allowCameraUpload,
             allowChannels=allowChannels,
@@ -529,11 +658,12 @@ def apply_sync_job(db, job):
             filterTelevision=filterTelevision,
             filterMusic=filterMusic,
         )
-        logger.info("✔ SYNC applied successfully (updateFriend OK)")
 
+        logger.info("SYNC applied successfully (LIBS ONLY)")
     except Exception:
-        logger.exception("❌ updateFriend() failed during sync")
+        logger.exception("update_friend_safe() failed during sync")
         raise
+
 
     # --- POST-CHECK : relire ce que Plex croit vraiment après updateFriend ---
     try:
@@ -555,13 +685,13 @@ def apply_sync_job(db, job):
                 break
 
         logger.warning(
-            f"🧾 POST-CHECK share state: user='{user['username']}' "
+            f"POST-CHECK share state: user='{user['username']}' "
             f"server_friendly='{plex.friendlyName}' matched_server_sections={shared_on_server} "
             f"user_servers={server_names}"
         )
 
     except Exception:
-        logger.exception("⚠️ POST-CHECK failed: unable to reload share state after updateFriend()")
+        logger.exception("POST-CHECK failed: unable to reload share state after updateFriend()")
 
 def apply_revoke_job(db, job):
     """
@@ -574,7 +704,7 @@ def apply_revoke_job(db, job):
     user = resolve_media_user(db, vodum_user_id, server_id)
     if is_owner_media_user(user):
         logger.info(
-            f"⏭️ Skip REVOKE (owner) : username={user['username']} server_id={server_id}"
+            f"Skip REVOKE (owner) : username={user['username']} server_id={server_id}"
         )
         return
 
@@ -595,7 +725,7 @@ def apply_revoke_job(db, job):
         install_plex_http_logger(getattr(account, "_session", None), "PLEX_ACCOUNT")
         plex_user = account.user(user["username"])
     except Exception:
-        logger.exception(f"❌ Unable to retrieve MyPlexUser for {user['username']}")
+        logger.exception(f"Unable to retrieve MyPlexUser for {user['username']}")
         raise
 
     allowSync, allowCameraUpload, allowChannels, filterMovies, filterTelevision, filterMusic = (
@@ -603,7 +733,7 @@ def apply_revoke_job(db, job):
     )
 
     logger.warning(
-        f"🚫 APPLY REVOKE intent: user='{user['username']}' "
+        f"APPLY REVOKE intent: user='{user['username']}' "
         f"server_friendly='{plex.friendlyName}' sections=[] (revoke all)"
     )
 
@@ -644,22 +774,20 @@ def apply_revoke_job(db, job):
     )
 
     try:
-        account.updateFriend(
-            user=user["username"],     # ✅ comme JBOPS: STRING (user)
-            server=plex,               # ✅ plex server object
-            removeSections=True,       # ✅ JBOPS
-            sections=sections_titles,  # ✅ JBOPS: liste de TITRES
-            allowSync=allowSync,
-            allowCameraUpload=allowCameraUpload,
-            allowChannels=allowChannels,
-            filterMovies=filterMovies,
-            filterTelevision=filterTelevision,
-            filterMusic=filterMusic,
+        update_friend_safe(
+            account=account,
+            plex=plex,
+            username=user["username"],
+            sections=[],            # <- revoke = aucune section
+            removeSections=True,    # <- important
         )
-        logger.info("✔ REVOKE applied successfully (removeSections=True + sections_titles)")
+        logger.info("REVOKE applied successfully (libs only via updateFriend)")
     except Exception:
-        logger.exception("❌ updateFriend() failed during revoke")
+        logger.exception("apply_revoke_job failed")
         raise
+
+
+
 
 
 
@@ -727,10 +855,10 @@ def run(task_id: int, db):
                 (job_id,)
             )
 
-            logger.info(f"Job {job_id} OK ✔ (success=1) -> deleted")
+            logger.info(f"Job {job_id} OK (success=1) -> deleted")
 
         except Exception as e:
-            logger.exception(f"❌ Error while processing job {job_id}: {e}")
+            logger.exception(f"Error while processing job {job_id}: {e}")
 
             # Job conservé pour debug/retry + remis en pending
             db.execute(

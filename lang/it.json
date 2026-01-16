@@ -44,6 +44,8 @@
   "choose_language": "Scegli la lingua",
   "cleanup_unfriended_no_users": "Nessun utente da elaborare.",
   "cleanup_unfriended_processed": "{count} utente/i sono stati segnati come senza accesso perché non avevano più librerie disponibili.",
+  "collapse_show_more": "Mostra altro",
+  "collapse_show_less": "Mostra meno",
   "confirm": "Conferma",
   "confirm_delete_server": "Eliminare definitivamente questo server?",
   "created_at": "Creato il",
