@@ -44,6 +44,8 @@
   "choose_language": "Sprache wählen",
   "cleanup_unfriended_no_users": "Keine Benutzer zu verarbeiten.",
   "cleanup_unfriended_processed": "{count} Benutzer wurden als ohne Zugriff markiert, da sie keine verfügbaren Bibliotheken mehr hatten.",
+  "collapse_show_more": "Mehr anzeigen",
+  "collapse_show_less": "Weniger anzeigen",
   "confirm": "Bestätigen",
   "confirm_delete_server": "Diesen Server endgültig löschen?",
   "created_at": "Erstellt am",

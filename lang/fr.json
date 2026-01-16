@@ -44,6 +44,8 @@
   "choose_language": "Choisir la langue",
   "cleanup_unfriended_no_users": "Aucun utilisateur à traiter.",
   "cleanup_unfriended_processed": "{count} utilisateur(s) ont été marqués sans accès car ils n’avaient plus aucune bibliothèque accessible.",
+  "collapse_show_more": "Voir la suite",
+  "collapse_show_less": "Réduire",
   "confirm": "Confirmer",
   "confirm_delete_server": "Supprimer définitivement ce serveur ?",
   "created_at": "Créé le",
