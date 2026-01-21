@@ -106,22 +106,77 @@ Designed to reflect **real server access configuration**, not just local metadat
 
 ---
 
-## 🚀 Quick Start (Docker / Unraid)
+## 🚀 Docker (Unraid)
 
-### Persistent storage structure
+> Until VODUM becomes available on **Community Applications (CA)**,
+> you can install it manually on Unraid using the official template settings.
 
-/appdata
-├── database.db
-├── backups/
-└── logs/
+This method requires **no Docker knowledge** and uses **exactly the same configuration**
+as the future CA template.
 
 ---
 
-### Docker example
+## ➕ Add VODUM to Unraid
 
-```bash
-docker run -d \
-  --name vodum \
-  -p 5000:5000 \
-  -v /mnt/user/appdata/vodum:/appdata \
-  vodum/vodum:latest
+1. Open the **Unraid Web UI**
+2. Go to **Docker**
+3. Click **Add Container**
+4. Switch to **Advanced View**
+
+---
+
+## 🧩 Container configuration
+
+Fill in the fields **exactly as shown below**.
+
+### 🔹 Basic settings
+
+**Name**
+VODUM
+
+**Repository**
+nexius2/vodum:latest
+
+**Network Type**
+bridge
+
+### 🔌 Port Mappings
+
+| Container Port | Host Port | Description |
+|---------------|----------|-------------|
+| 5000 | 8097 | Web interface |
+
+---
+
+### 📁 Path Mappings
+
+| Container Path | Host Path | Description |
+|---------------|----------|-------------|
+| /appdata | /mnt/user/appdata/vodum | Application data |
+| /logs | /mnt/user/appdata/vodum/logs | Logs |
+| /backups | /mnt/user/appdata/vodum/backups | Database backups |
+
+---
+
+### ⚙️ Environment Variables
+
+| Variable | Value | Description |
+|--------|------|-------------|
+| TZ | Europe/Paris | Timezone |
+| UID | 99 | User ID |
+| GID | 100 | Group ID |
+| DATABASE_PATH | /appdata/database.db | SQLite database location |
+
+---
+
+## ▶️ Start the container
+
+5. Click **Apply**
+6. Wait for the image to download and the container to start
+
+---
+
+## 🌐 Web Interface
+
+Once the container is running, open VODUM at:
+http://<unraid-ip>:8097
