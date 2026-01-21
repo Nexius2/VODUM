@@ -2,6 +2,8 @@ import time
 import json
 from plexapi.server import PlexServer
 from logging_utils import get_logger
+from urllib.parse import urlencode
+
 
 logger = get_logger("apply_plex_access_updates")
 
@@ -164,9 +166,7 @@ def get_all_plex_section_titles(plex):
         logger.exception("❌ Unable to read plex.library.sections()")
         raise
 
-def update_shared_server(account, plex, plex_user, section_titles,
-                         allowSync=None, allowCameraUpload=None, allowChannels=None,
-                         filterMovies=None, filterTelevision=None, filterMusic=None):
+def update_shared_server(account, plex, plex_user, section_titles):
     """
     Met à jour le partage Plex via /api/servers/{machineId}/shared_servers/{sharedServerId}
     en envoyant :
@@ -198,25 +198,73 @@ def update_shared_server(account, plex, plex_user, section_titles,
         }
     }
 
-    # IMPORTANT: n'ajoute que ce qui est défini (évite d'écraser par accident)
-    if allowSync is not None:
-        payload["shared_server"]["allowSync"] = 1 if bool(allowSync) else 0
-    if allowCameraUpload is not None:
-        payload["shared_server"]["allowCameraUpload"] = 1 if bool(allowCameraUpload) else 0
-    if allowChannels is not None:
-        payload["shared_server"]["allowChannels"] = 1 if bool(allowChannels) else 0
-
-    if filterMovies is not None:
-        payload["shared_server"]["filterMovies"] = filterMovies or ""
-    if filterTelevision is not None:
-        payload["shared_server"]["filterTelevision"] = filterTelevision or ""
-    if filterMusic is not None:
-        payload["shared_server"]["filterMusic"] = filterMusic or ""
-
     url = account.FRIENDSERVERS.format(machineId=machine_id, serverId=shared_srv.id)
     headers = {"Content-Type": "application/json"}
 
     return account.query(url, account._session.put, json=payload, headers=headers)
+
+
+
+def update_friend_filters_v2(account, plex, plex_user,
+                             allowSync=None, allowCameraUpload=None, allowChannels=None,
+                             filterMovies=None, filterTelevision=None, filterMusic=None):
+    """
+    Met à jour les flags + filtres via /api/v2/sharings/{sharingId}?...
+    IMPORTANT: l'ID attendu ici est l'id du "SharedServer" (sharing resource),
+    PAS le userID plex.
+    """
+
+    params = {}
+
+    def _i01(v):
+        if v is None:
+            return None
+        return "1" if int(v) == 1 else "0"
+
+    if allowSync is not None:
+        params["allowSync"] = _i01(allowSync)
+    if allowCameraUpload is not None:
+        params["allowCameraUpload"] = _i01(allowCameraUpload)
+    if allowChannels is not None:
+        params["allowChannels"] = _i01(allowChannels)
+
+    if filterMovies is not None:
+        params["filterMovies"] = filterMovies or ""
+    if filterTelevision is not None:
+        params["filterTelevision"] = filterTelevision or ""
+    if filterMusic is not None:
+        params["filterMusic"] = filterMusic or ""
+
+    if not params:
+        logger.info("No v2 sharing params to update (empty).")
+        return None
+
+    # 1) retrouver le "shared server" correspondant à CE serveur Plex
+    machine_id = plex.machineIdentifier
+    shared_srv = None
+    for srv in getattr(plex_user, "servers", []) or []:
+        if getattr(srv, "machineIdentifier", None) == machine_id:
+            shared_srv = srv
+            break
+
+    if not shared_srv:
+        raise RuntimeError(
+            f"No shared_server found for user='{plex_user.username}' on machineIdentifier='{machine_id}'"
+        )
+
+    # 2) l'ID à utiliser pour /api/v2/sharings/ est l'id du SharedServer
+    sharing_id = shared_srv.id
+
+    base = f"https://plex.tv/api/v2/sharings/{sharing_id}"
+    url = f"{base}?{urlencode(params)}"
+
+    logger.warning(f"[PLEX] v2 sharings update (sharing_id={sharing_id}, user_id={plex_user.id}): {url}")
+
+    # petit header Accept pour éviter certaines réponses "web"
+    headers = {"Accept": "application/json"}
+
+    return account.query(url, account._session.put, headers=headers)
+
 
 
 def update_friend_safe(account, plex, username, sections, removeSections=False):
@@ -487,27 +535,47 @@ def apply_grant_job(db, job):
     try:
         sections = list(current_sections)
 
-        # 1) Met à jour les LIBS (JBOPS)
-        account.updateFriend(user=user["username"], server=plex, sections=sections)
+        # 1) LIBS
+        update_friend_safe(
+            account=account,
+            plex=plex,
+            username=user["username"],
+            sections=sections,
+            removeSections=False,
+        )
 
-        # 2) Met à jour les FLAGS + FILTERS via shared_servers
+        # 2) (optionnel) Forcer libs via shared_servers (libs-only)
         update_shared_server(
             account=account,
             plex=plex,
             plex_user=plex_user,
             section_titles=sections,
-            allowSync=allowSync,
-            allowCameraUpload=allowCameraUpload,
-            allowChannels=allowChannels,
-            filterMovies=filterMovies,
-            filterTelevision=filterTelevision,
-            filterMusic=filterMusic,
         )
-        logger.info("Access updated successfully (libs + shared_server flags)")
+
+        # 3) FLAGS + FILTERS (LE BON ENDPOINT)
+        try:
+            update_friend_filters_v2(
+                account=account,
+                plex=plex,
+                plex_user=plex_user,
+                allowSync=allowSync,
+                allowCameraUpload=allowCameraUpload,
+                allowChannels=allowChannels,
+                filterMovies=filterMovies,
+                filterTelevision=filterTelevision,
+                filterMusic=filterMusic,
+            )
+
+        except Exception as e:
+            logger.warning(f"[PLEX] v2 sharings update failed (libs already applied): {e}")
+
+        logger.info("Access updated successfully (libs + v2 flags)")
 
     except Exception:
         logger.exception("apply_grant_job failed")
         raise
+
+
 
 
 
@@ -642,27 +710,47 @@ def apply_sync_job(db, job):
 
 
     try:
-        # 1) Met à jour les LIBS 
-        account.updateFriend(user=user["username"], server=plex, sections=sections)
+        # 1) LIBS
+        update_friend_safe(
+            account=account,
+            plex=plex,
+            username=user["username"],
+            sections=sections,
+            removeSections=False,
+        )
 
-        # 2) Met à jour les FLAGS + FILTERS via shared_servers (Allow Downloads etc.)
+        # 2) shared_servers libs-only (optionnel)
         update_shared_server(
             account=account,
             plex=plex,
             plex_user=plex_user,
             section_titles=sections,
-            allowSync=allowSync,
-            allowCameraUpload=allowCameraUpload,
-            allowChannels=allowChannels,
-            filterMovies=filterMovies,
-            filterTelevision=filterTelevision,
-            filterMusic=filterMusic,
         )
 
-        logger.info("SYNC applied successfully (LIBS ONLY)")
+        # 3) FLAGS + FILTERS via v2/sharings
+        try:
+            update_friend_filters_v2(
+                account=account,
+                plex=plex,
+                plex_user=plex_user,
+                allowSync=allowSync,
+                allowCameraUpload=allowCameraUpload,
+                allowChannels=allowChannels,
+                filterMovies=filterMovies,
+                filterTelevision=filterTelevision,
+                filterMusic=filterMusic,
+            )
+
+        except Exception as e:
+            logger.warning(f"[PLEX] v2 sharings update failed (libs already applied): {e}")
+
+        logger.info("SYNC applied successfully (libs + v2 flags)")
+
     except Exception:
-        logger.exception("update_friend_safe() failed during sync")
+        logger.exception("sync failed")
         raise
+
+
 
 
     # --- POST-CHECK : relire ce que Plex croit vraiment après updateFriend ---

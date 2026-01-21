@@ -16,6 +16,7 @@ from email.message import EmailMessage
 from tasks_engine import task_logs
 from logging_utils import get_logger
 from mailing_utils import build_user_context, render_mail
+import re
 
 
 
@@ -45,7 +46,9 @@ def send_email(subject, body, to_email, smtp_settings):
     msg["From"] = mail_from
     msg["To"] = to_email
     msg["Subject"] = subject
-    msg.set_content(body)
+    plain = re.sub(r"<[^>]+>", "", body)  # fallback simple (basique)
+    msg.set_content(plain)
+    msg.add_alternative(body, subtype="html")
 
     try:
         with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
@@ -188,7 +191,7 @@ def run(task_id: int, db):
                         if success_any:
                             db.execute(
                                 """
-                                INSERT INTO sent_emails(user_id, template_type, expiration_date)
+                                INSERT OR IGNORE INTO sent_emails(user_id, template_type, expiration_date)
                                 VALUES (?, 'fin', ?)
                                 """,
                                 (uid, exp_date),
@@ -241,7 +244,7 @@ def run(task_id: int, db):
                     if success_any:
                         db.execute(
                             """
-                            INSERT INTO sent_emails(user_id, template_type, expiration_date)
+                            INSERT OR IGNORE INTO sent_emails(user_id, template_type, expiration_date)
                             VALUES (?, ?, ?)
                             """,
                             (uid, type_, exp_date),

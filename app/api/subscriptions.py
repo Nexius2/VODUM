@@ -48,19 +48,8 @@ def update_user_expiration(user_id, new_expiration_date, reason="manual"):
 
     # 🔁 Nouveau cycle → reset sent_emails
     if new_exp > old_exp:
-        db.execute(
-            """
-            DELETE FROM sent_emails
-            WHERE user_id = ?
-              AND expiration_date = ?
-            """,
-            (user_id, old_exp)
-        )
+        log.info(f"[USER #{user_id}] Renewal detected ({old_exp} → {new_exp}) | keeping email history")
 
-        log.info(
-            f"[USER #{user_id}] Renewal detected "
-            f"({old_exp} → {new_exp}) | reset sent_emails"
-        )
 
     return True, "Expiration updated"
 

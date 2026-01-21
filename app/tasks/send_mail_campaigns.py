@@ -15,7 +15,8 @@ send_mail_campaigns.py — VERSION DBMANAGER
 import smtplib
 from email.mime.text import MIMEText
 from datetime import datetime, date
-
+import re
+from email.message import EmailMessage
 from tasks_engine import task_logs
 from logging_utils import get_logger
 from mailing_utils import build_user_context, render_mail
@@ -35,10 +36,15 @@ def send_email(settings, to_email, subject, body):
         f"host={settings['smtp_host']}:{settings['smtp_port']}, tls={settings['smtp_tls']}"
     )
 
-    msg = MIMEText(body)
+    msg = EmailMessage()
     msg["From"] = settings["mail_from"] or settings["smtp_user"]
     msg["To"] = to_email
     msg["Subject"] = subject
+
+    plain = re.sub(r"<[^>]+>", "", body)
+    msg.set_content(plain)
+    msg.add_alternative(body, subtype="html")
+
 
     try:
         with smtplib.SMTP(
