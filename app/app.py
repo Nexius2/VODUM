@@ -29,6 +29,7 @@ import platform
 
 from logging_utils import get_logger, read_last_logs, read_all_logs
 task_logger = get_logger("tasks_ui")
+
 from api.subscriptions import subscriptions_api, update_user_expiration
 import uuid
 from mailing_utils import build_user_context, render_mail
@@ -38,6 +39,11 @@ from db_manager import DBManager
 from typing import Optional
 from difflib import SequenceMatcher
 import time  
+from core.i18n import init_i18n, get_translator, get_available_languages
+from core.backup import BackupConfig, ensure_backup_dir, create_backup_file, list_backups, restore_backup_file
+
+
+
 
 _I18N_CACHE: dict[str, dict] = {}
 
@@ -94,7 +100,11 @@ def create_app():
 
     # Répertoire de backup (mounté par Docker, ex: /backups)
     app.config.setdefault("BACKUP_DIR", os.environ.get("VODUM_BACKUP_DIR", "/backups"))
-    
+    backup_cfg = BackupConfig(
+    backup_dir=app.config["BACKUP_DIR"],
+    database_path=app.config["DATABASE"],
+)
+
     app.register_blueprint(subscriptions_api)
 
     # -----------------------------
@@ -105,7 +115,7 @@ def create_app():
             g.db = DBManager()
         return g.db
 
-
+    init_i18n(app, get_db)
 
     def scheduler_db_provider():
         return DBManager()
@@ -299,6 +309,75 @@ def create_app():
 
 
 
+
+    def _html_to_plain(html: str) -> str:
+        """Fallback texte propre à partir d'un HTML simple."""
+        if not html:
+            return ""
+        txt = re.sub(r"(?i)<br\s*/?>", "\n", html)
+        txt = re.sub(r"(?i)</p\s*>", "\n\n", txt)
+        txt = re.sub(r"<[^>]+>", "", txt)
+        txt = re.sub(r"\n{3,}", "\n\n", txt)
+        return txt.strip()
+
+
+    def _normalize_body_to_html(body: str) -> str:
+        """
+        Si le template contient du texte brut (sans balises),
+        on transforme les retours ligne en <br>.
+        Si c'est déjà du HTML, on ne touche pas.
+        """
+        if not body:
+            return ""
+        if re.search(r"<[a-zA-Z][^>]*>", body):  # détecte grossièrement du HTML
+            return body
+
+        # texte brut -> html basique (escape minimal)
+        escaped = (
+            body.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+        )
+        return escaped.replace("\n", "<br>\n")
+
+
+    def _wrap_email_html(inner_html: str, title: str = "Stream Empire") -> str:
+        """
+        Enveloppe 'email-safe' (Gmail/Outlook) : tables + styles inline.
+        """
+        inner_html = inner_html or ""
+        return f"""\
+    <!DOCTYPE html>
+    <html>
+      <body style="margin:0;padding:0;background-color:#0b1220;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0b1220;padding:24px 0;">
+          <tr>
+            <td align="center">
+              <table width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;background:#111a2e;border:1px solid rgba(255,255,255,0.08);border-radius:12px;overflow:hidden;">
+                <tr>
+                  <td style="padding:18px 22px;font-family:Arial,Helvetica,sans-serif;font-size:18px;font-weight:bold;color:#ffffff;border-bottom:1px solid rgba(255,255,255,0.08);">
+                    {title}
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:18px 22px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#e5e7eb;">
+                    {inner_html}
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:14px 22px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.4;color:#9ca3af;border-top:1px solid rgba(255,255,255,0.08);">
+                    © {title} — Ceci est un email automatique.
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+    </html>
+    """
+
+
     def send_email_via_settings(
         to_email: str,
         subject: str,
@@ -311,11 +390,9 @@ def create_app():
         """
         Envoie un email en utilisant la configuration stockée en base (table settings).
 
-        - Lecture DB via DBManager (READ ONLY)
-        - Aucun cursor()
-        - Aucun commit / rollback
-        - Logs UNIQUEMENT via logging_utils
-        - Comportement fonctionnel inchangé
+        ✅ Supporte TEXTE BRUT dans Vodum (auto converti en HTML joli)
+        ✅ Envoie multipart/alternative (texte + html)
+        ✅ Corrige sqlite3.Row (pas de .get())
         """
         logger = get_logger("mailing")
 
@@ -328,33 +405,32 @@ def create_app():
         # --------------------------------------------------
         # 1) Charger configuration mail
         # --------------------------------------------------
-        settings = db.query_one("SELECT * FROM settings LIMIT 1")
-        if not settings:
+        settings_row = db.query_one("SELECT * FROM settings LIMIT 1")
+        if not settings_row:
             logger.error("[MAIL] Aucun paramètre mail trouvé en base")
             return False
+
+        # IMPORTANT: sqlite3.Row n'a pas .get() → on convertit en dict
+        settings = dict(settings_row)
 
         if not settings.get("mailing_enabled"):
             logger.info("[MAIL] Mailing désactivé dans les paramètres")
             return False
 
         smtp_host = settings.get("smtp_host")
-        smtp_port = settings.get("smtp_port")
+        smtp_port = settings.get("smtp_port") or 587
         smtp_user = settings.get("smtp_user")
-        smtp_pass = settings.get("smtp_pass")
+        smtp_pass = settings.get("smtp_pass") or ""
         smtp_tls = bool(settings.get("smtp_tls"))
         mail_from = settings.get("mail_from") or smtp_user
 
-        # Validation minimale
         try:
             smtp_port = int(smtp_port)
         except (TypeError, ValueError):
-            smtp_port = None
+            smtp_port = 587
 
-        if not smtp_host or not smtp_port:
-            logger.error(
-                "[MAIL] Configuration SMTP incomplète "
-                f"(host={smtp_host}, port={smtp_port})"
-            )
+        if not smtp_host:
+            logger.error("[MAIL] Configuration SMTP incomplète (host manquant)")
             return False
 
         if not mail_from:
@@ -362,27 +438,33 @@ def create_app():
             return False
 
         # --------------------------------------------------
-        # 2) Construction message
+        # 2) Construire plain + html
         # --------------------------------------------------
-        try:
-            subtype = "html" if is_html else "plain"
-            msg = MIMEText(body, subtype, "utf-8")
+        if is_html:
+            body_html_inner = body or ""
+            body_plain = _html_to_plain(body_html_inner)
+        else:
+            body_html_inner = _normalize_body_to_html(body or "")
+            body_plain = (body or "").strip()
 
-            msg["From"] = mail_from
-            msg["To"] = to_email
-            msg["Subject"] = subject
+        body_html = _wrap_email_html(body_html_inner, title="Stream Empire")
 
-            if cc:
-                msg["Cc"] = ", ".join(cc)
-            if bcc:
-                msg["Bcc"] = ", ".join(bcc)
+        # --------------------------------------------------
+        # 3) Construire message multipart/alternative
+        # --------------------------------------------------
+        msg = EmailMessage()
+        msg["From"] = mail_from
+        msg["To"] = to_email
+        msg["Subject"] = subject
 
-        except Exception as e:
-            logger.error(
-                f"[MAIL] Erreur construction message: {e}",
-                exc_info=True,
-            )
-            return False
+        if cc:
+            msg["Cc"] = ", ".join(cc)
+        if bcc:
+            msg["Bcc"] = ", ".join(bcc)
+
+        # texte d'abord, puis HTML
+        msg.set_content(body_plain, subtype="plain", charset="utf-8")
+        msg.add_alternative(body_html, subtype="html", charset="utf-8")
 
         recipients = [to_email]
         if cc:
@@ -391,7 +473,7 @@ def create_app():
             recipients.extend(bcc)
 
         # --------------------------------------------------
-        # 3) Envoi SMTP
+        # 4) Envoi SMTP
         # --------------------------------------------------
         try:
             with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
@@ -401,384 +483,28 @@ def create_app():
                 if smtp_user:
                     server.login(smtp_user, smtp_pass)
 
-                server.sendmail(mail_from, recipients, msg.as_string())
+                server.send_message(msg, from_addr=mail_from, to_addrs=recipients)
 
             logger.info(f"[MAIL] Email envoyé à {to_email}")
             return True
 
         except Exception as e:
-            logger.error(
-                f"[MAIL] Erreur SMTP vers {to_email}: {e}",
-                exc_info=True,
-            )
+            logger.error(f"[MAIL] Erreur SMTP vers {to_email}: {e}", exc_info=True)
             return False
 
 
-    # -----------------------------
-    # HELPERS BACKUP
-    # -----------------------------
-    def ensure_backup_dir() -> Path:
-        """
-        S'assure que le dossier de sauvegarde existe.
 
-        - Aucun accès DB
-        - Compatible Flask
-        - Logging applicatif via logging_utils
-        - Exception explicite si le dossier ne peut pas être créé
-        """
-        logger = get_logger("backup")
 
-        try:
-            backup_dir = Path(app.config["BACKUP_DIR"])
-        except KeyError:
-            logger.error("[BACKUP] BACKUP_DIR non défini dans la configuration")
-            raise
 
-        try:
-            backup_dir.mkdir(parents=True, exist_ok=True)
-        except Exception as e:
-            logger.error(
-                f"[BACKUP] Impossible de créer le dossier de sauvegarde "
-                f"({backup_dir}): {e}",
-                exc_info=True,
-            )
-            raise
 
-        logger.debug(f"[BACKUP] Dossier de sauvegarde prêt: {backup_dir}")
-        return backup_dir
 
 
-    def create_backup_file() -> str | None:
-        """
-        Crée un fichier de sauvegarde de la base SQLite.
 
-        - Compatible DBManager (une seule connexion)
-        - WAL checkpoint safe
-        - Aucun close manuel
-        - Aucun lock long
-        - Logs applicatifs UNIQUEMENT via logging_utils
-        - Retourne le nom du fichier de sauvegarde ou None
-        """
-        logger = get_logger("backup")
-        db = get_db()
 
-        # --------------------------------------------------
-        # 0) Dossier de sauvegarde
-        # --------------------------------------------------
-        try:
-            backup_dir = ensure_backup_dir()
-        except Exception:
-            # ensure_backup_dir a déjà loggué l'erreur
-            return None
 
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        backup_filename = f"backup_{timestamp}.sqlite"
-        backup_path = backup_dir / backup_filename
 
-        try:
-            # --------------------------------------------------
-            # 1) Forcer un checkpoint WAL (sans fermer la DB)
-            # --------------------------------------------------
-            db.execute("PRAGMA wal_checkpoint(TRUNCATE);")
 
-            # --------------------------------------------------
-            # 2) Copie fichier DB → backup
-            # --------------------------------------------------
-            db_path = app.config.get("DATABASE")
 
-            if not db_path or not os.path.exists(db_path):
-                logger.error("[BACKUP] Fichier DB introuvable")
-                return None
-
-            shutil.copy2(db_path, backup_path)
-
-            logger.info(f"[BACKUP] Sauvegarde créée: {backup_filename}")
-            return backup_filename
-
-        except Exception as e:
-            logger.error(
-                f"[BACKUP] Erreur création backup: {e}",
-                exc_info=True,
-            )
-            return None
-
-
-
-    def list_backups():
-        """
-        Liste les fichiers de sauvegarde disponibles.
-
-        - Aucun accès DB
-        - Compatible Flask
-        - Logging via logging_utils
-        - Retourne une liste de métadonnées triée par date décroissante
-        """
-        logger = get_logger("backup")
-
-        try:
-            backup_dir = ensure_backup_dir()
-        except Exception:
-            # ensure_backup_dir a déjà loggué l'erreur
-            return []
-
-        backups = []
-
-        try:
-            files = sorted(
-                backup_dir.glob("backup_*.sqlite"),
-                key=lambda p: p.stat().st_mtime,
-                reverse=True,
-            )
-
-            for f in files:
-                stat = f.stat()
-                backups.append(
-                    {
-                        "name": f.name,
-                        "path": str(f),
-                        "size": stat.st_size,
-                        "mtime": datetime.fromtimestamp(stat.st_mtime).strftime(
-                            "%Y-%m-%d %H:%M:%S"
-                        ),
-                    }
-                )
-
-            logger.debug(f"[BACKUP] {len(backups)} sauvegarde(s) trouvée(s)")
-            return backups
-
-        except Exception as e:
-            logger.error(
-                f"[BACKUP] Erreur lors de la liste des sauvegardes: {e}",
-                exc_info=True,
-            )
-            return []
-
-
-    def restore_backup_file(uploaded_path: Path):
-        """
-        Écrase la base actuelle par le fichier fourni.
-
-        ⚠️ Action destructive :
-        - crée une sauvegarde de précaution avant écrasement
-        - n'interrompt pas le process
-        - un redémarrage du conteneur est recommandé après restauration
-
-        - Aucun accès DB
-        - Logging via logging_utils
-        """
-        logger = get_logger("backup")
-
-        db_path = Path(app.config["DATABASE"])
-
-        # --------------------------------------------------
-        # Validation du fichier fourni
-        # --------------------------------------------------
-        if not uploaded_path or not uploaded_path.exists():
-            logger.error("[BACKUP] Fichier de restauration introuvable")
-            raise FileNotFoundError("Backup file not found")
-
-        if uploaded_path.stat().st_size == 0:
-            logger.error("[BACKUP] Fichier de restauration vide")
-            raise ValueError("Backup file is empty")
-
-        # --------------------------------------------------
-        # Sauvegarde de précaution de la DB actuelle
-        # --------------------------------------------------
-        try:
-            if db_path.exists():
-                backup_dir = ensure_backup_dir()
-                timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-                pre_restore_backup = backup_dir / f"pre_restore_{timestamp}.sqlite"
-
-                shutil.copy2(db_path, pre_restore_backup)
-                logger.info(
-                    f"[BACKUP] Sauvegarde pré-restauration créée: {pre_restore_backup.name}"
-                )
-        except Exception as e:
-            logger.error(
-                f"[BACKUP] Impossible de créer la sauvegarde pré-restauration: {e}",
-                exc_info=True,
-            )
-            raise
-
-        # --------------------------------------------------
-        # Restauration
-        # --------------------------------------------------
-        try:
-            shutil.copy2(uploaded_path, db_path)
-            logger.warning(
-                "[BACKUP] Base restaurée avec succès – redémarrage recommandé"
-            )
-        except Exception as e:
-            logger.error(
-                f"[BACKUP] Erreur lors de la restauration de la base: {e}",
-                exc_info=True,
-            )
-            raise
-
-
-    # ======================
-    #   MULTILINGUAL SYSTEM
-    # ======================
-    def load_language_dict(lang_code: str) -> dict:
-        """
-        Charge le dictionnaire de traduction pour une langue donnée.
-
-        - Source unique : fichiers JSON du dossier lang/
-        - Mise en cache en mémoire par langue
-        """
-        logger = get_logger("i18n")
-
-        # --------------------------------------------------
-        # Cache en mémoire
-        # --------------------------------------------------
-        if lang_code in _I18N_CACHE:
-            return _I18N_CACHE[lang_code]
-
-        translations: dict[str, str] = {}
-
-        # --------------------------------------------------
-        # Chargement fichiers JSON
-        # --------------------------------------------------
-        lang_dir = os.path.join(current_app.root_path, "lang")
-        json_path = os.path.join(lang_dir, f"{lang_code}.json")
-
-        if not os.path.exists(json_path):
-            logger.warning(f"[i18n] Fichier de langue introuvable: {json_path}")
-            _I18N_CACHE[lang_code] = translations
-            return translations
-
-        try:
-            with open(json_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-
-            if isinstance(data, dict):
-                translations.update(data)
-                logger.debug(
-                    f"[i18n] {len(translations)} traductions chargées depuis fichier ({lang_code})"
-                )
-
-        except Exception as e:
-            logger.error(
-                f"[i18n] Erreur lecture fichier langue {json_path}: {e}",
-                exc_info=True,
-            )
-
-        # --------------------------------------------------
-        # Mise en cache
-        # --------------------------------------------------
-        _I18N_CACHE[lang_code] = translations
-        return translations
-
-
-
-    def get_available_languages():
-        lang_dir = os.path.join(os.path.dirname(__file__), "lang")
-        languages = {}
-
-        for filename in os.listdir(lang_dir):
-            if filename.endswith(".json"):
-                code = filename[:-5]  # fr.json → fr
-
-                # lire le "language_name" dans le JSON
-                try:
-                    with open(os.path.join(lang_dir, filename), "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                        name = data.get("language_name", code.upper())
-                except:
-                    name = code.upper()
-
-                languages[code] = name
-
-        return languages
-
-
-
-    def get_translator():
-        logger = get_logger("i18n")
-
-        available_langs = tuple(get_available_languages().keys())
-
-        # --------------------------------------------------
-        # 1) Déterminer la langue active (READ ONLY)
-        # --------------------------------------------------
-        lang = session.get("lang")
-
-        # Si pas de langue en session -> fallback stable (PAS accept-language ici)
-        if not lang:
-            lang = "en"
-
-        # Sécurité : langue inconnue / invalide
-        if lang not in available_langs:
-            logger.warning(f"[i18n] Langue invalide '{lang}', fallback en")
-            lang = "en"
-
-        # --------------------------------------------------
-        # 2) Charger le dictionnaire
-        # --------------------------------------------------
-        try:
-            translations = load_language_dict(lang)
-        except Exception as e:
-            logger.error(
-                f"[i18n] Erreur chargement dictionnaire langue '{lang}': {e}",
-                exc_info=True,
-            )
-            translations = {}
-
-        # --------------------------------------------------
-        # 3) Fonction traducteur
-        # --------------------------------------------------
-        def _translate(key: str):
-            if not key:
-                return ""
-            return translations.get(key, key)
-
-        return _translate
-
-
-
-
-
-    # Injecte "t" dans tous les templates Jinja
-    @app.context_processor
-    def inject_globals():
-        """
-        Variables globales injectées dans tous les templates Jinja.
-
-        - settings : paramètres globaux
-        - t        : fonction de traduction
-
-        Compatible DBManager
-        Aucun cursor
-        Aucun execute+fetch
-        Aucun commit
-        """
-        db = get_db()
-
-        # READ ONLY via DBManager
-        row = db.query_one("SELECT * FROM settings WHERE id = 1")
-
-        # Toujours un dict pour un comportement homogène
-        settings = dict(row) if row else {}
-
-        # -----------------------------
-        # Sync langue session <- settings (si session vide)
-        # -----------------------------
-        available_langs = tuple(get_available_languages().keys())
-
-        if not session.get("lang"):
-            default_lang = settings.get("default_language")
-            if default_lang in available_langs:
-                session["lang"] = default_lang
-
-        # Sécurité : si langue invalide, fallback en
-        if session.get("lang") not in available_langs:
-            session["lang"] = "en"
-
-        return {
-            "t": get_translator(),  # <= pas d'argument
-            "settings": settings,
-        }
 
 
 
@@ -815,10 +541,7 @@ def create_app():
 
 
 
-    @app.route("/set_language/<lang>")
-    def set_language(lang):
-        session["lang"] = lang
-        return redirect(request.referrer or url_for("dashboard"))
+
 
 
     # -----------------------------
@@ -1689,11 +1412,83 @@ def create_app():
                     reason="ui_manual",
                 )
 
+            # ------------------------------------------------------------------
+            # Helper pour répliquer les flags Plex sur serveurs même owner
+            # ------------------------------------------------------------------
+            def replicate_plex_flags_same_owner(db, vodum_user_id: int, changed_mu_id: int, plex_share_new: dict):
+                """
+                Réplique allowSync/allowCameraUpload/allowChannels + filtres sur tous les serveurs Plex
+                qui partagent le même owner (approché par même servers.token).
+                """
+                # serveur lié à ce media_user
+                row = db.query_one("SELECT server_id FROM media_users WHERE id = ?", (changed_mu_id,))
+                if not row:
+                    return
+                changed_server_id = int(row["server_id"])
+
+                # token du serveur => proxy owner
+                srv = db.query_one("SELECT token FROM servers WHERE id = ?", (changed_server_id,))
+                if not srv:
+                    return
+                srv = dict(srv)
+                owner_token = srv.get("token")
+                if not owner_token:
+                    return
+
+                # tous les serveurs plex du même owner
+                owner_servers = db.query(
+                    "SELECT id FROM servers WHERE type='plex' AND token = ?",
+                    (owner_token,),
+                )
+                owner_server_ids = [int(s["id"]) for s in owner_servers]
+                if not owner_server_ids:
+                    return
+
+                placeholders = ",".join(["?"] * len(owner_server_ids))
+
+                rows = db.query(
+                    f"""
+                    SELECT mu.id, mu.details_json
+                    FROM media_users mu
+                    JOIN servers s ON s.id = mu.server_id
+                    WHERE mu.vodum_user_id = ?
+                      AND s.type = 'plex'
+                      AND mu.type = 'plex'
+                      AND mu.server_id IN ({placeholders})
+                    """,
+                    (vodum_user_id, *owner_server_ids),
+                )
+
+                for r in rows:
+                    mu_id2 = int(r["id"])
+                    try:
+                        details2 = json.loads(r["details_json"] or "{}")
+                    except Exception:
+                        details2 = {}
+
+                    if not isinstance(details2, dict):
+                        details2 = {}
+
+                    plex_share2 = details2.get("plex_share", {})
+                    if not isinstance(plex_share2, dict):
+                        plex_share2 = {}
+
+                    # réplique les champs qui doivent être identiques pour un même owner
+                    for k in ("allowSync", "allowCameraUpload", "allowChannels", "filterMovies", "filterTelevision", "filterMusic"):
+                        if k in plex_share_new:
+                            plex_share2[k] = plex_share_new[k]
+
+                    details2["plex_share"] = plex_share2
+
+                    db.execute(
+                        "UPDATE media_users SET details_json = ? WHERE id = ?",
+                        (json.dumps(details2, ensure_ascii=False), mu_id2),
+                    )
+
             # -----------------------------------------------
             # Sauvegarde des options Plex en JSON (details_json)
             # -> 1 details_json par media_user (donc par serveur)
             # -----------------------------------------------
-            # On ne fait ça que pour les comptes plex de cet user
             plex_media = db.query(
                 """
                 SELECT mu.id, mu.details_json
@@ -1705,6 +1500,8 @@ def create_app():
                 """,
                 (user_id,),
             )
+
+            truthy = {"1", "true", "on", "yes"}
 
             for mu in plex_media:
                 mu_id = int(mu["id"])
@@ -1722,10 +1519,32 @@ def create_app():
                 if not isinstance(plex_share, dict):
                     plex_share = {}
 
-                # Les champs sont attendus en "1"/"0"
-                plex_share["allowSync"] = 1 if form.get(f"allow_sync_{mu_id}") == "1" else 0
-                plex_share["allowCameraUpload"] = 1 if form.get(f"allow_camera_upload_{mu_id}") == "1" else 0
-                plex_share["allowChannels"] = 1 if form.get(f"allow_channels_{mu_id}") == "1" else 0
+                # allowSync
+                vals = form.getlist(f"allow_sync_{mu_id}")
+                task_logger.debug(f"FORM DEBUG mu_id={mu_id} allow_sync getlist={vals}")
+                v = vals[-1] if vals else None
+                if v is not None:
+                    plex_share["allowSync"] = 1 if str(v).strip().lower() in truthy else 0
+                else:
+                    plex_share["allowSync"] = int(plex_share.get("allowSync", 0) or 0)
+
+                # allowCameraUpload
+                vals = form.getlist(f"allow_camera_upload_{mu_id}")
+                task_logger.debug(f"FORM DEBUG mu_id={mu_id} allow_camera_upload getlist={vals}")
+                v = vals[-1] if vals else None
+                if v is not None:
+                    plex_share["allowCameraUpload"] = 1 if str(v).strip().lower() in truthy else 0
+                else:
+                    plex_share["allowCameraUpload"] = int(plex_share.get("allowCameraUpload", 0) or 0)
+
+                # allowChannels
+                vals = form.getlist(f"allow_channels_{mu_id}")
+                task_logger.debug(f"FORM DEBUG mu_id={mu_id} allow_channels getlist={vals}")
+                v = vals[-1] if vals else None
+                if v is not None:
+                    plex_share["allowChannels"] = 1 if str(v).strip().lower() in truthy else 0
+                else:
+                    plex_share["allowChannels"] = int(plex_share.get("allowChannels", 0) or 0)
 
                 plex_share["filterMovies"] = (form.get(f"filter_movies_{mu_id}") or "").strip()
                 plex_share["filterTelevision"] = (form.get(f"filter_television_{mu_id}") or "").strip()
@@ -1736,6 +1555,14 @@ def create_app():
                 db.execute(
                     "UPDATE media_users SET details_json = ? WHERE id = ?",
                     (json.dumps(details, ensure_ascii=False), mu_id),
+                )
+
+                # Réplication même owner
+                replicate_plex_flags_same_owner(
+                    db,
+                    vodum_user_id=user_id,
+                    changed_mu_id=mu_id,
+                    plex_share_new=plex_share,
                 )
 
             # -----------------------------------------------
@@ -1810,11 +1637,6 @@ def create_app():
         # GET → Chargement infos complètes
         # ==================================================
 
-        # -----------------------------------------------
-        # Comptes media + serveurs
-        #  - 1 ligne = 1 compte media sur 1 serveur
-        #  - has_access basé sur media_user_libraries
-        # -----------------------------------------------
         servers = db.query(
             """
             SELECT
@@ -1849,11 +1671,6 @@ def create_app():
             (user_id,),
         )
 
-        # --------------------------------------------------
-        # Déplier options depuis details_json
-        #  - Plex: details_json["plex_share"]
-        #  - Jellyfin: tu peux afficher ce que sync_jellyfin écrit (owned/all_libraries/num_libraries…)
-        # --------------------------------------------------
         enriched = []
         for row in servers:
             r = dict(row)
@@ -1887,16 +1704,11 @@ def create_app():
                 r["filter_television"] = plex_share.get("filterTelevision") or ""
                 r["filter_music"] = plex_share.get("filterMusic") or ""
 
-            # Jellyfin (état calculé par sync_jellyfin)
             r["_details_obj"] = details
-
             enriched.append(r)
 
         servers = enriched
 
-        # -----------------------------------------------
-        # Bibliothèques + accès (par utilisateur Vodum)
-        # -----------------------------------------------
         libraries = db.query(
             """
             SELECT
@@ -1920,9 +1732,6 @@ def create_app():
             (user_id,),
         )
 
-        # -----------------------------------------------
-        # Mails envoyés (DB v2: template_type / expiration_date / sent_at)
-        # -----------------------------------------------
         sent_emails = db.query(
             """
             SELECT *
@@ -1946,6 +1755,125 @@ def create_app():
             user_servers=servers,
         )
 
+
+
+    @app.route("/users/<int:user_id>/plex/share/filter", methods=["POST"])
+    def update_plex_share_filter(user_id):
+        db = get_db()
+        form = request.form
+
+        server_id = int(form.get("server_id") or 0)
+        media_user_id = int(form.get("media_user_id") or 0)
+        field = (form.get("field") or "").strip()
+        value = (form.get("value") or "").strip()
+
+        allowed_fields = {"filterMovies", "filterTelevision", "filterMusic"}
+        if field not in allowed_fields:
+            flash("invalid_field", "error")
+            return redirect(url_for("user_detail", user_id=user_id))
+
+        mu = db.query_one(
+            """
+            SELECT mu.id, mu.details_json
+            FROM media_users mu
+            JOIN servers s ON s.id = mu.server_id
+            WHERE mu.id = ?
+              AND mu.vodum_user_id = ?
+              AND mu.server_id = ?
+              AND s.type = 'plex'
+              AND mu.type = 'plex'
+            """,
+            (media_user_id, user_id, server_id),
+        )
+        if not mu:
+            flash("media_user_not_found", "error")
+            return redirect(url_for("user_detail", user_id=user_id))
+
+        try:
+            details = json.loads(mu["details_json"] or "{}")
+        except Exception:
+            details = {}
+        if not isinstance(details, dict):
+            details = {}
+
+        plex_share = details.get("plex_share", {})
+        if not isinstance(plex_share, dict):
+            plex_share = {}
+
+        plex_share[field] = value
+        details["plex_share"] = plex_share
+
+        db.execute(
+            "UPDATE media_users SET details_json = ? WHERE id = ?",
+            (json.dumps(details, ensure_ascii=False), int(mu["id"])),
+        )
+
+        return redirect(url_for("user_detail", user_id=user_id))
+
+
+    @app.route("/users/<int:user_id>/plex/share/toggle", methods=["POST"])
+    def toggle_plex_share_option(user_id):
+        db = get_db()
+        form = request.form
+
+        server_id = int(form.get("server_id") or 0)
+        media_user_id = int(form.get("media_user_id") or 0)
+        field = (form.get("field") or "").strip()
+        vals = form.getlist("value")
+        v = vals[-1] if vals else "0"
+
+        truthy = {"1", "true", "on", "yes"}
+        new_val = 1 if str(v).strip().lower() in truthy else 0
+
+        allowed_fields = {"allowSync", "allowCameraUpload", "allowChannels"}
+        if field not in allowed_fields:
+            flash("invalid_field", "error")
+            return redirect(url_for("user_detail", user_id=user_id))
+
+        # sécurité: s'assurer que ce media_user appartient bien au user_id + server_id
+        mu = db.query_one(
+            """
+            SELECT mu.id, mu.details_json
+            FROM media_users mu
+            JOIN servers s ON s.id = mu.server_id
+            WHERE mu.id = ?
+              AND mu.vodum_user_id = ?
+              AND mu.server_id = ?
+              AND s.type = 'plex'
+              AND mu.type = 'plex'
+            """,
+            (media_user_id, user_id, server_id),
+        )
+        if not mu:
+            flash("media_user_not_found", "error")
+            return redirect(url_for("user_detail", user_id=user_id))
+
+        # load json
+        try:
+            details = json.loads(mu["details_json"] or "{}")
+        except Exception:
+            details = {}
+        if not isinstance(details, dict):
+            details = {}
+
+        plex_share = details.get("plex_share", {})
+        if not isinstance(plex_share, dict):
+            plex_share = {}
+
+        plex_share[field] = new_val
+        details["plex_share"] = plex_share
+
+        db.execute(
+            "UPDATE media_users SET details_json = ? WHERE id = ?",
+            (json.dumps(details, ensure_ascii=False), int(mu["id"])),
+        )
+
+        # Optionnel mais recommandé: réplication même owner + jobs
+        # -> tu peux réutiliser exactement ta logique existante
+        #    (celle de replicate_plex_flags_same_owner + création media_jobs + queue task)
+
+        flash("user_saved", "success")
+        return redirect(url_for("user_detail", user_id=user_id))
 
 
     @app.route("/users/<int:user_id>/merge", methods=["POST"])
@@ -3695,7 +3623,7 @@ def create_app():
             "SELECT * FROM settings LIMIT 1"
         )
 
-        backups = list_backups()
+        backups = list_backups(backup_cfg)
 
         if request.method == "POST":
             action = request.form.get("action")
@@ -3705,7 +3633,7 @@ def create_app():
             # ───────────────────────────────
             if action == "create":
                 try:
-                    name = create_backup_file()
+                    name = create_backup_file(get_db, backup_cfg)
                     flash(
                         t("backup_created").format(name=name),
                         "success",
@@ -3755,7 +3683,7 @@ def create_app():
                         file.save(temp_path)
 
                         try:
-                            restore_backup_file(temp_path)
+                            restore_backup_file(temp_path, backup_cfg)
                             flash(
                                 t("backup_restore_success_restart"),
                                 "success",
@@ -3791,7 +3719,7 @@ def create_app():
                         "error",
                     )
 
-            backups = list_backups()
+            backups = list_backups(backup_cfg)
 
         return render_template(
             "backup.html",
@@ -3897,6 +3825,8 @@ def create_app():
             flash("Settings row missing in DB", "error")
             return redirect("/")
 
+        settings = dict(settings)
+
         # ------------------------------------------------------------
         # POST → SAVE ALL SETTINGS
         # ------------------------------------------------------------
@@ -3930,6 +3860,7 @@ def create_app():
                     "relance_days",
                     settings["reminder_days"],
                 ),
+                "brand_name": request.form.get("brand_name", settings.get("brand_name")),
 
                 "disable_on_expiry": 1 if request.form.get("disable_on_expiry") == "1" else 0,
                 "enable_cron_jobs": 1 if request.form.get("enable_cron_jobs") == "1" else 0,
@@ -3960,6 +3891,7 @@ def create_app():
                     default_language = :default_language,
                     timezone = :timezone,
                     admin_email = :admin_email,
+                    brand_name = :brand_name,
                     default_subscription_days = :default_subscription_days,
                     delete_after_expiry_days = :delete_after_expiry_days,
                     preavis_days = :preavis_days,

@@ -108,7 +108,12 @@
                         <td class="px-4 py-2 whitespace-nowrap">{{ log.created_at }}</td>
                         <td class="px-4 py-2">{{ log.level }}</td>
                         <td class="px-4 py-2">{{ log.source }}</td>
-                        <td class="px-4 py-2 text-slate-300">{{ log.message }}</td>
+                        <td class="px-4 py-2 text-slate-300 max-w-xl break-words whitespace-normal">
+							<div class="max-h-32 overflow-auto">
+								{{ log.message }}
+							</div>
+						</td>
+
                     </tr>
                 {% endfor %}
             </tbody>

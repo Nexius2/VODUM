@@ -154,4 +154,10 @@ log INFO "DB bootstrap completed"
 # ---------------------------------------------------------------------------
 
 log INFO "Starting Flask server"
-exec python3 /app/app.py
+log INFO "PWD=$(pwd)"
+log INFO "Listing /app:"
+ls -la /app || true
+log INFO "run.py exists?"
+ls -la /app/run.py || true
+
+exec python3 run.py

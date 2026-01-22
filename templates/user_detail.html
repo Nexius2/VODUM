@@ -679,82 +679,163 @@
     {% set o = s %}
 
 	<div class="md:pl-4 md:border-l md:border-slate-700/30 mt-2 md:mt-0">
-	  <div class="bg-slate-800/40 border border-slate-700 rounded-xl p-3 text-xs space-y-2 h-fit">
+  <div class="bg-slate-800/40 border border-slate-700 rounded-xl p-3 text-xs space-y-2 h-fit">
 
-		<div class="font-semibold text-slate-300 mb-1">
-		  {{ t("server_options") }}
-		</div>
+    <div class="font-semibold text-slate-300 mb-1">
+      {{ t("server_options") }}
+    </div>
 
-        {# Les options ci-dessous sont spécifiques Plex. Pour Jellyfin, on affiche "Not available". #}
-        {% if s.media_type == 'plex' %}
+    {# Les options ci-dessous sont spécifiques Plex. Pour Jellyfin, on affiche "Not available". #}
+    {% if s.media_type == 'plex' %}
 
-          <!-- Editable options -->
-			{% set debug_disabled = (not settings.debug_mode) %}
-			{% set disable_checkbox = (is_owner_plex or debug_disabled) %}
-			{% set readonly_text = (is_owner_plex or debug_disabled) %}
-			{% set dim_class = "opacity-60 cursor-not-allowed" if (is_owner_plex or debug_disabled) else "" %}
+      {% set debug_disabled = (not settings.debug_mode) %}
+      {% set disable_checkbox = (is_owner_plex or debug_disabled) %}
+      {% set readonly_text = (is_owner_plex or debug_disabled) %}
+      {% set dim_class = "opacity-60 cursor-not-allowed" if (is_owner_plex or debug_disabled) else "" %}
 
-			<label class="flex justify-between items-center gap-2 {{ dim_class }}">
-			  {{ t("allow_sync") }}
-			  <input type="checkbox"
-					 name="allow_sync_{{ s.media_user_id }}"
-					 {% if o.allow_sync %}checked{% endif %}
-					 {% if disable_checkbox %}disabled{% endif %}>
-			</label>
+      {# -------------------------- #}
+      {# allowSync (toggle auto)    #}
+      {# -------------------------- #}
+      <form method="POST"
+            action="{{ url_for('toggle_plex_share_option', user_id=user.id) }}"
+            class="m-0">
+        <input type="hidden" name="server_id" value="{{ s.server_id }}">
+        <input type="hidden" name="media_user_id" value="{{ s.media_user_id }}">
+        <input type="hidden" name="field" value="allowSync">
+        <input type="hidden" name="value" value="0">
 
-			<label class="flex justify-between items-center gap-2 {{ dim_class }}">
-			  {{ t("allow_camera_upload") }}
-			  <input type="checkbox"
-					 name="allow_camera_upload_{{ s.media_user_id }}"
-					 {% if o.allow_camera_upload %}checked{% endif %}
-					 {% if disable_checkbox %}disabled{% endif %}>
-			</label>
+        <label class="flex justify-between items-center gap-2 {{ dim_class }}">
+          {{ t("allow_sync") }}
+          <input type="checkbox"
+                 name="value"
+                 value="1"
+                 {% if o.allow_sync %}checked{% endif %}
+                 {% if disable_checkbox %}disabled{% endif %}
+                 onchange="this.form.submit()">
+        </label>
+      </form>
 
-			<label class="flex justify-between items-center gap-2 {{ dim_class }}">
-			  {{ t("allow_channels") }}
-			  <input type="checkbox"
-					 name="allow_channels_{{ s.media_user_id }}"
-					 {% if o.allow_channels %}checked{% endif %}
-					 {% if disable_checkbox %}disabled{% endif %}>
-			</label>
-			<label class="flex flex-col {{ "opacity-60" if (is_owner_plex or debug_disabled) else "" }}">
-			  {{ t("filter_movies") }}
-			  <input type="text"
-					 name="filter_movies_{{ s.media_user_id }}"
-					 value="{{ o.filter_movies }}"
-					 {% if readonly_text %}readonly{% endif %}
-					 class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1
-							{% if readonly_text %} cursor-not-allowed {% endif %}">
-			</label>
+      {# -------------------------- #}
+      {# allowCameraUpload toggle   #}
+      {# -------------------------- #}
+      <form method="POST"
+            action="{{ url_for('toggle_plex_share_option', user_id=user.id) }}"
+            class="m-0">
+        <input type="hidden" name="server_id" value="{{ s.server_id }}">
+        <input type="hidden" name="media_user_id" value="{{ s.media_user_id }}">
+        <input type="hidden" name="field" value="allowCameraUpload">
+        <input type="hidden" name="value" value="0">
 
-			<label class="flex flex-col {{ "opacity-60" if (is_owner_plex or debug_disabled) else "" }}">
-			  {{ t("filter_television") }}
-			  <input type="text"
-					 name="filter_television_{{ s.media_user_id }}"
-					 value="{{ o.filter_television }}"
-					 {% if readonly_text %}readonly{% endif %}
-					 class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1
-							{% if readonly_text %} cursor-not-allowed {% endif %}">
-			</label>
+        <label class="flex justify-between items-center gap-2 {{ dim_class }}">
+          {{ t("allow_camera_upload") }}
+          <input type="checkbox"
+                 name="value"
+                 value="1"
+                 {% if o.allow_camera_upload %}checked{% endif %}
+                 {% if disable_checkbox %}disabled{% endif %}
+                 onchange="this.form.submit()">
+        </label>
+      </form>
 
-			<label class="flex flex-col {{ "opacity-60" if (is_owner_plex or debug_disabled) else "" }}">
-			  {{ t("filter_music") }}
-			  <input type="text"
-					 name="filter_music_{{ s.media_user_id }}"
-					 value="{{ o.filter_music }}"
-					 {% if readonly_text %}readonly{% endif %}
-					 class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1
-							{% if readonly_text %} cursor-not-allowed {% endif %}">
-			</label>
+      {# -------------------------- #}
+      {# allowChannels toggle       #}
+      {# -------------------------- #}
+      <form method="POST"
+            action="{{ url_for('toggle_plex_share_option', user_id=user.id) }}"
+            class="m-0">
+        <input type="hidden" name="server_id" value="{{ s.server_id }}">
+        <input type="hidden" name="media_user_id" value="{{ s.media_user_id }}">
+        <input type="hidden" name="field" value="allowChannels">
+        <input type="hidden" name="value" value="0">
 
+        <label class="flex justify-between items-center gap-2 {{ dim_class }}">
+          {{ t("allow_channels") }}
+          <input type="checkbox"
+                 name="value"
+                 value="1"
+                 {% if o.allow_channels %}checked{% endif %}
+                 {% if disable_checkbox %}disabled{% endif %}
+                 onchange="this.form.submit()">
+        </label>
+      </form>
 
+      {# -------------------------- #}
+      {# Filters (auto save debounce)#}
+      {# -------------------------- #}
 
-        {% else %}
-          <p class="text-xs text-slate-500 italic">{{ t("not_available") }}</p>
-        {% endif %}
+      <form method="POST"
+            action="{{ url_for('update_plex_share_filter', user_id=user.id) }}"
+            class="m-0">
+        <input type="hidden" name="server_id" value="{{ s.server_id }}">
+        <input type="hidden" name="media_user_id" value="{{ s.media_user_id }}">
+        <input type="hidden" name="field" value="filterMovies">
 
-	  </div>
-	</div>
+        <label class="flex flex-col {{ "opacity-60" if readonly_text else "" }}">
+          {{ t("filter_movies") }}
+          <input type="text"
+                 name="value"
+                 value="{{ o.filter_movies }}"
+                 {% if readonly_text %}readonly{% endif %}
+                 oninput="window.__vodumDebounceSubmit && window.__vodumDebounceSubmit(this.form)"
+                 class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 {% if readonly_text %} cursor-not-allowed {% endif %}">
+        </label>
+      </form>
+
+      <form method="POST"
+            action="{{ url_for('update_plex_share_filter', user_id=user.id) }}"
+            class="m-0">
+        <input type="hidden" name="server_id" value="{{ s.server_id }}">
+        <input type="hidden" name="media_user_id" value="{{ s.media_user_id }}">
+        <input type="hidden" name="field" value="filterTelevision">
+
+        <label class="flex flex-col {{ "opacity-60" if readonly_text else "" }}">
+          {{ t("filter_television") }}
+          <input type="text"
+                 name="value"
+                 value="{{ o.filter_television }}"
+                 {% if readonly_text %}readonly{% endif %}
+                 oninput="window.__vodumDebounceSubmit && window.__vodumDebounceSubmit(this.form)"
+                 class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 {% if readonly_text %} cursor-not-allowed {% endif %}">
+        </label>
+      </form>
+
+      <form method="POST"
+            action="{{ url_for('update_plex_share_filter', user_id=user.id) }}"
+            class="m-0">
+        <input type="hidden" name="server_id" value="{{ s.server_id }}">
+        <input type="hidden" name="media_user_id" value="{{ s.media_user_id }}">
+        <input type="hidden" name="field" value="filterMusic">
+
+        <label class="flex flex-col {{ "opacity-60" if readonly_text else "" }}">
+          {{ t("filter_music") }}
+          <input type="text"
+                 name="value"
+                 value="{{ o.filter_music }}"
+                 {% if readonly_text %}readonly{% endif %}
+                 oninput="window.__vodumDebounceSubmit && window.__vodumDebounceSubmit(this.form)"
+                 class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 {% if readonly_text %} cursor-not-allowed {% endif %}">
+        </label>
+      </form>
+
+      {# Debounce JS (1 seul global, safe si déjà présent ailleurs) #}
+      <script>
+        window.__vodumDebounceSubmit = window.__vodumDebounceSubmit || (function () {
+          let t = null;
+          return function (form) {
+            if (!form) return;
+            clearTimeout(t);
+            t = setTimeout(function () { form.submit(); }, 500);
+          };
+        })();
+      </script>
+
+    {% else %}
+      <p class="text-xs text-slate-500 italic">{{ t("not_available") }}</p>
+    {% endif %}
+
+  </div>
+</div>
+
 
   </div>
 

@@ -13,15 +13,18 @@ send_mail_campaigns.py — VERSION DBMANAGER
 """
 
 import smtplib
-from email.mime.text import MIMEText
+#from email.mime.text import MIMEText
 from datetime import datetime, date
 import re
 from email.message import EmailMessage
 from tasks_engine import task_logs
 from logging_utils import get_logger
 from mailing_utils import build_user_context, render_mail
+from email_layout_utils import build_email_parts
+
 
 log = get_logger("send_mail_campaigns")
+
 
 
 # --------------------------------------------------------
@@ -31,33 +34,48 @@ def send_email(settings, to_email, subject, body):
     if not to_email:
         raise ValueError("Email vide")
 
+    smtp_host = settings["smtp_host"]
+    smtp_port = settings["smtp_port"] or 587
+    smtp_tls  = bool(settings["smtp_tls"])
+    smtp_user = settings["smtp_user"]
+    smtp_pass = settings["smtp_pass"] or ""
+    mail_from = settings["mail_from"] or smtp_user
+
+    # cast port si besoin
+    try:
+        smtp_port = int(smtp_port)
+    except (TypeError, ValueError):
+        smtp_port = 587
+
     log.debug(
         f"[SMTP] Email sending → to={to_email}, subject={subject}, "
-        f"host={settings['smtp_host']}:{settings['smtp_port']}, tls={settings['smtp_tls']}"
+        f"host={smtp_host}:{smtp_port}, tls={smtp_tls}"
     )
 
+    # -------------------------------------------------
+    # Construction du mail (texte + HTML)
+    # - texte brut autorisé côté UI
+    # - brand_name depuis settings
+    # - footer traduit via i18n
+    # -------------------------------------------------
+    body_plain, body_html = build_email_parts(body, settings)
+
     msg = EmailMessage()
-    msg["From"] = settings["mail_from"] or settings["smtp_user"]
+    msg["From"] = mail_from
     msg["To"] = to_email
     msg["Subject"] = subject
 
-    plain = re.sub(r"<[^>]+>", "", body)
-    msg.set_content(plain)
-    msg.add_alternative(body, subtype="html")
-
+    # multipart/alternative : texte d'abord, puis HTML
+    msg.set_content(body_plain, subtype="plain", charset="utf-8")
+    msg.add_alternative(body_html, subtype="html", charset="utf-8")
 
     try:
-        with smtplib.SMTP(
-            settings["smtp_host"],
-            settings["smtp_port"],
-            timeout=30
-        ) as server:
-
-            if settings["smtp_tls"]:
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
+            if smtp_tls:
                 server.starttls()
 
-            if settings["smtp_user"]:
-                server.login(settings["smtp_user"], settings["smtp_pass"])
+            if smtp_user:
+                server.login(smtp_user, smtp_pass)
 
             server.send_message(msg)
 
@@ -65,8 +83,9 @@ def send_email(settings, to_email, subject, body):
         return True
 
     except Exception as e:
-        log.error(f"[SMTP] Send failed → {to_email} : {e}")
+        log.error(f"[SMTP] Send failed → {to_email} : {e}", exc_info=True)
         return False
+
 
 
 

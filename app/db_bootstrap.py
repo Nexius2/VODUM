@@ -88,6 +88,13 @@ def run_migrations():
     print("✔ Task columns verified.")
 
     # -------------------------------------------------
+    # 2.1 Vérifier colonnes SETTINGS (migrations légères)
+    # -------------------------------------------------
+    ensure_column(cursor, "settings", "brand_name", "TEXT DEFAULT NULL")
+    print("✔ Settings columns verified (brand_name).")
+
+
+    # -------------------------------------------------
     # 3. Injecter les données par défaut
     # -------------------------------------------------
 
@@ -342,6 +349,7 @@ def run_migrations():
         "enable_cron_jobs": 1,
         "default_expiration_days": 90,
         "maintenance_mode": 0,
+        "brand_name": None,
         "debug_mode": 0
     })
 
