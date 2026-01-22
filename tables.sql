@@ -207,6 +207,8 @@ CREATE TABLE IF NOT EXISTS settings (
 	
 	backup_retention_days INTEGER DEFAULT 30,
 	
+	brand_name TEXT DEFAULT NULL,
+	
 	mailing_enabled INTEGER DEFAULT 0
 
 );

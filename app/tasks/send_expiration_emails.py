@@ -17,10 +17,13 @@ from tasks_engine import task_logs
 from logging_utils import get_logger
 from mailing_utils import build_user_context, render_mail
 import re
-
+from email_layout_utils import build_email_parts
 
 
 log = get_logger("send_expiration_emails")
+
+
+
 
 
 # --------------------------------------------------------
@@ -34,33 +37,38 @@ def send_email(subject, body, to_email, smtp_settings):
     smtp_port = smtp_settings["smtp_port"] or 587
     smtp_tls  = bool(smtp_settings["smtp_tls"])
     smtp_user = smtp_settings["smtp_user"]
-    smtp_pass = smtp_settings["smtp_pass"]
+    smtp_pass = smtp_settings["smtp_pass"] or ""
     mail_from = smtp_settings["mail_from"] or smtp_user
 
-    log.debug(
-        f"[SMTP] Sending email → to={to_email}, "
-        f"host={smtp_host}:{smtp_port}, tls={smtp_tls}, user={smtp_user}"
-    )
+    # cast port si besoin
+    try:
+        smtp_port = int(smtp_port)
+    except (TypeError, ValueError):
+        smtp_port = 587
+
+    # -------------------------------------------------
+    # Build mail parts:
+    # - texte brut autorisé côté UI
+    # - brand_name depuis settings
+    # - footer traduit via i18n
+    # -------------------------------------------------
+    plain, full_html = build_email_parts(body, smtp_settings)
 
     msg = EmailMessage()
     msg["From"] = mail_from
     msg["To"] = to_email
     msg["Subject"] = subject
-    plain = re.sub(r"<[^>]+>", "", body)  # fallback simple (basique)
-    msg.set_content(plain)
-    msg.add_alternative(body, subtype="html")
+
+    msg.set_content(plain, subtype="plain", charset="utf-8")
+    msg.add_alternative(full_html, subtype="html", charset="utf-8")
 
     try:
         with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
             if smtp_tls:
                 server.starttls()
-
             if smtp_user:
-                server.login(smtp_user, smtp_pass or "")
-
+                server.login(smtp_user, smtp_pass)
             server.send_message(msg)
-
-        log.info(f"[SMTP] Email sent → {to_email}")
         return True
 
     except Exception as e:

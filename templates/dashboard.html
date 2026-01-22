@@ -215,14 +215,15 @@
                     {{ log.level }}
                 </span>
 
-                <div>
-                    <div class="text-[11px] text-slate-400">
-                        {{ log.source }} · {{ log.created_at }}
-                    </div>
-                    <div class="text-[12px] text-slate-100 truncate">
-                        {{ log.message }}
-                    </div>
-                </div>
+				<div class="min-w-0 flex-1">
+					<div class="text-[11px] text-slate-400 truncate">
+						{{ log.source }} · {{ log.created_at }}
+					</div>
+					<div class="text-[12px] text-slate-100 truncate">
+						{{ log.message }}
+					</div>
+				</div>
+
 
             </div>
             {% else %}
