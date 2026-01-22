@@ -16,8 +16,8 @@
   <PostArgs/>
   <CPUset/>
   <DateInstalled>1768377799</DateInstalled>
-  <DonateText/>
-  <DonateLink/>
+  <DonateText>Help support my work by buying me a coffee</DonateText>
+  <DonateLink>https://buymeacoffee.com/vodum</DonateLink>
   <Support>https://forums.unraid.net/topic/196501-support-nexius2-vodum/</Support>
   <Project>https://github.com/Nexius2/VODUM</Project>
   <Overview>VODUM is a self-hosted subscription management tool for Plex and Jellyfin, designed to centrally manage users, subscriptions, and media library access.</Overview>
