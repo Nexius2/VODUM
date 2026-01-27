@@ -1,0 +1,48 @@
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+  <div class="flex items-center justify-between mb-4">
+    <div class="text-sm font-semibold">Libraries</div>
+    <div class="text-xs text-slate-400">30 rows / page</div>
+  </div>
+
+  {% if rows is not defined %}
+    <div class="text-slate-500">
+      Backend not wired yet: variable <code class="text-slate-300">rows</code> missing.
+    </div>
+  {% else %}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-slate-400 border-b border-slate-800">
+            <th class="py-2 pr-4">Library</th>
+            <th class="py-2 pr-4">Server</th>
+            <th class="py-2 pr-4">Type</th>
+            <th class="py-2 pr-4">Items</th>
+            <th class="py-2 pr-4">Last stream</th>
+            <th class="py-2 pr-4">Total plays</th>
+            <th class="py-2 pr-4">Played duration</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+            <tr class="border-b border-slate-800">
+              <td class="py-3 pr-4 font-semibold">{{ r.library_name }}</td>
+              <td class="py-3 pr-4">{{ r.server_name }}</td>
+              <td class="py-3 pr-4">{{ r.media_type or "-" }}</td>
+              <td class="py-3 pr-4">{{ r.item_count or "-" }}</td>
+              <td class="py-3 pr-4">{{ r.last_stream_at or "-" }}</td>
+              <td class="py-3 pr-4">{{ r.total_plays or 0 }}</td>
+              <td class="py-3 pr-4">{{ r.played_duration or "0h 0m" }}</td>
+            </tr>
+          {% endfor %}
+          {% if rows|length == 0 %}
+            <tr><td colspan="7" class="py-6 text-slate-500">No data yet.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if pagination is defined %}
+      {% include "monitoring/partials/_pagination.html" %}
+    {% endif %}
+  {% endif %}
+</div>

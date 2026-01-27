@@ -105,6 +105,7 @@ def _fetch_pending_jobs(db, limit: int = 50):
         FROM media_jobs
         WHERE processed = 0
           AND provider = 'jellyfin'
+          AND action IN ('grant','revoke','sync')
         ORDER BY created_at ASC
         LIMIT ?
         """,
@@ -266,10 +267,19 @@ def run(task_id: int, db) -> None:
         job = dict(job_row)
         job_id = int(job["id"])
 
+        # ✅ Sécurité: ne traite que grant/revoke/sync (jamais refresh monitoring)
+        action = (job.get("action") or "").lower().strip()
+        if action not in ("grant", "revoke", "sync"):
+            logger.warning(
+                f"Skipping Jellyfin job id={job_id}: unsupported action '{action}' "
+                f"(expected grant/revoke/sync)"
+            )
+            continue
+
         try:
             _mark_attempt(db, job_id)
             logger.info(
-                f"Traitement job Jellyfin id={job_id} action={job.get('action')} "
+                f"Traitement job Jellyfin id={job_id} action={action} "
                 f"server_id={job.get('server_id')} vodum_user_id={job.get('vodum_user_id')}"
             )
 
@@ -282,3 +292,4 @@ def run(task_id: int, db) -> None:
             _mark_failure(db, job_id, str(e))
 
     logger.info("=== APPLY JELLYFIN ACCESS UPDATES : END ===")
+

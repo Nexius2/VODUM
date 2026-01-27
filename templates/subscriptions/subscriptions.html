@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% set active_page = "subscriptions" %}
+
+{% block title %}{{ t("subscriptions") }} - {{ app_brand_name }}{% endblock %}
+{% block header_title %}{{ t("subscriptions") }}{% endblock %}
+{% block header_subtitle %}{{ t("subscriptions_description") }}{% endblock %}
+
+{% block content %}
+
+<div id="page-alert" class="hidden mb-6"></div>
+
+<form id="gift-form"
+      action="{{ url_for('subscriptions_api.api_gift_subscription') }}"
+      method="post"
+      onsubmit="event.preventDefault(); submitGift();">
+
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
+    {% include "subscriptions/_gift_form.html" %}
+    {% include "subscriptions/_gift_history.html" %}
+  </div>
+
+  {% include "subscriptions/_gift_modal.html" %}
+</form>
+
+{% include "subscriptions/_scripts.html" %}
+
+{% endblock %}

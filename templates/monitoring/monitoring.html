@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t("monitoring.title") }}{% endblock %}
+{% block header_title %}{{ t("monitoring.title") }}{% endblock %}
+{% block header_subtitle %}{{ t("monitoring.subtitle") }}{% endblock %}
+
+{% block content %}
+
+{% include "monitoring/partials/_tabs.html" %}
+
+{# Construit l'URL actuelle (tab + filtres/pagination) pour HTMX #}
+{% set args = request.args.to_dict() %}
+{% if args.get('tab') is none %}
+  {% set _ = args.update({'tab':'overview'}) %}
+{% endif %}
+
+{# Interval par onglet (tu peux ajuster) #}
+{% set current_tab = args.get('tab', 'overview') %}
+{% if current_tab == 'activity' %}
+  {% set refresh_ms = 5000 %}
+{% elif current_tab == 'overview' %}
+  {% set refresh_ms = 10000 %}
+{% elif current_tab in ['history', 'users', 'libraries'] %}
+  {% set refresh_ms = 30000 %}
+{% else %}
+  {% set refresh_ms = 10000 %}
+{% endif %}
+
+<div id="monitoring-content"
+     hx-get="{{ url_for('monitoring_page', **args) }}"
+     hx-trigger="load, every {{ refresh_ms }}ms"
+     hx-swap="innerHTML">
+
+  {# Fallback rendu serveur (si JS/HTMX désactivé) #}
+  {% if current_tab == "overview" %}
+    {% include "monitoring/overview_body.html" %}
+  {% elif current_tab == "activity" %}
+    {% include "monitoring/tabs/activity.html" %}
+  {% elif current_tab == "history" %}
+    {% include "monitoring/tabs/history.html" %}
+  {% elif current_tab == "libraries" %}
+    {% include "monitoring/tabs/libraries.html" %}
+  {% elif current_tab == "users" %}
+    {% include "monitoring/tabs/users.html" %}
+  {% else %}
+    {% include "monitoring/overview_body.html" %}
+  {% endif %}
+
+</div>
+
+{% endblock %}

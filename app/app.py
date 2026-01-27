@@ -120,6 +120,22 @@ def create_app():
     def scheduler_db_provider():
         return DBManager()
 
+    @app.context_processor
+    def inject_brand_name():
+        try:
+            db = get_db()
+            row = db.query_one("SELECT brand_name FROM settings WHERE id = 1")
+            brand_name = None
+            if row:
+                # sqlite3.Row -> accès par clé
+                brand_name = row["brand_name"]
+            brand_name = (brand_name or "").strip()
+        except Exception:
+            brand_name = ""
+
+        return {
+            "app_brand_name": brand_name if brand_name else "VODUM"
+        }
 
 
     @app.template_filter("safe_datetime")
@@ -252,10 +268,10 @@ def create_app():
         # --------------------------------------------------
         try:
             local_tz = ZoneInfo(tzname)
-            return dt.astimezone(local_tz).strftime("%Y-%m-%d %H:%M:%S")
+            return dt.astimezone(local_tz).strftime("%Y-%m-%d %H:%M")
         except Exception:
             # Timezone invalide → UTC lisible
-            return dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+            return dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M")
 
 
 
@@ -499,12 +515,717 @@ def create_app():
 
 
 
+    # =====================================================================
+    # ⚠️ START MONITORING ROUTES
+    # =====================================================================
+
+    @app.route("/monitoring")
+    def monitoring_page():
+        db = get_db()
+        tab = request.args.get("tab", "overview")
+
+        # Une session est considérée "live" si vue dans les 120 dernières secondes
+        live_window_seconds = 120
+        live_window_sql = f"-{live_window_seconds} seconds"
+
+        # --------------------------
+        # Serveurs (statuts) (utilisé partout)
+        # --------------------------
+        servers = db.query(
+            """
+            SELECT id, name, type, url, local_url, public_url, status, last_checked
+            FROM servers
+            WHERE type IN ('plex','jellyfin')
+            ORDER BY type, name
+            """
+        )
+
+        server_stats = db.query_one(
+            """
+            SELECT
+              SUM(CASE WHEN status='up' THEN 1 ELSE 0 END) AS online,
+              SUM(CASE WHEN status='down' THEN 1 ELSE 0 END) AS offline,
+              COUNT(*) AS total
+            FROM servers
+            WHERE type IN ('plex','jellyfin')
+            """
+        ) or {"online": 0, "offline": 0, "total": 0}
+        server_stats = dict(server_stats) if server_stats else {"online": 0, "offline": 0, "total": 0}
+
+        # --------------------------
+        # Sessions live (overview)
+        # --------------------------
+        sessions_stats = db.query_one(
+            """
+            SELECT
+              COUNT(*) AS live_sessions,
+              SUM(CASE WHEN is_transcode = 1 THEN 1 ELSE 0 END) AS transcodes
+            FROM media_sessions
+            WHERE last_seen_at >= datetime('now', ?)
+            """,
+            (live_window_sql,),
+        ) or {"live_sessions": 0, "transcodes": 0}
+        sessions_stats = dict(sessions_stats) if sessions_stats else {"live_sessions": 0, "transcodes": 0}
+
+        sessions = db.query(
+            """
+            SELECT
+              ms.id,
+              s.name AS server_name,
+              s.type AS provider,
+              ms.state,
+              ms.title,
+              ms.grandparent_title,
+              ms.client_name,
+              mu.username AS username,
+              ms.is_transcode,
+              ms.last_seen_at
+            FROM media_sessions ms
+            JOIN servers s ON s.id = ms.server_id
+            LEFT JOIN media_users mu ON mu.id = ms.media_user_id
+            WHERE ms.last_seen_at >= datetime('now', ?)
+            ORDER BY ms.last_seen_at DESC
+            """,
+            (live_window_sql,),
+        )
+
+        events = db.query(
+            """
+            SELECT
+              e.id,
+              s.name AS server_name,
+              e.provider,
+              e.event_type,
+              e.ts,
+              e.title
+            FROM media_events e
+            JOIN servers s ON s.id = e.server_id
+            ORDER BY e.ts DESC
+            LIMIT 30
+            """
+        )
+
+        # --------------------------
+        # Stats 7d + tops
+        # --------------------------
+        stats_7d = db.query_one(
+            """
+            SELECT
+              COUNT(*) AS sessions,
+              COUNT(DISTINCT media_user_id) AS active_users,
+              SUM(watch_ms) AS total_watch_ms,
+              AVG(CASE WHEN watch_ms > 0 THEN watch_ms END) AS avg_watch_ms
+            FROM media_session_history
+            WHERE started_at >= datetime('now', '-7 days')
+            """
+        ) or {"sessions": 0, "active_users": 0, "total_watch_ms": 0, "avg_watch_ms": 0}
+        stats_7d = dict(stats_7d) if stats_7d else {"sessions": 0, "active_users": 0, "total_watch_ms": 0, "avg_watch_ms": 0}
+
+        top_users_30d = db.query(
+            """
+            SELECT
+              mu.username,
+              COUNT(*) AS sessions,
+              SUM(h.watch_ms) AS watch_ms
+            FROM media_session_history h
+            LEFT JOIN media_users mu ON mu.id = h.media_user_id
+            WHERE h.started_at >= datetime('now', '-30 days')
+            GROUP BY h.media_user_id
+            ORDER BY watch_ms DESC
+            LIMIT 10
+            """
+        )
+
+        top_content_30d = db.query(
+            """
+            SELECT
+              COALESCE(title, '-') AS title,
+              COALESCE(grandparent_title, '') AS grandparent_title,
+              COUNT(*) AS sessions,
+              SUM(watch_ms) AS watch_ms
+            FROM media_session_history
+            WHERE started_at >= datetime('now', '-30 days')
+            GROUP BY title, grandparent_title
+            ORDER BY watch_ms DESC
+            LIMIT 10
+            """
+        )
+
+        # --------------------------
+        # Peak streams (7d) = pic simultané "light"
+        # bucket = 300s (5min). Pour encore + light -> 600 (10min)
+        # --------------------------
+        concurrent_7d = db.query_one(
+            """
+            WITH events AS (
+              -- +1 au début
+              SELECT
+                (CAST(strftime('%s', started_at) AS INTEGER) / 300) * 300 AS bucket_ts,
+                +1 AS delta
+              FROM media_session_history
+              WHERE started_at >= datetime('now', '-7 days')
+                AND started_at IS NOT NULL
+
+              UNION ALL
+
+              -- -1 à la fin
+              SELECT
+                (CAST(strftime('%s', stopped_at) AS INTEGER) / 300) * 300 AS bucket_ts,
+                -1 AS delta
+              FROM media_session_history
+              WHERE started_at >= datetime('now', '-7 days')
+                AND stopped_at IS NOT NULL
+            ),
+            per_bucket AS (
+              SELECT bucket_ts, SUM(delta) AS delta
+              FROM events
+              GROUP BY bucket_ts
+            ),
+            running AS (
+              SELECT
+                bucket_ts,
+                SUM(delta) OVER (
+                  ORDER BY bucket_ts
+                  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                ) AS concurrent
+              FROM per_bucket
+            )
+            SELECT MAX(concurrent) AS peak_streams
+            FROM running
+            """
+        ) or {"peak_streams": 0}
+        concurrent_7d = dict(concurrent_7d) if concurrent_7d else {"peak_streams": 0}
+
+        # Sécurité UX : peak >= streams live actuels
+        live_now = int(sessions_stats.get("live_sessions") or 0)
+        peak = int(concurrent_7d.get("peak_streams") or 0)
+        concurrent_7d["peak_streams"] = max(peak, live_now)
+
+        # --------------------------
+        # Tabs data
+        # --------------------------
+        rows = []
+        filters = {}
+        pagination = None
+
+        if tab == "history":
+            page = request.args.get("page", type=int, default=1)
+            per_page = 30
+            offset = (page - 1) * per_page
+
+            q = (request.args.get("q") or "").strip()
+            provider = (request.args.get("provider") or "").strip()
+            media_type = (request.args.get("media_type") or "").strip()
+            playback = (request.args.get("playback") or "").strip()
+            server_id = request.args.get("server", type=int)
+
+            where = ["1=1"]
+            params = []
+
+            if q:
+                where.append("(h.title LIKE ? OR h.grandparent_title LIKE ?)")
+                params += [f"%{q}%", f"%{q}%"]
+            if provider:
+                where.append("s.type = ?")
+                params.append(provider)
+            if media_type:
+                where.append("h.media_type = ?")
+                params.append(media_type)
+            if playback:
+                pb = playback.lower()
+                if pb in ("transcode", "transcoding"):
+                    where.append("h.was_transcode = 1")
+                elif pb in ("directplay", "direct", "direct_play"):
+                    where.append("h.was_transcode = 0")
+            if server_id:
+                where.append("h.server_id = ?")
+                params.append(server_id)
+
+            where_sql = " AND ".join(where)
+
+            total = db.query_one(
+                f"""
+                SELECT COUNT(*) AS cnt
+                FROM media_session_history h
+                JOIN servers s ON s.id = h.server_id
+                WHERE {where_sql}
+                """,
+                tuple(params),
+            ) or {"cnt": 0}
+            total = dict(total) if total else {"cnt": 0}
+
+            rows = db.query(
+                f"""
+                SELECT
+                  h.stopped_at,
+                  s.name AS server_name,
+                  s.type AS provider,
+                  mu.username,
+                  h.title,
+                  h.grandparent_title,
+                  h.media_type,
+                  CASE WHEN h.was_transcode = 1 THEN 'transcode' ELSE 'directplay' END AS playback_type,
+                  h.device,
+                  h.client_name,
+                  h.watch_ms
+                FROM media_session_history h
+                JOIN servers s ON s.id = h.server_id
+                LEFT JOIN media_users mu ON mu.id = h.media_user_id
+                WHERE {where_sql}
+                ORDER BY h.stopped_at DESC
+                LIMIT {per_page} OFFSET ?
+                """,
+                tuple(params + [offset]),
+            )
+
+            rows = [dict(r) for r in rows]
+            for r in rows:
+                ms = r.get("watch_ms") or 0
+                r["watch_time"] = f"{ms // 3600000}h {((ms % 3600000) // 60000)}m"
+
+            total_rows = int(total.get("cnt") or 0)
+            total_pages = max(1, (total_rows + per_page - 1) // per_page)
+
+            def build_url(p):
+                args = dict(request.args)
+                args["tab"] = "history"
+                args["page"] = p
+                return url_for("monitoring_page", **args)
+
+            pagination = {
+                "page": page,
+                "total_pages": total_pages,
+                "total_rows": total_rows,
+                "prev_url": build_url(page - 1),
+                "next_url": build_url(page + 1),
+            }
+
+            filters = {
+                "q": q,
+                "provider": provider,
+                "media_type": media_type,
+                "playback": playback,
+                "server": server_id,
+            }
+
+        elif tab == "users":
+            page = request.args.get("page", type=int, default=1)
+            per_page = 30
+            offset = (page - 1) * per_page
+
+            total = db.query_one(
+                """
+                SELECT COUNT(DISTINCT media_user_id) AS cnt
+                FROM media_session_history
+                WHERE media_user_id IS NOT NULL
+                """
+            ) or {"cnt": 0}
+            total = dict(total) if total else {"cnt": 0}
+
+            rows = db.query(
+                f"""
+                WITH last_rows AS (
+                  SELECT
+                    h.media_user_id,
+                    MAX(h.stopped_at) AS last_watch_at
+                  FROM media_session_history h
+                  WHERE h.media_user_id IS NOT NULL
+                  GROUP BY h.media_user_id
+                ),
+                agg AS (
+                  SELECT
+                    h.media_user_id,
+                    COUNT(*) AS total_plays,
+                    SUM(h.watch_ms) AS watch_ms
+                  FROM media_session_history h
+                  WHERE h.media_user_id IS NOT NULL
+                  GROUP BY h.media_user_id
+                )
+                SELECT
+                  mu.id AS user_id,
+                  mu.username,
+                  mu.type AS provider,
+                  mu.server_id,
+                  lr.last_watch_at,
+                  a.total_plays,
+                  a.watch_ms
+                FROM last_rows lr
+                JOIN agg a ON a.media_user_id = lr.media_user_id
+                JOIN media_users mu ON mu.id = lr.media_user_id
+                ORDER BY lr.last_watch_at DESC
+                LIMIT {per_page} OFFSET ?
+                """,
+                (offset,),
+            )
+
+            rows = [dict(r) for r in rows]
+            for u in rows:
+                ms = u.get("watch_ms") or 0
+                u["watch_time"] = f"{ms // 3600000}h {((ms % 3600000) // 60000)}m"
+                u["last_ip"] = "-"
+                u["platform"] = "-"
+                u["player"] = "-"
+
+            total_rows = int(total.get("cnt") or 0)
+            total_pages = max(1, (total_rows + per_page - 1) // per_page)
+
+            def build_url(p):
+                args = dict(request.args)
+                args["tab"] = "users"
+                args["page"] = p
+                return url_for("monitoring_page", **args)
+
+            pagination = {
+                "page": page,
+                "total_pages": total_pages,
+                "total_rows": total_rows,
+                "prev_url": build_url(page - 1),
+                "next_url": build_url(page + 1),
+            }
+
+        elif tab == "libraries":
+            page = request.args.get("page", type=int, default=1)
+            per_page = 30
+            offset = (page - 1) * per_page
+
+            total = db.query_one("SELECT COUNT(*) AS cnt FROM libraries") or {"cnt": 0}
+            total = dict(total) if total else {"cnt": 0}
+
+            rows = db.query(
+                f"""
+                SELECT
+                  l.name AS library_name,
+                  s.name AS server_name,
+                  l.type AS media_type,
+                  NULL AS item_count,
+                  NULL AS last_stream_at,
+                  0 AS total_plays,
+                  0 AS played_ms
+                FROM libraries l
+                JOIN servers s ON s.id = l.server_id
+                ORDER BY s.name, l.name
+                LIMIT {per_page} OFFSET ?
+                """,
+                (offset,),
+            )
+
+            rows = [dict(r) for r in rows]
+            for r in rows:
+                ms = r.get("played_ms") or 0
+                r["played_duration"] = f"{ms // 3600000}h {((ms % 3600000) // 60000)}m"
+
+            total_rows = int(total.get("cnt") or 0)
+            total_pages = max(1, (total_rows + per_page - 1) // per_page)
+
+            def build_url(p):
+                args = dict(request.args)
+                args["tab"] = "libraries"
+                args["page"] = p
+                return url_for("monitoring_page", **args)
+
+            pagination = {
+                "page": page,
+                "total_pages": total_pages,
+                "total_rows": total_rows,
+                "prev_url": build_url(page - 1),
+                "next_url": build_url(page + 1),
+            }
+
+        # ------------------------------------------------------------------
+        # HTMX: si requête dynamique, on renvoie uniquement le contenu de l’onglet
+        # ------------------------------------------------------------------
+        is_hx = bool(request.headers.get("HX-Request"))
+        if is_hx:
+            tab_tpl = {
+                "overview": "monitoring/overview_body.html",
+                "activity": "monitoring/tabs/activity.html",
+                "history": "monitoring/tabs/history.html",
+                "libraries": "monitoring/tabs/libraries.html",
+                "users": "monitoring/tabs/users.html",
+            }.get(tab, "monitoring/overview_body.html")
+
+            return render_template(
+                tab_tpl,
+                active_page="monitoring",
+                tab=tab,
+                servers=servers,
+                server_stats=server_stats,
+                sessions_stats=sessions_stats,
+                sessions=sessions,
+                events=events,
+                live_window_seconds=live_window_seconds,
+                stats_7d=stats_7d,
+                top_users_30d=top_users_30d,
+                top_content_30d=top_content_30d,
+                concurrent_7d=concurrent_7d,
+                rows=rows,
+                filters=filters,
+                pagination=pagination,
+            )
+
+        # Page complète (chargement normal)
+        return render_template(
+            "monitoring/monitoring.html",
+            active_page="monitoring",
+            tab=tab,
+            servers=servers,
+            server_stats=server_stats,
+            sessions_stats=sessions_stats,
+            sessions=sessions,
+            events=events,
+            live_window_seconds=live_window_seconds,
+            stats_7d=stats_7d,
+            top_users_30d=top_users_30d,
+            top_content_30d=top_content_30d,
+            concurrent_7d=concurrent_7d,
+            rows=rows,
+            filters=filters,
+            pagination=pagination,
+        )
+
+
+
+    # =====================================================================
+    # ⚠️ END MONITORING ROUTES
+    # =====================================================================
+
+    @app.route("/monitoring/user/<int:user_id>")
+    def monitoring_user_detail(user_id: int):
+        db = get_db()
+
+        # Stats user global
+        u = db.query_one(
+            """
+            SELECT
+              mu.id,
+              mu.username,
+              mu.type,
+              mu.server_id
+            FROM media_users mu
+            WHERE mu.id = ?
+            """,
+            (user_id,),
+        )
+        if not u:
+            flash("invalid_user", "error")
+            return redirect(url_for("monitoring_page", tab="users"))
+
+        agg = db.query_one(
+            """
+            SELECT
+              COUNT(*) AS total_plays,
+              SUM(watch_ms) AS watch_ms,
+              MAX(stopped_at) AS last_watch_at
+            FROM media_session_history
+            WHERE media_user_id = ?
+            """,
+            (user_id,),
+        ) or {"total_plays": 0, "watch_ms": 0, "last_watch_at": None}
+
+        agg = dict(agg) if agg else {"total_plays":0,"watch_ms":0,"last_watch_at":None}
+        ms = agg.get("watch_ms") or 0
+        u["total_plays"] = agg.get("total_plays") or 0
+        u["last_watch_at"] = agg.get("last_watch_at")
+        u["watch_time"] = f"{ms // 3600000}h {((ms % 3600000) // 60000)}m"
+
+        # History paginé
+        page = request.args.get("page", type=int, default=1)
+        per_page = 30
+        offset = (page - 1) * per_page
+        q = (request.args.get("q") or "").strip()
+
+        where = ["h.media_user_id = ?"]
+        params = [user_id]
+
+        if q:
+            where.append("(h.title LIKE ? OR h.grandparent_title LIKE ?)")
+            params += [f"%{q}%", f"%{q}%"]
+
+        where_sql = " AND ".join(where)
+
+        total = db.query_one(
+            f"""
+            SELECT COUNT(*) AS cnt
+            FROM media_session_history h
+            WHERE {where_sql}
+            """,
+            tuple(params),
+        ) or {"cnt": 0}
+
+        rows = db.query(
+            f"""
+            SELECT
+              h.stopped_at,
+              s.name AS server_name,
+              s.type AS provider,
+              h.title,
+              h.grandparent_title,
+              h.media_type,
+              CASE WHEN h.was_transcode = 1 THEN 'transcode' ELSE 'directplay' END AS playback_type,
+              h.device,
+              h.client_name,
+              h.watch_ms,
+              h.raw_json
+            FROM media_session_history h
+            JOIN servers s ON s.id = h.server_id
+            WHERE {where_sql}
+            ORDER BY h.stopped_at DESC
+            LIMIT {per_page} OFFSET ?
+            """,
+            tuple(params + [offset]),
+        )
+
+        # parse ip from raw_json if possible (sinon "-")
+        import json as _json
+        for r in rows:
+            ms2 = r.get("watch_ms") or 0
+            r["watch_time"] = f"{ms2 // 3600000}h {((ms2 % 3600000) // 60000)}m"
+            r["ip"] = "-"
+            try:
+                raw = r.get("raw_json")
+                if raw:
+                    j = _json.loads(raw)
+                    # best-effort: plex/jellyfin variants
+                    r["ip"] = j.get("ip") or j.get("IPAddress") or j.get("RemoteEndPoint") or "-"
+            except Exception:
+                pass
+
+        total_rows = int(total["cnt"])
+        total_pages = max(1, (total_rows + per_page - 1) // per_page)
+
+        def build_url(p):
+            args = dict(request.args)
+            args["page"] = p
+            return url_for("monitoring_user_detail", user_id=user_id, **args)
+
+        pagination = {
+            "page": page,
+            "total_pages": total_pages,
+            "total_rows": total_rows,
+            "prev_url": build_url(page - 1),
+            "next_url": build_url(page + 1),
+        }
+
+        return render_template(
+            "monitoring/user_detail.html",
+            active_page="monitoring",
+            tab="users",
+            user=u,
+            rows=rows,
+            q=q,
+            pagination=pagination,
+        )
+
+
+    @app.route("/monitoring/session/<int:session_row_id>")
+    def monitoring_session_detail(session_row_id: int):
+        db = get_db()
+
+        sess = db.query_one(
+            """
+            SELECT
+              ms.*,
+              s.name AS server_name,
+              s.type AS provider,
+              mu.username AS username
+            FROM media_sessions ms
+            JOIN servers s ON s.id = ms.server_id
+            LEFT JOIN media_users mu ON mu.id = ms.media_user_id
+            WHERE ms.id = ?
+            """,
+            (session_row_id,),
+        )
+
+        if not sess:
+            flash("monitoring.session_not_found", "error")
+            return redirect(url_for("monitoring_page"))
+
+        events = db.query(
+            """
+            SELECT id, event_type, ts, payload_json
+            FROM media_events
+            WHERE server_id = ?
+              AND session_key = ?
+            ORDER BY ts DESC
+            LIMIT 30
+            """,
+            (sess["server_id"], sess["session_key"]),
+        )
+
+        return render_template(
+            "monitoring/session_detail.html",
+            active_page="monitoring",
+            sess=sess,
+            events=events,
+        )
 
 
 
 
 
 
+
+
+
+
+
+    @app.route("/api/tasks/list", methods=["GET"])
+    def api_tasks_list():
+        db = get_db()
+
+        if not table_exists(db, "tasks"):
+            return {"tasks": []}
+
+        t = get_translator()
+
+        rows = db.query(
+            """
+            SELECT
+                id,
+                name,
+                description,
+                schedule,
+                status,
+                enabled,
+                last_run,
+                next_run
+            FROM tasks
+            ORDER BY name
+            """
+        )
+
+        tasks = []
+        for r in rows:
+            name = r["name"]
+            desc = r["description"]
+
+            # Labels comme dans tasks.html:
+            # {{ t("task." ~ task.name) or task.name }}
+            # {{ t("task_description." ~ task.name) or task.description or "-" }}
+            name_label = t(f"task.{name}") or name
+            desc_label = t(f"task_description.{name}") or (desc or "-")
+
+            schedule = r["schedule"] or ""
+            schedule_human = cron_human(schedule) if schedule else "-"
+
+            last_run_human = tz_filter(r["last_run"]) if r["last_run"] else "-"
+            next_run_human = tz_filter(r["next_run"]) if r["next_run"] else "-"
+
+            tasks.append({
+                "id": r["id"],
+                "name": name,
+                "description": desc,
+                "schedule": schedule,
+                "status": r["status"],
+                "enabled": bool(r["enabled"]),
+                "name_label": name_label,
+                "description_label": desc_label,
+                "schedule_human": schedule_human,
+                "last_run_human": last_run_human,
+                "next_run_human": next_run_human,
+            })
+
+        return {"tasks": tasks}
 
 
 
@@ -709,7 +1430,7 @@ def create_app():
         # PAGE RENDERING
         # --------------------------
         return render_template(
-            "dashboard.html",
+            "dashboard/dashboard.html",
             stats=stats,              # ✅ conservé (rien perdu)
             users_stats=users_stats,  # ✅ nouveau (pour ton template)
             servers=servers,
@@ -851,7 +1572,7 @@ def create_app():
         users = db.query(query, params)
 
         return render_template(
-            "users.html",
+            "users/users.html",
             users=users,
             selected_statuses=selected_statuses,
             show_archived=show_archived,
@@ -1745,7 +2466,7 @@ def create_app():
         merge_suggestions = get_merge_suggestions(db, user_id, limit=None)
 
         return render_template(
-            "user_detail.html",
+            "users/user_detail.html",
             user=user,
             servers=servers,
             libraries=libraries,
@@ -2273,7 +2994,7 @@ def create_app():
         )
 
         return render_template(
-            "servers.html",
+            "servers/servers.html",
             servers=servers,
             active_page="servers",
             active_tab="servers",
@@ -2310,7 +3031,7 @@ def create_app():
         )
 
         return render_template(
-            "libraries.html",
+            "servers/libraries.html",
             libraries=libraries,
             active_page="servers",
             active_tab="libraries",
@@ -2599,7 +3320,7 @@ def create_app():
         )
 
         return render_template(
-            "server_detail.html",
+            "servers/server_detail.html",
             server=server,
             libraries=libraries,
             users=users,
@@ -2767,7 +3488,7 @@ def create_app():
             "SELECT id, name FROM servers ORDER BY name"
         )
         return render_template(
-            "subscriptions.html",
+            "subscriptions/subscriptions.html",
             servers=servers,
         )
 
@@ -2804,6 +3525,88 @@ def create_app():
 
 
 
+    @app.route("/api/monitoring/activity")
+    def api_monitoring_activity():
+        db = get_db()
+        rng = request.args.get("range", "7d")
+
+        if rng == "all":
+            where = "1=1"
+            params = ()
+        else:
+            delta = {"7d": "-7 days", "1m": "-1 month", "6m": "-6 months", "12m": "-12 months"}.get(rng, "-7 days")
+            where = "started_at >= datetime('now', ?)"
+            params = (delta,)
+
+        rows = db.query(
+            f"""
+            SELECT
+              strftime('%Y-%m-%d', started_at) AS day,
+              COUNT(*) AS sessions
+            FROM media_session_history
+            WHERE {where}
+            GROUP BY strftime('%Y-%m-%d', started_at)
+            ORDER BY day ASC
+            """,
+            params,
+        )
+        return json.dumps(rows), 200, {"Content-Type": "application/json"}
+
+
+    @app.route("/api/monitoring/media_types")
+    def api_monitoring_media_types():
+        db = get_db()
+        rng = request.args.get("range", "7d")
+
+        if rng == "all":
+            where = "1=1"
+            params = ()
+        else:
+            delta = {"7d": "-7 days", "1m": "-1 month", "6m": "-6 months", "12m": "-12 months"}.get(rng, "-7 days")
+            where = "started_at >= datetime('now', ?)"
+            params = (delta,)
+
+        rows = db.query(
+            f"""
+            SELECT
+              COALESCE(media_type, 'unknown') AS media_type,
+              COUNT(*) AS sessions
+            FROM media_session_history
+            WHERE {where}
+            GROUP BY COALESCE(media_type, 'unknown')
+            ORDER BY sessions DESC
+            """,
+            params,
+        )
+        return json.dumps(rows), 200, {"Content-Type": "application/json"}
+
+
+    @app.route("/api/monitoring/weekday")
+    def api_monitoring_weekday():
+        db = get_db()
+        rng = request.args.get("range", "1m")
+
+        if rng == "all":
+            where = "1=1"
+            params = ()
+        else:
+            delta = {"1m": "-1 month", "6m": "-6 months", "12m": "-12 months"}.get(rng, "-1 month")
+            where = "started_at >= datetime('now', ?)"
+            params = (delta,)
+
+        rows = db.query(
+            f"""
+            SELECT
+              CAST(strftime('%w', started_at) AS INTEGER) AS weekday,
+              COUNT(*) AS sessions
+            FROM media_session_history
+            WHERE {where}
+            GROUP BY CAST(strftime('%w', started_at) AS INTEGER)
+            ORDER BY weekday
+            """,
+            params,
+        )
+        return json.dumps(rows), 200, {"Content-Type": "application/json"}
 
 
     @app.route("/tasks", methods=["GET", "POST"])
@@ -2815,17 +3618,25 @@ def create_app():
         # ------------------------------------------------------------------
         if request.method == "POST" and table_exists(db, "tasks"):
             task_id = request.form.get("task_id", type=int)
-            action = request.form.get("action")
+            action = request.form.get("action", type=str)
 
             if not task_id:
                 flash("invalid_task", "error")
                 task_logger.error("POST /tasks → task_id manquant")
                 return redirect(url_for("tasks_page"))
 
+            # On récupère la tâche une fois pour valider l'existence / état
+            task = db.query_one("SELECT * FROM tasks WHERE id = ?", (task_id,))
+            if not task:
+                flash("invalid_task", "error")
+                task_logger.error(f"POST /tasks → task_id introuvable: {task_id}")
+                return redirect(url_for("tasks_page"))
+
             # --------------------------------------------------------------
             # 1) Toggle enable/disable
             # --------------------------------------------------------------
             if action == "toggle":
+                # 1) Toggle enabled (0 <-> 1)
                 db.execute(
                     """
                     UPDATE tasks
@@ -2835,29 +3646,97 @@ def create_app():
                     (task_id,),
                 )
 
-                new_state = db.query_one(
-                    "SELECT enabled FROM tasks WHERE id = ?",
-                    (task_id,),
-                )
+                # 2) Relire la valeur enabled après update
+                row = db.query_one("SELECT enabled FROM tasks WHERE id = ?", (task_id,))
+                enabled = int(row["enabled"]) if row else 0
 
-                task_logger.info(
-                    f"Tâche {task_id} → toggle → enabled={new_state['enabled']}"
-                )
+                # 3) Synchroniser le status + reset champs utiles
+                if enabled == 1:
+                    # tâche activée -> prête à tourner
+                    db.execute(
+                        """
+                        UPDATE tasks
+                        SET status='idle',
+                            last_error=NULL,
+                            next_run=NULL
+                        WHERE id=?
+                        """,
+                        (task_id,),
+                    )
+                    task_logger.info(f"Tâche {task_id} → ENABLED (status=idle)")
+                else:
+                    # tâche désactivée
+                    db.execute(
+                        """
+                        UPDATE tasks
+                        SET status='disabled'
+                        WHERE id=?
+                        """,
+                        (task_id,),
+                    )
+                    task_logger.info(f"Tâche {task_id} → DISABLED (status=disabled)")
+
                 flash("task_updated", "success")
+                return redirect(url_for("tasks_page"))
 
             # --------------------------------------------------------------
-            # 2) run_now → marque la tâche comme queued
+            # 2) run_now → enqueue + status queued (optionnel mais utile)
             # --------------------------------------------------------------
             elif action == "run_now":
-                from tasks_engine import enqueue_task
-                enqueue_task(task_id)
-                flash("task_queued", "success")
+                # Re-lire enabled au cas où
+                row = db.query_one("SELECT enabled, status, name FROM tasks WHERE id = ?", (task_id,))
+                enabled = int(row["enabled"]) if row else 0
+                name = row["name"] if row and "name" in row else f"#{task_id}"
 
+                if enabled != 1:
+                    flash("task_disabled", "error")
+                    task_logger.warning(f"run_now refusé: tâche {task_id} ({name}) désactivée")
+                    return redirect(url_for("tasks_page"))
 
+                # Marquer queued (si tu veux une UI plus lisible)
+                # On ne force pas "queued" si déjà running, mais tu peux choisir.
+                if row and row.get("status") not in ("running",):
+                    db.execute(
+                        """
+                        UPDATE tasks
+                        SET status='queued',
+                            last_error=NULL
+                        WHERE id=?
+                        """,
+                        (task_id,),
+                    )
+
+                try:
+                    from tasks_engine import enqueue_task
+                    enqueue_task(task_id)
+                    flash("task_queued", "success")
+                    task_logger.info(f"Tâche {task_id} ({name}) → run_now → enqueued")
+                except Exception as e:
+                    flash("task_queue_failed", "error")
+                    task_logger.error(f"run_now erreur pour tâche {task_id} ({name}): {e}", exc_info=True)
+                    # On garde une trace DB si possible
+                    try:
+                        db.execute(
+                            """
+                            UPDATE tasks
+                            SET status='error',
+                                last_error=?
+                            WHERE id=?
+                            """,
+                            (str(e), task_id),
+                        )
+                    except Exception:
+                        pass
+
+                return redirect(url_for("tasks_page"))
+
+            # --------------------------------------------------------------
+            # Action inconnue
+            # --------------------------------------------------------------
             else:
-                task_logger.warning(f"Action inconnue sur /tasks : {action}")
-
-            return redirect(url_for("tasks_page"))
+                task_logger.warning(f"Action inconnue sur /tasks : {action} (task_id={task_id})")
+                flash("unknown_action", "error")
+                return redirect(url_for("tasks_page"))
 
         # ------------------------------------------------------------------
         # GET : affichage liste des tâches
@@ -2875,10 +3754,11 @@ def create_app():
         task_logger.debug(f"Affichage page tasks → {len(tasks)} tâches détectées")
 
         return render_template(
-            "tasks.html",
+            "tasks/tasks.html",
             tasks=tasks,
             active_page="tasks",
         )
+
 
 
 
@@ -3231,7 +4111,7 @@ def create_app():
         )
 
         return render_template(
-            "mailing_campaigns.html",
+            "mailing/mailing_campaigns.html",
             campaigns=campaigns,
             servers=servers,
             loaded_campaign=loaded_campaign,
@@ -3449,7 +4329,7 @@ def create_app():
         )
 
         return render_template(
-            "mailing_templates.html",
+            "mailing/mailing_templates.html",
             templates=templates,
             active_page="mailing",
         )
@@ -3535,7 +4415,7 @@ def create_app():
             return redirect(url_for("mailing_smtp_page"))
 
         return render_template(
-            "mailing_smtp.html",
+            "mailing/mailing_smtp.html",
             settings=settings,
             active_page="mailing",
         )
@@ -3722,7 +4602,7 @@ def create_app():
             backups = list_backups(backup_cfg)
 
         return render_template(
-            "backup.html",
+            "backup/backup.html",
             backups=backups,
             settings=settings,
             active_page="backup",
@@ -3950,7 +4830,7 @@ def create_app():
         # GET → RENDER SETTINGS UI
         # ------------------------------
         return render_template(
-            "settings.html",
+            "settings/settings.html",
             settings=settings,   # ✅ source unique
             active_page="settings",
             current_lang=session.get("lang", settings["default_language"]),
@@ -4067,7 +4947,7 @@ def create_app():
         # Rendu HTML
         # ----------------------------
         return render_template(
-            "logs.html",
+            "logs/logs.html",
             logs=parsed_logs,
             page=page,
             total_pages=total_pages,
@@ -4145,7 +5025,7 @@ def create_app():
         os_info = f"{platform.system()} {platform.release()}-{platform.version()}"
         
         return render_template(
-            "about.html",
+            "about/about.html",
             flask_version=flask_version,
             python_version=python_version,
             os_info=os_info,

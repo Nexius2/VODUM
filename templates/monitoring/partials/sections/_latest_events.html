@@ -1,0 +1,25 @@
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+  <div class="text-sm font-semibold mb-4">Latest events</div>
+
+  {% if events and events|length > 0 %}
+    <div class="space-y-4">
+      {% for e in events[:10] %}
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-sm font-semibold">{{ e.event_type }}</div>
+            <div class="text-xs text-slate-400">
+              {{ e.server_name }} · {{ e.provider }} · {{ e.title or "-" }}
+            </div>
+          </div>
+			{% set d = (e.ts|tz) %}
+			<div class="text-xs text-slate-500">
+			  {{ d[8:10] }}/{{ d[5:7] }} {{ d[11:16] }}
+			</div>
+        </div>
+        {% if not loop.last %}<div class="border-t border-slate-800"></div>{% endif %}
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="text-slate-500">No events yet.</div>
+  {% endif %}
+</div>

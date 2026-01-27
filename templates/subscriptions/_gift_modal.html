@@ -1,0 +1,67 @@
+<!-- DETAILS MODAL (overlay) -->
+<div id="gift-modal"
+     class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+     onclick="closeGiftModal()">
+
+  <div class="w-full max-w-2xl rounded-2xl border border-slate-700 bg-slate-950 shadow-xl"
+       onclick="event.stopPropagation()">
+
+    <div class="flex items-start justify-between gap-4 p-5 border-b border-slate-800">
+      <div>
+        <div class="text-base font-semibold text-white" id="gift-modal-title">—</div>
+        <div class="text-xs text-slate-400 mt-1" id="gift-modal-subtitle"></div>
+      </div>
+
+      <button type="button"
+              class="text-slate-400 hover:text-white text-sm"
+              onclick="closeGiftModal()">
+        ✕
+      </button>
+    </div>
+
+    <div class="p-5 space-y-3 text-sm text-slate-200">
+
+      <!-- Summary -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div class="rounded-xl border border-slate-800 bg-slate-900/40 p-3">
+          <div class="text-xs text-slate-400 mb-1">{{ t("subscription_modal_target") }}</div>
+          <div class="font-medium" id="gift-modal-target">—</div>
+        </div>
+
+        <div class="rounded-xl border border-slate-800 bg-slate-900/40 p-3">
+          <div class="text-xs text-slate-400 mb-1">{{ t("subscription_modal_duration") }}</div>
+          <div class="font-medium" id="gift-modal-duration">—</div>
+        </div>
+
+        <div class="rounded-xl border border-slate-800 bg-slate-900/40 p-3">
+          <div class="text-xs text-slate-400 mb-1">{{ t("subscription_modal_users_updated") }}</div>
+          <div class="font-medium" id="gift-modal-users-count">—</div>
+        </div>
+
+        <div class="rounded-xl border border-slate-800 bg-slate-900/40 p-3">
+          <div class="text-xs text-slate-400 mb-1">{{ t("subscription_modal_server") }}</div>
+          <div class="font-medium" id="gift-modal-server">—</div>
+        </div>
+      </div>
+
+      <div class="rounded-xl border border-slate-800 bg-slate-900/40 p-3">
+        <div class="text-xs text-slate-400 mb-1">{{ t("subscription_modal_comment") }}</div>
+        <div id="gift-modal-reason" class="text-slate-200 break-words">—</div>
+      </div>
+
+      <!-- Users list -->
+      <div class="rounded-xl border border-slate-800 bg-slate-900/40 p-3">
+        <div class="flex items-center justify-between mb-2">
+          <div class="text-xs text-slate-400">{{ t("subscription_modal_users") }}</div>
+          <div class="text-xs text-slate-500" id="gift-modal-users-label"></div>
+        </div>
+
+        <div id="gift-modal-users"
+             class="max-h-56 overflow-auto space-y-1 text-sm text-slate-200">
+          —
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>

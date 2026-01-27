@@ -34,18 +34,33 @@ def send_email(settings, to_email, subject, body):
     if not to_email:
         raise ValueError("Email vide")
 
-    smtp_host = settings["smtp_host"]
-    smtp_port = settings["smtp_port"] or 587
-    smtp_tls  = bool(settings["smtp_tls"])
-    smtp_user = settings["smtp_user"]
-    smtp_pass = settings["smtp_pass"] or ""
-    mail_from = settings["mail_from"] or smtp_user
+    # settings peut être un sqlite3.Row ou un dict → on sécurise l'accès
+    getv = settings.get if hasattr(settings, "get") else (lambda k, d=None: settings[k] if k in settings.keys() else d)
 
-    # cast port si besoin
+    smtp_host = (getv("smtp_host") or "").strip()
+
+    # Port : accepte int / "587" / "" / None
+    smtp_port = getv("smtp_port") or 587
     try:
         smtp_port = int(smtp_port)
     except (TypeError, ValueError):
         smtp_port = 587
+
+    # TLS : évite bool("0")==True
+    raw_tls = getv("smtp_tls")
+    if isinstance(raw_tls, bool):
+        smtp_tls = raw_tls
+    elif raw_tls is None:
+        smtp_tls = False
+    else:
+        smtp_tls = str(raw_tls).strip().lower() in ("1", "true", "yes", "on")
+
+    smtp_user = (getv("smtp_user") or "").strip()
+    smtp_pass = getv("smtp_pass") or ""
+    mail_from = (getv("mail_from") or smtp_user).strip()
+
+    if not smtp_host:
+        raise ValueError("SMTP host manquant")
 
     log.debug(
         f"[SMTP] Email sending → to={to_email}, subject={subject}, "
@@ -89,6 +104,7 @@ def send_email(settings, to_email, subject, body):
 
 
 
+
 # --------------------------------------------------------
 # Tâche principale
 # --------------------------------------------------------
@@ -107,6 +123,7 @@ def run(task_id: int, db):
         # 1) Charger settings SMTP
         # --------------------------------------------------------
         settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        settings = dict(settings) if settings else None
 
         if not settings or not settings["mailing_enabled"]:
             msg = "Mailing disabled → no action taken."
@@ -154,13 +171,23 @@ def run(task_id: int, db):
             # Destinataires
             # ----------------------------------------------------
             if is_test:
+                admin_email = (settings.get("admin_email") or "").strip()
+
+                if not admin_email:
+                    msg = "Test mode: admin_email is missing in settings"
+                    log.error(msg)
+                    task_logs(task_id, "error", msg)
+                    continue  # on saute cette campagne
+
                 recipients = [{
                     "id": 0,
-                    "email": settings["admin_email"],
+                    "email": admin_email,
                     "username": "ADMIN",
                     "expiration_date": None
                 }]
-                log.info(f"Test mode → {settings['admin_email']}")
+
+                log.info(f"Test mode → {admin_email}")
+
             else:
                 if not server_id:
                     recipients = db.query("""

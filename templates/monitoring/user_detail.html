@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Monitoring · User{% endblock %}
+{% block header_title %}Monitoring{% endblock %}
+{% block header_subtitle %}User detail{% endblock %}
+
+{% block content %}
+{% include "monitoring/partials/_tabs.html" %}
+
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-6">
+  <div class="flex items-center justify-between">
+    <div>
+      <div class="text-sm text-slate-400">User</div>
+      <div class="text-xl font-semibold">{{ user.username or "-" }}</div>
+      <div class="text-xs text-slate-500 mt-1">{{ user.type }} · server_id={{ user.server_id }}</div>
+    </div>
+    <div class="text-right text-xs text-slate-400">
+      <div>Total plays: <span class="text-slate-200">{{ user.total_plays or 0 }}</span></div>
+      <div>Watch time: <span class="text-slate-200">{{ user.watch_time or "0h 0m" }}</span></div>
+      <div>Last watch: <span class="text-slate-200">{{ user.last_watch_at or "-" }}</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+  <div class="flex items-center justify-between mb-4">
+    <div class="text-sm font-semibold">History</div>
+    <div class="text-xs text-slate-400">30 rows / page</div>
+  </div>
+
+  <form method="get" class="flex flex-wrap gap-3 mb-4">
+    <input type="hidden" name="page" value="1">
+    <input name="q" value="{{ q or '' }}" placeholder="Search title..."
+           class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm w-full md:w-96">
+    <button class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl px-4 py-2 text-sm">
+      Filter
+    </button>
+  </form>
+
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-slate-400 border-b border-slate-800">
+          <th class="py-2 pr-4">Date</th>
+          <th class="py-2 pr-4">Server</th>
+          <th class="py-2 pr-4">Media</th>
+          <th class="py-2 pr-4">Type</th>
+          <th class="py-2 pr-4">Playback</th>
+          <th class="py-2 pr-4">Device</th>
+          <th class="py-2 pr-4">IP</th>
+          <th class="py-2 pr-4">Duration</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+          <tr class="border-b border-slate-800">
+            <td class="py-3 pr-4 text-slate-300">{{ r.stopped_at }}</td>
+            <td class="py-3 pr-4">
+              <div class="font-semibold">{{ r.server_name }}</div>
+              <div class="text-xs text-slate-500">{{ r.provider }}</div>
+            </td>
+            <td class="py-3 pr-4">
+              <div class="font-semibold">{{ r.title or "-" }}</div>
+              {% if r.grandparent_title %}
+                <div class="text-xs text-slate-500">{{ r.grandparent_title }}</div>
+              {% endif %}
+            </td>
+            <td class="py-3 pr-4">{{ r.media_type or "-" }}</td>
+            <td class="py-3 pr-4">{{ r.playback_type or "-" }}</td>
+            <td class="py-3 pr-4">{{ r.device or "-" }}</td>
+            <td class="py-3 pr-4">{{ r.ip or "-" }}</td>
+            <td class="py-3 pr-4">{{ r.watch_time or "-" }}</td>
+          </tr>
+        {% endfor %}
+        {% if rows|length == 0 %}
+          <tr><td colspan="8" class="py-6 text-slate-500">No results.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+
+  {% include "monitoring/partials/_pagination.html" %}
+</div>
+
+{% endblock %}

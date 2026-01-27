@@ -1,0 +1,34 @@
+{% set smtp_ready =
+      settings.mailing_enabled
+  and settings.smtp_host
+  and settings.smtp_port
+  and settings.smtp_user
+  and settings.smtp_pass
+  and settings.mail_from
+%}
+
+
+
+<div class="mb-6 border-b border-slate-800 text-sm">
+  <nav class="flex gap-4">
+
+
+    {% if smtp_ready %}
+      <a href="{{ url_for('mailing_campaigns_page') }}"
+         class="pb-2 border-b-2 {{ 'border-primary text-primary' if current_subpage=='campaigns' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
+        {{ t("mail_campaigns") }}
+      </a>
+
+      <a href="{{ url_for('mailing_templates_page') }}"
+         class="pb-2 border-b-2 {{ 'border-primary text-primary' if current_subpage=='templates' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
+        {{ t("mail_templates") }}
+      </a>
+    {% endif %}
+
+    <a href="{{ url_for('mailing_smtp_page') }}"
+       class="pb-2 border-b-2 {{ 'border-primary text-primary' if current_subpage=='smtp' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
+      {{ t("mail_smtp_config") }}
+    </a>
+
+  </nav>
+</div>

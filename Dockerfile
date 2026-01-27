@@ -19,7 +19,7 @@ COPY migrations/ /app/migrations/
 
 # SQL seeds
 COPY tables.sql /app/tables.sql
-COPY default_data.sql /app/default_data.sql
+#COPY default_data.sql /app/default_data.sql
 
 # Entrypoint + INFO
 COPY entrypoint.sh /app/entrypoint.sh

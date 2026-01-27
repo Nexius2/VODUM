@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% set active_page = "settings" %}
+
+{% block header_title %}{{ t("settings") }}{% endblock %}
+{% block header_subtitle %}{{ t("settings_subtitle") }}{% endblock %}
+
+{% block header_actions %}
+<button
+    type="submit"
+    form="settings-save-form"
+    class="px-4 py-2 bg-primary hover:bg-primary-dark rounded text-white text-sm"
+>
+    {{ t("save") }}
+</button>
+{% endblock %}
+
+{% block content %}
+
+<form method="POST" id="settings-save-form" class="space-y-10">
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+        <!-- GENERAL SETTINGS -->
+        <div class="bg-slate-900 p-6 rounded-xl border border-slate-800">
+            <h2 class="text-lg font-semibold text-slate-200 mb-4">
+                {{ t("general_settings") }}
+            </h2>
+
+            <div class="space-y-4">
+                <!-- Language -->
+                <div>
+                    <label class="block text-sm mb-1 text-slate-300">
+                        {{ t("language") }}
+                    </label>
+
+                    <select name="default_language"
+                            class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+
+                        <!-- AUTO / BROWSER -->
+                        <option value=""
+                            {% if not settings.default_language %}selected{% endif %}>
+                            🌐 {{ t("language_auto") }}
+                        </option>
+
+                        <!-- AVAILABLE LANGUAGES -->
+                        {% for code, name in available_languages.items() %}
+                            <option value="{{ code }}"
+                                {% if settings.default_language == code %}selected{% endif %}>
+                                {{ name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+
+                    {% if not settings.default_language %}
+                        <p class="text-xs text-slate-400 mt-1">
+                            {{ t("language_auto_hint") }}
+                        </p>
+                    {% endif %}
+                </div>
+
+                <!-- Timezone -->
+                <div>
+                    <label class="block text-sm mb-1 text-slate-300">
+                        {{ t("timezone") }}
+                    </label>
+                    <input type="text" name="timezone"
+                           value="{{ settings.timezone }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm"
+                           placeholder="Europe/Paris">
+                </div>
+
+                <!-- Admin Email -->
+                <div>
+                    <label class="block text-sm mb-1 text-slate-300">
+                        {{ t("admin_email") }}
+                    </label>
+                    <input type="email" name="admin_email"
+                           value="{{ settings.admin_email }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+                </div>
+				<!-- Brand name -->
+				<div>
+				  <label class="block text-sm mb-1 text-slate-300">
+					{{ t("brand_name") }}
+				  </label>
+				  <input type="text" name="brand_name"
+						 value="{{ settings.brand_name or '' }}"
+						 class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm"
+						 placeholder="{{ t('brand_name_placeholder') }}">
+				  <p class="text-xs text-slate-400 mt-1">
+					{{ t("brand_name_hint") }}
+				  </p>
+				</div>
+
+				
+				
+            </div>
+        </div>
+
+
+        <!-- DEFAULT SUBSCRIPTION SETTINGS -->
+        <div class="bg-slate-900 p-6 rounded-xl border border-slate-800">
+            <h2 class="text-lg font-semibold text-slate-200 mb-4">
+                {{ t("default_subscription_settings") }}
+            </h2>
+
+            <div class="space-y-4">
+
+                <!-- Default duration -->
+                <div>
+                    <label class="block text-sm mb-1 text-slate-300">
+                        {{ t("default_subscription_duration_days") }}
+                    </label>
+                    <input type="number"
+                           name="default_expiration_days"
+                           value="{{ settings.default_expiration_days }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+                </div>
+
+                <!-- Auto-delete delay -->
+                <div>
+                    <label class="block text-sm mb-1 text-slate-300">
+                        {{ t("delete_user_after_expiry") }}
+                    </label>
+                    <input type="number"
+                           name="delete_after_expiry_days"
+                           value="{{ settings.delete_after_expiry_days }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+                </div>
+
+                <!-- Disable on expiry -->
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" name="disable_on_expiry" value="1"
+                           {% if settings.disable_on_expiry %}checked{% endif %}
+                           class="w-4 h-4 rounded border-slate-600 bg-slate-800">
+                    <span class="text-sm text-slate-300">
+                        {{ t("disable_user_on_expiration") }}
+                    </span>
+                </div>
+
+            </div>
+        </div>
+
+
+        <!-- STATUS WARNING DELAYS -->
+        <div class="bg-slate-900 p-6 rounded-xl border border-slate-800">
+            <h2 class="text-lg font-semibold text-slate-200 mb-4">
+                {{ t("status_warning_delays") }}
+            </h2>
+
+            <div class="space-y-4">
+
+                <!-- Preavis -->
+                <div>
+                    <label class="block text-sm mb-1 text-slate-300">
+                        {{ t("days_before_expiration_preavis") }}
+                    </label>
+                    <input type="number" min="0"
+                           name="preavis_days"
+                           value="{{ settings.preavis_days }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+                </div>
+
+                <!-- Relance -->
+                <div>
+                    <label class="block text-sm mb-1 text-slate-300">
+                        {{ t("days_before_expiration_relance") }}
+                    </label>
+                    <input type="number" min="0"
+                           name="relance_days"
+                           value="{{ settings.reminder_days }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+                </div>
+
+            </div>
+        </div>
+
+
+        <!-- SYSTEM SETTINGS -->
+        <div class="bg-slate-900 p-6 rounded-xl border border-slate-800">
+            <h2 class="text-lg font-semibold text-slate-200 mb-4">
+                {{ t("system_settings") }}
+            </h2>
+
+            <div class="space-y-4">
+
+                <!-- Cron -->
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" name="enable_cron_jobs" value="1"
+                           {% if settings.enable_cron_jobs %}checked{% endif %}
+                           class="w-4 h-4 rounded border-slate-600 bg-slate-800">
+                    <span class="text-sm text-slate-300">
+                        {{ t("enable_scheduled_tasks") }}
+                    </span>
+                </div>
+
+                <!-- Maintenance -->
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" name="maintenance_mode" value="1"
+                           {% if settings.maintenance_mode %}checked{% endif %}
+                           class="w-4 h-4 rounded border-slate-600 bg-slate-800">
+                    <span class="text-sm text-slate-300">
+                        {{ t("maintenance_mode") }}
+                    </span>
+                </div>
+
+                <!-- Debug -->
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" name="debug_mode" value="1"
+                           {% if settings.debug_mode %}checked{% endif %}
+                           class="w-4 h-4 rounded border-slate-600 bg-slate-800">
+                    <span class="text-sm text-slate-300">
+                        {{ t("debug_mode") }}
+                    </span>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+</form>
+
+{% endblock %}

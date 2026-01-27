@@ -111,20 +111,37 @@ def api_gift_time_to_server(server_id):
 
     for u in users:
         try:
-            old_exp = date.fromisoformat(u["expiration_date"])
+            current_exp = date.fromisoformat(u["expiration_date"])
         except Exception:
-            old_exp = date.today()
+            current_exp = date.today()
 
-        new_exp = old_exp + timedelta(days=days)
+        new_exp = (current_exp + timedelta(days=days)).isoformat()
 
         ok, _ = update_user_expiration(
             u["id"],
-            new_exp.isoformat(),
-            reason=f"gift_{days}_days"
+            new_exp,
+            reason=reason
         )
 
         if ok:
             updated += 1
+
+            # ✅ Historiser le cadeau (1 ligne par user modifié)
+            db.execute(
+                """
+                INSERT INTO subscription_gifts
+                    (vodum_user_id, target_type, target_server_id, days_added, reason)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    u["id"],
+                    target_type,
+                    int(server_id) if (target_type == "server" and server_id) else None,
+                    days,
+                    reason or None,
+                )
+            )
+
 
     return jsonify({
         "status": "ok",
@@ -143,7 +160,7 @@ def api_gift_subscription():
 
     target_type = data.get("target_type")
     days_raw = data.get("days")
-    reason = data.get("reason") or "manual_gift"
+    reason = (data.get("reason") or "manual gift").strip()
     server_id = data.get("server_id")
 
     if not target_type:
@@ -179,6 +196,8 @@ def api_gift_subscription():
             """
         )
 
+        target_server_id = None
+
     elif target_type == "server":
         if not server_id:
             return jsonify({"error": "server_id required"}), 400
@@ -194,11 +213,35 @@ def api_gift_subscription():
             (server_id,)
         )
 
+        try:
+            target_server_id = int(server_id)
+        except (TypeError, ValueError):
+            return jsonify({"error": "invalid server_id"}), 400
+
     else:
         return jsonify({"error": "invalid target_type"}), 400
 
     # --------------------------------------------------
-    # Mise à jour
+    # Historique : 1 ligne par gift (RUN)
+    # --------------------------------------------------
+    db.execute(
+        """
+        INSERT INTO subscription_gift_runs
+            (target_type, target_server_id, days_added, reason, users_updated)
+        VALUES (?, ?, ?, ?, 0)
+        """,
+        (target_type, target_server_id, days, reason or None)
+    )
+
+    # SQLite: récupère l'id du run créé
+    run_id_row = db.query_one("SELECT last_insert_rowid() AS id")
+    run_id = run_id_row["id"] if run_id_row else None
+
+    if not run_id:
+        return jsonify({"error": "failed to create gift run"}), 500
+
+    # --------------------------------------------------
+    # Mise à jour + détails du run (users)
     # --------------------------------------------------
     updated = 0
 
@@ -210,17 +253,101 @@ def api_gift_subscription():
 
         new_exp = (current_exp + timedelta(days=days)).isoformat()
 
-        update_user_expiration(
+        ok, _msg = update_user_expiration(
             u["id"],
             new_exp,
             reason=reason
         )
-        updated += 1
+
+        if ok:
+            updated += 1
+
+            # 1 ligne par user DANS LE DETAIL du run (pas dans l’historique principal)
+            db.execute(
+                """
+                INSERT OR IGNORE INTO subscription_gift_run_users
+                    (run_id, vodum_user_id)
+                VALUES (?, ?)
+                """,
+                (run_id, u["id"])
+            )
+
+    # --------------------------------------------------
+    # Update du compteur final sur le run
+    # --------------------------------------------------
+    db.execute(
+        "UPDATE subscription_gift_runs SET users_updated = ? WHERE id = ?",
+        (updated, run_id)
+    )
 
     return jsonify({
         "status": "ok",
+        "run_id": run_id,
         "users_updated": updated,
         "days_added": days,
         "target": target_type,
-        "server_id": server_id
+        "server_id": target_server_id
     }), 200
+
+
+@subscriptions_api.route("/api/subscriptions/gifts/<int:run_id>", methods=["GET"])
+def api_gift_history_detail(run_id):
+    db = DBManager()
+
+    run = db.query_one(
+        """
+        SELECT
+            r.id, r.created_at, r.target_type, r.target_server_id,
+            s.name AS server_name,
+            r.days_added, r.reason, r.users_updated
+        FROM subscription_gift_runs r
+        LEFT JOIN servers s ON s.id = r.target_server_id
+        WHERE r.id = ?
+        """,
+        (run_id,)
+    )
+
+    if not run:
+        return jsonify({"status": "error", "error": "not_found"}), 404
+
+    users = db.query(
+        """
+        SELECT vu.id, vu.username
+        FROM subscription_gift_run_users ru
+        JOIN vodum_users vu ON vu.id = ru.vodum_user_id
+        WHERE ru.run_id = ?
+        ORDER BY vu.username COLLATE NOCASE
+        """,
+        (run_id,)
+    )
+
+    return jsonify({
+        "status": "ok",
+        "run": dict(run),
+        "users": [dict(u) for u in users]
+    }), 200
+
+
+
+@subscriptions_api.route("/api/subscriptions/gifts", methods=["GET"])
+def api_gift_history():
+    db = DBManager()
+    rows = db.query(
+        """
+        SELECT
+            r.id,
+            r.created_at,
+            r.target_type,
+            r.target_server_id,
+            s.name AS server_name,
+            r.days_added,
+            r.reason,
+            r.users_updated
+        FROM subscription_gift_runs r
+        LEFT JOIN servers s ON s.id = r.target_server_id
+        ORDER BY r.created_at DESC
+        LIMIT 100
+        """
+    )
+    return jsonify({"status": "ok", "items": [dict(r) for r in rows]}), 200
+

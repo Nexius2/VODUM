@@ -1,0 +1,17 @@
+{% if pagination and pagination.total_pages > 1 %}
+  <div class="flex items-center justify-between mt-4">
+    <div class="text-xs text-slate-500">
+      Page {{ pagination.page }} / {{ pagination.total_pages }} ({{ pagination.total_rows }} rows)
+    </div>
+    <div class="flex gap-2">
+      {% if pagination.page > 1 %}
+        <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
+           href="{{ pagination.prev_url }}">Prev</a>
+      {% endif %}
+      {% if pagination.page < pagination.total_pages %}
+        <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
+           href="{{ pagination.next_url }}">Next</a>
+      {% endif %}
+    </div>
+  </div>
+{% endif %}

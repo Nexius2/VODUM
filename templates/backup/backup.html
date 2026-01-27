@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% set active_page = 'backup' %}
+
+{% block title %}{{ t("backup") }} - VODUM{% endblock %}
+{% block header_title %}{{ t("backup_restore") }}{% endblock %}
+{% block header_subtitle %}{{ t("backup_subtitle") }}{% endblock %}
+
+{% block content %}
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+  <!-- Création backup -->
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+
+    <!-- Backup manuel -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+      <h2 class="text-sm font-semibold mb-4">{{ t("manual_backup") }}</h2>
+
+      <p class="text-xs text-slate-400 mb-4">
+        {{ t("manual_backup_desc") }}
+      </p>
+
+      <form action="{{ url_for('backup_page') }}" method="post">
+        <input type="hidden" name="action" value="create">
+        <button class="px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-sm">
+          {{ t("create_backup_btn") }}
+        </button>
+      </form>
+    </div>
+
+    <!-- Réglages de rétention -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+      <h2 class="text-sm font-semibold mb-4">{{ t("backup_settings") }}</h2>
+
+      <p class="text-xs text-slate-400 mb-3">
+        {{ t("auto_retention_info") }}
+      </p>
+
+      <form action="{{ url_for('backup_page') }}" method="post" class="space-y-4">
+        <input type="hidden" name="action" value="save_settings">
+
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">
+            {{ t("backup_retention_days") }}
+          </label>
+          <input type="number" min="1" name="backup_retention_days"
+                 value="{{ settings.backup_retention_days }}"
+                 class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs w-full">
+        </div>
+
+        <button class="px-4 py-2 rounded-lg bg-primary/80 hover:bg-primary text-white text-sm">
+          {{ t("save_settings") }}
+        </button>
+      </form>
+    </div>
+
+  </div>
+
+  <!-- Restore (upload existant, inchangé) -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+    <h2 class="text-sm font-semibold mb-4">{{ t("restore_backup") }}</h2>
+
+    <p class="text-xs text-slate-400 mb-4">
+      {{ t("restore_backup_desc") }}
+    </p>
+
+    <form action="{{ url_for('backup_page') }}" method="post" enctype="multipart/form-data" class="space-y-3">
+      <input type="hidden" name="action" value="restore">
+      <input type="file" name="backup_file"
+             class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs w-full">
+      <button class="px-4 py-2 rounded-lg bg-rose-900/40 text-rose-200 hover:bg-rose-900/60 text-sm">
+        {{ t("restore_btn") }}
+      </button>
+    </form>
+  </div>
+
+</div>
+
+<!-- Liste des backups existants -->
+<div class="mt-8 bg-slate-900 border border-slate-800 rounded-2xl p-6">
+
+  <form action="{{ url_for('backup_page') }}" method="post" id="restore-existing-form">
+    <input type="hidden" name="action" value="restore">
+    <input type="hidden" name="selected_backup" id="selected-backup-input">
+
+    <h2 class="text-sm font-semibold mb-4">
+      {{ t("available_backups") }}
+    </h2>
+
+    {% if not backups %}
+      <p class="text-xs text-slate-500">{{ t("no_backups") }}</p>
+    {% else %}
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead class="bg-slate-950/60 text-slate-400">
+            <tr>
+              <th class="px-3 py-2 text-left">{{ t("name") }}</th>
+              <th class="px-3 py-2 text-left">{{ t("size") }}</th>
+              <th class="px-3 py-2 text-left">{{ t("modified_at") }}</th>
+
+              <!-- 🔴 COLONNE RESTORE -->
+              <th class="px-3 py-2 text-center w-24">
+                <button
+                  type="submit"
+                  id="restore-selected-btn"
+                  disabled
+                  class="px-3 py-1 rounded-lg
+                         bg-rose-900/40 text-rose-200
+                         hover:bg-rose-900/60 text-xs
+                         disabled:opacity-40 disabled:cursor-not-allowed">
+                  {{ t("restore_btn") }}
+                </button>
+              </th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {% for b in backups %}
+            <tr class="border-t border-slate-800">
+              <td class="px-3 py-2 font-mono text-[11px]">
+                {{ b.name }}
+              </td>
+              <td class="px-3 py-2 text-slate-300">
+                {{ (b.size / 1024)|round(1) }} KB
+              </td>
+              <td class="px-3 py-2 text-slate-400">
+                {{ b.mtime }}
+              </td>
+
+              <!-- ☑️ CHECKBOX À DROITE -->
+              <td class="px-3 py-2 text-center">
+                <input
+                  type="checkbox"
+                  class="backup-check"
+                  value="{{ b.name }}">
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </form>
+</div>
+
+
+<script>
+  // ───────────────────────────────
+  // Textes traduits (injectés par Jinja)
+  // ───────────────────────────────
+  const confirmRestoreText = "{{ t('confirm_restore') }}";
+
+  const checks = document.querySelectorAll('.backup-check');
+  const restoreBtn = document.getElementById('restore-selected-btn');
+  const hiddenInput = document.getElementById('selected-backup-input');
+
+  checks.forEach(cb => {
+    cb.addEventListener('change', () => {
+      checks.forEach(other => {
+        if (other !== cb) other.checked = false;
+      });
+
+      if (cb.checked) {
+        hiddenInput.value = cb.value;
+        restoreBtn.disabled = false;
+      } else {
+        hiddenInput.value = "";
+        restoreBtn.disabled = true;
+      }
+    });
+  });
+
+  document
+    .getElementById("restore-existing-form")
+    .addEventListener("submit", e => {
+      if (!hiddenInput.value) {
+        e.preventDefault();
+        return;
+      }
+
+      if (!confirm(confirmRestoreText)) {
+        e.preventDefault();
+      }
+    });
+</script>
+
+
+
+{% endblock %}
