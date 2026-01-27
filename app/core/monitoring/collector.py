@@ -281,10 +281,10 @@ def collect_sessions_for_server(
                       started_at, stopped_at,
                       duration_ms, watch_ms,
                       peak_bitrate, was_transcode,
-                      client_name, device,
+                      client_name, client_product, device, ip,
                       raw_json
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         server_id, provider_name,
@@ -294,10 +294,17 @@ def collect_sessions_for_server(
                         int(live["duration_ms"] or 0), watch_ms,
                         int(live["bitrate"] or 0) if live["bitrate"] is not None else None,
                         int(live["is_transcode"] or 0),
-                        live["client_name"], live["device"],
-                        live["raw_json"],
+
+                        # ✅ ordre identique aux colonnes
+                        live.get("client_name"),
+                        live.get("client_product"),
+                        live.get("device"),
+                        live.get("ip"),
+
+                        live.get("raw_json"),
                     ),
                 )
+
 
             db.execute("DELETE FROM media_sessions WHERE server_id=? AND session_key=?", (server_id, sk))
 

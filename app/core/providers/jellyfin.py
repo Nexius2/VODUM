@@ -63,8 +63,21 @@ class JellyfinProvider(BaseProvider):
             item_id = now_playing.get("Id")
 
             play_state = s.get("PlayState") or {}
-            play_method = play_state.get("PlayMethod")
-            is_transcode = 1 if str(play_method).lower() == "transcode" else 0
+            jf_play_method = (play_state.get("PlayMethod") or "").strip()  # DirectPlay / DirectStream / Transcode
+
+            pm = jf_play_method.lower()
+            if pm == "transcode":
+                play_method = "transcode"
+                is_transcode = 1
+            elif pm == "directstream":
+                play_method = "directstream"
+                is_transcode = 0
+            elif pm == "directplay":
+                play_method = "directplay"
+                is_transcode = 0
+            else:
+                play_method = "unknown"
+                is_transcode = 0
 
             transcoding_info = s.get("TranscodingInfo") or {}
             bitrate = transcoding_info.get("Bitrate")
@@ -79,7 +92,17 @@ class JellyfinProvider(BaseProvider):
             duration_ms = int(runtime_ticks / 10_000) if isinstance(runtime_ticks, int) else None
 
             title = now_playing.get("Name")
-            media_type = (now_playing.get("Type") or "unknown").lower()
+
+            # --- NEW: normalize media type to movie/series/music
+            jf_type = (now_playing.get("Type") or "").strip().lower()  # Movie / Episode / Audio / MusicVideo ...
+            if jf_type == "movie":
+                media_category = "movie"
+            elif jf_type == "episode":
+                media_category = "series"
+            elif jf_type in ("audio", "musictrack", "song"):
+                media_category = "music"
+            else:
+                media_category = "other"
 
             client_name = s.get("Client") or s.get("DeviceName")
             client_product = s.get("ApplicationVersion")
@@ -95,14 +118,25 @@ class JellyfinProvider(BaseProvider):
                 "external_user_id": str(user_id) if user_id else None,
                 "username": s.get("UserName") or (s.get("User") or {}).get("Name"),
                 "media_key": str(item_id) if item_id else None,
-                "media_type": media_type,
+
+                # IMPORTANT: unified category
+                "media_type": media_category,
+
                 "title": title,
                 "grandparent_title": None,
                 "parent_title": None,
                 "state": state,
                 "progress_ms": progress_ms,
                 "duration_ms": duration_ms,
+
+                # unified playback info
+                "play_method": play_method,
                 "is_transcode": is_transcode,
+
+                # Jellyfin doesn't expose audio/videoDecision like Plex
+                "video_decision": None,
+                "audio_decision": None,
+
                 "bitrate": int(bitrate) if isinstance(bitrate, int) else None,
                 "video_codec": (transcoding_info.get("VideoCodec") or None),
                 "audio_codec": (transcoding_info.get("AudioCodec") or None),
@@ -114,3 +148,4 @@ class JellyfinProvider(BaseProvider):
             })
 
         return sessions
+

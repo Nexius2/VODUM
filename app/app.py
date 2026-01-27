@@ -824,13 +824,31 @@ def create_app():
 
             rows = db.query(
                 f"""
-                WITH last_rows AS (
+                WITH ranked AS (
                   SELECT
                     h.media_user_id,
-                    MAX(h.stopped_at) AS last_watch_at
+                    h.stopped_at,
+                    h.ip,
+                    h.device,
+                    h.client_name,
+                    h.client_product,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY h.media_user_id
+                      ORDER BY h.stopped_at DESC
+                    ) AS rn
                   FROM media_session_history h
                   WHERE h.media_user_id IS NOT NULL
-                  GROUP BY h.media_user_id
+                ),
+                last_rows AS (
+                  SELECT
+                    media_user_id,
+                    stopped_at AS last_watch_at,
+                    ip,
+                    device,
+                    client_name,
+                    client_product
+                  FROM ranked
+                  WHERE rn = 1
                 ),
                 agg AS (
                   SELECT
@@ -848,7 +866,12 @@ def create_app():
                   mu.server_id,
                   lr.last_watch_at,
                   a.total_plays,
-                  a.watch_ms
+                  a.watch_ms,
+
+                  -- ✅ champs affichés dans l’UI Users
+                  lr.ip AS last_ip,
+                  COALESCE(lr.device, lr.client_product, '-') AS platform,
+                  COALESCE(lr.client_name, lr.client_product, '-') AS player
                 FROM last_rows lr
                 JOIN agg a ON a.media_user_id = lr.media_user_id
                 JOIN media_users mu ON mu.id = lr.media_user_id
@@ -862,9 +885,11 @@ def create_app():
             for u in rows:
                 ms = u.get("watch_ms") or 0
                 u["watch_time"] = f"{ms // 3600000}h {((ms % 3600000) // 60000)}m"
-                u["last_ip"] = "-"
-                u["platform"] = "-"
-                u["player"] = "-"
+
+                # ✅ si ip NULL
+                if not u.get("last_ip"):
+                    u["last_ip"] = "-"
+
 
             total_rows = int(total.get("cnt") or 0)
             total_pages = max(1, (total_rows + per_page - 1) // per_page)
@@ -3525,6 +3550,9 @@ def create_app():
 
 
 
+    def json_rows(rows):
+        return json.dumps([dict(r) for r in rows], ensure_ascii=False), 200, {"Content-Type": "application/json"}
+
     @app.route("/api/monitoring/activity")
     def api_monitoring_activity():
         db = get_db()
@@ -3550,7 +3578,9 @@ def create_app():
             """,
             params,
         )
-        return json.dumps(rows), 200, {"Content-Type": "application/json"}
+        return json_rows(rows)
+
+
 
 
     @app.route("/api/monitoring/media_types")
@@ -3578,7 +3608,9 @@ def create_app():
             """,
             params,
         )
-        return json.dumps(rows), 200, {"Content-Type": "application/json"}
+        return json_rows(rows)
+
+
 
 
     @app.route("/api/monitoring/weekday")
@@ -3606,7 +3638,9 @@ def create_app():
             """,
             params,
         )
-        return json.dumps(rows), 200, {"Content-Type": "application/json"}
+        return json_rows(rows)
+
+
 
 
     @app.route("/tasks", methods=["GET", "POST"])

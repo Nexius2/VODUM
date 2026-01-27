@@ -58,6 +58,40 @@ class PlexProvider(BaseProvider):
         xml_text = self._get("/status/sessions")
         root = ET.fromstring(xml_text)
 
+        def _first_decision(node: ET.Element, attr: str) -> Optional[str]:
+            # 1) Media
+            for m in node.findall("Media"):
+                v = m.attrib.get(attr)
+                if v:
+                    return v
+
+            # 2) Part
+            for p in node.findall(".//Part"):
+                v = p.attrib.get(attr)
+                if v:
+                    return v
+
+            # 3) TranscodeSession (important !)
+            ts = node.find("TranscodeSession")
+            if ts is not None:
+                v = ts.attrib.get(attr)
+                if v:
+                    return v
+
+            return None
+
+
+        def _normalize_decision(v: Optional[str]) -> Optional[str]:
+            if not v:
+                return None
+            v = str(v).strip().lower()
+
+            # normalise "direct play" / "direct_play" / etc -> "directplay"
+            v = v.replace(" ", "").replace("_", "").replace("-", "")
+
+            return v or None
+
+
         sessions: List[Dict[str, Any]] = []
         for node in root:
             media_type = node.tag.lower()
@@ -81,8 +115,29 @@ class PlexProvider(BaseProvider):
             progress_ms = node.attrib.get("viewOffset")
             duration_ms = node.attrib.get("duration")
 
+            # --- NEW: decisions (truth source)
+            video_decision = _normalize_decision(_first_decision(node, "videoDecision"))
+            audio_decision = _normalize_decision(_first_decision(node, "audioDecision"))
+
+            decisions = {d for d in (video_decision, audio_decision) if d}
+
+            # Play method classification (useful for UI + stats)
+            if "transcode" in decisions:
+                play_method = "transcode"
+                is_transcode = 1
+            elif "copy" in decisions:
+                play_method = "directstream"
+                is_transcode = 0
+            elif decisions and decisions.issubset({"directplay"}):
+                play_method = "directplay"
+                is_transcode = 0
+            else:
+                # fallback: no decision present => don't lie
+                play_method = "unknown"
+                is_transcode = 0
+
+            # Keep transcode session for bitrate/codecs, but don't use it as the "truth" for is_transcode
             transcode = node.find("TranscodeSession")
-            is_transcode = 1 if transcode is not None else 0
             bitrate = transcode.attrib.get("bandwidth") if transcode is not None else None
             video_codec = transcode.attrib.get("videoCodec") if transcode is not None else None
             audio_codec = transcode.attrib.get("audioCodec") if transcode is not None else None
@@ -94,19 +149,38 @@ class PlexProvider(BaseProvider):
             if not session_key:
                 continue
 
+            plex_type = node.attrib.get("type")  # movie / episode / track
+
+            if plex_type == "movie":
+                media_category = "movie"
+            elif plex_type == "episode":
+                media_category = "series"
+            elif plex_type == "track":
+                media_category = "music"
+            else:
+                media_category = "other"
+
+
             sessions.append({
                 "provider": "plex",
                 "session_key": str(session_key),
                 "external_user_id": external_user_id,
                 "username": username,
                 "media_key": rating_key,
-                "media_type": "video" if media_type == "video" else "track",
+                "media_type": media_category,
                 "title": title,
                 "grandparent_title": grandparent,
                 "parent_title": parent,
                 "state": state or "unknown",
                 "progress_ms": int(progress_ms) if progress_ms and str(progress_ms).isdigit() else None,
                 "duration_ms": int(duration_ms) if duration_ms and str(duration_ms).isdigit() else None,
+
+                # --- NEW: store decisions
+                "video_decision": video_decision,
+                "audio_decision": audio_decision,
+                "play_method": play_method,
+
+                # existing
                 "is_transcode": is_transcode,
                 "bitrate": int(bitrate) if bitrate and str(bitrate).isdigit() else None,
                 "video_codec": video_codec,
@@ -115,13 +189,21 @@ class PlexProvider(BaseProvider):
                 "client_product": client_product,
                 "device": device,
                 "ip": ip,
+
                 "raw_json": json.dumps({
                     "VideoOrTrack": dict(node.attrib),
                     "User": dict(user.attrib) if user is not None else None,
                     "Player": dict(player.attrib) if player is not None else None,
                     "TranscodeSession": dict(transcode.attrib) if transcode is not None else None,
                     "Media": [dict(m.attrib) for m in node.findall("Media")] if node is not None else [],
+                    "Computed": {
+                        "videoDecision": video_decision,
+                        "audioDecision": audio_decision,
+                        "play_method": play_method,
+                        "is_transcode": is_transcode,
+                    }
                 }, ensure_ascii=False),
             })
 
         return sessions
+

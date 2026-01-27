@@ -1,190 +1,278 @@
 // ===========================================================
 // VODUM Front-End JS
-// Gestion des onglets, auto-refresh intelligent et actions AJAX
+// Gestion onglets, auto-refresh intelligent, actions AJAX
+// + compat HTMX (Monitoring tabs)
 // ===========================================================
 
 // ------------ UTILITAIRES ---------------------------------
 
 async function apiGet(url) {
-    const response = await fetch(url, { cache: "no-cache" });
-    return response.json();
+  const response = await fetch(url, { cache: "no-cache" });
+
+  const contentType = response.headers.get("content-type") || "";
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`GET ${url} -> HTTP ${response.status}\n${text}`);
+  }
+  if (!contentType.includes("application/json")) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`GET ${url} -> Expected JSON, got ${contentType}\n${text}`);
+  }
+  return response.json();
 }
 
 async function apiPost(url, body = {}) {
-    const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-    });
-    return response.json();
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+
+  const contentType = response.headers.get("content-type") || "";
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`POST ${url} -> HTTP ${response.status}\n${text}`);
+  }
+  if (!contentType.includes("application/json")) {
+    const text = await response.text().catch(() => "");
+    return { ok: true, raw: text };
+  }
+  return response.json();
 }
 
 function qs(sel) { return document.querySelector(sel); }
 function qsa(sel) { return document.querySelectorAll(sel); }
 
 function htmlEscape(str) {
-    return str.replace(/[&<>"']/g, function(m) {
-        return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[m];
-    });
+  return String(str ?? "").replace(/[&<>"']/g, (m) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[m]));
 }
 
-// ------------ ONGLET ACTIF --------------------------------
+// ------------ ONGLET ACTIF (pages legacy avec .tab/.tab-content) --------
 
 function activateTab(tabName) {
-    qsa(".tab").forEach(t => t.classList.remove("active"));
-    qsa(".tab-content").forEach(c => c.classList.add("hidden"));
+  if (!tabName) return;
 
-    qs(`#tab-${tabName}`).classList.add("active");
-    qs(`#view-${tabName}`).classList.remove("hidden");
+  const tabEl = document.getElementById(`tab-${tabName}`);
+  const viewEl = document.getElementById(`view-${tabName}`);
 
-    localStorage.setItem("vodum_active_tab", tabName);
+  // Si pas d’onglets sur cette page, on sort (évite crash)
+  if (!tabEl || !viewEl) return;
+
+  document.querySelectorAll(".tab").forEach(t => t?.classList?.remove("active"));
+  document.querySelectorAll(".tab-content").forEach(v => v?.classList?.add("hidden"));
+
+  tabEl.classList.add("active");
+  viewEl.classList.remove("hidden");
+
+  localStorage.setItem("vodum_active_tab", tabName);
 }
 
 function initTabs() {
-    qsa(".tab").forEach(tab => {
-        tab.addEventListener("click", () => {
-            activateTab(tab.dataset.tab);
-        });
-    });
+  const tabs = qsa(".tab");
+  const views = qsa(".tab-content");
 
-    const saved = localStorage.getItem("vodum_active_tab");
-    if (saved && qs(`#tab-${saved}`)) activateTab(saved);
-    else activateTab("users");
+  // Si la page n'a pas le système d'onglets, ne rien faire.
+  if (!tabs.length || !views.length) return;
+
+  tabs.forEach(tab => {
+    tab.addEventListener("click", () => {
+      const name = tab.dataset.tab;
+      if (!name) return;
+      activateTab(name);
+    });
+  });
+
+  const saved = localStorage.getItem("vodum_active_tab");
+  if (saved && qs(`#tab-${saved}`) && qs(`#view-${saved}`)) {
+    activateTab(saved);
+    return;
+  }
+
+  if (qs("#tab-users") && qs("#view-users")) {
+    activateTab("users");
+    return;
+  }
+
+  const first = tabs[0]?.dataset?.tab;
+  if (first && qs(`#tab-${first}`) && qs(`#view-${first}`)) {
+    activateTab(first);
+  }
 }
 
-// ------------ AUTO-REFRESH INTELLIGENT ---------------------
+// ------------ AUTO-REFRESH INTELLIGENT (pages legacy) -------------------
 
 let refreshIntervals = {
-    users: 15000,       // mise à jour seulement après sync
-    servers: 15000,     // mise à jour du statut seulement
-    libraries: 30000,
-    tasks: 5000,
-    logs: 8000
+  users: 15000,
+  servers: 15000,
+  libraries: 30000,
+  tasks: 5000,
+  logs: 8000
 };
 
 async function refreshActiveTab() {
-    const active = localStorage.getItem("vodum_active_tab");
-    if (!active) return;
+  const active = localStorage.getItem("vodum_active_tab");
+  if (!active) return;
 
+  // Si la vue n’existe pas sur cette page → stop
+  if (!document.getElementById(`view-${active}`)) return;
+
+  try {
     switch (active) {
-        case "users": refreshUsers(); break;
-        case "servers": refreshServers(); break;
-        case "libraries": refreshLibraries(); break;
-        case "tasks": refreshTasks(); break;
-        case "logs": refreshLogs(); break;
+      case "users":      await refreshUsers(); break;
+      case "servers":    await refreshServers(); break;
+      case "libraries":  await refreshLibraries(); break;
+      case "tasks":      await refreshTasks(); break;
+      case "logs":       await refreshLogs(); break;
     }
+  } catch (e) {
+    console.error("[vodum] refresh failed:", e);
+  }
 
-    setTimeout(refreshActiveTab, refreshIntervals[active]);
+  const delay = refreshIntervals[active] ?? 15000;
+  setTimeout(refreshActiveTab, delay);
 }
 
-// ------------ RENDUS ----------------------------------------
+// ------------ RENDUS (legacy tables) ------------------------------------
 
 async function refreshUsers() {
-    const data = await apiGet("/api/users");
-    const tbody = qs("#users-table-body");
-    tbody.innerHTML = "";
+  const tbody = qs("#users-table-body");
+  if (!tbody) return;
 
-    data.forEach(u => {
-        tbody.innerHTML += `
-            <tr>
-                <td>${htmlEscape(u.title || u.username)}</td>
-                <td>${htmlEscape(u.email || "")}</td>
-                <td>${u.libraries_count}</td>
-                <td>${u.servers_count}</td>
-                <td>${u.status}</td>
-            </tr>
-        `;
-    });
+  const data = await apiGet("/api/users");
+  tbody.innerHTML = "";
+
+  data.forEach(u => {
+    tbody.innerHTML += `
+      <tr>
+        <td>${htmlEscape(u.title || u.username)}</td>
+        <td>${htmlEscape(u.email || "")}</td>
+        <td>${Number(u.libraries_count ?? 0)}</td>
+        <td>${Number(u.servers_count ?? 0)}</td>
+        <td>${htmlEscape(u.status ?? "")}</td>
+      </tr>
+    `;
+  });
 }
 
 async function refreshServers() {
-    const data = await apiGet("/api/servers");
-    const tbody = qs("#servers-table-body");
-    tbody.innerHTML = "";
+  const tbody = qs("#servers-table-body");
+  if (!tbody) return;
 
-    data.forEach(s => {
-        tbody.innerHTML += `
-            <tr>
-                <td>${s.name}</td>
-                <td>${s.type}</td>
-                <td>${s.status}</td>
-                <td>${s.libraries}</td>
-            </tr>
-        `;
-    });
+  const data = await apiGet("/api/servers");
+  tbody.innerHTML = "";
+
+  data.forEach(s => {
+    tbody.innerHTML += `
+      <tr>
+        <td>${htmlEscape(s.name ?? "")}</td>
+        <td>${htmlEscape(s.type ?? "")}</td>
+        <td>${htmlEscape(s.status ?? "")}</td>
+        <td>${htmlEscape(s.libraries ?? "")}</td>
+      </tr>
+    `;
+  });
 }
 
 async function refreshLibraries() {
-    const data = await apiGet("/api/libraries");
-    const tbody = qs("#libraries-table-body");
-    tbody.innerHTML = "";
+  const tbody = qs("#libraries-table-body");
+  if (!tbody) return;
 
-    data.forEach(lib => {
-        tbody.innerHTML += `
-            <tr>
-                <td>${htmlEscape(lib.title)}</td>
-                <td>${htmlEscape(lib.type)}</td>
-                <td>${htmlEscape(lib.server_name)}</td>
-                <td>${lib.user_count}</td>
-            </tr>
-        `;
-    });
+  const data = await apiGet("/api/libraries");
+  tbody.innerHTML = "";
+
+  data.forEach(lib => {
+    tbody.innerHTML += `
+      <tr>
+        <td>${htmlEscape(lib.title ?? "")}</td>
+        <td>${htmlEscape(lib.type ?? "")}</td>
+        <td>${htmlEscape(lib.server_name ?? "")}</td>
+        <td>${Number(lib.user_count ?? 0)}</td>
+      </tr>
+    `;
+  });
 }
 
 async function refreshTasks() {
-    const data = await apiGet("/api/tasks");
-    const tbody = qs("#tasks-table-body");
-    tbody.innerHTML = "";
+  const tbody = qs("#tasks-table-body");
+  if (!tbody) return;
 
-    data.forEach(t => {
-        tbody.innerHTML += `
-            <tr>
-                <td>${t.name}</td>
-                <td>${t.status}</td>
-                <td>${t.last_run || "-"}</td>
-                <td>${t.next_run || "-"}</td>
-                <td>
-                    <button onclick="runTask(${t.id})">Run</button>
-                </td>
-            </tr>
-        `;
-    });
+  const data = await apiGet("/api/tasks");
+  tbody.innerHTML = "";
+
+  data.forEach(t => {
+    tbody.innerHTML += `
+      <tr>
+        <td>${htmlEscape(t.name ?? "")}</td>
+        <td>${htmlEscape(t.status ?? "")}</td>
+        <td>${htmlEscape(t.last_run || "-")}</td>
+        <td>${htmlEscape(t.next_run || "-")}</td>
+        <td>
+          <button onclick="runTask(${Number(t.id)})">Run</button>
+        </td>
+      </tr>
+    `;
+  });
 }
 
 async function refreshLogs() {
-    const data = await apiGet("/api/logs?limit=200");
-    const tbody = qs("#logs-table-body");
-    tbody.innerHTML = "";
+  const tbody = qs("#logs-table-body");
+  if (!tbody) return;
 
-    data.forEach(log => {
-        tbody.innerHTML += `
-            <tr>
-                <td>${log.date}</td>
-                <td>${htmlEscape(log.level)}</td>
-                <td>${htmlEscape(log.message)}</td>
-            </tr>
-        `;
-    });
+  const data = await apiGet("/api/logs?limit=200");
+  tbody.innerHTML = "";
+
+  data.forEach(log => {
+    tbody.innerHTML += `
+      <tr>
+        <td>${htmlEscape(log.date ?? "")}</td>
+        <td>${htmlEscape(log.level ?? "")}</td>
+        <td>${htmlEscape(log.message ?? "")}</td>
+      </tr>
+    `;
+  });
 }
 
 // ------------ ACTIONS ---------------------------------------
 
 async function runTask(id) {
+  try {
     await apiPost(`/tasks/run/${id}`);
-    refreshTasks();
+    await refreshTasks();
+  } catch (e) {
+    console.error("[vodum] runTask failed:", e);
+  }
 }
 
 // ------------ INIT -------------------------------------------
 
 window.addEventListener("DOMContentLoaded", () => {
-    initTabs();
-    refreshActiveTab();
+  // Legacy tabs
+  try { initTabs(); } catch (e) { console.error("[vodum] initTabs failed:", e); }
+  try { refreshActiveTab(); } catch (e) { console.error("[vodum] refreshActiveTab failed:", e); }
+
+  // Monitoring Activity charts (si la page est chargée directement sur Activity)
+  try {
+    if (typeof window.vodumInitMonitoringActivity === "function") {
+      window.vodumInitMonitoringActivity(document);
+    }
+  } catch (e) {
+    console.error("[vodum] init monitoring activity failed:", e);
+  }
 });
+
+// ------------ HTMX HOOKS (Monitoring tabs) -------------------
+// IMPORTANT: quand HTMX injecte un onglet, DOMContentLoaded ne se déclenche pas.
+// Donc on relance les init JS ici.
+
+
+
+// ------------ INDICATEUR ACTIVITÉ TASKS ----------------------
 
 (function taskActivityIndicator() {
   const box = document.getElementById("taskActivity");
   const countEl = document.getElementById("taskActivityCount");
-
   if (!box || !countEl) return;
 
   async function refresh() {
