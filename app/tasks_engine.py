@@ -380,12 +380,22 @@ def run_task(task_id: int):
                 UPDATE tasks
                 SET
                     status = CASE WHEN queued_count > 0 THEN 'queued' ELSE 'error' END,
+                    last_run = datetime('now'),
                     last_error = ?,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """,
                 (str(e), task_id)
             )
+            # même en erreur, on calcule un next_run pour éviter les loops
+            if schedule:
+                try:
+                    itr = croniter(schedule, datetime.now())
+                    next_exec = itr.get_next(datetime)
+                    db.execute("UPDATE tasks SET next_run=? WHERE id=?", (next_exec, task_id))
+                except Exception:
+                    pass
+                
         except Exception:
             pass
 
@@ -783,11 +793,26 @@ def scheduler_loop():
                             continue
                         raise
 
-                # 🔑 Première exécution forcée
+                # 🔑 Première exécution forcée (UNE SEULE FOIS)
                 if last_run is None:
-                    logger.info(f"First forced execution: {name}")
+                    # si déjà planifiée dans le futur, on ne spam pas
+                    if next_exec and next_exec > now:
+                        continue
+
+                    logger.info(f"First forced execution (one-shot): {name}")
                     enqueue_task(task_id)
+
+                    # IMPORTANT: on marque un last_run "bootstrap" pour éviter le spam à chaque tick
+                    try:
+                        db.execute(
+                            "UPDATE tasks SET last_run=datetime('now'), updated_at=CURRENT_TIMESTAMP WHERE id=? AND last_run IS NULL",
+                            (task_id,),
+                        )
+                    except Exception:
+                        pass
+
                     continue
+
 
                 # 🔑 Exécution planifiée
                 if next_exec <= now:

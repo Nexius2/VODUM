@@ -94,6 +94,8 @@ def run(task_id: int, db):
         # 1) Vérification configuration globale
         # --------------------------------------------------------
         settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        settings = dict(settings) if settings else None
+
         if not settings or not settings["mailing_enabled"]:
             msg = "Mailing disabled → no action."
             log.warning(msg)
@@ -159,6 +161,8 @@ def run(task_id: int, db):
                 continue
 
             days_left = (exp_date - today).days
+            exp_iso = exp_date.isoformat()
+
 
             recipients = []
             if email1:
@@ -177,7 +181,7 @@ def run(task_id: int, db):
                         SELECT 1 FROM sent_emails
                         WHERE user_id=? AND template_type='fin' AND expiration_date=?
                         """,
-                        (uid, exp_date),
+                        (uid, exp_iso),
                     )
 
                     if not already:
@@ -202,7 +206,7 @@ def run(task_id: int, db):
                                 INSERT OR IGNORE INTO sent_emails(user_id, template_type, expiration_date)
                                 VALUES (?, 'fin', ?)
                                 """,
-                                (uid, exp_date),
+                                (uid, exp_iso),
                             )
                             sent_count += 1
 
@@ -228,7 +232,7 @@ def run(task_id: int, db):
                         SELECT 1 FROM sent_emails
                         WHERE user_id=? AND template_type=? AND expiration_date=?
                         """,
-                        (uid, type_, exp_date),
+                        (uid, type_, exp_iso),
                     )
 
                     if already:
@@ -255,7 +259,7 @@ def run(task_id: int, db):
                             INSERT OR IGNORE INTO sent_emails(user_id, template_type, expiration_date)
                             VALUES (?, ?, ?)
                             """,
-                            (uid, type_, exp_date),
+                            (uid, type_, exp_iso),
                         )
                         sent_count += 1
 

@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% set active_page = 'mailing' %}
+
+{% block title %}{{ t("mailing") }} - VODUM{% endblock %}
+{% block header_title %}{{ t("mailing") }}{% endblock %}
+{% block header_subtitle %}{{ t("mailing_subtitle") }}{% endblock %}
+
+{% block content %}
+
+{% set current_subpage = 'campaigns' %}
+{% include "mailing/mailing_nav.html" %}
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+  <!-- ================================================================================= -->
+  <!-- LEFT : CAMPAIGN CREATION -->
+  <!-- ================================================================================= -->
+
+  <div class="lg:col-span-1 bg-slate-900 border border-slate-800 rounded-2xl p-4">
+
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-sm font-semibold">{{ t("campaign_editor") }}</h2>
+
+      <!-- USE AS TEST SWITCH -->
+      <div class="flex items-center gap-2">
+        <span class="text-[11px] text-slate-400">{{ t("use_for_test") }}</span>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="campaign_test_switch" class="sr-only peer">
+          <div class="w-11 h-6 bg-slate-600 rounded-full peer-checked:bg-emerald-500 transition"></div>
+          <div class="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full transition peer-checked:translate-x-5"></div>
+        </label>
+      </div>
+    </div>
+
+    <form method="post" class="space-y-4">
+
+      <input type="hidden" name="action" id="campaign_action" value="create">
+      <input type="hidden" name="is_test" id="is_test" value="0">
+
+      <!-- SERVER -->
+      <div class="text-xs">
+        <label class="block mb-1">{{ t("target_server") }}</label>
+        <select name="server_id"
+                id="campaign_server"
+                class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+          <option value="0">{{ t("all_servers") }}</option>
+          {% for s in servers %}
+            <option value="{{ s.id }}">{{ s.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- SUBJECT -->
+      <div class="text-xs">
+        <label class="block mb-1">{{ t("subject") }}</label>
+        <input type="text"
+               name="subject"
+               id="campaign_subject"
+               class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs"
+               required>
+      </div>
+
+      <!-- BODY -->
+      <div class="text-xs">
+        <label class="block mb-1">{{ t("body") }}</label>
+        <textarea name="body"
+                  id="campaign_body"
+                  rows="14"
+                  class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-2 text-xs resize-none"></textarea>
+
+        <p class="text-[11px] text-slate-500 mt-2">
+          {{ t("campaign_help") }} :
+          <code>{username}</code>,
+          <code>{email}</code>,
+          <code>{expiration_date}</code>
+        </p>
+      </div>
+
+      <!-- ACTION BUTTONS -->
+      <div class="flex">
+        <button type="submit"
+				onclick="document.getElementById('campaign_action').value='create'"
+                class="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-dark text-xs font-medium">
+          {{ t("create_campaign") }}
+        </button>
+      </div>
+
+    </form>
+  </div>
+
+
+
+  <!-- ================================================================================= -->
+  <!-- RIGHT : CAMPAIGN LIST -->
+  <!-- ================================================================================= -->
+
+  <div class="lg:col-span-2">
+
+    {% if not campaigns %}
+      <p class="text-slate-500 text-sm">{{ t("no_campaigns") }}</p>
+    {% else %}
+
+      <form method="post" action="{{ url_for('mailing_campaigns_delete') }}">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+
+          <table class="w-full text-xs">
+            <thead class="bg-slate-950/60 text-slate-400 text-left">
+              <tr>
+                <th class="px-4 py-2 w-10">
+                  <button id="deleteBtn"
+                          name="action"
+                          value="delete"
+                          type="submit"
+                          disabled
+                          class="px-2 py-1 rounded bg-rose-700/40 text-rose-300 hover:bg-rose-700/60 disabled:opacity-40 disabled:cursor-not-allowed">
+                    🗑
+                  </button>
+                </th>
+                <th class="px-4 py-2">{{ t("subject") }}</th>
+                <th class="px-4 py-2">{{ t("server") }}</th>
+                <th class="px-4 py-2">{{ t("is_test") }}</th>
+                <th class="px-4 py-2">{{ t("status") }}</th>
+                <th class="px-4 py-2">{{ t("created_at") }}</th>
+                <th class="px-4 py-2">{{ t("finished_at") }}</th>
+              </tr>
+            </thead>
+
+            <tbody>
+            {% for c in campaigns %}
+              <tr class="border-t border-slate-800 hover:bg-slate-800/40">
+                <td class="px-4 py-2">
+                  <input type="checkbox"
+                         class="campaign-checkbox"
+                         name="campaign_ids"
+                         value="{{ c.id }}">
+                </td>
+
+                <td class="px-4 py-2">{{ c.subject }}</td>
+
+				<td class="px-4 py-2">
+					{% if c.server_id == 0 %}
+						<span class="text-emerald-300">{{ t("all_servers") }}</span>
+					{% else %}
+						{{ c.server_name or ("#" ~ c.server_id) }}
+					{% endif %}
+				</td>
+
+
+                <td class="px-4 py-2">
+                  {% if c.is_test %}
+                    <span class="text-emerald-300">{{ t("yes") }}</span>
+                  {% else %}
+                    <span class="text-slate-400">{{ t("no") }}</span>
+                  {% endif %}
+                </td>
+
+                <td class="px-4 py-2">
+                  {% set colors = {
+                    'pending': 'bg-slate-800 text-slate-300',
+                    'sending': 'bg-blue-900/40 text-blue-300',
+                    'finished': 'bg-emerald-900/40 text-emerald-300',
+                    'cancelled': 'bg-rose-900/40 text-rose-300',
+                    'error': 'bg-rose-900/40 text-rose-300'
+                  } %}
+                  <span class="px-2 py-1 rounded-full {{ colors.get(c.status, 'bg-slate-700 text-slate-300') }}">
+                    {{ t(c.status) }}
+                  </span>
+                </td>
+
+                <td class="px-4 py-2">{{ c.created_at or t("not_available") }}</td>
+                <td class="px-4 py-2">{{ c.finished_at or t("not_available") }}</td>
+              </tr>
+            {% endfor %}
+            </tbody>
+
+          </table>
+
+        </div>
+      </form>
+
+    {% endif %}
+  </div>
+
+</div>
+
+
+<!-- ================================================================================= -->
+<!-- SCRIPT : HANDLE DELETE BUTTON -->
+<!-- ================================================================================= -->
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+
+    // ---------------------------------------------------------------
+    // 1. DELETE BUTTON HANDLER
+    // ---------------------------------------------------------------
+    const checkboxes = document.querySelectorAll(".campaign-checkbox");
+    const deleteBtn = document.getElementById("deleteBtn");
+
+    if (deleteBtn && checkboxes.length) {
+        const refreshDeleteState = () => {
+            deleteBtn.disabled = !Array.from(checkboxes).some(cb => cb.checked);
+        };
+
+        checkboxes.forEach(cb => cb.addEventListener("change", refreshDeleteState));
+    }
+
+    // ---------------------------------------------------------------
+    // 2. SYNC SWITCH → HIDDEN is_test FIELD
+    // ---------------------------------------------------------------
+    const switchEl = document.getElementById("campaign_test_switch");
+    const isTestHidden = document.getElementById("is_test");
+
+    if (switchEl && isTestHidden) {
+        switchEl.addEventListener("change", () => {
+            isTestHidden.value = switchEl.checked ? "1" : "0";
+        });
+    }
+
+});
+</script>
+
+
+{% endblock %}

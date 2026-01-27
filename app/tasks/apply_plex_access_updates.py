@@ -253,6 +253,7 @@ def cleanup_old_jobs(db):
         """
         DELETE FROM media_jobs
         WHERE provider = 'plex'
+          AND action IN ('grant','revoke','sync')
           AND success = 1
           AND executed_at IS NOT NULL
           AND executed_at < datetime('now', '-7 days')
@@ -868,10 +869,12 @@ def run(task_id: int, db):
         FROM media_jobs
         WHERE provider = 'plex'
           AND processed = 0
+          AND action IN ('grant','revoke','sync')
         ORDER BY id ASC
         LIMIT 50
         """
     )
+
 
     if not jobs:
         logger.info("No jobs to process.")

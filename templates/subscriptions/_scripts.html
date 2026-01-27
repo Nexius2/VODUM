@@ -1,0 +1,284 @@
+<script>
+/* =========================
+   I18N STRINGS (injectées)
+   ========================= */
+const I18N = {
+  users_updated: "{{ t('subscription_users_updated') }}",
+  days_added: "{{ t('subscription_days_added') }}",
+  unknown_error: "{{ t('subscription_unknown_error') }}",
+  request_failed: "{{ t('subscription_request_failed') }}",
+
+  gift_history_empty: "{{ t('subscription_gift_history_empty') }}",
+  gift_history_user: "{{ t('subscription_gift_history_user') }}",
+  gift_history_scope_all: "{{ t('subscription_gift_history_scope_all') }}",
+  gift_history_scope_server: "{{ t('subscription_gift_history_scope_server') }}",
+  gift_history_days: "{{ t('subscription_gift_history_days') }}"
+};
+
+/* =========================
+   UI HELPERS
+   ========================= */
+
+function toggleServerSelect(show) {
+  document.getElementById("server-select")
+          .classList.toggle("hidden", !show);
+
+  const all = document.getElementById("card-all");
+  const srv = document.getElementById("card-server");
+
+  all.classList.remove("border-primary","bg-primary/10");
+  all.classList.add("border-slate-800");
+
+  srv.classList.remove("border-primary","bg-primary/10");
+  srv.classList.add("border-slate-800");
+
+  if (!show) {
+    all.classList.add("border-primary","bg-primary/10");
+  } else {
+    srv.classList.add("border-primary","bg-primary/10");
+  }
+}
+
+function selectDuration(input) {
+  document.querySelectorAll(".duration-card").forEach(card => {
+    card.classList.remove("border-emerald-400", "bg-emerald-400/10");
+    card.classList.add("border-slate-800");
+  });
+
+  const card = input.closest("label").querySelector(".duration-card");
+  card.classList.remove("border-slate-800");
+  card.classList.add("border-emerald-400", "bg-emerald-400/10");
+}
+
+function showAlert(type, html) {
+  const alertBox = document.getElementById("page-alert");
+  alertBox.classList.remove("hidden");
+
+  if (type === "success") {
+    alertBox.className =
+      "mb-6 rounded-lg bg-emerald-500/10 border border-emerald-500 text-emerald-300 px-4 py-3";
+  } else {
+    alertBox.className =
+      "mb-6 rounded-lg bg-red-500/10 border border-red-500 text-red-300 px-4 py-3";
+  }
+
+  alertBox.innerHTML = html;
+  alertBox.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+/* =========================
+   FORM SUBMIT
+   ========================= */
+
+function submitGift() {
+  const form = document.getElementById("gift-form");
+  const data = new FormData(form);
+
+  fetch(form.action, { method: "POST", body: data })
+    .then(r => r.json())
+    .then(res => {
+      if (res.status === "ok") {
+        showAlert(
+          "success",
+          `🎁 <strong>${res.users_updated}</strong> ${I18N.users_updated} (+${res.days_added} ${I18N.days_added})`
+        );
+        loadGiftHistory();
+      } else {
+        showAlert("error", `❌ ${res.error || I18N.unknown_error}`);
+      }
+    })
+    .catch(() => {
+      showAlert("error", `❌ ${I18N.request_failed}`);
+    });
+}
+
+/* =========================
+   HISTORY (1 line per RUN)
+   ========================= */
+
+function escapeHtml(s) {
+  return (s ?? "").toString().replace(/[&<>"']/g, (m) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;"
+  }[m]));
+}
+
+function closeGiftModal() {
+  const modal = document.getElementById("gift-modal");
+  if (!modal) return;
+  modal.classList.add("hidden");
+}
+
+// ESC ferme le modal
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeGiftModal();
+});
+
+function openGiftRunModal(run) {
+  const modal = document.getElementById("gift-modal");
+  if (!modal) return;
+
+  const scope =
+    run.target_type === "all"
+      ? I18N.gift_history_scope_all
+      : `${I18N.gift_history_scope_server}${run.server_name ? ": " + run.server_name : ""}`;
+
+  const setText = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value || "—";
+  };
+
+  setText("gift-modal-title", scope);
+  setText("gift-modal-subtitle", run.created_at || "");
+  setText("gift-modal-target", scope);
+
+  setText("gift-modal-duration", `+${run.days_added} ${I18N.gift_history_days}`);
+  setText("gift-modal-server", run.server_name || "—");
+  setText("gift-modal-reason", run.reason || "—");
+  setText("gift-modal-users-count", `${run.users_updated || 0}`);
+
+  // Users placeholder
+  const usersBox = document.getElementById("gift-modal-users");
+  const usersLabel = document.getElementById("gift-modal-users-label");
+  if (usersBox) usersBox.innerHTML = `<div class="text-slate-400 text-sm">Loading…</div>`;
+  if (usersLabel) usersLabel.textContent = "";
+
+  modal.classList.remove("hidden");
+
+  // Fetch detail (users list)
+  fetch(`/api/subscriptions/gifts/${run.id}`, { cache: "no-store" })
+    .then(r => r.json())
+    .then(res => {
+      if (!res || res.status !== "ok") {
+        if (usersBox) usersBox.innerHTML = `<div class="text-red-300 text-sm">❌ ${escapeHtml(res?.error || I18N.unknown_error)}</div>`;
+        return;
+      }
+
+      const users = res.users || [];
+      if (!usersBox) return;
+
+      if (usersLabel) usersLabel.textContent = `${users.length} users`;
+
+      if (users.length === 0) {
+        usersBox.innerHTML = `<div class="text-slate-400 text-sm">No users</div>`;
+        return;
+      }
+
+      usersBox.innerHTML = users
+        .map(u => `<div class="px-2 py-1 rounded-lg bg-slate-950/40 border border-slate-800">${escapeHtml(u.username)}</div>`)
+        .join("");
+    })
+    .catch(() => {
+      if (usersBox) usersBox.innerHTML = `<div class="text-red-300 text-sm">❌ ${escapeHtml(I18N.request_failed)}</div>`;
+    });
+}
+
+function renderGiftHistory(items) {
+  const box = document.getElementById("gift-history");
+  if (!box) return;
+
+  if (!items || items.length === 0) {
+    box.className = "text-sm text-slate-200";
+    box.innerHTML = `<div class="text-slate-400">${escapeHtml(I18N.gift_history_empty)}</div>`;
+    return;
+  }
+
+  // Table-like list (1 row per RUN)
+  box.className = "text-sm text-slate-200 max-h-[520px] overflow-auto rounded-xl border border-slate-800 divide-y divide-slate-800";
+
+  box.innerHTML = items.map((run, idx) => {
+    const scope =
+      run.target_type === "all"
+        ? I18N.gift_history_scope_all
+        : `${I18N.gift_history_scope_server}${run.server_name ? ": " + escapeHtml(run.server_name) : ""}`;
+
+    const duration = `+${run.days_added} ${I18N.gift_history_days}`;
+    const comment = run.reason ? escapeHtml(run.reason) : "—";
+    const created = run.created_at ? escapeHtml(run.created_at) : "";
+    const usersCount = `${run.users_updated || 0} users`;
+
+    return `
+      <button type="button"
+              class="gift-row w-full text-left px-4 py-3 bg-slate-950/30 hover:bg-slate-950/60 transition"
+              data-run-index="${idx}">
+        <div class="flex items-start justify-between gap-4">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-semibold text-slate-100">${scope}</span>
+              <span class="text-xs text-slate-500">•</span>
+              <span class="font-medium text-slate-200">${escapeHtml(duration)}</span>
+              <span class="text-xs text-slate-500">•</span>
+              <span class="text-xs text-slate-400">${escapeHtml(usersCount)}</span>
+            </div>
+            <div class="text-sm text-slate-300 mt-1 truncate">
+              ${comment}
+            </div>
+          </div>
+          <div class="shrink-0 text-xs text-slate-400">
+            ${created}
+          </div>
+        </div>
+      </button>
+    `;
+  }).join("");
+
+  // Bind clicks
+  box.querySelectorAll(".gift-row").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = Number(btn.dataset.runIndex);
+      const run = items[idx];
+      if (run) openGiftRunModal(run);
+    });
+  });
+}
+
+function loadGiftHistory() {
+  const box = document.getElementById("gift-history");
+  if (!box) return;
+
+  fetch("/api/subscriptions/gifts", { cache: "no-store" })
+    .then(r => r.json())
+    .then(res => {
+      if (!res || res.status !== "ok") {
+        box.className = "text-sm text-slate-200";
+        box.innerHTML = `<div class="text-red-300">❌ ${escapeHtml(res?.error || I18N.unknown_error)}</div>`;
+        return;
+      }
+      renderGiftHistory(res.items || []);
+    })
+    .catch((err) => {
+      console.error("Gift history fetch error:", err);
+      box.className = "text-sm text-slate-200";
+      box.innerHTML = `<div class="text-red-300">❌ ${escapeHtml(I18N.request_failed)}</div>`;
+    });
+}
+
+
+/* =========================
+   LIVE POLLING
+   ========================= */
+let giftHistoryTimer = null;
+
+function startGiftHistoryLive() {
+  if (giftHistoryTimer) return;
+
+  // 1er chargement immédiat
+  loadGiftHistory();
+
+  // refresh régulier (sans bouton)
+  giftHistoryTimer = setInterval(() => {
+    if (!document.hidden) loadGiftHistory();
+  }, 5000);
+}
+
+// Recharge dès qu’on revient sur l’onglet
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) loadGiftHistory();
+});
+
+startGiftHistoryLive();
+
+</script>

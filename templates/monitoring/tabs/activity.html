@@ -1,0 +1,100 @@
+<!-- Range selector -->
+<div class="flex items-center justify-between mb-4">
+  <div class="text-sm text-slate-400">Range</div>
+  <select id="rangePicker" class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm">
+    <option value="7d">7 days</option>
+    <option value="1m">1 month</option>
+    <option value="6m">6 months</option>
+    <option value="12m">12 months</option>
+    <option value="all">All time</option>
+  </select>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-sm font-semibold mb-3">Activity (sessions/day)</div>
+    <canvas id="chartActivity" height="120"></canvas>
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-sm font-semibold mb-3">Media types</div>
+    <canvas id="chartMediaTypes" height="120"></canvas>
+  </div>
+</div>
+
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-6">
+  <div class="text-sm font-semibold mb-3">Weekday activity</div>
+  <canvas id="chartWeekday" height="80"></canvas>
+</div>
+
+
+<div class="mb-6">
+  {% include "monitoring/partials/sections/_latest_events.html" %}
+</div>
+
+<script>
+(() => {
+  const picker = document.getElementById("rangePicker");
+
+  let chartActivity = null;
+  let chartMedia = null;
+  let chartWeekday = null;
+
+  function toLabels(data, key) { return data.map(x => x[key]); }
+
+  async function loadActivity(range) {
+    const res = await fetch(`/api/monitoring/activity?range=${encodeURIComponent(range)}`, {cache: "no-cache"});
+    return await res.json();
+  }
+  async function loadMediaTypes(range) {
+    const res = await fetch(`/api/monitoring/media_types?range=${encodeURIComponent(range)}`, {cache: "no-cache"});
+    return await res.json();
+  }
+  async function loadWeekday(range) {
+    const res = await fetch(`/api/monitoring/weekday?range=${encodeURIComponent(range)}`, {cache: "no-cache"});
+    return await res.json();
+  }
+
+  async function render(range) {
+    // Activity
+    const a = await loadActivity(range);
+    const aLabels = toLabels(a, "day");
+    const aSessions = toLabels(a, "sessions");
+
+    if (chartActivity) chartActivity.destroy();
+    chartActivity = new Chart(document.getElementById("chartActivity"), {
+      type: "line",
+      data: { labels: aLabels, datasets: [{ label: "Sessions", data: aSessions }] },
+      options: { responsive: true }
+    });
+
+    // Media types
+    const m = await loadMediaTypes(range);
+    const mLabels = toLabels(m, "media_type");
+    const mSessions = toLabels(m, "sessions");
+
+    if (chartMedia) chartMedia.destroy();
+    chartMedia = new Chart(document.getElementById("chartMediaTypes"), {
+      type: "doughnut",
+      data: { labels: mLabels, datasets: [{ label: "Sessions", data: mSessions }] },
+      options: { responsive: true }
+    });
+
+    // Weekday
+    const w = await loadWeekday(range);
+    const names = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    const wLabels = w.map(x => names[x.weekday] ?? String(x.weekday));
+    const wSessions = w.map(x => x.sessions);
+
+    if (chartWeekday) chartWeekday.destroy();
+    chartWeekday = new Chart(document.getElementById("chartWeekday"), {
+      type: "bar",
+      data: { labels: wLabels, datasets: [{ label: "Sessions", data: wSessions }] },
+      options: { responsive: true }
+    });
+  }
+
+  picker.addEventListener("change", () => render(picker.value));
+  render(picker.value);
+})();
+</script>

@@ -1,0 +1,452 @@
+{% extends "base.html" %}
+{% set active_page = 'users' %}
+
+{% block title %}{{ t("users_title") }} - VODUM{% endblock %}
+{% block header_title %}{{ t("users") }}{% endblock %}
+{% block header_subtitle %}{{ t("users_subtitle") }}{% endblock %}
+
+{% block content %}
+
+<style>
+    /* Curseur propre partout dans les colonnes triables */
+    th.sortable, th.sortable * {
+        cursor: pointer !important;
+    }
+
+    /* Style flèche */
+    th .arrow {
+        width: 12px;
+        height: 12px;
+        opacity: 0.35;
+        transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+
+    th.sorted .arrow {
+        opacity: 1;
+        color: rgb(52 211 153); /* emerald-400 */
+    }
+
+    th.sorted-asc .arrow {
+        transform: rotate(0deg);
+    }
+
+    th.sorted-desc .arrow {
+        transform: rotate(180deg);
+    }
+
+    th.sorted span {
+        color: rgb(52 211 153);
+    }
+</style>
+
+
+<!-- Filtres -->
+<form method="get" id="users_filter_form" class="flex flex-wrap items-center gap-3 mb-6">
+
+    <!-- Search -->
+    <input type="text"
+           name="q"
+           placeholder="{{ t('search') }}…"
+           value="{{ search }}"
+           class="bg-slate-900 border border-slate-800 rounded-lg text-sm px-3 py-2 w-56">
+
+    <!-- Status multiselect -->
+	<details class="relative">
+	  <summary class="list-none cursor-pointer bg-slate-900 border border-slate-800 rounded-lg text-sm px-3 py-2 flex items-center gap-2">
+		<span>{{ t("status") }}</span>
+		<span class="text-xs text-slate-400">
+		  ({{ (selected_statuses|length) if selected_statuses else "all" }})
+		</span>
+		<svg class="w-4 h-4 opacity-70" viewBox="0 0 24 24">
+		  <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
+		</svg>
+	  </summary>
+
+	  <div class="absolute z-20 mt-2 w-64 bg-slate-950 border border-slate-800 rounded-xl p-3 shadow-xl">
+		{% set all_statuses = ['active','pre_expired','reminder','expired','invited','unfriended','suspended','unknown'] %}
+
+		<!-- Quick actions -->
+		<div class="flex items-center justify-between mb-2">
+		  <button type="button"
+				  class="text-xs text-slate-300 hover:text-white underline"
+				  onclick="this.closest('details').querySelectorAll('input[name=status]').forEach(i => i.checked = true);">
+			Select all
+		  </button>
+
+		  <button type="button"
+				  class="text-xs text-slate-300 hover:text-white underline"
+				  onclick="this.closest('details').querySelectorAll('input[name=status]').forEach(i => i.checked = false);">
+			Select none
+		  </button>
+		</div>
+
+		<div class="space-y-2 max-h-56 overflow-y-auto pr-1">
+		  {% for s in all_statuses %}
+			<label class="flex items-center justify-between gap-2 text-sm">
+			  <span class="text-slate-200">{{ t(s) }}</span>
+			  <input type="checkbox" name="status" value="{{ s }}"
+					 {# ✅ si rien n'est sélectionné -> on coche tout par défaut #}
+					 {% if (not selected_statuses) or (s in selected_statuses) %}checked{% endif %}>
+			</label>
+		  {% endfor %}
+		</div>
+	  </div>
+	</details>
+
+<!-- 
+    <button class="text-sm px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white">
+        {{ t("filter") }}
+    </button>
+
+    <a href="{{ url_for('users_list') }}"
+       class="text-sm px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700">
+        {{ t("reset") }}
+    </a>-->
+</form>
+
+
+
+<!-- TABLE USERS -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+<table class="w-full text-sm">
+    <thead class="bg-slate-950/60 text-slate-400">
+        <tr>
+            <!-- NAME -->
+            <th class="px-4 py-3 text-left sortable" onclick="sortTable(0, this)">
+                <div class="flex items-center gap-1 cursor-pointer">
+                    <span>{{ t("name") }}</span>
+                    <svg class="arrow" viewBox="0 0 24 24">
+                        <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </div>
+            </th>
+
+            <!-- EMAIL -->
+            <th class="px-4 py-3 text-left sortable" onclick="sortTable(1, this)">
+                <div class="flex items-center gap-1 cursor-pointer">
+                    <span>{{ t("email") }}</span>
+                    <svg class="arrow" viewBox="0 0 24 24">
+                        <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </div>
+            </th>
+
+            <!-- STATUS -->
+            <th class="px-4 py-3 text-left sortable" onclick="sortTable(2, this)">
+                <div class="flex items-center gap-1 cursor-pointer">
+                    <span>{{ t("status") }}</span>
+                    <svg class="arrow" viewBox="0 0 24 24">
+                        <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </div>
+            </th>
+
+            <!-- EXPIRATION -->
+            <th class="px-4 py-3 text-left sortable" onclick="sortTable(3, this)">
+                <div class="flex items-center gap-1 cursor-pointer">
+                    <span>{{ t("expiration") }}</span>
+                    <svg class="arrow" viewBox="0 0 24 24">
+                        <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </div>
+            </th>
+
+            <!-- SERVERS -->
+            <th class="px-4 py-3 text-left sortable" onclick="sortTable(4, this)">
+                <div class="flex items-center gap-1 cursor-pointer">
+                    <span>{{ t("servers") }}</span>
+                    <svg class="arrow" viewBox="0 0 24 24">
+                        <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </div>
+            </th>
+
+            <!-- LIBRARIES -->
+            <th class="px-4 py-3 text-left sortable" onclick="sortTable(5, this)">
+                <div class="flex items-center gap-1 cursor-pointer">
+                    <span>{{ t("libraries") }}</span>
+                    <svg class="arrow" viewBox="0 0 24 24">
+                        <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </div>
+            </th>
+
+        </tr>
+    </thead>
+
+    <tbody>
+        {% for u in users %}
+        <tr class="border-t border-slate-800 hover:bg-slate-800/50 cursor-pointer"
+            onclick="window.location='{{ url_for('user_detail', user_id=u.id) }}'">
+
+            <td class="px-4 py-3">{{ u.username }}</td>
+            <td class="px-4 py-3 text-slate-300"
+				data-sort-value="{{ u.email or '' }}">
+			  {{ u.email or t("not_available") }}
+			</td>
+
+
+            <td class="px-4 py-3">
+                {% set colors = {
+                    'active': 'bg-emerald-900/40 text-emerald-300',
+                    'pre_expired': 'bg-amber-900/40 text-amber-300',
+                    'expired': 'bg-rose-900/40 text-rose-300',
+                    'reminder': 'bg-blue-900/40 text-blue-300',
+                    'invited': 'bg-cyan-900/40 text-cyan-300',
+                    'unfriended': 'bg-slate-700 text-slate-300',
+                    'suspended': 'bg-purple-900/40 text-purple-300',
+                    'unknown': 'bg-slate-800 text-slate-400'
+                } %}
+                <span class="text-xs px-2 py-1 rounded-full {{ colors.get(u.status) }}"
+					  data-status="{{ u.status }}">
+					{{ t(u.status) }}
+				</span>
+
+            </td>
+
+            <td class="px-4 py-3 text-slate-300"
+				data-sort-value="{{ u.expiration_date or '' }}">
+			  {{ u.expiration_date or t("not_available") }}
+			</td>
+            <td class="px-4 py-3 text-slate-300">{{ u.servers_count }}</td>
+            <td class="px-4 py-3 text-slate-300">{{ u.libraries_count }}</td>
+
+        </tr>
+
+        {% else %}
+        <tr>
+            <td colspan="6" class="px-4 py-6 text-center text-slate-500">
+                {{ t("no_user_found") }}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+
+<!-- SCRIPT TRI + MÉMOIRE -->
+<script>
+function sortTable(columnIndex, thElement) {
+    const table = document.querySelector("table");
+    if (!table) return;
+
+    const tbody = table.querySelector("tbody");
+    if (!tbody) return;
+
+    const rows = Array.from(tbody.querySelectorAll("tr"))
+        .filter(r => !r.querySelector("td[colspan]"));
+
+    const thList = table.querySelectorAll("th.sortable");
+
+    thList.forEach(th => {
+        th.classList.remove("sorted", "sorted-asc", "sorted-desc");
+    });
+
+    const currentOrder = thElement.dataset.order === "asc" ? "desc" : "asc";
+    thElement.dataset.order = currentOrder;
+    thElement.classList.add(
+        "sorted",
+        currentOrder === "asc" ? "sorted-asc" : "sorted-desc"
+    );
+
+    /* =========================
+       HELPERS
+       ========================= */
+
+    // 🔑 Valeur réelle utilisée pour le tri (i18n-safe)
+    function getCellValue(cell) {
+        if (cell?.dataset?.sortValue !== undefined) {
+            return cell.dataset.sortValue;
+        }
+        return cell?.innerText || "";
+    }
+
+    // 🔢 Conversion vers valeur comparable
+    function convert(v) {
+        v = (v || "").trim();
+
+        // valeur absente → toujours à la fin
+        if (v === "") return Number.POSITIVE_INFINITY;
+
+        // YYYY-MM-DD
+        if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+            return new Date(v).getTime();
+        }
+
+        // DD/MM/YYYY
+        if (/^\d{2}\/\d{2}\/\d{4}$/.test(v)) {
+            const [d, m, y] = v.split("/").map(Number);
+            return new Date(y, m - 1, d).getTime();
+        }
+
+        // nombre simple
+        if (!isNaN(v)) return Number(v);
+
+        // fallback string
+        return v.toLowerCase();
+    }
+
+    /* =========================
+       STATUS ORDER (métier)
+       ========================= */
+    const STATUS_ORDER = {
+        "active": 1,
+        "pre_expired": 2,
+        "reminder": 3,
+        "expired": 4,
+        "invited": 5,
+        "unfriended": 6,
+        "suspended": 7,
+        "none": 98,
+        "unknown": 99
+    };
+
+    const sorted = rows.sort((a, b) => {
+
+        /* 🔥 TRI MÉTIER POUR STATUS (col index 2) */
+        if (columnIndex === 2) {
+            const getStatusKey = (row) => {
+                const span = row.children[2]?.querySelector("span");
+                return span?.dataset?.status || "none";
+            };
+
+            const A = STATUS_ORDER[getStatusKey(a)] ?? 999;
+            const B = STATUS_ORDER[getStatusKey(b)] ?? 999;
+
+            return currentOrder === "asc" ? A - B : B - A;
+        }
+
+        /* 🔹 TRI CLASSIQUE */
+        const A = convert(getCellValue(a.children[columnIndex]));
+        const B = convert(getCellValue(b.children[columnIndex]));
+
+        if (A > B) return currentOrder === "asc" ? 1 : -1;
+        if (A < B) return currentOrder === "asc" ? -1 : 1;
+        return 0;
+    });
+
+    tbody.innerHTML = "";
+    sorted.forEach(r => tbody.appendChild(r));
+
+    localStorage.setItem("users_sort_col", String(columnIndex));
+    localStorage.setItem("users_sort_order", currentOrder);
+}
+
+/* =========================
+   RESTORE SORT + AUTO FILTER
+   ========================= */
+document.addEventListener("DOMContentLoaded", () => {
+    // -------------------------
+    // 1) RESTORE SORT STATE
+    // -------------------------
+    const col = localStorage.getItem("users_sort_col");
+    const order = localStorage.getItem("users_sort_order");
+
+    if (col !== null) {
+        const th = document.querySelectorAll("th.sortable")[Number(col)];
+        if (th) {
+            // inversion volontaire car sortTable toggle l’ordre
+            th.dataset.order = order === "asc" ? "desc" : "asc";
+            sortTable(Number(col), th);
+        }
+    }
+
+    // -------------------------
+    // 2) AUTO FILTER + PERSIST
+    // -------------------------
+    const form = document.getElementById("users_filter_form");
+    if (!form) return;
+
+    const searchInput = form.querySelector('input[name="q"]');
+    const statusCheckboxes = form.querySelectorAll('input[name="status"]');
+
+    const STORAGE_KEY = "vodum_users_filters_v1";
+    let timer = null;
+
+    function saveFilters() {
+        try {
+            const statuses = Array.from(statusCheckboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.value);
+
+            const q = searchInput ? (searchInput.value || "") : "";
+
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({ statuses, q }));
+        } catch (e) {
+            console.warn("saveFilters failed", e);
+        }
+    }
+
+    function submitForm() {
+        saveFilters();
+        if (form.requestSubmit) form.requestSubmit();
+        else form.submit();
+    }
+
+    // Restore uniquement si l’URL n’a pas déjà des filtres
+    (function restoreFilters() {
+        const url = new URL(window.location.href);
+        if (url.searchParams.has("status") || url.searchParams.has("q")) return;
+
+        try {
+            const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+
+            // Status : si rien sauvegardé -> on coche tout
+            if (Array.isArray(saved.statuses) && saved.statuses.length > 0) {
+                statusCheckboxes.forEach(cb => {
+                    cb.checked = saved.statuses.includes(cb.value);
+                });
+            } else {
+                statusCheckboxes.forEach(cb => cb.checked = true);
+            }
+
+            // Search
+            //if (searchInput && typeof saved.q === "string") {
+            //    searchInput.value = saved.q;
+            //}
+			if (searchInput) {
+			  searchInput.value = "";
+			}
+
+            // Applique seulement si on a qqch à restaurer
+            const hasSomething =
+                (Array.isArray(saved.statuses) && saved.statuses.length > 0) ||
+                (typeof saved.q === "string" && saved.q.trim() !== "");
+
+            if (hasSomething) submitForm();
+        } catch (e) {
+            console.warn("restoreFilters failed", e);
+        }
+    })();
+
+    // Search debounce
+    if (searchInput) {
+        searchInput.addEventListener("input", () => {
+            clearTimeout(timer);
+            timer = setTimeout(submitForm, 800);
+        });
+
+        searchInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                clearTimeout(timer);
+                submitForm();
+            }
+        });
+    }
+
+    // Status checkboxes -> submit immédiat
+    statusCheckboxes.forEach(cb => {
+        cb.addEventListener("change", () => {
+            clearTimeout(timer);
+            submitForm();
+        });
+    });
+});
+</script>
+
+
+
+
+{% endblock %}

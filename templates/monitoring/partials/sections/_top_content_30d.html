@@ -1,0 +1,26 @@
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+  <div class="text-sm font-semibold mb-4">Most watched content (30d)</div>
+
+  {% if top_content_30d and top_content_30d|length > 0 %}
+    <div class="space-y-3">
+      {% for c in top_content_30d %}
+        <div class="flex items-center justify-between">
+          <div class="text-sm">
+            <div class="font-semibold">{{ c.title or "-" }}</div>
+            {% if c.grandparent_title %}<div class="text-xs text-slate-500">{{ c.grandparent_title }}</div>{% endif %}
+          </div>
+          <div class="text-xs text-slate-400 text-right">
+            <div>{{ c.sessions }} sessions</div>
+            <div>
+              {% set ms = c.watch_ms or 0 %}
+              {{ (ms // 3600000) }}h {{ ((ms % 3600000) // 60000) }}m
+            </div>
+          </div>
+        </div>
+        {% if not loop.last %}<div class="border-t border-slate-800"></div>{% endif %}
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="text-slate-500">No data yet.</div>
+  {% endif %}
+</div>

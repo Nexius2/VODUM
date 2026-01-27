@@ -24,7 +24,7 @@ def ensure_row(cursor, table, where_clause, values):
     cursor.execute(f"SELECT COUNT(*) FROM {table} WHERE {where_clause}", values)
     if cursor.fetchone()[0] == 0:
         fields = ", ".join(values.keys())
-        placeholders = ", ".join("?" for _ in values)
+        placeholders = ", ".join(["?"] * len(values))
         cursor.execute(
             f"INSERT INTO {table} ({fields}) VALUES ({placeholders})",
             tuple(values.values()),
@@ -55,6 +55,8 @@ def run_migrations():
         "sent_emails": [],
         "settings": [],
         "logs": [],
+        "user_identities": [],
+        "media_jobs": [],
         "tasks": []
     }
 
@@ -79,6 +81,7 @@ def run_migrations():
         "last_run": "TIMESTAMP",
         "next_run": "TIMESTAMP",
         "last_error": "TEXT",
+        "queued_count": "INTEGER NOT NULL DEFAULT 0",
         "updated_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
     }
 
@@ -92,6 +95,229 @@ def run_migrations():
     # -------------------------------------------------
     ensure_column(cursor, "settings", "brand_name", "TEXT DEFAULT NULL")
     print("✔ Settings columns verified (brand_name).")
+
+    # -------------------------------------------------
+    # 2.2 Ensure subscription_gifts table exists
+    # -------------------------------------------------
+    if not table_exists(cursor, "subscription_gift_runs"):
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS subscription_gift_runs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+          target_type TEXT NOT NULL,
+          target_server_id INTEGER NULL,
+
+          days_added INTEGER NOT NULL,
+          reason TEXT NULL,
+
+          users_updated INTEGER NOT NULL DEFAULT 0
+        )
+        """)
+        conn.commit()
+
+    if not table_exists(cursor, "subscription_gift_run_users"):
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS subscription_gift_run_users (
+          run_id INTEGER NOT NULL,
+          vodum_user_id INTEGER NOT NULL,
+          PRIMARY KEY (run_id, vodum_user_id)
+        )
+        """)
+        conn.commit()
+
+    # -------------------------------------------------
+    # 2.3 Monitoring tables (sessions + events)
+    # -------------------------------------------------
+
+    if not table_exists(cursor, "media_sessions"):
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS media_sessions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+          server_id INTEGER NOT NULL,
+          provider TEXT NOT NULL CHECK (provider IN ('plex','jellyfin')),
+
+          session_key TEXT NOT NULL,
+
+          media_user_id INTEGER,
+          external_user_id TEXT,
+
+          media_key TEXT,
+          media_type TEXT,
+          title TEXT,
+          grandparent_title TEXT,
+          parent_title TEXT,
+
+          state TEXT,
+          progress_ms INTEGER,
+          duration_ms INTEGER,
+
+          is_transcode INTEGER DEFAULT 0 CHECK (is_transcode IN (0,1)),
+          bitrate INTEGER,
+          video_codec TEXT,
+          audio_codec TEXT,
+
+          client_name TEXT,
+          client_product TEXT,
+          device TEXT,
+          ip TEXT,
+
+          started_at TIMESTAMP,
+          last_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+          raw_json TEXT,
+
+          UNIQUE(server_id, session_key),
+
+          FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE,
+          FOREIGN KEY(media_user_id) REFERENCES media_users(id) ON DELETE SET NULL
+        )
+        """)
+        conn.commit()
+
+    if not table_exists(cursor, "media_events"):
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS media_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+          server_id INTEGER NOT NULL,
+          provider TEXT NOT NULL CHECK (provider IN ('plex','jellyfin')),
+
+          event_type TEXT NOT NULL,
+          ts TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+          session_key TEXT,
+
+          media_user_id INTEGER,
+          external_user_id TEXT,
+
+          media_key TEXT,
+          media_type TEXT,
+          title TEXT,
+
+          payload_json TEXT,
+
+          FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE,
+          FOREIGN KEY(media_user_id) REFERENCES media_users(id) ON DELETE SET NULL
+        )
+        """)
+        conn.commit()
+
+    # Index (idempotent)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_sessions_last_seen ON media_sessions(server_id, last_seen_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_sessions_user ON media_sessions(media_user_id, last_seen_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_events_ts ON media_events(server_id, ts)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_events_user_ts ON media_events(media_user_id, ts)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_events_type_ts ON media_events(event_type, ts)")
+    conn.commit()
+
+    print("✔ Monitoring tables verified (media_sessions, media_events).")
+
+    # -------------------------------------------------
+    # 2.4 Monitoring history table (aggregations)
+    # -------------------------------------------------
+    if not table_exists(cursor, "media_session_history"):
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS media_session_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+          server_id INTEGER NOT NULL,
+          provider TEXT NOT NULL CHECK (provider IN ('plex','jellyfin')),
+
+          -- Identifiants natifs
+          session_key TEXT,
+          media_key TEXT,
+          external_user_id TEXT,
+
+          -- Références internes (si résolues)
+          media_user_id INTEGER,
+
+          -- Infos média (snapshot)
+          media_type TEXT,               -- movie/episode/track/unknown
+          title TEXT,
+          grandparent_title TEXT,
+          parent_title TEXT,
+
+          -- Timing
+          started_at TIMESTAMP NOT NULL,
+          stopped_at TIMESTAMP NOT NULL,
+          duration_ms INTEGER NOT NULL DEFAULT 0,
+          watch_ms INTEGER NOT NULL DEFAULT 0,        -- progression estimée
+          peak_bitrate INTEGER,
+          was_transcode INTEGER NOT NULL DEFAULT 0,
+
+          -- Client
+          client_name TEXT,
+          device TEXT,
+
+          -- Debug / futur
+          raw_json TEXT,
+
+          FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE,
+          FOREIGN KEY(media_user_id) REFERENCES media_users(id) ON DELETE SET NULL
+        )
+        """)
+    else:
+        # Upgrade-safe : si la table existe déjà, on s'assure que les colonnes attendues existent.
+        # (pratique si tu ajoutes des champs plus tard sans casser les DB existantes)
+        ensure_column(cursor, "media_session_history", "peak_bitrate", "INTEGER")
+        ensure_column(cursor, "media_session_history", "was_transcode", "INTEGER NOT NULL DEFAULT 0")
+        ensure_column(cursor, "media_session_history", "device", "TEXT")
+        ensure_column(cursor, "media_session_history", "raw_json", "TEXT")
+
+    # Index pour stats rapides (safe avec IF NOT EXISTS)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_msh_time ON media_session_history(started_at, stopped_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_msh_user_time ON media_session_history(media_user_id, started_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_msh_media_time ON media_session_history(media_key, started_at)")
+
+    conn.commit()
+    print("✔ Monitoring history table verified (media_session_history).")
+
+    # -------------------------------------------------
+    # 2.4+ Media jobs: queue robuste (status/lease/backoff/priority)
+    # -------------------------------------------------
+    if table_exists(cursor, "media_jobs"):
+        # Colonnes modernes
+        ensure_column(cursor, "media_jobs", "status",
+                      "TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','running','success','error','canceled'))")
+        ensure_column(cursor, "media_jobs", "priority", "INTEGER NOT NULL DEFAULT 100")
+        ensure_column(cursor, "media_jobs", "run_after", "TIMESTAMP")
+        ensure_column(cursor, "media_jobs", "locked_by", "TEXT")
+        ensure_column(cursor, "media_jobs", "locked_until", "TIMESTAMP")
+        ensure_column(cursor, "media_jobs", "max_attempts", "INTEGER NOT NULL DEFAULT 10")
+
+        # Compat (certaines DB anciennes peuvent ne pas avoir ça)
+        ensure_column(cursor, "media_jobs", "processed", "INTEGER NOT NULL DEFAULT 0 CHECK (processed IN (0,1))")
+        ensure_column(cursor, "media_jobs", "success", "INTEGER NOT NULL DEFAULT 0 CHECK (success IN (0,1))")
+        ensure_column(cursor, "media_jobs", "attempts", "INTEGER NOT NULL DEFAULT 0")
+        ensure_column(cursor, "media_jobs", "dedupe_key", "TEXT")
+
+        # Indexes queue
+        cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_media_jobs_pick
+        ON media_jobs(status, run_after, priority, created_at)
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_jobs_user ON media_jobs(vodum_user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_jobs_server ON media_jobs(server_id)")
+        cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_media_jobs_server_action
+        ON media_jobs(server_id, provider, action, status)
+        """)
+
+        # Dédoublonnage (unique partiel)
+        cursor.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_media_jobs_dedupe_active
+        ON media_jobs(dedupe_key)
+        WHERE dedupe_key IS NOT NULL AND status IN ('queued','running');
+        """)
+
+        conn.commit()
+        print("✔ Media jobs queue columns + indexes verified.")
+    else:
+        # Si jamais media_jobs n'existe pas, c'est que tables.sql n'a pas été importé.
+        # Dans Vodum, on préfère échouer proprement plutôt que créer une version incomplète.
+        print("⚠ media_jobs table not found (tables.sql not imported yet). Skipping media_jobs upgrade.")
 
 
     # -------------------------------------------------
@@ -160,6 +386,25 @@ def run_migrations():
         "enabled": 1,
         "status": "idle"
     })
+    
+    # Scheduler monitoring (enqueue)
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "monitor_enqueue_refresh",
+        "description": "task_description.monitor_enqueue_refresh",
+        "schedule": "*/1 * * * *",
+        "enabled": 0,
+        "status": "disabled"
+    })
+
+    # Worker queue
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "media_jobs_worker",
+        "description": "task_description.media_jobs_worker",
+        "schedule": "*/1 * * * *",
+        "enabled": 0,
+        "status": "disabled"
+    })
+
 
     # Ajouter la tâche send_expiration_emails si absente
     cursor.execute("""
@@ -325,6 +570,14 @@ def run_migrations():
         "status": "idle"
     })
 
+    # Tâche monitor_collect_sessions (Now Playing multi-serveurs)
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "monitor_collect_sessions",
+        "description": "task_description.monitor_collect_sessions",
+        "schedule": "*/1 * * * *",   # toutes les minutes (safe pour débuter)
+        "enabled": 0,                # tu l’activeras via UI quand prêt
+        "status": "disabled"
+    })
 
 
 

@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% set active_page = 'logs' %}
+
+{% block header_title %}
+    {{ t("logs") }}
+{% endblock %}
+
+{% block header_subtitle %}
+    {{ t("application_logs") }}
+{% endblock %}
+{% block header_actions %}
+<a href="{{ url_for('download_logs') }}"
+   class="inline-flex items-center gap-2 px-3 py-2 rounded-lg
+          bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm">
+
+    <!-- Icône download -->
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4"
+         fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
+    </svg>
+
+    {{ t("download_logs") }}
+</a>
+{% endblock %}
+
+
+{% block content %}
+<div class="p-6 space-y-6">
+
+
+	<!-- Barre de filtres -->
+	<form id="logsFilterForm" method="get" class="flex items-center gap-4 mb-4">
+		<!-- On force le retour page 1 dès qu’on change un filtre -->
+		<input type="hidden" id="pageInput" name="page" value="1">
+
+		<!-- Niveau -->
+		<select id="levelSelect" name="level" class="bg-slate-900 border border-slate-700 rounded px-2 py-1">
+			<option value="ALL"  {% if level == "ALL" %}selected{% endif %}>{{ t("all_levels") }}</option>
+			<option value="INFO" {% if level == "INFO" %}selected{% endif %}>{{ t("info") }}</option>
+			<option value="WARNING" {% if level == "WARNING" %}selected{% endif %}>{{ t("warning") }}</option>
+			<option value="ERROR" {% if level == "ERROR" %}selected{% endif %}>{{ t("error") }}</option>
+		</select>
+
+		<!-- Recherche -->
+		<input
+			id="searchInput"
+			type="text"
+			name="q"
+			placeholder="{{ t('search') }}"
+			value="{{ search }}"
+			class="bg-slate-900 border border-slate-700 rounded px-3 py-1 w-64"
+			autocomplete="off"
+		>
+	</form>
+
+	<script>
+	(function () {
+	  const form = document.getElementById("logsFilterForm");
+	  const searchInput = document.getElementById("searchInput");
+	  const levelSelect = document.getElementById("levelSelect");
+	  const pageInput = document.getElementById("pageInput");
+
+	  if (!form || !searchInput || !levelSelect || !pageInput) return;
+
+	  // Petit debounce pour éviter un GET à chaque touche instantanément
+	  let t = null;
+	  const DEBOUNCE_MS = 350;
+
+	  function submitAndResetPage() {
+		pageInput.value = "1";
+		form.submit();
+	  }
+
+	  searchInput.addEventListener("input", () => {
+		clearTimeout(t);
+		t = setTimeout(submitAndResetPage, DEBOUNCE_MS);
+	  });
+
+	  levelSelect.addEventListener("change", submitAndResetPage);
+
+	  // Optionnel : ENTER submit direct (sans attendre le debounce)
+	  searchInput.addEventListener("keydown", (e) => {
+		if (e.key === "Enter") {
+		  e.preventDefault();
+		  clearTimeout(t);
+		  submitAndResetPage();
+		}
+	  });
+	})();
+	</script>
+
+
+    <!-- Table logs -->
+    <div class="bg-slate-900 rounded-lg border border-slate-700 overflow-hidden">
+        <table class="w-full text-sm">
+            <thead class="bg-slate-800 text-slate-300">
+                <tr>
+                    <th class="px-4 py-2 text-left">{{ t("date") }}</th>
+                    <th class="px-4 py-2 text-left">{{ t("level") }}</th>
+                    <th class="px-4 py-2 text-left">{{ t("source") }}</th>
+                    <th class="px-4 py-2 text-left">{{ t("message") }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                    <tr class="border-t border-slate-800">
+                        <td class="px-4 py-2 whitespace-nowrap">{{ log.created_at }}</td>
+                        <td class="px-4 py-2">{{ log.level }}</td>
+                        <td class="px-4 py-2">{{ log.source }}</td>
+                        <td class="px-4 py-2 text-slate-300 max-w-xl break-words whitespace-normal">
+							<div class="max-h-32 overflow-auto">
+								{{ log.message }}
+							</div>
+						</td>
+
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="flex justify-center items-center gap-2 mt-4">
+
+        {% if page > 1 %}
+            <a href="?page={{ page - 1 }}&level={{ level }}&q={{ search }}"
+               class="px-3 py-1 bg-slate-800 rounded text-slate-300">‹</a>
+        {% endif %}
+
+        {% for p in range(page_window_start, page_window_end + 1) %}
+            <a href="?page={{ p }}&level={{ level }}&q={{ search }}"
+               class="px-3 py-1 rounded
+                      {% if p == page %}
+                          bg-primary text-white
+                      {% else %}
+                          bg-slate-800 text-slate-300
+                      {% endif %}">
+                {{ p }}
+            </a>
+        {% endfor %}
+
+        {% if page < total_pages %}
+            <a href="?page={{ page + 1 }}&level={{ level }}&q={{ search }}"
+               class="px-3 py-1 bg-slate-800 rounded text-slate-300">›</a>
+        {% endif %}
+
+    </div>
+
+</div>
+{% endblock %}

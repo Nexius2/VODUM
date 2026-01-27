@@ -1,0 +1,382 @@
+{% extends "base.html" %}
+{% set active_page = 'mailing' %}
+
+{% block title %}{{ t("mailing") }} - VODUM{% endblock %}
+{% block header_title %}{{ t("mailing") }}{% endblock %}
+{% block header_subtitle %}{{ t("mailing_subtitle") }}{% endblock %}
+{% set smtp_ready =
+      settings.mailing_enabled
+  and settings.smtp_host
+  and settings.smtp_port
+  and settings.smtp_user
+  and settings.smtp_pass
+  and settings.mail_from
+%}
+
+{% block header_actions %}
+    {% if settings.mailing_enabled %}
+        <div class="flex flex-col items-end space-y-1">
+            <div class="flex space-x-2">
+
+                <!-- Bouton Test Email -->
+				{% if smtp_ready %}
+                <button
+                    type="submit"
+                    form="smtp-form"
+                    name="action"
+                    value="test"
+                    class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded text-sm"
+                >
+                    {{ t("send_test_email") }}
+                </button>
+				{% endif %}
+
+                <!-- Bouton Save -->
+                <button
+                    type="submit"
+                    form="smtp-form"
+                    class="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded text-sm"
+                >
+                    {{ t("save") }}
+                </button>
+            </div>
+
+            <!--<p class="text-xs text-slate-400">
+                Test emails are always sent to the admin email address.
+            </p>-->
+        </div>
+    {% endif %}
+{% endblock %}
+
+
+
+{% block content %}
+
+{% set current_subpage = 'smtp' %}
+{% include "mailing/mailing_nav.html" %}
+
+{% set smtp_incomplete =
+      (not settings.smtp_host)
+   or (not settings.smtp_user)
+   or (not settings.mail_from)
+   or (not settings.smtp_port)
+%}
+
+<!-- SWITCH mailing_enabled -->
+<div class="flex items-center gap-3 mb-4">
+    <label class="text-slate-300 font-medium">{{ t("mailing_enabled") }}</label>
+
+    <label class="relative inline-flex items-center cursor-pointer">
+      <input type="checkbox"
+             id="mailing_enabled_switch"
+             name="mailing_enabled"
+             class="sr-only peer"
+             {% if settings.mailing_enabled %}checked{% endif %}>
+
+      <div class="w-11 h-6 bg-slate-600 rounded-full peer peer-checked:bg-green-500 transition-colors"></div>
+      <div class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform
+                  peer-checked:translate-x-5 shadow"></div>
+
+      <span class="ml-3 text-xs text-slate-400">
+        {% if settings.mailing_enabled %}
+          {{ t("mailing_enabled_on") }}
+        {% else %}
+          {{ t("mailing_enabled_off") }}
+        {% endif %}
+      </span>
+    </label>
+</div>
+
+<!-- Message quand mailing est désactivé -->
+{% if not settings.mailing_enabled %}
+<div class="p-4 rounded-xl bg-slate-800 border border-slate-700 text-slate-200 text-sm mb-5">
+    {{ t("mailing_disabled_help") }}
+</div>
+{% endif %}
+
+<!-- CONTENEUR SMTP (affiché/masqué par JS) -->
+<div id="smtp_container"
+     class="grid grid-cols-1 lg:grid-cols-3 gap-6 text-xs {% if not settings.mailing_enabled %}hidden{% endif %}">
+
+  <!-- COLONNE AIDE -->
+  <div class="lg:col-span-1 bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+
+    <h2 class="text-sm font-semibold mb-2">{{ t("smtp_help_title") }}</h2>
+
+	<!-- AIDE GMAIL -->
+	<div id="help_gmail" class="smtp-help hidden">
+	  <div class="font-semibold mb-1 text-red-300">
+		{{ t("gmail") }}
+	  </div>
+
+	  <p class="text-slate-400">
+		{{ t("smtp_gmail_requires") }}
+	  </p>
+
+	  <ul class="list-disc list-inside text-slate-400 space-y-1 mt-1">
+		<li>✔ {{ t("smtp_gmail_2fa") }}</li>
+		<li>✔ {{ t("smtp_gmail_app_password") }}</li>
+	  </ul>
+
+	  <p class="text-slate-400 mt-2">
+		{{ t("smtp_gmail_password_warning") }}
+	  </p>
+
+	  <a href="https://myaccount.google.com/apppasswords"
+		 target="_blank"
+		 class="inline-block mt-3 px-3 py-1.5 rounded-lg bg-yellow-600 hover:bg-yellow-500 text-xs font-semibold text-black">
+		🔐 {{ t("smtp_gmail_create_app_password") }}
+	  </a>
+
+	  <p class="text-slate-400 mt-3">
+		{{ t("smtp_server") }} :
+		<strong>smtp.gmail.com</strong><br>
+		{{ t("smtp_port") }} :
+		<strong>587</strong> — {{ t("smtp_tls_recommended") }}
+	  </p>
+	</div>
+
+
+	<!-- AIDE OUTLOOK -->
+	<div id="help_outlook" class="smtp-help hidden">
+	  <div class="font-semibold mb-1 text-blue-300">
+		{{ t("outlook") }}
+	  </div>
+
+	  <p class="text-slate-400 mb-2">
+		{{ t("smtp_outlook_requires") }}
+	  </p>
+
+	  <ul class="list-disc list-inside text-slate-400 space-y-1">
+		<li>✔ {{ t("smtp_outlook_account_required") }}</li>
+		<li>✔ {{ t("smtp_outlook_smtp_enabled") }}</li>
+	  </ul>
+
+	  <p class="text-slate-400 mt-3">
+		{{ t("smtp_server") }} :
+		<strong>smtp.office365.com</strong><br>
+		{{ t("smtp_port") }} :
+		<strong>587</strong> — {{ t("smtp_tls_required") }}
+	  </p>
+	</div>
+
+
+	<!-- AIDE YAHOO -->
+	<div id="help_yahoo" class="smtp-help hidden">
+	  <div class="font-semibold mb-1 text-purple-300">
+		{{ t("yahoo") }}
+	  </div>
+
+	  <p class="text-slate-400">
+		{{ t("smtp_yahoo_requires_app_password") }}
+	  </p>
+
+	  <p class="text-slate-400 mt-3">
+		{{ t("smtp_server") }} :
+		<strong>smtp.mail.yahoo.com</strong><br>
+		{{ t("smtp_port") }} :
+		<strong>587</strong> — {{ t("smtp_tls_recommended") }}
+	  </p>
+	</div>
+
+
+	<!-- AIDE PAR DÉFAUT -->
+	<div id="help_custom" class="smtp-help">
+	  <div class="font-semibold mb-1">
+		{{ t("smtp_provider") }} : {{ t("custom_smtp") }}
+	  </div>
+
+	  <p class="text-slate-400">
+		{{ t("smtp_custom_select_provider_help") }}
+	  </p>
+
+	  <p class="text-slate-400 mt-3">
+		{{ t("smtp_custom_requirements_intro") }}
+	  </p>
+
+	  <ul class="list-disc list-inside text-slate-400 space-y-1 mt-1">
+		<li>✔ {{ t("smtp_custom_host") }}</li>
+		<li>✔ {{ t("smtp_custom_port") }}</li>
+		<li>✔ {{ t("smtp_custom_tls_ssl") }}</li>
+	  </ul>
+	</div>
+
+
+  </div>
+
+  <!-- FORMULAIRE SMTP -->
+  <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-4" id="smtp_section">
+
+    <form method="post"  id="smtp-form" class="space-y-4">
+      <input type="hidden" name="action" id="smtp_action" value="save">
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+        <!-- Provider -->
+        <div>
+          <label class="block mb-1 text-slate-400">{{ t("smtp_provider") }}</label>
+          <select id="smtp_provider"
+                  class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+            <option value="custom">{{ t("custom_smtp") }}</option>
+            <option value="gmail">{{ t("gmail") }}</option>
+			<option value="outlook">{{ t("outlook") }}</option>
+			<option value="yahoo">{{ t("yahoo") }}</option>
+
+          </select>
+        </div>
+
+        <!-- Mail-from -->
+        <div>
+          <label class="block mb-1 text-slate-400">{{ t("mail_from") }}</label>
+          <input type="email" name="mail_from" value="{{ settings.mail_from or '' }}"
+                 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+        </div>
+
+        <!-- Host -->
+        <div>
+          <label class="block mb-1 text-slate-400">{{ t("smtp_host") }}</label>
+          <input type="text" name="smtp_host" id="smtp_host" value="{{ settings.smtp_host or '' }}"
+                 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+        </div>
+
+        <!-- Port -->
+        <div>
+          <label class="block mb-1 text-slate-400">{{ t("smtp_port") }}</label>
+          <input type="number" name="smtp_port" id="smtp_port" value="{{ settings.smtp_port or 587 }}"
+                 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+        </div>
+
+        <!-- TLS -->
+        <div class="flex items-center gap-2">
+          <input type="checkbox" name="smtp_tls" id="smtp_tls" value="1"
+                 {% if settings.smtp_tls %}checked{% endif %}
+                 class="accent-primary">
+          <label for="smtp_tls" class="text-slate-400">{{ t("smtp_use_tls") }}</label>
+        </div>
+
+        <!-- SMTP User -->
+        <div>
+          <label class="block mb-1 text-slate-400">{{ t("smtp_user") }}</label>
+          <input type="text" name="smtp_user" value="{{ settings.smtp_user or '' }}"
+                 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+        </div>
+
+        <!-- Password -->
+        <div>
+          <label class="block mb-1 text-slate-400">{{ t("smtp_pass") }}</label>
+          <div class="relative">
+            <input type="password" id="smtp_pass" name="smtp_pass"
+                   value="{{ settings.smtp_pass or '' }}"
+                   class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs pr-10">
+            <button type="button"
+                    id="toggle_pass"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs">
+              👁️
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+
+
+    </form>
+
+  </div>
+</div>
+
+<!-- SCRIPT -->
+<script>
+const toggle = document.getElementById("mailing_enabled_switch");
+const smtpContainer = document.getElementById("smtp_container");
+
+// Toggle affichage du conteneur SMTP sans sauvegarde
+toggle.addEventListener("change", async () => {
+    const enabled = toggle.checked;
+
+    // Mise à jour de l’UI locale
+    smtpContainer.classList.toggle("hidden", !enabled);
+
+    // Appel API pour sauvegarder immédiatement
+    try {
+        await fetch("/api/mailing/toggle", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ enabled })
+        });
+		// refresh page
+		setTimeout(() => location.reload(), 200);
+    } catch (e) {
+        console.error(t("mailing_toggle_error"), e);
+    }
+
+    // Optionnel : recharger la nav automatiquement  
+    // location.reload();  // ← Si tu veux rafraîchir le nav après changement
+});
+
+
+// Provider auto-fill
+const providerSelect = document.getElementById('smtp_provider');
+const hostInput = document.getElementById('smtp_host');
+const portInput = document.getElementById('smtp_port');
+const tlsInput  = document.getElementById('smtp_tls');
+
+// Blocs aide
+const helpBlocks = {
+  gmail:   document.getElementById("help_gmail"),
+  outlook: document.getElementById("help_outlook"),
+  yahoo:   document.getElementById("help_yahoo"),
+  custom:  document.getElementById("help_custom"),
+};
+
+function updateProviderUI() {
+  const v = providerSelect.value;
+  Object.values(helpBlocks).forEach(el => el.classList.add("hidden"));
+
+  if (v === "gmail") helpBlocks.gmail.classList.remove("hidden");
+  else if (v === "outlook") helpBlocks.outlook.classList.remove("hidden");
+  else if (v === "yahoo") helpBlocks.yahoo.classList.remove("hidden");
+  else helpBlocks.custom.classList.remove("hidden");
+
+  if (v === "gmail") {
+    hostInput.value = "smtp.gmail.com";
+    portInput.value = 587;
+    tlsInput.checked = true;
+  } else if (v === "outlook") {
+    hostInput.value = "smtp.office365.com";
+    portInput.value = 587;
+    tlsInput.checked = true;
+  } else if (v === "yahoo") {
+    hostInput.value = "smtp.mail.yahoo.com";
+    portInput.value = 587;
+    tlsInput.checked = true;
+  }
+}
+
+providerSelect.addEventListener("change", updateProviderUI);
+
+document.addEventListener("DOMContentLoaded", () => {
+  if (hostInput.value === "smtp.gmail.com") providerSelect.value = "gmail";
+  else if (hostInput.value === "smtp.office365.com") providerSelect.value = "outlook";
+  else if (hostInput.value === "smtp.mail.yahoo.com") providerSelect.value = "yahoo";
+  else providerSelect.value = "custom";
+
+  updateProviderUI();
+});
+
+// Toggle mot de passe
+const passInput = document.getElementById("smtp_pass");
+const passBtn   = document.getElementById("toggle_pass");
+
+passBtn.addEventListener("click", () => {
+  if (passInput.type === "password") {
+    passInput.type = "text";
+    passBtn.textContent = "🙈";
+  } else {
+    passInput.type = "password";
+    passBtn.textContent = "👁️";
+  }
+});
+</script>
+
+{% endblock %}

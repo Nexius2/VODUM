@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block header_title %}
+    {{ t("tasks") }}
+{% endblock %}
+
+{% block header_subtitle %}
+    {{ t("tasks_desc") }}
+{% endblock %}
+
+{% block content %}
+
+<div class="bg-dark-2 p-4 rounded-lg shadow">
+
+    {% if tasks|length >= 1 %}
+    <table class="w-full text-left text-sm">
+        <thead>
+            <tr class="border-b border-slate-800">
+				{% if (settings.debug_mode|default(0)|int) == 1 %}
+				  <th class="p-2">ID</th>
+				{% endif %}
+                <th class="p-2">{{ t("name") }}</th>
+                <th class="p-2">{{ t("description") }}</th>
+                <th class="p-2">{{ t("schedule") }}</th>
+                <th class="p-2">{{ t("status") }}</th>
+                <th class="p-2">{{ t("last_run") }}</th>
+                <th class="p-2">{{ t("next_run") }}</th>
+                <th class="p-2 text-center">{{ t("actions") }}</th>
+            </tr>
+        </thead>
+
+        <tbody id="tasks-tbody">
+            {% for task in tasks %}
+            <tr class="border-b border-slate-800">
+				{% if (settings.debug_mode|default(0)|int) == 1 %}
+				  <td class="p-2">{{ task.id }}</td>
+				{% endif %}
+				<td class="p-2">
+					{{ t("task." ~ task.name) or task.name }}
+				</td>
+
+				<td class="p-2">
+					{{ t("task_description." ~ task.name) or task.description or "-" }}
+				</td>
+
+                <td class="p-2">{{ task.schedule | cron_human }}</td>
+
+                {# ---------- STATUS ---------- #}
+                <td class="p-2">
+                    {% if not task.enabled %}
+                        <span class="px-2 py-1 rounded bg-gray-700 text-gray-300 text-xs">
+                            {{ t("disabled") }}
+                        </span>
+                    {% else %}
+                        {% if task.status == "running" %}
+                            <span class="px-2 py-1 rounded bg-blue-700 text-blue-100 text-xs">
+                                {{ t("running") }}
+                            </span>
+                        {% elif task.status == "done" %}
+                            <span class="px-2 py-1 rounded bg-green-700 text-green-100 text-xs">
+                                {{ t("done") }}
+                            </span>
+                        {% elif task.status == "error" %}
+                            <span class="px-2 py-1 rounded bg-red-700 text-red-100 text-xs">
+                                {{ t("error") }}
+                            </span>
+                        {% else %}
+                            <span class="px-2 py-1 rounded bg-gray-600 text-gray-200 text-xs">
+                                {{ t("idle") }}
+                            </span>
+                        {% endif %}
+                    {% endif %}
+                </td>
+
+                <td class="p-2">{{ task.last_run | tz if task.last_run else "-" }}</td>
+                <td class="p-2">{{ task.next_run | tz if task.next_run else "-" }}</td>
+
+                {# ---------- ACTIONS ---------- #}
+				<td class="p-2 text-center">
+
+					{% if not task.enabled %}
+						<button disabled
+								class="px-3 py-1 rounded bg-gray-700 text-gray-400 opacity-50 cursor-not-allowed">
+							{{ t("run_now") }}
+						</button>
+
+					{% elif task.status in ("queued", "running") %}
+						<button disabled class="px-3 py-1 rounded bg-slate-600 text-slate-300 opacity-50 cursor-wait">
+							{{ t("running") }}
+						</button>
+
+					{% else %}
+						<form action="/tasks/run/{{ task.id }}" method="post">
+							<button class="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white">
+								{{ t("run_now") }}
+							</button>
+						</form>
+					{% endif %}
+
+				</td>
+
+
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {% else %}
+        <div class="text-center text-slate-400 p-6">
+            {{ t("no_tasks_found") }}
+        </div>
+    {% endif %}
+</div>
+
+<script>
+let TASKS_POLL_INTERVAL = 3000; // 3 secondes (comme le menu)
+
+async function refreshTasksTable() {
+    try {
+        const res = await fetch("/api/tasks/list");
+        if (!res.ok) return;
+
+        const data = await res.json();
+        const tbody = document.getElementById("tasks-tbody");
+        if (!tbody) return;
+
+        let html = "";
+
+        for (const task of data.tasks) {
+            html += `
+            <tr class="border-b border-slate-800">
+                <td class="p-2">${task.name_label}</td>
+                <td class="p-2">${task.description_label || "-"}</td>
+                <td class="p-2">${task.schedule_human || "-"}</td>
+                <td class="p-2">
+                    ${renderStatus(task)}
+                </td>
+                <td class="p-2">${task.last_run_human || "-"}</td>
+                <td class="p-2">${task.next_run_human || "-"}</td>
+                <td class="p-2 text-center">
+                    ${renderAction(task)}
+                </td>
+            </tr>
+            `;
+        }
+
+        tbody.innerHTML = html;
+
+    } catch (e) {
+        console.error("refreshTasksTable failed", e);
+    }
+}
+
+function renderStatus(task) {
+    if (!task.enabled) {
+        return `<span class="px-2 py-1 rounded bg-gray-700 text-gray-300 text-xs">disabled</span>`;
+    }
+    if (task.status === "running") {
+        return `<span class="px-2 py-1 rounded bg-blue-700 text-blue-100 text-xs">running</span>`;
+    }
+    if (task.status === "done") {
+        return `<span class="px-2 py-1 rounded bg-green-700 text-green-100 text-xs">done</span>`;
+    }
+    if (task.status === "error") {
+        return `<span class="px-2 py-1 rounded bg-red-700 text-red-100 text-xs">error</span>`;
+    }
+    return `<span class="px-2 py-1 rounded bg-gray-600 text-gray-200 text-xs">idle</span>`;
+}
+
+function renderAction(task) {
+    if (!task.enabled || task.status === "running" || task.status === "queued") {
+        return `<button disabled class="px-3 py-1 rounded bg-slate-600 text-slate-300 opacity-50">running</button>`;
+    }
+
+    return `
+        <form action="/tasks/run/${task.id}" method="post">
+            <button class="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white">
+                run
+            </button>
+        </form>
+    `;
+}
+
+// démarrage auto
+setInterval(refreshTasksTable, TASKS_POLL_INTERVAL);
+</script>
+
+
+{% endblock %}

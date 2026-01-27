@@ -23,6 +23,8 @@
       darkMode: 'class'
     }
   </script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+
 
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/logo.svg') }}">
 </head>
@@ -34,7 +36,8 @@
 
 	  <!-- Header -->
 	  <div class="h-16 flex items-center px-4 border-b border-slate-800">
-		<span class="text-xl font-bold tracking-tight">VODUM</span>
+		<span class="text-xl font-bold tracking-tight">{{ app_brand_name }}
+</span>
 	  </div>
 
 	  <!-- Menu (scroll interne si nécessaire) -->
@@ -43,6 +46,11 @@
 		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='dashboard' }}">
 		  <span class="material-icons-outlined mr-2 text-base">dashboard</span>
 		  {{ t("dashboard") }}
+		</a>
+		<a href="{{ url_for('monitoring_page') }}"
+		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='monitoring' }}">
+		  <span class="material-icons-outlined mr-2 text-base">tv</span>
+		  {{ t("monitoring") }}
 		</a>
 		<a href="{{ url_for('users_list') }}"
 		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='users' }}">
@@ -159,5 +167,7 @@
 
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 </body>
 </html>

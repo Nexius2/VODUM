@@ -242,6 +242,26 @@
   "subscription_active": "Abonnement actif",
   "subscription_status": "Statut de l’abonnement",
   "subscription_plan": "Formule d’abonnement",
+  "subscription_gift_history_title": "Historique des cadeaux",
+  "subscription_refresh": "Rafraîchir",
+  "subscription_loading": "Chargement",
+
+  "subscription_users_updated": "utilisateurs mis à jour",
+  "subscription_days_added": "jours ajoutés",
+  "subscription_unknown_error": "Erreur inconnue",
+  "subscription_request_failed": "Requête échouée",
+
+  "subscription_gift_history_empty": "Aucun cadeau enregistré pour le moment.",
+  "subscription_gift_history_user": "Utilisateur",
+  "subscription_gift_history_scope_all": "Tous les utilisateurs",
+  "subscription_gift_history_scope_server": "Utilisateurs du serveur",
+  "subscription_gift_history_days": "jours",
+  "subscription_modal_target": "Cible",
+  "subscription_modal_duration": "Durée",
+  "subscription_modal_users_updated": "Utilisateurs mis à jour",
+  "subscription_modal_server": "Serveur",
+  "subscription_modal_comment": "Commentaire",
+  "subscription_modal_users": "Utilisateurs",
   "suspended": "Suspendu",
   "tautulli_api_key": "Clé API Tautulli",
   "tautulli_url": "URL Tautulli",
@@ -460,5 +480,36 @@
   "merge.preview.sent_emails": "Emails envoyés",
   "merge.preview.media_jobs": "Tâches média",
   "merge_failed": "Échec de la fusion",
-  "user_merged": "Utilisateur fusionné"
+  "user_merged": "Utilisateur fusionné",
+  
+  
+  "task_description.monitor_collect_sessions": "Monitoring : collecte des sessions en cours (Plex/Jellyfin)",
+  "nav.monitoring": "Monitoring",
+
+  "monitoring.title": "Monitoring",
+  "monitoring.subtitle": "Vue globale Plex / Jellyfin",
+
+  "monitoring.cards.servers_online": "Serveurs en ligne",
+  "monitoring.cards.servers_offline": "Serveurs hors ligne",
+  "monitoring.cards.live_sessions": "Sessions en cours",
+  "monitoring.cards.transcodes": "Transcodages",
+
+  "monitoring.section.servers": "Serveurs",
+  "monitoring.section.sessions": "Now Playing",
+  "monitoring.section.events": "Derniers événements",
+
+  "monitoring.table.server": "Serveur",
+  "monitoring.table.provider": "Type",
+  "monitoring.table.status": "Statut",
+  "monitoring.table.last_checked": "Dernier check",
+
+  "monitoring.table.user": "Utilisateur",
+  "monitoring.table.state": "État",
+  "monitoring.table.title": "Titre",
+  "monitoring.table.client": "Client",
+  "monitoring.table.last_seen": "Dernière activité",
+
+  "monitoring.empty.sessions": "Aucune session en cours.",
+  "monitoring.empty.events": "Aucun événement récent."
+
 }

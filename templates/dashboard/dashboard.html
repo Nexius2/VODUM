@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% set active_page = 'dashboard' %}
+
+{% block title %}{{ t("dashboard") }}{% endblock %}
+{% block header_title %}{{ t("dashboard") }}{% endblock %}
+{% block header_subtitle %}{{ t("dashboard_subtitle") }}{% endblock %}
+
+{% block content %}
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+
+    <!-- Users -->
+	<div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+	  <div class="flex items-center justify-between mb-4">
+		<div class="text-xs uppercase tracking-wide text-slate-400">
+		  {{ t("users") }}
+		</div>
+	  </div>
+
+	  <!-- STATS ROW -->
+	  <div class="flex flex-wrap items-end gap-6">
+
+		<!-- ACTIVE (main focus) -->
+		<div class="flex flex-col">
+		  <div class="text-4xl font-bold text-emerald-400 leading-none">
+			{{ users_stats.active }}
+		  </div>
+		  <div class="text-xs text-slate-300 mt-1">
+			{{ t("active_users") }}
+		  </div>
+		</div>
+
+		<!-- EXPIRING SOON -->
+		<div class="flex flex-col">
+		  <div class="text-xl font-semibold text-amber-400 leading-none">
+			{{ users_stats.pre_expired }}
+		  </div>
+		  <div class="text-xs text-slate-400 mt-1">
+			{{ t("expiring_soon") }}
+		  </div>
+		</div>
+
+		<!-- REMINDER -->
+		<div class="flex flex-col">
+		  <div class="text-xl font-semibold text-blue-400 leading-none">
+			{{ users_stats.reminder }}
+		  </div>
+		  <div class="text-xs text-slate-400 mt-1">
+			{{ t("reminder") }}
+		  </div>
+		</div>
+
+		<!-- EXPIRED -->
+		<div class="flex flex-col">
+		  <div class="text-lg font-semibold text-rose-400 leading-none">
+			{{ users_stats.expired }}
+		  </div>
+		  <div class="text-xs text-slate-400 mt-1">
+			{{ t("expired") }}
+		  </div>
+		</div>
+
+		<!-- TOTAL (least important) -->
+		<div class="flex flex-col ml-auto text-right">
+		  <div class="text-sm font-medium text-slate-300 leading-none">
+			{{ users_stats.total }}
+		  </div>
+		  <div class="text-xs text-slate-500 mt-1">
+			{{ t("users_total") }}
+		  </div>
+		</div>
+
+	  </div>
+	</div>
+
+
+    <!-- Servers (compact global, colored badges) -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+        <div class="text-xs uppercase text-slate-400 mb-2">{{ t("servers") }}</div>
+
+        {% set ordered_types = ['plex', 'jellyfin', 'kodi'] %}
+        {% set filtered = {} %}
+        {% for t in ordered_types %}
+            {% if t in stats.server_types %}
+                {% set _ = filtered.update({ t: stats.server_types[t] }) %}
+            {% endif %}
+        {% endfor %}
+
+        <!-- LIGNE 1 : badges + global -->
+        <div class="flex justify-between items-center">
+
+            <div class="flex gap-4">
+                {% for stype, data in filtered.items() %}
+                    <span class="px-2 py-1 rounded-full text-xs font-semibold capitalize
+                        {% if stype == 'plex' %}
+                            bg-amber-900/40 text-amber-300
+                        {% elif stype == 'jellyfin' %}
+                            bg-blue-900/40 text-blue-300
+                        {% elif stype == 'kodi' %}
+                            bg-indigo-900/40 text-indigo-300
+                        {% endif %}
+                    ">
+                        {{ stype }}
+                    </span>
+                {% endfor %}
+            </div>
+
+            {% set total_online = filtered.values() | map(attribute='online') | sum %}
+            {% set total_offline = filtered.values() | map(attribute='offline') | sum %}
+
+            <div class="text-xs text-slate-400 whitespace-nowrap">
+                {{ total_online }} {{ t("online") }} · {{ total_offline }} {{ t("offline") }}
+            </div>
+        </div>
+
+        <!-- LIGNE 2 : totaux -->
+        <div class="flex gap-4 mt-1">
+            {% for stype, data in filtered.items() %}
+                <div class="text-xs text-slate-500">
+                    {{ data.total }} {{ t("total") }}
+                </div>
+            {% endfor %}
+        </div>
+
+    </div>
+
+    <!-- Tasks -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+        <div class="text-xs uppercase text-slate-400 mb-2">{{ t("tasks") }}</div>
+        <div class="text-sm text-slate-300">
+			{{ stats.active_tasks }} {{ t("active_tasks") }} ·
+			{{ stats.error_tasks }} {{ t("in_error") }}
+        </div>
+    </div>
+
+</div>
+
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+    <!-- Servers list -->
+    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-semibold">{{ t("servers") }}</h2>
+        </div>
+
+        <div class="space-y-2">
+            {% for s in servers %}
+            <div class="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2">
+
+                <div>
+                    <div class="text-sm font-medium flex items-center">
+                        {{ s.name }}
+
+                        <!-- Colored server type badge -->
+                        <span class="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize
+                            {% if s.type == 'plex' %}
+                                bg-amber-900/40 text-amber-300
+                            {% elif s.type == 'jellyfin' %}
+                                bg-blue-900/40 text-blue-300
+                            {% elif s.type == 'kodi' %}
+                                bg-indigo-900/40 text-indigo-300
+                            {% else %}
+                                bg-slate-800 text-slate-300
+                            {% endif %}
+                        ">
+                            {{ t(s.type) }}
+                        </span>
+                    </div>
+
+                    <div class="text-xs text-slate-400">
+                        {{ s.url }}
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    {% if s.status == 'up' %}
+                        <span class="text-xs px-2 py-1 rounded-full bg-emerald-900/40 text-emerald-300">
+                            {{ t("online") }}
+                        </span>
+                    {% else %}
+                        <span class="text-xs px-2 py-1 rounded-full bg-rose-900/40 text-rose-300">
+                            {{ t("offline") }}
+                        </span>
+                    {% endif %}
+                    <span class="text-[10px] text-slate-500">
+                        {{ t("last_check") }} : {{ s.last_checked or '—' }}
+                    </span>
+                </div>
+
+            </div>
+            {% else %}
+            <p class="text-xs text-slate-500">{{ t("no_servers_configured") }}</p>
+            {% endfor %}
+        </div>
+    </section>
+
+
+    <!-- Last logs -->
+    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-semibold">{{ t("latest_logs") }}</h2>
+            <a href="{{ url_for('logs_page') }}" class="text-xs text-primary hover:text-primary-dark">{{ t("view_all") }}</a>
+        </div>
+
+        <div class="space-y-2 text-xs">
+            {% for log in latest_logs %}
+            <div class="flex items-start gap-2 rounded-lg bg-slate-950/40 px-3 py-2">
+
+                <span class="mt-px text-[10px] px-1.5 py-0.5 rounded-full
+                    {% if log.level == 'ERROR' %}bg-rose-900/50 text-rose-200
+                    {% elif log.level == 'WARNING' %}bg-amber-900/50 text-amber-200
+                    {% else %}bg-slate-800 text-slate-200{% endif %}
+                ">
+                    {{ log.level }}
+                </span>
+
+				<div class="min-w-0 flex-1">
+					<div class="text-[11px] text-slate-400 truncate">
+						{{ log.source }} · {{ log.created_at }}
+					</div>
+					<div class="text-[12px] text-slate-100 truncate">
+						{{ log.message }}
+					</div>
+				</div>
+
+
+            </div>
+            {% else %}
+            <p class="text-xs text-slate-500">{{ t("no_logs_yet") }}</p>
+            {% endfor %}
+        </div>
+
+    </section>
+
+</div>
+
+{% endblock %}

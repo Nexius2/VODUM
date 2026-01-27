@@ -262,18 +262,35 @@ CREATE TABLE IF NOT EXISTS media_jobs (
     -- Données libres (options, liste de sections, flags, etc.)
     payload_json  TEXT,
 
-    -- Statuts d’exécution
-    processed     INTEGER NOT NULL DEFAULT 0 CHECK (processed IN (0, 1)),
-    success       INTEGER NOT NULL DEFAULT 0 CHECK (success IN (0, 1)),
-    attempts      INTEGER NOT NULL DEFAULT 0,
-    last_error    TEXT,
+    -- Statut (remplace l’ancien couple processed/success dans la logique moderne)
+    status TEXT NOT NULL DEFAULT 'queued'
+        CHECK (status IN ('queued','running','success','error','canceled')),
 
-    created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    processed_at  TIMESTAMP,
-    executed_at   TIMESTAMP,
+    -- Priorité (plus petit = plus prioritaire)
+    priority INTEGER NOT NULL DEFAULT 100,
+
+    -- Backoff / planification (job exécutable après cette date)
+    run_after TIMESTAMP,
+
+    -- Lease / lock (anti double-execution multi-workers)
+    locked_by TEXT,
+    locked_until TIMESTAMP,
+
+    -- Tentatives / erreurs
+    attempts   INTEGER NOT NULL DEFAULT 0,
+    max_attempts INTEGER NOT NULL DEFAULT 10,
+    last_error TEXT,
+
+    -- Champs legacy (tu peux les garder pour compat / UI existante)
+    processed INTEGER NOT NULL DEFAULT 0 CHECK (processed IN (0, 1)),
+    success   INTEGER NOT NULL DEFAULT 0 CHECK (success IN (0, 1)),
+
+    created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    processed_at TIMESTAMP,
+    executed_at  TIMESTAMP,
 
     -- Optionnel mais très pratique : empêcher certains doublons en file
-    -- Exemple: "plex:sync:server=1:user=12"
+    -- Exemple: "plex:sync:server=1:user=12" ou "monitor:refresh:server=12"
     dedupe_key TEXT,
 
     FOREIGN KEY(vodum_user_id) REFERENCES vodum_users(id) ON DELETE CASCADE,
@@ -281,9 +298,10 @@ CREATE TABLE IF NOT EXISTS media_jobs (
     FOREIGN KEY(library_id) REFERENCES libraries(id) ON DELETE CASCADE
 );
 
--- Index utiles
-CREATE INDEX IF NOT EXISTS idx_media_jobs_pending
-ON media_jobs(processed, provider, action, created_at);
+
+-- Indexes utiles (queue scalable)
+CREATE INDEX IF NOT EXISTS idx_media_jobs_pick
+ON media_jobs(status, run_after, priority, created_at);
 
 CREATE INDEX IF NOT EXISTS idx_media_jobs_user
 ON media_jobs(vodum_user_id);
@@ -291,10 +309,10 @@ ON media_jobs(vodum_user_id);
 CREATE INDEX IF NOT EXISTS idx_media_jobs_server
 ON media_jobs(server_id);
 
--- Dédoublonnage optionnel (si tu utilises dedupe_key)
-CREATE UNIQUE INDEX IF NOT EXISTS uq_media_jobs_dedupe
-ON media_jobs(dedupe_key)
-WHERE dedupe_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_media_jobs_server_action
+ON media_jobs(server_id, provider, action, status);
+
+
 
 
 -- ---------------------------------------------------------------------
@@ -321,5 +339,168 @@ INSERT OR IGNORE INTO schema_version (id, version) VALUES (1, 2);
 -- (optionnel mais utile) journaliser l'init si pas déjà présent
 INSERT OR IGNORE INTO schema_migrations (version, name)
 VALUES (2, 'init_v2');
+
+-- ---------------------------------------------------------------------
+-- historique des gifts 
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS subscription_gift_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+  target_type TEXT NOT NULL,            -- 'all' | 'server'
+  target_server_id INTEGER NULL,
+
+  days_added INTEGER NOT NULL,
+  reason TEXT NULL,
+
+  users_updated INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS subscription_gift_run_users (
+  run_id INTEGER NOT NULL,
+  vodum_user_id INTEGER NOT NULL,
+
+  PRIMARY KEY (run_id, vodum_user_id)
+);
+
+
+-- ------------------------------------------------------------
+-- MONITORING (sessions live)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS media_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+  server_id INTEGER NOT NULL,
+  provider TEXT NOT NULL CHECK (provider IN ('plex','jellyfin')),
+
+  session_key TEXT NOT NULL,                  -- id session natif (plex session key / jellyfin id)
+  media_user_id INTEGER,                      -- FK media_users si résolu
+  external_user_id TEXT,                      -- fallback si pas résolu
+
+  media_key TEXT,                             -- ratingKey (plex) / itemId (jellyfin) si dispo
+  media_type TEXT,                            -- movie/episode/track/unknown
+  title TEXT,
+  grandparent_title TEXT,                     -- série pour episode, album pour track
+  parent_title TEXT,                          -- saison pour episode
+
+  state TEXT,
+  progress_ms INTEGER,
+  duration_ms INTEGER,
+
+  is_transcode INTEGER NOT NULL DEFAULT 0 CHECK (is_transcode IN (0,1)),
+  bitrate INTEGER,
+  video_codec TEXT,
+  audio_codec TEXT,
+
+  client_name TEXT,
+  client_product TEXT,
+  device TEXT,
+  ip TEXT,
+
+  started_at TIMESTAMP,
+  last_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  raw_json TEXT,
+
+  UNIQUE(server_id, session_key),
+
+  FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE,
+  FOREIGN KEY(media_user_id) REFERENCES media_users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_media_sessions_last_seen
+ON media_sessions(server_id, last_seen_at);
+
+CREATE INDEX IF NOT EXISTS idx_media_sessions_user
+ON media_sessions(media_user_id, last_seen_at);
+
+
+-- ------------------------------------------------------------
+-- MONITORING (events)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS media_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+  server_id INTEGER NOT NULL,
+  provider TEXT NOT NULL CHECK (provider IN ('plex','jellyfin')),
+
+  event_type TEXT NOT NULL,                   -- start/stop/pause/resume/heartbeat/update
+  ts TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  session_key TEXT,
+  media_user_id INTEGER,
+  external_user_id TEXT,
+
+  media_key TEXT,
+  media_type TEXT,
+  title TEXT,
+
+  payload_json TEXT,
+
+  FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE,
+  FOREIGN KEY(media_user_id) REFERENCES media_users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_media_events_ts
+ON media_events(server_id, ts);
+
+CREATE INDEX IF NOT EXISTS idx_media_events_user_ts
+ON media_events(media_user_id, ts);
+
+CREATE INDEX IF NOT EXISTS idx_media_events_type_ts
+ON media_events(event_type, ts);
+
+
+-- ------------------------------------------------------------
+-- MONITORING (history / agrégations)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS media_session_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+  server_id INTEGER NOT NULL,
+  provider TEXT NOT NULL CHECK (provider IN ('plex','jellyfin')),
+
+  session_key TEXT,
+  media_key TEXT,
+  external_user_id TEXT,
+
+  media_user_id INTEGER,
+
+  media_type TEXT,               -- movie/episode/track/unknown
+  title TEXT,
+  grandparent_title TEXT,
+  parent_title TEXT,
+
+  started_at TIMESTAMP NOT NULL,
+  stopped_at TIMESTAMP NOT NULL,
+  duration_ms INTEGER NOT NULL DEFAULT 0,
+  watch_ms INTEGER NOT NULL DEFAULT 0,
+  peak_bitrate INTEGER,
+  was_transcode INTEGER NOT NULL DEFAULT 0 CHECK (was_transcode IN (0,1)),
+
+  client_name TEXT,
+  device TEXT,
+
+  raw_json TEXT,
+
+  FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE,
+  FOREIGN KEY(media_user_id) REFERENCES media_users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_msh_time
+ON media_session_history(started_at, stopped_at);
+
+CREATE INDEX IF NOT EXISTS idx_msh_user_time
+ON media_session_history(media_user_id, started_at);
+
+CREATE INDEX IF NOT EXISTS idx_msh_media_time
+ON media_session_history(media_key, started_at);
+
+
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_media_jobs_dedupe_active
+ON media_jobs(dedupe_key)
+WHERE dedupe_key IS NOT NULL AND status IN ('queued','running');
+
 
 

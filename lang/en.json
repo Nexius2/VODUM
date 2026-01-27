@@ -242,6 +242,24 @@
   "subscription_active": "Subscription active",
   "subscription_status": "Subscription status",
   "subscription_plan": "Subscription plan",
+  "subscription_gift_history_title": "Gift history",
+  "subscription_refresh": "Refresh",
+  "subscription_loading": "Loading",
+  "subscription_users_updated": "users updated",
+  "subscription_days_added": "days added",
+  "subscription_unknown_error": "Unknown error",
+  "subscription_request_failed": "Request failed",
+  "subscription_gift_history_empty": "No gifts recorded yet.",
+  "subscription_gift_history_user": "User",
+  "subscription_gift_history_scope_all": "All users",
+  "subscription_gift_history_scope_server": "Users from server",
+  "subscription_gift_history_days": "days",
+  "subscription_modal_target": "Target",
+  "subscription_modal_duration": "Duration",
+  "subscription_modal_users_updated": "Users updated",
+  "subscription_modal_server": "Server",
+  "subscription_modal_comment": "Comment",
+  "subscription_modal_users": "Users",
   "suspended": "Suspended",
   "tautulli_api_key": "Tautulli API key",
   "tautulli_url": "Tautulli URL",
@@ -460,5 +478,47 @@
   "merge.preview.sent_emails": "Sent emails",
   "merge.preview.media_jobs": "Media tasks",
   "merge_failed": "Merge failed",
-  "user_merged": "User merged"
+  "user_merged": "User merged",
+  
+  "task_description.monitor_collect_sessions": "Monitoring : collecte des sessions en cours (Plex/Jellyfin)",
+  "nav.monitoring": "Monitoring",
+
+  "monitoring.title": "Monitoring",
+  "monitoring.subtitle": "Global view Plex / Jellyfin",
+
+  "monitoring.cards.servers_online": "Servers online",
+  "monitoring.cards.servers_offline": "Servers offline",
+  "monitoring.cards.live_sessions": "Live sessions",
+  "monitoring.cards.transcodes": "Transcodes",
+
+  "monitoring.section.servers": "Servers",
+  "monitoring.section.sessions": "Now Playing",
+  "monitoring.section.events": "Latest events",
+
+  "monitoring.table.server": "Server",
+  "monitoring.table.provider": "Type",
+  "monitoring.table.status": "Status",
+  "monitoring.table.last_checked": "Last check",
+
+  "monitoring.table.user": "User",
+  "monitoring.table.state": "State",
+  "monitoring.table.title": "Title",
+  "monitoring.table.client": "Client",
+  "monitoring.table.last_seen": "Last seen",
+
+  "monitoring.empty.sessions": "No live sessions.",
+  "monitoring.empty.events": "No recent events."
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
 }

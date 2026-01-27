@@ -1,0 +1,34 @@
+<!-- Cards -->
+
+<!-- Cards (layout: 2x2 à gauche + 2 grandes bulles à droite) -->
+<div class="grid grid-cols-1 xl:grid-cols-4 gap-6 mb-6">
+
+  <!-- Ligne 1 (gauche) -->
+  {% include "monitoring/partials/cards/_servers.html" %}
+  {% include "monitoring/partials/cards/_live_sessions.html" %}
+
+  <!-- Grande bulle droite 1 (span 2 lignes) -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 xl:row-span-2">
+    {% include "monitoring/partials/sections/_top_users_30d_compact.html" %}
+  </div>
+
+  <!-- Grande bulle droite 2 (span 2 lignes) -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 xl:row-span-2">
+    {% include "monitoring/partials/sections/_top_content_30d_compact.html" %}
+  </div>
+
+  <!-- Ligne 2 (gauche) -->
+  {% include "monitoring/partials/cards/_active_users_7d.html" %}
+  {% include "monitoring/partials/cards/_watchtime_7d.html" %}
+
+</div>
+
+
+
+<div class="mb-6">
+  {% include "monitoring/partials/sections/_now_playing.html" %}
+</div>
+
+
+
+

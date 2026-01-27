@@ -1,0 +1,28 @@
+<div class="flex items-center gap-6 border-b border-slate-800 mb-6">
+  {% set current = tab or "overview" %}
+
+  <a href="{{ url_for('monitoring_page', tab='overview') }}"
+     class="py-3 text-sm {% if current=='overview' %}text-white border-b-2 border-indigo-500{% else %}text-slate-400 hover:text-white{% endif %}">
+    Overview
+  </a>
+
+  <a href="{{ url_for('monitoring_page', tab='activity') }}"
+     class="py-3 text-sm {% if current=='activity' %}text-white border-b-2 border-indigo-500{% else %}text-slate-400 hover:text-white{% endif %}">
+    Activity
+  </a>
+
+  <a href="{{ url_for('monitoring_page', tab='history') }}"
+     class="py-3 text-sm {% if current=='history' %}text-white border-b-2 border-indigo-500{% else %}text-slate-400 hover:text-white{% endif %}">
+    History
+  </a>
+
+  <a href="{{ url_for('monitoring_page', tab='libraries') }}"
+     class="py-3 text-sm {% if current=='libraries' %}text-white border-b-2 border-indigo-500{% else %}text-slate-400 hover:text-white{% endif %}">
+    Libraries
+  </a>
+
+  <a href="{{ url_for('monitoring_page', tab='users') }}"
+     class="py-3 text-sm {% if current=='users' %}text-white border-b-2 border-indigo-500{% else %}text-slate-400 hover:text-white{% endif %}">
+    Users
+  </a>
+</div>

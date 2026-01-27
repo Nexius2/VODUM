@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% set active_page = 'servers' %}
+
+{% block title %}{{ t("server") }} - {{ server.name }}{% endblock %}
+{% block header_title %}{{ server.name }}{% endblock %}
+{% block header_subtitle %}{{ t("server_details_subtitle") }}{% endblock %}
+
+{% block content %}
+
+<!-- FORMULAIRE D'ÉDITION DU SERVEUR -->
+<form method="post" class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 max-w-3xl">
+
+  <h2 class="text-sm font-semibold mb-2 flex items-center gap-2">
+    {{ t("server_information") }}
+
+    {% if server.type == 'plex' %}
+      <span class="px-2 py-0.5 rounded-full bg-amber-700/40 text-amber-300 text-[10px]">{{ t("plex") }}</span>
+    {% elif server.type == 'jellyfin' %}
+      <span class="px-2 py-0.5 rounded-full bg-blue-700/30 text-blue-300 text-[10px]">{{ t("jellyfin") }}</span>
+    {% else %}
+      <span class="px-2 py-0.5 rounded-full bg-slate-700/40 text-slate-300 text-[10px]">{{ server.type }}</span>
+    {% endif %}
+  </h2>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+
+    <label class="flex flex-col">
+      {{ t("name") }}
+      <input type="text" name="name" value="{{ server.name }}"
+             class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60" readonly>
+    </label>
+
+	<label class="flex flex-col">
+	  {{ t("server_type") }}
+	  <input type="text"
+			 class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 opacity-60"
+			 value="{% if server.type == 'plex' %}{{ t('plex') }}
+					{% elif server.type == 'jellyfin' %}{{ t('jellyfin') }}
+					{% elif server.type == 'other' %}{{ t('other') }}
+					{% endif %}"
+			 readonly>
+	</label>
+
+
+	<label class="flex flex-col">
+	  {{ t("status") }}
+	  <input type="text"
+			 class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 opacity-60"
+			 value="{{ t(server.status) }}"
+			 readonly>
+	</label>
+
+
+    <label class="flex flex-col">
+      {{ t("url") }}
+      <input type="text" name="url" value="{{ server.url or '' }}"
+             class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+    </label>
+
+    <label class="flex flex-col">
+      {{ t("server_token") }}
+      <input type="text" name="token" value="{{ server.token or '' }}"
+             class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 font-mono text-xs">
+    </label>
+
+    <label class="flex flex-col">
+      {{ t("local_url") }}
+      <input type="text" name="local_url" value="{{ server.local_url or '' }}"
+             class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+    </label>
+
+    <label class="flex flex-col">
+      {{ t("public_url") }}
+      <input type="text" name="public_url" value="{{ server.public_url or '' }}"
+             class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+    </label>
+
+
+<!--
+    <label class="flex flex-col">
+      {{ t("tautulli_url") }}
+      <input type="text" name="tautulli_url" value="{{ server.tautulli_url or '' }}"
+             class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+    </label>
+
+    <label class="flex flex-col">
+      {{ t("tautulli_api_key") }}
+      <input type="text" name="tautulli_api_key" value="{{ server.tautulli_api_key or '' }}"
+             class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 font-mono text-xs">
+    </label>
+-->
+  </div>
+
+  <!-- Barre d'actions -->
+  <div class="mt-4 flex justify-between items-center">
+
+    <!-- Bouton Enregistrer -->
+    <button class="px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-sm">
+      {{ t("save") }}
+    </button>
+
+    <!-- Bouton Supprimer (lié au formulaire delete_form) -->
+    <button form="delete_form"
+            class="px-4 py-2 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-sm">
+      {{ t("delete") }}
+    </button>
+
+  </div>
+
+</form>
+
+<!-- FORMULAIRE SUPPRESSION EN DEHORS (HTML VALIDE) -->
+<form id="delete_form"
+      method="post"
+      action="{{ url_for('server_delete', server_id=server.id) }}"
+      onsubmit="return confirm('❌ {{ t('confirm_delete_server') }}');">
+</form>
+
+<!-- SECTION BIBLIOTHÈQUES -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 mt-8">
+  <h2 class="text-sm font-semibold mb-4">{{ t("libraries") }}</h2>
+
+  {% if libraries %}
+    <table class="w-full text-xs">
+      <thead class="bg-slate-950/60 text-slate-400">
+        <tr>
+          <th class="px-3 py-2 text-left">{{ t("name") }}</th>
+          <th class="px-3 py-2 text-left">{{ t("type") }}</th>
+          <th class="px-3 py-2 text-left">{{ t("section_id") }}</th>
+          <th class="px-3 py-2 text-left">{{ t("users") }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for lib in libraries %}
+        <tr class="border-t border-slate-800">
+          <td class="px-3 py-2">{{ lib.name }}</td>
+          <td class="px-3 py-2 text-slate-400">{{ t(lib.type or 'unknown') }}</td>
+          <td class="px-3 py-2 font-mono text-[11px] text-slate-400">{{ lib.section_id }}</td>
+          <td class="px-3 py-2 text-slate-300">{{ lib.users_count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="text-xs text-slate-500">{{ t("no_libraries") }}</p>
+  {% endif %}
+</div>
+
+<!-- SECTION UTILISATEURS -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 mt-8">
+  <h2 class="text-sm font-semibold mb-4">{{ t("server_users") }}</h2>
+
+  {% if users %}
+    <ul class="space-y-1 text-xs">
+      {% for u in users %}
+      <li class="flex items-center justify-between bg-slate-950/40 rounded-xl px-3 py-2">
+        <div>
+          <div class="font-medium text-sm">{{ u.username }}</div>
+          <div class="text-slate-400">{{ u.email or '—' }}</div>
+        </div>
+        <a href="{{ url_for('user_detail', user_id=u.id) }}"
+           class="text-primary hover:text-primary-dark text-xs">
+          {{ t("view_user") }}
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="text-xs text-slate-500">{{ t("no_users_for_server") }}</p>
+  {% endif %}
+</div>
+
+{% endblock %}
