@@ -26,26 +26,33 @@
   {% set refresh_ms = 10000 %}
 {% endif %}
 
-<div id="monitoring-content"
-     hx-get="{{ url_for('monitoring_page', **args) }}"
-     hx-trigger="load, every {{ refresh_ms }}ms"
-     hx-swap="innerHTML">
-
-  {# Fallback rendu serveur (si JS/HTMX désactivé) #}
-  {% if current_tab == "overview" %}
-    {% include "monitoring/overview_body.html" %}
-  {% elif current_tab == "activity" %}
+{% if current_tab == 'activity' %}
+  {# ✅ PAS de HTMX sur Activity => pas de double rendu => pas de clignotement #}
+  <div id="monitoring-content">
     {% include "monitoring/tabs/activity.html" %}
-  {% elif current_tab == "history" %}
-    {% include "monitoring/tabs/history.html" %}
-  {% elif current_tab == "libraries" %}
-    {% include "monitoring/tabs/libraries.html" %}
-  {% elif current_tab == "users" %}
-    {% include "monitoring/tabs/users.html" %}
-  {% else %}
-    {% include "monitoring/overview_body.html" %}
-  {% endif %}
+  </div>
+{% else %}
+  {# ✅ HTMX conservé pour les autres onglets (auto-refresh OK) #}
+  <div id="monitoring-content"
+       hx-get="{{ url_for('monitoring_page', **args) }}"
+       hx-trigger="load, every {{ refresh_ms }}ms"
+       hx-swap="innerHTML">
 
-</div>
+    {# Fallback rendu serveur (si JS/HTMX désactivé) #}
+    {% if current_tab == "overview" %}
+      {% include "monitoring/overview_body.html" %}
+    {% elif current_tab == "history" %}
+      {% include "monitoring/tabs/history.html" %}
+    {% elif current_tab == "libraries" %}
+      {% include "monitoring/tabs/libraries.html" %}
+    {% elif current_tab == "users" %}
+      {% include "monitoring/tabs/users.html" %}
+    {% else %}
+      {% include "monitoring/overview_body.html" %}
+    {% endif %}
+
+  </div>
+{% endif %}
+
 
 {% endblock %}

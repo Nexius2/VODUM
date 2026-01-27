@@ -479,7 +479,9 @@ CREATE TABLE IF NOT EXISTS media_session_history (
   was_transcode INTEGER NOT NULL DEFAULT 0 CHECK (was_transcode IN (0,1)),
 
   client_name TEXT,
+  client_product TEXT,
   device TEXT,
+  ip TEXT,
 
   raw_json TEXT,
 
@@ -496,6 +498,8 @@ ON media_session_history(media_user_id, started_at);
 CREATE INDEX IF NOT EXISTS idx_msh_media_time
 ON media_session_history(media_key, started_at);
 
+CREATE INDEX IF NOT EXISTS idx_hist_user_stopped ON media_session_history(media_user_id, stopped_at);
+CREATE INDEX IF NOT EXISTS idx_hist_server_stopped ON media_session_history(server_id, stopped_at);
 
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_media_jobs_dedupe_active

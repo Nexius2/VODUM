@@ -249,7 +249,9 @@ def run_migrations():
 
           -- Client
           client_name TEXT,
+          client_product TEXT,
           device TEXT,
+          ip TEXT,
 
           -- Debug / futur
           raw_json TEXT,
@@ -265,6 +267,9 @@ def run_migrations():
         ensure_column(cursor, "media_session_history", "was_transcode", "INTEGER NOT NULL DEFAULT 0")
         ensure_column(cursor, "media_session_history", "device", "TEXT")
         ensure_column(cursor, "media_session_history", "raw_json", "TEXT")
+        ensure_column(cursor, "media_session_history", "ip", "TEXT")
+        ensure_column(cursor, "media_session_history", "client_product", "TEXT")
+
 
     # Index pour stats rapides (safe avec IF NOT EXISTS)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_msh_time ON media_session_history(started_at, stopped_at)")
@@ -292,6 +297,21 @@ def run_migrations():
         ensure_column(cursor, "media_jobs", "success", "INTEGER NOT NULL DEFAULT 0 CHECK (success IN (0,1))")
         ensure_column(cursor, "media_jobs", "attempts", "INTEGER NOT NULL DEFAULT 0")
         ensure_column(cursor, "media_jobs", "dedupe_key", "TEXT")
+
+        # ---- Indexes for monitoring / users (safe & idempotent) ----
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_hist_user_stopped
+            ON media_session_history (media_user_id, stopped_at)
+            """
+        )
+
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_hist_server_stopped
+            ON media_session_history (server_id, stopped_at)
+            """
+        )
 
         # Indexes queue
         cursor.execute("""

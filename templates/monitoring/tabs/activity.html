@@ -2,7 +2,7 @@
 <div class="flex items-center justify-between mb-4">
   <div class="text-sm text-slate-400">Range</div>
   <select id="rangePicker" class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm">
-    <option value="7d">7 days</option>
+    <option value="7d" selected>7 days</option>
     <option value="1m">1 month</option>
     <option value="6m">6 months</option>
     <option value="12m">12 months</option>
@@ -10,91 +10,327 @@
   </select>
 </div>
 
+<!-- Charts -->
 <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
     <div class="text-sm font-semibold mb-3">Activity (sessions/day)</div>
-    <canvas id="chartActivity" height="120"></canvas>
+    <div class="chart-container chart-container-md">
+      <canvas id="chartActivity"></canvas>
+    </div>
   </div>
 
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
     <div class="text-sm font-semibold mb-3">Media types</div>
-    <canvas id="chartMediaTypes" height="120"></canvas>
+    <div class="chart-container chart-container-sm">
+      <canvas id="chartMediaTypes"></canvas>
+    </div>
   </div>
 </div>
 
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-6">
   <div class="text-sm font-semibold mb-3">Weekday activity</div>
-  <canvas id="chartWeekday" height="80"></canvas>
+  <div class="chart-container chart-container-sm">
+    <canvas id="chartWeekday"></canvas>
+  </div>
 </div>
-
 
 <div class="mb-6">
   {% include "monitoring/partials/sections/_latest_events.html" %}
 </div>
 
+<style>
+  .chart-container { position: relative; width: 100%; }
+  .chart-container-md { height: 280px; min-height: 280px; }
+  .chart-container-sm { height: 220px; min-height: 220px; }
+</style>
+
 <script>
 (() => {
-  const picker = document.getElementById("rangePicker");
+  // Registry global (évite doubles inits)
+  window.__vodumCharts = window.__vodumCharts || new Map();
 
-  let chartActivity = null;
-  let chartMedia = null;
-  let chartWeekday = null;
-
-  function toLabels(data, key) { return data.map(x => x[key]); }
-
-  async function loadActivity(range) {
-    const res = await fetch(`/api/monitoring/activity?range=${encodeURIComponent(range)}`, {cache: "no-cache"});
-    return await res.json();
-  }
-  async function loadMediaTypes(range) {
-    const res = await fetch(`/api/monitoring/media_types?range=${encodeURIComponent(range)}`, {cache: "no-cache"});
-    return await res.json();
-  }
-  async function loadWeekday(range) {
-    const res = await fetch(`/api/monitoring/weekday?range=${encodeURIComponent(range)}`, {cache: "no-cache"});
-    return await res.json();
+  function keyFor(canvas) {
+    // clé stable par élément (id + page)
+    return `${location.pathname}::${canvas.id}`;
   }
 
-  async function render(range) {
-    // Activity
-    const a = await loadActivity(range);
-    const aLabels = toLabels(a, "day");
-    const aSessions = toLabels(a, "sessions");
+  function destroyChartByCanvas(canvas) {
+    if (!canvas) return;
+    const key = keyFor(canvas);
+    const ch = window.__vodumCharts.get(key);
+    if (ch) {
+      try { ch.destroy(); } catch (_) {}
+      window.__vodumCharts.delete(key);
+    }
+  }
 
-    if (chartActivity) chartActivity.destroy();
-    chartActivity = new Chart(document.getElementById("chartActivity"), {
+  async function fetchJSON(url) {
+    const res = await fetch(url, { cache: "no-cache" });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status} on ${url}\n${txt}`);
+    }
+    return res.json();
+  }
+
+  function waitForChart(maxMs = 5000) {
+    const start = Date.now();
+    return new Promise((resolve, reject) => {
+      const tick = () => {
+        if (window.Chart) return resolve();
+        if (Date.now() - start > maxMs) return reject(new Error("Chart.js not loaded"));
+        setTimeout(tick, 50);
+      };
+      tick();
+    });
+  }
+
+  function baseOpts() {
+    return {
+      responsive: false,          // ✅ stop ResizeObserver (source principale du clignotement)
+      maintainAspectRatio: false,
+      animation: false,
+      normalized: true
+    };
+  }
+
+  function toLabels(data, k) { return (data || []).map(x => x?.[k]); }
+
+  function update(chart, labels, values) {
+    chart.data.labels = labels;
+    chart.data.datasets[0].data = values;
+    chart.update("none");
+  }
+
+  function mediaColor(label) {
+    const k = String(label || "unknown").toLowerCase();
+
+    // mapping "stable" (même type => même couleur)
+    if (k.includes("series") || k.includes("episode") || k.includes("show")) return "#A855F7"; // violet
+    if (k.includes("movie")  || k.includes("film")    || k.includes("video")) return "#3B82F6"; // bleu
+    if (k.includes("music")  || k.includes("track")   || k.includes("audio")) return "#10B981"; // vert
+    if (k.includes("photo")  || k.includes("image")) return "#F59E0B"; // orange
+    if (k.includes("unknown")) return "#94A3B8"; // slate
+    return "#EF4444"; // fallback rouge
+  }
+
+  function updateMediaTypes(chart, labels, values) {
+    chart.data.labels = labels;
+
+    const colors = labels.map(mediaColor);
+    chart.data.datasets[0].data = values;
+    chart.data.datasets[0].backgroundColor = colors;
+
+    // séparation nette
+    chart.data.datasets[0].borderColor = "#0B1220";
+    chart.data.datasets[0].borderWidth = 2;
+
+    chart.update("none");
+  }
+
+  function getOrCreate(canvas, factory) {
+    const key = keyFor(canvas);
+    const existing = window.__vodumCharts.get(key);
+    if (existing) return existing;
+    const created = factory();
+    window.__vodumCharts.set(key, created);
+    return created;
+  }
+
+  // --------- RESIZE MANUEL (le seul resize conservé) ----------
+
+  function manualResize(chart, canvas) {
+    if (!chart || !canvas) return;
+    const parent = canvas.parentElement;
+    if (!parent) return;
+
+    const w = parent.clientWidth;
+    const h = parent.clientHeight;
+    if (!w || !h) return;
+
+    // Taille CSS
+    canvas.style.width = w + "px";
+    canvas.style.height = h + "px";
+
+    // Taille réelle canvas (pixels)
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+
+    try {
+      chart.resize();
+      chart.update("none");
+    } catch (_) {}
+  }
+
+  function manualResizeAll(list) {
+    requestAnimationFrame(() => {
+      list.forEach(({chart, canvas}) => manualResize(chart, canvas));
+      setTimeout(() => list.forEach(({chart, canvas}) => manualResize(chart, canvas)), 250);
+    });
+  }
+
+  // Debounce par page (évite multiples renders concurrents)
+  let renderToken = 0;
+
+  // Pour le resize window debounced
+  let __rzT = null;
+
+  // ✅ Plugin Chart.js : affiche les % sur un doughnut (déclaré UNE seule fois)
+  const doughnutPercentLabels = {
+    id: "doughnutPercentLabels",
+    afterDatasetsDraw(chart, args, pluginOptions) {
+      const { ctx } = chart;
+      const datasetIndex = (pluginOptions && pluginOptions.datasetIndex) ?? 0;
+      const minPercent = (pluginOptions && pluginOptions.minPercent) ?? 5;
+
+      const dataset = chart.data.datasets[datasetIndex];
+      if (!dataset) return;
+
+      const data = dataset.data || [];
+      const total = data.reduce((a, b) => a + (Number(b) || 0), 0);
+      if (!total) return;
+
+      const meta = chart.getDatasetMeta(datasetIndex);
+      if (!meta || !meta.data) return;
+
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#E5E7EB";
+
+      meta.data.forEach((arc, i) => {
+        const value = Number(data[i]) || 0;
+        if (!value) return;
+
+        const percent = (value / total) * 100;
+        if (percent < minPercent) return;
+
+        const pos = arc.tooltipPosition();
+        const fontSize = Math.max(10, Math.min(14, chart.width / 40));
+        ctx.font = `600 ${fontSize}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+        ctx.fillText(`${percent.toFixed(0)}%`, pos.x, pos.y);
+      });
+
+      ctx.restore();
+    }
+  };
+
+  async function initOrUpdate(root = document) {
+    const picker     = root.querySelector?.("#rangePicker")      || document.getElementById("rangePicker");
+    const elActivity = root.querySelector?.("#chartActivity")    || document.getElementById("chartActivity");
+    const elMedia    = root.querySelector?.("#chartMediaTypes")  || document.getElementById("chartMediaTypes");
+    const elWeekday  = root.querySelector?.("#chartWeekday")     || document.getElementById("chartWeekday");
+
+    if (!picker || !elActivity || !elMedia || !elWeekday) return;
+
+    await waitForChart();
+
+    const chartActivity = getOrCreate(elActivity, () => new Chart(elActivity.getContext("2d"), {
       type: "line",
-      data: { labels: aLabels, datasets: [{ label: "Sessions", data: aSessions }] },
-      options: { responsive: true }
-    });
+      data: { labels: [], datasets: [{ label: "Sessions", data: [], tension: 0.25 }] },
+      options: { ...baseOpts(), plugins: { legend: { display: true } }, scales: { y: { beginAtZero: true } } }
+    }));
 
-    // Media types
-    const m = await loadMediaTypes(range);
-    const mLabels = toLabels(m, "media_type");
-    const mSessions = toLabels(m, "sessions");
-
-    if (chartMedia) chartMedia.destroy();
-    chartMedia = new Chart(document.getElementById("chartMediaTypes"), {
+    // ✅ ICI : plugins au bon niveau (même niveau que type/data/options), virgules OK
+    const chartMedia = getOrCreate(elMedia, () => new Chart(elMedia.getContext("2d"), {
       type: "doughnut",
-      data: { labels: mLabels, datasets: [{ label: "Sessions", data: mSessions }] },
-      options: { responsive: true }
-    });
+      data: {
+        labels: [],
+        datasets: [{
+          label: "Sessions",
+          data: [],
+          backgroundColor: [],
+          borderColor: "#0B1220",
+          borderWidth: 2
+        }]
+      },
+      options: {
+        ...baseOpts(),
+        cutout: "70%",
+        plugins: {
+          legend: { position: "top" },
+          tooltip: { enabled: true },
+          doughnutPercentLabels: { datasetIndex: 0, minPercent: 5 }
+        }
+      },
+      plugins: [doughnutPercentLabels]
+    }));
 
-    // Weekday
-    const w = await loadWeekday(range);
-    const names = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-    const wLabels = w.map(x => names[x.weekday] ?? String(x.weekday));
-    const wSessions = w.map(x => x.sessions);
-
-    if (chartWeekday) chartWeekday.destroy();
-    chartWeekday = new Chart(document.getElementById("chartWeekday"), {
+    const chartWeekday = getOrCreate(elWeekday, () => new Chart(elWeekday.getContext("2d"), {
       type: "bar",
-      data: { labels: wLabels, datasets: [{ label: "Sessions", data: wSessions }] },
-      options: { responsive: true }
-    });
+      data: { labels: [], datasets: [{ label: "Sessions", data: [] }] },
+      options: { ...baseOpts(), plugins: { legend: { display: true } }, scales: { y: { beginAtZero: true } } }
+    }));
+
+    manualResizeAll([
+      { chart: chartActivity, canvas: elActivity },
+      { chart: chartMedia,    canvas: elMedia },
+      { chart: chartWeekday,  canvas: elWeekday }
+    ]);
+
+    const token = ++renderToken;
+    const range = picker.value || "7d";
+
+    const [a, m, w] = await Promise.all([
+      fetchJSON(`/api/monitoring/activity?range=${encodeURIComponent(range)}`),
+      fetchJSON(`/api/monitoring/media_types?range=${encodeURIComponent(range)}`),
+      fetchJSON(`/api/monitoring/weekday?range=${encodeURIComponent(range)}`)
+    ]);
+
+    if (token !== renderToken) return;
+
+    update(chartActivity, toLabels(a, "day"), toLabels(a, "sessions"));
+    updateMediaTypes(chartMedia, toLabels(m, "media_type"), toLabels(m, "sessions"));
+
+    const names = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    update(chartWeekday, (w || []).map(x => names[x.weekday] ?? String(x.weekday)), (w || []).map(x => x.sessions));
+
+    manualResizeAll([
+      { chart: chartActivity, canvas: elActivity },
+      { chart: chartMedia,    canvas: elMedia },
+      { chart: chartWeekday,  canvas: elWeekday }
+    ]);
+
+    if (!picker.__vodumBound) {
+      picker.__vodumBound = true;
+      picker.addEventListener("change", () => initOrUpdate(document).catch(console.error), { passive: true });
+    }
+
+    if (!window.__vodumMonitoringResizeBound) {
+      window.__vodumMonitoringResizeBound = true;
+      window.addEventListener("resize", () => {
+        clearTimeout(__rzT);
+        __rzT = setTimeout(() => {
+          manualResizeAll([
+            { chart: window.__vodumCharts.get(keyFor(elActivity)), canvas: elActivity },
+            { chart: window.__vodumCharts.get(keyFor(elMedia)),    canvas: elMedia },
+            { chart: window.__vodumCharts.get(keyFor(elWeekday)),  canvas: elWeekday }
+          ]);
+        }, 150);
+      });
+    }
   }
 
-  picker.addEventListener("change", () => render(picker.value));
-  render(picker.value);
+  // Expose global
+  window.vodumInitMonitoringActivity = initOrUpdate;
+
+  // Init normal
+  initOrUpdate(document).catch(console.error);
+
+  // ✅ HTMX: détruit AVANT swap (sinon Chart garde un canvas mort)
+  document.addEventListener("htmx:beforeSwap", (evt) => {
+    const target = evt.detail?.target;
+    if (!target) return;
+    target.querySelectorAll?.("canvas#chartActivity, canvas#chartMediaTypes, canvas#chartWeekday")
+      .forEach(destroyChartByCanvas);
+  });
+
+  // ✅ HTMX: init/update APRÈS injection
+  document.addEventListener("htmx:afterSwap", (evt) => {
+    const target = evt.detail?.target || document;
+    initOrUpdate(target).catch(console.error);
+  });
 })();
 </script>
+
