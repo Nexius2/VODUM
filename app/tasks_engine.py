@@ -349,6 +349,13 @@ def run_task(task_id: int):
             except Exception as e:
                 logger.error(f"Sync re-evaluation failed: {e}", exc_info=True)
                 task_logs(task_id, "warning", f"Sync re-evaluation failed: {e}")
+            try:
+                auto_enable_monitoring_tasks()
+            except Exception as e:
+                logger.error(f"Enable monitoring failed: {e}", exc_info=True)
+                task_logs(task_id, "warning", f"Sync monitoring failed: {e}")
+            
+          
 
         # -------------------------------------------------
         # Calcul du prochain run (sécurisé)
@@ -588,6 +595,32 @@ def _run_task_sequence_internal(task_names):
     logger.info(f"Sequence ended : {task_names}")
     return True
 
+def auto_enable_monitoring_tasks():
+    """
+    Active/désactive les tâches de monitoring automatiquement :
+    - ON si au moins 1 serveur (plex ou jellyfin) est UP
+    - OFF sinon
+    """
+    up_count = db.query_one(
+        """
+        SELECT COUNT(*) AS cnt
+        FROM servers
+        WHERE LOWER(status) = 'up'
+        """
+    )["cnt"]
+
+    should_enable = 1 if up_count > 0 else 0
+
+    db.execute(
+        """
+        UPDATE tasks
+        SET enabled = ?,
+            status  = CASE WHEN ? = 1 THEN 'idle' ELSE 'disabled' END,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE name IN ('monitor_collect_sessions', 'monitor_enqueue_refresh', 'media_jobs_worker')
+        """,
+        (should_enable, should_enable),
+    )
 
 
 def auto_enable_sync_tasks():
@@ -859,6 +892,7 @@ def start_scheduler():
 
 
         auto_enable_sync_tasks()
+        auto_enable_monitoring_tasks
 
 
 
