@@ -4,17 +4,19 @@ import re
 import sqlite3
 import time
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 # -------------------------------------------------------------------
 # CONFIG
 # -------------------------------------------------------------------
 
-LOG_DIR = "/logs"
+LOG_DIR = os.environ.get("VODUM_LOG_DIR", "/appdata/logs")
+Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
 os.makedirs(LOG_DIR, exist_ok=True)
 
 LOG_FILE = os.path.join(LOG_DIR, "app.log")
 
-DB_PATH = os.environ.get("VODUM_DB", "/appdata/database.db")
+DB_PATH = os.environ.get("DATABASE_PATH") or "/appdata/database.db"
 
 # Cache debug_mode
 DEBUG_CACHE_TTL = 10  # secondes

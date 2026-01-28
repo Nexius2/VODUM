@@ -113,6 +113,17 @@
 </div>
 
 <script>
+const I18N = {
+  run_now: {{ t("run_now")|tojson }},
+  running: {{ t("running")|tojson }},
+  disabled: {{ t("disabled")|tojson }},
+  idle: {{ t("idle")|tojson }},
+  done: {{ t("done")|tojson }},
+  error: {{ t("error")|tojson }},
+};
+</script>
+
+<script>
 let TASKS_POLL_INTERVAL = 3000; // 3 secondes (comme le menu)
 
 async function refreshTasksTable() {
@@ -152,34 +163,50 @@ async function refreshTasksTable() {
 }
 
 function renderStatus(task) {
-    if (!task.enabled) {
-        return `<span class="px-2 py-1 rounded bg-gray-700 text-gray-300 text-xs">disabled</span>`;
-    }
-    if (task.status === "running") {
-        return `<span class="px-2 py-1 rounded bg-blue-700 text-blue-100 text-xs">running</span>`;
-    }
-    if (task.status === "done") {
-        return `<span class="px-2 py-1 rounded bg-green-700 text-green-100 text-xs">done</span>`;
-    }
-    if (task.status === "error") {
-        return `<span class="px-2 py-1 rounded bg-red-700 text-red-100 text-xs">error</span>`;
-    }
-    return `<span class="px-2 py-1 rounded bg-gray-600 text-gray-200 text-xs">idle</span>`;
+  if (!task.enabled) {
+    return `<span class="px-2 py-1 rounded bg-gray-700 text-gray-300 text-xs">${I18N.disabled}</span>`;
+  }
+
+  switch (task.status) {
+    case "running":
+      return `<span class="px-2 py-1 rounded bg-blue-700 text-blue-100 text-xs">${I18N.running}</span>`;
+    case "done":
+      return `<span class="px-2 py-1 rounded bg-green-700 text-green-100 text-xs">${I18N.done}</span>`;
+    case "error":
+      return `<span class="px-2 py-1 rounded bg-red-700 text-red-100 text-xs">${I18N.error}</span>`;
+    default:
+      return `<span class="px-2 py-1 rounded bg-gray-600 text-gray-200 text-xs">${I18N.idle}</span>`;
+  }
 }
 
 function renderAction(task) {
-    if (!task.enabled || task.status === "running" || task.status === "queued") {
-        return `<button disabled class="px-3 py-1 rounded bg-slate-600 text-slate-300 opacity-50">running</button>`;
-    }
-
+  if (!task.enabled) {
     return `
-        <form action="/tasks/run/${task.id}" method="post">
-            <button class="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white">
-                run
-            </button>
-        </form>
+      <button disabled
+              class="px-3 py-1 rounded bg-gray-700 text-gray-400 opacity-50 cursor-not-allowed">
+        ${I18N.disabled}
+      </button>
     `;
+  }
+
+  if (task.status === "running" || task.status === "queued") {
+    return `
+      <button disabled
+              class="px-3 py-1 rounded bg-slate-600 text-slate-300 opacity-50 cursor-wait">
+        ${I18N.running}
+      </button>
+    `;
+  }
+
+  return `
+    <form action="/tasks/run/${task.id}" method="post">
+      <button class="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white">
+        ${I18N.run_now}
+      </button>
+    </form>
+  `;
 }
+
 
 // démarrage auto
 setInterval(refreshTasksTable, TASKS_POLL_INTERVAL);

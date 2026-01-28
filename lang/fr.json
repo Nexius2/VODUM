@@ -188,7 +188,7 @@
   "restore_backup_desc": "Importer un fichier .db sauvegardé précédemment. Attention : cela remplacera la base actuelle.",
   "restore_btn": "Restaurer",
   "role": "Rôle",
-  "run_now": "Exécuter maintenant",
+  "run_now": "Exécuter",
   "save": "Sauvegarder",
   "save_settings": "Sauvegarder les paramètres",
   "save_templates": "Sauvegarder les modèles",
