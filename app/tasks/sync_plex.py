@@ -7,8 +7,8 @@ import requests
 import xml.etree.ElementTree as ET
 import json
 
-from ..logging_utils import get_logger
-from ..tasks_engine import task_logs
+from logging_utils import get_logger
+from tasks_engine import task_logs
 from plexapi.server import PlexServer  
 
 class TimeoutSession(requests.Session):
