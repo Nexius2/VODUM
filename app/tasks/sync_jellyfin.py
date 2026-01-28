@@ -5,7 +5,7 @@ import requests
 from datetime import datetime, timedelta
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
-from ..logging_utils import get_logger
+from logging_utils import get_logger
 
 
 logger = get_logger("sync_jellyfin")
