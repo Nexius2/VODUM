@@ -188,7 +188,7 @@
   "restore_backup_desc": "Upload a previously saved .db file. Warning: current database will be overwritten.",
   "restore_btn": "Restore",
   "role": "Role",
-  "run_now": "Run now",
+  "run_now": "Run",
   "save": "Save",
   "save_settings": "Save settings",
   "save_templates": "Save templates",

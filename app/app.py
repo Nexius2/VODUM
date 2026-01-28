@@ -99,7 +99,7 @@ def create_app():
     app.config.from_object(Config)
 
     # Répertoire de backup (mounté par Docker, ex: /backups)
-    app.config.setdefault("BACKUP_DIR", os.environ.get("VODUM_BACKUP_DIR", "/backups"))
+    app.config.setdefault("BACKUP_DIR", os.environ.get("VODUM_BACKUP_DIR", "/appdata/backups"))
     backup_cfg = BackupConfig(
     backup_dir=app.config["BACKUP_DIR"],
     database_path=app.config["DATABASE"],
@@ -4613,7 +4613,7 @@ def create_app():
                     else:
                         temp_dir = Path("/tmp")
                         temp_dir.mkdir(exist_ok=True)
-                        temp_path = temp_dir / f"restore-{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.db"
+                        temp_path = temp_dir / f"restore-{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.sqlite"
 
                         file.save(temp_path)
 

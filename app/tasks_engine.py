@@ -407,10 +407,10 @@ def run_task(task_id: int):
             pass
 
 
-    except Exception as e:
-        msg = f"Error while running {name}: {e}"
-        logger.error(msg, exc_info=True)
-        task_logs(task_id, "error", msg)
+#    except Exception as e:
+#        msg = f"Error while running {name}: {e}"
+#        logger.error(msg, exc_info=True)
+#        task_logs(task_id, "error", msg)
 
         try:
             db.execute(

@@ -3,8 +3,9 @@ from typing import Any, Dict, List, Optional, Tuple
 import json
 import requests
 from datetime import datetime, timedelta
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
-from logging_utils import get_logger
+from ..logging_utils import get_logger
 
 
 logger = get_logger("sync_jellyfin")
@@ -16,7 +17,7 @@ logger = get_logger("sync_jellyfin")
 
 def _jellyfin_pick_user_id(session: requests.Session, base_url: str, token: str, timeout: int = 20) -> str | None:
     users_url = _build_api_url(base_url, "/Users", token)
-    users = _get_json(session, users_url, timeout=timeout) or []
+    users = _get_json(session, users_url, timeout=timeout, token=token) or []
     if not isinstance(users, list) or not users:
         return None
 
@@ -30,6 +31,31 @@ def _jellyfin_pick_user_id(session: requests.Session, base_url: str, token: str,
     if isinstance(u0, dict) and u0.get("Id"):
         return str(u0["Id"])
     return None
+
+def _jellyfin_list_user_ids(session: requests.Session, base_url: str, token: str, timeout: int = 20) -> List[str]:
+    """
+    Retourne une liste de UserId Jellyfin (admin d’abord si possible, puis les autres).
+    Utile pour fallback item_count quand le no-user renvoie 0/None.
+    """
+    users_url = _build_api_url(base_url, "/Users", token)
+    users = _get_json(session, users_url, timeout=timeout) or []
+    if not isinstance(users, list):
+        return []
+
+    admins = []
+    others = []
+    for u in users:
+        if not isinstance(u, dict):
+            continue
+        uid = u.get("Id")
+        if not uid:
+            continue
+        uid = str(uid)
+        is_admin = bool((u.get("Policy") or {}).get("IsAdministrator"))
+        (admins if is_admin else others).append(uid)
+
+    return admins + others
+
 
 def _jellyfin_library_total_items(
     session: requests.Session,
@@ -64,9 +90,15 @@ def _jellyfin_library_total_items_no_user(
     library_item_id: str,
     timeout: int = 20,
 ) -> int | None:
+    headers = {"X-Emby-Token": token, "Accept": "application/json"}
+
     # Tentative 1: /Items/Counts?ParentId=...
-    url = f"{base_url.rstrip('/')}/Items/Counts?ParentId={library_item_id}&Recursive=true"
-    r = session.get(url, headers={"X-Emby-Token": token, "Accept": "application/json"}, timeout=timeout)
+    url = _build_api_url(
+        base_url,
+        f"/Items/Counts?ParentId={library_item_id}&Recursive=true",
+        token,
+    )
+    r = session.get(url, headers=headers, timeout=timeout)
     if r.status_code == 200:
         try:
             data = r.json()
@@ -74,16 +106,30 @@ def _jellyfin_library_total_items_no_user(
             for key in ("ItemCount", "Items", "TotalCount", "Count"):
                 if key in data and data[key] is not None:
                     return int(data[key])
+
+            # fallback Jellyfin courant: MovieCount/SeriesCount/EpisodeCount...
+            summed = 0
+            any_found = False
+            for k, v in data.items():
+                if k.endswith("Count"):
+                    try:
+                        summed += int(v)
+                        any_found = True
+                    except Exception:
+                        pass
+            if any_found:
+                return summed
+
         except Exception:
             pass
 
-    # Tentative 2 (fallback): /Items?ParentId=... avec EnableTotalRecordCount
-    # (sur certains serveurs, ça marche sans user)
-    url = (
-        f"{base_url.rstrip('/')}/Items"
-        f"?ParentId={library_item_id}&Recursive=true&StartIndex=0&Limit=1&EnableTotalRecordCount=true"
+    # Tentative 2 (fallback): /Items?...EnableTotalRecordCount=true
+    url = _build_api_url(
+        base_url,
+        f"/Items?ParentId={library_item_id}&Recursive=true&StartIndex=0&Limit=1&EnableTotalRecordCount=true",
+        token,
     )
-    r = session.get(url, headers={"X-Emby-Token": token, "Accept": "application/json"}, timeout=timeout)
+    r = session.get(url, headers=headers, timeout=timeout)
     if r.status_code != 200:
         return None
 
@@ -95,6 +141,8 @@ def _jellyfin_library_total_items_no_user(
         return int(trc)
     except Exception:
         return None
+
+
 
 
 def ensure_expiration_date_on_first_access(db, vodum_user_id: int) -> bool:
@@ -224,15 +272,31 @@ def _store_full_user_json_and_fields(
 # ----------------------------
 
 def _build_api_url(base_url: str, path: str, token: str) -> str:
+    """
+    Construit une URL Jellyfin en ajoutant api_key=<token> proprement,
+    même si `path` contient déjà une querystring (?...).
+    """
     base_url = (base_url or "").rstrip("/")
     path = "/" + (path or "").lstrip("/")
-    return f"{base_url}{path}?api_key={token}"
+
+    raw = f"{base_url}{path}"
+    parts = urlsplit(raw)
+
+    q = dict(parse_qsl(parts.query, keep_blank_values=True))
+    q["api_key"] = token
+
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(q), parts.fragment))
 
 
-def _get_json(session: requests.Session, url: str, timeout: int = 20) -> Any:
-    resp = session.get(url, timeout=timeout)
+def _get_json(session: requests.Session, url: str, timeout: int = 20, token: str | None = None) -> Any:
+    headers = {"Accept": "application/json"}
+    if token:
+        headers["X-Emby-Token"] = token
+
+    resp = session.get(url, headers=headers, timeout=timeout)
     resp.raise_for_status()
     return resp.json()
+
 
 
 # ----------------------------
@@ -278,7 +342,7 @@ def _ensure_vodum_user_for_username(
             """,
             (provider_type, int(server_id), str(external_user_id)),
         )
-        if row and row.get("vodum_user_id"):
+        if row and row["vodum_user_id"]:
             return int(row["vodum_user_id"])
 
         # Crée un vodum_user placeholder
@@ -481,8 +545,9 @@ def _sync_libraries_for_server(
     api_url = _build_api_url(url, "/Library/VirtualFolders", token)
     logger.info(f"Jellyfin libraries: GET {api_url}")
 
-    data = _get_json(session, api_url, timeout=30)
+    data = _get_json(session, api_url, timeout=30, token=token)
     mapping: Dict[str, int] = {}
+    user_ids = _jellyfin_list_user_ids(session, url, token, timeout=20)
 
     if not isinstance(data, list):
         logger.warning(
@@ -511,7 +576,7 @@ def _sync_libraries_for_server(
         lib_db_id = _upsert_library(db, server_id, item_id, name, lib_type)
         mapping[item_id] = lib_db_id
 
-        # 👉 récupération du count SANS user
+        # 👉 récupération du count SANS user en priorité
         try:
             count = _jellyfin_library_total_items_no_user(
                 session,
@@ -525,9 +590,35 @@ def _sync_libraries_for_server(
                 f"Jellyfin libraries: erreur item_count no-user "
                 f"(ParentId={item_id}, server_id={server_id}): {e}"
             )
-            skipped_counts += 1
-            continue
+            count = None
 
+        # Si no-user ne marche pas (None) OU renvoie 0 (souvent "pas de scope"), fallback user-scoped
+        if count is None or count == 0:
+            for uid in user_ids:
+                try:
+                    c2 = _jellyfin_library_total_items(
+                        session,
+                        url,
+                        token,
+                        item_id,
+                        user_id=uid,
+                        timeout=20,
+                    )
+                except Exception:
+                    continue
+
+                # Si on obtient un count exploitable, on le garde
+                if c2 is not None:
+                    # si c2 > 0, c’est clairement bon
+                    if c2 > 0:
+                        count = c2
+                        break
+                    # si c2 == 0, on le garde quand même (lib réellement vide possible),
+                    # mais on continue d’essayer un autre user au cas où.
+                    if count in (None, 0):
+                        count = c2
+
+        # Si toujours rien → skip
         if count is None:
             skipped_counts += 1
             continue
@@ -537,6 +628,7 @@ def _sync_libraries_for_server(
             (int(count), server_id, item_id),
         )
         updated_counts += 1
+
 
     logger.info(
         f"Jellyfin libraries: {len(mapping)} importées/mises à jour "
@@ -564,7 +656,7 @@ def _sync_users_and_policies_for_server(
     users_url = _build_api_url(url, "/Users", token)
     logger.info(f"Jellyfin users: GET {users_url}")
 
-    users = _get_json(session, users_url, timeout=30) or []
+    users = _get_json(session, users_url, timeout=30, token=token) or []
     processed = 0
     policy_ok = 0
 
@@ -590,7 +682,7 @@ def _sync_users_and_policies_for_server(
         # Policy (plus fiable via /Users/{id})
         detail_url = _build_api_url(url, f"/Users/{jellyfin_id}", token)
         try:
-            detail = _get_json(session, detail_url, timeout=30) or {}
+            detail = _get_json(session, detail_url, timeout=30, token=token) or {}
             policy_ok += 1
         except Exception as e:
             logger.warning(
@@ -675,9 +767,11 @@ def _sync_users_and_policies_for_server(
 def run(task_id: int, db):
     """
     Synchronisation complète Jellyfin (lecture seule côté Jellyfin)
+    - Libraries (libraries + item_count)
     - Users (media_users)
-    - Libraries (libraries)
     - Policies → media_user_libraries
+
+    Important: la sync users/policies ne doit pas empêcher le commit des libraries/item_count.
     """
     logger.info("=== SYNC JELLYFIN : START ===")
 
@@ -704,28 +798,54 @@ def run(task_id: int, db):
             token = (srv.get("token") or "").strip()
 
             if not url or not token:
-                logger.warning(f"[SYNC JELLYFIN] serveur {name} (id={server_id}) URL/TOKEN manquant")
+                logger.warning(
+                    f"[SYNC JELLYFIN] serveur {name} (id={server_id}) URL/TOKEN manquant"
+                )
                 continue
 
+            # ---- 1) LIBRARIES (doit rester même si users/policies plante) ----
             try:
                 lib_map = _sync_libraries_for_server(session, db, server_id, url, token)
                 total_libraries += len(lib_map)
 
+                if hasattr(db, "commit"):
+                    db.commit()
+
+                # ✅ dès que les libs sont OK, on considère que ce serveur a réussi quelque chose
+                any_success = True
+
+                logger.info(
+                    f"[SYNC JELLYFIN] Libraries OK server={name} (libs={len(lib_map)})"
+                )
+
+            except Exception as e:
+                logger.error(
+                    f"[SYNC JELLYFIN] Libraries FAILED pour {name} : {e}",
+                    exc_info=True,
+                )
+                # Si même les libs plantent, on passe au serveur suivant
+                continue
+
+            # ---- 2) USERS + POLICIES (peut échouer sans annuler les libs) ----
+            try:
                 users_count, policy_ok = _sync_users_and_policies_for_server(
                     session, db, server_id, url, token, lib_map
                 )
                 total_users += users_count
                 total_policy_ok += policy_ok
 
-                any_success = True
-                logger.info(f"[SYNC JELLYFIN] OK server={name} (users={users_count}, libs={len(lib_map)})")
+                logger.info(
+                    f"[SYNC JELLYFIN] Users/Policies OK server={name} "
+                    f"(users={users_count}, policies_ok={policy_ok})"
+                )
 
             except Exception as e:
+                # ⚠️ Important : on ne raise pas ici
                 logger.error(
-                    f"[SYNC JELLYFIN] Connexion ou synchronisation impossible pour {name} : {e}",
+                    f"[SYNC JELLYFIN] Users/Policies FAILED pour {name} "
+                    f"(libs OK, counts conservés) : {e}",
                     exc_info=True,
                 )
-                continue
 
         if not any_success:
             raise RuntimeError("Aucun serveur Jellyfin n'a pu être synchronisé")
@@ -747,3 +867,4 @@ def run(task_id: int, db):
             f"policies_ok={total_policy_ok}, libraries_seen={total_libraries}"
         )
         logger.info("=== SYNC JELLYFIN : END ===")
+
