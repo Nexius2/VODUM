@@ -29,7 +29,7 @@
               <td class="py-3 pr-4">{{ r.server_name }}</td>
               <td class="py-3 pr-4">{{ r.media_type or "-" }}</td>
               <td class="py-3 pr-4">{{ r.item_count or "-" }}</td>
-              <td class="py-3 pr-4">{{ r.last_stream_at or "-" }}</td>
+              <td class="py-3 pr-4">{{ r.last_stream_at|tz or "-" }}</td>
               <td class="py-3 pr-4">{{ r.total_plays or 0 }}</td>
               <td class="py-3 pr-4">{{ r.played_duration or "0h 0m" }}</td>
             </tr>

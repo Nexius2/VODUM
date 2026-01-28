@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import json
 import requests
 from typing import Any, Dict, List, Optional
@@ -12,9 +13,11 @@ class JellyfinProvider(BaseProvider):
     def _candidate_bases(self) -> List[str]:
         # url > local_url > public_url
         bases: List[str] = []
-        for u in (getattr(self.server, "url", None),
-                  getattr(self.server, "local_url", None),
-                  getattr(self.server, "public_url", None)):
+        for u in (
+            getattr(self.server, "url", None),
+            getattr(self.server, "local_url", None),
+            getattr(self.server, "public_url", None),
+        ):
             if u and str(u).strip():
                 b = str(u).strip().rstrip("/")
                 if b not in bases:
@@ -50,20 +53,71 @@ class JellyfinProvider(BaseProvider):
                 errors.append(f"{url} -> {code or type(e).__name__}")
                 continue
 
-        raise RuntimeError(f"Jellyfin unreachable via any URL. Attempts: {', '.join(errors)}") from last_exc
+        raise RuntimeError(
+            f"Jellyfin unreachable via any URL. Attempts: {', '.join(errors)}"
+        ) from last_exc
+
+    @staticmethod
+    def _ticks_to_ms(ticks: Any) -> Optional[int]:
+        # Jellyfin ticks = 10_000 ticks per ms
+        if isinstance(ticks, int):
+            return int(ticks / 10_000)
+        return None
+
+    @staticmethod
+    def _pick_ip(session: Dict[str, Any]) -> Optional[str]:
+        """
+        Jellyfin can expose remote ip depending on config/version and reverse proxy.
+        Best-effort extraction.
+        """
+        ip = (
+            session.get("RemoteEndPoint")
+            or session.get("RemoteAddress")
+            or session.get("RemoteIp")
+        )
+
+        # Some setups may put it in AdditionalUsers / etc (rare) -> ignore.
+
+        # If behind reverse-proxy, RemoteEndPoint may be proxy IP.
+        # Sometimes Jellyfin includes request headers (not always). Best-effort:
+        if not ip:
+            headers = session.get("Headers") or session.get("RequestHeaders") or {}
+            if isinstance(headers, dict):
+                xff = headers.get("X-Forwarded-For") or headers.get("x-forwarded-for")
+                if isinstance(xff, str) and xff.strip():
+                    # Take first IP in XFF chain
+                    ip = xff.split(",")[0].strip()
+
+        if isinstance(ip, str):
+            ip = ip.strip()
+            if not ip:
+                return None
+
+            # Sometimes Jellyfin returns "IP:PORT"
+            # Example: "192.168.1.12:51234"
+            if ":" in ip and ip.count(":") == 1:
+                host, port = ip.split(":", 1)
+                if host.strip().replace(".", "").isdigit():
+                    ip = host.strip()
+
+            return ip
+
+        return None
 
     def get_active_sessions(self) -> List[Dict[str, Any]]:
-        data = self._get_json("/Sessions")
+        # EnableRemoteIP increases chances of having RemoteEndPoint filled
+        data = self._get_json("/Sessions?EnableRemoteIP=true")
         sessions: List[Dict[str, Any]] = []
 
         for s in data or []:
             session_id = s.get("Id")
             user_id = s.get("UserId") or (s.get("User") or {}).get("Id")
+
             now_playing = s.get("NowPlayingItem") or {}
             item_id = now_playing.get("Id")
 
             play_state = s.get("PlayState") or {}
-            jf_play_method = (play_state.get("PlayMethod") or "").strip()  # DirectPlay / DirectStream / Transcode
+            jf_play_method = (play_state.get("PlayMethod") or "").strip()  # DirectPlay/DirectStream/Transcode
 
             pm = jf_play_method.lower()
             if pm == "transcode":
@@ -85,67 +139,83 @@ class JellyfinProvider(BaseProvider):
             is_paused = play_state.get("IsPaused")
             state = "paused" if is_paused else ("playing" if now_playing else "unknown")
 
-            progress_ticks = play_state.get("PositionTicks")
-            progress_ms = int(progress_ticks / 10_000) if isinstance(progress_ticks, int) else None
-
-            runtime_ticks = now_playing.get("RunTimeTicks")
-            duration_ms = int(runtime_ticks / 10_000) if isinstance(runtime_ticks, int) else None
+            progress_ms = self._ticks_to_ms(play_state.get("PositionTicks"))
+            duration_ms = self._ticks_to_ms(now_playing.get("RunTimeTicks"))
 
             title = now_playing.get("Name")
 
-            # --- NEW: normalize media type to movie/series/music
-            jf_type = (now_playing.get("Type") or "").strip().lower()  # Movie / Episode / Audio / MusicVideo ...
+            # --- Normalize media type to movie/serie/tracks
+            jf_type = (now_playing.get("Type") or "").strip().lower()  # Movie/Episode/Audio/MusicVideo/...
             if jf_type == "movie":
                 media_category = "movie"
             elif jf_type == "episode":
-                media_category = "series"
+                media_category = "serie"
             elif jf_type in ("audio", "musictrack", "song"):
-                media_category = "music"
+                media_category = "tracks"
             else:
                 media_category = "other"
 
+            # Fill episode info when possible (helps history)
+            # Jellyfin items often include SeriesName/SeasonName on NowPlayingItem for episodes
+            grandparent_title = (
+                now_playing.get("SeriesName")
+                or now_playing.get("GrandparentTitle")
+                or None
+            )
+            parent_title = (
+                now_playing.get("SeasonName")
+                or now_playing.get("ParentTitle")
+                or None
+            )
+
             client_name = s.get("Client") or s.get("DeviceName")
-            client_product = s.get("ApplicationVersion")
-            device = s.get("DeviceName")
-            ip = (s.get("RemoteEndPoint") or "")
+            client_product = s.get("ApplicationName") or s.get("AppName") or None
+            app_version = s.get("ApplicationVersion") or None
+            if client_product and app_version:
+                client_product = f"{client_product} {app_version}".strip()
+            elif not client_product:
+                client_product = app_version
+
+            device = s.get("DeviceName") or s.get("DeviceId") or None
+
+            ip = self._pick_ip(s)
 
             if not session_id:
                 continue
 
-            sessions.append({
-                "provider": "jellyfin",
-                "session_key": str(session_id),
-                "external_user_id": str(user_id) if user_id else None,
-                "username": s.get("UserName") or (s.get("User") or {}).get("Name"),
-                "media_key": str(item_id) if item_id else None,
+            sessions.append(
+                {
+                    "provider": "jellyfin",
+                    "session_key": str(session_id),
+                    "external_user_id": str(user_id) if user_id else None,
+                    "username": s.get("UserName") or (s.get("User") or {}).get("Name"),
+                    "media_key": str(item_id) if item_id else None,
 
-                # IMPORTANT: unified category
-                "media_type": media_category,
+                    "media_type": media_category,
 
-                "title": title,
-                "grandparent_title": None,
-                "parent_title": None,
-                "state": state,
-                "progress_ms": progress_ms,
-                "duration_ms": duration_ms,
+                    "title": title,
+                    "grandparent_title": grandparent_title,
+                    "parent_title": parent_title,
+                    "state": state,
+                    "progress_ms": progress_ms,
+                    "duration_ms": duration_ms,
 
-                # unified playback info
-                "play_method": play_method,
-                "is_transcode": is_transcode,
+                    "play_method": play_method,
+                    "is_transcode": is_transcode,
 
-                # Jellyfin doesn't expose audio/videoDecision like Plex
-                "video_decision": None,
-                "audio_decision": None,
+                    "video_decision": None,
+                    "audio_decision": None,
 
-                "bitrate": int(bitrate) if isinstance(bitrate, int) else None,
-                "video_codec": (transcoding_info.get("VideoCodec") or None),
-                "audio_codec": (transcoding_info.get("AudioCodec") or None),
-                "client_name": client_name,
-                "client_product": client_product,
-                "device": device,
-                "ip": ip,
-                "raw_json": json.dumps(s, ensure_ascii=False),
-            })
+                    "bitrate": int(bitrate) if isinstance(bitrate, int) else None,
+                    "video_codec": (transcoding_info.get("VideoCodec") or None),
+                    "audio_codec": (transcoding_info.get("AudioCodec") or None),
+
+                    "client_name": client_name,
+                    "client_product": client_product,
+                    "device": device,
+                    "ip": ip,
+                    "raw_json": json.dumps(s, ensure_ascii=False),
+                }
+            )
 
         return sessions
-

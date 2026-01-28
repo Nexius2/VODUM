@@ -561,7 +561,7 @@ def create_app():
               COUNT(*) AS live_sessions,
               SUM(CASE WHEN is_transcode = 1 THEN 1 ELSE 0 END) AS transcodes
             FROM media_sessions
-            WHERE last_seen_at >= datetime('now', ?)
+            WHERE datetime(last_seen_at) >= datetime('now', ?)
             """,
             (live_window_sql,),
         ) or {"live_sessions": 0, "transcodes": 0}
@@ -583,8 +583,8 @@ def create_app():
             FROM media_sessions ms
             JOIN servers s ON s.id = ms.server_id
             LEFT JOIN media_users mu ON mu.id = ms.media_user_id
-            WHERE ms.last_seen_at >= datetime('now', ?)
-            ORDER BY ms.last_seen_at DESC
+            WHERE datetime(ms.last_seen_at) >= datetime('now', ?)
+            ORDER BY datetime(ms.last_seen_at) DESC
             """,
             (live_window_sql,),
         )
@@ -922,10 +922,30 @@ def create_app():
                   l.name AS library_name,
                   s.name AS server_name,
                   l.type AS media_type,
-                  NULL AS item_count,
-                  NULL AS last_stream_at,
-                  0 AS total_plays,
-                  0 AS played_ms
+
+                  l.item_count AS item_count,
+
+                  (
+                    SELECT MAX(h.stopped_at)
+                    FROM media_session_history h
+                    WHERE h.server_id = l.server_id
+                      AND h.library_section_id = l.section_id
+                  ) AS last_stream_at,
+
+                  (
+                    SELECT COUNT(*)
+                    FROM media_session_history h
+                    WHERE h.server_id = l.server_id
+                      AND h.library_section_id = l.section_id
+                  ) AS total_plays,
+
+                  (
+                    SELECT COALESCE(SUM(h.watch_ms), 0)
+                    FROM media_session_history h
+                    WHERE h.server_id = l.server_id
+                      AND h.library_section_id = l.section_id
+                  ) AS played_ms
+
                 FROM libraries l
                 JOIN servers s ON s.id = l.server_id
                 ORDER BY s.name, l.name
@@ -933,6 +953,7 @@ def create_app():
                 """,
                 (offset,),
             )
+
 
             rows = [dict(r) for r in rows]
             for r in rows:

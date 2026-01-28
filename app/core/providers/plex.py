@@ -111,6 +111,8 @@ class PlexProvider(BaseProvider):
             device = player.attrib.get("device") if player is not None else None
             ip = player.attrib.get("address") if player is not None else None
             state = player.attrib.get("state") if player is not None else None
+            library_section_id = node.attrib.get("librarySectionID") or None
+
 
             progress_ms = node.attrib.get("viewOffset")
             duration_ms = node.attrib.get("duration")
@@ -154,9 +156,9 @@ class PlexProvider(BaseProvider):
             if plex_type == "movie":
                 media_category = "movie"
             elif plex_type == "episode":
-                media_category = "series"
+                media_category = "serie"
             elif plex_type == "track":
-                media_category = "music"
+                media_category = "tracks"
             else:
                 media_category = "other"
 
@@ -174,6 +176,8 @@ class PlexProvider(BaseProvider):
                 "state": state or "unknown",
                 "progress_ms": int(progress_ms) if progress_ms and str(progress_ms).isdigit() else None,
                 "duration_ms": int(duration_ms) if duration_ms and str(duration_ms).isdigit() else None,
+                "library_section_id": library_section_id,
+
 
                 # --- NEW: store decisions
                 "video_decision": video_decision,

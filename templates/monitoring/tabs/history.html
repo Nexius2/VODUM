@@ -26,7 +26,7 @@
         <tbody>
           {% for r in rows %}
             <tr class="border-b border-slate-800">
-              <td class="py-3 pr-4">{{ r.stopped_at }}</td>
+              <td class="py-3 pr-4">{{ r.stopped_at|tz }}</td>
               <td class="py-3 pr-4">{{ r.username or "-" }}</td>
               <td class="py-3 pr-4">
                 <div class="font-semibold">{{ r.server_name }}</div>
