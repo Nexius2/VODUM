@@ -14,6 +14,89 @@ logger = get_logger("sync_jellyfin")
 # helpers
 # ----------------------------
 
+def _jellyfin_pick_user_id(session: requests.Session, base_url: str, token: str, timeout: int = 20) -> str | None:
+    users_url = _build_api_url(base_url, "/Users", token)
+    users = _get_json(session, users_url, timeout=timeout) or []
+    if not isinstance(users, list) or not users:
+        return None
+
+    # Essaye de prendre un admin si possible, sinon le premier
+    for u in users:
+        if isinstance(u, dict) and (u.get("Policy") or {}).get("IsAdministrator"):
+            if u.get("Id"):
+                return str(u["Id"])
+
+    u0 = users[0]
+    if isinstance(u0, dict) and u0.get("Id"):
+        return str(u0["Id"])
+    return None
+
+def _jellyfin_library_total_items(
+    session: requests.Session,
+    base_url: str,
+    token: str,
+    library_item_id: str,
+    *,
+    user_id: str,
+    timeout: int = 20,
+) -> int | None:
+    # Limit=1 (pas 0) + EnableTotalRecordCount=true
+    url = (
+        f"{base_url.rstrip('/')}/Users/{user_id}/Items"
+        f"?ParentId={library_item_id}&Recursive=true&StartIndex=0&Limit=1&EnableTotalRecordCount=true"
+    )
+    r = session.get(url, headers={"X-Emby-Token": token, "Accept": "application/json"}, timeout=timeout)
+    r.raise_for_status()
+    data = r.json()
+
+    trc = data.get("TotalRecordCount")
+    if trc is None:
+        return None
+    try:
+        return int(trc)
+    except Exception:
+        return None
+
+def _jellyfin_library_total_items_no_user(
+    session: requests.Session,
+    base_url: str,
+    token: str,
+    library_item_id: str,
+    timeout: int = 20,
+) -> int | None:
+    # Tentative 1: /Items/Counts?ParentId=...
+    url = f"{base_url.rstrip('/')}/Items/Counts?ParentId={library_item_id}&Recursive=true"
+    r = session.get(url, headers={"X-Emby-Token": token, "Accept": "application/json"}, timeout=timeout)
+    if r.status_code == 200:
+        try:
+            data = r.json()
+            # selon versions : ItemCount / Items / TotalCount...
+            for key in ("ItemCount", "Items", "TotalCount", "Count"):
+                if key in data and data[key] is not None:
+                    return int(data[key])
+        except Exception:
+            pass
+
+    # Tentative 2 (fallback): /Items?ParentId=... avec EnableTotalRecordCount
+    # (sur certains serveurs, ça marche sans user)
+    url = (
+        f"{base_url.rstrip('/')}/Items"
+        f"?ParentId={library_item_id}&Recursive=true&StartIndex=0&Limit=1&EnableTotalRecordCount=true"
+    )
+    r = session.get(url, headers={"X-Emby-Token": token, "Accept": "application/json"}, timeout=timeout)
+    if r.status_code != 200:
+        return None
+
+    try:
+        data = r.json()
+        trc = data.get("TotalRecordCount")
+        if trc is None:
+            return None
+        return int(trc)
+    except Exception:
+        return None
+
+
 def ensure_expiration_date_on_first_access(db, vodum_user_id: int) -> bool:
     """
     Initialise expiration_date UNIQUEMENT si :
@@ -393,6 +476,7 @@ def _sync_libraries_for_server(
     """
     Récupère les VirtualFolders et les upsert dans libraries.
     Retourne un mapping {ItemId -> libraries.id}
+    Met à jour libraries.item_count SANS dépendre d’un user Jellyfin.
     """
     api_url = _build_api_url(url, "/Library/VirtualFolders", token)
     logger.info(f"Jellyfin libraries: GET {api_url}")
@@ -401,7 +485,13 @@ def _sync_libraries_for_server(
     mapping: Dict[str, int] = {}
 
     if not isinstance(data, list):
+        logger.warning(
+            f"Jellyfin libraries: réponse inattendue (pas une liste) (server_id={server_id})"
+        )
         return mapping
+
+    updated_counts = 0
+    skipped_counts = 0
 
     for entry in data:
         if not isinstance(entry, dict):
@@ -414,13 +504,48 @@ def _sync_libraries_for_server(
         if not item_id or not name:
             continue
 
-        lib_db_id = _upsert_library(db, server_id, str(item_id), str(name), str(lib_type))
-        mapping[str(item_id)] = lib_db_id
+        item_id = str(item_id)
+        name = str(name)
+        lib_type = str(lib_type)
+
+        lib_db_id = _upsert_library(db, server_id, item_id, name, lib_type)
+        mapping[item_id] = lib_db_id
+
+        # 👉 récupération du count SANS user
+        try:
+            count = _jellyfin_library_total_items_no_user(
+                session,
+                url,
+                token,
+                item_id,
+                timeout=20,
+            )
+        except Exception as e:
+            logger.warning(
+                f"Jellyfin libraries: erreur item_count no-user "
+                f"(ParentId={item_id}, server_id={server_id}): {e}"
+            )
+            skipped_counts += 1
+            continue
+
+        if count is None:
+            skipped_counts += 1
+            continue
+
+        db.execute(
+            "UPDATE libraries SET item_count = ? WHERE server_id = ? AND section_id = ?",
+            (int(count), server_id, item_id),
+        )
+        updated_counts += 1
 
     logger.info(
-        f"Jellyfin libraries: {len(mapping)} importées/mises à jour (server_id={server_id})"
+        f"Jellyfin libraries: {len(mapping)} importées/mises à jour "
+        f"(item_count updated={updated_counts}, skipped={skipped_counts}) "
+        f"(server_id={server_id})"
     )
     return mapping
+
+
 
 
 def _sync_users_and_policies_for_server(

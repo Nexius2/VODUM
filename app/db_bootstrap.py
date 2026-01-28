@@ -339,6 +339,71 @@ def run_migrations():
         # Dans Vodum, on préfère échouer proprement plutôt que créer une version incomplète.
         print("⚠ media_jobs table not found (tables.sql not imported yet). Skipping media_jobs upgrade.")
 
+    # libraries.item_count
+    if table_exists(cursor, "libraries") and not column_exists(cursor, "libraries", "item_count"):
+        cursor.execute("ALTER TABLE libraries ADD COLUMN item_count INTEGER")
+        conn.commit()
+        print("✔ libraries.item_count added")
+
+    # media_sessions.library_section_id (pour relier session -> library)
+    if table_exists(cursor, "media_sessions") and not column_exists(cursor, "media_sessions", "library_section_id"):
+        cursor.execute("ALTER TABLE media_sessions ADD COLUMN library_section_id TEXT")
+        conn.commit()
+        print("✔ media_sessions.library_section_id added")
+
+    # media_session_history.library_section_id
+    if table_exists(cursor, "media_session_history") and not column_exists(cursor, "media_session_history", "library_section_id"):
+        cursor.execute("ALTER TABLE media_session_history ADD COLUMN library_section_id TEXT")
+        conn.commit()
+        print("✔ media_session_history.library_section_id added")
+
+    # -------------------------------------------------
+    # 2.5 Normalize monitoring media_type values (idempotent)
+    # -------------------------------------------------
+    print("🔧 Normalizing monitoring media_type values…")
+
+    # Harmonise les anciens labels (si tu as déjà stocké series/music/video/etc.)
+    # History
+    cursor.execute("UPDATE media_session_history SET media_type='serie'  WHERE media_type IN ('series')")
+    cursor.execute("UPDATE media_session_history SET media_type='tracks' WHERE media_type IN ('music','track')")
+
+    # "video" historique : on tranche via grandparent_title (épisode si grandparent existe, sinon film)
+    cursor.execute("""
+        UPDATE media_session_history
+        SET media_type='serie'
+        WHERE media_type='video'
+          AND grandparent_title IS NOT NULL
+          AND TRIM(grandparent_title) <> ''
+    """)
+    cursor.execute("""
+        UPDATE media_session_history
+        SET media_type='movie'
+        WHERE media_type='video'
+          AND (grandparent_title IS NULL OR TRIM(grandparent_title) = '')
+    """)
+
+    # Live sessions (optionnel mais conseillé pour cohérence UI)
+    cursor.execute("UPDATE media_sessions SET media_type='serie'  WHERE media_type IN ('series')")
+    cursor.execute("UPDATE media_sessions SET media_type='tracks' WHERE media_type IN ('music','track')")
+    cursor.execute("""
+        UPDATE media_sessions
+        SET media_type='serie'
+        WHERE media_type='video'
+          AND grandparent_title IS NOT NULL
+          AND TRIM(grandparent_title) <> ''
+    """)
+    cursor.execute("""
+        UPDATE media_sessions
+        SET media_type='movie'
+        WHERE media_type='video'
+          AND (grandparent_title IS NULL OR TRIM(grandparent_title) = '')
+    """)
+
+    conn.commit()
+    print("✔ Monitoring media_type normalized.")
+
+
+
 
     # -------------------------------------------------
     # 3. Injecter les données par défaut
@@ -633,11 +698,6 @@ def run_migrations():
     conn.close()
 
     print("✔ Migrations completed successfully !")
-
-
-
-
-
 
 
 

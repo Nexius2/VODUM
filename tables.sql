@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS libraries (
     section_id TEXT NOT NULL,
     name TEXT NOT NULL,
     type TEXT,
+	item_count INTEGER,
     UNIQUE(server_id, section_id),
     FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE
 );
@@ -402,6 +403,8 @@ CREATE TABLE IF NOT EXISTS media_sessions (
 
   raw_json TEXT,
 
+  library_section_id TEXT,
+
   UNIQUE(server_id, session_key),
 
   FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE,
@@ -485,6 +488,8 @@ CREATE TABLE IF NOT EXISTS media_session_history (
 
   raw_json TEXT,
 
+  library_section_id TEXT,
+
   FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE,
   FOREIGN KEY(media_user_id) REFERENCES media_users(id) ON DELETE SET NULL
 );
@@ -506,5 +511,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_media_jobs_dedupe_active
 ON media_jobs(dedupe_key)
 WHERE dedupe_key IS NOT NULL AND status IN ('queued','running');
 
+CREATE INDEX IF NOT EXISTS idx_history_server_library_stopped
+ON media_session_history(server_id, library_section_id, stopped_at);
 
 

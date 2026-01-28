@@ -28,7 +28,9 @@ class AttrDict(dict):
 
 
 def _iso_now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    # SQLite CURRENT_TIMESTAMP => "YYYY-MM-DD HH:MM:SS" (UTC)
+    return datetime.utcnow().replace(microsecond=0).strftime("%Y-%m-%d %H:%M:%S")
+
 
 
 def _load_single_server(db, server_id: int) -> Optional[Dict[str, Any]]:
@@ -84,7 +86,7 @@ def _has_recent_live_sessions(db, server_id: int, window_seconds: int = 180) -> 
         SELECT COUNT(*) AS c
         FROM media_sessions
         WHERE server_id = ?
-          AND last_seen_at >= datetime('now', ?)
+          AND datetime(last_seen_at) >= datetime('now', ?)
         """,
         (server_id, f"-{int(window_seconds)} seconds"),
     )
@@ -133,10 +135,13 @@ def collect_sessions_for_server(
     - met à jour servers.last_checked et servers.status
     """
     srv = _load_single_server(db, server_id)
+
+
+    
     if not srv:
         raise RuntimeError(f"Server id={server_id} not found or not plex/jellyfin")
 
-    provider_name = (provider or srv.get("type") or "").lower().strip()
+    provider_name = (provider or (srv["type"] if "type" in srv else None) or "").lower().strip()
     if provider_name not in ("plex", "jellyfin"):
         raise RuntimeError(f"Unsupported provider '{provider_name}' for server id={server_id}")
 
@@ -178,9 +183,9 @@ def collect_sessions_for_server(
                   state, progress_ms, duration_ms,
                   is_transcode, bitrate, video_codec, audio_codec,
                   client_name, client_product, device, ip,
-                  started_at, last_seen_at, raw_json
+                  started_at, last_seen_at, raw_json, library_section_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(server_id, session_key) DO UPDATE SET
                   media_user_id=excluded.media_user_id,
                   external_user_id=excluded.external_user_id,
@@ -202,7 +207,9 @@ def collect_sessions_for_server(
                   ip=excluded.ip,
                   started_at=COALESCE(media_sessions.started_at, excluded.started_at),
                   last_seen_at=excluded.last_seen_at,
-                  raw_json=excluded.raw_json
+                  raw_json=excluded.raw_json,
+                  library_section_id=excluded.library_section_id
+
                 """,
                 (
                     server_id, provider_name, sk,
@@ -215,6 +222,7 @@ def collect_sessions_for_server(
                     sess.get("client_name"), sess.get("client_product"),
                     sess.get("device"), sess.get("ip"),
                     started_at, _iso_now(), sess.get("raw_json"),
+                    sess.get("library_section_id"),
                 ),
             )
 
@@ -269,8 +277,9 @@ def collect_sessions_for_server(
             )
 
             if live:
-                watch_ms = int(live["progress_ms"] or 0)
-                started_at = live["started_at"] or live["last_seen_at"] or _iso_now()
+                live = dict(live)  # ✅ sqlite3.Row -> dict (permet .get)
+                watch_ms = int(live.get("progress_ms") or 0)
+                started_at = live.get("started_at") or live.get("last_seen_at") or _iso_now()
 
                 db.execute(
                     """
@@ -282,26 +291,26 @@ def collect_sessions_for_server(
                       duration_ms, watch_ms,
                       peak_bitrate, was_transcode,
                       client_name, client_product, device, ip,
-                      raw_json
+                      raw_json, library_section_id
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         server_id, provider_name,
-                        live["session_key"], live["media_key"], live["external_user_id"], live["media_user_id"],
-                        live["media_type"], live["title"], live["grandparent_title"], live["parent_title"],
+                        live.get("session_key"), live.get("media_key"), live.get("external_user_id"), live.get("media_user_id"),
+                        live.get("media_type"), live.get("title"), live.get("grandparent_title"), live.get("parent_title"),
                         started_at, _iso_now(),
-                        int(live["duration_ms"] or 0), watch_ms,
-                        int(live["bitrate"] or 0) if live["bitrate"] is not None else None,
-                        int(live["is_transcode"] or 0),
+                        int(live.get("duration_ms") or 0), watch_ms,
+                        int(live.get("bitrate") or 0) if live.get("bitrate") is not None else None,
+                        int(live.get("is_transcode") or 0),
 
-                        # ✅ ordre identique aux colonnes
                         live.get("client_name"),
                         live.get("client_product"),
                         live.get("device"),
                         live.get("ip"),
 
                         live.get("raw_json"),
+                        live.get("library_section_id"),
                     ),
                 )
 

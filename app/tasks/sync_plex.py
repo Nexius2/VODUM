@@ -328,6 +328,28 @@ def plex_get_user_access(db, plex, server_name, media_user_id: int):
 
     return out
 
+def _plex_section_total_items(session, base_url: str, token: str, section_id: str, timeout: int = 10) -> int | None:
+    # Astuce Plex: demander 0 item renvoie totalSize dans MediaContainer
+    url = (
+        f"{base_url.rstrip('/')}/library/sections/{section_id}/all"
+        f"?X-Plex-Token={token}&X-Plex-Container-Start=0&X-Plex-Container-Size=0"
+    )
+    r = session.get(url, timeout=timeout)
+    r.raise_for_status()
+
+    root = ET.fromstring(r.text)
+
+    # Plex renvoie généralement <MediaContainer ...> en racine
+    mc = root if root.tag == "MediaContainer" else root.find("MediaContainer")
+    if mc is None:
+        return None
+
+    total = mc.attrib.get("totalSize") or mc.attrib.get("size")
+    try:
+        return int(total)
+    except Exception:
+        return None
+
 
 
 def sync_plex_user_library_access(db, plex, server):
@@ -497,8 +519,12 @@ def plex_get_libraries(server):
 def sync_plex_libraries(db, server, libraries):
     """
     Synchronise les libraries Plex pour un serveur donné.
+    + met à jour item_count.
     """
     server_id = server["id"]
+
+    base_url = (server.get("url") or server.get("local_url") or server.get("public_url") or "").rstrip("/")
+    token = (server.get("token") or "").strip()
 
     rows = db.query(
         "SELECT id, section_id FROM libraries WHERE server_id = ?",
@@ -507,6 +533,9 @@ def sync_plex_libraries(db, server, libraries):
 
     existing = {row["section_id"]: row["id"] for row in rows}
     found = set()
+
+    # Session requests avec timeout par défaut
+    session = requests.Session()
 
     for lib in libraries:
         sid = lib["section_id"]
@@ -530,12 +559,24 @@ def sync_plex_libraries(db, server, libraries):
                 (server_id, sid, lib["name"], lib["type"]),
             )
 
+        # ✅ item_count (best effort)
+        if base_url and token:
+            try:
+                count = _plex_section_total_items(session, base_url, token, str(sid), timeout=10)
+            except Exception:
+                count = None
+
+            if count is not None:
+                db.execute(
+                    "UPDATE libraries SET item_count = ? WHERE server_id = ? AND section_id = ?",
+                    (int(count), server_id, str(sid)),
+                )
+
     # suppression des libraries disparues
     for sid, lib_id in existing.items():
         if sid not in found:
             log.info(f"[SYNC LIBRARIES] Library removal {lib_id} (section={sid})")
 
-            # 🔥 ancien : shared_libraries → nouveau : media_user_libraries
             db.execute(
                 "DELETE FROM media_user_libraries WHERE library_id = ?",
                 (lib_id,),
@@ -545,6 +586,7 @@ def sync_plex_libraries(db, server, libraries):
                 "DELETE FROM libraries WHERE id = ?",
                 (lib_id,),
             )
+
 
 
   
@@ -1136,7 +1178,11 @@ def sync_all(task_id=None, db=None) -> None:
     # 3) Pour chaque serveur → sync libraries + accès users
     #
     for server in servers:
-        server_name = server["name"]
+        # IMPORTANT: sqlite3.Row -> dict, pour supporter .get() et éviter les crash
+        server = dict(server)
+
+        server_name = server.get("name") or f"server_{server.get('id')}"
+
         log.info(f"[SYNC ALL] Plex server: {server_name}")
 
         # --- Libraries ---
