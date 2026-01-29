@@ -188,6 +188,7 @@ CREATE TABLE IF NOT EXISTS settings (
     smtp_tls INTEGER,
     smtp_user TEXT,
     smtp_pass TEXT,
+	email_history_retention_years INTEGER DEFAULT 2,
 
     disable_on_expiry INTEGER DEFAULT 0,
     delete_after_expiry_days INTEGER DEFAULT 30,
@@ -198,6 +199,9 @@ CREATE TABLE IF NOT EXISTS settings (
     default_language TEXT DEFAULT NULL,
     timezone TEXT DEFAULT 'Europe/Paris',
     admin_email TEXT,
+	admin_password_hash TEXT,
+    auth_enabled INTEGER DEFAULT 1,
+
 
     enable_cron_jobs INTEGER DEFAULT 1,
     default_expiration_days INTEGER DEFAULT 90,
@@ -214,17 +218,6 @@ CREATE TABLE IF NOT EXISTS settings (
 
 );
 
------------------------------------------------------------------------
---  LOGS (multi-critères)
------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    level TEXT,              -- INFO / WARNING / ERROR
-    category TEXT,           -- sync_plex, emails, db, server_check...
-    message TEXT NOT NULL,
-    details TEXT,            -- JSON
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
 
 -----------------------------------------------------------------------
 --  TASKS (scheduler)
