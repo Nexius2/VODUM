@@ -478,5 +478,102 @@
   "merge.preview.sent_emails": "Gesendete E-Mails",
   "merge.preview.media_jobs": "Medienaufgaben",
   "merge_failed": "Zusammenführen fehlgeschlagen",
-  "user_merged": "Benutzer zusammengeführt"
+  "user_merged": "Benutzer zusammengeführt",
+  "task_description.monitor_collect_sessions": "Monitoring: Sammeln aktiver Sitzungen (Plex/Jellyfin)",
+  "nav.monitoring": "Monitoring",
+
+  "monitoring.title": "Monitoring",
+  "monitoring.subtitle": "Globale Plex / Jellyfin Übersicht",
+
+  "monitoring.cards.servers_online": "Server online",
+  "monitoring.cards.servers_offline": "Server offline",
+  "monitoring.cards.live_sessions": "Aktive Sitzungen",
+  "monitoring.cards.transcodes": "Transkodierungen",
+
+  "monitoring.section.servers": "Server",
+  "monitoring.section.sessions": "Jetzt läuft",
+  "monitoring.section.events": "Letzte Ereignisse",
+
+  "monitoring.table.server": "Server",
+  "monitoring.table.provider": "Typ",
+  "monitoring.table.status": "Status",
+  "monitoring.table.last_checked": "Letzte Prüfung",
+
+  "monitoring.table.user": "Benutzer",
+  "monitoring.table.state": "Status",
+  "monitoring.table.title": "Titel",
+  "monitoring.table.client": "Client",
+  "monitoring.table.last_seen": "Letzte Aktivität",
+
+  "monitoring.empty.sessions": "Keine aktiven Sitzungen.",
+  "monitoring.empty.events": "Keine aktuellen Ereignisse.",
+
+  "db_size": "Datenbankgröße",
+
+  "auth.title_setup_admin": "Initialisierung",
+  "auth.initialisation": "Initialisierung",
+  "auth.setup_admin_description": "Lege die Admin-E-Mail und das Passwort fest, bevor du Server konfigurierst.",
+  "auth.admin_email": "Admin-E-Mail",
+  "auth.admin_password": "Admin-Passwort",
+  "auth.password_min_8": "Mindestens 8 Zeichen",
+  "common.validate": "Bestätigen",
+
+  "auth.title_login": "Anmeldung",
+  "auth.login": "Anmeldung",
+  "auth.login_description": "Administratorzugang erforderlich.",
+  "auth.password": "Passwort",
+  "common.login": "Anmelden",
+  "common.logout": "Abmelden",
+  "auth.reset_link": "Passwort zurücksetzen",
+  "auth.reset_title": "Passwort zurücksetzen",
+  "auth.reset_subtitle": "Nur lokaler Zugriff • Nicht aus der Ferne verfügbar",
+  "auth.reset_explain_1": "Aus Sicherheitsgründen erfordert die Zurücksetzung des Passworts lokalen Zugriff auf den Server (Unraid / SSH / Konsole).",
+  "auth.reset_steps_title": "Vorgehensweise",
+  "auth.reset_step_1": "Eine Reset-Datei auf dem Server erstellen.",
+  "auth.reset_step_2": "Token abrufen (Inhalt der Datei).",
+  "auth.reset_step_3": "Die Reset-Seite öffnen und Token, neue E-Mail und neues Passwort eingeben.",
+  "auth.reset_cmd_simple": "Einfache Befehlszeile:",
+  "auth.reset_cmd_random": "Befehl mit zufälligem Token:",
+  "auth.reset_available": "Reset verfügbar (Datei erkannt).",
+  "auth.reset_not_available": "Reset nicht verfügbar: Keine Reset-Datei auf dem Server gefunden.",
+  "auth.reset_open_page": "Reset-Seite öffnen",
+  "common.close": "Schließen",
+  "auth.reset_step_1_simple": "Eine Reset-Datei auf dem Server erstellen.",
+  "auth.reset_step_2_restart": "Den VODUM-Container neu starten.",
+  "auth.reset_step_3_setup": "Die Oberfläche öffnen und die Admin-E-Mail sowie das Passwort neu festlegen.",
+  "auth.reset_note_path": "Hinweis: Passe den Pfad an den tatsächlichen Speicherort der Appdata deines Containers an.",
+  "auth.reset_available_restart": "Reset-Datei erkannt. Starte den Container jetzt neu, um die Zugangsdaten zurückzusetzen.",
+  "mail_history_title": "Verlauf",
+  "mail_history_desc": "Alle gesendeten E-Mails (automatische Benutzer-E-Mails + Kampagnen).",
+
+  "mail_history_retention_years": "Aufbewahrung (Jahre)",
+  "mail_history_save_retention": "Speichern",
+  "mail_history_purge_now": "Bereinigen",
+
+  "mail_history_all_columns": "Alle Spalten",
+  "mail_history_filter_placeholder": "Filtern…",
+  "mail_history_reset": "Zurücksetzen",
+
+  "mail_history_col_date": "Datum",
+  "mail_history_col_source": "Quelle",
+  "mail_history_col_type": "Typ",
+  "mail_history_col_subject": "Betreff",
+  "mail_history_col_username": "Benutzername",
+  "mail_history_col_email": "E-Mail",
+  "mail_history_col_server": "Server",
+  "mail_history_col_status": "Status",
+  "mail_history_col_expiration": "Ablauf",
+
+  "mail_history_badge_user": "Benutzer",
+  "mail_history_badge_campaign": "Kampagne",
+
+  "mail_history_retention_saved": "Aufbewahrung gespeichert ({years} Jahr(e)).",
+  "mail_history_purged": "Verlauf bereinigt: {sent} Benutzer-E-Mail(s), {campaigns} Kampagne(n).",
+  "mail_history_purge_failed": "Bereinigung fehlgeschlagen",
+  "mail_history_no_item_selected": "Keine Zeile ausgewählt",
+  "mail_history_items_deleted": "{count} Zeile(n) gelöscht.",
+  "mail_history_delete_failed": "Löschen fehlgeschlagen",
+
+  "mail_history_hint": "Tipp: Die Bereinigung entfernt auch den Verlauf in der Benutzeransicht und den Kampagnenverlauf."
+  
 }

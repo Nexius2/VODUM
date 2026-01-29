@@ -42,6 +42,15 @@ def run_migrations():
     cursor = conn.cursor()
 
     # -------------------------------------------------
+    # 0. Nettoyage legacy : suppression table logs (désormais obsolète)
+    # -------------------------------------------------
+    if table_exists(cursor, "logs"):
+        print("🧹 Dropping legacy table: logs")
+        cursor.execute("DROP TABLE IF EXISTS logs")
+        conn.commit()
+
+
+    # -------------------------------------------------
     # 1. Vérifier que toutes les tables existent
     # -------------------------------------------------
 
@@ -54,7 +63,6 @@ def run_migrations():
         "email_templates": [],
         "sent_emails": [],
         "settings": [],
-        "logs": [],
         "user_identities": [],
         "media_jobs": [],
         "tasks": []
@@ -94,6 +102,13 @@ def run_migrations():
     # 2.1 Vérifier colonnes SETTINGS (migrations légères)
     # -------------------------------------------------
     ensure_column(cursor, "settings", "brand_name", "TEXT DEFAULT NULL")
+    ensure_column(cursor, "settings", "email_history_retention_years", "INTEGER DEFAULT 2")
+
+    
+    # 🔐 Auth admin
+    ensure_column(cursor, "settings", "admin_password_hash", "TEXT DEFAULT NULL")
+    ensure_column(cursor, "settings", "auth_enabled", "INTEGER DEFAULT 1")
+    
     print("✔ Settings columns verified (brand_name).")
 
     # -------------------------------------------------
@@ -688,7 +703,9 @@ def run_migrations():
         "default_expiration_days": 90,
         "maintenance_mode": 0,
         "brand_name": None,
-        "debug_mode": 0
+        "debug_mode": 0,
+        "admin_password_hash": None,
+        "auth_enabled": 1,
     })
 
 

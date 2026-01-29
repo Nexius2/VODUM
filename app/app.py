@@ -14,6 +14,9 @@ from flask import (
     session,
     Response,
     current_app,
+    jsonify,
+    make_response,
+    abort,
 )
 from config import Config
 #from tasks import create_task, run_task
@@ -29,6 +32,7 @@ import platform
 
 from logging_utils import get_logger, read_last_logs, read_all_logs
 task_logger = get_logger("tasks_ui")
+auth_logger = get_logger("auth")
 
 from api.subscriptions import subscriptions_api, update_user_expiration
 import uuid
@@ -41,6 +45,9 @@ from difflib import SequenceMatcher
 import time  
 from core.i18n import init_i18n, get_translator, get_available_languages
 from core.backup import BackupConfig, ensure_backup_dir, create_backup_file, list_backups, restore_backup_file
+from werkzeug.security import generate_password_hash, check_password_hash
+
+
 
 
 
@@ -48,6 +55,63 @@ from core.backup import BackupConfig, ensure_backup_dir, create_backup_file, lis
 _I18N_CACHE: dict[str, dict] = {}
 
 
+
+# -----------------------------
+# AUTH RESET (local file)
+# -----------------------------
+RESET_FILE = os.environ.get("VODUM_RESET_FILE", "/appdata/password.reset")
+RESET_MAGIC = os.environ.get("VODUM_RESET_MAGIC", "RECOVER")
+
+
+def startup_admin_recover_if_requested(app):
+    """
+    Reset LOCAL (Unraid/Docker) :
+    - si RESET_FILE existe et contient RESET_MAGIC ("RECOVER")
+    - au démarrage de l'app uniquement
+    -> wipe admin_email + admin_password_hash
+    -> supprime le fichier (one-shot)
+    """
+    if not os.path.exists(RESET_FILE):
+        return
+
+    try:
+        with open(RESET_FILE, "r", encoding="utf-8") as f:
+            marker = (f.read() or "").strip()
+    except Exception:
+        marker = ""
+
+    # Pour ton nouveau process ultra-simple :
+    # on accepte n'importe quel contenu NON vide, mais on garde "RECOVER" comme valeur recommandée
+    if not marker:
+        app.logger.warning(f"password.reset detected at {RESET_FILE} but file is empty. Ignoring.")
+        return
+
+    try:
+        db = DBManager()
+        cur = db.execute(
+            """
+            UPDATE settings
+            SET
+              admin_email = NULL,
+              admin_password_hash = NULL,
+              auth_enabled = 1
+            WHERE id = 1
+            """
+        )
+        try:
+            cur.close()
+        except Exception:
+            pass
+
+        # one-shot: suppression du fichier reset
+        os.remove(RESET_FILE)
+
+        app.logger.warning(
+            "Admin credentials cleared via password.reset. Please reinitialize via /setup-admin."
+        )
+    except Exception as e:
+        # si ça échoue, on NE supprime PAS le fichier -> ça retentera au prochain restart
+        app.logger.error(f"Startup admin recover failed: {e}")
 
 
 
@@ -88,6 +152,7 @@ APP_VERSION = load_version()
 
 def create_app():
     app = Flask(__name__)
+
     # Injecte la version globale dans tous les 
     
     app.jinja_env.filters["fromjson"] = fromjson_safe
@@ -97,6 +162,9 @@ def create_app():
         g.app_version = APP_VERSION
 
     app.config.from_object(Config)
+
+    # RESET au démarrage (avant routes / scheduler)
+    startup_admin_recover_if_requested(app)
 
     # Répertoire de backup (mounté par Docker, ex: /backups)
     app.config.setdefault("BACKUP_DIR", os.environ.get("VODUM_BACKUP_DIR", "/appdata/backups"))
@@ -701,6 +769,10 @@ def create_app():
         peak = int(concurrent_7d.get("peak_streams") or 0)
         concurrent_7d["peak_streams"] = max(peak, live_now)
 
+        sort_key = None
+        sort_dir = None
+
+
         # --------------------------
         # Tabs data
         # --------------------------
@@ -718,6 +790,33 @@ def create_app():
             media_type = (request.args.get("media_type") or "").strip()
             playback = (request.args.get("playback") or "").strip()
             server_id = request.args.get("server", type=int)
+
+            cookie_sort = request.cookies.get(f"monitoring_{tab}_sort")
+            cookie_dir  = request.cookies.get(f"monitoring_{tab}_dir")
+
+            sort_key = (request.args.get("sort") or cookie_sort or "date").strip()
+            sort_dir = (request.args.get("dir") or cookie_dir or "desc").strip().lower()
+
+            if sort_dir not in ("asc", "desc"):
+                sort_dir = "desc"
+
+            # whitelist anti-injection SQL (IMPORTANT)
+            SORT_MAP = {
+                "date": "h.stopped_at",
+                "user": "mu.username",
+                "server": "s.name",
+                "media": "h.title",
+                "type": "h.media_type",
+                "playback": "playback_type",   # alias défini dans SELECT
+                "device": "h.device",
+                "duration": "h.watch_ms",
+            }
+            if sort_key not in SORT_MAP:
+                sort_key = "date"
+
+            order_col = SORT_MAP[sort_key]
+            order_sql = f"{order_col} {'ASC' if sort_dir == 'asc' else 'DESC'}"
+
 
             where = ["1=1"]
             params = []
@@ -772,7 +871,7 @@ def create_app():
                 JOIN servers s ON s.id = h.server_id
                 LEFT JOIN media_users mu ON mu.id = h.media_user_id
                 WHERE {where_sql}
-                ORDER BY h.stopped_at DESC
+                ORDER BY {order_sql}
                 LIMIT {per_page} OFFSET ?
                 """,
                 tuple(params + [offset]),
@@ -821,6 +920,13 @@ def create_app():
                 """
             ) or {"cnt": 0}
             total = dict(total) if total else {"cnt": 0}
+
+            cookie_sort = request.cookies.get(f"monitoring_{tab}_sort")
+            cookie_dir  = request.cookies.get(f"monitoring_{tab}_dir")
+
+            sort_key = (request.args.get("sort") or cookie_sort or "last").strip()
+            sort_dir = (request.args.get("dir") or cookie_dir or "desc").strip().lower()
+
 
             rows = db.query(
                 f"""
@@ -916,6 +1022,30 @@ def create_app():
             total = db.query_one("SELECT COUNT(*) AS cnt FROM libraries") or {"cnt": 0}
             total = dict(total) if total else {"cnt": 0}
 
+            cookie_sort = request.cookies.get(f"monitoring_{tab}_sort")
+            cookie_dir  = request.cookies.get(f"monitoring_{tab}_dir")
+
+            sort_key = (request.args.get("sort") or cookie_sort or "last").strip()
+            sort_dir = (request.args.get("dir") or cookie_dir or "asc").strip().lower()
+
+            if sort_dir not in ("asc", "desc"):
+                sort_dir = "asc"
+
+            SORT_MAP = {
+                "server": "s.name",
+                "library": "l.name",
+                "type": "l.type",
+                "items": "l.item_count",
+                "last": "last_stream_at",
+                "plays": "total_plays",
+                "duration": "played_ms",
+            }
+
+            if sort_key not in SORT_MAP:
+                sort_key = "server"
+
+            order_sql = f"{SORT_MAP[sort_key]} {'ASC' if sort_dir == 'asc' else 'DESC'}"
+
             rows = db.query(
                 f"""
                 SELECT
@@ -948,7 +1078,7 @@ def create_app():
 
                 FROM libraries l
                 JOIN servers s ON s.id = l.server_id
-                ORDER BY s.name, l.name
+                ORDER BY {order_sql}
                 LIMIT {per_page} OFFSET ?
                 """,
                 (offset,),
@@ -990,7 +1120,7 @@ def create_app():
                 "users": "monitoring/tabs/users.html",
             }.get(tab, "monitoring/overview_body.html")
 
-            return render_template(
+            resp = make_response(render_template(
                 tab_tpl,
                 active_page="monitoring",
                 tab=tab,
@@ -1007,10 +1137,17 @@ def create_app():
                 rows=rows,
                 filters=filters,
                 pagination=pagination,
-            )
+                sort_key=sort_key,
+                sort_dir=sort_dir,
+            ))
+            if sort_key and sort_dir:
+                resp.set_cookie(f"monitoring_{tab}_sort", str(sort_key), max_age=60*60*24*365)
+                resp.set_cookie(f"monitoring_{tab}_dir",  str(sort_dir),  max_age=60*60*24*365)
+
+            return resp
 
         # Page complète (chargement normal)
-        return render_template(
+        resp = make_response(render_template(
             "monitoring/monitoring.html",
             active_page="monitoring",
             tab=tab,
@@ -1027,7 +1164,14 @@ def create_app():
             rows=rows,
             filters=filters,
             pagination=pagination,
-        )
+            sort_key=sort_key,
+            sort_dir=sort_dir,
+        ))
+        
+        if sort_key and sort_dir:
+            resp.set_cookie(f"monitoring_{tab}_sort", str(sort_key), max_age=60*60*24*365)
+            resp.set_cookie(f"monitoring_{tab}_dir",  str(sort_dir),  max_age=60*60*24*365)
+        return resp
 
 
 
@@ -4389,6 +4533,193 @@ def create_app():
             active_page="mailing",
         )
 
+    # -------------------------------------------------------------------------
+    # MAILING HISTORY (sent_emails + mail_campaigns)
+    # -------------------------------------------------------------------------
+
+    def _purge_email_history(db, retention_years):
+        """Delete sent email history entries older than retention_years.
+        retention_years <= 0 -> no purge.
+        """
+        try:
+            ry = int(retention_years or 0)
+        except Exception:
+            ry = 0
+
+        if ry <= 0:
+            return {"sent_emails": 0, "mail_campaigns": 0}
+
+        # SQLite: DATE('now', '-X years')
+        threshold = f"-{ry} years"
+
+        # sent_emails: use sent_at
+        cur1 = db.execute(
+            "DELETE FROM sent_emails WHERE sent_at < DATETIME('now', ?)",
+            (threshold,),
+        )
+
+        # mail_campaigns: use created_at
+        cur2 = db.execute(
+            "DELETE FROM mail_campaigns WHERE created_at < DATETIME('now', ?)",
+            (threshold,),
+        )
+
+        c1 = getattr(cur1, "rowcount", None) or 0
+        c2 = getattr(cur2, "rowcount", None) or 0
+        return {"sent_emails": c1, "mail_campaigns": c2}
+
+
+    @app.route("/mailing/history")
+    def mailing_history_page():
+        db = get_db()
+        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+
+        if not is_smtp_ready(settings):
+            return redirect(url_for("mailing_smtp_page"))
+
+        # Retention purge (best-effort)
+        try:
+            _purge_email_history(db, (settings["email_history_retention_years"] if settings else 0))
+        except Exception as e:
+            add_log("error", "mailing_history", "Retention purge failed", {"error": str(e)})
+
+        history = db.query(
+            """
+            SELECT
+                'user' AS source,
+                se.id AS id,
+                se.user_id AS user_id,
+                se.template_type AS type,
+                NULL AS subject,
+                vu.username AS username,
+                vu.email AS email,
+                NULL AS server_name,
+                NULL AS status,
+                se.expiration_date AS expiration_date,
+                se.sent_at AS date
+            FROM sent_emails se
+            JOIN vodum_users vu ON vu.id = se.user_id
+
+            UNION ALL
+
+            SELECT
+                'campaign' AS source,
+                mc.id AS id,
+                NULL AS user_id,
+                'campaign' AS type,
+                mc.subject AS subject,
+                NULL AS username,
+                NULL AS email,
+                COALESCE(s.name, '-') AS server_name,
+                mc.status AS status,
+                NULL AS expiration_date,
+                mc.created_at AS date
+            FROM mail_campaigns mc
+            LEFT JOIN servers s ON s.id = mc.server_id
+
+            ORDER BY date DESC
+            """
+        )
+
+        return render_template(
+            "mailing/mailing_history.html",
+            settings=settings,
+            history=history,
+        )
+
+
+    @app.post("/mailing/history/retention")
+    def mailing_history_retention():
+        db = get_db()
+        t = get_translator()
+
+        years_raw = request.form.get("retention_years", "").strip()
+        try:
+            years = int(years_raw)
+        except Exception:
+            years = 2
+
+        if years < 0:
+            years = 0
+        if years > 50:
+            years = 50
+
+        db.execute(
+            "UPDATE settings SET email_history_retention_years = ? WHERE id = 1",
+            (years,),
+        )
+
+        add_log("info", "mailing_history", "Retention updated", {"years": years})
+        flash(t("retention_saved").format(years=years), "success")
+        return redirect(url_for("mailing_history_page"))
+
+
+    @app.post("/mailing/history/purge")
+    def mailing_history_purge():
+        db = get_db()
+        t = get_translator()
+
+        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        years = (settings["email_history_retention_years"] if settings else 0)
+
+        try:
+            counts = _purge_email_history(db, years)
+            flash(
+                t("history_purged").format(sent=counts["sent_emails"], campaigns=counts["mail_campaigns"]),
+                "success",
+            )
+            add_log("info", "mailing_history", "History purged", {"years": years, **counts})
+        except Exception as e:
+            add_log("error", "mailing_history", "Purge failed", {"error": str(e)})
+            flash(f"{t('purge_failed')} ({e})", "error")
+
+        return redirect(url_for("mailing_history_page"))
+
+
+    @app.post("/mailing/history/delete")
+    def mailing_history_delete():
+        db = get_db()
+        t = get_translator()
+
+        items = request.form.getlist("items")
+        if not items:
+            flash(t("no_item_selected"), "error")
+            return redirect(url_for("mailing_history_page"))
+
+        sent_ids = []
+        camp_ids = []
+        for it in items:
+            try:
+                src, rid = it.split(":", 1)
+                rid = int(rid)
+            except Exception:
+                continue
+            if src == "user":
+                sent_ids.append(rid)
+            elif src == "campaign":
+                camp_ids.append(rid)
+
+        try:
+            total = 0
+            if sent_ids:
+                placeholders = ",".join("?" for _ in sent_ids)
+                db.execute(f"DELETE FROM sent_emails WHERE id IN ({placeholders})", sent_ids)
+                total += len(sent_ids)
+
+            if camp_ids:
+                placeholders = ",".join("?" for _ in camp_ids)
+                db.execute(f"DELETE FROM mail_campaigns WHERE id IN ({placeholders})", camp_ids)
+                total += len(camp_ids)
+
+            add_log("info", "mailing_history", "History rows deleted", {"sent_ids": sent_ids, "campaign_ids": camp_ids})
+            flash(t("items_deleted").format(count=total), "success")
+
+        except Exception as e:
+            add_log("error", "mailing_history", "Delete failed", {"error": str(e)})
+            flash(f"{t('delete_failed')} ({e})", "error")
+
+        return redirect(url_for("mailing_history_page"))
+
 
     @app.route("/mailing/smtp", methods=["GET", "POST"])
     def mailing_smtp_page():
@@ -4546,7 +4877,30 @@ def create_app():
             "[BACKUP] Base restaurée – redémarrage du conteneur requis"
         )
 
+    def get_sqlite_db_size_bytes(db_path: str) -> int | None:
+        """
+        Retourne la taille disque de la DB SQLite.
+        Inclut le fichier -wal / -shm si présents (utile si WAL activé).
+        """
+        try:
+            p = Path(db_path)
+            if not p.exists():
+                return None
 
+            total = p.stat().st_size
+
+            wal = p.with_name(p.name + "-wal")
+            shm = p.with_name(p.name + "-shm")
+
+            if wal.exists():
+                total += wal.stat().st_size
+            if shm.exists():
+                total += shm.stat().st_size
+
+            return int(total)
+        except Exception:
+            return None
+    
 
     @app.route("/backup", methods=["GET", "POST"])
     def backup_page():
@@ -4557,6 +4911,8 @@ def create_app():
         settings = db.query_one(
             "SELECT * FROM settings LIMIT 1"
         )
+
+        db_size_bytes = get_sqlite_db_size_bytes(app.config["DATABASE"])
 
         backups = list_backups(backup_cfg)
 
@@ -4660,13 +5016,185 @@ def create_app():
             "backup/backup.html",
             backups=backups,
             settings=settings,
+            db_size_bytes=db_size_bytes, 
             active_page="backup",
         )
-    # ⚠️ À partir d’ici l’état mémoire ≠ état disque
-# Le process DOIT être redémarré
 
 
 
+    # -----------------------------
+    # AUTH (admin) - guard global
+    # -----------------------------
+    def _get_auth_settings():
+        db = get_db()
+        row = db.query_one(
+            "SELECT admin_email, admin_password_hash, auth_enabled FROM settings WHERE id = 1"
+        )
+        return dict(row) if row else {"admin_email": "", "admin_password_hash": None, "auth_enabled": 1}
+
+    def _is_auth_configured(s: dict) -> bool:
+        return bool((s.get("admin_password_hash") or "").strip())
+
+    def _is_logged_in() -> bool:
+        return session.get("vodum_logged_in") is True
+
+    @app.before_request
+    def auth_guard():
+        """
+        🔒 Auth = UI uniquement
+        - Les routes HTML sont protégées
+        - Les routes /api restent accessibles (pour tâches / automation / healthchecks) SAUF si tu veux les bloquer.
+        """
+        s = _get_auth_settings()
+
+        # assets toujours OK
+        always_allowed_prefixes = ("/static", "/set_language", "/health")
+        if request.path.startswith(always_allowed_prefixes) or request.path in ("/favicon.ico",):
+            return
+
+        # si auth désactivée -> open bar
+        if int(s.get("auth_enabled") or 1) == 0:
+            return
+
+        configured = _is_auth_configured(s)
+
+        # ✅ IMPORTANT : on ne protège PAS /api (background)
+        if request.path.startswith("/api/"):
+            return
+
+        # pages auth accessibles
+        auth_pages = ("/login", "/logout", "/setup-admin")
+        if request.path in auth_pages:
+            if request.path == "/login" and not configured:
+                return redirect(url_for("setup_admin"))
+            return
+
+        # Si pas configuré => forcer setup admin pour toute UI
+        if not configured:
+            return redirect(url_for("setup_admin"))
+
+        # Si configuré => login obligatoire pour UI
+        if not _is_logged_in():
+            return redirect(url_for("login", next=request.path))
+
+
+
+
+    # -----------------------------
+    # AUTH ROUTES
+    # -----------------------------
+
+    @app.route("/setup-admin", methods=["GET", "POST"])
+    def setup_admin():
+        db = get_db()
+        s = db.query_one("SELECT admin_email, admin_password_hash FROM settings WHERE id = 1")
+        s = dict(s) if s else {"admin_email": "", "admin_password_hash": None}
+
+        # déjà configuré => go login/home
+        if (s.get("admin_password_hash") or "").strip():
+            return redirect(url_for("login"))
+
+        if request.method == "POST":
+            # Récupération + normalisation (ne plante jamais)
+            email_input = (request.form.get("email") or "").strip().lower()
+            password = (request.form.get("password") or "")
+
+            # ✅ Stricte: email obligatoire.
+            # Si l'utilisateur laisse vide MAIS qu'un email existe déjà en DB, on le reprend.
+            email = email_input or (s.get("admin_email") or "").strip().lower()
+
+            # ✅ Validation stricte (pas seulement "@")
+            # - non vide
+            # - contient exactement un "@"
+            # - pas d'espaces
+            # - a un domaine avec un "."
+            if (
+                not email
+                or " " in email
+                or email.count("@") != 1
+                or "." not in email.split("@", 1)[1]
+            ):
+                flash("Un email admin valide est obligatoire.", "error")
+                return redirect(url_for("setup_admin"))
+
+            # ✅ Mot de passe strict
+            if len(password) < 8:
+                flash("Mot de passe trop court (8 caractères minimum).", "error")
+                return redirect(url_for("setup_admin"))
+
+            pwd_hash = generate_password_hash(password)
+
+            db.execute(
+                "UPDATE settings SET admin_email = ?, admin_password_hash = ?, auth_enabled = 1 WHERE id = 1",
+                (email, pwd_hash),
+            )
+
+            session["vodum_logged_in"] = True
+            session["vodum_admin_email"] = email
+
+            # ensuite seulement, si aucun serveur -> page serveurs
+            row = db.query_one("SELECT COUNT(*) AS cnt FROM servers")
+            if row and int(row["cnt"] or 0) == 0:
+                return redirect(url_for("servers_list"))
+
+            return redirect(url_for("dashboard"))
+
+        return render_template(
+            "auth/setup_admin.html",
+            admin_email=(s.get("admin_email") or "")
+        )
+
+
+
+    @app.route("/login", methods=["GET", "POST"])
+    def login():
+        db = get_db()
+        s = db.query_one("SELECT admin_email, admin_password_hash FROM settings WHERE id = 1")
+        s = dict(s) if s else {"admin_email": "", "admin_password_hash": None}
+
+        if not (s.get("admin_password_hash") or "").strip():
+            return redirect(url_for("setup_admin"))
+
+        if request.method == "POST":
+            email = (request.form.get("email") or "").strip().lower()
+            password = request.form.get("password") or ""
+
+            if not email or email != (s.get("admin_email") or "").strip().lower():
+                flash("Email ou mot de passe incorrect.", "error")
+                return redirect(url_for("login"))
+
+            if not check_password_hash(s["admin_password_hash"], password):
+                flash("Email ou mot de passe incorrect.", "error")
+                return redirect(url_for("login"))
+
+            session["vodum_logged_in"] = True
+            session["vodum_admin_email"] = email
+
+            next_url = request.args.get("next") or url_for("dashboard")
+            auth_logger.info("AUTH login ok email=%s ip=%s ua=%s", email, request.remote_addr, request.user_agent.string)
+            return redirect(next_url)
+
+        reset_host_example = os.environ.get(
+            "VODUM_RESET_FILE_EXAMPLE",
+            "/mnt/user/appdata/VODUM/password.reset"
+        )
+        reset_cmd = f'echo "{RESET_MAGIC}" > {reset_host_example}'
+
+        return render_template(
+            "auth/login.html",
+            reset_available=os.path.exists(RESET_FILE),
+            reset_cmd=reset_cmd,
+        )
+
+
+
+    @app.route("/logout")
+    def logout():
+        session.clear()
+        auth_logger.info("AUTH logout ip=%s ua=%s", request.remote_addr, request.user_agent.string)
+        return redirect(url_for("login"))
+
+ 
 
 
     # -----------------------------
@@ -4839,6 +5367,23 @@ def create_app():
                 """,
                 new_values,
             )
+
+            # --------------------------------------------------
+            # Update admin password (optional)
+            # --------------------------------------------------
+            new_pwd = request.form.get("admin_password") or ""
+            new_pwd = new_pwd.strip()
+            if new_pwd:
+                if len(new_pwd) < 8:
+                    flash("Mot de passe admin trop court (8 caractères minimum).", "error")
+                    return redirect(url_for("settings_page"))
+
+                db.execute(
+                    "UPDATE settings SET admin_password_hash = ? WHERE id = 1",
+                    (generate_password_hash(new_pwd),),
+                )
+                flash("Mot de passe admin mis à jour.", "success")
+
 
             # --------------------------------------------------
             # Sync TASKS from SETTINGS (source unique)

@@ -24,7 +24,10 @@
         {{ t("mail_templates") }}
       </a>
     {% endif %}
-
+	<a href="{{ url_for('mailing_history_page') }}"
+	   class="pb-2 border-b-2 {{ 'border-primary text-primary' if current_subpage=='history' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
+	  {{ t("mail_history_title") }}
+	</a>
     <a href="{{ url_for('mailing_smtp_page') }}"
        class="pb-2 border-b-2 {{ 'border-primary text-primary' if current_subpage=='smtp' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
       {{ t("mail_smtp_config") }}

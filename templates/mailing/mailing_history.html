@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% set active_page = 'mailing' %}
+
+{% block title %}{{ t("mailing") }} - VODUM{% endblock %}
+{% block header_title %}{{ t("mailing") }}{% endblock %}
+{% block header_subtitle %}{{ t("mailing_subtitle") }}{% endblock %}
+
+{% block content %}
+
+{% set current_subpage = 'history' %}
+{% include "mailing/mailing_nav.html" %}
+
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+
+  <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
+    <div>
+      <h2 class="text-sm font-semibold">{{ t("mail_history_title") }}</h2>
+      <p class="text-xs text-slate-400">{{ t("mail_history_desc") }}</p>
+    </div>
+
+    <form method="post" action="{{ url_for('mailing_history_retention') }}" class="flex items-center gap-3">
+      <label class="text-xs text-slate-300">{{ t("mail_history_retention_years") }}</label>
+      <input type="number" min="0" max="50" step="1"
+             name="retention_years"
+             value="{{ settings.email_history_retention_years or 2 }}"
+             class="w-24 bg-slate-950/60 border border-slate-700 rounded px-2 py-1 text-xs" />
+      <button type="submit"
+              class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs">
+        {{ t("mail_history_save_retention") }}
+      </button>
+
+      <button type="submit"
+              formaction="{{ url_for('mailing_history_purge') }}"
+              class="px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs">
+        {{ t("mail_history_purge_now") }}
+      </button>
+    </form>
+  </div>
+
+  <div class="flex flex-col md:flex-row md:items-center gap-3 mb-3">
+    <select id="historyFilterColumn"
+            class="bg-slate-950/60 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200">
+      <option value="all">{{ t("mail_history_all_columns") }}</option>
+      <option value="date">{{ t("mail_history_col_date") }}</option>
+      <option value="source">{{ t("mail_history_col_source") }}</option>
+      <option value="type">{{ t("mail_history_col_type") }}</option>
+      <option value="subject">{{ t("mail_history_col_subject") }}</option>
+      <option value="username">{{ t("mail_history_col_username") }}</option>
+      <option value="email">{{ t("mail_history_col_email") }}</option>
+      <option value="server">{{ t("mail_history_col_server") }}</option>
+      <option value="status">{{ t("mail_history_col_status") }}</option>
+      <option value="expiration">{{ t("mail_history_col_expiration") }}</option>
+    </select>
+
+    <input id="historyFilterInput"
+           type="text"
+           placeholder="{{ t('mail_history_filter_placeholder') }}"
+           class="flex-1 bg-slate-950/60 border border-slate-700 rounded px-3 py-2 text-xs text-slate-200" />
+
+    <button id="historyFilterClear"
+            type="button"
+            class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs">
+      {{ t("mail_history_reset") }}
+    </button>
+  </div>
+
+  <form method="post" action="{{ url_for('mailing_history_delete') }}">
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs">
+        <thead class="bg-slate-950/60 text-slate-400 text-left">
+          <tr>
+            <th class="px-4 py-2 w-10">
+              <button id="deleteHistoryBtn"
+                      type="submit"
+                      disabled
+                      class="px-2 py-1 rounded bg-rose-700/40 text-rose-300 hover:bg-rose-700/60 disabled:opacity-40 disabled:cursor-not-allowed">
+                🗑
+              </button>
+            </th>
+            <th class="px-4 py-2">{{ t("mail_history_col_date") }}</th>
+            <th class="px-4 py-2">{{ t("mail_history_col_source") }}</th>
+            <th class="px-4 py-2">{{ t("mail_history_col_type") }}</th>
+            <th class="px-4 py-2">{{ t("mail_history_col_subject") }}</th>
+            <th class="px-4 py-2">{{ t("mail_history_col_username") }}</th>
+            <th class="px-4 py-2">{{ t("mail_history_col_email") }}</th>
+            <th class="px-4 py-2">{{ t("mail_history_col_server") }}</th>
+            <th class="px-4 py-2">{{ t("mail_history_col_status") }}</th>
+            <th class="px-4 py-2">{{ t("mail_history_col_expiration") }}</th>
+          </tr>
+        </thead>
+
+        <tbody>
+        {% for row in history %}
+          <tr class="border-t border-slate-800 hover:bg-slate-800/40 history-row"
+              data-date="{{ row.date or '' }}"
+              data-source="{{ row.source or '' }}"
+              data-type="{{ row.type or '' }}"
+              data-subject="{{ row.subject or '' }}"
+              data-username="{{ row.username or '' }}"
+              data-email="{{ row.email or '' }}"
+              data-server="{{ row.server_name or '' }}"
+              data-status="{{ row.status or '' }}"
+              data-expiration="{{ row.expiration_date or '' }}">
+            <td class="px-4 py-2">
+              <input type="checkbox" class="historyCheck" name="items" value="{{ row.source }}:{{ row.id }}">
+            </td>
+
+            <td class="px-4 py-2 whitespace-nowrap">{{ row.date or '-' }}</td>
+            <td class="px-4 py-2">
+              {% if row.source == 'user' %}
+                <span class="px-2 py-1 rounded-full bg-sky-700/30 text-sky-200">{{ t("mail_history_badge_user") }}</span>
+              {% else %}
+                <span class="px-2 py-1 rounded-full bg-emerald-700/30 text-emerald-200">{{ t("mail_history_badge_campaign") }}</span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-2">{{ row.type or '-' }}</td>
+            <td class="px-4 py-2 max-w-[380px] truncate" title="{{ row.subject or '' }}">{{ row.subject or '-' }}</td>
+            <td class="px-4 py-2">
+              {% if row.user_id %}
+                <a class="text-indigo-400 hover:underline" href="{{ url_for('user_detail', user_id=row.user_id) }}">{{ row.username or '-' }}</a>
+              {% else %}
+                {{ row.username or '-' }}
+              {% endif %}
+            </td>
+            <td class="px-4 py-2">{{ row.email or '-' }}</td>
+            <td class="px-4 py-2">{{ row.server_name or '-' }}</td>
+            <td class="px-4 py-2">{{ row.status or '-' }}</td>
+            <td class="px-4 py-2 whitespace-nowrap">{{ row.expiration_date or '-' }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </form>
+
+  <p class="text-xs text-slate-500 mt-3">
+    {{ t("mail_history_hint") }}
+  </p>
+
+</div>
+
+<script>
+(function() {
+  const input = document.getElementById("historyFilterInput");
+  const col   = document.getElementById("historyFilterColumn");
+  const clear = document.getElementById("historyFilterClear");
+
+  const rows = () => Array.from(document.querySelectorAll(".history-row"));
+
+  function normalize(v) {
+    return (v || "").toString().toLowerCase().trim();
+  }
+
+  function rowMatches(r, q, column) {
+    if (!q) return true;
+    const get = (k) => normalize(r.getAttribute("data-" + k));
+    if (column === "all") {
+      return ["date","source","type","subject","username","email","server","status","expiration"]
+        .some(k => get(k).includes(q));
+    }
+    return get(column).includes(q);
+  }
+
+  function applyFilter() {
+    const q = normalize(input.value);
+    const column = col.value;
+    rows().forEach(r => {
+      r.style.display = rowMatches(r, q, column) ? "" : "none";
+    });
+  }
+
+  input.addEventListener("input", applyFilter);
+  col.addEventListener("change", applyFilter);
+  clear.addEventListener("click", () => {
+    input.value = "";
+    col.value = "all";
+    applyFilter();
+  });
+
+  const deleteBtn = document.getElementById("deleteHistoryBtn");
+  const checks = () => Array.from(document.querySelectorAll(".historyCheck"));
+  function refreshDelete() {
+    deleteBtn.disabled = !checks().some(c => c.checked);
+  }
+  document.addEventListener("change", (e) => {
+    if (e.target && e.target.classList.contains("historyCheck")) refreshDelete();
+  });
+  refreshDelete();
+})();
+</script>
+
+{% endblock %}

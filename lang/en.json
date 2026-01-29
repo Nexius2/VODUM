@@ -480,11 +480,11 @@
   "merge_failed": "Merge failed",
   "user_merged": "User merged",
   
-  "task_description.monitor_collect_sessions": "Monitoring : collecte des sessions en cours (Plex/Jellyfin)",
+  "task_description.monitor_collect_sessions": "Monitoring: collect active sessions (Plex/Jellyfin)",
   "nav.monitoring": "Monitoring",
 
   "monitoring.title": "Monitoring",
-  "monitoring.subtitle": "Global view Plex / Jellyfin",
+  "monitoring.subtitle": "Global Plex / Jellyfin overview",
 
   "monitoring.cards.servers_online": "Servers online",
   "monitoring.cards.servers_offline": "Servers offline",
@@ -504,21 +504,79 @@
   "monitoring.table.state": "State",
   "monitoring.table.title": "Title",
   "monitoring.table.client": "Client",
-  "monitoring.table.last_seen": "Last seen",
+  "monitoring.table.last_seen": "Last activity",
 
-  "monitoring.empty.sessions": "No live sessions.",
-  "monitoring.empty.events": "No recent events."
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
+  "monitoring.empty.sessions": "No active sessions.",
+  "monitoring.empty.events": "No recent events.",
+
+  "db_size": "Database size",
+
+  "auth.title_setup_admin": "Initialization",
+  "auth.initialisation": "Initialization",
+  "auth.setup_admin_description": "Set the admin email and password before configuring servers.",
+  "auth.admin_email": "Admin email",
+  "auth.admin_password": "Admin password",
+  "auth.password_min_8": "8 characters minimum",
+  "common.validate": "Validate",
+
+  "auth.title_login": "Login",
+  "auth.login": "Login",
+  "auth.login_description": "Administrator access required.",
+  "auth.password": "Password",
+  "common.login": "Sign in",
+  "common.logout": "Log out",
+  "auth.reset_link": "Reset password",
+  "auth.reset_title": "Password reset",
+  "auth.reset_subtitle": "Local access only • Not available remotely",
+  "auth.reset_explain_1": "For security reasons, password reset requires local access to the server (Unraid / SSH / console).",
+  "auth.reset_steps_title": "Procedure",
+  "auth.reset_step_1": "Create a reset file on the server.",
+  "auth.reset_step_2": "Retrieve the token (file contents).",
+  "auth.reset_step_3": "Open the reset page and enter the token, new email, and new password.",
+  "auth.reset_cmd_simple": "Simple command:",
+  "auth.reset_cmd_random": "Command with random token:",
+  "auth.reset_available": "Reset available (file detected).",
+  "auth.reset_not_available": "Reset unavailable: no reset file was found on the server.",
+  "auth.reset_open_page": "Open reset page",
+  "common.close": "Close",
+  "auth.reset_step_1_simple": "Create a reset file on the server.",
+  "auth.reset_step_2_restart": "Restart the VODUM container.",
+  "auth.reset_step_3_setup": "Open the interface and redefine the admin email and password.",
+  "auth.reset_note_path": "Tip: adjust the path according to the actual appdata location of your container.",
+  "auth.reset_available_restart": "Reset file detected. Restart the container now to reset the credentials.",
+  "mail_history_title": "History",
+  "mail_history_desc": "All sent emails (automatic user emails + campaigns).",
+
+  "mail_history_retention_years": "Retention (years)",
+  "mail_history_save_retention": "Save",
+  "mail_history_purge_now": "Purge",
+
+  "mail_history_all_columns": "All columns",
+  "mail_history_filter_placeholder": "Filter…",
+  "mail_history_reset": "Reset",
+
+  "mail_history_col_date": "Date",
+  "mail_history_col_source": "Source",
+  "mail_history_col_type": "Type",
+  "mail_history_col_subject": "Subject",
+  "mail_history_col_username": "Username",
+  "mail_history_col_email": "Email",
+  "mail_history_col_server": "Server",
+  "mail_history_col_status": "Status",
+  "mail_history_col_expiration": "Expiration",
+
+  "mail_history_badge_user": "User",
+  "mail_history_badge_campaign": "Campaign",
+
+  "mail_history_retention_saved": "Retention saved ({years} year(s)).",
+  "mail_history_purged": "History purged: {sent} user email(s), {campaigns} campaign(s).",
+  "mail_history_purge_failed": "Purge failed",
+  "mail_history_no_item_selected": "No row selected",
+  "mail_history_items_deleted": "{count} row(s) deleted.",
+  "mail_history_delete_failed": "Delete failed",
+
+  "mail_history_hint": "Tip: purging also clears the history shown in user details and the campaign history."
+
   
   
 }
