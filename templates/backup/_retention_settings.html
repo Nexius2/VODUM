@@ -1,0 +1,24 @@
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+  <h2 class="text-sm font-semibold mb-4">{{ t("backup_settings") }}</h2>
+
+  <p class="text-xs text-slate-400 mb-3">
+    {{ t("auto_retention_info") }}
+  </p>
+
+  <form action="{{ url_for('backup_page') }}" method="post" class="space-y-4">
+    <input type="hidden" name="action" value="save_settings">
+
+    <div>
+      <label class="block text-xs text-slate-400 mb-1">
+        {{ t("backup_retention_days") }}
+      </label>
+      <input type="number" min="1" name="backup_retention_days"
+             value="{{ settings.backup_retention_days }}"
+             class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs w-full">
+    </div>
+
+    <button class="px-4 py-2 rounded-lg bg-primary/80 hover:bg-primary text-white text-sm">
+      {{ t("save_settings") }}
+    </button>
+  </form>
+</div>

@@ -6,7 +6,22 @@
       {% for s in sessions %}
         <div class="bg-slate-950/40 border border-slate-800 rounded-2xl p-4">
           <div class="flex flex-wrap gap-2 mb-3">
-            <span class="text-xs px-2 py-1 rounded-full border border-slate-700">{{ s.provider }}</span>
+			{# Provider badge (Plex/Jellyfin) #}
+			{% set p = (s.provider or '')|lower %}
+
+			<span
+			  class="text-xs px-2 py-1 rounded-full border
+				{% if 'plex' in p %}
+				  border-orange-500 text-orange-300 bg-orange-500/10
+				{% elif 'jellyfin' in p %}
+				  border-blue-500 text-blue-300 bg-blue-500/10
+				{% else %}
+				  border-slate-700 text-slate-200 bg-slate-900/30
+				{% endif %}"
+			>
+			  {{ s.provider }}
+			</span>
+
             {% if s.is_transcode %}
               <span class="text-xs px-2 py-1 rounded-full border border-orange-500 text-orange-300">Transcoding</span>
             {% else %}

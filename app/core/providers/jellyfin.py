@@ -99,10 +99,22 @@ class JellyfinProvider(BaseProvider):
                 host, port = ip.split(":", 1)
                 if host.strip().replace(".", "").isdigit():
                     ip = host.strip()
-
             return ip
-
         return None
+
+    def _get_item_details(self, item_id: str) -> Dict[str, Any]:
+        """
+        Fallback: /Sessions ne fournit pas toujours Name/Type dans NowPlayingItem
+        (souvent avec Jellyfin Web). On récupère donc l'item complet.
+        """
+        try:
+            # /Items/{id} retourne un objet avec Name + Type généralement fiables
+            return self._get_json(f"/Items/{item_id}") or {}
+        except Exception:
+            return {}
+
+
+
 
     def get_active_sessions(self) -> List[Dict[str, Any]]:
         # EnableRemoteIP increases chances of having RemoteEndPoint filled
@@ -113,9 +125,17 @@ class JellyfinProvider(BaseProvider):
             session_id = s.get("Id")
             user_id = s.get("UserId") or (s.get("User") or {}).get("Id")
 
+            # IMPORTANT:
+            # Jellyfin peut garder une "session" même après arrêt,
+            # mais avec NowPlayingItem absent (ou vide).
+            # Si on la garde, le collecteur ne verra jamais la session "disparaitre"
+            # => aucun event "stop" => aucune entrée en history.
             now_playing = s.get("NowPlayingItem") or {}
             item_id = now_playing.get("Id")
+            if not session_id or not item_id:
+                continue
 
+            play_key = f"{session_id}:{item_id}"
             play_state = s.get("PlayState") or {}
             jf_play_method = (play_state.get("PlayMethod") or "").strip()  # DirectPlay/DirectStream/Transcode
 
@@ -137,26 +157,38 @@ class JellyfinProvider(BaseProvider):
             bitrate = transcoding_info.get("Bitrate")
 
             is_paused = play_state.get("IsPaused")
-            state = "paused" if is_paused else ("playing" if now_playing else "unknown")
+            state = "paused" if is_paused else "playing"
 
             progress_ms = self._ticks_to_ms(play_state.get("PositionTicks"))
             duration_ms = self._ticks_to_ms(now_playing.get("RunTimeTicks"))
 
-            title = now_playing.get("Name")
+            # title/type peuvent être absents ou "Video" selon le client Jellyfin.
+            title = (
+                now_playing.get("Name")
+                or now_playing.get("OriginalTitle")
+                or now_playing.get("SortName")
+            )
+            jf_type = (now_playing.get("Type") or "").strip().lower()
 
-            # --- Normalize media type to movie/serie/tracks
-            jf_type = (now_playing.get("Type") or "").strip().lower()  # Movie/Episode/Audio/MusicVideo/...
-            if jf_type == "movie":
+            # ✅ Fallback: si /Sessions est incomplet, récupérer l'item complet
+            if not title or jf_type in ("", "unknown", "other"):
+                item = self._get_item_details(str(item_id))
+                if item:
+                    title = title or item.get("Name") or item.get("OriginalTitle")
+                    jf_type = jf_type or (item.get("Type") or "").strip().lower()
+
+            # --- Normalize media type (Jellyfin renvoie souvent "Video" pour les films)
+            if jf_type in ("movie", "video"):
                 media_category = "movie"
-            elif jf_type == "episode":
+            elif jf_type in ("episode",):
                 media_category = "serie"
             elif jf_type in ("audio", "musictrack", "song"):
                 media_category = "tracks"
             else:
                 media_category = "other"
 
-            # Fill episode info when possible (helps history)
-            # Jellyfin items often include SeriesName/SeasonName on NowPlayingItem for episodes
+
+            # Episode fields when available
             grandparent_title = (
                 now_playing.get("SeriesName")
                 or now_playing.get("GrandparentTitle")
@@ -177,19 +209,15 @@ class JellyfinProvider(BaseProvider):
                 client_product = app_version
 
             device = s.get("DeviceName") or s.get("DeviceId") or None
-
             ip = self._pick_ip(s)
-
-            if not session_id:
-                continue
 
             sessions.append(
                 {
                     "provider": "jellyfin",
-                    "session_key": str(session_id),
+                    "session_key": str(play_key),
                     "external_user_id": str(user_id) if user_id else None,
                     "username": s.get("UserName") or (s.get("User") or {}).get("Name"),
-                    "media_key": str(item_id) if item_id else None,
+                    "media_key": str(item_id),
 
                     "media_type": media_category,
 
@@ -197,6 +225,7 @@ class JellyfinProvider(BaseProvider):
                     "grandparent_title": grandparent_title,
                     "parent_title": parent_title,
                     "state": state,
+
                     "progress_ms": progress_ms,
                     "duration_ms": duration_ms,
 
@@ -219,3 +248,4 @@ class JellyfinProvider(BaseProvider):
             )
 
         return sessions
+

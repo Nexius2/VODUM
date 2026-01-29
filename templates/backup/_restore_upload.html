@@ -1,0 +1,16 @@
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+  <h2 class="text-sm font-semibold mb-4">{{ t("restore_backup") }}</h2>
+
+  <p class="text-xs text-slate-400 mb-4">
+    {{ t("restore_backup_desc") }}
+  </p>
+
+  <form action="{{ url_for('backup_page') }}" method="post" enctype="multipart/form-data" class="space-y-3">
+    <input type="hidden" name="action" value="restore">
+    <input type="file" name="backup_file"
+           class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs w-full">
+    <button class="px-4 py-2 rounded-lg bg-rose-900/40 text-rose-200 hover:bg-rose-900/60 text-sm">
+      {{ t("restore_btn") }}
+    </button>
+  </form>
+</div>

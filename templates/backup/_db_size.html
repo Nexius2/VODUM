@@ -1,0 +1,27 @@
+{# templates/backup/_db_size.html #}
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+  <h2 class="text-sm font-semibold mb-3">
+    {{ t("db_size") }}
+  </h2>
+
+  {% if db_size_bytes is defined and db_size_bytes %}
+    {% set mb = db_size_bytes / 1024 / 1024 %}
+    {% set gb = mb / 1024 %}
+
+    <div class="text-xl font-semibold">
+      {% if gb >= 1 %}
+        {{ gb|round(2) }} GB
+      {% else %}
+        {{ mb|round(2) }} MB
+      {% endif %}
+    </div>
+
+    <div class="text-[11px] text-slate-500 mt-1">
+      {{ db_size_bytes }} bytes
+    </div>
+  {% else %}
+    <div class="text-sm text-slate-500">
+      —
+    </div>
+  {% endif %}
+</div>

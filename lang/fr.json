@@ -510,6 +510,74 @@
   "monitoring.table.last_seen": "Dernière activité",
 
   "monitoring.empty.sessions": "Aucune session en cours.",
-  "monitoring.empty.events": "Aucun événement récent."
+  "monitoring.empty.events": "Aucun événement récent.",
+  "db_size": "Taille de la base de données",
+  "auth.title_setup_admin": "Initialisation",
+  "auth.initialisation": "Initialisation",
+  "auth.setup_admin_description": "Définis l’email admin et un mot de passe avant de configurer des serveurs.",
+  "auth.admin_email": "Email admin",
+  "auth.admin_password": "Mot de passe admin",
+  "auth.password_min_8": "8 caractères minimum",
+  "common.validate": "Valider",
+
+  "auth.title_login": "Connexion",
+  "auth.login": "Connexion",
+  "auth.login_description": "Accès administrateur requis.",
+  "auth.password": "Mot de passe",
+  "common.login": "Se connecter",
+  "common.logout": "Se déconnecter",
+  "auth.reset_link": "Réinitialiser le mot de passe",
+  "auth.reset_title": "Réinitialisation du mot de passe",
+  "auth.reset_subtitle": "Accès local uniquement • Non disponible à distance",
+  "auth.reset_explain_1": "Pour des raisons de sécurité, la réinitialisation nécessite un accès local au serveur (Unraid / SSH / console).",
+  "auth.reset_steps_title": "Procédure",
+  "auth.reset_step_1": "Créer un fichier de réinitialisation sur le serveur.",
+  "auth.reset_step_2": "Récupérer le token (contenu du fichier).",
+  "auth.reset_step_3": "Ouvrir la page de réinitialisation et saisir le token, le nouvel email et le nouveau mot de passe.",
+  "auth.reset_cmd_simple": "Commande simple :",
+  "auth.reset_cmd_random": "Commande avec token aléatoire :",
+  "auth.reset_available": "Réinitialisation disponible (fichier détecté).",
+  "auth.reset_not_available": "Réinitialisation indisponible : aucun fichier de reset n’a été trouvé sur le serveur.",
+  "auth.reset_open_page": "Ouvrir la page de réinitialisation",
+  "common.close": "Fermer",
+  "auth.reset_step_1_simple": "Créer un fichier de reset sur le serveur.",
+  "auth.reset_step_2_restart": "Redémarrer le conteneur VODUM.",
+  "auth.reset_step_3_setup": "Ouvrir l’interface et redéfinir l’email admin et le mot de passe.",
+  "auth.reset_note_path": "Astuce : adapte le chemin selon l’emplacement réel de l’appdata de ton conteneur.",
+  "auth.reset_available_restart": "Fichier de reset détecté. Redémarre le conteneur maintenant pour réinitialiser les identifiants.",
+ "mail_history_title": "Historique",
+  "mail_history_desc": "Tous les emails envoyés (emails automatiques + campagnes).",
+
+  "mail_history_retention_years": "Rétention (années)",
+  "mail_history_save_retention": "Enregistrer",
+  "mail_history_purge_now": "Purger",
+
+  "mail_history_all_columns": "Toutes les colonnes",
+  "mail_history_filter_placeholder": "Filtrer…",
+  "mail_history_reset": "Réinitialiser",
+
+  "mail_history_col_date": "Date",
+  "mail_history_col_source": "Source",
+  "mail_history_col_type": "Type",
+  "mail_history_col_subject": "Sujet",
+  "mail_history_col_username": "Utilisateur",
+  "mail_history_col_email": "Email",
+  "mail_history_col_server": "Serveur",
+  "mail_history_col_status": "Statut",
+  "mail_history_col_expiration": "Expiration",
+
+  "mail_history_badge_user": "Utilisateur",
+  "mail_history_badge_campaign": "Campagne",
+
+  "mail_history_retention_saved": "Rétention sauvegardée ({years} an(s)).",
+  "mail_history_purged": "Historique purgé : {sent} email(s) utilisateur, {campaigns} campagne(s).",
+  "mail_history_purge_failed": "Échec de la purge",
+  "mail_history_no_item_selected": "Aucune ligne sélectionnée",
+  "mail_history_items_deleted": "{count} ligne(s) supprimée(s).",
+  "mail_history_delete_failed": "Échec de la suppression",
+
+  "mail_history_hint": "Astuce : la purge supprime aussi l’historique affiché dans la fiche utilisateur et l’historique des campagnes."
+}
+
 
 }

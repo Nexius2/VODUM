@@ -105,6 +105,12 @@
 		  <span class="material-icons-outlined mr-2 text-base">info</span>
 		  {{ t("about") }}
 		</a>
+		<a href="{{ url_for('logout') }}"
+		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800">
+		  <span class="material-icons-outlined mr-2 text-base">logout</span>
+		  {{ t("common.logout") }}
+		</a>
+
 	  </nav>
 
 	<!-- Indicateur activité tâches (visible seulement si active > 0) -->

@@ -91,7 +91,7 @@ def run(task_id: int, db):
         # On garde TON format historique pour ne rien casser:
         # vodum-YYYYmmdd-HHMMSS.db
         timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
-        backup_name = f"vodum-{timestamp}.db"
+        backup_name = f"backup_{timestamp}.sqlite"
         backup_path = backup_dir / backup_name
 
         log.info(f"Creating backup: {backup_name}")
@@ -105,8 +105,8 @@ def run(task_id: int, db):
         scanned = 0
 
         patterns = (
-            "vodum-*.db",          # historique auto_backup
-            "backup_*.sqlite",     # format UI
+            "vodum-*.db",          # ancien format auto_backup
+            "backup_*.sqlite",     # nouveau format (manuel + auto)
             "pre_restore_*.sqlite",
             "database_v1_*.db",
         )

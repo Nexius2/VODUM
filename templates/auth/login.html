@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>{{ t("auth.title_login") }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100">
+  <div class="min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-xl p-6">
+
+      <h1 class="text-xl font-semibold mb-1">{{ t("auth.title_login") }}</h1>
+      <p class="text-sm text-slate-400 mb-6">{{ t("auth.login_description") }}</p>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="space-y-2 mb-4">
+            {% for category, msg in messages %}
+              <div class="text-sm px-3 py-2 rounded bg-slate-800 border border-slate-700">
+                {{ msg }}
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      <form method="POST" class="space-y-4">
+        <div>
+          <label class="block text-sm mb-1 text-slate-300">{{ t("auth.admin_email") }}</label>
+          <input type="email" name="email" autocomplete="email"
+                 class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm"
+                 required>
+        </div>
+
+        <div>
+          <label class="block text-sm mb-1 text-slate-300">{{ t("auth.password") }}</label>
+          <input type="password" name="password" autocomplete="current-password"
+                 class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm"
+                 required>
+        </div>
+
+        <button class="w-full px-4 py-2 bg-indigo-500 hover:bg-indigo-600 rounded text-white text-sm">
+          {{ t("common.login") }}
+        </button>
+      </form>
+
+      <!-- Reset password link -->
+      <div class="mt-4 text-center">
+        <button type="button" id="openResetModal"
+                class="text-xs text-slate-400 hover:text-slate-200 underline">
+          {{ t("auth.reset_link") }}
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Modal overlay (like user merge) -->
+  <div id="resetModal"
+       class="fixed inset-0 z-50 hidden"
+       aria-hidden="true">
+    <!-- backdrop -->
+    <div class="absolute inset-0 bg-black/70"></div>
+
+    <!-- modal panel -->
+    <div class="relative mx-auto my-10 w-[92%] max-w-2xl">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden">
+
+        <div class="flex items-start justify-between px-6 py-4 border-b border-slate-800">
+          <div>
+            <h2 class="text-lg font-semibold">{{ t("auth.reset_title") }}</h2>
+            <p class="text-xs text-slate-400">{{ t("auth.reset_subtitle") }}</p>
+          </div>
+          <button type="button" id="closeResetModal"
+                  class="text-slate-400 hover:text-slate-200 text-xl leading-none">
+            ×
+          </button>
+        </div>
+
+        <div class="px-6 py-5 space-y-4 text-sm text-slate-200">
+          <p class="text-slate-300">
+            {{ t("auth.reset_explain_1") }}
+          </p>
+
+			<div class="bg-slate-950 border border-slate-800 rounded-lg p-4">
+
+			  <p class="font-semibold mb-2">{{ t("auth.reset_steps_title") }}</p>
+			  <ol class="list-decimal ml-5 space-y-2 text-slate-300">
+				<li>{{ t("auth.reset_step_1_simple") }}</li>
+			  <div class="mt-4">
+				<div class="text-xs text-slate-400 mb-1">
+				  {{ t("auth.reset_cmd_simple") }}
+				</div>
+				<pre class="bg-slate-900 border border-slate-800 rounded p-2 overflow-x-auto text-xs">{{ reset_cmd }}</pre>
+				<div class="text-xs text-slate-500 mt-2">
+				  {{ t("auth.reset_note_path") }}
+				</div>
+			  </div>
+				<li>{{ t("auth.reset_step_2_restart") }}</li>
+				<li>{{ t("auth.reset_step_3_setup") }}</li>
+			  </ol>
+
+
+			</div>
+
+			{% if reset_available %}
+			  <div class="bg-emerald-900/20 border border-emerald-900/40 rounded-lg p-3 text-emerald-100 text-sm">
+				{{ t("auth.reset_available_restart") }}
+			  </div>
+			{% else %}
+			  <div class="bg-slate-800/60 border border-slate-700 rounded-lg p-3 text-slate-200 text-sm">
+				{{ t("auth.reset_not_available") }}
+			  </div>
+			{% endif %}
+
+        </div>
+
+        <div class="px-6 py-4 border-t border-slate-800 flex justify-end gap-2">
+          <button type="button" id="closeResetModal2"
+                  class="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 text-sm">
+            {{ t("common.close") }}
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const modal = document.getElementById("resetModal");
+    const openBtn = document.getElementById("openResetModal");
+    const closeBtn = document.getElementById("closeResetModal");
+    const closeBtn2 = document.getElementById("closeResetModal2");
+
+    function openModal() {
+      modal.classList.remove("hidden");
+      modal.setAttribute("aria-hidden", "false");
+    }
+    function closeModal() {
+      modal.classList.add("hidden");
+      modal.setAttribute("aria-hidden", "true");
+    }
+
+    openBtn.addEventListener("click", openModal);
+    closeBtn.addEventListener("click", closeModal);
+    closeBtn2.addEventListener("click", closeModal);
+
+    // close on ESC
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !modal.classList.contains("hidden")) closeModal();
+    });
+
+    // close if click backdrop
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal || e.target.classList.contains("bg-black/70")) closeModal();
+    });
+  </script>
+</body>
+</html>

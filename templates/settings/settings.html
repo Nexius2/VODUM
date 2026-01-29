@@ -78,6 +78,22 @@
                            value="{{ settings.admin_email }}"
                            class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
                 </div>
+				
+                <!-- Admin Password (leave empty = no change) -->
+                <div>
+                    <label class="block text-sm mb-1 text-slate-300">
+                        {{ t("auth.admin_password") }}
+                    </label>
+                    <input type="password" name="admin_password"
+                           value=""
+                           class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm"
+                           placeholder="••••••••">
+                    <p class="text-xs text-slate-400 mt-1">
+                        {{ t("auth.password_min_8") }}
+                    </p>
+                </div>
+
+				
 				<!-- Brand name -->
 				<div>
 				  <label class="block text-sm mb-1 text-slate-300">

@@ -9,6 +9,9 @@ import requests
 from core.monitoring.diff import compute_session_events
 from core.monitoring.mappers import resolve_media_user_id
 from core.providers.registry import get_provider
+from logging_utils import get_logger
+
+logger = get_logger("monitoring.collector")
 
 
 class AttrDict(dict):
@@ -97,28 +100,50 @@ def _has_recent_live_sessions(db, server_id: int, window_seconds: int = 180) -> 
 
 
 def _classify_status_from_exception(e: Exception) -> str:
-    msg = (str(e) or "").lower()
+    """
+    Classe un statut serveur à partir d'une exception.
+    Important: certains providers (ex: Jellyfin) encapsulent les erreurs requests
+    dans un RuntimeError("... unreachable ...") avec __cause__ = RequestException.
+    On déroule donc la chaîne des exceptions.
+    """
+    def iter_chain(exc: Exception):
+        seen = set()
+        cur = exc
+        while cur is not None and id(cur) not in seen:
+            seen.add(id(cur))
+            yield cur
+            cur = getattr(cur, "__cause__", None) or getattr(cur, "__context__", None)
 
-    # Problèmes réseau => DOWN
-    if isinstance(e, (requests.exceptions.Timeout, requests.exceptions.ConnectionError)):
+    chain = list(iter_chain(e))
+
+    # 1) Si dans la chaîne on trouve une vraie erreur réseau requests => DOWN
+    for exc in chain:
+        if isinstance(exc, (requests.exceptions.Timeout, requests.exceptions.ConnectionError)):
+            return "down"
+
+    # 2) Si dans la chaîne on trouve un HTTPError => classifier selon code
+    for exc in chain:
+        if isinstance(exc, requests.exceptions.HTTPError):
+            resp = getattr(exc, "response", None)
+            code = getattr(resp, "status_code", None)
+            if code in (401, 403):
+                return "unknown"  # auth/token
+            if code and int(code) >= 500:
+                return "down"
+            return "unknown"
+
+    # 3) Heuristique message: "unreachable"/"connection"/"timed out" => DOWN
+    # (utile si le provider relance un RuntimeError avec ce texte)
+    msg = " | ".join([(str(x) or "").lower() for x in chain])
+    if any(k in msg for k in ("unreachable", "connection", "timed out", "timeout", "refused", "name or service not known")):
         return "down"
 
-    # HTTP errors => dépend du code
-    if isinstance(e, requests.exceptions.HTTPError):
-        resp = getattr(e, "response", None)
-        code = getattr(resp, "status_code", None)
-        if code in (401, 403):
-            return "unknown"  # auth/token => pas "down"
-        if code and int(code) >= 500:
-            return "down"
+    # 4) Config manquante => UNKNOWN
+    if any(k in msg for k in ("missing", "token", "url")):
         return "unknown"
 
-    # Erreurs de config (URL/token manquant) => UNKNOWN
-    if "missing" in msg or "token" in msg or "url" in msg:
-        return "unknown"
-
-    # Par défaut => UNKNOWN (on évite de mentir)
     return "unknown"
+
 
 
 def collect_sessions_for_server(
@@ -189,14 +214,17 @@ def collect_sessions_for_server(
                 ON CONFLICT(server_id, session_key) DO UPDATE SET
                   media_user_id=excluded.media_user_id,
                   external_user_id=excluded.external_user_id,
-                  media_key=excluded.media_key,
-                  media_type=excluded.media_type,
-                  title=excluded.title,
-                  grandparent_title=excluded.grandparent_title,
-                  parent_title=excluded.parent_title,
+
+                  media_key=COALESCE(excluded.media_key, media_sessions.media_key),
+                  media_type=COALESCE(excluded.media_type, media_sessions.media_type),
+                  title=COALESCE(excluded.title, media_sessions.title),
+                  grandparent_title=COALESCE(excluded.grandparent_title, media_sessions.grandparent_title),
+                  parent_title=COALESCE(excluded.parent_title, media_sessions.parent_title),
+
                   state=excluded.state,
                   progress_ms=excluded.progress_ms,
-                  duration_ms=excluded.duration_ms,
+                  duration_ms=COALESCE(excluded.duration_ms, media_sessions.duration_ms),
+
                   is_transcode=excluded.is_transcode,
                   bitrate=excluded.bitrate,
                   video_codec=excluded.video_codec,
@@ -205,11 +233,11 @@ def collect_sessions_for_server(
                   client_product=excluded.client_product,
                   device=excluded.device,
                   ip=excluded.ip,
+
                   started_at=COALESCE(media_sessions.started_at, excluded.started_at),
                   last_seen_at=excluded.last_seen_at,
                   raw_json=excluded.raw_json,
-                  library_section_id=excluded.library_section_id
-
+                  library_section_id=COALESCE(excluded.library_section_id, media_sessions.library_section_id)
                 """,
                 (
                     server_id, provider_name, sk,
@@ -329,10 +357,8 @@ def collect_sessions_for_server(
 
     except Exception as e:
         # Log en base pour diagnostic (et éviter "offline" injustifié)
-        db.execute(
-            "INSERT INTO logs(level, category, message, details) VALUES (?, ?, ?, ?)",
-            ("ERROR", "monitoring", f"collect_sessions_for_server failed (server_id={server_id})", str(e)[:2000]),
-        )
+        logger.exception("collect_sessions_for_server failed (server_id=%s)", server_id)
+
 
         # Règle d’or: si on a une session récente, on reste UP
         if _has_recent_live_sessions(db, server_id, window_seconds=180):

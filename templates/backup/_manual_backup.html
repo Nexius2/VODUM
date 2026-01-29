@@ -1,0 +1,14 @@
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+  <h2 class="text-sm font-semibold mb-4">{{ t("manual_backup") }}</h2>
+
+  <p class="text-xs text-slate-400 mb-4">
+    {{ t("manual_backup_desc") }}
+  </p>
+
+  <form action="{{ url_for('backup_page') }}" method="post">
+    <input type="hidden" name="action" value="create">
+    <button class="px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-sm">
+      {{ t("create_backup_btn") }}
+    </button>
+  </form>
+</div>
