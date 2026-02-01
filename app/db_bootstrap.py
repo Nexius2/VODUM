@@ -1,7 +1,7 @@
 import sqlite3
 import os
 
-DB_PATH = "/appdata/database.db"
+DB_PATH = os.environ.get("DATABASE_PATH", "/appdata/database.db")
 
 # ---------------------------------------------------------
 # Utility: checks
