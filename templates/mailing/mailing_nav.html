@@ -1,37 +1,28 @@
-{% set smtp_ready =
-      settings.mailing_enabled
-  and settings.smtp_host
-  and settings.smtp_port
-  and settings.smtp_user
-  and settings.smtp_pass
-  and settings.mail_from
-%}
-
-
-
-<div class="mb-6 border-b border-slate-800 text-sm">
-  <nav class="flex gap-4">
-
-
-    {% if smtp_ready %}
-      <a href="{{ url_for('mailing_campaigns_page') }}"
-         class="pb-2 border-b-2 {{ 'border-primary text-primary' if current_subpage=='campaigns' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
-        {{ t("mail_campaigns") }}
-      </a>
-
-      <a href="{{ url_for('mailing_templates_page') }}"
-         class="pb-2 border-b-2 {{ 'border-primary text-primary' if current_subpage=='templates' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
-        {{ t("mail_templates") }}
-      </a>
-    {% endif %}
-	<a href="{{ url_for('mailing_history_page') }}"
-	   class="pb-2 border-b-2 {{ 'border-primary text-primary' if current_subpage=='history' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
-	  {{ t("mail_history_title") }}
-	</a>
-    <a href="{{ url_for('mailing_smtp_page') }}"
-       class="pb-2 border-b-2 {{ 'border-primary text-primary' if current_subpage=='smtp' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
-      {{ t("mail_smtp_config") }}
+<div class="mb-6">
+  <div class="flex flex-wrap items-center gap-6 border-b border-slate-800">
+    <a href="{{ url_for('mailing_campaigns_page') }}"
+       class="pb-2 border-b-2 {{ 'border-primary text-primary' if current_subpage=='campaigns' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
+      Campaigns
     </a>
 
-  </nav>
+    <a href="{{ url_for('mailing_templates_page') }}"
+       class="pb-2 border-b-2 {{ 'border-primary text-primary' if current_subpage=='templates' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
+      Templates
+    </a>
+
+    <a href="{{ url_for('mailing_welcome_templates_page') }}"
+       class="pb-2 border-b-2 {{ 'border-primary text-primary' if current_subpage=='welcome_templates' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
+      Welcome templates
+    </a>
+
+    <a href="{{ url_for('mailing_history_page') }}"
+       class="pb-2 border-b-2 {{ 'border-primary text-primary' if current_subpage=='history' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
+      History
+    </a>
+
+    <a href="{{ url_for('mailing_smtp_page') }}"
+       class="pb-2 border-b-2 {{ 'border-primary text-primary' if current_subpage=='smtp' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
+      SMTP
+    </a>
+  </div>
 </div>
