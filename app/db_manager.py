@@ -2,6 +2,8 @@ import sqlite3
 import threading
 import logging
 from typing import Any, Iterable, Optional
+import os
+
 
 
 class DBManager:
@@ -16,7 +18,7 @@ class DBManager:
     _instance = None
     _instance_lock = threading.Lock()
 
-    def __new__(cls, db_path: str = "/appdata/database.db"):
+    def __new__(cls, db_path: str | None = None):
         # Singleton strict
         with cls._instance_lock:
             if cls._instance is None:
@@ -24,9 +26,12 @@ class DBManager:
                 cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self, db_path: str = "/appdata/database.db"):
+    def __init__(self, db_path: str | None = None):
         if self._initialized:
             return
+
+        if not db_path:
+            db_path = os.environ.get("DATABASE_PATH", "/appdata/database.db")
 
         self.db_path = db_path
         self._lock = threading.Lock()

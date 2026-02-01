@@ -185,13 +185,13 @@ def create_app():
     # -----------------------------
     def get_db():
         if "db" not in g:
-            g.db = DBManager()
+            g.db = DBManager(app.config["DATABASE"])
         return g.db
 
     init_i18n(app, get_db)
 
     def scheduler_db_provider():
-        return DBManager()
+        return DBManager(app.config["DATABASE"])
 
     @app.context_processor
     def inject_brand_name():
