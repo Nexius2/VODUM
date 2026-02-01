@@ -102,31 +102,89 @@
     chart.update("none");
   }
 
+  function hashColor(str) {
+    // Couleur stable pour types inconnus (déterministe)
+    const s = String(str || "unknown").toLowerCase();
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+
+    // Génère une couleur lisible (pas trop sombre)
+    const r = 80 + (h & 0x7F);
+    const g = 80 + ((h >> 7) & 0x7F);
+    const b = 80 + ((h >> 14) & 0x7F);
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+
   function mediaColor(label) {
-    const k = String(label || "unknown").toLowerCase();
+    const k = String(label || "unknown").toLowerCase().trim();
 
-    // mapping "stable" (même type => même couleur)
-    if (k.includes("series") || k.includes("episode") || k.includes("show")) return "#A855F7"; // violet
-    if (k.includes("movie")  || k.includes("film")    || k.includes("video")) return "#3B82F6"; // bleu
-    if (k.includes("music")  || k.includes("track")   || k.includes("audio")) return "#10B981"; // vert
-    if (k.includes("photo")  || k.includes("image")) return "#F59E0B"; // orange
-    if (k.includes("unknown")) return "#94A3B8"; // slate
-    return "#EF4444"; // fallback rouge
+    // ✅ mapping exact (tes types API: movie/serie/tracks/photo/other/...)
+    const MAP = {
+      movie:  "#3B82F6", // bleu
+      serie:  "#10B981", // vert
+      show:   "#10B981", 
+      episode:"#10B981",
+
+      tracks: "#A855F7", // violet
+      track:  "#A855F7",
+      music:  "#A855F7",
+      audio:  "#A855F7",
+
+      photo:  "#F59E0B", // orange
+      image:  "#F59E0B",
+      pictures:"#F59E0B",
+
+      tv:     "#22C55E", // vert vif (si jamais)
+      live:   "#22C55E",
+
+      book:   "#E879F9", // rose
+      comic:  "#E879F9",
+
+      other:  "#EF4444", // rouge
+      unknown:"#94A3B8"  // gris
+    };
+
+    if (MAP[k]) return MAP[k];
+
+    // ✅ fallback par mots-clés (au cas où l’API renvoie "Movie (Plex)" etc.)
+    if (k.includes("serie") || k.includes("episode") || k.includes("show")) return MAP.serie;
+    if (k.includes("movie") || k.includes("film") || k.includes("video")) return MAP.movie;
+    if (k.includes("track") || k.includes("music") || k.includes("audio")) return MAP.tracks;
+    if (k.includes("photo") || k.includes("image") || k.includes("picture")) return MAP.photo;
+    if (k.includes("unknown")) return MAP.unknown;
+    if (k.includes("other")) return MAP.other;
+
+    // ✅ couleur stable pour tout le reste
+    return hashColor(k);
   }
 
-  function updateMediaTypes(chart, labels, values) {
-    chart.data.labels = labels;
 
-    const colors = labels.map(mediaColor);
-    chart.data.datasets[0].data = values;
-    chart.data.datasets[0].backgroundColor = colors;
+	function updateMediaTypes(chart, labels, values) {
+	  // Sécurisation
+	  labels = labels || [];
+	  values = values || [];
 
-    // séparation nette
-    chart.data.datasets[0].borderColor = "#0B1220";
-    chart.data.datasets[0].borderWidth = 2;
+	  // Associe label + valeur, puis trie par volume décroissant
+	  const pairs = labels.map((label, i) => ({
+		label,
+		value: Number(values[i]) || 0
+	  })).filter(p => p.value > 0)
+		.sort((a, b) => b.value - a.value);
 
-    chart.update("none");
-  }
+	  const sortedLabels = pairs.map(p => p.label);
+	  const sortedValues = pairs.map(p => p.value);
+
+	  chart.data.labels = sortedLabels;
+	  chart.data.datasets[0].data = sortedValues;
+	  chart.data.datasets[0].backgroundColor = sortedLabels.map(mediaColor);
+
+	  // Séparation nette entre les segments
+	  chart.data.datasets[0].borderColor = "#0B1220";
+	  chart.data.datasets[0].borderWidth = 2;
+
+	  chart.update("none");
+	}
+
 
   function getOrCreate(canvas, factory) {
     const key = keyFor(canvas);
