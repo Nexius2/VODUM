@@ -47,6 +47,7 @@ from core.i18n import init_i18n, get_translator, get_available_languages
 from core.backup import BackupConfig, ensure_backup_dir, create_backup_file, list_backups, restore_backup_file
 from werkzeug.security import generate_password_hash, check_password_hash
 from blueprints.users import users_bp
+import requests
 
 
 
@@ -643,15 +644,23 @@ def create_app():
             """
             SELECT
               ms.id,
+              ms.server_id,
               s.name AS server_name,
               s.type AS provider,
-              ms.state,
+
+              ms.media_type,
               ms.title,
               ms.grandparent_title,
+              ms.parent_title,
+
+              ms.state,
               ms.client_name,
               mu.username AS username,
               ms.is_transcode,
-              ms.last_seen_at
+              ms.last_seen_at,
+
+              ms.raw_json,
+              ms.media_key
             FROM media_sessions ms
             JOIN servers s ON s.id = ms.server_id
             LEFT JOIN media_users mu ON mu.id = ms.media_user_id
@@ -660,6 +669,92 @@ def create_app():
             """,
             (live_window_sql,),
         )
+
+        # ------------------------------------------------------------------
+        # Enrich Now Playing: SxxExx + jaquette (sans changer la DB)
+        # ------------------------------------------------------------------
+        def _safe_int(v):
+            try:
+                if v is None:
+                    return None
+                return int(v)
+            except Exception:
+                return None
+
+        sessions = [dict(r) for r in sessions]
+
+        for s in sessions:
+            s["season_number"] = None
+            s["episode_number"] = None
+            s["episode_code"] = None
+            s["poster_url"] = None
+
+            raw = s.get("raw_json")
+            if not raw:
+                continue
+
+            try:
+                data = json.loads(raw)
+            except Exception:
+                data = {}
+
+            provider = (s.get("provider") or "").lower()
+
+            # ---------- PLEX ----------
+            if provider == "plex":
+                attrs = (data.get("VideoOrTrack") or {})
+
+                # Episode numbers (Plex XML attribs are stored in raw_json)
+                # parentIndex = season number, index = episode number
+                season = _safe_int(attrs.get("parentIndex"))
+                episode = _safe_int(attrs.get("index"))
+
+                s["season_number"] = season
+                s["episode_number"] = episode
+
+                if season is not None and episode is not None:
+                    s["episode_code"] = f"S{season:02d}E{episode:02d}"
+                elif season is not None:
+                    s["episode_code"] = f"S{season}"
+
+                # Poster path preference for series:
+                # grandparentThumb (show poster) > parentThumb (season poster) > thumb (item)
+                poster_path = (
+                    attrs.get("grandparentThumb")
+                    or attrs.get("parentThumb")
+                    or attrs.get("thumb")
+                )
+                if poster_path:
+                    s["poster_url"] = url_for(
+                        "api_monitoring_poster",
+                        server_id=s["server_id"],
+                        path=poster_path,
+                    )
+
+            # ---------- JELLYFIN ----------
+            elif provider == "jellyfin":
+                now = (data.get("NowPlayingItem") or {})
+
+                season = _safe_int(now.get("ParentIndexNumber"))
+                episode = _safe_int(now.get("IndexNumber"))
+
+                s["season_number"] = season
+                s["episode_number"] = episode
+
+                if season is not None and episode is not None:
+                    s["episode_code"] = f"S{season:02d}E{episode:02d}"
+                elif season is not None:
+                    s["episode_code"] = f"S{season}"
+
+                # Poster: for episodes, prefer SeriesId (show poster). fallback to item Id.
+                poster_item_id = now.get("SeriesId") or now.get("Id") or s.get("media_key")
+                if poster_item_id:
+                    s["poster_url"] = url_for(
+                        "api_monitoring_poster",
+                        server_id=s["server_id"],
+                        item_id=str(poster_item_id),
+                    )
+
 
         events = db.query(
             """
@@ -1177,6 +1272,102 @@ def create_app():
             resp.set_cookie(f"monitoring_{tab}_dir",  str(sort_dir),  max_age=60*60*24*365)
         return resp
 
+    @app.route("/api/monitoring/poster/<int:server_id>")
+    def api_monitoring_poster(server_id: int):
+        db = get_db()
+        srv = db.query_one(
+            """
+            SELECT id, type, url, local_url, public_url, token
+            FROM servers
+            WHERE id = ?
+              AND type IN ('plex','jellyfin')
+            LIMIT 1
+            """,
+            (server_id,),
+        )
+        if not srv:
+            abort(404)
+
+        srv = dict(srv)
+        stype = (srv.get("type") or "").lower()
+        token = srv.get("token")
+        if not token:
+            abort(404)
+
+        # url > local_url > public_url
+        bases = []
+        for u in (srv.get("url"), srv.get("local_url"), srv.get("public_url")):
+            if u and str(u).strip():
+                b = str(u).strip().rstrip("/")
+                if b not in bases:
+                    bases.append(b)
+
+        if not bases:
+            abort(502)
+
+        def _try_get(full_url, headers=None, params=None):
+            r = requests.get(full_url, headers=headers, params=params, timeout=10)
+            r.raise_for_status()
+            return r
+
+        # ---------------- PLEX ----------------
+        if stype == "plex":
+            path = request.args.get("path")
+            if not path:
+                abort(400)
+
+            if not path.startswith("/"):
+                path = "/" + path
+
+            params = {"X-Plex-Token": token}
+
+            last_err = None
+            for base in bases:
+                try:
+                    r = _try_get(base + path, params=params)
+                    ct = r.headers.get("Content-Type") or "image/jpeg"
+                    return Response(
+                        r.content,
+                        mimetype=ct,
+                        headers={"Cache-Control": "public, max-age=300"},
+                    )
+                except Exception as e:
+                    last_err = e
+                    continue
+
+            abort(502)
+
+        # --------------- JELLYFIN --------------
+        if stype == "jellyfin":
+            item_id = request.args.get("item_id")
+            if not item_id:
+                abort(400)
+
+            # small poster size by default
+            w = request.args.get("w", "120")
+            q = request.args.get("q", "90")
+
+            path = f"/Items/{item_id}/Images/Primary"
+            params = {"maxWidth": w, "quality": q}
+            headers = {"X-Emby-Token": token}
+
+            last_err = None
+            for base in bases:
+                try:
+                    r = _try_get(base + path, headers=headers, params=params)
+                    ct = r.headers.get("Content-Type") or "image/jpeg"
+                    return Response(
+                        r.content,
+                        mimetype=ct,
+                        headers={"Cache-Control": "public, max-age=300"},
+                    )
+                except Exception as e:
+                    last_err = e
+                    continue
+
+            abort(502)
+
+        abort(404)
 
 
     # =====================================================================

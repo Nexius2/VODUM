@@ -688,6 +688,44 @@ def auto_enable_plex_jobs_worker():
         (should_enable, should_enable),
     )
 
+def auto_enable_jellyfin_jobs_worker():
+    """
+    Active/désactive apply_jellyfin_access_updates automatiquement :
+    - ON si au moins 1 serveur Jellyfin UP OU si des media_jobs Jellyfin non traités existent
+    - OFF sinon
+    """
+
+    jellyfin_up = db.query_one(
+        """
+        SELECT COUNT(*) AS cnt
+        FROM servers
+        WHERE type = 'jellyfin'
+          AND LOWER(status) = 'up'
+        """
+    )["cnt"]
+
+    # On compte UNIQUEMENT les jobs liés à un serveur Jellyfin
+    pending_jellyfin_jobs = db.query_one(
+        """
+        SELECT COUNT(*) AS cnt
+        FROM media_jobs mj
+        JOIN servers s ON s.id = mj.server_id
+        WHERE mj.processed = 0
+          AND s.type = 'jellyfin'
+        """
+    )["cnt"]
+
+    should_enable = 1 if (jellyfin_up > 0 or pending_jellyfin_jobs > 0) else 0
+
+    db.execute(
+        """
+        UPDATE tasks
+        SET enabled = ?,
+            status  = CASE WHEN ? = 1 THEN 'idle' ELSE 'disabled' END
+        WHERE name = 'apply_jellyfin_access_updates'
+        """,
+        (should_enable, should_enable),
+    )
 
 
 # -------------------------------------------------------------------
@@ -758,6 +796,46 @@ def scheduler_loop():
                     f"Erreur auto-enable apply_plex_access_updates: {e}",
                     exc_info=True
                 )
+
+            try:
+                # --- apply_jellyfin_access_updates : utile seulement si Jellyfin UP ou jobs Jellyfin en attente
+                jellyfin_up = db.query_one(
+                    """
+                    SELECT COUNT(*) AS cnt
+                    FROM servers
+                    WHERE type = 'jellyfin'
+                      AND LOWER(status) = 'up'
+                    """
+                )["cnt"]
+
+                pending_jellyfin_jobs = db.query_one(
+                    """
+                    SELECT COUNT(*) AS cnt
+                    FROM media_jobs mj
+                    JOIN servers s ON s.id = mj.server_id
+                    WHERE mj.processed = 0
+                      AND s.type = 'jellyfin'
+                    """
+                )["cnt"]
+
+                should_enable = 1 if (jellyfin_up > 0 or pending_jellyfin_jobs > 0) else 0
+
+                db.execute(
+                    """
+                    UPDATE tasks
+                    SET enabled = ?,
+                        status  = CASE WHEN ? = 1 THEN 'idle' ELSE 'disabled' END
+                    WHERE name = 'apply_jellyfin_access_updates'
+                    """,
+                    (should_enable, should_enable),
+                )
+
+            except Exception as e:
+                logger.warning(
+                    f"Erreur auto-enable apply_jellyfin_access_updates: {e}",
+                    exc_info=True
+                )
+
 
             # -------------------------------------------------
             # 1) Charger les tâches actives
@@ -892,7 +970,10 @@ def start_scheduler():
 
 
         auto_enable_sync_tasks()
-        auto_enable_monitoring_tasks
+        auto_enable_monitoring_tasks()
+        auto_enable_plex_jobs_worker()
+        auto_enable_jellyfin_jobs_worker()
+
 
 
 

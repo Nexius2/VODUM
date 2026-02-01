@@ -627,9 +627,14 @@ def apply_sync_job(db, job):
     logger.info(f"Sections DB (expected) ({len(sections)}): {sections}")
 
     # --- PERMISSIONS (depuis media_users.details_json) --------------------
-    allowSync, allowCameraUpload, allowChannels, filterMovies, filterTelevision, filterMusic = (
-        _get_plex_share_settings_from_user(user)
-    )
+    (
+        allowSync,
+        allowCameraUpload,
+        allowChannels,
+        filterMovies,
+        filterTelevision,
+        filterMusic,
+    ) = _get_plex_share_settings_from_user(user)
 
     logger.info(
         "Plex share settings: "
@@ -637,7 +642,7 @@ def apply_sync_job(db, job):
         f"filterMovies='{filterMovies}' filterTelevision='{filterTelevision}' filterMusic='{filterMusic}'"
     )
 
-    # Application via updateFriend (méthode Wizarr)
+    # Application via updateFriend (sections uniquement)
     logger.warning(
         f"APPLY SYNC intent: user='{user['username']}' "
         f"server_friendly='{plex.friendlyName}' sections={sections}"
@@ -658,21 +663,19 @@ def apply_sync_job(db, job):
         filterMusic=filterMusic,
     )
 
-    # On résout machine_id une fois
     machine_id = plex.machineIdentifier
 
     try:
-        # 1) LIBS ONLY (sans flags)
+        # 1) PARTAGE DES LIBS (sans flags)
         account.updateFriend(
             user=plex_user,
             server=plex,
             sections=sections,
-            # ⚠️ NE PAS passer allowSync/allowCameraUpload/allowChannels ici
         )
         logger.info("✅ Sections updated via updateFriend()")
 
-        # 2) PERMISSIONS via shared_servers
-        # Trouver le shared_server_id sur CE serveur (machineIdentifier)
+        # 2) FLAGS + LIB IDS via /shared_servers (c'est ça qui était cassé)
+        # Trouver le shared_server associé à CE serveur
         shared_srv = None
         for srv in getattr(plex_user, "servers", []) or []:
             if getattr(srv, "machineIdentifier", None) == machine_id:
@@ -686,67 +689,82 @@ def apply_sync_job(db, job):
 
         shared_server_id = getattr(shared_srv, "id", None)
         if not shared_server_id:
-            raise RuntimeError(f"shared_server.id missing for '{getattr(plex_user, 'username', None)}'")
+            raise RuntimeError(
+                f"shared_server.id missing for '{getattr(plex_user, 'username', None)}'"
+            )
 
-        # Convertir titres → IDs (nécessaire pour librarySectionID)
+        # Convertir titres -> section IDs (Plex attend des IDs)
         section_ids = account._getSectionIds(machine_id, sections)
 
-        # ⚠️ Plex attend des query params / form-style, pas ton JSON "server_id/shared_server/..."
-        params = [
-            ("allowSync", "1" if allowSync else "0"),
-            ("allowCameraUpload", "1" if allowCameraUpload else "0"),
-            ("allowChannels", "1" if allowChannels else "0"),
-            ("filterMovies", str(filterMovies or "")),
-            ("filterTelevision", str(filterTelevision or "")),
-            ("filterMusic", str(filterMusic or "")),
+        # ✅ IMPORTANT :
+        # Plex veut un form body avec des clés "shared_server[...]"
+        data = [
+            ("shared_server[allowSync]", "1" if allowSync else "0"),
+            ("shared_server[allowCameraUpload]", "1" if allowCameraUpload else "0"),
+            ("shared_server[allowChannels]", "1" if allowChannels else "0"),
+            ("shared_server[filterMovies]", str(filterMovies or "")),
+            ("shared_server[filterTelevision]", str(filterTelevision or "")),
+            ("shared_server[filterMusic]", str(filterMusic or "")),
         ]
         for sid in section_ids:
-            params.append(("librarySectionID", str(sid)))
+            # multi-values -> on répète la clé
+            data.append(("shared_server[librarySectionID][]", str(sid)))
 
-        base_url = f"https://plex.tv/api/servers/{machine_id}/shared_servers/{shared_server_id}"
-        url = f"{base_url}?{urlencode(params, doseq=True)}"
+        url = f"https://plex.tv/api/servers/{machine_id}/shared_servers/{shared_server_id}"
 
         logger.warning(
-            f"[PERMISSIONS] Updating shared_server permissions (query params):\n"
+            "[PERMISSIONS] Updating shared_server permissions (FORM body):\n"
+            f"  url={url}\n"
             f"  user={getattr(plex_user, 'username', None)}\n"
             f"  shared_server_id={shared_server_id}\n"
             f"  allowSync={1 if allowSync else 0}\n"
             f"  allowCameraUpload={1 if allowCameraUpload else 0}\n"
             f"  allowChannels={1 if allowChannels else 0}\n"
-            f"  section_ids={section_ids}"
+            f"  section_ids={section_ids}\n"
         )
 
+        # ✅ et là : on envoie data=... au PUT (body), pas dans l'URL
         account.query(
             url,
             account._session.put,
+            data=data,
         )
 
-        logger.info("✅ Permissions updated via shared_servers (query params)")
+        logger.info("✅ Permissions updated via shared_servers (FORM body)")
 
     except Exception:
         logger.exception("sync failed")
         raise
 
-    # --- POST-CHECK : vérifier ce que Plex a vraiment appliqué (source fiable) ---
+    # --- POST-CHECK : lecture correcte du SharedServer ---
     try:
         check_url = f"https://plex.tv/api/servers/{machine_id}/shared_servers/{shared_server_id}"
         resp = account.query(check_url, account._session.get)
 
-        allowSync_val = None
-        allowCameraUpload_val = None
-        allowChannels_val = None
+        shared_elem = None
 
-        # resp peut être un Element XML ou une liste
-        if hasattr(resp, "attrib"):
-            allowSync_val = resp.attrib.get("allowSync")
-            allowCameraUpload_val = resp.attrib.get("allowCameraUpload")
-            allowChannels_val = resp.attrib.get("allowChannels")
-        elif isinstance(resp, list) and resp and hasattr(resp[0], "attrib"):
-            allowSync_val = resp[0].attrib.get("allowSync")
-            allowCameraUpload_val = resp[0].attrib.get("allowCameraUpload")
-            allowChannels_val = resp[0].attrib.get("allowChannels")
+        # Cas normal : MediaContainer -> SharedServer
+        if hasattr(resp, "find"):
+            shared_elem = resp.find(".//SharedServer")
 
-        # Sections réellement partagées : on peut aussi log les ids attendus
+        # Sécurité
+        if shared_elem is None:
+            logger.warning(
+                f"POST-CHECK: SharedServer introuvable pour user='{user['username']}' "
+                f"server='{plex.friendlyName}'"
+            )
+            return
+
+        allowSync_val = shared_elem.attrib.get("allowSync")
+        allowCameraUpload_val = shared_elem.attrib.get("allowCameraUpload")
+        allowChannels_val = shared_elem.attrib.get("allowChannels")
+
+        shared_section_ids = [
+            s.attrib.get("id")
+            for s in shared_elem.findall(".//Section")
+            if s.attrib.get("id")
+        ]
+
         logger.warning(
             f"POST-CHECK (shared_servers GET): user='{user['username']}' "
             f"server_friendly='{plex.friendlyName}'\n"
@@ -754,11 +772,14 @@ def apply_sync_job(db, job):
             f"  allowCameraUpload={allowCameraUpload_val}\n"
             f"  allowChannels={allowChannels_val}\n"
             f"  expected_section_ids={section_ids}\n"
-            f"  expected_sections={sections}"
+            f"  shared_section_ids={shared_section_ids}\n"
         )
 
     except Exception:
         logger.exception("POST-CHECK failed")
+
+
+
 
 
 

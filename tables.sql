@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS vodum_users (
 	
     notes TEXT,
 
-	status TEXT DEFAULT 'expired' CHECK (status IN ('active','pre_expired','reminder','expired')),
+	status TEXT DEFAULT 'expired' CHECK (status IN ('active','pre_expired','reminder','expired','invited','unfriended','suspended','unknown')),
+	
 	last_status TEXT,
     status_changed_at TIMESTAMP
 );
@@ -140,6 +141,22 @@ CREATE TABLE IF NOT EXISTS email_templates (
 	default_subject TEXT,
 	default_body TEXT
 
+);
+
+-----------------------------------------------------------------------
+--  WELCOME EMAIL TEMPLATES (per provider / optional per server)
+-----------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS welcome_email_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider TEXT NOT NULL CHECK (provider IN ('plex','jellyfin')),
+    server_id INTEGER NULL,
+    subject TEXT NOT NULL,
+    body TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE(provider, server_id),
+    FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE
 );
 
 
