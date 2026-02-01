@@ -75,23 +75,34 @@ def send_email(subject, body, to_email, smtp_settings):
         log.error(f"[SMTP] Error while sending to {to_email}: {e}", exc_info=True)
         return False
 
-def was_sent_recently(db, user_id: int, template_type: str, *, cooldown_hours: int = 24) -> bool:
+def was_sent_recently(db, user_id: int, template_type: str, cooldown_hours: int = 24) -> bool:
     """
-    Anti-spam robuste :
-    - empêche d'envoyer le même type de mail plus d'une fois sur une fenêtre de temps.
+    Cooldown robuste:
+    - fonctionne si sent_at est stocké en TEXT (YYYY-MM-DD HH:MM:SS)
+    - fonctionne si sent_at est stocké en INTEGER (epoch)
     """
+    window = f"-{int(cooldown_hours)} hours"
+
     row = db.query_one(
         """
         SELECT 1
         FROM sent_emails
         WHERE user_id = ?
           AND template_type = ?
-          AND sent_at >= DATETIME('now', ?)
+          AND (
+                -- cas 1: sent_at est un datetime texte
+                (typeof(sent_at) != 'integer' AND julianday(sent_at) >= julianday('now', ?))
+                OR
+                -- cas 2: sent_at est un epoch integer
+                (typeof(sent_at) = 'integer' AND sent_at >= CAST(strftime('%s','now', ?) AS INTEGER))
+              )
         LIMIT 1
         """,
-        (user_id, template_type, f"-{int(cooldown_hours)} hours"),
+        (user_id, template_type, window, window),
     )
     return bool(row)
+
+
 
 
 # --------------------------------------------------------
@@ -196,12 +207,14 @@ def run(task_id: int, db):
                     already = db.query_one(
                         """
                         SELECT 1 FROM sent_emails
-                        WHERE user_id=? AND template_type='fin' AND expiration_date=?
+                        WHERE user_id = ?
+                          AND template_type = 'fin'
+                          AND expiration_date = ?
                         """,
                         (uid, exp_iso),
                     )
 
-                    # anti-spam "cooldown" (évite l'envoi horaire)
+                    # ⛔ STOP spam horaire
                     if already or was_sent_recently(db, uid, "fin", cooldown_hours=24):
                         continue
 
@@ -223,12 +236,20 @@ def run(task_id: int, db):
                     if success_any:
                         db.execute(
                             """
-                            INSERT INTO sent_emails(user_id, template_type, expiration_date)
-                            VALUES (?, 'fin', ?)
+                            INSERT OR IGNORE INTO sent_emails(
+                                user_id,
+                                template_type,
+                                expiration_date,
+                                sent_at
+                            )
+                            VALUES (?, 'fin', ?, CAST(strftime('%s','now') AS INTEGER))
                             """,
                             (uid, exp_iso),
                         )
                         sent_count += 1
+                        log.debug(f"[DB] sent_emails inserted: user={uid} type=fin exp={exp_iso} sent_at=now")
+
+
 
 
             # ----------------------------------------------------
@@ -259,7 +280,6 @@ def run(task_id: int, db):
                     if already or was_sent_recently(db, uid, type_, cooldown_hours=24):
                         continue
 
-
                     success_any = False
                     for r in recipients:
                         context = build_user_context({
@@ -278,12 +298,20 @@ def run(task_id: int, db):
                     if success_any:
                         db.execute(
                             """
-                            INSERT INTO sent_emails(user_id, template_type, expiration_date)
-                            VALUES (?, ?, ?)
+                            INSERT OR IGNORE INTO sent_emails(
+                                user_id,
+                                template_type,
+                                expiration_date,
+                                sent_at
+                            )
+                            VALUES (?, ?, ?, CAST(strftime('%s','now') AS INTEGER))
                             """,
                             (uid, type_, exp_iso),
                         )
                         sent_count += 1
+                        log.debug(f"[DB] sent_emails inserted: user={uid} type={type_} exp={exp_iso} sent_at=now")
+
+    
 
 
         msg = f"send_expiration_emails finished — {sent_count} Email(s) sent"

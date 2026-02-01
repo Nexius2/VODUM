@@ -49,6 +49,26 @@ def run_migrations():
         cursor.execute("DROP TABLE IF EXISTS logs")
         conn.commit()
 
+    # -------------------------------------------------
+    # 0.1 Welcome email templates table (NEW)
+    # -------------------------------------------------
+    if not table_exists(cursor, "welcome_email_templates"):
+        print("🛠 Creating table: welcome_email_templates")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS welcome_email_templates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider TEXT NOT NULL CHECK (provider IN ('plex','jellyfin')),
+            server_id INTEGER NULL,
+            subject TEXT NOT NULL,
+            body TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(provider, server_id),
+            FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE
+        );
+        """)
+        conn.commit()
+
 
     # -------------------------------------------------
     # 1. Vérifier que toutes les tables existent
@@ -75,6 +95,66 @@ def run_migrations():
                                f"-> Check that tables.sql has been imported correctly.")
 
     print("✔ All tables exist.")
+
+    # -------------------------------------------------
+    # 1.1 Upgrade vodum_users.status CHECK constraint (NEW statuses)
+    # -------------------------------------------------
+    def vodum_users_has_new_statuses():
+        cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='vodum_users'")
+        row = cursor.fetchone()
+        if not row or not row[0]:
+            return False
+        sql = row[0].lower()
+        return ("'invited'" in sql) and ("'unknown'" in sql)
+
+    if table_exists(cursor, "vodum_users") and not vodum_users_has_new_statuses():
+        print("🛠 Upgrading vodum_users.status CHECK (add invited/unfriended/suspended/unknown)")
+        cursor.execute("ALTER TABLE vodum_users RENAME TO vodum_users_old")
+
+        cursor.execute("""
+        CREATE TABLE vodum_users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            username TEXT,
+            firstname TEXT,
+            lastname TEXT,
+            email TEXT,
+            second_email TEXT,
+
+            expiration_date TIMESTAMP,
+            renewal_method TEXT,
+            renewal_date TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+            notes TEXT,
+
+            status TEXT DEFAULT 'expired'
+              CHECK (status IN (
+                'active','pre_expired','reminder','expired',
+                'invited','unfriended','suspended','unknown'
+              )),
+            last_status TEXT,
+            status_changed_at TIMESTAMP
+        );
+        """)
+
+        cursor.execute("""
+        INSERT INTO vodum_users (
+            id, username, firstname, lastname, email, second_email,
+            expiration_date, renewal_method, renewal_date, created_at,
+            notes, status, last_status, status_changed_at
+        )
+        SELECT
+            id, username, firstname, lastname, email, second_email,
+            expiration_date, renewal_method, renewal_date, created_at,
+            notes, status, last_status, status_changed_at
+        FROM vodum_users_old;
+        """)
+
+        cursor.execute("DROP TABLE vodum_users_old")
+        conn.commit()
+        print("✔ vodum_users.status constraint upgraded.")
+
 
     # -------------------------------------------------
     # 2. Vérifier que toutes les colonnes obligatoires existent
@@ -518,6 +598,70 @@ def run_migrations():
             VALUES ('send_expiration_emails', '0 * * * *', 0, 'disabled')
         """)
         print("➕ Task send_expiration_emails added.")
+
+    # -------------------------------------------------
+    # 3.1 Seed default welcome templates (English)
+    # -------------------------------------------------
+    def ensure_welcome_template(provider, server_id, subject, body):
+        cursor.execute(
+            "SELECT 1 FROM welcome_email_templates WHERE provider=? AND server_id IS ?",
+            (provider, server_id),
+        )
+        if not cursor.fetchone():
+            cursor.execute(
+                """
+                INSERT INTO welcome_email_templates(provider, server_id, subject, body)
+                VALUES (?, ?, ?, ?)
+                """,
+                (provider, server_id, subject, body),
+            )
+            print(f"➕ Default welcome template inserted: {provider} / server_id={server_id}")
+
+    plex_subject = "Welcome to Plex - {server_name}"
+    plex_body = """Hi {firstname} {lastname},
+
+You've been invited to access our Plex server.
+
+1) Create (or sign in to) your Plex account using this email: {email}
+2) Accept the invitation from Plex
+3) Open the server and start watching
+
+Server name: {server_name}
+
+Need help?
+- Install Plex on your device (TV / mobile / web)
+- Sign in with your Plex account
+- Accept the share invitation
+- You will then see the server in your Plex home
+
+Regards,
+Vodum Team
+"""
+
+    jf_subject = "Welcome to Jellyfin - {server_name}"
+    jf_body = """Hi {firstname} {lastname},
+
+Your Jellyfin account is ready.
+
+Server: {server_name}
+URL: {server_url}
+Username: {login_username}
+Temporary password: {temporary_password}
+
+How to log in:
+- Open the URL above (web)
+- Or install the Jellyfin app (Android / iOS / TV)
+- Sign in with your username and password
+
+Regards,
+Vodum Team
+"""
+
+    ensure_welcome_template("plex", None, plex_subject, plex_body)
+    ensure_welcome_template("jellyfin", None, jf_subject, jf_body)
+
+    conn.commit()
+
 
     # -------------------------------------------------
     # 4. Templates email par défaut 

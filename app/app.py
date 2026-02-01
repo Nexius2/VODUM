@@ -46,6 +46,8 @@ import time
 from core.i18n import init_i18n, get_translator, get_available_languages
 from core.backup import BackupConfig, ensure_backup_dir, create_backup_file, list_backups, restore_backup_file
 from werkzeug.security import generate_password_hash, check_password_hash
+from blueprints.users import users_bp
+
 
 
 
@@ -174,6 +176,8 @@ def create_app():
 )
 
     app.register_blueprint(subscriptions_api)
+    app.register_blueprint(users_bp)
+
 
     # -----------------------------
     # DB helpers
@@ -4533,6 +4537,120 @@ def create_app():
             active_page="mailing",
         )
 
+    @app.route("/mailing/welcome-templates", methods=["GET", "POST"])
+    def mailing_welcome_templates_page():
+        db = get_db()
+        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        if not is_smtp_ready(settings):
+            return redirect(url_for("mailing_smtp_page"))
+
+        t = get_translator()
+
+        # Create/override empty row
+        if request.method == "POST" and request.form.get("action") == "create_or_override":
+            provider = (request.form.get("provider") or "").strip().lower()
+            server_id_raw = (request.form.get("server_id") or "").strip()
+            server_id = int(server_id_raw) if server_id_raw else None
+
+            if provider not in ("plex", "jellyfin"):
+                flash("Invalid provider", "error")
+            else:
+                exists = db.query_one(
+                    """
+                    SELECT 1 FROM welcome_email_templates
+                    WHERE provider=? AND server_id IS ?
+                    """,
+                    (provider, server_id),
+                )
+                if not exists:
+                    db.execute(
+                        """
+                        INSERT INTO welcome_email_templates(provider, server_id, subject, body)
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        (provider, server_id, "", ""),
+                    )
+                    flash("Template created.", "success")
+
+        # Save all
+        if request.method == "POST" and request.form.get("action") == "save_all":
+            rows = db.query("SELECT id FROM welcome_email_templates")
+            for r in rows:
+                tid = r["id"]
+                subject = request.form.get(f"subject_{tid}", "").strip()
+                body = request.form.get(f"body_{tid}", "").strip()
+                db.execute(
+                    """
+                    UPDATE welcome_email_templates
+                    SET subject=?, body=?, updated_at=CURRENT_TIMESTAMP
+                    WHERE id=?
+                    """,
+                    (subject, body, tid),
+                )
+            add_log("info", "mail_templates", "Welcome templates updated", {})
+            flash("Welcome templates saved.", "success")
+
+        # Test send
+        if request.method == "POST" and request.form.get("test_template_id"):
+            template_id = request.form.get("test_template_id", type=int)
+
+            settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+            admin_email = settings["admin_email"] if settings else None
+
+            if not admin_email:
+                flash(t("admin_email_missing"), "error")
+            else:
+                tpl = db.query_one(
+                    "SELECT * FROM welcome_email_templates WHERE id = ?",
+                    (template_id,),
+                )
+                if not tpl:
+                    flash("Template not found", "error")
+                else:
+                    try:
+                        fake_user = {
+                            "username": "TestUser",
+                            "email": admin_email,
+                            "expiration_date": "2026-12-31",
+                            "firstname": "John",
+                            "lastname": "Doe",
+                            "server_name": "My Server",
+                            "server_url": "https://example.com",
+                            "login_username": "TestUser",
+                            "temporary_password": "TempPass123!",
+                        }
+                        context = build_user_context(fake_user)
+                        subject = render_mail(tpl["subject"], context)
+                        body = render_mail(tpl["body"], context)
+
+                        send_email_via_settings(admin_email, subject, body)
+
+                        add_log("info", "mail_templates", "Welcome template test email sent", {"template_id": template_id})
+                        flash("Test email sent to admin.", "success")
+                    except Exception as e:
+                        add_log("error", "mail_templates", "Welcome template test failed", {"error": str(e)})
+                        flash(f"Test failed ({e})", "error")
+
+        templates = db.query("""
+            SELECT w.*,
+                   s.name as server_name
+            FROM welcome_email_templates w
+            LEFT JOIN servers s ON s.id = w.server_id
+            ORDER BY w.provider ASC, (w.server_id IS NOT NULL) ASC, s.name ASC
+        """)
+
+        servers = db.query("SELECT id, name, type FROM servers ORDER BY name ASC")
+
+        return render_template(
+            "mailing/mailing_welcome_templates.html",
+            templates=templates,
+            servers=servers,
+            active_page="mailing",
+            current_subpage="welcome_templates",
+            settings=settings
+        )
+
+
     # -------------------------------------------------------------------------
     # MAILING HISTORY (sent_emails + mail_campaigns)
     # -------------------------------------------------------------------------
@@ -5220,6 +5338,7 @@ def create_app():
             "/health",        # optionnel si tu as un healthcheck
             "/login",         # futur admin login
             "/logout",        # futur admin logout
+            "/setup-admin",
         )
 
         if request.path.startswith(allowed_prefixes):
