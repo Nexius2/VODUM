@@ -75,6 +75,23 @@ def send_email(subject, body, to_email, smtp_settings):
         log.error(f"[SMTP] Error while sending to {to_email}: {e}", exc_info=True)
         return False
 
+def was_sent_recently(db, user_id: int, template_type: str, *, cooldown_hours: int = 24) -> bool:
+    """
+    Anti-spam robuste :
+    - empêche d'envoyer le même type de mail plus d'une fois sur une fenêtre de temps.
+    """
+    row = db.query_one(
+        """
+        SELECT 1
+        FROM sent_emails
+        WHERE user_id = ?
+          AND template_type = ?
+          AND sent_at >= DATETIME('now', ?)
+        LIMIT 1
+        """,
+        (user_id, template_type, f"-{int(cooldown_hours)} hours"),
+    )
+    return bool(row)
 
 
 # --------------------------------------------------------
@@ -184,31 +201,35 @@ def run(task_id: int, db):
                         (uid, exp_iso),
                     )
 
-                    if not already:
-                        success_any = False
-                        for r in recipients:
-                            context = build_user_context({
-                                "username": username,
-                                "email": r,
-                                "expiration_date": exp_date.isoformat(),
-                                "days_left": days_left,
-                            })
+                    # anti-spam "cooldown" (évite l'envoi horaire)
+                    if already or was_sent_recently(db, uid, "fin", cooldown_hours=24):
+                        continue
 
-                            subject = render_mail(tpl["subject"], context)
-                            body = render_mail(tpl["body"], context)
+                    success_any = False
+                    for r in recipients:
+                        context = build_user_context({
+                            "username": username,
+                            "email": r,
+                            "expiration_date": exp_date.isoformat(),
+                            "days_left": days_left,
+                        })
 
-                            if send_email(subject, body, r, settings):
-                                success_any = True
+                        subject = render_mail(tpl["subject"], context)
+                        body = render_mail(tpl["body"], context)
 
-                        if success_any:
-                            db.execute(
-                                """
-                                INSERT OR IGNORE INTO sent_emails(user_id, template_type, expiration_date)
-                                VALUES (?, 'fin', ?)
-                                """,
-                                (uid, exp_iso),
-                            )
-                            sent_count += 1
+                        if send_email(subject, body, r, settings):
+                            success_any = True
+
+                    if success_any:
+                        db.execute(
+                            """
+                            INSERT INTO sent_emails(user_id, template_type, expiration_date)
+                            VALUES (?, 'fin', ?)
+                            """,
+                            (uid, exp_iso),
+                        )
+                        sent_count += 1
+
 
             # ----------------------------------------------------
             # PRÉAVIS / RELANCE
@@ -235,8 +256,9 @@ def run(task_id: int, db):
                         (uid, type_, exp_iso),
                     )
 
-                    if already:
+                    if already or was_sent_recently(db, uid, type_, cooldown_hours=24):
                         continue
+
 
                     success_any = False
                     for r in recipients:
@@ -256,7 +278,7 @@ def run(task_id: int, db):
                     if success_any:
                         db.execute(
                             """
-                            INSERT OR IGNORE INTO sent_emails(user_id, template_type, expiration_date)
+                            INSERT INTO sent_emails(user_id, template_type, expiration_date)
                             VALUES (?, ?, ?)
                             """,
                             (uid, type_, exp_iso),
