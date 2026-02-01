@@ -16,14 +16,18 @@ echo "Starting VODUM..."
 
 # ---------------------------------------------------------------------------
 # Chemins standards (UNIQUE source de vérité)
+# - Respecte DATABASE_PATH / VODUM_BACKUP_DIR / VODUM_LOG_DIR
+# - Permet à l’utilisateur de monter ailleurs que /appdata
 # ---------------------------------------------------------------------------
 
-DB_DIR="/appdata"
-DB_PATH="$DB_DIR/database.db"
-LOG_DIR="$DB_DIR/logs"
-BACKUP_DIR="$DB_DIR/backups"
+DB_PATH="${DATABASE_PATH:-/appdata/database.db}"
+DB_DIR="$(dirname "$DB_PATH")"
+
+LOG_DIR="${VODUM_LOG_DIR:-$DB_DIR/logs}"
+BACKUP_DIR="${VODUM_BACKUP_DIR:-$DB_DIR/backups}"
 
 mkdir -p "$DB_DIR" "$LOG_DIR" "$BACKUP_DIR"
+
 
 # ---------------------------------------------------------------------------
 # Fonction utilitaire de log (stdout + fichier)
@@ -144,6 +148,54 @@ fi
 #
 # Peut être exécuté À CHAQUE démarrage sans risque
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# 3️⃣.2️⃣ Fix FK legacy (REFERENCES *_old / *__rebuild / *__rebuild_old)
+# - Déclenche si:
+#   a) le dry-run liste des tables à rebuild
+#   b) OU foreign_key_check mentionne un parent avec suffix legacy
+# ---------------------------------------------------------------------------
+
+DRY_OUT="$(python3 /app/migrations/20260201_fix_fk_legacy_suffixes.py "$DB_PATH" --dry-run || true)"
+
+# Signal 1 : le script voit des refs legacy
+echo "$DRY_OUT" | grep -q "\[DRY\]" && NEED_FIX=1 || NEED_FIX=0
+
+# Signal 2 : sqlite voit des FK cassées vers des tables legacy
+FKC_OUT="$(sqlite3 "$DB_PATH" "PRAGMA foreign_key_check;" 2>/dev/null || true)"
+echo "$FKC_OUT" | grep -Eiq "(_old|__rebuild_old|__rebuild)" && NEED_FIX=1 || true
+
+if [ "${NEED_FIX:-0}" = "1" ]; then
+  log WARN "Legacy FK issue detected → backup then apply fix"
+
+  TS=$(date -u '+%Y%m%d_%H%M%S')
+  PRE_FIX_BACKUP="$BACKUP_DIR/backup_${TS}_pre_20260201_fixfk.sqlite"
+
+  # checkpoint WAL avant copie (si WAL actif)
+  sqlite3 "$DB_PATH" "PRAGMA wal_checkpoint(TRUNCATE);" >/dev/null 2>&1 || true
+
+  cp -f "$DB_PATH" "$PRE_FIX_BACKUP"
+  log INFO "Pre-fix backup created: $PRE_FIX_BACKUP"
+
+  python3 /app/migrations/20260201_fix_fk_legacy_suffixes.py "$DB_PATH" || exit 1
+
+  # re-check
+  POST_FKC="$(sqlite3 "$DB_PATH" "PRAGMA foreign_key_check;" 2>/dev/null || true)"
+  if [ -n "$POST_FKC" ]; then
+    log WARN "foreign_key_check still reports issues after fix. First lines:"
+    echo "$POST_FKC" | head -n 20 | while read -r line; do log WARN "$line"; done
+    # On ne stoppe pas forcément le container, mais tu peux mettre exit 1 si tu préfères bloquer.
+  else
+    log INFO "Legacy FK fix applied successfully (foreign_key_check clean)"
+  fi
+else
+  log INFO "Legacy FK fix not needed."
+fi
+
+
+
+
+
 
 log INFO "Starting DB bootstrap"
 python3 /app/db_bootstrap.py
