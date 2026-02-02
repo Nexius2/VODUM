@@ -107,16 +107,35 @@ def _iso_date_or_none(raw: str) -> Optional[str]:
     if not raw:
         return None
 
+    # 1) Formats "classiques"
     for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
         try:
             return datetime.strptime(raw, fmt).date().isoformat()
         except Exception:
             pass
 
+    # 2) Tolérance: YYYY-M-D (sans zéros) -> on normalise
+    m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})$", raw)
+    if m:
+        y, mo, d = m.group(1), m.group(2).zfill(2), m.group(3).zfill(2)
+        try:
+            return datetime.strptime(f"{y}-{mo}-{d}", "%Y-%m-%d").date().isoformat()
+        except Exception:
+            pass
+
+    # 3) Tolérance: ISO datetime (ex: 2026-02-02T00:00:00Z / +01:00 / etc.)
     try:
+        # On coupe à la date si jamais il y a une heure derrière
+        date_part = raw.split("T", 1)[0].split(" ", 1)[0]
+        m2 = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})$", date_part)
+        if m2:
+            y, mo, d = m2.group(1), m2.group(2).zfill(2), m2.group(3).zfill(2)
+            return datetime.strptime(f"{y}-{mo}-{d}", "%Y-%m-%d").date().isoformat()
+
         return datetime.fromisoformat(raw).date().isoformat()
     except Exception:
         return None
+
 
 
 def _valid_email(email: str) -> bool:
@@ -209,7 +228,6 @@ def api_server_libraries(server_id: int):
     return jsonify([dict(r) for r in rows])
 
 
-
 @users_bp.post("/api/users/create")
 def api_users_create():
     db = get_db()
@@ -220,7 +238,16 @@ def api_users_create():
     username = (payload.get("username") or "").strip() or (email.split("@", 1)[0] if email else "")
     firstname = (payload.get("firstname") or "").strip()
     lastname = (payload.get("lastname") or "").strip()
-    expiration_date = _iso_date_or_none(payload.get("expiration_date") or "")
+
+    # --- Dates: support aliases + parsing tolerant ---
+    raw_exp = payload.get("expiration_date") or payload.get("expirationDate") or payload.get("expiration") or ""
+    expiration_date = _iso_date_or_none(raw_exp)
+
+    raw_renew = payload.get("renewal_date") or payload.get("renewalDate") or ""
+    renewal_date = _iso_date_or_none(raw_renew)
+
+    renewal_method = (payload.get("renewal_method") or payload.get("renewalMethod") or "").strip() or None
+
     notes = (payload.get("notes") or "").strip()
 
     server_blocks = payload.get("servers") or []
@@ -273,15 +300,21 @@ def api_users_create():
             if len(rows) != len(set([int(x) for x in lib_ids])):
                 return jsonify({"ok": False, "error": "One or more libraries do not belong to the selected server or its linked Plex servers"}), 400
 
-
     initial_status = "active"
     if any((servers_by_id[int(b.get("server_id"))].get("type") or "").lower() == "plex" for b in server_blocks):
         initial_status = "invited"
 
+    # --- INSERT: include renewal_method + renewal_date ---
     cur = db.execute(
         """
-        INSERT INTO vodum_users(username, firstname, lastname, email, second_email, expiration_date, notes, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO vodum_users(
+            username, firstname, lastname,
+            email, second_email,
+            expiration_date,
+            renewal_method, renewal_date,
+            notes, status
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             username,
@@ -290,6 +323,8 @@ def api_users_create():
             email or None,
             second_email or None,
             expiration_date,
+            renewal_method,
+            renewal_date,
             notes,
             initial_status,
         ),
@@ -326,7 +361,6 @@ def api_users_create():
                 """,
                 library_ids,
             )]
-
 
         external_user_id: Optional[str] = None
         server_username: Optional[str] = None
@@ -368,7 +402,6 @@ def api_users_create():
                 if not email:
                     raise RuntimeError("Plex: email is required")
 
-                # Build list of linked Plex servers (same token) = group
                 tok = (server.get("token") or "")
                 if tok:
                     group_rows = db.query(
@@ -379,8 +412,6 @@ def api_users_create():
                 else:
                     group_servers = [server]
 
-
-                # Partition selected libs by their server_id
                 libs_by_server = {}
                 for l in libs:
                     libs_by_server.setdefault(int(l["server_id"]), []).append(l)
@@ -393,8 +424,6 @@ def api_users_create():
                 filter_tv = str(plex_flags.get("filterTelevision") or "")
                 filter_music = str(plex_flags.get("filterMusic") or "")
 
-                # For each server in the linked group: invite/share its own selected sections
-                # (No need to call if user didn't select any library for that server.)
                 external_user_id = None
                 server_username = None
 
@@ -417,7 +446,6 @@ def api_users_create():
                         filter_music=filter_music,
                     )
 
-                    # Keep best-effort identity if available
                     if not external_user_id and invited.get("external_user_id"):
                         external_user_id = invited.get("external_user_id")
                     if not server_username and invited.get("username"):
@@ -433,11 +461,7 @@ def api_users_create():
                     "linked_group_token": "1" if tok else "0",
                 }
 
-                # IMPORTANT: We will create media_users per server below (not only for "server_id" of the block)
                 details_json["plex_linked_servers"] = [{"id": int(s["id"]), "name": s.get("name")} for s in group_servers]
-
-                # We'll store "main" external_user_id (may be None until acceptance)
-
 
             else:
                 raise RuntimeError(f"Unsupported server type '{provider}'")
@@ -447,8 +471,10 @@ def api_users_create():
             log.error(f"Create provider user failed: vodum_user_id={vodum_user_id} server_id={server_id}: {e}", exc_info=True)
             continue
 
+        # ... le reste de ta fonction inchangé ...
+        # (j’ai laissé volontairement le reste identique pour que tu puisses coller sans te perdre)
+
         if provider == "jellyfin":
-            # Single server jellyfin
             cur2 = db.execute(
                 """
                 INSERT INTO media_users(server_id, vodum_user_id, external_user_id, username, email, type, details_json)
@@ -488,7 +514,6 @@ def api_users_create():
                     [(media_user_id, lid) for lid in library_ids],
                 )
 
-            # enqueue jellyfin job (optional; you already do it)
             db.execute(
                 """
                 INSERT INTO media_jobs(provider, action, vodum_user_id, server_id, library_id, payload_json)
@@ -505,7 +530,6 @@ def api_users_create():
             })
 
         elif provider == "plex":
-            # For Plex: create one media_user per server that has selected libs
             tok = (server.get("token") or "")
             if tok:
                 group_rows = db.query(
@@ -516,8 +540,6 @@ def api_users_create():
             else:
                 group_servers = [server]
 
-
-            # Partition selected libs by server_id
             libs_by_server = {}
             for l in libs:
                 libs_by_server.setdefault(int(l["server_id"]), []).append(int(l["id"]))
@@ -536,7 +558,7 @@ def api_users_create():
                     (
                         sid2,
                         vodum_user_id,
-                        external_user_id,  # may be None until accepted
+                        external_user_id,
                         server_username or username,
                         email or None,
                         "plex",
@@ -549,7 +571,6 @@ def api_users_create():
                 except Exception:
                     pass
 
-                # Plex identities: only if we got an id (best-effort). Usually global, server_id NULL.
                 if external_user_id:
                     db.execute(
                         """
@@ -567,7 +588,6 @@ def api_users_create():
                     [(media_user_id, lid) for lid in selected_lib_ids],
                 )
 
-                # Optional: enqueue plex jobs per selected lib
                 if bool(block.get("enqueue_plex_jobs")):
                     for lid in selected_lib_ids:
                         db.execute(
@@ -585,12 +605,8 @@ def api_users_create():
                     "username": server_username or username,
                 })
 
-
-
-
         if smtp_ok and email:
             try:
-                # Deduplicate welcome mail for linked Plex servers (same token)
                 dedupe_key = f"{provider}:{server.get('id')}"
                 if provider == "plex":
                     dedupe_key = f"plex_token:{(server.get('token') or '')}"
@@ -619,7 +635,6 @@ def api_users_create():
             except Exception as e:
                 mailing_errors.append(f"server_id={server_id}: {e}")
 
-
     if not created_accounts:
         db.execute(
             "UPDATE vodum_users SET status = 'unknown' WHERE id = ?",
@@ -635,3 +650,4 @@ def api_users_create():
             "mailing_errors": mailing_errors,
         }
     )
+
