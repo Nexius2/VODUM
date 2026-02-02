@@ -632,7 +632,25 @@
   "username": "Nome utente",
   "warning": "Avviso",
   "wednesday": "Mercoledì",
-  "yahoo": "Yahoo"
+  "yahoo": "Yahoo",
+   "task.sync_plex": "Sincronizzazione Plex",
+  "task_description.sync_plex": "Recupera utenti e librerie e aggiorna il database.",
+
+  "task.sync_jellyfin": "Sincronizzazione Jellyfin",
+  "task_description.sync_jellyfin": "Sincronizza gli account Jellyfin e gli accessi alle librerie.",
+
+  "task.disable_expired_users": "Disattivazione utenti scaduti",
+  "task_description.disable_expired_users": "Rimuove l'accesso alle librerie per gli abbonamenti scaduti.",
+
+  "task.media_jobs_worker": "Worker dei job multimediali",
+  "task_description.media_jobs_worker": "Applica gli aggiornamenti di accesso Jellyfin/Plex in sospeso (media_jobs).",
+
+  "task.monitor_collect_sessions": "Monitoraggio: raccolta sessioni",
+  "task_description.monitor_collect_sessions": "Raccoglie le sessioni attive (Plex/Jellyfin) per il monitoraggio.",
+
+  "task.monitor_enqueue_refresh": "Monitoraggio: accodamento aggiornamento",
+  "task_description.monitor_enqueue_refresh": "Aggiunge alla coda i job di aggiornamento del monitoraggio."
+
 
 
 }
