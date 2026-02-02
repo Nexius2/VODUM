@@ -39,6 +39,13 @@
     }
 </style>
 
+<div class="flex items-center justify-end mb-4">
+  <button id="btn_create_user" type="button"
+          class="text-sm px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white">
+    + Create user
+  </button>
+</div>
+
 
 <!-- Filtres -->
 <form method="get" id="users_filter_form" class="flex flex-wrap items-center gap-3 mb-6">
@@ -447,6 +454,428 @@ document.addEventListener("DOMContentLoaded", () => {
 </script>
 
 
+<!-- CREATE USER MODAL -->
+<div id="modal_create_user" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/60" onclick="VodumCreateUser.close()"></div>
+
+  <div class="relative max-w-4xl mx-auto mt-16 bg-slate-950 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800">
+      <div>
+        <div class="text-lg font-semibold">Create user</div>
+        <div class="text-sm text-slate-400">Create a user on Plex/Jellyfin and in Vodum, assign libraries, send welcome mail.</div>
+      </div>
+      <button class="text-slate-300 hover:text-white" onclick="VodumCreateUser.close()">✕</button>
+    </div>
+
+    <div class="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+
+      <!-- USER FIELDS -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="text-xs text-slate-400">Email (required for Plex)</label>
+          <input id="cu_email" type="email" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" placeholder="user@mail.com">
+        </div>
+        <div>
+          <label class="text-xs text-slate-400">Second email (optional)</label>
+          <input id="cu_second_email" type="email" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" placeholder="backup@mail.com">
+        </div>
+        <div>
+          <label class="text-xs text-slate-400">Username</label>
+          <input id="cu_username" type="text" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" placeholder="username">
+          <div class="text-xs text-slate-500 mt-1">If empty, we'll use email local-part.</div>
+        </div>
+        <div>
+          <label class="text-xs text-slate-400">Expiration date</label>
+          <input id="cu_expiration" type="date" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="text-xs text-slate-400">Firstname</label>
+          <input id="cu_firstname" type="text" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" placeholder="Firstname">
+        </div>
+        <div>
+          <label class="text-xs text-slate-400">Lastname</label>
+          <input id="cu_lastname" type="text" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" placeholder="Lastname">
+        </div>
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-400">Notes</label>
+        <textarea id="cu_notes" rows="3" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" placeholder="internal notes..."></textarea>
+      </div>
+
+      <!-- SERVERS BLOCKS -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <div class="text-sm font-semibold">Servers & libraries</div>
+          <button type="button" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700" onclick="VodumCreateUser.addServerBlock()">+ Add server</button>
+        </div>
+
+        <div id="cu_servers_container" class="space-y-4"></div>
+
+        <div class="text-xs text-slate-500 mt-2">
+          Plex: invitation by email (user must accept). Jellyfin: local account created immediately.
+        </div>
+      </div>
+
+      <!-- FEEDBACK -->
+      <div id="cu_feedback" class="hidden rounded-xl border border-slate-800 bg-slate-900 p-3 text-sm"></div>
+
+    </div>
+
+    <div class="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-800">
+      <button type="button" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700" onclick="VodumCreateUser.close()">Cancel</button>
+      <button id="cu_submit" type="button" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white" onclick="VodumCreateUser.submit()">Create</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const api = {
+    servers: '/api/servers',
+    libs: (serverId) => `/api/servers/${serverId}/libraries`,
+    create: '/api/users/create',
+  };
+
+  const state = {
+    servers: [],
+    blocks: [],
+  };
+
+  function el(html){
+    const t = document.createElement('template');
+    t.innerHTML = html.trim();
+    return t.content.firstChild;
+  }
+
+  async function fetchJSON(url){
+    const r = await fetch(url, {headers:{'Accept':'application/json'}});
+    if(!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+    return await r.json();
+  }
+
+  function pickUrl(s){
+    return (s.public_url || s.url || s.local_url || '').trim();
+  }
+
+  function feedback(msg, kind='info'){
+    const box = document.getElementById('cu_feedback');
+    box.classList.remove('hidden');
+    box.textContent = msg;
+    box.classList.remove('border-emerald-600','border-red-600','border-slate-800');
+    if(kind==='success') box.classList.add('border-emerald-600');
+    else if(kind==='error') box.classList.add('border-red-600');
+    else box.classList.add('border-slate-800');
+  }
+
+  function open(){
+    document.getElementById('modal_create_user').classList.remove('hidden');
+    document.getElementById('cu_feedback').classList.add('hidden');
+    if(state.blocks.length===0) addServerBlock();
+  }
+
+  function close(){
+    document.getElementById('modal_create_user').classList.add('hidden');
+  }
+
+  async function initServers(){
+    state.servers = await fetchJSON(api.servers);
+  }
+
+  function serverOptionsHtml(){
+    const opts = state.servers.map(s => {
+      const label = `${s.name} (${(s.type||'').toUpperCase()})`;
+      return `<option value="${s.id}">${label}</option>`;
+    });
+    return `<option value="">-- choose server --</option>` + opts.join('');
+  }
+
+  async function loadLibraries(serverId){
+    if(!serverId) return [];
+    return await fetchJSON(api.libs(serverId));
+  }
+
+  function renderBlock(blockId){
+    const block = state.blocks.find(b => b.id===blockId);
+    const node = el(`
+      <div class="border border-slate-800 rounded-2xl p-4 bg-slate-950">
+        <div class="flex items-center justify-between mb-3">
+          <div class="text-sm font-semibold">Server</div>
+          <button type="button" class="text-xs px-2 py-1 rounded bg-slate-800 hover:bg-slate-700" data-action="remove">Remove</button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs text-slate-400">Server</label>
+            <div class="flex gap-2 items-center">
+              <select class="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" data-field="server_id">
+                ${serverOptionsHtml()}
+              </select>
+              <button type="button"
+                      class="hidden"
+                      title="Add linked Plex servers"
+                      data-add-linked>
+                +
+              </button>
+            </div>
+            <div class="text-xs text-slate-500 mt-1" data-server-url></div>
+            <div class="text-xs text-slate-500 mt-1" data-linked-info></div>
+          </div>
+
+
+          <div>
+            <label class="text-xs text-slate-400">Libraries</label>
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs max-h-40 overflow-y-auto" data-libs>
+              <div class="text-slate-500">Select a server first</div>
+            </div>
+          </div>
+
+          <div data-jellyfin class="hidden md:col-span-2">
+            <div class="text-xs text-slate-400 mb-1">Jellyfin options</div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label class="text-xs text-slate-500">Initial password (optional)</label>
+                <input type="password" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" data-field="jellyfin_password" autocomplete="new-password">
+              </div>
+              <label class="flex items-center gap-2 text-sm mt-5">
+                <input type="checkbox" data-field="jellyfin_force_password_change">
+                <span class="text-slate-200">Force password change</span>
+              </label>
+            </div>
+          </div>
+
+          <div data-plex class="hidden md:col-span-2">
+            <div class="text-xs text-slate-400 mb-1">Plex share flags (stored in details_json)</div>
+            <div class="flex flex-wrap gap-4 text-sm">
+              <label class="flex items-center gap-2">
+                <input type="checkbox" data-plex-flag="allowSync">
+                <span>allowSync</span>
+              </label>
+              <label class="flex items-center gap-2">
+                <input type="checkbox" data-plex-flag="allowCameraUpload">
+                <span>allowCameraUpload</span>
+              </label>
+              <label class="flex items-center gap-2">
+                <input type="checkbox" data-plex-flag="allowChannels">
+                <span>allowChannels</span>
+              </label>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+              <div>
+                <label class="text-xs text-slate-500">filterMovies</label>
+                <input type="text" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" data-plex-flag="filterMovies">
+              </div>
+              <div>
+                <label class="text-xs text-slate-500">filterTelevision</label>
+                <input type="text" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" data-plex-flag="filterTelevision">
+              </div>
+              <div>
+                <label class="text-xs text-slate-500">filterMusic</label>
+                <input type="text" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" data-plex-flag="filterMusic">
+              </div>
+            </div>
+
+            <label class="flex items-center gap-2 text-sm mt-3">
+              <input type="checkbox" data-field="enqueue_plex_jobs">
+              <span class="text-slate-200">Enqueue Plex jobs (debug / optional)</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    `);
+
+    const container = document.getElementById('cu_servers_container');
+    container.appendChild(node);
+
+    const select = node.querySelector('[data-field="server_id"]');
+    const libsBox = node.querySelector('[data-libs]');
+    const serverUrlLine = node.querySelector('[data-server-url]');
+    const jellyfinBox = node.querySelector('[data-jellyfin]');
+    const plexBox = node.querySelector('[data-plex]');
+	const linkedInfo = node.querySelector('[data-linked-info]');
+    const btnAddLinked = node.querySelector('[data-add-linked]');
+
+
+    node.querySelector('[data-action="remove"]').addEventListener('click', () => removeServerBlock(blockId));
+
+    select.addEventListener('change', async () => {
+      const serverId = select.value ? parseInt(select.value,10) : null;
+      block.server_id = serverId;
+      block.library_ids = [];
+
+      const srv = state.servers.find(s => s.id===serverId);
+      const provider = (srv?.type||'').toLowerCase();
+      block.provider = provider;
+
+      const u = srv ? pickUrl(srv) : '';
+	  serverUrlLine.textContent = u ? `URL: ${u}` : '';
+
+
+      // Show linked Plex servers (same token)
+      if(provider === 'plex' && srv?.linked_servers?.length){
+        linkedInfo.textContent = `Linked Plex servers: ${srv.linked_servers.map(x => x.name).join(', ')}`;
+        btnAddLinked.disabled = false;
+      } else {
+        linkedInfo.textContent = '';
+        btnAddLinked.disabled = true;
+      }
+
+
+      jellyfinBox.classList.toggle('hidden', provider!=='jellyfin');
+      plexBox.classList.toggle('hidden', provider!=='plex');
+
+      libsBox.innerHTML = `<div class="text-slate-500">Loading libraries…</div>`;
+      try{
+        const libs = await loadLibraries(serverId);
+        if(!libs.length){
+          libsBox.innerHTML = `<div class="text-slate-500">No libraries found for this server.</div>`;
+          return;
+        }
+
+        libsBox.innerHTML = libs.map(l => {
+          return `
+            <label class="flex items-center justify-between gap-2 py-1">
+              <span class="text-slate-200">${l.server_name ? (l.server_name + " — ") : ""}${l.name}</span>
+              <input type="checkbox" data-lib-id="${l.id}">
+            </label>
+          `;
+        }).join('');
+
+        libsBox.querySelectorAll('input[data-lib-id]').forEach(cb => {
+          cb.addEventListener('change', () => {
+            const id = parseInt(cb.getAttribute('data-lib-id'),10);
+            if(cb.checked){
+              if(!block.library_ids.includes(id)) block.library_ids.push(id);
+            } else {
+              block.library_ids = block.library_ids.filter(x => x!==id);
+            }
+          });
+        });
+
+      } catch(e){
+        libsBox.innerHTML = `<div class="text-red-400">Failed to load libraries</div>`;
+      }
+    });
+
+
+
+    node.querySelectorAll('[data-field="jellyfin_password"]').forEach(inp => {
+      inp.addEventListener('input', () => block.jellyfin_password = inp.value);
+    });
+    node.querySelectorAll('[data-field="jellyfin_force_password_change"]').forEach(inp => {
+      inp.addEventListener('change', () => block.jellyfin_force_password_change = inp.checked);
+    });
+    node.querySelectorAll('[data-field="enqueue_plex_jobs"]').forEach(inp => {
+      inp.addEventListener('change', () => block.enqueue_plex_jobs = inp.checked);
+    });
+
+    node.querySelectorAll('[data-plex-flag]').forEach(inp => {
+      const key = inp.getAttribute('data-plex-flag');
+      inp.addEventListener('input', () => {
+        if(!block.plex_share) block.plex_share = {};
+        if(inp.type==='checkbox') block.plex_share[key] = inp.checked;
+        else block.plex_share[key] = inp.value;
+      });
+      inp.addEventListener('change', () => {
+        if(!block.plex_share) block.plex_share = {};
+        if(inp.type==='checkbox') block.plex_share[key] = inp.checked;
+        else block.plex_share[key] = inp.value;
+      });
+    });
+
+    return node;
+  }
+
+  function addServerBlock(){
+    const id = Math.random().toString(16).slice(2);
+    const block = {id, server_id:null, library_ids:[], provider:null};
+    state.blocks.push(block);
+    renderBlock(id);
+  }
+
+  function removeServerBlock(blockId){
+    state.blocks = state.blocks.filter(b => b.id!==blockId);
+    const container = document.getElementById('cu_servers_container');
+    container.innerHTML = '';
+    state.blocks.forEach(b => renderBlock(b.id));
+  }
+
+  async function submit(){
+    const btn = document.getElementById('cu_submit');
+    btn.disabled = true;
+    feedback('Creating…');
+
+    try{
+      const email = document.getElementById('cu_email').value.trim();
+      const username = document.getElementById('cu_username').value.trim();
+      const payload = {
+        email,
+        second_email: document.getElementById('cu_second_email').value.trim(),
+        username,
+        firstname: document.getElementById('cu_firstname').value.trim(),
+        lastname: document.getElementById('cu_lastname').value.trim(),
+        expiration_date: document.getElementById('cu_expiration').value,
+        notes: document.getElementById('cu_notes').value.trim(),
+        servers: state.blocks
+          .filter(b => b.server_id)
+          .map(b => ({
+            server_id: b.server_id,
+            library_ids: b.library_ids || [],
+            jellyfin_password: b.jellyfin_password || '',
+            jellyfin_force_password_change: !!b.jellyfin_force_password_change,
+            plex_share: b.plex_share || {},
+            enqueue_plex_jobs: !!b.enqueue_plex_jobs,
+          })),
+      };
+
+      if(!payload.servers.length){
+        feedback('Select at least one server.', 'error');
+        return;
+      }
+
+      const r = await fetch(api.create, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json', 'Accept':'application/json'},
+        body: JSON.stringify(payload)
+      });
+
+      const data = await r.json().catch(()=>({ok:false,error:'Invalid JSON response'}));
+      if(!r.ok || !data.ok){
+        feedback(data.error || 'Create failed', 'error');
+        return;
+      }
+
+      let msg = `User created (vodum_user_id=${data.vodum_user_id}).`;
+      if(data.provider_errors?.length){
+        msg += ` Provider errors: ${data.provider_errors.join(' | ')}`;
+      }
+      if(data.mailing_errors?.length){
+        msg += ` Mailing errors: ${data.mailing_errors.join(' | ')}`;
+      }
+      feedback(msg, 'success');
+
+      setTimeout(() => window.location.reload(), 800);
+
+    } catch(e){
+      feedback(e.message || String(e), 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  window.VodumCreateUser = {open, close, addServerBlock, removeServerBlock, submit};
+
+  document.getElementById('btn_create_user')?.addEventListener('click', async () => {
+    try{
+      if(!state.servers.length) await initServers();
+      VodumCreateUser.open();
+    }catch(e){
+      alert('Failed to load servers: ' + (e.message || e));
+    }
+  });
+})();
+</script>
 
 
 {% endblock %}
