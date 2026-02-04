@@ -19,12 +19,26 @@
     </div>
   </div>
 
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-    <div class="text-sm font-semibold mb-3">Media types</div>
-    <div class="chart-container chart-container-sm">
-      <canvas id="chartMediaTypes"></canvas>
-    </div>
-  </div>
+	<div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+	  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+		<!-- LEFT -->
+		<div>
+		  <div class="text-sm font-semibold mb-3">Media types</div>
+		  <div class="chart-container chart-container-sm">
+			<canvas id="chartMediaTypes"></canvas>
+		  </div>
+		</div>
+
+		<!-- RIGHT -->
+		<div>
+		  <div class="text-sm font-semibold mb-3">Per server</div>
+		  <div class="chart-container chart-container-sm">
+			<canvas id="chartPerServer"></canvas>
+		  </div>
+		</div>
+	  </div>
+	</div>
+
 </div>
 
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-6">
@@ -185,6 +199,32 @@
 	  chart.update("none");
 	}
 
+	function updatePerServer(chart, labels, values) {
+	  labels = labels || [];
+	  values = values || [];
+
+	  const pairs = labels.map((label, i) => ({
+		label,
+		value: Number(values[i]) || 0
+	  })).filter(p => p.value > 0)
+		.sort((a, b) => b.value - a.value);
+
+	  const sortedLabels = pairs.map(p => p.label);
+	  const sortedValues = pairs.map(p => p.value);
+
+	  chart.data.labels = sortedLabels;
+	  chart.data.datasets[0].data = sortedValues;
+
+	  // Couleurs stables par serveur
+	  chart.data.datasets[0].backgroundColor = sortedLabels.map(hashColor);
+
+	  // séparation nette comme l'autre doughnut
+	  chart.data.datasets[0].borderColor = "#0B1220";
+	  chart.data.datasets[0].borderWidth = 2;
+
+	  chart.update("none");
+	}
+
 
   function getOrCreate(canvas, factory) {
     const key = keyFor(canvas);
@@ -276,9 +316,13 @@
 
   async function initOrUpdate(root = document) {
     const picker     = root.querySelector?.("#rangePicker")      || document.getElementById("rangePicker");
-    const elActivity = root.querySelector?.("#chartActivity")    || document.getElementById("chartActivity");
-    const elMedia    = root.querySelector?.("#chartMediaTypes")  || document.getElementById("chartMediaTypes");
-    const elWeekday  = root.querySelector?.("#chartWeekday")     || document.getElementById("chartWeekday");
+	const elActivity = root.querySelector?.("#chartActivity")    || document.getElementById("chartActivity");
+	const elMedia    = root.querySelector?.("#chartMediaTypes")  || document.getElementById("chartMediaTypes");
+	const elServer   = root.querySelector?.("#chartPerServer")   || document.getElementById("chartPerServer");
+	const elWeekday  = root.querySelector?.("#chartWeekday")     || document.getElementById("chartWeekday");
+
+	if (!picker || !elActivity || !elMedia || !elServer || !elWeekday) return;
+
 
     if (!picker || !elActivity || !elMedia || !elWeekday) return;
 
@@ -315,6 +359,32 @@
       plugins: [doughnutPercentLabels]
     }));
 
+	const chartServer = getOrCreate(elServer, () => new Chart(elServer.getContext("2d"), {
+	  type: "doughnut",
+	  data: {
+		labels: [],
+		datasets: [{
+		  label: "Sessions",
+		  data: [],
+		  backgroundColor: [],
+		  borderColor: "#0B1220",
+		  borderWidth: 2
+		}]
+	  },
+	  options: {
+		...baseOpts(),
+		cutout: "70%", // comme Media types (plus harmonieux)
+		plugins: {
+		  legend: { display: true, position: "top" }, // ✅ comme Media types
+		  tooltip: { enabled: true },
+		  doughnutPercentLabels: { datasetIndex: 0, minPercent: 6 }
+		}
+	  },
+	  plugins: [doughnutPercentLabels]
+	}));
+
+
+
     const chartWeekday = getOrCreate(elWeekday, () => new Chart(elWeekday.getContext("2d"), {
       type: "bar",
       data: { labels: [], datasets: [{ label: "Sessions", data: [] }] },
@@ -324,22 +394,27 @@
     manualResizeAll([
       { chart: chartActivity, canvas: elActivity },
       { chart: chartMedia,    canvas: elMedia },
+	  { chart: chartServer,   canvas: elServer },
       { chart: chartWeekday,  canvas: elWeekday }
     ]);
 
     const token = ++renderToken;
     const range = picker.value || "7d";
 
-    const [a, m, w] = await Promise.all([
-      fetchJSON(`/api/monitoring/activity?range=${encodeURIComponent(range)}`),
-      fetchJSON(`/api/monitoring/media_types?range=${encodeURIComponent(range)}`),
-      fetchJSON(`/api/monitoring/weekday?range=${encodeURIComponent(range)}`)
-    ]);
+	const [a, m, s, w] = await Promise.all([
+	  fetchJSON(`/api/monitoring/activity?range=${encodeURIComponent(range)}`),
+	  fetchJSON(`/api/monitoring/media_types?range=${encodeURIComponent(range)}`),
+	  fetchJSON(`/api/monitoring/per_server?range=${encodeURIComponent(range)}`),
+	  fetchJSON(`/api/monitoring/weekday?range=${encodeURIComponent(range)}`)
+	]);
+
 
     if (token !== renderToken) return;
 
     update(chartActivity, toLabels(a, "day"), toLabels(a, "sessions"));
     updateMediaTypes(chartMedia, toLabels(m, "media_type"), toLabels(m, "sessions"));
+	updatePerServer(chartServer, toLabels(s, "server_name"), toLabels(s, "sessions"));
+
 
     const names = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
     update(chartWeekday, (w || []).map(x => names[x.weekday] ?? String(x.weekday)), (w || []).map(x => x.sessions));
@@ -347,6 +422,7 @@
     manualResizeAll([
       { chart: chartActivity, canvas: elActivity },
       { chart: chartMedia,    canvas: elMedia },
+	  { chart: chartServer,   canvas: elServer },
       { chart: chartWeekday,  canvas: elWeekday }
     ]);
 
@@ -363,6 +439,7 @@
           manualResizeAll([
             { chart: window.__vodumCharts.get(keyFor(elActivity)), canvas: elActivity },
             { chart: window.__vodumCharts.get(keyFor(elMedia)),    canvas: elMedia },
+			{ chart: window.__vodumCharts.get(keyFor(elServer)),    canvas: elServer },
             { chart: window.__vodumCharts.get(keyFor(elWeekday)),  canvas: elWeekday }
           ]);
         }, 150);
@@ -380,8 +457,9 @@
   document.addEventListener("htmx:beforeSwap", (evt) => {
     const target = evt.detail?.target;
     if (!target) return;
-    target.querySelectorAll?.("canvas#chartActivity, canvas#chartMediaTypes, canvas#chartWeekday")
-      .forEach(destroyChartByCanvas);
+    target.querySelectorAll?.("canvas#chartActivity, canvas#chartMediaTypes, canvas#chartPerServer, canvas#chartWeekday")
+	.forEach(destroyChartByCanvas);
+
   });
 
   // ✅ HTMX: init/update APRÈS injection
