@@ -226,5 +226,8 @@ http://<unraid-ip>:8097
 
 ---
 
-Discord for help:
+## Community & Support
+
+💬 Join the Discord server for discussions and troubleshooting:
 https://discord.gg/5PU7TnegZt
+
