@@ -5,7 +5,7 @@ from email.message import EmailMessage
 from typing import Any, Dict, List, Optional
 
 import smtplib
-
+import os
 from flask import Blueprint, jsonify, request, g
 
 from db_manager import DBManager
@@ -29,7 +29,7 @@ users_bp = Blueprint("users_bp", __name__)
 
 def get_db() -> DBManager:
     if "db" not in g:
-        g.db = DBManager()
+        g.db = DBManager(os.environ.get("DATABASE_PATH", "/appdata/database.db"))
     return g.db
 
 

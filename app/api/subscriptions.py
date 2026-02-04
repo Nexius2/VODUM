@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from datetime import date, timedelta
+import os
 
 from db_manager import DBManager
 from logging_utils import get_logger
@@ -18,7 +19,7 @@ def update_user_expiration(user_id, new_expiration_date, reason="manual"):
     Met à jour la date d'expiration d'un utilisateur.
     Reset les templates envoyés uniquement si on entre dans un nouveau cycle.
     """
-    db = DBManager()
+    db = DBManager(os.environ.get("DATABASE_PATH", "/appdata/database.db"))
 
     # ✅ users -> vodum_users
     row = db.query_one(
@@ -94,7 +95,7 @@ def api_gift_time_to_server(server_id):
     if not isinstance(days, int) or days <= 0:
         return jsonify({"error": "days must be an integer > 0"}), 400
 
-    db = DBManager()
+    db = DBManager(os.environ.get("DATABASE_PATH", "/appdata/database.db"))
 
     # ✅ users + user_servers -> vodum_users + media_users
     users = db.query(
@@ -177,7 +178,7 @@ def api_gift_subscription():
     if days <= 0:
         return jsonify({"error": "days must be > 0"}), 400
 
-    db = DBManager()
+    db = DBManager(os.environ.get("DATABASE_PATH", "/appdata/database.db"))
 
     # --------------------------------------------------
     # Sélection des utilisateurs
@@ -292,7 +293,7 @@ def api_gift_subscription():
 
 @subscriptions_api.route("/api/subscriptions/gifts/<int:run_id>", methods=["GET"])
 def api_gift_history_detail(run_id):
-    db = DBManager()
+    db = DBManager(os.environ.get("DATABASE_PATH", "/appdata/database.db"))
 
     run = db.query_one(
         """
@@ -331,7 +332,7 @@ def api_gift_history_detail(run_id):
 
 @subscriptions_api.route("/api/subscriptions/gifts", methods=["GET"])
 def api_gift_history():
-    db = DBManager()
+    db = DBManager(os.environ.get("DATABASE_PATH", "/appdata/database.db"))
     rows = db.query(
         """
         SELECT
