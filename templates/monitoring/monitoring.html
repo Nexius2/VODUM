@@ -18,6 +18,8 @@
 {% set current_tab = args.get('tab', 'overview') %}
 {% if current_tab == 'activity' %}
   {% set refresh_ms = 5000 %}
+{% elif current_tab == 'policies' %}
+  {% set refresh_ms = 600000 %}
 {% elif current_tab == 'overview' %}
   {% set refresh_ms = 10000 %}
 {% elif current_tab in ['history', 'users', 'libraries'] %}
@@ -41,6 +43,8 @@
     {# Fallback rendu serveur (si JS/HTMX désactivé) #}
     {% if current_tab == "overview" %}
       {% include "monitoring/overview_body.html" %}
+	{% elif current_tab == "policies" %}
+      {% include "monitoring/tabs/policies.html" %}
     {% elif current_tab == "history" %}
       {% include "monitoring/tabs/history.html" %}
     {% elif current_tab == "libraries" %}

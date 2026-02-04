@@ -1,0 +1,295 @@
+<div class="space-y-6">
+
+  <!-- Header -->
+  <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h2 class="text-lg font-semibold mb-2">
+          {{ t("policies_title") }}
+        </h2>
+
+        <p class="text-slate-400 text-sm">
+          {{ t("policies_intro") }}
+          <span class="mx-1">•</span>
+          {{ t("policies_task_label") }}
+          <code class="text-slate-200">stream_enforcer</code>
+        </p>
+
+        <p class="text-slate-500 text-xs mt-2">
+          {{ t("policies_note_providers") }}
+        </p>
+      </div>
+
+      <div class="shrink-0">
+        <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-950 border border-slate-800 text-xs text-slate-300">
+          <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
+          {{ t("policies_scan_every_60s") }}
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create policy -->
+  <form method="post"
+        action="{{ url_for('stream_policy_create') }}"
+        class="bg-slate-900 border border-slate-800 rounded-xl p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+
+    <!-- Rule -->
+    <div>
+      <label class="text-xs text-slate-400">
+        {{ t("policies_rule") }}
+      </label>
+
+      <select name="rule_type"
+              class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+        <option value="max_streams_per_user">{{ t("policies_rule_max_streams_user") }}</option>
+		<option value="max_ips_per_user">{{ t("policies_rule_max_ips_user") }}</option>
+		<option value="max_streams_per_ip">{{ t("policies_rule_max_streams_ip") }}</option>
+        <option value="max_transcodes_global">{{ t("policies_rule_max_transcodes_server") }}</option>
+        <option value="ban_4k_transcode">{{ t("policies_rule_ban_4k_transcode") }}</option>
+        <option value="max_bitrate_kbps">{{ t("policies_rule_max_bitrate") }}</option>
+        <option value="device_allowlist">{{ t("policies_rule_device_allowlist") }}</option>
+      </select>
+    </div>
+
+    <!-- Scope -->
+    <div>
+      <label class="text-xs text-slate-400">
+        {{ t("policies_scope") }}
+      </label>
+
+      <select name="scope_type"
+              class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+        <option value="global">{{ t("policies_scope_global") }}</option>
+        <option value="server">{{ t("policies_scope_server") }}</option>
+        <option value="user">{{ t("policies_scope_user") }}</option>
+      </select>
+
+      <input name="scope_id"
+             placeholder="{{ t('policies_scope_id_placeholder') }}"
+             class="w-full mt-2 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
+      <p class="text-xs text-slate-500 mt-1">
+        {{ t("policies_scope_help") }}
+      </p>
+    </div>
+
+    <!-- Provider + server filter -->
+    <div>
+      <label class="text-xs text-slate-400">
+        {{ t("policies_provider") }}
+      </label>
+
+      <select name="provider"
+              class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+        <option value="">{{ t("policies_provider_both") }}</option>
+        <option value="plex">{{ t("policies_provider_plex") }}</option>
+        <option value="jellyfin">{{ t("policies_provider_jellyfin") }}</option>
+      </select>
+
+      <label class="text-xs text-slate-400 mt-3 block">
+        {{ t("policies_server_filter") }}
+        <span class="text-slate-500">({{ t("optional") }})</span>
+      </label>
+
+      <select name="server_id"
+              class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+        <option value="">{{ t("policies_all_servers") }}</option>
+        {% for s in servers %}
+          <option value="{{ s.id }}">{{ s.name }} ({{ s.type }})</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- Priority / Selector / Enabled -->
+    <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        <label class="text-xs text-slate-400">
+          {{ t("policies_priority") }}
+        </label>
+        <input name="priority"
+               value="100"
+               class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
+        <p class="text-xs text-slate-500 mt-1">
+          {{ t("policies_priority_help") }}
+        </p>
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-400">
+          {{ t("policies_selector") }}
+        </label>
+
+        <select name="selector"
+                class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+          <option value="kill_newest">{{ t("policies_selector_kill_newest") }}</option>
+          <option value="kill_oldest">{{ t("policies_selector_kill_oldest") }}</option>
+          <option value="kill_transcoding_first">{{ t("policies_selector_kill_transcoding") }}</option>
+        </select>
+
+        <p class="text-xs text-slate-500 mt-1">
+          {{ t("policies_selector_help") }}
+        </p>
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-400">
+          {{ t("policies_enabled") }}
+        </label>
+
+        <select name="is_enabled"
+                class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+          <option value="1">{{ t("enabled") }}</option>
+          <option value="0">{{ t("disabled") }}</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Rule values -->
+    <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        <label class="text-xs text-slate-400">
+          {{ t("policies_max_value") }}
+        </label>
+        <input name="max_value"
+               placeholder="{{ t('policies_max_value_placeholder') }}"
+               class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
+        <p class="text-xs text-slate-500 mt-1">
+          {{ t("policies_max_value_help") }}
+        </p>
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-400">
+          {{ t("policies_max_bitrate_kbps") }}
+        </label>
+        <input name="max_kbps"
+               placeholder="{{ t('policies_max_bitrate_placeholder') }}"
+               class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
+        <p class="text-xs text-slate-500 mt-1">
+          {{ t("policies_max_bitrate_help") }}
+        </p>
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-400">
+          {{ t("policies_allowed_devices") }}
+        </label>
+        <input name="allowed_devices"
+               placeholder="{{ t('policies_allowed_devices_placeholder') }}"
+               class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
+        <p class="text-xs text-slate-500 mt-1">
+          {{ t("policies_allowed_devices_help") }}
+        </p>
+      </div>
+    </div>
+
+    <!-- Warn message -->
+    <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="text-xs text-slate-400">
+          {{ t("policies_warn_title") }}
+        </label>
+        <input name="warn_title"
+               value="{{ t('policies_warn_title_default') }}"
+               class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-400">
+          {{ t("policies_warn_text") }}
+        </label>
+        <input name="warn_text"
+               value="{{ t('policies_warn_text_default') }}"
+               class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
+      </div>
+    </div>
+
+    <div class="md:col-span-3 flex justify-end">
+      <button class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg font-semibold">
+        {{ t("policies_create_button") }}
+      </button>
+    </div>
+  </form>
+
+  <!-- List policies -->
+  <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+    <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+      <h3 class="font-semibold">
+        {{ t("policies_existing_title") }}
+      </h3>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-950 text-slate-400">
+          <tr>
+            <th class="text-left p-3">{{ t("id") }}</th>
+            <th class="text-left p-3">{{ t("enabled") }}</th>
+            <th class="text-left p-3">{{ t("priority") }}</th>
+            <th class="text-left p-3">{{ t("scope") }}</th>
+            <th class="text-left p-3">{{ t("provider") }}</th>
+            <th class="text-left p-3">{{ t("rule") }}</th>
+            <th class="text-left p-3">{{ t("value") }}</th>
+            <th class="text-left p-3"></th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {% for p in policies %}
+            <tr class="border-t border-slate-800">
+              <td class="p-3 text-slate-200">{{ p.id }}</td>
+
+              <td class="p-3">
+                {% if p.is_enabled %}
+                  <span class="inline-flex items-center gap-1 text-emerald-400">
+                    <span>●</span>{{ t("enabled") }}
+                  </span>
+                {% else %}
+                  <span class="text-slate-500">—</span>
+                {% endif %}
+              </td>
+
+              <td class="p-3">{{ p.priority }}</td>
+
+              <td class="p-3">
+                <span class="text-slate-300">{{ p.scope_type }}</span>
+                <span class="text-slate-500">{{ p.scope_id or "" }}</span>
+              </td>
+
+              <td class="p-3">
+                {% if p.provider %}
+                  {{ p.provider }}
+                {% else %}
+                  {{ t("policies_provider_both_short") }}
+                {% endif %}
+              </td>
+
+              <td class="p-3">{{ p.rule_type }}</td>
+
+              <td class="p-3 text-slate-400">
+                <code class="whitespace-pre-wrap break-words">{{ p.rule_value_json }}</code>
+              </td>
+
+              <td class="p-3 text-right">
+                <form method="post" action="{{ url_for('stream_policy_delete', policy_id=p.id) }}">
+                  <button class="text-red-400 hover:text-red-300">
+                    {{ t("delete") }}
+                  </button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+
+          {% if not policies %}
+            <tr>
+              <td class="p-4 text-slate-400" colspan="8">
+                {{ t("policies_empty") }}
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>

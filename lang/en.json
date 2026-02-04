@@ -648,7 +648,75 @@
   "task_description.monitor_collect_sessions": "Collects active sessions (Plex/Jellyfin) for monitoring.",
 
   "task.monitor_enqueue_refresh": "Monitoring: enqueue refresh",
-  "task_description.monitor_enqueue_refresh": "Queues monitoring refresh jobs."
+  "task_description.monitor_enqueue_refresh": "Queues monitoring refresh jobs.",
+
+  "policies_title": "Stream policies",
+  "policies_intro": "Define rules to limit or control active streams in real time.",
+  "policies_task_label": "Task used",
+  "policies_note_providers": "Policies apply to Plex and Jellyfin servers depending on configuration.",
+  "policies_scan_every_60s": "Scan every 60 seconds",
+
+  "policies_rule": "Rule",
+  "policies_rule_max_streams_user": "Maximum streams per user",
+  "policies_rule_max_transcodes_server": "Maximum transcodes (global)",
+  "policies_rule_ban_4k_transcode": "Block 4K transcoding",
+  "policies_rule_max_bitrate": "Maximum bitrate",
+  "policies_rule_device_allowlist": "Allowed devices",
+
+  "policies_scope": "Scope",
+  "policies_scope_global": "Global",
+  "policies_scope_server": "Specific server",
+  "policies_scope_user": "Specific user",
+
+  "policies_scope_id_placeholder": "User ID or server ID",
+  "policies_scope_help": "Leave empty for global scope.",
+
+  "policies_provider": "Provider",
+  "policies_provider_both": "Plex + Jellyfin",
+  "policies_provider_plex": "Plex only",
+  "policies_provider_jellyfin": "Jellyfin only",
+  "policies_provider_both_short": "Both",
+
+  "policies_server_filter": "Server filter",
+  "policies_all_servers": "All servers",
+
+  "policies_priority": "Priority",
+  "policies_priority_help": "Lower value = higher priority",
+
+  "policies_selector": "Target selection",
+  "policies_selector_kill_newest": "Kill newest session",
+  "policies_selector_kill_oldest": "Kill oldest session",
+  "policies_selector_kill_transcoding": "Kill transcoding session first",
+  "policies_selector_help": "Choose which session will be terminated if the rule is violated.",
+
+  "policies_enabled": "Enabled",
+
+  "policies_max_value": "Limit value",
+  "policies_max_value_placeholder": "e.g. 2",
+  "policies_max_value_help": "Maximum allowed value for this rule.",
+
+  "policies_max_bitrate_kbps": "Maximum bitrate (kbps)",
+  "policies_max_bitrate_placeholder": "e.g. 8000",
+  "policies_max_bitrate_help": "Applied to remote streams only.",
+
+  "policies_allowed_devices": "Allowed devices",
+  "policies_allowed_devices_placeholder": "e.g. Apple TV, Android TV",
+  "policies_allowed_devices_help": "Comma-separated device names.",
+
+  "policies_warn_title": "Warning title",
+  "policies_warn_text": "Warning message",
+
+  "policies_warn_title_default": "Streaming limit reached",
+  "policies_warn_text_default": "You have reached the allowed number of simultaneous streams.",
+
+  "policies_create_button": "Create policy",
+
+  "policies_existing_title": "Existing policies",
+  "policies_empty": "No stream policy defined yet.",
+  "policies_rule_max_streams_ip": "Maximum streams per IP",
+  "policies_rule_max_ips_user": "Max IPs per user"
+
+
 
 
 

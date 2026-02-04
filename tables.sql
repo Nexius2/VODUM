@@ -524,4 +524,95 @@ WHERE dedupe_key IS NOT NULL AND status IN ('queued','running');
 CREATE INDEX IF NOT EXISTS idx_history_server_library_stopped
 ON media_session_history(server_id, library_section_id, stopped_at);
 
+-----------------------------------------------------------------------
+-- STREAM POLICIES (enforcement)
+-----------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS stream_policies (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+  -- scope : global, server, user
+  scope_type TEXT NOT NULL CHECK (scope_type IN ('global','server','user')),
+  scope_id INTEGER, -- NULL pour global ; servers.id pour server ; vodum_users.id pour user
+
+  provider TEXT NULL CHECK (provider IN ('plex','jellyfin')), -- NULL => both
+  server_id INTEGER NULL,   -- optionnel (si tu veux cibler un serveur précis)
+  is_enabled INTEGER NOT NULL DEFAULT 1 CHECK (is_enabled IN (0,1)),
+  priority INTEGER NOT NULL DEFAULT 100,
+
+  rule_type TEXT NOT NULL CHECK (rule_type IN (
+    'max_streams_per_user',
+	'max_streams_per_ip',
+	'max_ips_per_user',
+    'max_transcodes_global',
+    'ban_4k_transcode',
+    'max_bitrate_kbps',
+    'device_allowlist'
+  )),
+
+  rule_value_json TEXT NOT NULL, -- JSON (valeurs de règle + options)
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_stream_policies_scope
+ON stream_policies(scope_type, scope_id);
+
+CREATE INDEX IF NOT EXISTS idx_stream_policies_enabled
+ON stream_policies(is_enabled, priority);
+
+
+-----------------------------------------------------------------------
+-- STREAM ENFORCEMENT STATE (warn -> recheck -> kill)
+-----------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS stream_enforcement_state (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+  policy_id INTEGER NOT NULL,
+  server_id INTEGER NOT NULL,
+
+  actor_key TEXT NOT NULL,       -- ✅ clé normalisée (vodum:ID ou ext:XYZ)
+  vodum_user_id INTEGER,
+  external_user_id TEXT,
+
+  first_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_seen_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  warned_at TIMESTAMP,
+  killed_at TIMESTAMP,
+  last_reason TEXT,
+
+  UNIQUE(policy_id, server_id, actor_key),
+
+  FOREIGN KEY(policy_id) REFERENCES stream_policies(id) ON DELETE CASCADE,
+  FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_stream_state_actor
+ON stream_enforcement_state(actor_key);
+
+
+
+-----------------------------------------------------------------------
+-- STREAM ENFORCEMENT LOG (audit)
+-----------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS stream_enforcements (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+  policy_id INTEGER NOT NULL,
+  server_id INTEGER NOT NULL,
+  provider TEXT NOT NULL CHECK (provider IN ('plex','jellyfin')),
+
+  session_key TEXT,
+  vodum_user_id INTEGER,
+  external_user_id TEXT,
+  action TEXT NOT NULL CHECK (action IN ('warn','kill')),
+  reason TEXT,
+
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY(policy_id) REFERENCES stream_policies(id) ON DELETE CASCADE,
+  FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_stream_enforcements_time
+ON stream_enforcements(created_at);
 
