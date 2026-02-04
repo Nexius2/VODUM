@@ -649,7 +649,74 @@
   "task_description.monitor_collect_sessions": "Collecte les sessions actives (Plex/Jellyfin) pour le monitoring.",
 
   "task.monitor_enqueue_refresh": "Monitoring : mise en file de refresh",
-  "task_description.monitor_enqueue_refresh": "Ajoute en file d’attente les jobs de rafraîchissement du monitoring."
+  "task_description.monitor_enqueue_refresh": "Ajoute en file d’attente les jobs de rafraîchissement du monitoring.",
+
+  "policies_title": "Politiques de streaming",
+  "policies_intro": "Définissez des règles pour limiter ou contrôler les flux actifs en temps réel.",
+  "policies_task_label": "Tâche utilisée",
+  "policies_note_providers": "Les règles s’appliquent aux serveurs Plex et Jellyfin selon la configuration.",
+  "policies_scan_every_60s": "Analyse toutes les 60 secondes",
+
+  "policies_rule": "Règle",
+  "policies_rule_max_streams_user": "Nombre maximum de streams par utilisateur",
+  "policies_rule_max_transcodes_server": "Nombre maximum de transcodages (global)",
+  "policies_rule_ban_4k_transcode": "Interdire le transcodage 4K",
+  "policies_rule_max_bitrate": "Débit maximal",
+  "policies_rule_device_allowlist": "Appareils autorisés",
+
+  "policies_scope": "Portée",
+  "policies_scope_global": "Globale",
+  "policies_scope_server": "Serveur spécifique",
+  "policies_scope_user": "Utilisateur spécifique",
+
+  "policies_scope_id_placeholder": "ID utilisateur ou serveur",
+  "policies_scope_help": "Laissez vide pour une règle globale.",
+
+  "policies_provider": "Plateforme",
+  "policies_provider_both": "Plex + Jellyfin",
+  "policies_provider_plex": "Plex uniquement",
+  "policies_provider_jellyfin": "Jellyfin uniquement",
+  "policies_provider_both_short": "Les deux",
+
+  "policies_server_filter": "Filtre serveur",
+  "policies_all_servers": "Tous les serveurs",
+
+  "policies_priority": "Priorité",
+  "policies_priority_help": "Valeur plus basse = priorité plus élevée",
+
+  "policies_selector": "Sélection de la session",
+  "policies_selector_kill_newest": "Couper la session la plus récente",
+  "policies_selector_kill_oldest": "Couper la session la plus ancienne",
+  "policies_selector_kill_transcoding": "Couper la session en transcodage",
+  "policies_selector_help": "Permet de choisir quelle session sera interrompue.",
+
+  "policies_enabled": "Activée",
+
+  "policies_max_value": "Valeur limite",
+  "policies_max_value_placeholder": "ex : 2",
+  "policies_max_value_help": "Valeur maximale autorisée pour cette règle.",
+
+  "policies_max_bitrate_kbps": "Débit maximal (kbps)",
+  "policies_max_bitrate_placeholder": "ex : 8000",
+  "policies_max_bitrate_help": "Appliqué uniquement aux lectures à distance.",
+
+  "policies_allowed_devices": "Appareils autorisés",
+  "policies_allowed_devices_placeholder": "ex : Apple TV, Android TV",
+  "policies_allowed_devices_help": "Liste séparée par des virgules.",
+
+  "policies_warn_title": "Titre de l’avertissement",
+  "policies_warn_text": "Message d’avertissement",
+
+  "policies_warn_title_default": "Limite de streaming atteinte",
+  "policies_warn_text_default": "Vous avez atteint le nombre maximum de streams simultanés autorisés.",
+
+  "policies_create_button": "Créer la règle",
+
+  "policies_existing_title": "Règles existantes",
+  "policies_empty": "Aucune règle de streaming définie pour le moment.",
+  "policies_rule_max_streams_ip": "Nombre maximum de streams par IP",
+  "policies_rule_max_ips_user": "IP maximum par utilisateur"
+
 
 
 

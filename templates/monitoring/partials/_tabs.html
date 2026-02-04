@@ -6,6 +6,12 @@
     Overview
   </a>
 
+  <a href="{{ url_for('monitoring_page', tab='policies') }}"
+     class="py-3 text-sm {% if current=='policies' %}text-white border-b-2 border-indigo-500{% else %}text-slate-400 hover:text-white{% endif %}">
+    Policies
+  </a>
+
+
   <a href="{{ url_for('monitoring_page', tab='activity') }}"
      class="py-3 text-sm {% if current=='activity' %}text-white border-b-2 border-indigo-500{% else %}text-slate-400 hover:text-white{% endif %}">
     Activity
