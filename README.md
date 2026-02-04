@@ -223,3 +223,8 @@ bridge
 
 Once the container is running, open VODUM at:
 http://<unraid-ip>:8097
+
+---
+
+Discord for help:
+https://discord.gg/5PU7TnegZt
