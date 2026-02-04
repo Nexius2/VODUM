@@ -4,8 +4,12 @@ import traceback
 import importlib
 from datetime import datetime
 from croniter import croniter
+import os
 from db_manager import DBManager
 
+
+DB_PATH = os.environ.get("DATABASE_PATH", "/appdata/database.db")
+db = DBManager(DB_PATH)
 
 
 # 🔥 AJOUT : logger TXT
@@ -727,6 +731,29 @@ def auto_enable_jellyfin_jobs_worker():
         (should_enable, should_enable),
     )
 
+def auto_enable_stream_enforcer():
+    """
+    Active stream_enforcer automatiquement si au moins 1 policy est activée.
+    Ne désactive PAS automatiquement (on respecte un éventuel choix admin).
+    """
+    try:
+        enabled_policies = db.query_one("""
+            SELECT COUNT(*) AS cnt
+            FROM stream_policies
+            WHERE is_enabled = 1
+        """)["cnt"]
+
+        if enabled_policies > 0:
+            db.execute("""
+                UPDATE tasks
+                SET enabled = 1,
+                    status = CASE WHEN status = 'disabled' THEN 'idle' ELSE status END,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE name = 'stream_enforcer'
+            """)
+    except Exception as e:
+        logger.warning(f"auto_enable_stream_enforcer failed: {e}", exc_info=True)
+
 
 # -------------------------------------------------------------------
 # Scheduler cron
@@ -760,6 +787,8 @@ def scheduler_loop():
             # 0) Auto-enable / disable des tâches dépendantes
             #    (avant de charger WHERE enabled = 1)
             # -------------------------------------------------
+            auto_enable_stream_enforcer()
+            
             try:
                 # --- apply_plex_access_updates : utile seulement si Plex UP ou jobs en attente
                 plex_up = db.query_one(

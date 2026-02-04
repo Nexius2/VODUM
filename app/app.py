@@ -90,7 +90,7 @@ def startup_admin_recover_if_requested(app):
         return
 
     try:
-        db = DBManager()
+        db = DBManager(os.environ.get("DATABASE_PATH", "/appdata/database.db"))
         cur = db.execute(
             """
             UPDATE settings
@@ -875,9 +875,11 @@ def create_app():
         # --------------------------
         # Tabs data
         # --------------------------
+        policies = []
         rows = []
         filters = {}
         pagination = None
+        
 
         if tab == "history":
             page = request.args.get("page", type=int, default=1)
@@ -1025,7 +1027,26 @@ def create_app():
 
             sort_key = (request.args.get("sort") or cookie_sort or "last").strip()
             sort_dir = (request.args.get("dir") or cookie_dir or "desc").strip().lower()
+            if sort_dir not in ("asc", "desc"):
+                sort_dir = "desc"
 
+            SORT_MAP = {
+                "user": "mu.username",
+                "last": "lr.last_watch_at",
+                "plays": "a.total_plays",
+                "watch": "a.watch_ms",
+                "ip": "lr.ip",
+                # on trie sur une expression stable (comme l’affichage)
+                "platform": "COALESCE(lr.device, lr.client_product, '-')",
+                "player": "COALESCE(lr.client_name, lr.client_product, '-')",
+            }
+            if sort_key not in SORT_MAP:
+                sort_key = "last"
+
+            # SQLite n’a pas toujours NULLS LAST => petit hack portable:
+            col = SORT_MAP[sort_key]
+            direction = "ASC" if sort_dir == "asc" else "DESC"
+            order_sql = f"({col} IS NULL) ASC, {col} {direction}"
 
             rows = db.query(
                 f"""
@@ -1072,15 +1093,13 @@ def create_app():
                   lr.last_watch_at,
                   a.total_plays,
                   a.watch_ms,
-
-                  -- ✅ champs affichés dans l’UI Users
                   lr.ip AS last_ip,
                   COALESCE(lr.device, lr.client_product, '-') AS platform,
                   COALESCE(lr.client_name, lr.client_product, '-') AS player
                 FROM last_rows lr
                 JOIN agg a ON a.media_user_id = lr.media_user_id
                 JOIN media_users mu ON mu.id = lr.media_user_id
-                ORDER BY lr.last_watch_at DESC
+                ORDER BY {order_sql}
                 LIMIT {per_page} OFFSET ?
                 """,
                 (offset,),
@@ -1090,28 +1109,21 @@ def create_app():
             for u in rows:
                 ms = u.get("watch_ms") or 0
                 u["watch_time"] = f"{ms // 3600000}h {((ms % 3600000) // 60000)}m"
-
-                # ✅ si ip NULL
                 if not u.get("last_ip"):
                     u["last_ip"] = "-"
 
 
-            total_rows = int(total.get("cnt") or 0)
-            total_pages = max(1, (total_rows + per_page - 1) // per_page)
+        elif tab == "policies":
+            policies = db.query("""
+                SELECT
+                  p.*,
+                  s.name AS server_name
+                FROM stream_policies p
+                LEFT JOIN servers s ON s.id = p.server_id
+                ORDER BY p.is_enabled DESC, p.priority ASC, p.id DESC
+            """)
+            policies = [dict(r) for r in policies]
 
-            def build_url(p):
-                args = dict(request.args)
-                args["tab"] = "users"
-                args["page"] = p
-                return url_for("monitoring_page", **args)
-
-            pagination = {
-                "page": page,
-                "total_pages": total_pages,
-                "total_rows": total_rows,
-                "prev_url": build_url(page - 1),
-                "next_url": build_url(page + 1),
-            }
 
         elif tab == "libraries":
             page = request.args.get("page", type=int, default=1)
@@ -1213,6 +1225,7 @@ def create_app():
         if is_hx:
             tab_tpl = {
                 "overview": "monitoring/overview_body.html",
+                "policies": "monitoring/tabs/policies.html",
                 "activity": "monitoring/tabs/activity.html",
                 "history": "monitoring/tabs/history.html",
                 "libraries": "monitoring/tabs/libraries.html",
@@ -1238,6 +1251,7 @@ def create_app():
                 pagination=pagination,
                 sort_key=sort_key,
                 sort_dir=sort_dir,
+                policies=policies,
             ))
             if sort_key and sort_dir:
                 resp.set_cookie(f"monitoring_{tab}_sort", str(sort_key), max_age=60*60*24*365)
@@ -1265,6 +1279,7 @@ def create_app():
             pagination=pagination,
             sort_key=sort_key,
             sort_dir=sort_dir,
+            policies=policies,
         ))
         
         if sort_key and sort_dir:
@@ -1544,6 +1559,85 @@ def create_app():
             events=events,
         )
 
+    @app.post("/monitoring/policies/create")
+    def stream_policy_create():
+        db = get_db()
+
+        rule_type = request.form.get("rule_type", "").strip()
+        scope_type = request.form.get("scope_type", "global").strip()
+        scope_id_raw = (request.form.get("scope_id") or "").strip()
+        provider = (request.form.get("provider") or "").strip() or None
+        server_id_raw = (request.form.get("server_id") or "").strip()
+        priority = int((request.form.get("priority") or "100").strip() or 100)
+        is_enabled = 1 if (request.form.get("is_enabled") or "1") == "1" else 0
+
+        scope_id = int(scope_id_raw) if scope_id_raw.isdigit() else None
+        server_id = int(server_id_raw) if server_id_raw.isdigit() else None
+
+        selector = (request.form.get("selector") or "kill_newest").strip()
+        warn_title = (request.form.get("warn_title") or "Stream limit").strip()
+        warn_text = (request.form.get("warn_text") or "You reached your limit. If this continues, the most recent stream will be stopped.").strip()
+
+        max_value = (request.form.get("max_value") or "").strip()
+        max_kbps = (request.form.get("max_kbps") or "").strip()
+        allowed_devices = (request.form.get("allowed_devices") or "").strip()
+
+        rule = {
+            "selector": selector,
+            "warn_title": warn_title,
+            "warn_text": warn_text,
+        }
+
+        # attach rule-specific fields
+        if rule_type in ("max_streams_per_user", "max_transcodes_global", "max_streams_per_ip", "max_ips_per_user"):
+            rule["max"] = int(max_value) if max_value.isdigit() else 1
+
+        # options IP
+        if rule_type in ("max_streams_per_ip", "max_ips_per_user"):
+            rule["ignore_unknown"] = True
+            rule["per_server"] = True
+
+
+
+        if rule_type == "max_bitrate_kbps":
+            rule["max_kbps"] = int(max_kbps) if max_kbps.isdigit() else 20000
+
+        if rule_type == "device_allowlist":
+            allowed = []
+            if allowed_devices:
+                allowed = [x.strip() for x in allowed_devices.split(",") if x.strip()]
+            rule["allowed"] = allowed
+
+        if rule_type == "ban_4k_transcode":
+            # rien de plus requis
+            pass
+
+        db.execute("""
+            INSERT INTO stream_policies(scope_type, scope_id, provider, server_id, is_enabled, priority, rule_type, rule_value_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (scope_type, scope_id, provider, server_id, is_enabled, priority, rule_type, json.dumps(rule)))
+
+        # ✅ Auto-enable stream_enforcer si la policy est activée
+        if is_enabled == 1:
+            db.execute("""
+                UPDATE tasks
+                SET enabled = 1,
+                    status = CASE WHEN status = 'disabled' THEN 'idle' ELSE status END,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE name = 'stream_enforcer'
+            """)
+
+
+        flash("Policy created", "success")
+        return redirect(url_for("monitoring_page", tab="policies"))
+
+
+    @app.post("/monitoring/policies/<int:policy_id>/delete")
+    def stream_policy_delete(policy_id: int):
+        db = get_db()
+        db.execute("DELETE FROM stream_policies WHERE id=?", (policy_id,))
+        flash("Policy deleted", "success")
+        return redirect(url_for("monitoring_page", tab="policies"))
 
 
 

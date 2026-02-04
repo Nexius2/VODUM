@@ -28,3 +28,10 @@ class BaseProvider:
         pas le raw du provider.
         """
         raise NotImplementedError
+
+
+    def send_session_message(self, session_key: str, title: str, text: str, timeout_ms: int = 8000) -> bool:
+        return False
+
+    def terminate_session(self, session_key: str, reason: str = "") -> bool:
+        raise NotImplementedError

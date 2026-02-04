@@ -16,14 +16,30 @@ class PlexProvider(BaseProvider):
         car local_url est souvent un 'localhost' / URL docker / mauvais port.
         """
         bases: List[str] = []
-        for u in (getattr(self.server, "url", None),
-                  getattr(self.server, "local_url", None),
-                  getattr(self.server, "public_url", None)):
-            if u and str(u).strip():
-                b = str(u).strip().rstrip("/")
-                if b not in bases:
-                    bases.append(b)
+
+        invalid_literals = {"none", "null", "undefined", ""}
+
+        for u in (
+            getattr(self.server, "url", None),
+            getattr(self.server, "local_url", None),
+            getattr(self.server, "public_url", None),
+        ):
+            if not u:
+                continue
+
+            b = str(u).strip().rstrip("/")
+            if b.lower() in invalid_literals:
+                continue
+
+            # Évite les "192.168.1.60:32400" sans schéma
+            if not (b.startswith("http://") or b.startswith("https://")):
+                continue
+
+            if b not in bases:
+                bases.append(b)
+
         return bases
+
 
     def _get(self, path: str) -> str:
         bases = self._candidate_bases()
@@ -53,6 +69,90 @@ class PlexProvider(BaseProvider):
 
         # Aucune URL n'a fonctionné : on remonte une erreur explicite (utile en logs)
         raise RuntimeError(f"Plex unreachable via any URL. Attempts: {', '.join(errors)}") from last_exc
+
+    def _request(self, method: str, path: str, params: Optional[dict] = None) -> bool:
+        bases = self._candidate_bases()
+        if not bases:
+            raise RuntimeError("Plex server URL missing")
+
+        token = getattr(self.server, "token", None)
+        if not token:
+            raise RuntimeError("Plex token missing")
+
+        last_exc: Optional[Exception] = None
+        errors: List[str] = []
+
+        for base in bases:
+            url = f"{base}{path}"
+            try:
+                p = {"X-Plex-Token": token}
+                if params:
+                    p.update(params)
+
+                r = requests.request(method, url, params=p, timeout=self.timeout)
+                r.raise_for_status()
+                return True
+            except requests.exceptions.RequestException as e:
+                last_exc = e
+                code = getattr(getattr(e, "response", None), "status_code", None)
+                errors.append(f"{method} {url} -> {code or type(e).__name__}")
+                continue
+
+        raise RuntimeError(f"Plex request failed. Attempts: {', '.join(errors)}") from last_exc
+
+
+    def terminate_session(self, session_key: str, reason: str = "") -> bool:
+        """
+        Plex: /status/sessions/terminate attend sessionId (= l'id de la balise <Session id="...">),
+        qui n'est pas toujours égal au sessionKey.
+        Donc:
+          - on recharge /status/sessions
+          - on retrouve la bonne sessionId
+          - on appelle terminate avec la bonne valeur
+        """
+        # 1) charger /status/sessions (XML brut)
+        xml_text = self._get("/status/sessions")
+        root = ET.fromstring(xml_text)
+
+        target_session_id = None
+
+        # 2) retrouver la session correspondante au session_key
+        for node in root:
+            # sessionKey est souvent sur le node (Video/Track/Episode)
+            sk = node.attrib.get("sessionKey") or node.attrib.get("sessionId") or node.attrib.get("key")
+            if not sk:
+                continue
+            if str(sk) != str(session_key):
+                continue
+
+            # la vraie sessionId est généralement dans <Session id="...">
+            sess = node.find("Session")
+            if sess is not None:
+                sid = sess.attrib.get("id")
+                if sid:
+                    target_session_id = str(sid)
+                    break
+
+            # fallback (au cas où) : certaines versions exposent sessionId directement
+            if node.attrib.get("sessionId"):
+                target_session_id = str(node.attrib["sessionId"])
+                break
+
+        # 3) si on n'a pas trouvé, on tente quand même avec session_key (mais on logge clairement)
+        if not target_session_id:
+            target_session_id = str(session_key)
+
+        params = {"sessionId": target_session_id}
+        if reason:
+            params["reason"] = reason[:120]
+
+        # GET puis POST (compat)
+        try:
+            return self._request("GET", "/status/sessions/terminate", params=params)
+        except Exception:
+            return self._request("POST", "/status/sessions/terminate", params=params)
+
+
 
     def get_active_sessions(self) -> List[Dict[str, Any]]:
         xml_text = self._get("/status/sessions")

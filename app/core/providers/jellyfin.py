@@ -13,16 +13,79 @@ class JellyfinProvider(BaseProvider):
     def _candidate_bases(self) -> List[str]:
         # url > local_url > public_url
         bases: List[str] = []
+
+        invalid_literals = {"none", "null", "undefined", ""}
+
         for u in (
             getattr(self.server, "url", None),
             getattr(self.server, "local_url", None),
             getattr(self.server, "public_url", None),
         ):
-            if u and str(u).strip():
-                b = str(u).strip().rstrip("/")
-                if b not in bases:
-                    bases.append(b)
+            if not u:
+                continue
+
+            b = str(u).strip().rstrip("/")
+            if b.lower() in invalid_literals:
+                continue
+
+            # refuse "192.168.1.50:8096" sans schéma
+            if not (b.startswith("http://") or b.startswith("https://")):
+                continue
+
+            if b not in bases:
+                bases.append(b)
+
         return bases
+
+
+    def _post_json(self, path: str, payload: Optional[dict] = None) -> bool:
+        bases = self._candidate_bases()
+        if not bases:
+            raise RuntimeError("Jellyfin server URL missing")
+
+        token = getattr(self.server, "token", None)
+        if not token:
+            raise RuntimeError("Jellyfin API key missing (stored in servers.token)")
+
+        headers = {
+            "X-Emby-Token": token,
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+
+        last_exc: Optional[Exception] = None
+        errors: List[str] = []
+
+        for base in bases:
+            url = f"{base}{path}"
+            try:
+                r = requests.post(url, headers=headers, json=(payload or {}), timeout=self.timeout)
+                r.raise_for_status()
+                return True
+            except requests.exceptions.RequestException as e:
+                last_exc = e
+                code = getattr(getattr(e, "response", None), "status_code", None)
+                errors.append(f"{url} -> {code or type(e).__name__}")
+                continue
+
+        raise RuntimeError(f"Jellyfin POST failed. Attempts: {', '.join(errors)}") from last_exc
+
+
+    def send_session_message(self, session_key: str, title: str, text: str, timeout_ms: int = 8000) -> bool:
+        session_id = str(session_key).split(":", 1)[0]  # sessionId uniquement
+        payload = {
+            "Header": title,
+            "Text": text,
+            "TimeoutMs": int(timeout_ms),
+        }
+        return self._post_json(f"/Sessions/{session_id}/Message", payload)
+
+
+    def terminate_session(self, session_key: str, reason: str = "") -> bool:
+        session_id = str(session_key).split(":", 1)[0]  # sessionId uniquement
+        return self._post_json(f"/Sessions/{session_id}/Playing/Stop", {})
+
+
 
     def _get_json(self, path: str) -> Any:
         bases = self._candidate_bases()
