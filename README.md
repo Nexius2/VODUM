@@ -1,11 +1,14 @@
 # VODUM
-### Media Server Subscription & Access Manager (Beta)
+### Media Server Subscription, Access & Policy Manager (Beta)
 
-VODUM is a **self-hosted web application** designed to **centralize the management of users, libraries and subscriptions**
+VODUM is a **self-hosted web application** designed to **centralize and automate the management of users, subscriptions and access rights**
 for media servers such as **Plex and Jellyfin**.
 
-It provides a **single control panel** to handle access rights, subscriptions, notifications and automation,
-without relying on external spreadsheets or manual reminders.
+Its primary purpose is to act as a **subscription service layer** on top of media servers, handling users, access rules,
+monitoring and communication in a single interface.
+
+VODUM replaces manual workflows (spreadsheets, notes, reminders, manual sharing)
+with an **automated, policy-driven system**.
 
 > ⚠️ **Beta notice**: the database schema and features may evolve. Regular backups are strongly recommended.
 
@@ -15,11 +18,13 @@ without relying on external spreadsheets or manual reminders.
 
 VODUM is built for media server administrators who:
 
-- share their server with friends, family or subscribers
+- share their Plex or Jellyfin servers with friends, family or subscribers
 - need a clear overview of **active, expiring and expired users**
-- want to **automate access control** instead of managing shares manually
-- want to **automate subscription-related email notifications**
-- want a reliable alternative to manual tracking (notes, spreadsheets, reminders)
+- want to manage access like a **real subscription service**
+- want to **automate access control** instead of editing shares manually
+- want users to be **notified automatically** about their subscription status
+
+VODUM acts as a **subscription-aware management layer** on top of Plex and Jellyfin.
 
 ---
 
@@ -27,68 +32,102 @@ VODUM is built for media server administrators who:
 
 ### 👤 User Management (Plex & Jellyfin)
 
-- Centralized list of all users
-- Plex and Jellyfin users retrieved via their respective APIs
-- Users can exist in the database even without active library shares
-- User status automatically derived from subscription state
+VODUM maintains a **central database of all users**, independently from their current access state.
 
-Both **Plex and Jellyfin are fully supported**.
+- Users retrieved via Plex and Jellyfin APIs
+- Users can exist without active library shares
+- A single user can be linked to multiple servers
+- User state automatically derived from subscription status
+
+VODUM becomes the **single source of truth** for user management.
 
 ---
 
 ### 🗂️ Server & Library Management
 
-- Manage **multiple media servers**
+- Manage multiple Plex and Jellyfin servers
 - Associate users with one or more servers
-- Control which libraries are shared per user
+- Control exactly which libraries are accessible per user
 - Store advanced Plex sharing options:
   - Sync permissions
   - Camera upload
   - Channel access
   - Media filters (Movies / TV / Music)
 
-Designed to reflect **real server access configuration**, not just local metadata.
+VODUM mirrors **real server access**, not just theoretical permissions.
 
 ---
 
-### 💳 Subscription Management
+### 💳 Subscription Management (Core Feature)
 
-- Subscription system linked to users
-- Start and end date tracking
-- Automatic subscription states:
+Subscriptions are the **heart of VODUM**.
+
+Each subscription includes:
+
+- Start date
+- End date
+- Automatic state calculation:
   - Active
   - Expiring soon
   - Expired
-- Subscription state drives both **access control** and **notifications**
+
+The subscription state directly drives:
+
+- Library access
+- Policy enforcement
+- Email notifications
+
+VODUM behaves like a **real subscription service**, not a simple reminder tool.
 
 ---
 
-### ✉️ Email Automation
+### ✉️ User Mailing & Notifications
 
-- Email templates stored directly in the database
-- Multiple email types supported:
+VODUM includes a **built-in mailing system** to communicate automatically with users.
+
+- Email templates stored in the database
+- Multiple email types:
   - Upcoming expiration reminder
   - Renewal reminder
   - Subscription expired notification
 - Per-template delay configuration
 - Daily automated email processing
 
+This removes the need to manually track and warn users.
+
 ---
 
 ### 🔒 Automated Access Control
 
-- Automatic restriction of library access for expired users
-- Access removal performed **directly on Plex and Jellyfin servers**
+- Automatic access restriction for expired users
+- Applied **directly on Plex and Jellyfin servers**
 - Users are never deleted
-- Access can be restored instantly if a subscription is renewed
-- Fully **multi-server aware** logic
+- Access is restored instantly upon renewal
+- Fully multi-server aware logic
+
+VODUM never relies on local flags only: **changes are applied on the servers themselves**.
+
+---
+
+### 📊 Monitoring & Policies
+
+VODUM continuously monitors server activity and user behavior.
+
+- Track active sessions in real time
+- Monitor IP usage and concurrent streams
+- Detect abnormal situations automatically
+- Enforce policies:
+  - warnings
+  - session termination
+  - access restrictions
+
+Policies make VODUM an **active regulation system**, not just a passive dashboard.
 
 ---
 
 ### 🌍 Multi-language Interface
 
-- Built-in multi-language support
-- Language automatically detected from the browser
+- Browser language auto-detection
 - Manual language selection available in settings
 - Translation system based on JSON language files
 
@@ -96,15 +135,19 @@ Designed to reflect **real server access configuration**, not just local metadat
 
 ### 🧱 Docker & Unraid Friendly
 
-- Fully containerized
+- Fully containerized application
+- Designed for Unraid and standard Docker hosts
 - Persistent `/appdata` directory
 - Automatic database initialization
 - One-time schema creation
 - Versioned migrations
 - Timestamped log files
-- Until it becomes available through Community Applications (CA), the XML file can be found at the root of the GitHub repository.
 
 ---
+
+## 🚀 Installation (Docker / Unraid)
+
+VODUM is distributed as a Docker image and is **fully compatible with Unraid**.
 
 ## 🚀 Docker (Unraid)
 
