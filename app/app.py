@@ -4064,6 +4064,33 @@ def create_app():
         )
         return json_rows(rows)
 
+    @app.route("/api/monitoring/per_server")
+    def api_monitoring_per_server():
+        db = get_db()
+        rng = request.args.get("range", "7d")
+
+        if rng == "all":
+            where = "1=1"
+            params = ()
+        else:
+            delta = {"7d": "-7 days", "1m": "-1 month", "6m": "-6 months", "12m": "-12 months"}.get(rng, "-7 days")
+            where = "h.started_at >= datetime('now', ?)"
+            params = (delta,)
+
+        rows = db.query(
+            f"""
+            SELECT
+              COALESCE(NULLIF(s.name, ''), 'Server ' || h.server_id) AS server_name,
+              COUNT(*) AS sessions
+            FROM media_session_history h
+            LEFT JOIN servers s ON s.id = h.server_id
+            WHERE {where}
+            GROUP BY h.server_id
+            ORDER BY sessions DESC
+            """,
+            params,
+        )
+        return json_rows(rows)
 
 
 
