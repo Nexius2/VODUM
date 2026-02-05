@@ -33,6 +33,7 @@ import platform
 from logging_utils import get_logger, read_last_logs, read_all_logs
 task_logger = get_logger("tasks_ui")
 auth_logger = get_logger("auth")
+from discord_utils import is_discord_ready, validate_discord_bot_token
 
 from api.subscriptions import subscriptions_api, update_user_expiration
 import uuid
@@ -163,6 +164,18 @@ def create_app():
     @app.before_request
     def inject_version():
         g.app_version = APP_VERSION
+
+        # Update badge (sans BDD) -> lit /appdata/update_status.json
+        g.update_available = False
+        try:
+            status_path = "/appdata/update_status.json"
+            if os.path.exists(status_path):
+                with open(status_path, "r", encoding="utf-8", errors="ignore") as f:
+                    data = json.load(f) or {}
+                g.update_available = bool(data.get("update_available"))
+        except Exception:
+            g.update_available = False
+
 
     app.config.from_object(Config)
 
@@ -1124,6 +1137,19 @@ def create_app():
             """)
             policies = [dict(r) for r in policies]
 
+            edit_policy = None
+            edit_policy_id = request.args.get("edit_policy_id", type=int)
+            if edit_policy_id:
+                ep = db.query_one("SELECT * FROM stream_policies WHERE id = ?", (edit_policy_id,))
+                if ep:
+                    ep = dict(ep)
+                    try:
+                        ep["_rule"] = json.loads(ep.get("rule_value_json") or "{}")
+                    except Exception:
+                        ep["_rule"] = {}
+                    edit_policy = ep
+
+
 
         elif tab == "libraries":
             page = request.args.get("page", type=int, default=1)
@@ -1218,6 +1244,207 @@ def create_app():
                 "next_url": build_url(page + 1),
             }
 
+        # --------------------------
+        # Servers tab (stats combinées + par serveur + tops + breakdowns)
+        # --------------------------
+        server_range = request.args.get("range", "7d")
+
+        servers_combined = None
+        servers_details = None
+        servers_sessions_day = None
+        servers_media_types = None
+        servers_clients = None
+        servers_top_users = None
+        servers_top_titles = None
+        servers_unique_ips = None
+
+        if tab == "servers":
+            # Range filter basé sur stopped_at (stats "terminées" fiables)
+            if server_range == "all":
+                where_hist = "1=1"
+                params_hist = ()
+            else:
+                delta = {"7d": "-7 days", "1m": "-1 month", "6m": "-6 months", "12m": "-12 months"}.get(server_range, "-7 days")
+                where_hist = "stopped_at >= datetime('now', ?)"
+                params_hist = (delta,)
+
+            # Global (tous serveurs)
+            servers_combined = db.query_one(
+                f"""
+                SELECT
+                  COUNT(*) AS sessions,
+                  COUNT(DISTINCT media_user_id) AS active_users,
+                  COALESCE(SUM(watch_ms), 0) AS watch_ms,
+                  SUM(CASE WHEN was_transcode = 1 THEN 1 ELSE 0 END) AS transcodes,
+                  AVG(NULLIF(peak_bitrate, 0)) AS avg_peak_bitrate,
+                  MAX(peak_bitrate) AS max_peak_bitrate,
+                  COUNT(DISTINCT ip) AS unique_ips
+                FROM media_session_history
+                WHERE {where_hist}
+                """,
+                params_hist,
+            ) or {}
+            servers_combined = dict(servers_combined)
+
+            # Détails par serveur (hist + live)
+            params = tuple(params_hist) + (live_window_sql,)
+            servers_details = db.query(
+                f"""
+                WITH hist AS (
+                  SELECT * FROM media_session_history
+                  WHERE {where_hist}
+                ),
+                live AS (
+                  SELECT * FROM media_sessions
+                  WHERE datetime(last_seen_at) >= datetime('now', ?)
+                )
+                SELECT
+                  s.id AS server_id,
+                  s.name,
+                  s.type,
+                  s.status,
+                  s.last_checked,
+
+                  (SELECT COUNT(*) FROM libraries l WHERE l.server_id = s.id) AS libraries,
+                  (SELECT COUNT(*) FROM media_users mu WHERE mu.server_id = s.id) AS users,
+
+                  (SELECT COUNT(*) FROM live x WHERE x.server_id = s.id) AS live_sessions,
+                  (SELECT COUNT(*) FROM live x WHERE x.server_id = s.id AND x.is_transcode = 1) AS live_transcodes,
+
+                  (SELECT COUNT(*) FROM hist h WHERE h.server_id = s.id) AS sessions,
+                  (SELECT COUNT(DISTINCT h.media_user_id) FROM hist h WHERE h.server_id = s.id) AS active_users,
+                  (SELECT COALESCE(SUM(h.watch_ms), 0) FROM hist h WHERE h.server_id = s.id) AS watch_ms,
+                  (SELECT SUM(CASE WHEN h.was_transcode = 1 THEN 1 ELSE 0 END) FROM hist h WHERE h.server_id = s.id) AS transcodes,
+                  (SELECT AVG(NULLIF(h.peak_bitrate, 0)) FROM hist h WHERE h.server_id = s.id) AS avg_peak_bitrate,
+                  (SELECT MAX(h.peak_bitrate) FROM hist h WHERE h.server_id = s.id) AS max_peak_bitrate,
+                  (SELECT COUNT(DISTINCT h.ip) FROM hist h WHERE h.server_id = s.id) AS unique_ips
+
+                FROM servers s
+                WHERE s.type IN ('plex','jellyfin')
+                ORDER BY s.type, s.name
+                """,
+                params,
+            )
+            servers_details = [dict(r) for r in servers_details]
+
+            # Courbe sessions/jour par serveur (multi-datasets côté front)
+            servers_sessions_day = db.query(
+                f"""
+                SELECT
+                  date(stopped_at) AS day,
+                  server_id,
+                  COUNT(*) AS sessions
+                FROM media_session_history
+                WHERE {where_hist}
+                GROUP BY day, server_id
+                ORDER BY day ASC
+                """,
+                params_hist,
+            )
+            servers_sessions_day = [dict(r) for r in servers_sessions_day]
+
+            # Répartition media_type par serveur
+            servers_media_types = db.query(
+                f"""
+                SELECT
+                  server_id,
+                  COALESCE(media_type, 'unknown') AS media_type,
+                  COUNT(*) AS sessions,
+                  COALESCE(SUM(watch_ms),0) AS watch_ms
+                FROM media_session_history
+                WHERE {where_hist}
+                GROUP BY server_id, media_type
+                ORDER BY server_id, sessions DESC
+                """,
+                params_hist,
+            )
+            servers_media_types = [dict(r) for r in servers_media_types]
+
+            # Top clients / devices (global + par serveur)
+            servers_clients = db.query(
+                f"""
+                SELECT
+                  server_id,
+                  COALESCE(client_product, COALESCE(device, 'unknown')) AS client,
+                  COUNT(*) AS sessions,
+                  COALESCE(SUM(watch_ms),0) AS watch_ms,
+                  SUM(CASE WHEN was_transcode = 1 THEN 1 ELSE 0 END) AS transcodes
+                FROM media_session_history
+                WHERE {where_hist}
+                GROUP BY server_id, client
+                ORDER BY sessions DESC
+                LIMIT 200
+                """,
+                params_hist,
+            )
+            servers_clients = [dict(r) for r in servers_clients]
+
+            # Top users (global + par serveur)
+            servers_top_users = db.query(
+                f"""
+                SELECT
+                  h.server_id,
+                  h.media_user_id,
+                  COALESCE(mu.username, mu.email, 'User #' || h.media_user_id) AS user_label,
+                  COUNT(*) AS sessions,
+                  COALESCE(SUM(h.watch_ms),0) AS watch_ms,
+                  SUM(CASE WHEN h.was_transcode = 1 THEN 1 ELSE 0 END) AS transcodes
+                FROM media_session_history h
+                LEFT JOIN media_users mu
+                  ON mu.id = h.media_user_id
+                WHERE {where_hist}
+                GROUP BY h.server_id, h.media_user_id
+                ORDER BY watch_ms DESC
+                LIMIT 200
+                """,
+                params_hist,
+            )
+            servers_top_users = [dict(r) for r in servers_top_users]
+
+            # Top contenus (global + par serveur)
+            # -> s’appuie sur title / grandparent_title / parent_title si présents
+            servers_top_titles = db.query(
+                f"""
+                SELECT
+                  server_id,
+                  TRIM(
+                    COALESCE(grandparent_title || ' - ', '') ||
+                    COALESCE(parent_title || ' - ', '') ||
+                    COALESCE(title, 'Unknown')
+                  ) AS full_title,
+                  COUNT(*) AS sessions,
+                  COALESCE(SUM(watch_ms),0) AS watch_ms,
+                  SUM(CASE WHEN was_transcode = 1 THEN 1 ELSE 0 END) AS transcodes
+                FROM media_session_history
+                WHERE {where_hist}
+                GROUP BY server_id, full_title
+                ORDER BY watch_ms DESC
+                LIMIT 200
+                """,
+                params_hist,
+            )
+            servers_top_titles = [dict(r) for r in servers_top_titles]
+
+            # IPs uniques (par serveur + global, plus “top IP”)
+            servers_unique_ips = db.query(
+                f"""
+                SELECT
+                  server_id,
+                  ip,
+                  COUNT(*) AS sessions,
+                  COALESCE(SUM(watch_ms),0) AS watch_ms
+                FROM media_session_history
+                WHERE {where_hist}
+                GROUP BY server_id, ip
+                ORDER BY sessions DESC
+                LIMIT 200
+                """,
+                params_hist,
+            )
+            servers_unique_ips = [dict(r) for r in servers_unique_ips]
+
+
+
         # ------------------------------------------------------------------
         # HTMX: si requête dynamique, on renvoie uniquement le contenu de l’onglet
         # ------------------------------------------------------------------
@@ -1230,6 +1457,7 @@ def create_app():
                 "history": "monitoring/tabs/history.html",
                 "libraries": "monitoring/tabs/libraries.html",
                 "users": "monitoring/tabs/users.html",
+                "servers": "monitoring/tabs/servers.html",
             }.get(tab, "monitoring/overview_body.html")
 
             resp = make_response(render_template(
@@ -1252,6 +1480,16 @@ def create_app():
                 sort_key=sort_key,
                 sort_dir=sort_dir,
                 policies=policies,
+                edit_policy=locals().get('edit_policy'),
+                server_range=server_range,
+                servers_combined=servers_combined,
+                servers_details=servers_details,
+                servers_sessions_day=servers_sessions_day,
+                servers_media_types=servers_media_types,
+                servers_clients=servers_clients,
+                servers_top_users=servers_top_users,
+                servers_top_titles=servers_top_titles,
+                servers_unique_ips=servers_unique_ips,
             ))
             if sort_key and sort_dir:
                 resp.set_cookie(f"monitoring_{tab}_sort", str(sort_key), max_age=60*60*24*365)
@@ -1280,6 +1518,16 @@ def create_app():
             sort_key=sort_key,
             sort_dir=sort_dir,
             policies=policies,
+            edit_policy=locals().get('edit_policy'),
+            server_range=server_range,
+            servers_combined=servers_combined,
+            servers_details=servers_details,
+            servers_sessions_day=servers_sessions_day,
+            servers_media_types=servers_media_types,
+            servers_clients=servers_clients,
+            servers_top_users=servers_top_users,
+            servers_top_titles=servers_top_titles,
+            servers_unique_ips=servers_unique_ips,
         ))
         
         if sort_key and sort_dir:
@@ -1563,6 +1811,9 @@ def create_app():
     def stream_policy_create():
         db = get_db()
 
+        policy_id_raw = (request.form.get("policy_id") or "").strip()
+        policy_id = int(policy_id_raw) if policy_id_raw.isdigit() else None
+
         rule_type = request.form.get("rule_type", "").strip()
         scope_type = request.form.get("scope_type", "global").strip()
         scope_id_raw = (request.form.get("scope_id") or "").strip()
@@ -1581,6 +1832,7 @@ def create_app():
         max_value = (request.form.get("max_value") or "").strip()
         max_kbps = (request.form.get("max_kbps") or "").strip()
         allowed_devices = (request.form.get("allowed_devices") or "").strip()
+        allow_local_ip = 1 if (request.form.get("allow_local_ip") or "0") == "1" else 0
 
         rule = {
             "selector": selector,
@@ -1597,7 +1849,9 @@ def create_app():
             rule["ignore_unknown"] = True
             rule["per_server"] = True
 
-
+        # allow local IP bypass (LAN)
+        if rule_type in ("max_streams_per_user", "max_streams_per_ip", "max_ips_per_user"):
+            rule["allow_local_ip"] = bool(allow_local_ip)
 
         if rule_type == "max_bitrate_kbps":
             rule["max_kbps"] = int(max_kbps) if max_kbps.isdigit() else 20000
@@ -1611,11 +1865,32 @@ def create_app():
         if rule_type == "ban_4k_transcode":
             # rien de plus requis
             pass
-
-        db.execute("""
-            INSERT INTO stream_policies(scope_type, scope_id, provider, server_id, is_enabled, priority, rule_type, rule_value_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (scope_type, scope_id, provider, server_id, is_enabled, priority, rule_type, json.dumps(rule)))
+        if policy_id:
+            db.execute(
+                """
+                UPDATE stream_policies
+                SET scope_type=?,
+                    scope_id=?,
+                    provider=?,
+                    server_id=?,
+                    is_enabled=?,
+                    priority=?,
+                    rule_type=?,
+                    rule_value_json=?
+                WHERE id=?
+                """,
+                (scope_type, scope_id, provider, server_id, is_enabled, priority, rule_type, json.dumps(rule), policy_id),
+            )
+            flash("Policy saved", "success")
+        else:
+            db.execute(
+                """
+                INSERT INTO stream_policies(scope_type, scope_id, provider, server_id, is_enabled, priority, rule_type, rule_value_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (scope_type, scope_id, provider, server_id, is_enabled, priority, rule_type, json.dumps(rule)),
+            )
+            flash("Policy created", "success")
 
         # ✅ Auto-enable stream_enforcer si la policy est activée
         if is_enabled == 1:
@@ -1628,7 +1903,6 @@ def create_app():
             """)
 
 
-        flash("Policy created", "success")
         return redirect(url_for("monitoring_page", tab="policies"))
 
 
@@ -1638,6 +1912,11 @@ def create_app():
         db.execute("DELETE FROM stream_policies WHERE id=?", (policy_id,))
         flash("Policy deleted", "success")
         return redirect(url_for("monitoring_page", tab="policies"))
+
+
+    @app.get("/monitoring/policies/<int:policy_id>/edit")
+    def stream_policy_edit(policy_id: int):
+        return redirect(url_for("monitoring_page", tab="policies", edit_policy_id=policy_id))
 
 
 
@@ -2589,17 +2868,35 @@ def create_app():
             renewal_method  = form.get("renewal_method") or user.get("renewal_method")
             notes           = form.get("notes") if "notes" in form else user.get("notes")
 
+            discord_user_id = (form.get("discord_user_id") or "").strip() or None
+            discord_name = (form.get("discord_name") or "").strip() or None
+
+            # Optional per-user stream override (NULL if empty; 0 allowed)
+            raw_override = form.get("max_streams_override")
+            max_streams_override = None
+            if raw_override is not None:
+                raw_override = raw_override.strip()
+                if raw_override != "":
+                    try:
+                        max_streams_override = int(raw_override)
+                    except Exception:
+                        max_streams_override = None
+
             # --- MAJ infos Vodum ---
             db.execute(
                 """
                 UPDATE vodum_users
                 SET firstname = ?, lastname = ?, second_email = ?,
-                    renewal_date = ?, renewal_method = ?, notes = ?
+                    renewal_date = ?, renewal_method = ?, notes = ?,
+                    max_streams_override = ?,
+                    discord_user_id = ?, discord_name = ?
                 WHERE id = ?
                 """,
                 (
                     firstname, lastname, second_email,
                     renewal_date, renewal_method, notes,
+                    max_streams_override,
+                    discord_user_id, discord_name,
                     user_id,
                 ),
             )
@@ -5236,6 +5533,276 @@ def create_app():
             active_page="mailing",
         )
 
+    # -----------------------------
+    # DISCORD
+    # -----------------------------
+
+    def is_discord_ready(settings) -> bool:
+        if not settings:
+            return False
+        try:
+            return bool(
+                settings.get("discord_enabled")
+                and (settings.get("discord_bot_token") or "").strip()
+            )
+        except Exception:
+            return False
+
+
+    @app.post("/api/discord/toggle")
+    def api_discord_toggle():
+        db = get_db()
+        data = request.get_json(silent=True) or {}
+        enabled = 1 if data.get("enabled") else 0
+
+        try:
+            # read current token
+            settings = db.query_one("SELECT discord_bot_token FROM settings WHERE id = 1")
+            token = (dict(settings).get("discord_bot_token") or "").strip() if settings else ""
+
+            # If enabling, validate token NOW (real check against Discord)
+            if enabled == 1:
+                ok, detail = validate_discord_bot_token(token)
+                if not ok:
+                    # force disabled in DB to avoid "enabled but broken"
+                    db.execute("UPDATE settings SET discord_enabled = ? WHERE id = 1", (0,))
+                    db.execute(
+                        """
+                        UPDATE tasks
+                        SET enabled = ?,
+                            status  = 'disabled'
+                        WHERE name IN ('send_expiration_discord', 'send_campaign_discord')
+                        """,
+                        (0,),
+                    )
+                    return {"status": "error", "message": f"Discord token invalid: {detail}"}, 400
+
+            # 1) update settings flag
+            db.execute(
+                "UPDATE settings SET discord_enabled = ? WHERE id = 1",
+                (enabled,),
+            )
+
+            # 2) enable/disable discord tasks
+            db.execute(
+                """
+                UPDATE tasks
+                SET enabled = ?,
+                    status  = CASE WHEN ? = 1 THEN 'idle' ELSE 'disabled' END
+                WHERE name IN ('send_expiration_discord', 'send_campaign_discord')
+                """,
+                (enabled, enabled),
+            )
+
+            add_log("info", "discord", f"Discord toggled → {enabled}")
+            return {"status": "ok", "enabled": enabled}
+
+        except Exception as e:
+            add_log("error", "discord", "Failed to toggle discord", {"error": str(e)})
+            return {"status": "error", "message": str(e)}, 500
+
+
+
+    @app.route("/discord")
+    def discord_page():
+        db = get_db()
+        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+
+        if is_discord_ready(settings):
+            return redirect(url_for("discord_campaigns_page"))
+
+        return redirect(url_for("discord_settings_page"))
+
+
+    @app.route("/discord/settings", methods=["GET", "POST"])
+    def discord_settings_page():
+        db = get_db()
+
+        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        settings = dict(settings) if settings else {}
+
+        if request.method == "POST":
+            # discord_enabled can come from the switch (via hidden field) or from the API toggle.
+            raw_enabled = request.form.get("discord_enabled")
+            if raw_enabled is None:
+                enabled = 1 if int(settings.get("discord_enabled") or 0) == 1 else 0
+            else:
+                enabled = 1 if raw_enabled in ("1", "on", "true", "True") else 0
+
+            token = (request.form.get("discord_bot_token") or "").strip() or None
+            # If user tries to enable Discord from the form, validate token
+            if enabled == 1 and token:
+                ok, detail = validate_discord_bot_token(token)
+                if not ok:
+                    enabled = 0  # force disable to avoid misleading UI
+                    flash(f"Discord token invalid: {detail}", "error")
+                else:
+                    flash(f"Discord bot validated: {detail}", "success")
+
+
+            db.execute(
+                """
+                UPDATE settings
+                SET discord_enabled = ?, discord_bot_token = ?
+                WHERE id = 1
+                """,
+                (enabled, token),
+            )
+
+            # Enable/disable Discord tasks automatically
+            db.execute(
+                """
+                UPDATE tasks
+                SET enabled = ?,
+                    status  = CASE WHEN ? = 1 THEN 'idle' ELSE 'disabled' END
+                WHERE name IN ('send_expiration_discord', 'send_campaign_discord')
+                """,
+                (enabled, enabled),
+            )
+
+            add_log("info", "discord", "Discord settings updated")
+            flash("saved", "success")
+            return redirect(url_for("discord_settings_page"))
+
+
+        return render_template(
+            "discord/discord_settings.html",
+            settings=settings,
+            active_page="discord",
+        )
+    @app.route("/discord/templates", methods=["GET", "POST"])
+    def discord_templates_page():
+        db = get_db()
+
+        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        settings = dict(settings) if settings else {}
+
+        if request.method == "POST":
+            for ttype in ("preavis", "relance", "fin"):
+                title = request.form.get(f"title_{ttype}") or ""
+                body = request.form.get(f"body_{ttype}") or ""
+
+                db.execute(
+                    """
+                    UPDATE discord_templates
+                    SET title = ?, body = ?
+                    WHERE type = ?
+                    """,
+                    (title, body, ttype),
+                )
+
+            add_log("info", "discord", "Discord templates updated")
+            flash("saved", "success")
+            return redirect(url_for("discord_templates_page"))
+
+        templates = {row["type"]: dict(row) for row in db.query("SELECT * FROM discord_templates")}
+
+        return render_template(
+            "discord/discord_templates.html",
+            settings=settings,
+            templates=templates,
+            active_page="discord",
+        )
+
+
+    @app.route("/discord/campaigns", methods=["GET", "POST"])
+    def discord_campaigns_page():
+        db = get_db()
+
+        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        settings = dict(settings) if settings else {}
+
+        # Fetch list of servers for dropdown (READ)
+        servers = db.query("SELECT id, name FROM servers ORDER BY name")
+
+        if request.method == "POST":
+            title = (request.form.get("title") or "").strip()
+            body = (request.form.get("body") or "").strip()
+            raw_server_id = (request.form.get("server_id") or "").strip()
+
+            if not title or not body:
+                flash("missing_fields", "error")
+                return redirect(url_for("discord_campaigns_page"))
+
+            server_id = None
+            if raw_server_id:
+                try:
+                    server_id = int(raw_server_id)
+                except Exception:
+                    server_id = None
+
+            db.execute(
+                """
+                INSERT INTO discord_campaigns(title, body, server_id, status)
+                VALUES (?, ?, ?, 'pending')
+                """,
+                (title, body, server_id),
+            )
+
+            # Optionally enqueue immediately if task enabled
+            run_task_by_name("send_campaign_discord")
+
+            add_log("info", "discord", "Discord campaign created")
+            flash("saved", "success")
+            return redirect(url_for("discord_campaigns_page"))
+
+        campaigns = db.query(
+            """
+            SELECT c.*, s.name AS server_name
+            FROM discord_campaigns c
+            LEFT JOIN servers s ON s.id = c.server_id
+            ORDER BY c.created_at DESC
+            LIMIT 200
+            """
+        )
+
+        return render_template(
+            "discord/discord_campaigns.html",
+            settings=settings,
+            servers=servers,
+            campaigns=campaigns,
+            active_page="discord",
+        )
+
+
+    @app.post("/discord/campaigns/delete")
+    def discord_campaigns_delete():
+        db = get_db()
+        cid = request.form.get("id")
+        try:
+            db.execute("DELETE FROM discord_campaigns WHERE id = ?", (cid,))
+            flash("deleted", "success")
+        except Exception:
+            flash("error", "error")
+        return redirect(url_for("discord_campaigns_page"))
+
+
+    @app.route("/discord/history")
+    def discord_history_page():
+        db = get_db()
+        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        settings = dict(settings) if settings else {}
+
+        rows = db.query(
+            """
+            SELECT sd.id, sd.template_type, sd.expiration_date, sd.sent_at,
+                   u.id AS user_id, u.username, u.discord_user_id, u.discord_name
+            FROM sent_discord sd
+            JOIN vodum_users u ON u.id = sd.user_id
+            ORDER BY sd.sent_at DESC
+            LIMIT 300
+            """
+        )
+
+        return render_template(
+            "discord/discord_history.html",
+            settings=settings,
+            rows=rows,
+            active_page="discord",
+        )
+
+
+
 
     # -----------------------------
     # BACKUP
@@ -5721,6 +6288,25 @@ def create_app():
 
         settings = dict(settings)
 
+        def _sanitize_notifications_order(raw: str) -> str:
+            allowed = {"email", "discord"}
+            raw = (raw or "").strip().lower()
+            if not raw:
+                return "email"
+
+            parts = [p.strip() for p in raw.split(",") if p.strip()]
+            cleaned = []
+            for p in parts:
+                if p in allowed and p not in cleaned:
+                    cleaned.append(p)
+
+            if not cleaned:
+                return "email"
+            if len(cleaned) == 1:
+                return cleaned[0]
+            return f"{cleaned[0]},{cleaned[1]}"
+
+
         # ------------------------------------------------------------
         # POST → SAVE ALL SETTINGS
         # ------------------------------------------------------------
@@ -5756,6 +6342,11 @@ def create_app():
                 ),
                 "brand_name": request.form.get("brand_name", settings.get("brand_name")),
 
+                "notifications_order": _sanitize_notifications_order(
+                    request.form.get("notifications_order", settings.get("notifications_order") or "email")
+                ),
+
+
                 "disable_on_expiry": 1 if request.form.get("disable_on_expiry") == "1" else 0,
                 "enable_cron_jobs": 1 if request.form.get("enable_cron_jobs") == "1" else 0,
                 "maintenance_mode": 1 if request.form.get("maintenance_mode") == "1" else 0,
@@ -5786,6 +6377,7 @@ def create_app():
                     timezone = :timezone,
                     admin_email = :admin_email,
                     brand_name = :brand_name,
+                    notifications_order = :notifications_order,
                     default_subscription_days = :default_subscription_days,
                     delete_after_expiry_days = :delete_after_expiry_days,
                     preavis_days = :preavis_days,
@@ -5862,13 +6454,44 @@ def create_app():
         # ------------------------------
         return render_template(
             "settings/settings.html",
-            settings=settings,   # ✅ source unique
+            settings=settings,  
             active_page="settings",
             current_lang=session.get("lang", settings["default_language"]),
             available_languages=get_available_languages(),
             app_version=g.get("app_version", "dev"),
         )
 
+    @app.route("/settings/<section>", methods=["GET"])
+    def settings_section_page(section: str):
+        db = get_db()
+
+        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        if not settings:
+            flash("Settings row missing in DB", "error")
+            return redirect("/")
+
+        settings = dict(settings)
+
+        # Map section -> template
+        template_map = {
+            "general": "settings/settings_general.html",
+            "subscription": "settings/settings_subscription.html",
+            "notifications": "settings/settings_notifications.html",
+            "system": "settings/settings_system.html",
+        }
+
+        tpl = template_map.get(section)
+        if not tpl:
+            return redirect(url_for("settings_page"))
+
+        return render_template(
+            tpl,
+            settings=settings,
+            active_page="settings",
+            current_lang=session.get("lang", settings.get("default_language")),
+            available_languages=get_available_languages(),
+            app_version=g.get("app_version", "dev"),
+        )
 
 
     # -----------------------------
