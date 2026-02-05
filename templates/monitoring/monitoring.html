@@ -20,6 +20,8 @@
   {% set refresh_ms = 5000 %}
 {% elif current_tab == 'policies' %}
   {% set refresh_ms = 600000 %}
+{% elif current_tab == 'servers' %}
+  {% set refresh_ms = 15000 %}
 {% elif current_tab == 'overview' %}
   {% set refresh_ms = 10000 %}
 {% elif current_tab in ['history', 'users', 'libraries'] %}
@@ -28,10 +30,19 @@
   {% set refresh_ms = 10000 %}
 {% endif %}
 
-{% if current_tab == 'activity' %}
-  {# ✅ PAS de HTMX sur Activity => pas de double rendu => pas de clignotement #}
+{# ------------------------------------------------------------
+   Helper : quel template inclure pour l’onglet courant
+   (évite les doublons + gère "overview" qui n'est pas dans tabs/)
+------------------------------------------------------------ #}
+{% set tab_template = "monitoring/tabs/" ~ current_tab ~ ".html" %}
+{% if current_tab == "overview" %}
+  {% set tab_template = "monitoring/overview_body.html" %}
+{% endif %}
+
+{% if current_tab in ['activity', 'servers'] %}
+  {# ✅ PAS de HTMX sur Activity + Servers => pas de clignotement (charts) #}
   <div id="monitoring-content">
-    {% include "monitoring/tabs/activity.html" %}
+    {% include tab_template %}
   </div>
 {% else %}
   {# ✅ HTMX conservé pour les autres onglets (auto-refresh OK) #}
@@ -39,24 +50,11 @@
        hx-get="{{ url_for('monitoring_page', **args) }}"
        hx-trigger="load, every {{ refresh_ms }}ms"
        hx-swap="innerHTML">
-
-    {# Fallback rendu serveur (si JS/HTMX désactivé) #}
-    {% if current_tab == "overview" %}
-      {% include "monitoring/overview_body.html" %}
-	{% elif current_tab == "policies" %}
-      {% include "monitoring/tabs/policies.html" %}
-    {% elif current_tab == "history" %}
-      {% include "monitoring/tabs/history.html" %}
-    {% elif current_tab == "libraries" %}
-      {% include "monitoring/tabs/libraries.html" %}
-    {% elif current_tab == "users" %}
-      {% include "monitoring/tabs/users.html" %}
-    {% else %}
-      {% include "monitoring/overview_body.html" %}
-    {% endif %}
-
+    {# ✅ contenu initial pour éviter un blanc #}
+    {% include tab_template %}
   </div>
 {% endif %}
+
 
 
 {% endblock %}

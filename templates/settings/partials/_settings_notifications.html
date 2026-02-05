@@ -1,0 +1,151 @@
+<div class="bg-slate-900 p-6 rounded-xl border border-slate-800">
+  <h2 class="text-lg font-semibold text-slate-200 mb-1">{{ t("notification_settings") }}</h2>
+  <p class="text-sm text-slate-400 mb-6">{{ t("settings_section_notifications_desc") }}</p>
+
+  <!-- Delays -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+    <!-- Preavis -->
+    <div>
+      <label class="block text-sm mb-1 text-slate-300">{{ t("days_before_expiration_preavis") }}</label>
+      <input type="number" min="0" name="preavis_days"
+             value="{{ settings.preavis_days }}"
+             class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+    </div>
+
+    <!-- Relance -->
+    <div>
+      <label class="block text-sm mb-1 text-slate-300">{{ t("days_before_expiration_relance") }}</label>
+      <input type="number" min="0" name="relance_days"
+             value="{{ settings.reminder_days }}"
+             class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+    </div>
+
+  </div>
+
+  <hr class="border-slate-800 my-6">
+
+  <!-- Notification system order -->
+  <div class="space-y-2">
+    <div class="flex items-center gap-2">
+      <h3 class="text-sm font-semibold text-slate-200">{{ t("notification_system_order") }}</h3>
+    </div>
+    <p class="text-xs text-slate-400">
+      {{ t("notification_system_order_help") }}
+    </p>
+  </div>
+
+  {# Allowed channels for now (extensible later) #}
+  {% set allowed_channels = ["discord", "email"] %}
+
+  {# Current order from DB (e.g. "discord,email") #}
+  {% set current_order = (settings.notifications_order or "email") %}
+  {% set parts = current_order.split(",") %}
+
+  {# Build a clean ordered list: keep known, unique; then append missing #}
+  {% set ordered = [] %}
+  {% for p in parts %}
+    {% set p = p.strip() %}
+    {% if p in allowed_channels and p not in ordered %}
+      {% set _ = ordered.append(p) %}
+    {% endif %}
+  {% endfor %}
+  {% for c in allowed_channels %}
+    {% if c not in ordered %}
+      {% set _ = ordered.append(c) %}
+    {% endif %}
+  {% endfor %}
+
+  <div class="mt-4 bg-slate-950/40 border border-slate-800 rounded-lg p-4">
+    <div class="flex items-center justify-between mb-3">
+      <div class="text-sm text-slate-300">{{ t("order_of_execution") }}</div>
+      <div class="text-xs text-slate-500">{{ t("top_is_tried_first") }}</div>
+    </div>
+
+    <ul id="notif-order-list" class="space-y-2">
+      {% for ch in ordered %}
+        <li class="flex items-center justify-between gap-3 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2"
+            data-channel="{{ ch }}">
+
+          <div class="flex items-center gap-2">
+            <span class="text-slate-200 text-sm font-medium">
+              {% if ch == "email" %}{{ t("email") }}
+              {% elif ch == "discord" %}{{ t("discord") }}
+              {% else %}{{ ch }}
+              {% endif %}
+            </span>
+
+            <span class="text-xs text-slate-500">
+              {% if ch == "email" %}{{ t("email_order_hint") }}
+              {% elif ch == "discord" %}{{ t("discord_order_hint") }}
+              {% endif %}
+            </span>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button type="button"
+                    class="order-up px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs"
+                    title="{{ t('move_up') }}">
+              ↑
+            </button>
+            <button type="button"
+                    class="order-down px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs"
+                    title="{{ t('move_down') }}">
+              ↓
+            </button>
+          </div>
+
+        </li>
+      {% endfor %}
+    </ul>
+
+    <p class="text-xs text-slate-400 mt-3">
+      {{ t("notification_system_order_example") }}
+    </p>
+
+    <!-- Hidden field used by backend -->
+    <input type="hidden" name="notifications_order" id="notifications_order_hidden" value="{{ current_order }}">
+  </div>
+
+</div>
+
+<script>
+(function () {
+  const list = document.getElementById('notif-order-list');
+  const hidden = document.getElementById('notifications_order_hidden');
+  if (!list || !hidden) return;
+
+  function updateHidden() {
+    const items = Array.from(list.querySelectorAll('li[data-channel]'));
+    const order = items.map(li => li.getAttribute('data-channel')).filter(Boolean);
+    hidden.value = order.join(',');
+  }
+
+  function moveItem(li, direction) {
+    if (!li) return;
+
+    if (direction === 'up') {
+      const prev = li.previousElementSibling;
+      if (prev) list.insertBefore(li, prev);
+    } else if (direction === 'down') {
+      const next = li.nextElementSibling;
+      if (next) list.insertBefore(next, li);
+    }
+    updateHidden();
+  }
+
+  list.addEventListener('click', function (e) {
+    const btnUp = e.target.closest('.order-up');
+    const btnDown = e.target.closest('.order-down');
+    if (!btnUp && !btnDown) return;
+
+    const li = e.target.closest('li[data-channel]');
+    if (!li) return;
+
+    if (btnUp) moveItem(li, 'up');
+    if (btnDown) moveItem(li, 'down');
+  });
+
+  updateHidden();
+})();
+</script>

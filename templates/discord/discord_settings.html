@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% set active_page = 'discord' %}
+
+{% block title %}{{ t("discord") }} - VODUM{% endblock %}
+{% block header_title %}{{ t("discord") }}{% endblock %}
+{% block header_subtitle %}{{ t("discord_subtitle") }}{% endblock %}
+
+{% block header_actions %}
+  <div class="flex items-center gap-2">
+    <button type="submit" form="discord-form"
+            class="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded text-sm">
+      {{ t("save") }}
+    </button>
+  </div>
+{% endblock %}
+
+{% block content %}
+{% set current_subpage = 'settings' %}
+{% include "discord/discord_nav.html" %}
+
+<!-- SWITCH discord_enabled -->
+<div class="flex items-center gap-3 mb-4">
+  <label class="text-slate-300 font-medium">{{ t("discord_enabled") }}</label>
+
+  <label class="relative inline-flex items-center cursor-pointer">
+    <input type="checkbox"
+           id="discord_enabled_switch"
+           class="sr-only peer"
+           {% if settings.discord_enabled %}checked{% endif %}>
+
+    <div class="w-11 h-6 bg-slate-600 rounded-full peer peer-checked:bg-green-500 transition-colors"></div>
+    <div class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform
+                peer-checked:translate-x-5 shadow"></div>
+
+    <span class="ml-3 text-xs text-slate-400">
+      {% if settings.discord_enabled %}
+        {{ t("discord_enabled_on") }}
+      {% else %}
+        {{ t("discord_enabled_off") }}
+      {% endif %}
+    </span>
+  </label>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 text-xs">
+
+  <div class="lg:col-span-1 bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+    <h2 class="text-sm font-semibold mb-2">{{ t("discord_help_title") }}</h2>
+
+    <p class="text-slate-400">
+      {{ t("discord_help_1") }}
+    </p>
+
+    <ul class="list-disc list-inside text-slate-400 space-y-1">
+      <li>{{ t("discord_help_need_bot") }}</li>
+      <li>{{ t("discord_help_need_user_id") }}</li>
+    </ul>
+
+
+  </div>
+
+  <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-4">
+    <form method="post" id="discord-form" class="space-y-4">
+      <input type="hidden" name="discord_enabled" id="discord_enabled_hidden" value="{{ 1 if settings.discord_enabled else 0 }}">
+
+      <div>
+        <label class="block mb-1 text-slate-400">{{ t("discord_bot_token") }}</label>
+
+        <div class="relative">
+          <input type="password"
+                 id="discord_bot_token"
+                 name="discord_bot_token"
+                 value="{{ settings.discord_bot_token or '' }}"
+                 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs pr-10"
+                 placeholder="Bot token">
+
+          <button type="button"
+                  id="toggle_discord_token"
+                  class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-sm">
+            👁️
+          </button>
+        </div>
+
+        <p class="text-slate-500 mt-1">
+          {{ t("discord_token_help") }}
+        </p>
+      </div>
+
+
+      <div class="text-slate-500 text-xs">
+        {{ t("discord_note_tasks") }}
+      </div>
+    </form>
+  </div>
+
+
+</div>
+
+<script>
+  const sw = document.getElementById("discord_enabled_switch");
+  const hidden = document.getElementById("discord_enabled_hidden");
+
+  // Le span "Enabled/Disabled" dans le switch
+  const statusSpan = sw?.closest("label")?.querySelector("span");
+
+  // Texte initial (pour rollback)
+  const initialSpanText = statusSpan ? statusSpan.textContent : "";
+
+  // Helper flash (fallback si vodumFlash n'existe pas)
+  function flash(category, msg) {
+    if (typeof window.vodumFlash === "function") {
+      window.vodumFlash(category, msg);
+    } else {
+      // fallback pas moche mais simple
+      console.log(`[${category}] ${msg}`);
+    }
+  }
+
+  if (hidden && sw) hidden.value = sw.checked ? "1" : "0";
+
+  sw?.addEventListener("change", async () => {
+    const enabled = sw.checked;
+
+    if (hidden) hidden.value = enabled ? "1" : "0";
+
+    // ✅ Feedback immédiat côté UI (sans attendre l'API)
+    if (statusSpan) {
+      statusSpan.textContent = enabled ? "{{ t('discord_enabled_on') }}" : "{{ t('discord_enabled_off') }}";
+    }
+
+    const res = await fetch("/api/discord/toggle", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled })
+    });
+
+    // ❌ ERROR: rollback UI
+    if (!res.ok) {
+      sw.checked = !enabled;
+      if (hidden) hidden.value = sw.checked ? "1" : "0";
+
+      if (statusSpan) statusSpan.textContent = initialSpanText;
+
+      let detail = "";
+      try {
+        const data = await res.json();
+        if (data?.message) detail = ` (${data.message})`;
+        else if (data?.error) detail = ` (${data.error})`;
+      } catch (_) {}
+
+      flash("error", "Discord: toggle failed" + detail);
+      return;
+    }
+
+    // ✅ SUCCESS
+    flash("success", enabled ? "Discord activé" : "Discord désactivé");
+  });
+
+  // show/hide token
+  const tokenInput = document.getElementById("discord_bot_token");
+  const tokenBtn = document.getElementById("toggle_discord_token");
+
+  tokenBtn?.addEventListener("click", () => {
+    if (!tokenInput) return;
+
+    if (tokenInput.type === "password") {
+      tokenInput.type = "text";
+      tokenBtn.textContent = "🙈";
+    } else {
+      tokenInput.type = "password";
+      tokenBtn.textContent = "👁️";
+    }
+  });
+</script>
+
+
+{% endblock %}

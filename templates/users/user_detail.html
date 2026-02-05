@@ -81,6 +81,23 @@
                class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
       </label>
 
+      <!-- Discord user id -->
+      <label class="text-sm">
+        {{ t("discord_user_id") }}
+        <input type="text" name="discord_user_id" value="{{ user.discord_user_id or '' }}"
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2"
+               placeholder="123456789012345678">
+      </label>
+
+      <!-- Discord name -->
+      <label class="text-sm">
+        {{ t("discord_name") }}
+        <input type="text" name="discord_name" value="{{ user.discord_name or '' }}"
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2"
+               placeholder="MyUser">
+      </label>
+
+
       <!-- Last name -->
       <label class="text-sm">
         {{ t("lastname") }}
@@ -159,6 +176,17 @@
         <input type="text" name="renewal_method"
                value="{{ user.renewal_method or '' }}"
                class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+      </label>
+
+      <label class="text-sm">
+        {{ t("max_streams_override") }}
+        <input type="number" name="max_streams_override"
+               value="{{ user.max_streams_override if user.max_streams_override is not none else '' }}"
+               placeholder="{{ t('max_streams_override_placeholder') }}"
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+        <div class="text-xs text-slate-500 mt-1">
+          {{ t("max_streams_override_help") }}
+        </div>
       </label>
 
       <label class="text-sm">
