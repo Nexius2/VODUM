@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% set active_page = 'discord' %}
+
+{% block title %}{{ t("discord") }} - VODUM{% endblock %}
+{% block header_title %}{{ t("discord") }}{% endblock %}
+{% block header_subtitle %}{{ t("discord_subtitle") }}{% endblock %}
+
+{% block content %}
+{% set current_subpage = 'history' %}
+{% include "discord/discord_nav.html" %}
+
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+  <h2 class="text-sm font-semibold mb-3">{{ t("history") }}</h2>
+
+  <div class="overflow-x-auto">
+    <table class="w-full text-xs">
+      <thead class="text-slate-400">
+        <tr class="border-b border-slate-800">
+          <th class="text-left py-2">{{ t("user") }}</th>
+          <th class="text-left py-2">{{ t("template") }}</th>
+          <th class="text-left py-2">{{ t("expiration_date") }}</th>
+          <th class="text-left py-2">{{ t("sent_at") }}</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in rows %}
+        <tr class="border-b border-slate-800">
+          <td class="py-2 pr-3 text-slate-200">
+            <a href="{{ url_for('user_detail', user_id=r.user_id) }}" class="hover:underline">
+              {{ r.username }}
+            </a>
+            <div class="text-slate-500 text-[11px]">
+              {{ r.discord_name or '' }} {% if r.discord_user_id %}<span class="opacity-60">({{ r.discord_user_id }})</span>{% endif %}
+            </div>
+          </td>
+          <td class="py-2 pr-3 text-slate-300">{{ r.template_type }}</td>
+          <td class="py-2 pr-3 text-slate-300">{{ r.expiration_date or '-' }}</td>
+          <td class="py-2 pr-3 text-slate-400">
+            {% if r.sent_at %}
+              {{ r.sent_at }}
+            {% else %}
+              -
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr>
+          <td colspan="4" class="py-4 text-center text-slate-500">{{ t("no_history") }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

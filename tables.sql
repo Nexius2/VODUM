@@ -616,3 +616,42 @@ CREATE TABLE IF NOT EXISTS stream_enforcements (
 CREATE INDEX IF NOT EXISTS idx_stream_enforcements_time
 ON stream_enforcements(created_at);
 
+
+
+-----------------------------------------------------------------------
+
+
+-----------------------------------------------------------------------
+-- DISCORD (DM notifications + campaigns)
+-----------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS discord_templates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  type TEXT UNIQUE NOT NULL CHECK(type IN ('preavis','relance','fin')),
+  title TEXT,
+  body TEXT
+);
+
+CREATE TABLE IF NOT EXISTS sent_discord (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  template_type TEXT NOT NULL,
+  expiration_date TEXT,
+  sent_at INTEGER,
+  UNIQUE(user_id, template_type, expiration_date),
+  FOREIGN KEY(user_id) REFERENCES vodum_users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS discord_campaigns (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  server_id INTEGER,
+  is_test INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'pending' CHECK(status IN ('pending','sent','failed')),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  sent_at TIMESTAMP,
+  error TEXT,
+  FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE SET NULL
+);
+

@@ -1,0 +1,29 @@
+<div class="bg-slate-900 p-6 rounded-xl border border-slate-800">
+  <h2 class="text-lg font-semibold text-slate-200 mb-1">{{ t("system_settings") }}</h2>
+  <p class="text-sm text-slate-400 mb-6">{{ t("settings_section_system_desc") }}</p>
+
+  <div class="space-y-4">
+
+    <div class="flex items-center gap-2">
+      <input type="checkbox" name="enable_cron_jobs" value="1"
+             {% if settings.enable_cron_jobs %}checked{% endif %}
+             class="w-4 h-4 rounded border-slate-600 bg-slate-800">
+      <span class="text-sm text-slate-300">{{ t("enable_scheduled_tasks") }}</span>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <input type="checkbox" name="maintenance_mode" value="1"
+             {% if settings.maintenance_mode %}checked{% endif %}
+             class="w-4 h-4 rounded border-slate-600 bg-slate-800">
+      <span class="text-sm text-slate-300">{{ t("maintenance_mode") }}</span>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <input type="checkbox" name="debug_mode" value="1"
+             {% if settings.debug_mode %}checked{% endif %}
+             class="w-4 h-4 rounded border-slate-600 bg-slate-800">
+      <span class="text-sm text-slate-300">{{ t("debug_mode") }}</span>
+    </div>
+
+  </div>
+</div>

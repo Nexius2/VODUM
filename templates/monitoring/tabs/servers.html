@@ -1,0 +1,292 @@
+<div class="flex items-center justify-between mb-4">
+  <div class="text-sm text-slate-400">Range</div>
+  <select id="serversRangePicker" class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm">
+    <option value="7d"  {% if server_range=='7d' %}selected{% endif %}>7 days</option>
+    <option value="1m"  {% if server_range=='1m' %}selected{% endif %}>1 month</option>
+    <option value="6m"  {% if server_range=='6m' %}selected{% endif %}>6 months</option>
+    <option value="12m" {% if server_range=='12m' %}selected{% endif %}>12 months</option>
+    <option value="all" {% if server_range=='all' %}selected{% endif %}>All time</option>
+  </select>
+</div>
+
+{# --- helpers --- #}
+{% set g_ms = (servers_combined.watch_ms or 0) %}
+{% set g_hours = g_ms // 3600000 %}
+{% set g_mins = (g_ms % 3600000) // 60000 %}
+
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4 mb-6">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-xs text-slate-400">Sessions</div>
+    <div class="text-3xl font-semibold mt-2">{{ servers_combined.sessions or 0 }}</div>
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-xs text-slate-400">Active users</div>
+    <div class="text-3xl font-semibold mt-2">{{ servers_combined.active_users or 0 }}</div>
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-xs text-slate-400">Watch time</div>
+    <div class="text-3xl font-semibold mt-2">{{ g_hours }}h {{ g_mins }}m</div>
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-xs text-slate-400">Transcodes</div>
+    <div class="text-3xl font-semibold mt-2">{{ servers_combined.transcodes or 0 }}</div>
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-xs text-slate-400">Unique IPs</div>
+    <div class="text-3xl font-semibold mt-2">{{ servers_combined.unique_ips or 0 }}</div>
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-xs text-slate-400">Peak bitrate</div>
+    <div class="text-sm mt-2 text-slate-200">
+      Avg: {{ (servers_combined.avg_peak_bitrate or 0) | round(0) }} kbps<br>
+      Max: {{ (servers_combined.max_peak_bitrate or 0) }} kbps
+    </div>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-sm font-semibold mb-3">Sessions/day per server</div>
+    <canvas id="chartServersSessionsDay" height="120"></canvas>
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-sm font-semibold mb-3">Media types per server (sessions)</div>
+    <canvas id="chartServersMediaTypes" height="120"></canvas>
+  </div>
+</div>
+
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-6">
+  <div class="text-sm font-semibold mb-3">Per server (summary)</div>
+
+  <div class="overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead class="text-slate-400">
+        <tr class="border-b border-slate-800">
+          <th class="text-left py-2 pr-4">Server</th>
+          <th class="text-left py-2 pr-4">Status</th>
+          <th class="text-left py-2 pr-4">Live</th>
+          <th class="text-left py-2 pr-4">Users</th>
+          <th class="text-left py-2 pr-4">Libraries</th>
+          <th class="text-left py-2 pr-4">Sessions</th>
+          <th class="text-left py-2 pr-4">Active</th>
+          <th class="text-left py-2 pr-4">Watch time</th>
+          <th class="text-left py-2 pr-4">Transcodes</th>
+          <th class="text-left py-2 pr-4">IPs</th>
+          <th class="text-left py-2 pr-4">Bitrate</th>
+          <th class="text-left py-2 pr-4">Last check</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in servers_details or [] %}
+        {% set ms = s.watch_ms or 0 %}
+        <tr class="border-b border-slate-800">
+          <td class="py-2 pr-4">
+            <div class="font-semibold">{{ s.name or ('Server ' ~ s.server_id) }}</div>
+            <div class="text-xs text-slate-500">{{ (s.type or '')|upper }}</div>
+          </td>
+
+          <td class="py-2 pr-4">
+            {% if s.status == 'up' %}
+              <span class="px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">UP</span>
+            {% elif s.status == 'down' %}
+              <span class="px-2 py-1 rounded-lg bg-red-500/10 text-red-300 border border-red-500/30">DOWN</span>
+            {% else %}
+              <span class="px-2 py-1 rounded-lg bg-slate-500/10 text-slate-300 border border-slate-500/30">UNKNOWN</span>
+            {% endif %}
+          </td>
+
+          <td class="py-2 pr-4">
+            <div class="font-semibold">{{ s.live_sessions or 0 }}</div>
+            <div class="text-xs text-slate-500">transcodes: {{ s.live_transcodes or 0 }}</div>
+          </td>
+
+          <td class="py-2 pr-4">{{ s.users or 0 }}</td>
+          <td class="py-2 pr-4">{{ s.libraries or 0 }}</td>
+          <td class="py-2 pr-4">{{ s.sessions or 0 }}</td>
+          <td class="py-2 pr-4">{{ s.active_users or 0 }}</td>
+
+          <td class="py-2 pr-4">
+            {{ ms // 3600000 }}h {{ (ms % 3600000) // 60000 }}m
+          </td>
+
+          <td class="py-2 pr-4">{{ s.transcodes or 0 }}</td>
+          <td class="py-2 pr-4">{{ s.unique_ips or 0 }}</td>
+
+          <td class="py-2 pr-4 text-xs text-slate-300">
+            Avg: {{ (s.avg_peak_bitrate or 0) | round(0) }} kbps<br>
+            Max: {{ (s.max_peak_bitrate or 0) }} kbps
+          </td>
+
+          <td class="py-2 pr-4 text-xs text-slate-500">{{ s.last_checked or '-' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-6">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-sm font-semibold mb-3">Top users (by watch time)</div>
+    <div class="space-y-2 max-h-[360px] overflow-auto pr-2">
+      {% for r in (servers_top_users or [])[:40] %}
+        <div class="flex items-center justify-between border border-slate-800 rounded-xl px-3 py-2">
+          <div class="min-w-0">
+            <div class="text-sm font-semibold truncate">{{ r.user_label }}</div>
+            <div class="text-xs text-slate-500">Server #{{ r.server_id }} • sessions {{ r.sessions }} • transcodes {{ r.transcodes }}</div>
+          </div>
+          {% set ms = r.watch_ms or 0 %}
+          <div class="text-xs text-slate-300 text-right whitespace-nowrap">
+            {{ ms // 3600000 }}h {{ (ms % 3600000) // 60000 }}m
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-sm font-semibold mb-3">Top titles (by watch time)</div>
+    <div class="space-y-2 max-h-[360px] overflow-auto pr-2">
+      {% for r in (servers_top_titles or [])[:40] %}
+        <div class="flex items-center justify-between border border-slate-800 rounded-xl px-3 py-2">
+          <div class="min-w-0">
+            <div class="text-sm font-semibold truncate">{{ r.full_title }}</div>
+            <div class="text-xs text-slate-500">Server #{{ r.server_id }} • sessions {{ r.sessions }} • transcodes {{ r.transcodes }}</div>
+          </div>
+          {% set ms = r.watch_ms or 0 %}
+          <div class="text-xs text-slate-300 text-right whitespace-nowrap">
+            {{ ms // 3600000 }}h {{ (ms % 3600000) // 60000 }}m
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-sm font-semibold mb-3">Top IPs (by sessions)</div>
+    <div class="space-y-2 max-h-[360px] overflow-auto pr-2">
+      {% for r in (servers_unique_ips or [])[:40] %}
+        <div class="flex items-center justify-between border border-slate-800 rounded-xl px-3 py-2">
+          <div class="min-w-0">
+            <div class="text-sm font-semibold truncate">{{ r.ip }}</div>
+            <div class="text-xs text-slate-500">Server #{{ r.server_id }} • sessions {{ r.sessions }}</div>
+          </div>
+          {% set ms = r.watch_ms or 0 %}
+          <div class="text-xs text-slate-300 text-right whitespace-nowrap">
+            {{ ms // 3600000 }}h {{ (ms % 3600000) // 60000 }}m
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+  <div class="text-sm font-semibold mb-3">Top clients/devices (by sessions)</div>
+  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 max-h-[360px] overflow-auto pr-2">
+    {% for r in (servers_clients or [])[:80] %}
+      <div class="border border-slate-800 rounded-xl px-3 py-2">
+        <div class="text-sm font-semibold truncate">{{ r.client }}</div>
+        <div class="text-xs text-slate-500">
+          Server #{{ r.server_id }} • sessions {{ r.sessions }} • transcodes {{ r.transcodes }}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+(() => {
+  function waitForChart(maxMs = 8000) {
+    const start = Date.now();
+    return new Promise((resolve, reject) => {
+      const tick = () => {
+        if (window.Chart) return resolve();
+        if (Date.now() - start > maxMs) return reject(new Error("Chart.js not loaded"));
+        setTimeout(tick, 50);
+      };
+      tick();
+    });
+  }
+
+  // Range redirect
+  const picker = document.getElementById("serversRangePicker");
+  if (picker) {
+    picker.addEventListener("change", () => {
+      const base = "{{ url_for('monitoring_page', tab='servers') }}";
+      window.location.href = `${base}?range=${encodeURIComponent(picker.value || "7d")}`;
+    });
+  }
+
+  async function render() {
+    await waitForChart();
+
+    const details = {{ (servers_details or [])|tojson }};
+    const sessionsDay = {{ (servers_sessions_day or [])|tojson }};
+    const mediaTypes = {{ (servers_media_types or [])|tojson }};
+
+    const serverNames = new Map(details.map(s => [String(s.server_id), s.name || ("Server " + s.server_id)]));
+
+    // ---- Chart 1: sessions/day per server
+    const days = [...new Set(sessionsDay.map(r => r.day))].sort();
+    const serverIds = [...new Set(sessionsDay.map(r => String(r.server_id)))].sort();
+
+    const mapDayServer = new Map();
+    sessionsDay.forEach(r => mapDayServer.set(`${r.day}|${r.server_id}`, Number(r.sessions||0)));
+
+    const datasets1 = serverIds.map(sid => ({
+      label: serverNames.get(sid) || ("Server " + sid),
+      data: days.map(d => mapDayServer.get(`${d}|${sid}`) || 0),
+      tension: 0.25,
+      borderWidth: 2,
+      pointRadius: 2,
+      pointHoverRadius: 5,
+      hitRadius: 10
+    }));
+
+    const ctx1 = document.getElementById("chartServersSessionsDay")?.getContext("2d");
+    if (ctx1) {
+      new Chart(ctx1, {
+        type: "line",
+        data: { labels: days, datasets: datasets1 },
+        options: {
+          responsive: true,
+          interaction: { mode: "nearest", intersect: true },
+          plugins: {
+            tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}` } }
+          },
+          scales: { y: { beginAtZero: true } }
+        }
+      });
+    }
+
+    // ---- Chart 2: media types (global sum sessions)
+    const typeList = [...new Set(mediaTypes.map(r => String(r.media_type||"unknown")))].sort();
+    const typeSum = new Map(typeList.map(t => [t, 0]));
+    mediaTypes.forEach(r => typeSum.set(String(r.media_type||"unknown"), (typeSum.get(String(r.media_type||"unknown"))||0) + Number(r.sessions||0)));
+
+    const ctx2 = document.getElementById("chartServersMediaTypes")?.getContext("2d");
+    if (ctx2) {
+      new Chart(ctx2, {
+        type: "bar",
+        data: { labels: typeList, datasets: [{ label: "Sessions", data: typeList.map(t => typeSum.get(t) || 0) }] },
+        options: {
+          responsive: true,
+          interaction: { mode: "nearest", intersect: true },
+          plugins: { tooltip: { callbacks: { label: (ctx) => `Sessions: ${ctx.parsed.y}` } } },
+          scales: { y: { beginAtZero: true } }
+        }
+      });
+    }
+  }
+
+  render().catch(console.error);
+})();
+</script>
+

@@ -60,34 +60,26 @@
 
 <script>
 (() => {
-  // Registry global (évite doubles inits)
   window.__vodumCharts = window.__vodumCharts || new Map();
 
-  function keyFor(canvas) {
-    // clé stable par élément (id + page)
-    return `${location.pathname}::${canvas.id}`;
-  }
+  function keyFor(canvas) { return `${location.pathname}::${canvas.id}`; }
 
-  function destroyChartByCanvas(canvas) {
-    if (!canvas) return;
+  function getOrCreate(canvas, factory) {
     const key = keyFor(canvas);
-    const ch = window.__vodumCharts.get(key);
-    if (ch) {
-      try { ch.destroy(); } catch (_) {}
-      window.__vodumCharts.delete(key);
-    }
+    const existing = window.__vodumCharts.get(key);
+    if (existing) return existing;
+    const created = factory();
+    window.__vodumCharts.set(key, created);
+    return created;
   }
 
   async function fetchJSON(url) {
     const res = await fetch(url, { cache: "no-cache" });
-    if (!res.ok) {
-      const txt = await res.text().catch(() => "");
-      throw new Error(`HTTP ${res.status} on ${url}\n${txt}`);
-    }
+    if (!res.ok) throw new Error(`HTTP ${res.status} on ${url}`);
     return res.json();
   }
 
-  function waitForChart(maxMs = 5000) {
+  function waitForChart(maxMs = 8000) {
     const start = Date.now();
     return new Promise((resolve, reject) => {
       const tick = () => {
@@ -101,7 +93,7 @@
 
   function baseOpts() {
     return {
-      responsive: false,          // ✅ stop ResizeObserver (source principale du clignotement)
+      responsive: false,
       maintainAspectRatio: false,
       animation: false,
       normalized: true
@@ -117,12 +109,9 @@
   }
 
   function hashColor(str) {
-    // Couleur stable pour types inconnus (déterministe)
     const s = String(str || "unknown").toLowerCase();
     let h = 0;
     for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-
-    // Génère une couleur lisible (pas trop sombre)
     const r = 80 + (h & 0x7F);
     const g = 80 + ((h >> 7) & 0x7F);
     const b = 80 + ((h >> 14) & 0x7F);
@@ -131,150 +120,67 @@
 
   function mediaColor(label) {
     const k = String(label || "unknown").toLowerCase().trim();
-
-    // ✅ mapping exact (tes types API: movie/serie/tracks/photo/other/...)
     const MAP = {
-      movie:  "#3B82F6", // bleu
-      serie:  "#10B981", // vert
-      show:   "#10B981", 
+      movie:  "#3B82F6",
+      serie:  "#10B981",
+      show:   "#10B981",
       episode:"#10B981",
-
-      tracks: "#A855F7", // violet
+      tracks: "#A855F7",
       track:  "#A855F7",
       music:  "#A855F7",
       audio:  "#A855F7",
-
-      photo:  "#F59E0B", // orange
+      photo:  "#F59E0B",
       image:  "#F59E0B",
       pictures:"#F59E0B",
-
-      tv:     "#22C55E", // vert vif (si jamais)
-      live:   "#22C55E",
-
-      book:   "#E879F9", // rose
-      comic:  "#E879F9",
-
-      other:  "#EF4444", // rouge
-      unknown:"#94A3B8"  // gris
+      other:  "#EF4444",
+      unknown:"#94A3B8"
     };
-
     if (MAP[k]) return MAP[k];
-
-    // ✅ fallback par mots-clés (au cas où l’API renvoie "Movie (Plex)" etc.)
     if (k.includes("serie") || k.includes("episode") || k.includes("show")) return MAP.serie;
     if (k.includes("movie") || k.includes("film") || k.includes("video")) return MAP.movie;
     if (k.includes("track") || k.includes("music") || k.includes("audio")) return MAP.tracks;
     if (k.includes("photo") || k.includes("image") || k.includes("picture")) return MAP.photo;
     if (k.includes("unknown")) return MAP.unknown;
     if (k.includes("other")) return MAP.other;
-
-    // ✅ couleur stable pour tout le reste
     return hashColor(k);
   }
 
+  function updateMediaTypes(chart, labels, values) {
+    labels = labels || [];
+    values = values || [];
+    const pairs = labels.map((label, i) => ({ label, value: Number(values[i]) || 0 }))
+      .filter(p => p.value > 0)
+      .sort((a, b) => b.value - a.value);
 
-	function updateMediaTypes(chart, labels, values) {
-	  // Sécurisation
-	  labels = labels || [];
-	  values = values || [];
+    const sortedLabels = pairs.map(p => p.label);
+    const sortedValues = pairs.map(p => p.value);
 
-	  // Associe label + valeur, puis trie par volume décroissant
-	  const pairs = labels.map((label, i) => ({
-		label,
-		value: Number(values[i]) || 0
-	  })).filter(p => p.value > 0)
-		.sort((a, b) => b.value - a.value);
-
-	  const sortedLabels = pairs.map(p => p.label);
-	  const sortedValues = pairs.map(p => p.value);
-
-	  chart.data.labels = sortedLabels;
-	  chart.data.datasets[0].data = sortedValues;
-	  chart.data.datasets[0].backgroundColor = sortedLabels.map(mediaColor);
-
-	  // Séparation nette entre les segments
-	  chart.data.datasets[0].borderColor = "#0B1220";
-	  chart.data.datasets[0].borderWidth = 2;
-
-	  chart.update("none");
-	}
-
-	function updatePerServer(chart, labels, values) {
-	  labels = labels || [];
-	  values = values || [];
-
-	  const pairs = labels.map((label, i) => ({
-		label,
-		value: Number(values[i]) || 0
-	  })).filter(p => p.value > 0)
-		.sort((a, b) => b.value - a.value);
-
-	  const sortedLabels = pairs.map(p => p.label);
-	  const sortedValues = pairs.map(p => p.value);
-
-	  chart.data.labels = sortedLabels;
-	  chart.data.datasets[0].data = sortedValues;
-
-	  // Couleurs stables par serveur
-	  chart.data.datasets[0].backgroundColor = sortedLabels.map(hashColor);
-
-	  // séparation nette comme l'autre doughnut
-	  chart.data.datasets[0].borderColor = "#0B1220";
-	  chart.data.datasets[0].borderWidth = 2;
-
-	  chart.update("none");
-	}
-
-
-  function getOrCreate(canvas, factory) {
-    const key = keyFor(canvas);
-    const existing = window.__vodumCharts.get(key);
-    if (existing) return existing;
-    const created = factory();
-    window.__vodumCharts.set(key, created);
-    return created;
+    chart.data.labels = sortedLabels;
+    chart.data.datasets[0].data = sortedValues;
+    chart.data.datasets[0].backgroundColor = sortedLabels.map(mediaColor);
+    chart.data.datasets[0].borderColor = "#0B1220";
+    chart.data.datasets[0].borderWidth = 2;
+    chart.update("none");
   }
 
-  // --------- RESIZE MANUEL (le seul resize conservé) ----------
+  function updatePerServer(chart, labels, values) {
+    labels = labels || [];
+    values = values || [];
+    const pairs = labels.map((label, i) => ({ label, value: Number(values[i]) || 0 }))
+      .filter(p => p.value > 0)
+      .sort((a, b) => b.value - a.value);
 
-  function manualResize(chart, canvas) {
-    if (!chart || !canvas) return;
-    const parent = canvas.parentElement;
-    if (!parent) return;
+    const sortedLabels = pairs.map(p => p.label);
+    const sortedValues = pairs.map(p => p.value);
 
-    const w = parent.clientWidth;
-    const h = parent.clientHeight;
-    if (!w || !h) return;
-
-    // Taille CSS
-    canvas.style.width = w + "px";
-    canvas.style.height = h + "px";
-
-    // Taille réelle canvas (pixels)
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.floor(w * dpr);
-    canvas.height = Math.floor(h * dpr);
-
-    try {
-      chart.resize();
-      chart.update("none");
-    } catch (_) {}
+    chart.data.labels = sortedLabels;
+    chart.data.datasets[0].data = sortedValues;
+    chart.data.datasets[0].backgroundColor = sortedLabels.map(hashColor);
+    chart.data.datasets[0].borderColor = "#0B1220";
+    chart.data.datasets[0].borderWidth = 2;
+    chart.update("none");
   }
 
-  function manualResizeAll(list) {
-    requestAnimationFrame(() => {
-      list.forEach(({chart, canvas}) => manualResize(chart, canvas));
-      setTimeout(() => list.forEach(({chart, canvas}) => manualResize(chart, canvas)), 250);
-    });
-  }
-
-  // Debounce par page (évite multiples renders concurrents)
-  let renderToken = 0;
-
-  // Pour le resize window debounced
-  let __rzT = null;
-
-  // ✅ Plugin Chart.js : affiche les % sur un doughnut (déclaré UNE seule fois)
   const doughnutPercentLabels = {
     id: "doughnutPercentLabels",
     afterDatasetsDraw(chart, args, pluginOptions) {
@@ -314,39 +220,65 @@
     }
   };
 
+  function manualResize(chart, canvas) {
+    if (!chart || !canvas) return;
+    const parent = canvas.parentElement;
+    if (!parent) return;
+
+    const w = parent.clientWidth;
+    const h = parent.clientHeight;
+    if (!w || !h) return;
+
+    canvas.style.width = w + "px";
+    canvas.style.height = h + "px";
+
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+
+    try { chart.resize(); chart.update("none"); } catch (_) {}
+  }
+
+  function manualResizeAll(list) {
+    requestAnimationFrame(() => {
+      list.forEach(({chart, canvas}) => manualResize(chart, canvas));
+      setTimeout(() => list.forEach(({chart, canvas}) => manualResize(chart, canvas)), 250);
+    });
+  }
+
+  let renderToken = 0;
+
   async function initOrUpdate(root = document) {
     const picker     = root.querySelector?.("#rangePicker")      || document.getElementById("rangePicker");
-	const elActivity = root.querySelector?.("#chartActivity")    || document.getElementById("chartActivity");
-	const elMedia    = root.querySelector?.("#chartMediaTypes")  || document.getElementById("chartMediaTypes");
-	const elServer   = root.querySelector?.("#chartPerServer")   || document.getElementById("chartPerServer");
-	const elWeekday  = root.querySelector?.("#chartWeekday")     || document.getElementById("chartWeekday");
-
-	if (!picker || !elActivity || !elMedia || !elServer || !elWeekday) return;
-
-
-    if (!picker || !elActivity || !elMedia || !elWeekday) return;
+    const elActivity = root.querySelector?.("#chartActivity")    || document.getElementById("chartActivity");
+    const elMedia    = root.querySelector?.("#chartMediaTypes")  || document.getElementById("chartMediaTypes");
+    const elServer   = root.querySelector?.("#chartPerServer")   || document.getElementById("chartPerServer");
+    const elWeekday  = root.querySelector?.("#chartWeekday")     || document.getElementById("chartWeekday");
+    if (!picker || !elActivity || !elMedia || !elServer || !elWeekday) return;
 
     await waitForChart();
 
     const chartActivity = getOrCreate(elActivity, () => new Chart(elActivity.getContext("2d"), {
       type: "line",
       data: { labels: [], datasets: [{ label: "Sessions", data: [], tension: 0.25 }] },
-      options: { ...baseOpts(), plugins: { legend: { display: true } }, scales: { y: { beginAtZero: true } } }
+      options: {
+        ...baseOpts(),
+        interaction: { mode: "nearest", intersect: true },
+        elements: { point: { radius: 3, hoverRadius: 6, hitRadius: 12 } },
+        plugins: {
+          legend: { display: true },
+          tooltip: {
+            enabled: true,
+            callbacks: { label: (ctx) => `Sessions: ${ctx.parsed?.y ?? (Number(ctx.raw) || 0)}` }
+          }
+        },
+        scales: { y: { beginAtZero: true } }
+      }
     }));
 
-    // ✅ ICI : plugins au bon niveau (même niveau que type/data/options), virgules OK
     const chartMedia = getOrCreate(elMedia, () => new Chart(elMedia.getContext("2d"), {
       type: "doughnut",
-      data: {
-        labels: [],
-        datasets: [{
-          label: "Sessions",
-          data: [],
-          backgroundColor: [],
-          borderColor: "#0B1220",
-          borderWidth: 2
-        }]
-      },
+      data: { labels: [], datasets: [{ label: "Sessions", data: [], backgroundColor: [], borderColor: "#0B1220", borderWidth: 2 }] },
       options: {
         ...baseOpts(),
         cutout: "70%",
@@ -359,70 +291,62 @@
       plugins: [doughnutPercentLabels]
     }));
 
-	const chartServer = getOrCreate(elServer, () => new Chart(elServer.getContext("2d"), {
-	  type: "doughnut",
-	  data: {
-		labels: [],
-		datasets: [{
-		  label: "Sessions",
-		  data: [],
-		  backgroundColor: [],
-		  borderColor: "#0B1220",
-		  borderWidth: 2
-		}]
-	  },
-	  options: {
-		...baseOpts(),
-		cutout: "70%", // comme Media types (plus harmonieux)
-		plugins: {
-		  legend: { display: true, position: "top" }, // ✅ comme Media types
-		  tooltip: { enabled: true },
-		  doughnutPercentLabels: { datasetIndex: 0, minPercent: 6 }
-		}
-	  },
-	  plugins: [doughnutPercentLabels]
-	}));
-
-
+    const chartServer = getOrCreate(elServer, () => new Chart(elServer.getContext("2d"), {
+      type: "doughnut",
+      data: { labels: [], datasets: [{ label: "Sessions", data: [], backgroundColor: [], borderColor: "#0B1220", borderWidth: 2 }] },
+      options: {
+        ...baseOpts(),
+        cutout: "70%",
+        plugins: {
+          legend: { position: "top" },
+          tooltip: { enabled: true },
+          doughnutPercentLabels: { datasetIndex: 0, minPercent: 6 }
+        }
+      },
+      plugins: [doughnutPercentLabels]
+    }));
 
     const chartWeekday = getOrCreate(elWeekday, () => new Chart(elWeekday.getContext("2d"), {
       type: "bar",
       data: { labels: [], datasets: [{ label: "Sessions", data: [] }] },
-      options: { ...baseOpts(), plugins: { legend: { display: true } }, scales: { y: { beginAtZero: true } } }
+      options: {
+        ...baseOpts(),
+        plugins: { legend: { display: true }, tooltip: { enabled: true } },
+        scales: { y: { beginAtZero: true } }
+      }
     }));
 
     manualResizeAll([
       { chart: chartActivity, canvas: elActivity },
       { chart: chartMedia,    canvas: elMedia },
-	  { chart: chartServer,   canvas: elServer },
+      { chart: chartServer,   canvas: elServer },
       { chart: chartWeekday,  canvas: elWeekday }
     ]);
 
     const token = ++renderToken;
     const range = picker.value || "7d";
 
-	const [a, m, s, w] = await Promise.all([
-	  fetchJSON(`/api/monitoring/activity?range=${encodeURIComponent(range)}`),
-	  fetchJSON(`/api/monitoring/media_types?range=${encodeURIComponent(range)}`),
-	  fetchJSON(`/api/monitoring/per_server?range=${encodeURIComponent(range)}`),
-	  fetchJSON(`/api/monitoring/weekday?range=${encodeURIComponent(range)}`)
-	]);
-
-
+    const [a, m, s, w] = await Promise.all([
+      fetchJSON(`/api/monitoring/activity?range=${encodeURIComponent(range)}`),
+      fetchJSON(`/api/monitoring/media_types?range=${encodeURIComponent(range)}`),
+      fetchJSON(`/api/monitoring/per_server?range=${encodeURIComponent(range)}`),
+      fetchJSON(`/api/monitoring/weekday?range=${encodeURIComponent(range)}`)
+    ]);
     if (token !== renderToken) return;
 
     update(chartActivity, toLabels(a, "day"), toLabels(a, "sessions"));
     updateMediaTypes(chartMedia, toLabels(m, "media_type"), toLabels(m, "sessions"));
-	updatePerServer(chartServer, toLabels(s, "server_name"), toLabels(s, "sessions"));
-
+    updatePerServer(chartServer, toLabels(s, "server_name"), toLabels(s, "sessions"));
 
     const names = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-    update(chartWeekday, (w || []).map(x => names[x.weekday] ?? String(x.weekday)), (w || []).map(x => x.sessions));
+    chartWeekday.data.labels = (w || []).map(x => names[x.weekday] ?? String(x.weekday));
+    chartWeekday.data.datasets[0].data = (w || []).map(x => x.sessions);
+    chartWeekday.update("none");
 
     manualResizeAll([
       { chart: chartActivity, canvas: elActivity },
       { chart: chartMedia,    canvas: elMedia },
-	  { chart: chartServer,   canvas: elServer },
+      { chart: chartServer,   canvas: elServer },
       { chart: chartWeekday,  canvas: elWeekday }
     ]);
 
@@ -430,43 +354,9 @@
       picker.__vodumBound = true;
       picker.addEventListener("change", () => initOrUpdate(document).catch(console.error), { passive: true });
     }
-
-    if (!window.__vodumMonitoringResizeBound) {
-      window.__vodumMonitoringResizeBound = true;
-      window.addEventListener("resize", () => {
-        clearTimeout(__rzT);
-        __rzT = setTimeout(() => {
-          manualResizeAll([
-            { chart: window.__vodumCharts.get(keyFor(elActivity)), canvas: elActivity },
-            { chart: window.__vodumCharts.get(keyFor(elMedia)),    canvas: elMedia },
-			{ chart: window.__vodumCharts.get(keyFor(elServer)),    canvas: elServer },
-            { chart: window.__vodumCharts.get(keyFor(elWeekday)),  canvas: elWeekday }
-          ]);
-        }, 150);
-      });
-    }
   }
 
-  // Expose global
-  window.vodumInitMonitoringActivity = initOrUpdate;
-
-  // Init normal
   initOrUpdate(document).catch(console.error);
-
-  // ✅ HTMX: détruit AVANT swap (sinon Chart garde un canvas mort)
-  document.addEventListener("htmx:beforeSwap", (evt) => {
-    const target = evt.detail?.target;
-    if (!target) return;
-    target.querySelectorAll?.("canvas#chartActivity, canvas#chartMediaTypes, canvas#chartPerServer, canvas#chartWeekday")
-	.forEach(destroyChartByCanvas);
-
-  });
-
-  // ✅ HTMX: init/update APRÈS injection
-  document.addEventListener("htmx:afterSwap", (evt) => {
-    const target = evt.detail?.target || document;
-    initOrUpdate(target).catch(console.error);
-  });
 })();
 </script>
 

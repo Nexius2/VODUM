@@ -1,34 +1,38 @@
-<div class="flex items-center gap-6 border-b border-slate-800 mb-6">
+<nav class="mb-4 border-b border-slate-800 text-base flex flex-wrap items-center gap-6">
   {% set current = tab or "overview" %}
 
   <a href="{{ url_for('monitoring_page', tab='overview') }}"
-     class="py-3 text-sm {% if current=='overview' %}text-white border-b-2 border-indigo-500{% else %}text-slate-400 hover:text-white{% endif %}">
+     class="pb-2 border-b-2 {% if current=='overview' %}border-primary text-primary{% else %}border-transparent text-slate-400 hover:text-slate-200{% endif %}">
     Overview
   </a>
 
   <a href="{{ url_for('monitoring_page', tab='policies') }}"
-     class="py-3 text-sm {% if current=='policies' %}text-white border-b-2 border-indigo-500{% else %}text-slate-400 hover:text-white{% endif %}">
+     class="pb-2 border-b-2 {% if current=='policies' %}border-primary text-primary{% else %}border-transparent text-slate-400 hover:text-slate-200{% endif %}">
     Policies
   </a>
 
-
   <a href="{{ url_for('monitoring_page', tab='activity') }}"
-     class="py-3 text-sm {% if current=='activity' %}text-white border-b-2 border-indigo-500{% else %}text-slate-400 hover:text-white{% endif %}">
+     class="pb-2 border-b-2 {% if current=='activity' %}border-primary text-primary{% else %}border-transparent text-slate-400 hover:text-slate-200{% endif %}">
     Activity
   </a>
 
   <a href="{{ url_for('monitoring_page', tab='history') }}"
-     class="py-3 text-sm {% if current=='history' %}text-white border-b-2 border-indigo-500{% else %}text-slate-400 hover:text-white{% endif %}">
+     class="pb-2 border-b-2 {% if current=='history' %}border-primary text-primary{% else %}border-transparent text-slate-400 hover:text-slate-200{% endif %}">
     History
   </a>
 
   <a href="{{ url_for('monitoring_page', tab='libraries') }}"
-     class="py-3 text-sm {% if current=='libraries' %}text-white border-b-2 border-indigo-500{% else %}text-slate-400 hover:text-white{% endif %}">
+     class="pb-2 border-b-2 {% if current=='libraries' %}border-primary text-primary{% else %}border-transparent text-slate-400 hover:text-slate-200{% endif %}">
     Libraries
   </a>
 
   <a href="{{ url_for('monitoring_page', tab='users') }}"
-     class="py-3 text-sm {% if current=='users' %}text-white border-b-2 border-indigo-500{% else %}text-slate-400 hover:text-white{% endif %}">
+     class="pb-2 border-b-2 {% if current=='users' %}border-primary text-primary{% else %}border-transparent text-slate-400 hover:text-slate-200{% endif %}">
     Users
   </a>
-</div>
+
+  <a href="{{ url_for('monitoring_page', tab='servers') }}"
+     class="pb-2 border-b-2 {% if current=='servers' %}border-primary text-primary{% else %}border-transparent text-slate-400 hover:text-slate-200{% endif %}">
+    Servers
+  </a>
+</nav>

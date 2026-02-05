@@ -296,3 +296,37 @@ window.addEventListener("DOMContentLoaded", () => {
   refresh();
   setInterval(refresh, 2500);
 })();
+
+
+
+
+// -----------------------------------------------------------
+// Flash banners (client-side) - same style as server flash()
+// -----------------------------------------------------------
+window.vodumFlash = function(category, message, autoHideMs = 4000) {
+  const box = document.getElementById("clientFlash");
+  if (!box) return;
+
+  const div = document.createElement("div");
+  div.className = "text-xs px-3 py-2 rounded-lg";
+
+  if (category === "success") {
+    div.classList.add("bg-emerald-900/40", "text-emerald-100");
+  } else if (category === "error") {
+    div.classList.add("bg-rose-900/40", "text-rose-100");
+  } else {
+    div.classList.add("bg-slate-800", "text-slate-100");
+  }
+
+  div.textContent = message;
+
+  box.classList.remove("hidden");
+  box.appendChild(div);
+
+  if (autoHideMs && autoHideMs > 0) {
+    setTimeout(() => {
+      div.remove();
+      if (!box.children.length) box.classList.add("hidden");
+    }, autoHideMs);
+  }
+};

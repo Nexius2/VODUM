@@ -299,13 +299,22 @@ toggle.addEventListener("change", async () => {
 
     // Appel API pour sauvegarder immédiatement
     try {
-        await fetch("/api/mailing/toggle", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ enabled })
-        });
-		// refresh page
-		setTimeout(() => location.reload(), 200);
+		const res = await fetch("/api/mailing/toggle", {
+		  method: "POST",
+		  headers: { "Content-Type": "application/json" },
+		  body: JSON.stringify({ enabled })
+		});
+
+		if (!res.ok) {
+		  console.error("Failed to toggle mailing");
+		  // rollback UI
+		  toggle.checked = !enabled;
+		  smtpContainer.classList.toggle("hidden", enabled);
+		  return;
+		}
+
+		location.reload();
+
     } catch (e) {
         console.error(t("mailing_toggle_error"), e);
     }

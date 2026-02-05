@@ -34,6 +34,8 @@
         action="{{ url_for('stream_policy_create') }}"
         class="bg-slate-900 border border-slate-800 rounded-xl p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
 
+    <input type="hidden" name="policy_id" value="{{ edit_policy.id if edit_policy else '' }}">
+
     <!-- Rule -->
     <div>
       <label class="text-xs text-slate-400">
@@ -42,13 +44,13 @@
 
       <select name="rule_type"
               class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-        <option value="max_streams_per_user">{{ t("policies_rule_max_streams_user") }}</option>
-		<option value="max_ips_per_user">{{ t("policies_rule_max_ips_user") }}</option>
-		<option value="max_streams_per_ip">{{ t("policies_rule_max_streams_ip") }}</option>
-        <option value="max_transcodes_global">{{ t("policies_rule_max_transcodes_server") }}</option>
-        <option value="ban_4k_transcode">{{ t("policies_rule_ban_4k_transcode") }}</option>
-        <option value="max_bitrate_kbps">{{ t("policies_rule_max_bitrate") }}</option>
-        <option value="device_allowlist">{{ t("policies_rule_device_allowlist") }}</option>
+        <option value="max_streams_per_user" {% if edit_policy and edit_policy.rule_type=="max_streams_per_user" %}selected{% endif %}>{{ t("policies_rule_max_streams_user") }}</option>
+		<option value="max_ips_per_user" {% if edit_policy and edit_policy.rule_type=="max_ips_per_user" %}selected{% endif %}>{{ t("policies_rule_max_ips_user") }}</option>
+		<option value="max_streams_per_ip" {% if edit_policy and edit_policy.rule_type=="max_streams_per_ip" %}selected{% endif %}>{{ t("policies_rule_max_streams_ip") }}</option>
+        <option value="max_transcodes_global" {% if edit_policy and edit_policy.rule_type=="max_transcodes_global" %}selected{% endif %}>{{ t("policies_rule_max_transcodes_server") }}</option>
+        <option value="ban_4k_transcode" {% if edit_policy and edit_policy.rule_type=="ban_4k_transcode" %}selected{% endif %}>{{ t("policies_rule_ban_4k_transcode") }}</option>
+        <option value="max_bitrate_kbps" {% if edit_policy and edit_policy.rule_type=="max_bitrate_kbps" %}selected{% endif %}>{{ t("policies_rule_max_bitrate") }}</option>
+        <option value="device_allowlist" {% if edit_policy and edit_policy.rule_type=="device_allowlist" %}selected{% endif %}>{{ t("policies_rule_device_allowlist") }}</option>
       </select>
     </div>
 
@@ -60,12 +62,13 @@
 
       <select name="scope_type"
               class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-        <option value="global">{{ t("policies_scope_global") }}</option>
-        <option value="server">{{ t("policies_scope_server") }}</option>
-        <option value="user">{{ t("policies_scope_user") }}</option>
+        <option value="global" {% if edit_policy and edit_policy.scope_type=="global" %}selected{% endif %}>{{ t("policies_scope_global") }}</option>
+        <option value="server" {% if edit_policy and edit_policy.scope_type=="server" %}selected{% endif %}>{{ t("policies_scope_server") }}</option>
+        <option value="user" {% if edit_policy and edit_policy.scope_type=="user" %}selected{% endif %}>{{ t("policies_scope_user") }}</option>
       </select>
 
       <input name="scope_id"
+             value="{{ edit_policy.scope_id if edit_policy else '' }}"
              placeholder="{{ t('policies_scope_id_placeholder') }}"
              class="w-full mt-2 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
       <p class="text-xs text-slate-500 mt-1">
@@ -81,9 +84,9 @@
 
       <select name="provider"
               class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-        <option value="">{{ t("policies_provider_both") }}</option>
-        <option value="plex">{{ t("policies_provider_plex") }}</option>
-        <option value="jellyfin">{{ t("policies_provider_jellyfin") }}</option>
+        <option value="" {% if edit_policy and not edit_policy.provider %}selected{% endif %}>{{ t("policies_provider_both") }}</option>
+        <option value="plex" {% if edit_policy and edit_policy.provider=="plex" %}selected{% endif %}>{{ t("policies_provider_plex") }}</option>
+        <option value="jellyfin" {% if edit_policy and edit_policy.provider=="jellyfin" %}selected{% endif %}>{{ t("policies_provider_jellyfin") }}</option>
       </select>
 
       <label class="text-xs text-slate-400 mt-3 block">
@@ -93,9 +96,9 @@
 
       <select name="server_id"
               class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-        <option value="">{{ t("policies_all_servers") }}</option>
+        <option value="" {% if edit_policy and not edit_policy.server_id %}selected{% endif %}>{{ t("policies_all_servers") }}</option>
         {% for s in servers %}
-          <option value="{{ s.id }}">{{ s.name }} ({{ s.type }})</option>
+          <option value="{{ s.id }}" {% if edit_policy and edit_policy.server_id==s.id %}selected{% endif %}>{{ s.name }} ({{ s.type }})</option>
         {% endfor %}
       </select>
     </div>
@@ -107,7 +110,7 @@
           {{ t("policies_priority") }}
         </label>
         <input name="priority"
-               value="100"
+               value="{{ edit_policy.priority if edit_policy else 100 }}"
                class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
         <p class="text-xs text-slate-500 mt-1">
           {{ t("policies_priority_help") }}
@@ -121,9 +124,9 @@
 
         <select name="selector"
                 class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-          <option value="kill_newest">{{ t("policies_selector_kill_newest") }}</option>
-          <option value="kill_oldest">{{ t("policies_selector_kill_oldest") }}</option>
-          <option value="kill_transcoding_first">{{ t("policies_selector_kill_transcoding") }}</option>
+          <option value="kill_newest" {% if edit_policy and edit_policy._rule.selector=="kill_newest" %}selected{% endif %}>{{ t("policies_selector_kill_newest") }}</option>
+          <option value="kill_oldest" {% if edit_policy and edit_policy._rule.selector=="kill_oldest" %}selected{% endif %}>{{ t("policies_selector_kill_oldest") }}</option>
+          <option value="kill_transcoding_first" {% if edit_policy and edit_policy._rule.selector=="kill_transcoding_first" %}selected{% endif %}>{{ t("policies_selector_kill_transcoding") }}</option>
         </select>
 
         <p class="text-xs text-slate-500 mt-1">
@@ -138,8 +141,8 @@
 
         <select name="is_enabled"
                 class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-          <option value="1">{{ t("enabled") }}</option>
-          <option value="0">{{ t("disabled") }}</option>
+          <option value="1" {% if not edit_policy or edit_policy.is_enabled %}selected{% endif %}>{{ t("enabled") }}</option>
+          <option value="0" {% if edit_policy and not edit_policy.is_enabled %}selected{% endif %}>{{ t("disabled") }}</option>
         </select>
       </div>
     </div>
@@ -151,10 +154,20 @@
           {{ t("policies_max_value") }}
         </label>
         <input name="max_value"
+               value="{{ edit_policy._rule.max if edit_policy and (edit_policy._rule.max is defined) else '' }}"
                placeholder="{{ t('policies_max_value_placeholder') }}"
                class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
         <p class="text-xs text-slate-500 mt-1">
           {{ t("policies_max_value_help") }}
+        </p>
+
+        <label class="mt-3 flex items-center gap-2 text-xs text-slate-300">
+          <input type="checkbox" name="allow_local_ip" value="1"
+                 {% if edit_policy and edit_policy._rule.allow_local_ip %}checked{% endif %}>
+          {{ t("policies_allow_local_ip") }}
+        </label>
+        <p class="text-xs text-slate-500 mt-1">
+          {{ t("policies_allow_local_ip_help") }}
         </p>
       </div>
 
@@ -163,6 +176,7 @@
           {{ t("policies_max_bitrate_kbps") }}
         </label>
         <input name="max_kbps"
+               value="{{ edit_policy._rule.max_kbps if edit_policy and (edit_policy._rule.max_kbps is defined) else '' }}"
                placeholder="{{ t('policies_max_bitrate_placeholder') }}"
                class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
         <p class="text-xs text-slate-500 mt-1">
@@ -175,6 +189,7 @@
           {{ t("policies_allowed_devices") }}
         </label>
         <input name="allowed_devices"
+               value="{{ (edit_policy._rule.allowed|join(', ')) if edit_policy and (edit_policy._rule.allowed is defined) else '' }}"
                placeholder="{{ t('policies_allowed_devices_placeholder') }}"
                class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
         <p class="text-xs text-slate-500 mt-1">
@@ -190,7 +205,7 @@
           {{ t("policies_warn_title") }}
         </label>
         <input name="warn_title"
-               value="{{ t('policies_warn_title_default') }}"
+               value="{{ edit_policy._rule.warn_title if edit_policy and (edit_policy._rule.warn_title is defined) else t('policies_warn_title_default') }}"
                class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
       </div>
 
@@ -199,14 +214,20 @@
           {{ t("policies_warn_text") }}
         </label>
         <input name="warn_text"
-               value="{{ t('policies_warn_text_default') }}"
+               value="{{ edit_policy._rule.warn_text if edit_policy and (edit_policy._rule.warn_text is defined) else t('policies_warn_text_default') }}"
                class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
       </div>
     </div>
 
-    <div class="md:col-span-3 flex justify-end">
+    <div class="md:col-span-3 flex justify-end gap-2">
+      {% if edit_policy %}
+        <a href="{{ url_for('monitoring_page', tab='policies') }}"
+           class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-950/40 text-slate-200 hover:bg-slate-950/70 font-semibold">
+          {{ t("cancel") }}
+        </a>
+      {% endif %}
       <button class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg font-semibold">
-        {{ t("policies_create_button") }}
+        {% if edit_policy %}{{ t("save") }}{% else %}{{ t("policies_create_button") }}{% endif %}
       </button>
     </div>
   </form>
@@ -271,11 +292,14 @@
               </td>
 
               <td class="p-3 text-right">
-                <form method="post" action="{{ url_for('stream_policy_delete', policy_id=p.id) }}">
+                <div class="flex items-center justify-end gap-3">
+                  <a class="text-slate-300 hover:text-white" href="{{ url_for('stream_policy_edit', policy_id=p.id) }}">{{ t("edit") }}</a>
+                  <form method="post" action="{{ url_for('stream_policy_delete', policy_id=p.id) }}">
                   <button class="text-red-400 hover:text-red-300">
                     {{ t("delete") }}
                   </button>
                 </form>
+                </div>
               </td>
             </tr>
           {% endfor %}

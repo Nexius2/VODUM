@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% set active_page = 'discord' %}
+
+{% block title %}{{ t("discord") }} - VODUM{% endblock %}
+{% block header_title %}{{ t("discord") }}{% endblock %}
+{% block header_subtitle %}{{ t("discord_subtitle") }}{% endblock %}
+
+{% block header_actions %}
+  <div class="flex items-center gap-2">
+    <button type="submit" form="discord-templates-form"
+            class="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded text-sm">
+      {{ t("save") }}
+    </button>
+  </div>
+{% endblock %}
+
+{% block content %}
+{% set current_subpage = 'templates' %}
+{% include "discord/discord_nav.html" %}
+
+<form method="post" id="discord-templates-form" class="space-y-6">
+
+  {% for ttype in ["preavis","relance","fin"] %}
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+    <div class="flex items-center justify-between mb-3">
+      <div class="text-sm font-semibold">
+        {{ t("template") }} : {{ t(ttype) }}
+      </div>
+      <div class="text-xs text-slate-500">
+        {{ t("discord_template_hint") }}
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-3">
+      <div>
+        <label class="block mb-1 text-slate-400 text-xs">{{ t("title") }}</label>
+        <input type="text" name="title_{{ ttype }}" value="{{ templates.get(ttype, {}).get('title','') }}"
+               class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs">
+      </div>
+
+      <div>
+        <label class="block mb-1 text-slate-400 text-xs">{{ t("body") }}</label>
+        <textarea name="body_{{ ttype }}" rows="5"
+                  class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs">{{ templates.get(ttype, {}).get('body','') }}</textarea>
+      </div>
+
+      <div class="text-xs text-slate-500">
+        {{ t("available_vars") }} :
+        <code class="px-2 py-0.5 bg-slate-800 rounded">{username}</code>
+        <code class="px-2 py-0.5 bg-slate-800 rounded">{days_left}</code>
+        <code class="px-2 py-0.5 bg-slate-800 rounded">{expiration_date}</code>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+</form>
+{% endblock %}
