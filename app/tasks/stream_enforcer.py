@@ -1,5 +1,6 @@
 import json
 import time
+import ipaddress
 from typing import Dict, List, Optional, Tuple
 
 from core.providers.registry import get_provider
@@ -9,6 +10,7 @@ logger = get_logger("stream_enforcer")
 
 # DBManager injected by tasks_engine (do not instantiate DBManager in task modules)
 _db = None
+_USER_STREAM_OVERRIDES: Dict[int, int] = {}
 
 def _set_db(db):
     global _db
@@ -72,6 +74,36 @@ def _normalize_user_key(sess: dict) -> Tuple[Optional[int], str]:
     vodum_user_id = sess.get("vodum_user_id")
     ext = sess.get("external_user_id") or ""
     return (vodum_user_id, str(ext))
+
+def _is_local_ip(ip: str) -> bool:
+    ip = (ip or "").strip()
+    if not ip or ip.lower() == "unknown":
+        return False
+    try:
+        addr = ipaddress.ip_address(ip)
+        # RFC1918 + loopback + link-local (IPv4/IPv6)
+        return bool(addr.is_private or addr.is_loopback or addr.is_link_local)
+    except Exception:
+        return False
+
+
+def _load_user_stream_overrides() -> Dict[int, int]:
+    """Return {vodum_user_id: max_streams_override} where override is not NULL."""
+    out: Dict[int, int] = {}
+    try:
+        rows = _db.query(
+            "SELECT id, max_streams_override FROM vodum_users WHERE max_streams_override IS NOT NULL"
+        )
+        for r in rows:
+            try:
+                out[int(r["id"])] = int(r["max_streams_override"])
+            except Exception:
+                continue
+    except Exception:
+        return {}
+    return out
+
+
 
 
 # -------------------------
@@ -247,6 +279,7 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
 
     if rule_type == "max_streams_per_user":
         max_streams = int(rule.get("max", 1))
+        allow_local_ip = bool(rule.get("allow_local_ip", False))
 
         # Group by user (global) OR by (server+user) if policy is server-scoped
         by_key: Dict[Tuple[Optional[int], str], List[dict]] = {}
@@ -268,18 +301,32 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
                 by_key.setdefault(ukey, []).extend(lst)
 
         for user_key, user_sessions in by_key.items():
-            if len(user_sessions) <= max_streams:
+            # Per-user override (vodum_users.max_streams_override) supersedes policy max.
+            vodum_user_id = user_key[0]
+            eff_max = max_streams
+            if vodum_user_id is not None:
+                try:
+                    eff_max = int(_USER_STREAM_OVERRIDES.get(int(vodum_user_id), eff_max))
+                except Exception:
+                    pass
+
+            # Optional LAN bypass: local IP sessions do not count.
+            counted_sessions = user_sessions
+            if allow_local_ip:
+                counted_sessions = [s for s in user_sessions if not _is_local_ip((s.get('ip') or '').strip())]
+
+            if len(counted_sessions) <= eff_max:
                 continue
 
             # ✅ On choisit la session à tuer globalement (tous serveurs confondus)
-            target = _pick_kill_target(user_sessions, selector)
+            target = _pick_kill_target(counted_sessions, selector)
             if not target:
                 continue
 
             # ✅ Violation mono-session + server_id DU TARGET (kill garanti sur le bon serveur)
             server_id = int(target["server_id"])
             provider = target["provider"]
-            reason = f"max_streams_per_user: {len(user_sessions)} > {max_streams}"
+            reason = f"max_streams_per_user: {len(counted_sessions)} > {eff_max}"
 
             violations.append({
                 "policy": policy,
@@ -295,9 +342,13 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
             })
 
 
+    
+
+
     elif rule_type == "max_ips_per_user":
         max_ips = int(rule.get("max", 1))
         ignore_unknown = bool(rule.get("ignore_unknown", True))
+        allow_local_ip = bool(rule.get("allow_local_ip", False))
 
         # Group by user across ALL servers if global policy
         by_user: Dict[Tuple[Optional[int], str], List[dict]] = {}
@@ -312,13 +363,21 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
                 ip = (s.get("ip") or "").strip() or "unknown"
                 if ip == "unknown" and ignore_unknown:
                     continue
+                if allow_local_ip and _is_local_ip(ip):
+                    continue
                 ips.add(ip)
 
             if len(ips) <= max_ips:
                 continue
 
             # ✅ On tue une session du user (selector), sur le serveur de la session ciblée
-            target = _pick_kill_target(user_sessions, selector)
+            candidates = user_sessions
+            if allow_local_ip:
+                candidates = [s for s in user_sessions if not _is_local_ip((s.get('ip') or '').strip())]
+                if not candidates:
+                    candidates = user_sessions
+
+            target = _pick_kill_target(candidates, selector)
             if not target:
                 continue
 
@@ -340,10 +399,14 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
             })
 
 
+    
+
+
     elif rule_type == "max_streams_per_ip":
         max_streams = int(rule.get("max", 2))
         ignore_unknown = bool(rule.get("ignore_unknown", True))
         per_server = bool(rule.get("per_server", True))
+        allow_local_ip = bool(rule.get("allow_local_ip", False))
 
         by_key: Dict[str, List[dict]] = {}
 
@@ -351,6 +414,9 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
             ip = (s.get("ip") or "").strip() or "unknown"
 
             if ip == "unknown" and ignore_unknown:
+                continue
+
+            if allow_local_ip and _is_local_ip(ip):
                 continue
 
             key = f"{s['server_id']}|{ip}" if per_server else ip
@@ -377,6 +443,9 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
                     "warn_text": warn_text,
                 })
 
+
+
+    
 
 
     elif rule_type == "max_transcodes_global":
@@ -619,6 +688,8 @@ def run(task_id: int, db):
     logger.info(f"[TASK {task_id}] stream_enforcer: start")
 
     policies = _load_enabled_policies()
+    global _USER_STREAM_OVERRIDES
+    _USER_STREAM_OVERRIDES = _load_user_stream_overrides()
     logger.info(f"[TASK {task_id}] stream_enforcer: loaded_policies={len(policies)}")
     if not policies:
         logger.info(f"[TASK {task_id}] stream_enforcer: no enabled policies")

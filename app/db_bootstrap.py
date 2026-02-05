@@ -230,6 +230,10 @@ def run_migrations():
         conn.commit()
         print("✔ vodum_users.status constraint upgraded.")
 
+    # 1.2 vodum_users per-user stream override (NEW)
+    ensure_column(cursor, "vodum_users", "max_streams_override", "INTEGER DEFAULT NULL")
+
+
 
     # -------------------------------------------------
     # 2. Vérifier que toutes les colonnes obligatoires existent
@@ -265,6 +269,90 @@ def run_migrations():
     ensure_column(cursor, "settings", "auth_enabled", "INTEGER DEFAULT 1")
     
     print("✔ Settings columns verified (brand_name).")
+    # -------------------------------------------------
+    # 2.1.1 Discord settings + user fields (NEW)
+    # -------------------------------------------------
+    ensure_column(cursor, "settings", "discord_enabled", "INTEGER DEFAULT 0")
+    ensure_column(cursor, "settings", "discord_bot_token", "TEXT DEFAULT NULL")
+    ensure_column(cursor, "settings", "notifications_order", "TEXT DEFAULT 'email'")
+    cursor.execute("UPDATE settings SET notifications_order = COALESCE(NULLIF(TRIM(notifications_order),''), 'email') WHERE id = 1")
+
+    ensure_column(cursor, "vodum_users", "discord_user_id", "TEXT DEFAULT NULL")
+    ensure_column(cursor, "vodum_users", "discord_name", "TEXT DEFAULT NULL")
+
+    # Tables Discord (templates + history + campaigns)
+    if not table_exists(cursor, "discord_templates"):
+        print("🛠 Creating table: discord_templates")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS discord_templates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            type TEXT UNIQUE NOT NULL CHECK(type IN ('preavis','relance','fin')),
+            title TEXT,
+            body TEXT
+        );
+        """)
+        conn.commit()
+
+    if not table_exists(cursor, "sent_discord"):
+        print("🛠 Creating table: sent_discord")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS sent_discord (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            template_type TEXT NOT NULL,
+            expiration_date TEXT,
+            sent_at INTEGER,
+            UNIQUE(user_id, template_type, expiration_date),
+            FOREIGN KEY(user_id) REFERENCES vodum_users(id) ON DELETE CASCADE
+        );
+        """)
+        conn.commit()
+
+    if not table_exists(cursor, "discord_campaigns"):
+        print("🛠 Creating table: discord_campaigns")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS discord_campaigns (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            body TEXT NOT NULL,
+            server_id INTEGER,
+            is_test INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'pending' CHECK(status IN ('pending','sent','failed')),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            sent_at TIMESTAMP,
+            error TEXT,
+            FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE SET NULL
+        );
+        """)
+        conn.commit()
+
+    # Seed default discord templates (only if missing)
+    defaults = {
+        "preavis": (
+            "⏳ Subscription expiring soon",
+            "Hi {username}! You have {days_left} day(s) left. Your subscription expires on {expiration_date}."
+        ),
+        "relance": (
+            "🔔 Subscription reminder",
+            "Hello {username} 🙂 Just a reminder: your subscription expires on {expiration_date} ({days_left} day(s) left)."
+        ),
+        "fin": (
+            "⚠️ Subscription expired",
+            "Hi {username}. Your subscription expired on {expiration_date}. Please contact me to renew it."
+        ),
+    }
+
+    for k, (title, body) in defaults.items():
+        cursor.execute("SELECT 1 FROM discord_templates WHERE type=?", (k,))
+        if not cursor.fetchone():
+            cursor.execute(
+                "INSERT INTO discord_templates(type, title, body) VALUES(?,?,?)",
+                (k, title, body),
+            )
+            print(f"➕ Default discord template inserted: {k}")
+    conn.commit()
+
+
 
     # -------------------------------------------------
     # 2.2 Ensure subscription_gifts table exists
@@ -596,6 +684,16 @@ def run_migrations():
     #    "enabled": 1,
     #    "status": "idle"
     #})
+    
+    # Tâche check_update (tous les jours)
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "check_update",
+        "description": "task_description.check_update",
+        "schedule": "0 4 * * *",  # tous les jours à 04:00
+        "enabled": 1,
+        "status": "idle"
+    })
+
 
     # Tâche backup automatique (tous les 3 jours à 03:00)
     ensure_row(cursor, "tasks", "name = :name", {
@@ -673,6 +771,24 @@ def run_migrations():
             VALUES ('send_expiration_emails', '0 * * * *', 0, 'disabled')
         """)
         print("➕ Task send_expiration_emails added.")
+
+    # Ajouter les tâches Discord si absentes
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "send_expiration_discord",
+        "description": "task_description.send_expiration_discord",
+        "schedule": "0 * * * *",
+        "enabled": 0,
+        "status": "disabled"
+    })
+
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "send_campaign_discord",
+        "description": "task_description.send_campaign_discord",
+        "schedule": "*/10 * * * *",
+        "enabled": 0,
+        "status": "disabled"
+    })
+
 
     # -------------------------------------------------
     # 3.1 Seed default welcome templates (English)

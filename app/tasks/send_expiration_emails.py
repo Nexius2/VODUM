@@ -9,17 +9,14 @@ send_expiration_emails.py — VERSION CORRIGÉE
 ✓ Anti-doublons fiable
 ✓ Logging fichier + tasks_engine
 """
-
-import smtplib
-from datetime import datetime, date, timedelta
-from email.message import EmailMessage
+from datetime import datetime, date
 from tasks_engine import task_logs
 from logging_utils import get_logger
 from mailing_utils import build_user_context, render_mail
+from notifications_utils import normalize_notifications_order, is_email_ready
+from discord_utils import is_discord_ready, send_discord_dm, DiscordSendError
+from email_sender import send_email
 import re
-from email_layout_utils import build_email_parts
-
-
 log = get_logger("send_expiration_emails")
 
 
@@ -29,52 +26,6 @@ log = get_logger("send_expiration_emails")
 # --------------------------------------------------------
 # Helper : envoyer un email
 # --------------------------------------------------------
-def send_email(subject, body, to_email, smtp_settings):
-    if not to_email:
-        raise ValueError("Adresse email vide")
-
-    smtp_host = smtp_settings["smtp_host"]
-    smtp_port = smtp_settings["smtp_port"] or 587
-    smtp_tls  = bool(smtp_settings["smtp_tls"])
-    smtp_user = smtp_settings["smtp_user"]
-    smtp_pass = smtp_settings["smtp_pass"] or ""
-    mail_from = smtp_settings["mail_from"] or smtp_user
-
-    # cast port si besoin
-    try:
-        smtp_port = int(smtp_port)
-    except (TypeError, ValueError):
-        smtp_port = 587
-
-    # -------------------------------------------------
-    # Build mail parts:
-    # - texte brut autorisé côté UI
-    # - brand_name depuis settings
-    # - footer traduit via i18n
-    # -------------------------------------------------
-    plain, full_html = build_email_parts(body, smtp_settings)
-
-    msg = EmailMessage()
-    msg["From"] = mail_from
-    msg["To"] = to_email
-    msg["Subject"] = subject
-
-    msg.set_content(plain, subtype="plain", charset="utf-8")
-    msg.add_alternative(full_html, subtype="html", charset="utf-8")
-
-    try:
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
-            if smtp_tls:
-                server.starttls()
-            if smtp_user:
-                server.login(smtp_user, smtp_pass)
-            server.send_message(msg)
-        return True
-
-    except Exception as e:
-        log.error(f"[SMTP] Error while sending to {to_email}: {e}", exc_info=True)
-        return False
-
 def was_sent_recently(db, user_id: int, template_type: str, cooldown_hours: int = 24) -> bool:
     """
     Cooldown robuste:
@@ -131,6 +82,21 @@ def run(task_id: int, db):
             return
 
         log.debug("Mailing enabled. Loading templates…")
+
+        notifications_order = normalize_notifications_order(settings)
+
+        # Respect the global notification order:
+        # - If Email is NOT the primary channel, do nothing here.
+        # - Discord task will handle Discord-first (with optional fallback to Email).
+        if notifications_order[:1] != ["email"]:
+            msg = "Email is not the primary notification channel → no action."
+            log.info(msg)
+            task_logs(task_id, "info", msg)
+            return
+
+        discord_ready = is_discord_ready(settings)
+
+
         preavis_days = int(settings["preavis_days"])
         reminder_days = int(settings["reminder_days"])
 
@@ -152,7 +118,7 @@ def run(task_id: int, db):
         # --------------------------------------------------------
         users = db.query(
             """
-            SELECT id, username, email, second_email, expiration_date
+            SELECT id, username, email, second_email, expiration_date, discord_user_id
             FROM vodum_users u
             WHERE u.expiration_date IS NOT NULL
               AND EXISTS (
@@ -178,6 +144,8 @@ def run(task_id: int, db):
             email1 = u["email"]
             email2 = u["second_email"]
             exp_raw = u["expiration_date"]
+
+            discord_user_id = (u["discord_user_id"] or "").strip()
 
             if not email1 and not email2:
                 continue
@@ -230,9 +198,39 @@ def run(task_id: int, db):
                         subject = render_mail(tpl["subject"], context)
                         body = render_mail(tpl["body"], context)
 
-                        if send_email(subject, body, r, settings):
+                        ok, _err = send_email(subject, body, r, settings)
+                        if ok:
                             success_any = True
 
+                    
+                    # Fallback to Discord if configured (order: email -> discord) and email failed
+                    if (not success_any) and (notifications_order[:2] == ["email", "discord"]) and discord_ready and discord_user_id:
+                        # Avoid duplicates in Discord history
+                        already_d = db.query_one(
+                            "SELECT 1 FROM sent_discord WHERE user_id=? AND template_type=? AND expiration_date=?",
+                            (uid, "fin", exp_iso),
+                        )
+                        if not already_d:
+                            ctx = build_user_context({
+                                "username": username,
+                                "expiration_date": exp_iso,
+                                "days_left": days_left,
+                            })
+                            # Reuse discord templates for the same type
+                            d_tpl = db.query_one("SELECT * FROM discord_templates WHERE type='fin'")
+                            if d_tpl:
+                                d_title = render_mail(d_tpl["title"] or "", ctx).strip()
+                                d_body = render_mail(d_tpl["body"] or "", ctx).strip()
+                                d_content = f"**{d_title}**\n{d_body}" if d_title else d_body
+                                try:
+                                    send_discord_dm(settings.get("discord_bot_token") or "", discord_user_id, d_content)
+                                    db.execute(
+                                        "INSERT OR IGNORE INTO sent_discord(user_id, template_type, expiration_date, sent_at) VALUES (?, ?, ?, CAST(strftime('%s','now') AS INTEGER))",
+                                        (uid, "fin", exp_iso),
+                                    )
+                                    sent_count += 1
+                                except DiscordSendError:
+                                    pass
                     if success_any:
                         db.execute(
                             """
@@ -292,9 +290,37 @@ def run(task_id: int, db):
                         subject = render_mail(tpl["subject"], context)
                         body = render_mail(tpl["body"], context)
 
-                        if send_email(subject, body, r, settings):
+                        ok, _err = send_email(subject, body, r, settings)
+                        if ok:
                             success_any = True
 
+                    
+                    # Fallback to Discord if configured (order: email -> discord) and email failed
+                    if (not success_any) and (notifications_order[:2] == ["email", "discord"]) and discord_ready and discord_user_id:
+                        already_d = db.query_one(
+                            "SELECT 1 FROM sent_discord WHERE user_id=? AND template_type=? AND expiration_date=?",
+                            (uid, type_, exp_iso),
+                        )
+                        if not already_d:
+                            ctx = build_user_context({
+                                "username": username,
+                                "expiration_date": exp_iso,
+                                "days_left": days_left,
+                            })
+                            d_tpl = db.query_one("SELECT * FROM discord_templates WHERE type=?", (type_,))
+                            if d_tpl:
+                                d_title = render_mail(d_tpl["title"] or "", ctx).strip()
+                                d_body = render_mail(d_tpl["body"] or "", ctx).strip()
+                                d_content = f"**{d_title}**\n{d_body}" if d_title else d_body
+                                try:
+                                    send_discord_dm(settings.get("discord_bot_token") or "", discord_user_id, d_content)
+                                    db.execute(
+                                        "INSERT OR IGNORE INTO sent_discord(user_id, template_type, expiration_date, sent_at) VALUES (?, ?, ?, CAST(strftime('%s','now') AS INTEGER))",
+                                        (uid, type_, exp_iso),
+                                    )
+                                    sent_count += 1
+                                except DiscordSendError:
+                                    pass
                     if success_any:
                         db.execute(
                             """
