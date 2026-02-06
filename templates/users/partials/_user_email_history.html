@@ -1,0 +1,49 @@
+<!-- ========== EMAIL HISTORY (unchanged content, just moved) ========== -->
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+  <h2 class="text-sm font-semibold mb-2">{{ t("email_history") }}</h2>
+
+  {% if sent_emails %}
+    {# Zone compactable #}
+    <div id="emailsBox"
+         class="relative overflow-hidden transition-all duration-300 max-h-48 border border-slate-800 rounded-xl">
+
+      <div id="emailsInner" class="overflow-y-auto">
+        <table class="w-full text-xs">
+          <thead class="bg-slate-950/60 text-slate-400 sticky top-0">
+            <tr>
+              <th class="px-3 py-2 text-left">{{ t("type") }}</th>
+              <th class="px-3 py-2 text-left">{{ t("snapshot") }}</th>
+              <th class="px-3 py-2 text-left">{{ t("date") }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in sent_emails %}
+              <tr class="border-t border-slate-800">
+                <td class="px-3 py-2">{{ t(m.template_type) }}</td>
+                <td class="px-3 py-2 text-slate-400">{{ m.expiration_date }}</td>
+                <td class="px-3 py-2 text-slate-300">{{ m.sent_at }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {# Dégradé bas (visible seulement quand replié) #}
+      <div id="emailsFade"
+           class="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-slate-900 to-transparent">
+      </div>
+    </div>
+
+    {# Bouton (masqué par défaut, affiché en JS si nécessaire) #}
+    <div id="emailsToggleWrap" class="mt-3 hidden">
+      <button type="button"
+              id="emailsToggle"
+              class="w-full px-3 py-2 text-xs rounded-xl border border-slate-800 bg-slate-950/40 text-slate-200 hover:bg-slate-950/70">
+        {{ t("collapse_show_more") }}
+      </button>
+    </div>
+
+  {% else %}
+    <p class="text-xs text-slate-500">{{ t("no_email_sent") }}</p>
+  {% endif %}
+</div>
