@@ -700,5 +700,7 @@
   "email_order_hint": "Notificación por email",
   "discord_order_hint": "Mensaje privado de Discord",
   "task.send_campaign_discord": "Enviar campañas de Discord pendientes",
-  "task.send_expiration_discord": "Enviar notificaciones de expiración por Discord"
+  "task.send_expiration_discord": "Enviar notificaciones de expiración por Discord",
+  "merged_usernames": "Nombres de usuario fusionados"
+
 }

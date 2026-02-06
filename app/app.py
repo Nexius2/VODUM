@@ -3241,6 +3241,34 @@ def create_app():
 
         merge_suggestions = get_merge_suggestions(db, user_id, limit=None)
 
+        # --------------------------------------------------
+        # merged_usernames = tous les usernames "liés" (media_users)
+        # SAUF le username principal (vodum_users.username)
+        # --------------------------------------------------
+        main_username = (user.get("username") or "").strip().lower()
+
+        merged_usernames_set = set()
+
+        rows = db.query(
+            """
+            SELECT DISTINCT username
+            FROM media_users
+            WHERE vodum_user_id = ?
+              AND username IS NOT NULL
+              AND TRIM(username) <> ''
+            """,
+            (user_id,),
+        )
+
+        for r in rows:
+            uname = str(r["username"]).strip()
+            if uname and uname.lower() != main_username:
+                merged_usernames_set.add(uname)
+
+        merged_usernames = sorted(merged_usernames_set, key=lambda x: x.lower())
+
+
+
         return render_template(
             "users/user_detail.html",
             user=user,
@@ -3250,6 +3278,7 @@ def create_app():
             allowed_types=allowed_types,
             merge_suggestions=merge_suggestions,
             user_servers=servers,
+            merged_usernames=merged_usernames,
         )
 
 
