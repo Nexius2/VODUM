@@ -107,6 +107,7 @@ This removes the need to manually track and warn users.
 
 VODUM never relies on local flags only: **changes are applied on the servers themselves**.
 
+
 ---
 
 ### 📊 Monitoring & Policies
@@ -231,3 +232,15 @@ http://<unraid-ip>:8097
 💬 Join the Discord server for discussions and troubleshooting:
 https://discord.gg/5PU7TnegZt
 
+
+## 📸 Interface Preview
+
+<p align="center">
+  <img src="screenshots/dashboard.png" width="45%">
+  <img src="screenshots/monitoring.png" width="45%">
+</p>
+
+<p align="center">
+  <img src="screenshots/policies.png" width="45%">
+  <img src="screenshots/activity.png" width="45%">
+</p>
