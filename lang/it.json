@@ -700,5 +700,7 @@
   "email_order_hint": "Notifica email",
   "discord_order_hint": "DM Discord",
   "task.send_campaign_discord": "Inviare le campagne Discord in sospeso",
-  "task.send_expiration_discord": "Inviare notifiche di scadenza tramite Discord"
+  "task.send_expiration_discord": "Inviare notifiche di scadenza tramite Discord",
+  "merged_usernames": "Nomi utente uniti"
+
 }

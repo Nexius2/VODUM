@@ -700,5 +700,7 @@
   "email_order_hint": "E-Mail-Benachrichtigung",
   "discord_order_hint": "Discord-DM",
   "task.send_campaign_discord": "Ausstehende Discord-Kampagnen senden",
-  "task.send_expiration_discord": "Ablaufbenachrichtigungen über Discord senden"
+  "task.send_expiration_discord": "Ablaufbenachrichtigungen über Discord senden",
+  "merged_usernames": "Zusammengeführte Benutzernamen"
+
 }

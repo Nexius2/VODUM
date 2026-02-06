@@ -731,5 +731,6 @@
   "email_order_hint": "Email notification",
   "discord_order_hint": "Discord DM",
   "task.send_campaign_discord": "Send pending Discord campaigns",
-  "task.send_expiration_discord": "Send expiration notifications via Discord"
+  "task.send_expiration_discord": "Send expiration notifications via Discord",
+  "merged_usernames": "Merged usernames"
 }

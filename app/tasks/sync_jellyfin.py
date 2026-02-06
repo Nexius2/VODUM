@@ -309,6 +309,54 @@ def _get_jellyfin_servers(db):
     )
 
 
+
+def _is_placeholder_vodum_user(u: dict) -> bool:
+    """
+    Détecte un vodum_user "placeholder" typiquement créé automatiquement :
+    - pas d'email
+    - pas de prénom/nom
+    - pas d'expiration_date
+    - (souvent status='active' car créé par sync)
+    """
+    if not u:
+        return True
+    return (
+        not (u.get("email") or "").strip()
+        and not (u.get("firstname") or "").strip()
+        and not (u.get("lastname") or "").strip()
+        and u.get("expiration_date") is None
+        and not (u.get("notes") or "").strip()
+    )
+
+
+def _pick_best_vodum_user_for_username(db, username: str) -> Optional[int]:
+    """
+    Retourne le "meilleur" vodum_user_id correspondant au username (case-insensitive).
+    On préfère un compte déjà renseigné (email/expiration/prénom/nom).
+    """
+    if not username or not str(username).strip():
+        return None
+
+    rows = db.query(
+        """
+        SELECT
+          id, username, firstname, lastname, email, expiration_date, notes, status
+        FROM vodum_users
+        WHERE lower(username) = lower(?)
+        ORDER BY
+          CASE WHEN email IS NOT NULL AND trim(email) <> '' THEN 1 ELSE 0 END DESC,
+          CASE WHEN expiration_date IS NOT NULL THEN 1 ELSE 0 END DESC,
+          CASE WHEN firstname IS NOT NULL AND trim(firstname) <> '' THEN 1 ELSE 0 END DESC,
+          CASE WHEN lastname IS NOT NULL AND trim(lastname) <> '' THEN 1 ELSE 0 END DESC,
+          id ASC
+        """,
+        (str(username).strip(),),
+    )
+    if not rows:
+        return None
+    return int(rows[0]["id"])
+
+
 def _ensure_vodum_user_for_username(
     db,
     username: str,
@@ -318,20 +366,25 @@ def _ensure_vodum_user_for_username(
     external_user_id: Optional[str] = None,
 ) -> int:
     """
-    Assure l'existence d'un vodum_user.
-
-    - Pour Jellyfin (et tout provider server-scoped) :
-      on DOIT utiliser une identité (type, server_id, external_user_id) via user_identities,
-      car un même username peut exister sur plusieurs serveurs.
-
-    - Fallback legacy :
-      si provider_type/server_id/external_user_id ne sont pas fournis,
-      on garde le comportement historique basé sur username.
+    Fix principal :
+    - Identity-first (type/server_id/external_user_id) comme avant
+    - MAIS :
+      - si l'identité n'existe pas => on tente de rattacher à un vodum_user existant (même username)
+      - si l'identité existe MAIS pointe vers un placeholder => on migre vers le meilleur vodum_user (même username)
     """
 
-    # --- Mode identity-first (recommandé pour Jellyfin) ---
+    uname = (str(username or "")).strip()
+    if not uname:
+        # dernier recours : on crée un placeholder minimal
+        cur = db.execute(
+            "INSERT INTO vodum_users (username, status) VALUES (?, 'active')",
+            ("unknown",),
+        )
+        return int(cur.lastrowid)
+
+    # --- Mode identity-first (recommandé) ---
     if provider_type and server_id is not None and external_user_id:
-        row = db.query_one(
+        row_ident = db.query_one(
             """
             SELECT vodum_user_id
             FROM user_identities
@@ -342,17 +395,60 @@ def _ensure_vodum_user_for_username(
             """,
             (provider_type, int(server_id), str(external_user_id)),
         )
-        if row and row["vodum_user_id"]:
-            return int(row["vodum_user_id"])
 
-        # Crée un vodum_user placeholder
+        if row_ident and row_ident.get("vodum_user_id"):
+            current_vuid = int(row_ident["vodum_user_id"])
+
+            # Si l'identité est déjà liée, mais vers un placeholder,
+            # et qu'on trouve un vodum_user "meilleur" avec même username,
+            # on migre l'identité (et on réutilise le bon vodum_user_id).
+            urow = db.query_one(
+                """
+                SELECT id, username, firstname, lastname, email, expiration_date, notes, status
+                FROM vodum_users
+                WHERE id = ?
+                LIMIT 1
+                """,
+                (current_vuid,),
+            )
+            current_user = dict(urow) if urow else {}
+
+            best_vuid = _pick_best_vodum_user_for_username(db, uname)
+            if best_vuid and best_vuid != current_vuid and _is_placeholder_vodum_user(current_user):
+                # migre l'identité vers le compte existant "meilleur"
+                db.execute(
+                    """
+                    UPDATE user_identities
+                    SET vodum_user_id = ?
+                    WHERE type = ?
+                      AND server_id = ?
+                      AND external_user_id = ?
+                    """,
+                    (int(best_vuid), provider_type, int(server_id), str(external_user_id)),
+                )
+                return int(best_vuid)
+
+            return current_vuid
+
+        # Identité absente -> tenter de rattacher à un vodum_user existant (username)
+        best_vuid = _pick_best_vodum_user_for_username(db, uname)
+        if best_vuid:
+            db.execute(
+                """
+                INSERT INTO user_identities (vodum_user_id, type, server_id, external_user_id)
+                VALUES (?, ?, ?, ?)
+                """,
+                (int(best_vuid), provider_type, int(server_id), str(external_user_id)),
+            )
+            return int(best_vuid)
+
+        # Sinon : crée un vodum_user placeholder + identité
         cur = db.execute(
             "INSERT INTO vodum_users (username, status) VALUES (?, 'active')",
-            (username,),
+            (uname,),
         )
         vodum_user_id = int(cur.lastrowid)
 
-        # Crée l'identité liée (clé unique)
         db.execute(
             """
             INSERT INTO user_identities (vodum_user_id, type, server_id, external_user_id)
@@ -365,15 +461,15 @@ def _ensure_vodum_user_for_username(
 
     # --- Fallback legacy (username only) ---
     row = db.query_one(
-        "SELECT id FROM vodum_users WHERE username = ? LIMIT 1",
-        (username,),
+        "SELECT id FROM vodum_users WHERE lower(username) = lower(?) LIMIT 1",
+        (uname,),
     )
     if row:
         return int(row["id"])
 
     cur = db.execute(
         "INSERT INTO vodum_users (username, status) VALUES (?, 'active')",
-        (username,),
+        (uname,),
     )
     return int(cur.lastrowid)
 
@@ -387,7 +483,9 @@ def _upsert_media_user_by_jellyfin_id(
     """
     Upsert d'un compte Jellyfin dans media_users.
 
-    Retourne (media_user_id, vodum_user_id)
+    Fix :
+    - on s'assure d'obtenir le BON vodum_user_id (merge placeholder -> user existant si possible)
+    - on met à jour media_users.vodum_user_id même si déjà set (dans le cas d'une migration)
     """
     # 1) Cherche un compte existant sur CE serveur
     row = db.query_one(
@@ -402,25 +500,23 @@ def _upsert_media_user_by_jellyfin_id(
         (server_id, jellyfin_id),
     )
 
-    # 2) Assure un vodum_user
-    if row and row["vodum_user_id"]:
-        vodum_user_id = int(row["vodum_user_id"])
-    else:
-        vodum_user_id = _ensure_vodum_user_for_username(
-            db,
-            username,
-            provider_type="jellyfin",
-            server_id=server_id,
-            external_user_id=jellyfin_id,
-        )
-        db.execute(
-            """
-            INSERT OR IGNORE INTO user_identities (vodum_user_id, type, server_id, external_user_id)
-            VALUES (?, 'jellyfin', ?, ?)
-            """,
-            (vodum_user_id, server_id, jellyfin_id),
-        )
+    # 2) Assure un vodum_user (avec logique de merge)
+    vodum_user_id = _ensure_vodum_user_for_username(
+        db,
+        username,
+        provider_type="jellyfin",
+        server_id=server_id,
+        external_user_id=jellyfin_id,
+    )
 
+    # 3) Assure identité
+    db.execute(
+        """
+        INSERT OR IGNORE INTO user_identities (vodum_user_id, type, server_id, external_user_id)
+        VALUES (?, 'jellyfin', ?, ?)
+        """,
+        (vodum_user_id, server_id, jellyfin_id),
+    )
 
     if row:
         media_user_id = int(row["id"])
@@ -428,22 +524,23 @@ def _upsert_media_user_by_jellyfin_id(
             """
             UPDATE media_users
             SET username = ?,
-                vodum_user_id = COALESCE(vodum_user_id, ?)
+                vodum_user_id = ?
             WHERE id = ?
             """,
-            (username, vodum_user_id, media_user_id),
+            (str(username or ""), int(vodum_user_id), media_user_id),
         )
-        return media_user_id, vodum_user_id
+        return media_user_id, int(vodum_user_id)
 
-    # 3) Insert nouveau media_user
+    # 4) Insert nouveau media_user
     cur = db.execute(
         """
         INSERT INTO media_users (server_id, vodum_user_id, external_user_id, username, type)
         VALUES (?, ?, ?, ?, 'jellyfin')
         """,
-        (server_id, vodum_user_id, jellyfin_id, username),
+        (server_id, int(vodum_user_id), jellyfin_id, str(username or "")),
     )
-    return int(cur.lastrowid), vodum_user_id
+    return int(cur.lastrowid), int(vodum_user_id)
+
 
 
 def _upsert_library(db, server_id, section_id, name, lib_type) -> int:

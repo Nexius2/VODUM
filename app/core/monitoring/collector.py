@@ -234,7 +234,7 @@ def collect_sessions_for_server(
                   device=excluded.device,
                   ip=excluded.ip,
 
-                  started_at=COALESCE(media_sessions.started_at, excluded.started_at),
+                  started_at=COALESCE(media_sessions.started_at, excluded.started_at, excluded.last_seen_at),
                   last_seen_at=excluded.last_seen_at,
                   raw_json=excluded.raw_json,
                   library_section_id=COALESCE(excluded.library_section_id, media_sessions.library_section_id)
