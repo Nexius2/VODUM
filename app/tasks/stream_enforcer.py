@@ -19,6 +19,13 @@ def _set_db(db):
 
 LIVE_WINDOW_SECONDS = 120     # live si last_seen < 120s
 RECHECK_DELAY_SECONDS = 30    # recheck après warn
+JELLYFIN_KILL_MESSAGE_SPAM_COUNT = 5   # 5 messages
+JELLYFIN_KILL_MESSAGE_SPAM_SLEEP = 1.0 # 1 seconde entre chaque
+JELLYFIN_KILL_MESSAGE_TIMEOUT_MS = 50000  # durée d'affichage de chaque toast
+JELLYFIN_PRE_KILL_DURATION_SECONDS = 60     # 1 minute avant coupure
+JELLYFIN_PRE_KILL_INTERVAL_SECONDS = 10     # un message toutes les 10 secondes
+
+
 
 
 # -------------------------
@@ -32,6 +39,21 @@ def _loads_json(s: Optional[str]) -> dict:
         return json.loads(s)
     except Exception:
         return {}
+
+def _jellyfin_session_id_from_target(target: dict, fallback_session_key: str) -> str:
+    """
+    Extract real Jellyfin Session Id from raw_json (Session object).
+    Fallback to current session_key.
+    """
+    try:
+        raw = _loads_json(target.get("raw_json"))
+        sid = raw.get("Id")
+        if sid:
+            return str(sid)
+    except Exception:
+        pass
+    return str(fallback_session_key)
+
 
 def _now_sql_window() -> str:
     return f"-{int(LIVE_WINDOW_SECONDS)} seconds"
@@ -643,12 +665,15 @@ def _kill_session(server_row: dict, session_key: str, reason: str) -> bool:
     return provider.terminate_session(session_key, reason=reason)
 
 
-def _warn_session(server_row: dict, session_key: str, title: str, text: str) -> bool:
+def _warn_session(server_row, session_key, title, text, timeout_ms: int = 8000):
     provider = get_provider(server_row)
     try:
-        return bool(provider.send_session_message(session_key, title, text, timeout_ms=8000))
-    except Exception:
-        return False
+        return provider.send_session_message(session_key, title, text, timeout_ms=timeout_ms)
+    except TypeError:
+        # fallback if provider signature is older
+        return provider.send_session_message(session_key, title, text)
+
+
 
 
 def _load_server(server_id: int) -> Optional[dict]:
@@ -738,7 +763,20 @@ def run(task_id: int, db):
             continue
 
         session_key = str(target["session_key"])
+        jf_message_key = session_key
+        if provider_type == "jellyfin":
+            jf_message_key = _jellyfin_session_id_from_target(target, session_key)
+
         reason = v.get("reason") or "policy violation"
+
+        # Message utilisateur (celui que tu veux voir côté client)
+        warn_title = v.get("warn_title", "Stream limit")
+        warn_text  = v.get("warn_text", "Limit reached.")
+
+        # Pour Plex, le "reason" est affiché au moment du terminate
+        # => on veut un texte user-friendly (warn_text), pas un reason technique.
+        kill_reason_for_client = warn_text or reason
+
 
         # 1) WARN (une fois) + recheck 30s
         if not _already_warned_recently(policy_id, server_id, user_vodum_id, user_ext, minutes=5):
@@ -746,7 +784,7 @@ def run(task_id: int, db):
             if provider_type == "jellyfin":
                 warned_ok = _warn_session(
                     server_row,
-                    session_key,
+                    jf_message_key,
                     v.get("warn_title", "Stream limit"),
                     v.get("warn_text", "Limit reached.")
                 )
@@ -770,9 +808,48 @@ def run(task_id: int, db):
             continue
 
         try:
-            ok = _kill_session(server_row, session_key, reason=reason)
+            # Jellyfin : affichage "pénible mais lisible" avant coupure
+            if provider_type == "jellyfin":
+                try:
+                    start = time.time()
+                    while True:
+                        elapsed = time.time() - start
+                        if elapsed >= JELLYFIN_PRE_KILL_DURATION_SECONDS:
+                            break
+
+                        # Message visible 5s
+                        _warn_session(
+                            server_row,
+                            jf_message_key,
+                            warn_title,
+                            warn_text,
+                            timeout_ms=JELLYFIN_KILL_MESSAGE_TIMEOUT_MS
+                        )
+
+                        # Attendre jusqu'au prochain tick (toutes les 10s)
+                        remaining = JELLYFIN_PRE_KILL_DURATION_SECONDS - elapsed
+                        sleep_for = min(float(JELLYFIN_PRE_KILL_INTERVAL_SECONDS), float(remaining))
+                        if sleep_for > 0:
+                            time.sleep(sleep_for)
+                        else:
+                            break
+
+                except Exception as e:
+                    logger.warning(
+                        f"[TASK {task_id}] jellyfin pre-kill message loop failed "
+                        f"session={jf_message_key} server={server_id}: {e}",
+                        exc_info=True
+                    )
+
+
+
+
+            # Kill stream (Plex affichera kill_reason_for_client ; Jellyfin ignore reason, mais on a déjà envoyé un message)
+            ok = _kill_session(server_row, session_key, reason=kill_reason_for_client)
+
             _log_enforcement(policy_id, server_id, provider_type, session_key, user_vodum_id, user_ext, "kill", reason)
             _upsert_state(policy_id, server_id, user_vodum_id, user_ext, warned=False, killed=True, reason=reason)
+
             logger.warning(
                 f"[TASK {task_id}] [KILL] policy={policy_id} server={server_id} provider={provider_type} "
                 f"session={session_key} ok={ok} reason={reason} "
@@ -783,5 +860,6 @@ def run(task_id: int, db):
 
         except Exception as e:
             logger.error(f"[TASK {task_id}] stream_enforcer: kill failed server={server_id} session={session_key}: {e}", exc_info=True)
+
 
     logger.info(f"[TASK {task_id}] stream_enforcer: done")

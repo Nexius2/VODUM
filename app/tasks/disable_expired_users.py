@@ -2,42 +2,66 @@
 """
 disable_expired_users.py
 ------------------------
-✓ Désactive les accès Plex des utilisateurs expirés
-✓ Indépendant du mailing
-✓ Compatible multi-serveurs Plex
+Mode A (settings.expiry_mode = 'disable')
+
+✓ Désactive les accès des utilisateurs expirés (Plex + Jellyfin)
+✓ Indépendant du mailing/discord
+✓ Compatible multi-serveurs
 ✓ S'appuie sur media_user_libraries + media_jobs
-✓ Lance apply_plex_access_updates (via jobs 'sync')
+
+Principe:
+- Pour chaque vodum_user expiré, on supprime les accès en base (media_user_libraries)
+- Puis on crée un media_job pour appliquer la révocation côté serveur:
+  - Plex    : job action='revoke' (apply_plex_access_updates)
+  - Jellyfin: job action='sync'   (apply_jellyfin_access_updates)
+
+NB: Les comptes utilisateurs restent chez Plex/Jellyfin, seuls les accès sont retirés.
 """
 
+from __future__ import annotations
+
 from datetime import date
+
 from tasks_engine import task_logs
 from logging_utils import get_logger
 
 log = get_logger("disable_expired_users")
 
 
+def _get_settings(db) -> dict:
+    row = db.query_one("SELECT expiry_mode FROM settings WHERE id = 1") or {}
+    return dict(row)
+
+
 def run(task_id: int, db):
-    """
-    Désactive les accès Plex des utilisateurs expirés
-    - Compatible multi-serveurs Plex
-    - S'appuie sur media_user_libraries + media_jobs
-    """
+    settings = _get_settings(db)
+    mode = (settings.get("expiry_mode") or "none").strip()
+
+    if mode != "disable":
+        return
 
     task_logs(task_id, "info", "Task disable_expired_users started")
     log.info("=== DISABLE EXPIRED USERS : START ===")
 
+    settings = _get_settings(db)
+    if (settings.get("expiry_mode") or "disable") != "disable":
+        msg = "Skipped: expiry_mode is not 'disable'."
+        log.info(msg)
+        task_logs(task_id, "info", msg)
+        return
+
     today = date.today()
 
     try:
-        # 1️⃣ Sélection des media_users Plex appartenant à des vodum_users expirés
-        #     ET qui ont encore au moins 1 library Plex en base.
+        # 1) Select expired vodum_users that still have at least one library on at least one media account
         rows = db.query(
             """
             SELECT DISTINCT
                 vu.id            AS vodum_user_id,
                 vu.username      AS vodum_username,
                 mu.id            AS media_user_id,
-                mu.server_id     AS server_id
+                mu.server_id     AS server_id,
+                mu.type          AS provider
             FROM vodum_users vu
             JOIN media_users mu
                 ON mu.vodum_user_id = vu.id
@@ -51,69 +75,71 @@ def run(task_id: int, db):
                 ON s_lib.id = l.server_id
             WHERE vu.expiration_date IS NOT NULL
               AND date(vu.expiration_date) < date(?)
-              AND mu.type = 'plex'
-              AND s_mu.type = 'plex'
-              AND s_lib.type = 'plex'
+              AND mu.type IN ('plex','jellyfin')
+              AND s_mu.type = mu.type
+              AND s_lib.type = mu.type
             """,
             (today.isoformat(),),
         )
 
         if not rows:
-            msg = "No expired users with Plex access."
+            msg = "No expired users with media server access."
             log.info(msg)
             task_logs(task_id, "info", msg)
             return
 
-        # Pour message final (compter les vodum_users uniques)
         vodum_ids = sorted({r["vodum_user_id"] for r in rows})
-        log.info(f"{len(vodum_ids)} Expired user(s) to disable (Plex)")
+        log.info(f"{len(vodum_ids)} Expired user(s) to disable")
 
-        # 2️⃣ Pour chaque compte Plex (media_user) → supprimer accès en base + créer job revoke
         processed_media = 0
         created_jobs = 0
 
         for r in rows:
-            vodum_user_id = r["vodum_user_id"]
+            vodum_user_id = int(r["vodum_user_id"])
             vodum_username = r["vodum_username"]
-            media_user_id = r["media_user_id"]
-            server_id = r["server_id"]
+            media_user_id = int(r["media_user_id"])
+            server_id = int(r["server_id"])
+            provider = (r["provider"] or "").strip().lower()
 
             log.info(
-                f"[VODUM #{vodum_user_id}] Removing Plex access from database "
-                f"(media_user_id={media_user_id}, server_id={server_id}, user={vodum_username})"
+                f"[VODUM #{vodum_user_id}] Removing access from database "
+                f"(provider={provider}, media_user_id={media_user_id}, server_id={server_id}, user={vodum_username})"
             )
 
-            # Supprime uniquement les libs de CE serveur (ça évite d'effacer un autre serveur par erreur)
+            # Delete only libraries for THIS server
             db.execute(
                 """
                 DELETE FROM media_user_libraries
                 WHERE media_user_id = ?
-                  AND library_id IN (
-                      SELECT id FROM libraries WHERE server_id = ?
-                  )
+                  AND library_id IN (SELECT id FROM libraries WHERE server_id = ?)
                 """,
                 (media_user_id, server_id),
             )
 
             processed_media += 1
 
-            # Crée un job 'revoke' générique pour appliquer la révocation côté Plex via apply_media_access_updates
-            # IMPORTANT: on stocke l'utilisateur CANONIQUE (vodum_user_id), pas media_user_id.
-            dedupe_key = f"plex:revoke:server={server_id}:vodum_user={vodum_user_id}"
+            # Create a deduped job to apply on provider side
+            if provider == "plex":
+                action = "revoke"
+            else:
+                # Jellyfin worker applies desired folders; any action triggers sync
+                action = "sync"
+
+            dedupe_key = f"{provider}:{action}:server={server_id}:vodum_user={vodum_user_id}"
 
             exists = db.query_one(
                 """
                 SELECT 1
                 FROM media_jobs
-                WHERE provider = 'plex'
-                  AND action = 'revoke'
+                WHERE provider = ?
+                  AND action = ?
                   AND server_id = ?
                   AND vodum_user_id = ?
                   AND library_id IS NULL
                   AND processed = 0
                 LIMIT 1
                 """,
-                (server_id, vodum_user_id),
+                (provider, action, server_id, vodum_user_id),
             )
 
             if not exists:
@@ -127,20 +153,20 @@ def run(task_id: int, db):
                         dedupe_key
                     )
                     VALUES (
-                        'plex', 'revoke',
+                        ?, ?,
                         ?, ?, NULL,
                         NULL,
                         0, 0, 0,
                         ?
                     )
                     """,
-                    (vodum_user_id, server_id, dedupe_key),
+                    (provider, action, vodum_user_id, server_id, dedupe_key),
                 )
                 created_jobs += 1
 
         msg = (
-            f"{len(vodum_ids)} Plex user(s) disabled "
-            f"(Plex accounts processed={processed_media}, Jobs created={created_jobs})"
+            f"{len(vodum_ids)} user(s) disabled "
+            f"(media accounts processed={processed_media}, jobs created={created_jobs})"
         )
         log.info(msg)
         task_logs(task_id, "success", msg)

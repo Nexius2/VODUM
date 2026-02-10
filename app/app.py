@@ -29,10 +29,13 @@ from email.message import EmailMessage
 import math
 from importlib.metadata import version
 import platform
-
+import ipaddress
 from logging_utils import get_logger, read_last_logs, read_all_logs
 task_logger = get_logger("tasks_ui")
 auth_logger = get_logger("auth")
+security_logger = get_logger("security")
+
+
 from discord_utils import is_discord_ready, validate_discord_bot_token
 
 from api.subscriptions import subscriptions_api, update_user_expiration
@@ -53,9 +56,6 @@ import requests
 
 
 
-
-
-
 _I18N_CACHE: dict[str, dict] = {}
 
 
@@ -65,6 +65,21 @@ _I18N_CACHE: dict[str, dict] = {}
 # -----------------------------
 RESET_FILE = os.environ.get("VODUM_RESET_FILE", "/appdata/password.reset")
 RESET_MAGIC = os.environ.get("VODUM_RESET_MAGIC", "RECOVER")
+
+def _log_ip_filter_status():
+    ip_filter_enabled = (os.environ.get("VODUM_IP_FILTER") or "1").strip() not in (
+        "0", "false", "False", "no", "NO"
+    )
+
+    default_allowed = "127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+    allowed = (os.environ.get("VODUM_ALLOWED_NETS") or default_allowed).strip()
+
+    if ip_filter_enabled:
+        security_logger.info(
+            "IP filter ENABLED | allowed_nets=%s", allowed
+        )
+    else:
+        security_logger.info("IP filter DISABLED")
 
 
 def startup_admin_recover_if_requested(app):
@@ -1026,13 +1041,35 @@ def create_app():
             per_page = 30
             offset = (page - 1) * per_page
 
-            total = db.query_one(
-                """
-                SELECT COUNT(DISTINCT media_user_id) AS cnt
-                FROM media_session_history
-                WHERE media_user_id IS NOT NULL
-                """
-            ) or {"cnt": 0}
+            q = (request.args.get("q") or "").strip()
+
+            # --------------------------
+            # Total rows (avec filtre username)
+            # --------------------------
+            if q:
+                total = db.query_one(
+                    """
+                    WITH users_with_hist AS (
+                      SELECT DISTINCT media_user_id AS uid
+                      FROM media_session_history
+                      WHERE media_user_id IS NOT NULL
+                    )
+                    SELECT COUNT(*) AS cnt
+                    FROM media_users mu
+                    JOIN users_with_hist u ON u.uid = mu.id
+                    WHERE mu.username LIKE ?
+                    """,
+                    (f"%{q}%",),
+                ) or {"cnt": 0}
+            else:
+                total = db.query_one(
+                    """
+                    SELECT COUNT(DISTINCT media_user_id) AS cnt
+                    FROM media_session_history
+                    WHERE media_user_id IS NOT NULL
+                    """
+                ) or {"cnt": 0}
+
             total = dict(total) if total else {"cnt": 0}
 
             cookie_sort = request.cookies.get(f"monitoring_{tab}_sort")
@@ -1049,17 +1086,22 @@ def create_app():
                 "plays": "a.total_plays",
                 "watch": "a.watch_ms",
                 "ip": "lr.ip",
-                # on trie sur une expression stable (comme l’affichage)
                 "platform": "COALESCE(lr.device, lr.client_product, '-')",
                 "player": "COALESCE(lr.client_name, lr.client_product, '-')",
             }
             if sort_key not in SORT_MAP:
                 sort_key = "last"
 
-            # SQLite n’a pas toujours NULLS LAST => petit hack portable:
             col = SORT_MAP[sort_key]
             direction = "ASC" if sort_dir == "asc" else "DESC"
             order_sql = f"({col} IS NULL) ASC, {col} {direction}"
+
+            # filtre username
+            end_where = ""
+            params = []
+            if q:
+                end_where = "WHERE mu.username LIKE ?"
+                params.append(f"%{q}%")
 
             rows = db.query(
                 f"""
@@ -1112,10 +1154,11 @@ def create_app():
                 FROM last_rows lr
                 JOIN agg a ON a.media_user_id = lr.media_user_id
                 JOIN media_users mu ON mu.id = lr.media_user_id
+                {end_where}
                 ORDER BY {order_sql}
                 LIMIT {per_page} OFFSET ?
                 """,
-                (offset,),
+                tuple(params + [offset]),
             )
 
             rows = [dict(r) for r in rows]
@@ -1124,6 +1167,25 @@ def create_app():
                 u["watch_time"] = f"{ms // 3600000}h {((ms % 3600000) // 60000)}m"
                 if not u.get("last_ip"):
                     u["last_ip"] = "-"
+
+            # Pagination
+            total_rows = int(total.get("cnt") or 0)
+            total_pages = max(1, (total_rows + per_page - 1) // per_page)
+
+            def build_url(p):
+                args = dict(request.args)
+                args["tab"] = "users"
+                args["page"] = p
+                return url_for("monitoring_page", **args)
+
+            pagination = {
+                "page": page,
+                "total_pages": total_pages,
+                "total_rows": total_rows,
+                "prev_url": build_url(page - 1),
+                "next_url": build_url(page + 1),
+            }
+
 
 
         elif tab == "policies":
@@ -1136,6 +1198,13 @@ def create_app():
                 ORDER BY p.is_enabled DESC, p.priority ASC, p.id DESC
             """)
             policies = [dict(r) for r in policies]
+            # Parse rule JSON + detect system-managed policies
+            for p in policies:
+                try:
+                    p["_rule"] = json.loads(p.get("rule_value_json") or "{}")
+                except Exception:
+                    p["_rule"] = {}
+                p["_is_system"] = bool(p["_rule"].get("system_tag"))
 
             edit_policy = None
             edit_policy_id = request.args.get("edit_policy_id", type=int)
@@ -1641,14 +1710,13 @@ def create_app():
     def monitoring_user_detail(user_id: int):
         db = get_db()
 
-        # Stats user global
+        view = (request.args.get("view") or "profile").strip().lower()
+        if view not in ("profile", "history", "ip"):
+            view = "profile"
+
         u = db.query_one(
             """
-            SELECT
-              mu.id,
-              mu.username,
-              mu.type,
-              mu.server_id
+            SELECT mu.id, mu.username, mu.type, mu.server_id
             FROM media_users mu
             WHERE mu.id = ?
             """,
@@ -1658,6 +1726,7 @@ def create_app():
             flash("invalid_user", "error")
             return redirect(url_for("monitoring_page", tab="users"))
 
+        # Global agg (all-time)
         agg = db.query_one(
             """
             SELECT
@@ -1669,100 +1738,214 @@ def create_app():
             """,
             (user_id,),
         ) or {"total_plays": 0, "watch_ms": 0, "last_watch_at": None}
+        agg = dict(agg) if agg else {"total_plays": 0, "watch_ms": 0, "last_watch_at": None}
 
-        agg = dict(agg) if agg else {"total_plays":0,"watch_ms":0,"last_watch_at":None}
+        u = dict(u)
         ms = agg.get("watch_ms") or 0
         u["total_plays"] = agg.get("total_plays") or 0
         u["last_watch_at"] = agg.get("last_watch_at")
         u["watch_time"] = f"{ms // 3600000}h {((ms % 3600000) // 60000)}m"
 
-        # History paginé
-        page = request.args.get("page", type=int, default=1)
-        per_page = 30
-        offset = (page - 1) * per_page
+        # --------------------------
+        # PROFILE (cards + top players)
+        # --------------------------
+        profile = {}
+        if view == "profile":
+            def _period_stats(delta_sql: str | None):
+                if delta_sql is None:
+                    row = db.query_one(
+                        """
+                        SELECT COUNT(*) AS plays, SUM(watch_ms) AS watch_ms
+                        FROM media_session_history
+                        WHERE media_user_id = ?
+                        """,
+                        (user_id,),
+                    )
+                else:
+                    row = db.query_one(
+                        """
+                        SELECT COUNT(*) AS plays, SUM(watch_ms) AS watch_ms
+                        FROM media_session_history
+                        WHERE media_user_id = ?
+                          AND stopped_at >= datetime('now', ?)
+                        """,
+                        (user_id, delta_sql),
+                    )
+                row = dict(row) if row else {"plays": 0, "watch_ms": 0}
+                w = int(row.get("watch_ms") or 0)
+                row["watch_time"] = f"{w // 3600000}h {((w % 3600000) // 60000)}m"
+                row["plays"] = int(row.get("plays") or 0)
+                return row
+
+            profile["last_24h"] = _period_stats("-24 hours")
+            profile["last_7d"]  = _period_stats("-7 days")
+            profile["last_30d"] = _period_stats("-30 days")
+            profile["all_time"] = _period_stats(None)
+
+            # Top players (comme les tuiles Tautulli)
+            top_players = db.query(
+                """
+                SELECT
+                  COALESCE(NULLIF(client_name, ''), NULLIF(client_product,''), NULLIF(device,''), 'Unknown') AS player,
+                  COUNT(*) AS plays
+                FROM media_session_history
+                WHERE media_user_id = ?
+                GROUP BY COALESCE(NULLIF(client_name, ''), NULLIF(client_product,''), NULLIF(device,''), 'Unknown')
+                ORDER BY plays DESC
+                LIMIT 12
+                """,
+                (user_id,),
+            )
+            profile["top_players"] = [dict(r) for r in top_players]
+
+        # --------------------------
+        # HISTORY (ton existant, inchangé, mais déclenché seulement sur view=history)
+        # --------------------------
+        rows = []
+        pagination = None
         q = (request.args.get("q") or "").strip()
 
-        where = ["h.media_user_id = ?"]
-        params = [user_id]
+        if view == "history":
+            page = request.args.get("page", type=int, default=1)
+            per_page = 30
+            offset = (page - 1) * per_page
 
-        if q:
-            where.append("(h.title LIKE ? OR h.grandparent_title LIKE ?)")
-            params += [f"%{q}%", f"%{q}%"]
+            where = ["h.media_user_id = ?"]
+            params = [user_id]
 
-        where_sql = " AND ".join(where)
+            if q:
+                where.append("(h.title LIKE ? OR h.grandparent_title LIKE ?)")
+                params += [f"%{q}%", f"%{q}%"]
 
-        total = db.query_one(
-            f"""
-            SELECT COUNT(*) AS cnt
-            FROM media_session_history h
-            WHERE {where_sql}
-            """,
-            tuple(params),
-        ) or {"cnt": 0}
+            where_sql = " AND ".join(where)
 
-        rows = db.query(
-            f"""
-            SELECT
-              h.stopped_at,
-              s.name AS server_name,
-              s.type AS provider,
-              h.title,
-              h.grandparent_title,
-              h.media_type,
-              CASE WHEN h.was_transcode = 1 THEN 'transcode' ELSE 'directplay' END AS playback_type,
-              h.device,
-              h.client_name,
-              h.watch_ms,
-              h.raw_json
-            FROM media_session_history h
-            JOIN servers s ON s.id = h.server_id
-            WHERE {where_sql}
-            ORDER BY h.stopped_at DESC
-            LIMIT {per_page} OFFSET ?
-            """,
-            tuple(params + [offset]),
-        )
+            total = db.query_one(
+                f"""
+                SELECT COUNT(*) AS cnt
+                FROM media_session_history h
+                WHERE {where_sql}
+                """,
+                tuple(params),
+            ) or {"cnt": 0}
 
-        # parse ip from raw_json if possible (sinon "-")
-        import json as _json
-        for r in rows:
-            ms2 = r.get("watch_ms") or 0
-            r["watch_time"] = f"{ms2 // 3600000}h {((ms2 % 3600000) // 60000)}m"
-            r["ip"] = "-"
-            try:
-                raw = r.get("raw_json")
-                if raw:
-                    j = _json.loads(raw)
-                    # best-effort: plex/jellyfin variants
-                    r["ip"] = j.get("ip") or j.get("IPAddress") or j.get("RemoteEndPoint") or "-"
-            except Exception:
-                pass
+            rows = db.query(
+                f"""
+                SELECT
+                  h.stopped_at,
+                  s.name AS server_name,
+                  s.type AS provider,
+                  h.title,
+                  h.grandparent_title,
+                  h.media_type,
+                  CASE WHEN h.was_transcode = 1 THEN 'transcode' ELSE 'directplay' END AS playback_type,
+                  h.device,
+                  h.client_name,
+                  h.watch_ms,
+                  h.ip
+                FROM media_session_history h
+                JOIN servers s ON s.id = h.server_id
+                WHERE {where_sql}
+                ORDER BY h.stopped_at DESC
+                LIMIT {per_page} OFFSET ?
+                """,
+                tuple(params + [offset]),
+            )
 
-        total_rows = int(total["cnt"])
-        total_pages = max(1, (total_rows + per_page - 1) // per_page)
+            rows = [dict(r) for r in rows]
+            for r in rows:
+                ms2 = r.get("watch_ms") or 0
+                r["watch_time"] = f"{ms2 // 3600000}h {((ms2 % 3600000) // 60000)}m"
+                if not r.get("ip"):
+                    r["ip"] = "-"
 
-        def build_url(p):
-            args = dict(request.args)
-            args["page"] = p
-            return url_for("monitoring_user_detail", user_id=user_id, **args)
+            total_rows = int((total.get("cnt") if isinstance(total, dict) else total["cnt"]) or 0)
+            total_pages = max(1, (total_rows + per_page - 1) // per_page)
 
-        pagination = {
-            "page": page,
-            "total_pages": total_pages,
-            "total_rows": total_rows,
-            "prev_url": build_url(page - 1),
-            "next_url": build_url(page + 1),
-        }
+            def build_url(p):
+                args = dict(request.args)
+                args["page"] = p
+                args["view"] = "history"
+                return url_for("monitoring_user_detail", user_id=user_id, **args)
+
+            pagination = {
+                "page": page,
+                "total_pages": total_pages,
+                "total_rows": total_rows,
+                "prev_url": build_url(page - 1),
+                "next_url": build_url(page + 1),
+            }
+
+        # --------------------------
+        # IP ADDRESSES (table type Tautulli)
+        # --------------------------
+        ip_rows = []
+        if view == "ip":
+            ip_rows = db.query(
+                """
+                WITH ranked AS (
+                  SELECT
+                    ip,
+                    started_at,
+                    stopped_at,
+                    COALESCE(NULLIF(device,''), NULLIF(client_product,''), '-') AS platform,
+                    COALESCE(NULLIF(client_name,''), NULLIF(client_product,''), '-') AS player,
+                    title,
+                    ROW_NUMBER() OVER (PARTITION BY ip ORDER BY stopped_at DESC) AS rn
+                  FROM media_session_history
+                  WHERE media_user_id = ?
+                    AND ip IS NOT NULL AND ip != ''
+                ),
+                last_per_ip AS (
+                  SELECT ip, stopped_at AS last_seen, platform AS last_platform, player AS last_player, title AS last_played
+                  FROM ranked
+                  WHERE rn = 1
+                ),
+                agg AS (
+                  SELECT
+                    ip,
+                    MIN(started_at) AS first_seen,
+                    MAX(stopped_at) AS last_seen,
+                    COUNT(*) AS play_count,
+                    SUM(watch_ms) AS watch_ms
+                  FROM media_session_history
+                  WHERE media_user_id = ?
+                    AND ip IS NOT NULL AND ip != ''
+                  GROUP BY ip
+                )
+                SELECT
+                  a.ip,
+                  a.first_seen,
+                  a.last_seen,
+                  l.last_platform,
+                  l.last_player,
+                  l.last_played,
+                  a.play_count,
+                  a.watch_ms
+                FROM agg a
+                LEFT JOIN last_per_ip l ON l.ip = a.ip
+                ORDER BY datetime(a.last_seen) DESC
+                """,
+                (user_id, user_id),
+            )
+            ip_rows = [dict(r) for r in ip_rows]
+            for r in ip_rows:
+                ms2 = r.get("watch_ms") or 0
+                r["watch_time"] = f"{ms2 // 3600000}h {((ms2 % 3600000) // 60000)}m"
 
         return render_template(
             "monitoring/user_detail.html",
             active_page="monitoring",
             tab="users",
             user=u,
+            view=view,
+            profile=profile,
             rows=rows,
+            ip_rows=ip_rows,
             q=q,
             pagination=pagination,
         )
+
+
 
 
     @app.route("/monitoring/session/<int:session_row_id>")
@@ -1813,6 +1996,18 @@ def create_app():
 
         policy_id_raw = (request.form.get("policy_id") or "").strip()
         policy_id = int(policy_id_raw) if policy_id_raw.isdigit() else None
+
+        # Prevent edits on system-managed policies
+        if policy_id:
+            existing = db.query_one("SELECT rule_value_json FROM stream_policies WHERE id = ?", (policy_id,))
+            if existing:
+                try:
+                    rj = json.loads(existing["rule_value_json"] or "{}")
+                except Exception:
+                    rj = {}
+                if rj.get("system_tag"):
+                    flash("System policy is read-only.", "error")
+                    return redirect(url_for("monitoring_page", tab="policies"))
 
         rule_type = request.form.get("rule_type", "").strip()
         scope_type = request.form.get("scope_type", "global").strip()
@@ -1909,6 +2104,17 @@ def create_app():
     @app.post("/monitoring/policies/<int:policy_id>/delete")
     def stream_policy_delete(policy_id: int):
         db = get_db()
+
+        existing = db.query_one("SELECT rule_value_json FROM stream_policies WHERE id = ?", (policy_id,))
+        if existing:
+            try:
+                rj = json.loads(existing["rule_value_json"] or "{}")
+            except Exception:
+                rj = {}
+            if rj.get("system_tag"):
+                flash("System policy cannot be deleted manually.", "error")
+                return redirect(url_for("monitoring_page", tab="policies"))
+
         db.execute("DELETE FROM stream_policies WHERE id=?", (policy_id,))
         flash("Policy deleted", "success")
         return redirect(url_for("monitoring_page", tab="policies"))
@@ -4447,6 +4653,39 @@ def create_app():
         )
         return json_rows(rows)
 
+    @app.route("/api/monitoring/user/<int:user_id>/daily")
+    def api_monitoring_user_daily(user_id: int):
+        db = get_db()
+        rng = request.args.get("range", "30d")
+
+        if rng == "all":
+            where = "1=1"
+            params = (user_id,)
+        else:
+            delta = {
+                "7d": "-7 days",
+                "30d": "-30 days",
+                "90d": "-90 days",
+                "12m": "-12 months",
+            }.get(rng, "-30 days")
+            where = "h.started_at >= datetime('now', ?)"
+            params = (user_id, delta)
+
+        rows = db.query(
+            f"""
+            SELECT
+              strftime('%Y-%m-%d', h.started_at) AS day,
+              COUNT(*) AS plays,
+              SUM(h.watch_ms) AS watch_ms
+            FROM media_session_history h
+            WHERE h.media_user_id = ?
+              AND {where}
+            GROUP BY strftime('%Y-%m-%d', h.started_at)
+            ORDER BY day ASC
+            """,
+            params,
+        )
+        return json_rows(rows)
 
 
 
@@ -6064,13 +6303,65 @@ def create_app():
     def _is_logged_in() -> bool:
         return session.get("vodum_logged_in") is True
 
+    def _is_private_ip(ip_str: str) -> bool:
+        try:
+            ip = ipaddress.ip_address(ip_str)
+            return ip.is_private or ip.is_loopback
+        except Exception:
+            return False
+
+
+    def _get_client_ip() -> str:
+        remote = request.remote_addr or ""
+
+        xff = (request.headers.get("X-Forwarded-For") or "").strip()
+        if xff and _is_private_ip(remote):
+            # XFF peut contenir "client, proxy1, proxy2"
+            first = xff.split(",")[0].strip()
+            if first:
+                return first
+
+        return remote
+
+
+    def _ip_allowed(remote_ip: str) -> bool:
+        # Permet de désactiver le filtrage si besoin 
+        if (os.environ.get("VODUM_IP_FILTER") or "1").strip() in ("0", "false", "False", "no", "NO"):
+            return True
+
+        # ✅ Valeur par défaut 
+        default_allowed = "127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+
+        allowed = (os.environ.get("VODUM_ALLOWED_NETS") or default_allowed).strip()
+
+        try:
+            ip = ipaddress.ip_address(remote_ip)
+        except Exception:
+            return False
+
+        for part in allowed.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                net = ipaddress.ip_network(part, strict=False)
+                if ip in net:
+                    return True
+            except Exception:
+                continue
+
+        return False
+
+
+
     @app.before_request
     def auth_guard():
-        """
-        🔒 Auth = UI uniquement
-        - Les routes HTML sont protégées
-        - Les routes /api restent accessibles (pour tâches / automation / healthchecks) SAUF si tu veux les bloquer.
-        """
+        # 🔒 Filtrage IP
+        client_ip = _get_client_ip()
+        if not _ip_allowed(client_ip):
+            security_logger.warning("Blocked request | ip=%s | path=%s", client_ip, request.path)
+            abort(403)
+
         s = _get_auth_settings()
 
         # assets toujours OK
@@ -6085,8 +6376,8 @@ def create_app():
         configured = _is_auth_configured(s)
 
         # ✅ IMPORTANT : on ne protège PAS /api (background)
-        if request.path.startswith("/api/"):
-            return
+        #if request.path.startswith("/api/"):
+        #    return
 
         # pages auth accessibles
         auth_pages = ("/login", "/logout", "/setup-admin")
@@ -6341,6 +6632,27 @@ def create_app():
         # ------------------------------------------------------------
         if request.method == "POST":
 
+            # --------------------------------------------------
+            # Expiration handling (2 exclusive modes)
+            # --------------------------------------------------
+            expiry_mode = (request.form.get("expiry_mode") or settings.get("expiry_mode") or "none").strip()
+            if expiry_mode not in ("none", "disable", "warn_then_disable"):
+                expiry_mode = "none"
+
+            warn_then_disable_days_raw = (request.form.get("warn_then_disable_days") or settings.get("warn_then_disable_days") or 7)
+            try:
+                warn_then_disable_days = int(warn_then_disable_days_raw)
+            except Exception:
+                warn_then_disable_days = int(settings.get("warn_then_disable_days") or 7)
+
+            # X days must be >= 1 (only meaningful for warn_then_disable)
+            if warn_then_disable_days < 1:
+                warn_then_disable_days = 1
+                
+            if expiry_mode != "warn_then_disable":
+                warn_then_disable_days = int(settings.get("warn_then_disable_days") or 7)
+
+
             new_values = {
                 "default_language": request.form.get(
                     "default_language", settings["default_language"]
@@ -6376,7 +6688,10 @@ def create_app():
                 ),
 
 
-                "disable_on_expiry": 1 if request.form.get("disable_on_expiry") == "1" else 0,
+                "expiry_mode": expiry_mode,
+                "warn_then_disable_days": warn_then_disable_days,
+                # legacy flag kept for backward compatibility
+                "disable_on_expiry": 1 if expiry_mode == "disable" else 0,
                 "enable_cron_jobs": 1 if request.form.get("enable_cron_jobs") == "1" else 0,
                 "maintenance_mode": 1 if request.form.get("maintenance_mode") == "1" else 0,
                 "debug_mode": 1 if request.form.get("debug_mode") == "1" else 0,
@@ -6390,6 +6705,7 @@ def create_app():
                 "delete_after_expiry_days",
                 "preavis_days",
                 "reminder_days",
+                "warn_then_disable_days",
             ):
                 try:
                     new_values[key] = int(new_values[key])
@@ -6409,6 +6725,8 @@ def create_app():
                     notifications_order = :notifications_order,
                     default_subscription_days = :default_subscription_days,
                     delete_after_expiry_days = :delete_after_expiry_days,
+                    expiry_mode = :expiry_mode,
+                    warn_then_disable_days = :warn_then_disable_days,
                     preavis_days = :preavis_days,
                     reminder_days = :reminder_days,
                     disable_on_expiry = :disable_on_expiry,
@@ -6438,13 +6756,20 @@ def create_app():
 
 
             # --------------------------------------------------
+                        # --------------------------------------------------
             # Sync TASKS from SETTINGS (source unique)
             # --------------------------------------------------
-            task_enabled = 1 if (
+            disable_task_enabled = 1 if (
                 new_values["enable_cron_jobs"] == 1
-                and new_values["disable_on_expiry"] == 1
+                and new_values.get("expiry_mode") == "disable"
             ) else 0
 
+            warn_task_enabled = 1 if (
+                new_values["enable_cron_jobs"] == 1
+                and new_values.get("expiry_mode") == "warn_then_disable"
+            ) else 0
+
+            # Mode A
             db.execute(
                 """
                 UPDATE tasks
@@ -6452,8 +6777,20 @@ def create_app():
                     status  = CASE WHEN ? = 1 THEN 'idle' ELSE 'disabled' END
                 WHERE name = 'disable_expired_users'
                 """,
-                (task_enabled, task_enabled),
+                (disable_task_enabled, disable_task_enabled),
             )
+
+            # Mode B
+            db.execute(
+                """
+                UPDATE tasks
+                SET enabled = ?,
+                    status  = CASE WHEN ? = 1 THEN 'idle' ELSE 'disabled' END
+                WHERE name = 'expired_subscription_manager'
+                """,
+                (warn_task_enabled, warn_task_enabled),
+            )
+
 
 
 
@@ -6738,4 +7075,5 @@ if (not app.debug) or (os.environ.get("WERKZEUG_RUN_MAIN") == "true"):
 
 
 if __name__ == "__main__":
+    _log_ip_filter_status()
     app.run(host="0.0.0.0", port=5000, use_reloader=False)
