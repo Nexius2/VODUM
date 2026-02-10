@@ -276,6 +276,11 @@ def run_migrations():
     ensure_column(cursor, "settings", "discord_bot_token", "TEXT DEFAULT NULL")
     ensure_column(cursor, "settings", "notifications_order", "TEXT DEFAULT 'email'")
     cursor.execute("UPDATE settings SET notifications_order = COALESCE(NULLIF(TRIM(notifications_order),''), 'email') WHERE id = 1")
+    # Expiration handling mode (NEW)
+    # - 'disable' : disable access immediately on expiration (task disable_expired_users)
+    # - 'warn_then_disable' : create a system policy at expiration, then disable access after X days
+    ensure_column(cursor, "settings", "expiry_mode", "TEXT DEFAULT 'disable'")
+    ensure_column(cursor, "settings", "warn_then_disable_days", "INTEGER DEFAULT 7")
 
     ensure_column(cursor, "vodum_users", "discord_user_id", "TEXT DEFAULT NULL")
     ensure_column(cursor, "vodum_users", "discord_name", "TEXT DEFAULT NULL")
@@ -1005,6 +1010,16 @@ Vodum Team
         "enabled": 0,                # pilotée par settings.disable_on_expiry
         "status": "idle"
     })
+    # Tâche expired_subscription_manager (policy "abonnement expiré" + disable différé)
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "expired_subscription_manager",
+        "description": "task_description.expired_subscription_manager",
+        "schedule": "0 */1 * * *",  # toutes les heures
+        "enabled": 0,               # pilotée par settings.expiry_mode
+        "status": "disabled"
+    })
+
+
 
     # Tâche apply_jellyfin_access_updates (désactivation des accès Jellyfin à l'expiration)
     ensure_row(cursor, "tasks", "name = :name", {
