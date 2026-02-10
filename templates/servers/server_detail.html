@@ -57,11 +57,32 @@
              class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
     </label>
 
-    <label class="flex flex-col">
-      {{ t("server_token") }}
-      <input type="text" name="token" value="{{ server.token or '' }}"
-             class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 font-mono text-xs">
-    </label>
+	<label class="flex flex-col">
+	  {{ t("server_token") }}
+
+	  <div class="relative mt-1">
+		<input
+		  id="server_token"
+		  type="password"
+		  name="token"
+		  value="{{ server.token or '' }}"
+		  class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 pr-10 font-mono text-xs"
+		  autocomplete="off"
+		  spellcheck="false"
+		>
+
+		<button
+		  type="button"
+		  id="toggle_server_token"
+		  class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 text-sm"
+		  aria-label="Toggle token visibility"
+		>
+		  👁️
+		</button>
+
+	  </div>
+	</label>
+
 
     <label class="flex flex-col">
       {{ t("local_url") }}
@@ -75,20 +96,6 @@
              class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
     </label>
 
-
-<!--
-    <label class="flex flex-col">
-      {{ t("tautulli_url") }}
-      <input type="text" name="tautulli_url" value="{{ server.tautulli_url or '' }}"
-             class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-    </label>
-
-    <label class="flex flex-col">
-      {{ t("tautulli_api_key") }}
-      <input type="text" name="tautulli_api_key" value="{{ server.tautulli_api_key or '' }}"
-             class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 font-mono text-xs">
-    </label>
--->
   </div>
 
   <!-- Barre d'actions -->
@@ -169,5 +176,25 @@
     <p class="text-xs text-slate-500">{{ t("no_users_for_server") }}</p>
   {% endif %}
 </div>
+
+<script>
+  // Toggle token (même comportement que Mailing)
+  document.addEventListener("DOMContentLoaded", () => {
+    const input = document.getElementById("server_token");
+    const btn   = document.getElementById("toggle_server_token");
+    if (!input || !btn) return;
+
+    btn.addEventListener("click", () => {
+      if (input.type === "password") {
+        input.type = "text";
+        btn.textContent = "🙈";
+      } else {
+        input.type = "password";
+        btn.textContent = "👁️";
+      }
+    });
+  });
+</script>
+
 
 {% endblock %}

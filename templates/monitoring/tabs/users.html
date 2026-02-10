@@ -4,6 +4,17 @@
     <div class="text-xs text-slate-400">30 rows / page</div>
   </div>
 
+	<form method="get" class="flex flex-wrap gap-3 mb-4">
+	  <input type="hidden" name="tab" value="users">
+	  <input type="hidden" name="page" value="1">
+	  <input name="q" value="{{ request.args.get('q','') }}" placeholder="Search username..."
+			 class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm w-full md:w-96">
+	  <button class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl px-4 py-2 text-sm">
+		Search
+	  </button>
+	</form>
+
+
   {% if rows is not defined %}
     <div class="text-slate-500">
       Backend not wired yet: variable <code class="text-slate-300">rows</code> missing.
@@ -55,7 +66,13 @@
         <tbody>
           {% for u in rows %}
             <tr class="border-b border-slate-800">
-              <td class="py-3 pr-4 font-semibold">{{ u.username or "-" }}</td>
+              <td class="py-3 pr-4 font-semibold">
+				  <a class="text-slate-200 hover:text-emerald-400"
+					 href="{{ url_for('monitoring_user_detail', user_id=u.user_id, view='profile') }}">
+					{{ u.username or "-" }}
+				  </a>
+			  </td>
+
               <td class="py-3 pr-4">{{ u.last_watch_at|tz or "-" }}</td>
               <td class="py-3 pr-4">{{ u.total_plays or 0 }}</td>
               <td class="py-3 pr-4">{{ u.watch_time or "0h 0m" }}</td>

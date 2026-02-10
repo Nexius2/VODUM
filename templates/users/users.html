@@ -4,6 +4,13 @@
 {% block title %}{{ t("users_title") }} - VODUM{% endblock %}
 {% block header_title %}{{ t("users") }}{% endblock %}
 {% block header_subtitle %}{{ t("users_subtitle") }}{% endblock %}
+{% block header_actions %}
+  <button id="btn_create_user" type="button"
+          class="text-sm px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white">
+    + Create user
+  </button>
+{% endblock %}
+
 
 {% block content %}
 
@@ -39,12 +46,7 @@
     }
 </style>
 
-<div class="flex items-center justify-end mb-4">
-  <button id="btn_create_user" type="button"
-          class="text-sm px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white">
-    + Create user
-  </button>
-</div>
+
 
 
 <!-- Filtres -->
