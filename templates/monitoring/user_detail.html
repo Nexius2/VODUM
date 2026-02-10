@@ -8,12 +8,13 @@
 {% include "monitoring/partials/_tabs.html" %}
 
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-6">
-  <div class="flex items-center justify-between">
+  <div class="flex items-center justify-between gap-6">
     <div>
       <div class="text-sm text-slate-400">User</div>
       <div class="text-xl font-semibold">{{ user.username or "-" }}</div>
       <div class="text-xs text-slate-500 mt-1">{{ user.type }} · server_id={{ user.server_id }}</div>
     </div>
+
     <div class="text-right text-xs text-slate-400">
       <div>Total plays: <span class="text-slate-200">{{ user.total_plays or 0 }}</span></div>
       <div>Watch time: <span class="text-slate-200">{{ user.watch_time or "0h 0m" }}</span></div>
@@ -22,64 +23,323 @@
   </div>
 </div>
 
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-  <div class="flex items-center justify-between mb-4">
-    <div class="text-sm font-semibold">History</div>
-    <div class="text-xs text-slate-400">30 rows / page</div>
+{# --------------------------
+   Sous-onglets type Tautulli
+   -------------------------- #}
+<div class="mb-6">
+  <div class="flex flex-wrap gap-2 border-b border-slate-800">
+    {% set args = dict(request.args) %}
+    {% set _ = args.pop("page", None) %}
+
+    <a class="px-4 py-2 text-sm rounded-t-xl border border-b-0
+              {{ 'bg-slate-900 border-slate-800 text-emerald-400 font-semibold' if view=='profile' else 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200' }}"
+       href="{{ url_for('monitoring_user_detail', user_id=user.id, view='profile') }}">
+      Profile
+    </a>
+
+    <a class="px-4 py-2 text-sm rounded-t-xl border border-b-0
+              {{ 'bg-slate-900 border-slate-800 text-emerald-400 font-semibold' if view=='history' else 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200' }}"
+       href="{{ url_for('monitoring_user_detail', user_id=user.id, view='history') }}">
+      History
+    </a>
+
+    <a class="px-4 py-2 text-sm rounded-t-xl border border-b-0
+              {{ 'bg-slate-900 border-slate-800 text-emerald-400 font-semibold' if view=='ip' else 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200' }}"
+       href="{{ url_for('monitoring_user_detail', user_id=user.id, view='ip') }}">
+      IP Addresses
+    </a>
   </div>
-
-  <form method="get" class="flex flex-wrap gap-3 mb-4">
-    <input type="hidden" name="page" value="1">
-    <input name="q" value="{{ q or '' }}" placeholder="Search title..."
-           class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm w-full md:w-96">
-    <button class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl px-4 py-2 text-sm">
-      Filter
-    </button>
-  </form>
-
-  <div class="overflow-x-auto">
-    <table class="w-full text-sm">
-      <thead>
-        <tr class="text-left text-slate-400 border-b border-slate-800">
-          <th class="py-2 pr-4">Date</th>
-          <th class="py-2 pr-4">Server</th>
-          <th class="py-2 pr-4">Media</th>
-          <th class="py-2 pr-4">Type</th>
-          <th class="py-2 pr-4">Playback</th>
-          <th class="py-2 pr-4">Device</th>
-          <th class="py-2 pr-4">IP</th>
-          <th class="py-2 pr-4">Duration</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for r in rows %}
-          <tr class="border-b border-slate-800">
-            <td class="py-3 pr-4 text-slate-300">{{ r.stopped_at }}</td>
-            <td class="py-3 pr-4">
-              <div class="font-semibold">{{ r.server_name }}</div>
-              <div class="text-xs text-slate-500">{{ r.provider }}</div>
-            </td>
-            <td class="py-3 pr-4">
-              <div class="font-semibold">{{ r.title or "-" }}</div>
-              {% if r.grandparent_title %}
-                <div class="text-xs text-slate-500">{{ r.grandparent_title }}</div>
-              {% endif %}
-            </td>
-            <td class="py-3 pr-4">{{ r.media_type or "-" }}</td>
-            <td class="py-3 pr-4">{{ r.playback_type or "-" }}</td>
-            <td class="py-3 pr-4">{{ r.device or "-" }}</td>
-            <td class="py-3 pr-4">{{ r.ip or "-" }}</td>
-            <td class="py-3 pr-4">{{ r.watch_time or "-" }}</td>
-          </tr>
-        {% endfor %}
-        {% if rows|length == 0 %}
-          <tr><td colspan="8" class="py-6 text-slate-500">No results.</td></tr>
-        {% endif %}
-      </tbody>
-    </table>
-  </div>
-
-  {% include "monitoring/partials/_pagination.html" %}
 </div>
+
+{# ==========================
+   PROFILE
+   ========================== #}
+{% if view == "profile" %}
+  <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+    {% set s24 = profile.last_24h %}
+    {% set s7  = profile.last_7d %}
+    {% set s30 = profile.last_30d %}
+    {% set sa  = profile.all_time %}
+
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+      <div class="text-xs text-slate-400">Last 24 hours</div>
+      <div class="mt-2 text-2xl font-semibold">{{ s24.plays }}</div>
+      <div class="text-xs text-slate-500">plays · {{ s24.watch_time }}</div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+      <div class="text-xs text-slate-400">Last 7 days</div>
+      <div class="mt-2 text-2xl font-semibold">{{ s7.plays }}</div>
+      <div class="text-xs text-slate-500">plays · {{ s7.watch_time }}</div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+      <div class="text-xs text-slate-400">Last 30 days</div>
+      <div class="mt-2 text-2xl font-semibold">{{ s30.plays }}</div>
+      <div class="text-xs text-slate-500">plays · {{ s30.watch_time }}</div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+      <div class="text-xs text-slate-400">All time</div>
+      <div class="mt-2 text-2xl font-semibold">{{ sa.plays }}</div>
+      <div class="text-xs text-slate-500">plays · {{ sa.watch_time }}</div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+      <div class="text-sm font-semibold mb-3">Plays / day (30d)</div>
+		<div class="relative w-full h-[320px]">
+		  <canvas id="chartUserPlays" class="w-full h-full"></canvas>
+		</div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+      <div class="text-sm font-semibold mb-3">Watch time / day (30d)</div>
+		<div class="relative w-full h-[320px]">
+		  <canvas id="chartUserWatch" class="w-full h-full"></canvas>
+		</div>
+
+    </div>
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-sm font-semibold mb-4">Top players</div>
+
+    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+      {% for p in profile.top_players %}
+        <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+          <div class="text-xs text-slate-400 truncate">{{ p.player }}</div>
+          <div class="mt-2 text-xl font-semibold text-amber-300">{{ p.plays }}</div>
+          <div class="text-xs text-slate-500">plays</div>
+        </div>
+      {% endfor %}
+      {% if (profile.top_players|length) == 0 %}
+        <div class="text-slate-500">No player stats.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    async function waitForChart(maxMs = 8000) {
+      const start = Date.now();
+      return new Promise((resolve, reject) => {
+        const tick = () => {
+          if (window.Chart) return resolve();
+          if (Date.now() - start > maxMs) return reject(new Error("Chart.js not loaded"));
+          setTimeout(tick, 50);
+        };
+        tick();
+      });
+    }
+
+    async function fetchJSON(url) {
+      const res = await fetch(url, { cache: "no-cache" });
+      if (!res.ok) throw new Error(`HTTP ${res.status} on ${url}`);
+      return res.json();
+    }
+
+	function baseOpts() {
+	  return {
+		responsive: true,
+		maintainAspectRatio: false,
+		animation: false,
+		normalized: true,
+		plugins: {
+		  legend: {
+			labels: {
+			  color: "#94a3b8"
+			}
+		  }
+		},
+		scales: {
+		  x: {
+			ticks: { color: "#64748b" },
+			grid: { color: "rgba(148,163,184,0.08)" }
+		  },
+		  y: {
+			ticks: { color: "#64748b" },
+			grid: { color: "rgba(148,163,184,0.08)" }
+		  }
+		}
+	  };
+	}
+		
+
+    function hoursFromMs(ms) { return (Number(ms || 0) / 3600000); }
+
+    (async () => {
+      await waitForChart();
+
+      const data = await fetchJSON("{{ url_for('api_monitoring_user_daily', user_id=user.id) }}?range=30d");
+      const labels = (data || []).map(x => x.day);
+      const plays  = (data || []).map(x => Number(x.plays || 0));
+      const watch  = (data || []).map(x => hoursFromMs(x.watch_ms));
+
+      const elPlays = document.getElementById("chartUserPlays");
+      const elWatch = document.getElementById("chartUserWatch");
+
+		if (!elPlays || !elWatch) {
+		  console.error("Missing canvas", { elPlays, elWatch });
+		  return;
+		}
+
+
+		new Chart(elPlays.getContext("2d"), {
+		  type: "line",
+		  data: {
+			labels,
+			datasets: [{
+			  label: "Plays",
+			  data: plays,
+			  tension: 0.4,
+			  fill: true,
+			  borderWidth: 2,
+			  pointRadius: 3,
+			  backgroundColor: "rgba(16,185,129,0.08)",
+			  borderColor: "rgba(16,185,129,1)"
+			}]
+		  },
+		  options: baseOpts()
+		});
+
+
+		new Chart(elWatch.getContext("2d"), {
+		  type: "line",
+		  data: {
+			labels,
+			datasets: [{
+			  label: "Hours",
+			  data: watch,
+			  tension: 0.4,
+			  fill: true,
+			  borderWidth: 2,
+			  pointRadius: 3,
+			  backgroundColor: "rgba(59,130,246,0.08)",
+			  borderColor: "rgba(59,130,246,1)"
+			}]
+		  },
+		  options: baseOpts()
+		});
+
+    })().catch(console.error);
+  })();
+  </script>
+{% endif %}
+
+{# ==========================
+   HISTORY
+   ========================== #}
+{% if view == "history" %}
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="flex items-center justify-between mb-4">
+      <div class="text-sm font-semibold">History</div>
+      <div class="text-xs text-slate-400">30 rows / page</div>
+    </div>
+
+    <form method="get" class="flex flex-wrap gap-3 mb-4">
+      <input type="hidden" name="view" value="history">
+      <input type="hidden" name="page" value="1">
+      <input name="q" value="{{ q or '' }}" placeholder="Search title..."
+             class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm w-full md:w-96">
+      <button class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl px-4 py-2 text-sm">
+        Filter
+      </button>
+    </form>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-slate-400 border-b border-slate-800">
+            <th class="py-2 pr-4">Date</th>
+            <th class="py-2 pr-4">Server</th>
+            <th class="py-2 pr-4">Media</th>
+            <th class="py-2 pr-4">Type</th>
+            <th class="py-2 pr-4">Playback</th>
+            <th class="py-2 pr-4">Device</th>
+            <th class="py-2 pr-4">IP</th>
+            <th class="py-2 pr-4">Duration</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+            <tr class="border-b border-slate-800">
+              <td class="py-3 pr-4 text-slate-300">{{ r.stopped_at }}</td>
+              <td class="py-3 pr-4">
+                <div class="font-semibold">{{ r.server_name }}</div>
+                <div class="text-xs text-slate-500">{{ r.provider }}</div>
+              </td>
+              <td class="py-3 pr-4">
+                <div class="font-semibold">{{ r.title or "-" }}</div>
+                {% if r.grandparent_title %}
+                  <div class="text-xs text-slate-500">{{ r.grandparent_title }}</div>
+                {% endif %}
+              </td>
+              <td class="py-3 pr-4">{{ r.media_type or "-" }}</td>
+              <td class="py-3 pr-4">{{ r.playback_type or "-" }}</td>
+              <td class="py-3 pr-4">{{ r.device or "-" }}</td>
+              <td class="py-3 pr-4">{{ r.ip or "-" }}</td>
+              <td class="py-3 pr-4">{{ r.watch_time or "-" }}</td>
+            </tr>
+          {% endfor %}
+          {% if rows|length == 0 %}
+            <tr><td colspan="8" class="py-6 text-slate-500">No results.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if pagination %}
+      {% include "monitoring/partials/_pagination.html" %}
+    {% endif %}
+  </div>
+{% endif %}
+
+{# ==========================
+   IP ADDRESSES
+   ========================== #}
+{% if view == "ip" %}
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="flex items-center justify-between mb-4">
+      <div class="text-sm font-semibold">IP Addresses</div>
+      <div class="text-xs text-slate-400">All time</div>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-slate-400 border-b border-slate-800">
+            <th class="py-2 pr-4">Last streamed</th>
+            <th class="py-2 pr-4">First streamed</th>
+            <th class="py-2 pr-4">IP</th>
+            <th class="py-2 pr-4">Last platform</th>
+            <th class="py-2 pr-4">Last player</th>
+            <th class="py-2 pr-4">Last played</th>
+            <th class="py-2 pr-4">Play count</th>
+            <th class="py-2 pr-4">Watch time</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in ip_rows %}
+            <tr class="border-b border-slate-800">
+              <td class="py-3 pr-4 text-slate-300">{{ r.last_seen }}</td>
+              <td class="py-3 pr-4 text-slate-300">{{ r.first_seen }}</td>
+              <td class="py-3 pr-4 font-semibold">{{ r.ip }}</td>
+              <td class="py-3 pr-4">{{ r.last_platform or "-" }}</td>
+              <td class="py-3 pr-4">{{ r.last_player or "-" }}</td>
+              <td class="py-3 pr-4">{{ r.last_played or "-" }}</td>
+              <td class="py-3 pr-4">{{ r.play_count or 0 }}</td>
+              <td class="py-3 pr-4">{{ r.watch_time or "-" }}</td>
+            </tr>
+          {% endfor %}
+          {% if ip_rows|length == 0 %}
+            <tr><td colspan="8" class="py-6 text-slate-500">No IP history.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endif %}
 
 {% endblock %}

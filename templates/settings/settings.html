@@ -21,4 +21,24 @@
 
 </form>
 
+<script>
+  // Toggle admin password (même comportement que Mailing)
+  document.addEventListener("DOMContentLoaded", () => {
+    const input = document.getElementById("admin_password");
+    const btn   = document.getElementById("toggle_admin_password");
+    if (!input || !btn) return;
+
+    btn.addEventListener("click", () => {
+      if (input.type === "password") {
+        input.type = "text";
+        btn.textContent = "🙈";
+      } else {
+        input.type = "password";
+        btn.textContent = "👁️";
+      }
+    });
+  });
+</script>
+
+
 {% endblock %}
