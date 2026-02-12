@@ -4,15 +4,19 @@
     <div class="text-xs text-slate-400">30 rows / page</div>
   </div>
 
-	<form method="get" class="flex flex-wrap gap-3 mb-4">
+	<form method="get" id="monitoring_users_filter_form" class="flex flex-wrap items-center gap-3 mb-4">
 	  <input type="hidden" name="tab" value="users">
 	  <input type="hidden" name="page" value="1">
-	  <input name="q" value="{{ request.args.get('q','') }}" placeholder="Search username..."
+
+	  <input id="monitoring_users_search_input"
+			 type="text"
+			 name="q"
+			 value="{{ request.args.get('q','') }}"
+			 placeholder="Search username..."
 			 class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm w-full md:w-96">
-	  <button class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl px-4 py-2 text-sm">
-		Search
-	  </button>
 	</form>
+
+
 
 
   {% if rows is not defined %}
@@ -93,3 +97,5 @@
     {% endif %}
   {% endif %}
 </div>
+
+

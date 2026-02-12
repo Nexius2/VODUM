@@ -20,7 +20,7 @@
   </div>
 
 	<div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-	  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+	  <div id="donutGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
 		<!-- LEFT -->
 		<div>
 		  <div class="text-sm font-semibold mb-3">Media types</div>
@@ -30,12 +30,13 @@
 		</div>
 
 		<!-- RIGHT -->
-		<div>
+		<div id="perServerBlock">
 		  <div class="text-sm font-semibold mb-3">Per server</div>
 		  <div class="chart-container chart-container-sm">
 			<canvas id="chartPerServer"></canvas>
 		  </div>
 		</div>
+
 	  </div>
 	</div>
 
@@ -336,7 +337,30 @@
 
     update(chartActivity, toLabels(a, "day"), toLabels(a, "sessions"));
     updateMediaTypes(chartMedia, toLabels(m, "media_type"), toLabels(m, "sessions"));
-    updatePerServer(chartServer, toLabels(s, "server_name"), toLabels(s, "sessions"));
+	const serverLabels = toLabels(s, "server_name") || [];
+	const serverValues = toLabels(s, "sessions") || [];
+
+	const activeServers = serverValues.filter(v => Number(v) > 0);
+
+	const perServerBlock = document.getElementById("perServerBlock");
+
+	const donutGrid = document.getElementById("donutGrid");
+
+	if (activeServers.length <= 1) {
+	  if (perServerBlock) perServerBlock.style.display = "none";
+	  // ✅ Media types prend toute la place
+	  if (donutGrid) donutGrid.classList.remove("md:grid-cols-2");
+	} else {
+	  if (perServerBlock) perServerBlock.style.display = "";
+	  // ✅ On remet 2 colonnes
+	  if (donutGrid && !donutGrid.classList.contains("md:grid-cols-2")) {
+		donutGrid.classList.add("md:grid-cols-2");
+	  }
+	  updatePerServer(chartServer, serverLabels, serverValues);
+	}
+	manualResizeAll([{ chart: chartMedia, canvas: elMedia }]);
+
+
 
     const names = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
     chartWeekday.data.labels = (w || []).map(x => names[x.weekday] ?? String(x.weekday));
