@@ -21,11 +21,36 @@ NB: Les comptes utilisateurs restent chez Plex/Jellyfin, seuls les accès sont r
 from __future__ import annotations
 
 from datetime import date
+import json
 
 from tasks_engine import task_logs
 from logging_utils import get_logger
 
 log = get_logger("disable_expired_users")
+
+SYSTEM_TAG = "expired_subscription"
+
+def _purge_expired_subscription_policies(db) -> int:
+    """
+    En mode expiry_mode='disable', on ne veut AUCUNE policy de type 'expired_subscription'.
+    On les purge toutes.
+    """
+    rows = db.query(
+        "SELECT id, rule_value_json FROM stream_policies WHERE scope_type='user'"
+    ) or []
+
+    removed = 0
+    for r in rows:
+        try:
+            rule = json.loads(r["rule_value_json"] or "{}")
+        except Exception:
+            rule = {}
+
+        if rule.get("system_tag") == SYSTEM_TAG:
+            db.execute("DELETE FROM stream_policies WHERE id = ?", (int(r["id"]),))
+            removed += 1
+
+    return removed
 
 
 def _get_settings(db) -> dict:
@@ -39,6 +64,15 @@ def run(task_id: int, db):
 
     if mode != "disable":
         return
+
+    # En mode disable, on purge les anciennes policies système éventuelles
+    try:
+        removed = _purge_expired_subscription_policies(db)
+        if removed:
+            log.info(f"Purged {removed} expired_subscription system policy(ies) (expiry_mode=disable)")
+    except Exception:
+        log.error("Failed to purge expired_subscription policies", exc_info=True)
+
 
     task_logs(task_id, "info", "Task disable_expired_users started")
     log.info("=== DISABLE EXPIRED USERS : START ===")

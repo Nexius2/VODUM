@@ -741,6 +741,11 @@
   "yes": "Yes",
   "subscription_expiry_mode_none_title": "No automatic action",
   "subscription_expiry_mode_none_help": "No action will be taken when the subscription expires.",
-  "delete_after_expiry_days_help": "Removes media server access after X days. Plex: the user is not deleted from Plex, only the library shares are revoked."
+  "delete_after_expiry_days_help": "Removes media server access after X days. Plex: the user is not deleted from Plex, only the library shares are revoked.",
+  "user_id": "User ID",
+  "task.stream_enforcer": "Stream enforcer",
+  "task_description.stream_enforcer": "Enforces streaming policies and limits active sessions."
+
+
 
 }

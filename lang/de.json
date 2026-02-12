@@ -711,6 +711,11 @@
   "yes": "Ja",
   "subscription_expiry_mode_none_title": "Keine automatische Aktion",
   "subscription_expiry_mode_none_help": "Es wird keine Aktion ausgeführt, wenn das Abonnement abläuft.",
-  "delete_after_expiry_days_help": "Entzieht den Zugriff auf den Media-Server nach X Tagen. Plex: Der Benutzer wird nicht aus Plex gelöscht, sondern nur die Freigaben werden entfernt."
+  "delete_after_expiry_days_help": "Entzieht den Zugriff auf den Media-Server nach X Tagen. Plex: Der Benutzer wird nicht aus Plex gelöscht, sondern nur die Freigaben werden entfernt.",
+  "user_id": "User ID",
+  "task.stream_enforcer": "Stream-Überwachung",
+  "task_description.stream_enforcer": "Setzt Streaming-Richtlinien durch und überwacht aktive Sitzungen."
+
+
 
 }

@@ -3,6 +3,8 @@ import json
 from datetime import datetime, timezone
 import requests
 from logging_utils import get_logger
+import re
+
 
 logger = get_logger("task_check_update")
 
@@ -28,6 +30,42 @@ def _read_local_version() -> str:
             return _read_version_from_info_text(f.read()) or "dev"
     except Exception:
         return "dev"
+
+def _normalize_version_str(v: str) -> str:
+    return (v or "").strip()
+
+
+def _parse_version_tuple(v: str):
+    s = _normalize_version_str(v)
+    if not s or s.lower() == "dev":
+        return None
+
+    # enlève un éventuel "v" en début
+    if s.lower().startswith("v"):
+        s = s[1:].strip()
+
+    # ex: "26.02.10 b1841"
+    m = re.match(r"^(\d+)\.(\d+)\.(\d+)(?:\s*[ -]?\s*b(\d+))?$", s, re.IGNORECASE)
+    if not m:
+        return None
+
+    yy = int(m.group(1))
+    mm = int(m.group(2))
+    dd = int(m.group(3))
+    build = int(m.group(4)) if m.group(4) else 0
+
+    return (yy, mm, dd, build)
+
+
+def _is_update_available(local_v: str, remote_v: str) -> bool:
+    local_t = _parse_version_tuple(local_v)
+    remote_t = _parse_version_tuple(remote_v)
+
+    if local_t is not None and remote_t is not None:
+        return remote_t > local_t
+
+    # fallback (comportement historique)
+    return bool(remote_v and _normalize_version_str(remote_v) != _normalize_version_str(local_v))
 
 
 def _raw_info_url() -> str:
@@ -80,7 +118,7 @@ def run(task_id: int = None, db=None):
 
         latest = _read_version_from_info_text(r.text)
         payload["latest_version"] = latest or None
-        payload["update_available"] = bool(latest and latest != local_version)
+        payload["update_available"] = _is_update_available(local_version, latest)
 
         if payload["update_available"]:
             logger.info(f"Update available: local={local_version} remote={latest}")

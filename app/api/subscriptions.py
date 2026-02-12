@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from datetime import date, timedelta
 import os
+import json
 
 from db_manager import DBManager
 from logging_utils import get_logger
@@ -13,6 +14,35 @@ subscriptions_api = Blueprint("subscriptions_api", __name__)
 # ------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------
+
+def _remove_expired_subscription_policy_for_user(db, user_id: int) -> int:
+    """
+    Supprime toutes les stream_policies (scope=user) dont le rule_value_json contient system_tag=expired_subscription
+    pour ce user.
+    Retourne le nombre de policies supprimées.
+    """
+    rows = db.query(
+        """
+        SELECT id, rule_value_json
+        FROM stream_policies
+        WHERE scope_type = 'user' AND scope_id = ?
+        """,
+        (user_id,),
+    ) or []
+
+    removed = 0
+    for r in rows:
+        try:
+            rule = json.loads(r["rule_value_json"] or "{}")
+        except Exception:
+            rule = {}
+
+        if rule.get("system_tag") == "expired_subscription":
+            db.execute("DELETE FROM stream_policies WHERE id = ?", (int(r["id"]),))
+            removed += 1
+
+    return removed
+
 
 def update_user_expiration(user_id, new_expiration_date, reason="manual"):
     """
@@ -46,6 +76,14 @@ def update_user_expiration(user_id, new_expiration_date, reason="manual"):
         """,
         (new_expiration_date, user_id)
     )
+
+    # Si on renouvelle (date future), on supprime la policy système "expired_subscription"
+    # (important si le mode a changé et que expired_subscription_manager ne tourne plus)
+    if new_exp >= date.today():
+        removed = _remove_expired_subscription_policy_for_user(db, int(user_id))
+        if removed:
+            log.info(f"[USER #{user_id}] Removed {removed} expired_subscription system policy(ies) after renewal")
+
 
     # 🔁 Nouveau cycle → reset sent_emails
     if new_exp > old_exp:

@@ -895,10 +895,17 @@ def scheduler_loop():
                 if not schedule:
                     continue
 
-                # Si la tâche est déjà running, on NE BLOQUE PAS l'enqueue
-                # Le worker gère l'ordre via queued_count
-                if status == "running":
+                # Anti-spam: si déjà en file ou en cours, on n'enfile pas plus
+                queued_count = None
+                try:
+                    qc = db.query_one("SELECT queued_count FROM tasks WHERE id=?", (task_id,))
+                    queued_count = int(qc["queued_count"]) if qc else 0
+                except Exception:
+                    queued_count = 0
+
+                if status in ("running", "queued") or (queued_count and queued_count > 0):
                     continue
+
 
                 # ---------------------------
                 # Calcul du prochain run
@@ -940,6 +947,12 @@ def scheduler_loop():
                         continue
 
                     logger.info(f"First forced execution (one-shot): {name}")
+                    try:
+                        next_future = croniter(schedule, now).get_next(datetime)
+                        db.execute("UPDATE tasks SET next_run=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (next_future, task_id))
+                    except Exception:
+                        pass
+
                     enqueue_task(task_id)
 
                     # IMPORTANT: on marque un last_run "bootstrap" pour éviter le spam à chaque tick
@@ -954,10 +967,27 @@ def scheduler_loop():
                     continue
 
 
-                # 🔑 Exécution planifiée
+                # 🔑 Exécution planifiée (rattrapage 1x, sans catch-up)
                 if next_exec <= now:
-                    logger.info(f"Programed task late: {name}")
+                    logger.info(f"Scheduled task due (late): {name}")
+
+                    # IMPORTANT: on décale tout de suite next_run dans le futur
+                    # => évite d'enfiler en boucle tant que le worker n'a pas tourné
+                    try:
+                        next_future = croniter(schedule, now).get_next(datetime)
+                        db.execute(
+                            "UPDATE tasks SET next_run=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                            (next_future, task_id),
+                        )
+                    except Exception as e:
+                        # si DB locked, on évite de spammer: on n'enfile pas
+                        if "locked" in str(e).lower():
+                            logger.warning(f"DB locked while updating next_run for '{name}', skipping enqueue this tick")
+                            continue
+                        raise
+
                     enqueue_task(task_id)
+
 
         except Exception as e:
             logger.error(f"Error scheduler (global): {e}", exc_info=True)
