@@ -12,7 +12,17 @@
     <div>
       <div class="text-sm text-slate-400">User</div>
       <div class="text-xl font-semibold">{{ user.username or "-" }}</div>
-      <div class="text-xs text-slate-500 mt-1">{{ user.type }} · server_id={{ user.server_id }}</div>
+
+      <div class="text-xs text-slate-500 mt-1">
+        IDs :
+        {% if user.ids_by_type %}
+          {% for t, ids in user.ids_by_type.items() %}
+            <span class="text-slate-300">{{ t }}={{ ids|join(',') }}</span>{% if not loop.last %} · {% endif %}
+          {% endfor %}
+        {% else %}
+          <span class="text-slate-300">{{ user.id }}</span>
+        {% endif %}
+      </div>
     </div>
 
     <div class="text-right text-xs text-slate-400">
@@ -24,7 +34,7 @@
 </div>
 
 {# --------------------------
-   Sous-onglets type Tautulli
+   Sous-onglets
    -------------------------- #}
 <div class="mb-6">
   <div class="flex flex-wrap gap-2 border-b border-slate-800">
@@ -55,51 +65,117 @@
    PROFILE
    ========================== #}
 {% if view == "profile" %}
-  <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
-    {% set s24 = profile.last_24h %}
-    {% set s7  = profile.last_7d %}
-    {% set s30 = profile.last_30d %}
-    {% set sa  = profile.all_time %}
 
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+{% set s24 = profile.last_24h %}
+{% set s7  = profile.last_7d %}
+{% set s30 = profile.last_30d %}
+{% set sa  = profile.all_time %}
+
+{# ===== TOP ROW: stats left + insights right ===== #}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+
+  {# LEFT: 2x2 stats grid (comme ton mockup) #}
+  <div class="grid grid-cols-2 gap-4 lg:col-span-1">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
       <div class="text-xs text-slate-400">Last 24 hours</div>
       <div class="mt-2 text-2xl font-semibold">{{ s24.plays }}</div>
       <div class="text-xs text-slate-500">plays · {{ s24.watch_time }}</div>
     </div>
 
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
       <div class="text-xs text-slate-400">Last 7 days</div>
       <div class="mt-2 text-2xl font-semibold">{{ s7.plays }}</div>
       <div class="text-xs text-slate-500">plays · {{ s7.watch_time }}</div>
     </div>
 
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
       <div class="text-xs text-slate-400">Last 30 days</div>
       <div class="mt-2 text-2xl font-semibold">{{ s30.plays }}</div>
       <div class="text-xs text-slate-500">plays · {{ s30.watch_time }}</div>
     </div>
 
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
       <div class="text-xs text-slate-400">All time</div>
       <div class="mt-2 text-2xl font-semibold">{{ sa.plays }}</div>
       <div class="text-xs text-slate-500">plays · {{ sa.watch_time }}</div>
     </div>
   </div>
 
+  {# RIGHT: Insights big card (2 donuts if server_usage_30d_show) #}
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 lg:col-span-2">
+    <div class="text-sm font-semibold mb-4">Insights (30d)</div>
+
+    {% if user.server_usage_30d_show %}
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+
+        {# Media types donut + legend #}
+        <div class="flex items-center gap-6">
+          <div class="w-[230px] h-[180px] shrink-0">
+            <canvas id="chartMediaTypes"></canvas>
+          </div>
+          <div class="min-w-0">
+            <div class="text-sm font-semibold mb-2">Media types</div>
+            {% if user.media_types_30d_show %}
+              <div id="legendMediaTypes" class="space-y-1 text-xs text-slate-400"></div>
+            {% else %}
+              <div class="text-xs text-slate-500">No data (30d).</div>
+            {% endif %}
+          </div>
+        </div>
+
+        {# Per server donut + legend #}
+        <div class="flex items-center gap-6">
+          <div class="w-[230px] h-[180px] shrink-0">
+            <canvas id="chartServerUsage"></canvas>
+          </div>
+          <div class="min-w-0">
+            <div class="text-sm font-semibold mb-2">Per server</div>
+            <div id="legendPerServer" class="space-y-1 text-xs text-slate-400"></div>
+          </div>
+        </div>
+
+      </div>
+
+    {% else %}
+      {# 1 donut only => plus compact, centré, pas de gros vide #}
+      <div class="flex items-center justify-center">
+        <div class="flex items-center gap-6 max-w-3xl w-full">
+          <div class="w-[230px] h-[180px] shrink-0">
+            <canvas id="chartMediaTypes"></canvas>
+          </div>
+          <div class="min-w-0">
+            <div class="text-sm font-semibold mb-2">Media types</div>
+            {% if user.media_types_30d_show %}
+              <div id="legendMediaTypes" class="space-y-1 text-xs text-slate-400"></div>
+            {% else %}
+              <div class="text-xs text-slate-500">No data (30d).</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
+  </div>
+</div>
+
+
+
+
+
+  {# Courbes du dessous #}
   <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
       <div class="text-sm font-semibold mb-3">Plays / day (30d)</div>
-		<div class="relative w-full h-[320px]">
-		  <canvas id="chartUserPlays" class="w-full h-full"></canvas>
-		</div>
+      <div class="relative w-full h-[320px]">
+        <canvas id="chartUserPlays" class="w-full h-full"></canvas>
+      </div>
     </div>
 
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
       <div class="text-sm font-semibold mb-3">Watch time / day (30d)</div>
-		<div class="relative w-full h-[320px]">
-		  <canvas id="chartUserWatch" class="w-full h-full"></canvas>
-		</div>
-
+      <div class="relative w-full h-[320px]">
+        <canvas id="chartUserWatch" class="w-full h-full"></canvas>
+      </div>
     </div>
   </div>
 
@@ -122,7 +198,10 @@
 
   <script>
   (() => {
-    async function waitForChart(maxMs = 8000) {
+    // -----------------------
+    // Helpers
+    // -----------------------
+    function waitForChart(maxMs = 8000) {
       const start = Date.now();
       return new Promise((resolve, reject) => {
         const tick = () => {
@@ -140,38 +219,168 @@
       return res.json();
     }
 
-	function baseOpts() {
-	  return {
-		responsive: true,
-		maintainAspectRatio: false,
-		animation: false,
-		normalized: true,
-		plugins: {
-		  legend: {
-			labels: {
-			  color: "#94a3b8"
-			}
-		  }
-		},
-		scales: {
-		  x: {
-			ticks: { color: "#64748b" },
-			grid: { color: "rgba(148,163,184,0.08)" }
-		  },
-		  y: {
-			ticks: { color: "#64748b" },
-			grid: { color: "rgba(148,163,184,0.08)" }
-		  }
-		}
-	  };
-	}
-		
-
     function hoursFromMs(ms) { return (Number(ms || 0) / 3600000); }
 
+    function baseLineOpts() {
+      return {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        normalized: true,
+        plugins: {
+          legend: { labels: { color: "#94a3b8" } }
+        },
+        scales: {
+          x: { ticks: { color: "#64748b" }, grid: { color: "rgba(148,163,184,0.08)" } },
+          y: { ticks: { color: "#64748b" }, grid: { color: "rgba(148,163,184,0.08)" }, beginAtZero: true }
+        }
+      };
+    }
+
+    function doughnutOpts() {
+      return {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        cutout: "70%",
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: true }
+        }
+      };
+    }
+
+    function makeLegend(container, labels, values, colors) {
+      if (!container) return;
+      const total = values.reduce((a, b) => a + (Number(b) || 0), 0) || 0;
+
+      container.innerHTML = "";
+      labels.forEach((label, i) => {
+        const v = Number(values[i] || 0);
+        if (!v) return;
+        const pct = total ? Math.round((v / total) * 100) : 0;
+
+        const row = document.createElement("div");
+        row.className = "flex items-center justify-between gap-3";
+
+        const left = document.createElement("div");
+        left.className = "flex items-center gap-2 min-w-0";
+
+        const dot = document.createElement("span");
+        dot.className = "inline-block w-2.5 h-2.5 rounded-full shrink-0";
+        dot.style.backgroundColor = colors[i] || "rgba(148,163,184,0.7)";
+
+        const text = document.createElement("span");
+        text.className = "truncate";
+        text.textContent = label;
+
+        left.appendChild(dot);
+        left.appendChild(text);
+
+        const right = document.createElement("div");
+        right.className = "shrink-0 text-slate-500";
+        right.textContent = `${pct}%`;
+
+        row.appendChild(left);
+        row.appendChild(right);
+
+        container.appendChild(row);
+      });
+    }
+
+    function hashColor(str) {
+      const s = String(str || "unknown").toLowerCase();
+      let h = 0;
+      for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+      const r = 80 + (h & 0x7F);
+      const g = 80 + ((h >> 7) & 0x7F);
+      const b = 80 + ((h >> 14) & 0x7F);
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+
+    function mediaColor(label) {
+      const k = String(label || "unknown").toLowerCase().trim();
+      const MAP = {
+        movie:  "#3B82F6",
+        serie:  "#10B981",
+        episode:"#10B981",
+        show:   "#10B981",
+        other:  "#EF4444",
+        unknown:"#94A3B8"
+      };
+      if (MAP[k]) return MAP[k];
+      if (k.includes("serie") || k.includes("episode") || k.includes("show")) return MAP.serie;
+      if (k.includes("movie") || k.includes("film")) return MAP.movie;
+      return hashColor(k);
+    }
+
+    // -----------------------
+    // Init
+    // -----------------------
     (async () => {
       await waitForChart();
 
+      // -------- Donuts (Insights 30d) --------
+      const mt = {{ (user.media_types_30d or []) | tojson }};
+      const su = {{ (user.server_usage_30d or []) | tojson }};
+
+      const mtEl = document.getElementById("chartMediaTypes");
+      if (mtEl && Array.isArray(mt) && mt.length) {
+        const mtLabels = mt.map(x => x.label);
+        const mtValues = mt.map(x => Number(x.plays || 0));
+        const mtColors = mtLabels.map(mediaColor);
+
+        new Chart(mtEl.getContext("2d"), {
+          type: "doughnut",
+          data: {
+            labels: mtLabels,
+            datasets: [{
+              data: mtValues,
+              backgroundColor: mtColors,
+              borderColor: "rgba(255,255,255,0.06)",
+              borderWidth: 1
+            }]
+          },
+          options: doughnutOpts()
+        });
+
+        makeLegend(
+          document.getElementById("legendMediaTypes"),
+          mtLabels,
+          mtValues,
+          mtColors
+        );
+      }
+
+      const suEl = document.getElementById("chartServerUsage");
+      if (suEl && Array.isArray(su) && su.length) {
+        const suLabels = su.map(x => x.label);
+        const suValues = su.map(x => Number(x.plays || 0));
+        const suColors = suLabels.map(hashColor);
+
+        new Chart(suEl.getContext("2d"), {
+          type: "doughnut",
+          data: {
+            labels: suLabels,
+            datasets: [{
+              data: suValues,
+              backgroundColor: suColors,
+              borderColor: "rgba(255,255,255,0.06)",
+              borderWidth: 1
+            }]
+          },
+          options: doughnutOpts()
+        });
+
+        makeLegend(
+          document.getElementById("legendPerServer"),
+          suLabels,
+          suValues,
+          suColors
+        );
+      }
+
+      // -------- Line charts (30d) --------
       const data = await fetchJSON("{{ url_for('api_monitoring_user_daily', user_id=user.id) }}?range=30d");
       const labels = (data || []).map(x => x.day);
       const plays  = (data || []).map(x => Number(x.plays || 0));
@@ -179,53 +388,47 @@
 
       const elPlays = document.getElementById("chartUserPlays");
       const elWatch = document.getElementById("chartUserWatch");
+      if (!elPlays || !elWatch) return;
 
-		if (!elPlays || !elWatch) {
-		  console.error("Missing canvas", { elPlays, elWatch });
-		  return;
-		}
+      new Chart(elPlays.getContext("2d"), {
+        type: "line",
+        data: {
+          labels,
+          datasets: [{
+            label: "Plays",
+            data: plays,
+            tension: 0.4,
+            fill: true,
+            borderWidth: 2,
+            pointRadius: 3,
+            backgroundColor: "rgba(16,185,129,0.08)",
+            borderColor: "rgba(16,185,129,1)"
+          }]
+        },
+        options: baseLineOpts()
+      });
 
-
-		new Chart(elPlays.getContext("2d"), {
-		  type: "line",
-		  data: {
-			labels,
-			datasets: [{
-			  label: "Plays",
-			  data: plays,
-			  tension: 0.4,
-			  fill: true,
-			  borderWidth: 2,
-			  pointRadius: 3,
-			  backgroundColor: "rgba(16,185,129,0.08)",
-			  borderColor: "rgba(16,185,129,1)"
-			}]
-		  },
-		  options: baseOpts()
-		});
-
-
-		new Chart(elWatch.getContext("2d"), {
-		  type: "line",
-		  data: {
-			labels,
-			datasets: [{
-			  label: "Hours",
-			  data: watch,
-			  tension: 0.4,
-			  fill: true,
-			  borderWidth: 2,
-			  pointRadius: 3,
-			  backgroundColor: "rgba(59,130,246,0.08)",
-			  borderColor: "rgba(59,130,246,1)"
-			}]
-		  },
-		  options: baseOpts()
-		});
-
+      new Chart(elWatch.getContext("2d"), {
+        type: "line",
+        data: {
+          labels,
+          datasets: [{
+            label: "Hours",
+            data: watch,
+            tension: 0.4,
+            fill: true,
+            borderWidth: 2,
+            pointRadius: 3,
+            backgroundColor: "rgba(59,130,246,0.08)",
+            borderColor: "rgba(59,130,246,1)"
+          }]
+        },
+        options: baseLineOpts()
+      });
     })().catch(console.error);
   })();
   </script>
+
 {% endif %}
 
 {# ==========================
@@ -309,23 +512,45 @@
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
         <thead>
-          <tr class="text-left text-slate-400 border-b border-slate-800">
-            <th class="py-2 pr-4">Last streamed</th>
-            <th class="py-2 pr-4">First streamed</th>
-            <th class="py-2 pr-4">IP</th>
-            <th class="py-2 pr-4">Last platform</th>
-            <th class="py-2 pr-4">Last player</th>
-            <th class="py-2 pr-4">Last played</th>
-            <th class="py-2 pr-4">Play count</th>
-            <th class="py-2 pr-4">Watch time</th>
+          {% set current_sort = request.args.get('sort') or 'last_seen' %}
+          {% set current_dir  = request.args.get('dir')  or 'desc' %}
+
+          {% macro th(label, key) %}
+            {% set active = (current_sort == key) %}
+            {% set next_dir = "asc" if (active and current_dir == "desc") else "desc" %}
+            {% set args = dict(request.args) %}
+            {% set _ = args.update({ "view": "ip", "sort": key, "dir": next_dir }) %}
+            <th class="py-2 pr-4">
+              <a href="{{ url_for('monitoring_user_detail', user_id=user.id, **args) }}"
+                 class="inline-flex items-center gap-2 {{ 'text-emerald-400 font-semibold' if active else 'text-slate-400' }}">
+                {{ label }}
+                {% if active %}
+                  {{ '▲' if current_dir == 'asc' else '▼' }}
+                {% else %}
+                  ↕
+                {% endif %}
+              </a>
+            </th>
+          {% endmacro %}
+
+          <tr class="text-left border-b border-slate-800">
+            {{ th("IP", "ip") }}
+            {{ th("Last streamed", "last_seen") }}
+            {{ th("First streamed", "first_seen") }}
+            {{ th("Last platform", "last_platform") }}
+            {{ th("Last player", "last_player") }}
+            {{ th("Last played", "last_played") }}
+            {{ th("Play count", "plays") }}
+            {{ th("Watch time", "watch") }}
           </tr>
         </thead>
+
         <tbody>
           {% for r in ip_rows %}
             <tr class="border-b border-slate-800">
+              <td class="py-3 pr-4 font-semibold">{{ r.ip }}</td>
               <td class="py-3 pr-4 text-slate-300">{{ r.last_seen }}</td>
               <td class="py-3 pr-4 text-slate-300">{{ r.first_seen }}</td>
-              <td class="py-3 pr-4 font-semibold">{{ r.ip }}</td>
               <td class="py-3 pr-4">{{ r.last_platform or "-" }}</td>
               <td class="py-3 pr-4">{{ r.last_player or "-" }}</td>
               <td class="py-3 pr-4">{{ r.last_played or "-" }}</td>

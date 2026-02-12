@@ -55,6 +55,48 @@
   </div>
 {% endif %}
 
+<script>
+(function () {
+  function initMonitoringUsersSearch() {
+    const form = document.getElementById("monitoring_users_filter_form");
+    const input = document.getElementById("monitoring_users_search_input");
+    if (!form || !input) return;
+
+    // éviter de binder 15 fois si htmx reload
+    if (input.dataset.bound === "1") return;
+    input.dataset.bound = "1";
+
+    let timer = null;
+
+    function submitForm() {
+      const page = form.querySelector('input[name="page"]');
+      if (page) page.value = "1";
+      if (form.requestSubmit) form.requestSubmit();
+      else form.submit();
+    }
+
+    input.addEventListener("input", () => {
+      clearTimeout(timer);
+      timer = setTimeout(submitForm, 800);
+    });
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        clearTimeout(timer);
+        submitForm();
+      }
+    });
+  }
+
+  // 1) chargement normal
+  document.addEventListener("DOMContentLoaded", initMonitoringUsersSearch);
+
+  // 2) chargement via HTMX (tabs swap)
+  document.addEventListener("htmx:load", initMonitoringUsersSearch);
+})();
+</script>
+
 
 
 {% endblock %}
