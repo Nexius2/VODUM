@@ -711,6 +711,11 @@
   "yes": "Sì",
   "subscription_expiry_mode_none_title": "Nessuna azione automatica",
   "subscription_expiry_mode_none_help": "Non verrà eseguita alcuna azione alla scadenza dell’abbonamento.",
-  "delete_after_expiry_days_help": "Rimuove l’accesso al media server dopo X giorni. Plex: l’utente non viene eliminato da Plex, vengono revocate solo le condivisioni delle librerie."
+  "delete_after_expiry_days_help": "Rimuove l’accesso al media server dopo X giorni. Plex: l’utente non viene eliminato da Plex, vengono revocate solo le condivisioni delle librerie.",
+  "user_id": "User ID",
+  "task.stream_enforcer": "Controllo streaming",
+  "task_description.stream_enforcer": "Applica le regole di streaming e controlla le sessioni attive."
+
+
 
 }

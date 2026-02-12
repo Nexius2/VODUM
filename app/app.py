@@ -34,6 +34,7 @@ from logging_utils import get_logger, read_last_logs, read_all_logs
 task_logger = get_logger("tasks_ui")
 auth_logger = get_logger("auth")
 security_logger = get_logger("security")
+settings_logger = get_logger("settings")
 
 
 from discord_utils import is_discord_ready, validate_discord_bot_token
@@ -1047,6 +1048,7 @@ def create_app():
             # Total rows (avec filtre username)
             # --------------------------
             if q:
+                like = f"%{q}%"
                 total = db.query_one(
                     """
                     WITH users_with_hist AS (
@@ -1057,9 +1059,18 @@ def create_app():
                     SELECT COUNT(*) AS cnt
                     FROM media_users mu
                     JOIN users_with_hist u ON u.uid = mu.id
-                    WHERE mu.username LIKE ?
+                    LEFT JOIN vodum_users vu ON vu.id = mu.vodum_user_id
+                    WHERE (
+                      COALESCE(mu.username,'') LIKE ? OR
+                      COALESCE(vu.username,'') LIKE ? OR
+                      COALESCE(vu.email,'') LIKE ? OR
+                      COALESCE(vu.second_email,'') LIKE ? OR
+                      COALESCE(vu.firstname,'') LIKE ? OR
+                      COALESCE(vu.lastname,'') LIKE ? OR
+                      COALESCE(vu.notes,'') LIKE ?
+                    )
                     """,
-                    (f"%{q}%",),
+                    (like, like, like, like, like, like, like),
                 ) or {"cnt": 0}
             else:
                 total = db.query_one(
@@ -1069,6 +1080,7 @@ def create_app():
                     WHERE media_user_id IS NOT NULL
                     """
                 ) or {"cnt": 0}
+
 
             total = dict(total) if total else {"cnt": 0}
 
@@ -1100,8 +1112,20 @@ def create_app():
             end_where = ""
             params = []
             if q:
-                end_where = "WHERE mu.username LIKE ?"
-                params.append(f"%{q}%")
+                like = f"%{q}%"
+                end_where = """
+                WHERE (
+                  COALESCE(mu.username,'') LIKE ? OR
+                  COALESCE(vu.username,'') LIKE ? OR
+                  COALESCE(vu.email,'') LIKE ? OR
+                  COALESCE(vu.second_email,'') LIKE ? OR
+                  COALESCE(vu.firstname,'') LIKE ? OR
+                  COALESCE(vu.lastname,'') LIKE ? OR
+                  COALESCE(vu.notes,'') LIKE ?
+                )
+                """
+                params.extend([like, like, like, like, like, like, like])
+
 
             rows = db.query(
                 f"""
@@ -1151,10 +1175,11 @@ def create_app():
                   lr.ip AS last_ip,
                   COALESCE(lr.device, lr.client_product, '-') AS platform,
                   COALESCE(lr.client_name, lr.client_product, '-') AS player
-                FROM last_rows lr
-                JOIN agg a ON a.media_user_id = lr.media_user_id
-                JOIN media_users mu ON mu.id = lr.media_user_id
-                {end_where}
+                  FROM last_rows lr
+                  JOIN agg a ON a.media_user_id = lr.media_user_id
+                  JOIN media_users mu ON mu.id = lr.media_user_id
+                  LEFT JOIN vodum_users vu ON vu.id = mu.vodum_user_id
+                  {end_where}
                 ORDER BY {order_sql}
                 LIMIT {per_page} OFFSET ?
                 """,
@@ -1186,17 +1211,21 @@ def create_app():
                 "next_url": build_url(page + 1),
             }
 
-
-
         elif tab == "policies":
             policies = db.query("""
                 SELECT
                   p.*,
-                  s.name AS server_name
+                  s.name AS server_name,
+                  vu.username AS scope_username
                 FROM stream_policies p
-                LEFT JOIN servers s ON s.id = p.server_id
+                LEFT JOIN servers s
+                  ON s.id = p.server_id
+                LEFT JOIN vodum_users vu
+                  ON (p.scope_type = 'user' AND vu.id = p.scope_id)
                 ORDER BY p.is_enabled DESC, p.priority ASC, p.id DESC
             """)
+
+
             policies = [dict(r) for r in policies]
             # Parse rule JSON + detect system-managed policies
             for p in policies:
@@ -1716,28 +1745,171 @@ def create_app():
 
         u = db.query_one(
             """
-            SELECT mu.id, mu.username, mu.type, mu.server_id
+            SELECT
+              mu.id,
+              mu.username,
+              mu.type,
+              mu.server_id,
+              mu.vodum_user_id,
+              mu.external_user_id
             FROM media_users mu
             WHERE mu.id = ?
             """,
             (user_id,),
         )
+
         if not u:
             flash("invalid_user", "error")
             return redirect(url_for("monitoring_page", tab="users"))
 
+        u = dict(u)
+
+        # ✅ IMPORTANT :
+        # Un même user existe 1 fois par serveur dans media_users.
+        # On doit donc agréger tous les media_users.id qui ont le même vodum_user_id + external_user_id + type.
+        linked_rows = db.query(
+            """
+            SELECT id, server_id
+            FROM media_users
+            WHERE vodum_user_id = ?
+              AND external_user_id = ?
+              AND type = ?
+            ORDER BY server_id
+            """,
+            (u["vodum_user_id"], u["external_user_id"], u["type"]),
+        )
+
+        linked_ids = [r["id"] for r in linked_rows] or [user_id]
+
+        # ✅ Tous les media_users liés au même vodum_user (tous types: plex/jellyfin/...)
+        all_identity_rows = db.query(
+            """
+            SELECT id, type, server_id, external_user_id
+            FROM media_users
+            WHERE vodum_user_id = ?
+            ORDER BY type, server_id
+            """,
+            (u["vodum_user_id"],),
+        )
+
+        ids_by_type = {}
+        for r in all_identity_rows:
+            t = r["type"] or "unknown"
+            ids_by_type.setdefault(t, []).append(r["id"])
+
+        # Pour affichage dans le header
+        u["ids_by_type"] = ids_by_type
+        u["all_identity_rows"] = [dict(r) for r in all_identity_rows]
+
+        # ✅ Camembert : serveurs réellement utilisés (plays) sur 30 jours
+        # On groupe par server_id via join media_users (car media_session_history peut ne pas avoir server_id)
+        placeholders = ",".join(["?"] * len(linked_ids))
+        server_usage_rows = db.query(
+            f"""
+            SELECT
+              mu.server_id AS server_id,
+              COUNT(*) AS plays
+            FROM media_session_history h
+            JOIN media_users mu ON mu.id = h.media_user_id
+            WHERE h.media_user_id IN ({placeholders})
+              AND h.stopped_at >= datetime('now', '-30 days')
+            GROUP BY mu.server_id
+            ORDER BY plays DESC
+            """,
+            tuple(linked_ids),
+        )
+
+        server_ids = [r["server_id"] for r in server_usage_rows if r["server_id"] is not None]
+        server_names = {}
+        if server_ids:
+            ph = ",".join(["?"] * len(server_ids))
+            rows = db.query(
+                f"SELECT id, name, type FROM servers WHERE id IN ({ph})",
+                tuple(server_ids),
+            )
+            server_names = {
+                x["id"]: f'{x["name"]}'
+                for x in rows
+            }
+
+
+        server_usage = []
+        for r in server_usage_rows:
+            sid = r["server_id"]
+            server_usage.append({
+                "server_id": sid,
+                "label": server_names.get(sid, f"server#{sid}" if sid is not None else "unknown"),
+                "plays": int(r["plays"] or 0),
+            })
+
+        u["server_usage_30d"] = server_usage
+        u["server_usage_30d_show"] = (len([x for x in server_usage if x.get("plays", 0) > 0]) > 1)
+
+        # ✅ Donut : types de médias consommés (30 jours)
+        media_types_rows = db.query(
+            f"""
+            SELECT
+              CASE
+                WHEN h.media_type IN ('episode', 'serie') THEN 'serie'
+                WHEN h.media_type = 'movie' THEN 'movie'
+                ELSE 'other'
+              END AS kind,
+              COUNT(*) AS plays
+            FROM media_session_history h
+            WHERE h.media_user_id IN ({placeholders})
+              AND h.stopped_at >= datetime('now', '-30 days')
+            GROUP BY kind
+            ORDER BY plays DESC
+            """,
+            tuple(linked_ids),
+        )
+
+        media_types = [{"label": r["kind"], "plays": int(r["plays"] or 0)} for r in media_types_rows]
+        u["media_types_30d"] = media_types
+        u["media_types_30d_show"] = (sum(x["plays"] for x in media_types) > 0)
+
+
+        # ✅ Serveurs liés à CE user (pour affichage lisible dans le header)
+        linked_server_ids = [r["server_id"] for r in linked_rows if r["server_id"] is not None]
+
+
+        linked_servers = []
+        if linked_server_ids:
+            placeholders = ",".join(["?"] * len(linked_server_ids))
+            linked_servers = db.query(
+                f"""
+                SELECT id, name, type
+                FROM servers
+                WHERE id IN ({placeholders})
+                ORDER BY type, name
+                """,
+                tuple(linked_server_ids),
+            )
+            linked_servers = [dict(x) for x in linked_servers]
+
+        # On met ça dans u pour le template
+        u["linked_server_ids"] = linked_server_ids
+        u["linked_servers"] = linked_servers
+
+
+        # Helper pour générer "(?,?,?)" + params
+        in_placeholders = ",".join(["?"] * len(linked_ids))
+        in_sql = f"({in_placeholders})"
+
+
         # Global agg (all-time)
         agg = db.query_one(
-            """
+            f"""
             SELECT
               COUNT(*) AS total_plays,
               SUM(watch_ms) AS watch_ms,
               MAX(stopped_at) AS last_watch_at
             FROM media_session_history
-            WHERE media_user_id = ?
+            WHERE media_user_id IN {in_sql}
             """,
-            (user_id,),
+            tuple(linked_ids),
         ) or {"total_plays": 0, "watch_ms": 0, "last_watch_at": None}
+
         agg = dict(agg) if agg else {"total_plays": 0, "watch_ms": 0, "last_watch_at": None}
 
         u = dict(u)
@@ -1754,28 +1926,30 @@ def create_app():
             def _period_stats(delta_sql: str | None):
                 if delta_sql is None:
                     row = db.query_one(
-                        """
-                        SELECT COUNT(*) AS plays, SUM(watch_ms) AS watch_ms
+                        f"""
+                        SELECT COUNT(*) AS plays, COALESCE(SUM(watch_ms), 0) AS watch_ms
                         FROM media_session_history
-                        WHERE media_user_id = ?
+                        WHERE media_user_id IN {in_sql}
                         """,
-                        (user_id,),
+                        tuple(linked_ids),
                     )
                 else:
                     row = db.query_one(
-                        """
-                        SELECT COUNT(*) AS plays, SUM(watch_ms) AS watch_ms
+                        f"""
+                        SELECT COUNT(*) AS plays, COALESCE(SUM(watch_ms), 0) AS watch_ms
                         FROM media_session_history
-                        WHERE media_user_id = ?
+                        WHERE media_user_id IN {in_sql}
                           AND stopped_at >= datetime('now', ?)
                         """,
-                        (user_id, delta_sql),
+                        tuple(linked_ids) + (delta_sql,),
                     )
+
                 row = dict(row) if row else {"plays": 0, "watch_ms": 0}
                 w = int(row.get("watch_ms") or 0)
                 row["watch_time"] = f"{w // 3600000}h {((w % 3600000) // 60000)}m"
                 row["plays"] = int(row.get("plays") or 0)
                 return row
+
 
             profile["last_24h"] = _period_stats("-24 hours")
             profile["last_7d"]  = _period_stats("-7 days")
@@ -1784,19 +1958,20 @@ def create_app():
 
             # Top players (comme les tuiles Tautulli)
             top_players = db.query(
-                """
+                f"""
                 SELECT
                   COALESCE(NULLIF(client_name, ''), NULLIF(client_product,''), NULLIF(device,''), 'Unknown') AS player,
                   COUNT(*) AS plays
                 FROM media_session_history
-                WHERE media_user_id = ?
+                WHERE media_user_id IN {in_sql}
                 GROUP BY COALESCE(NULLIF(client_name, ''), NULLIF(client_product,''), NULLIF(device,''), 'Unknown')
                 ORDER BY plays DESC
                 LIMIT 12
                 """,
-                (user_id,),
+                tuple(linked_ids),
             )
             profile["top_players"] = [dict(r) for r in top_players]
+
 
         # --------------------------
         # HISTORY (ton existant, inchangé, mais déclenché seulement sur view=history)
@@ -1810,8 +1985,9 @@ def create_app():
             per_page = 30
             offset = (page - 1) * per_page
 
-            where = ["h.media_user_id = ?"]
-            params = [user_id]
+            where = [f"h.media_user_id IN {in_sql}"]
+            params = list(linked_ids)
+
 
             if q:
                 where.append("(h.title LIKE ? OR h.grandparent_title LIKE ?)")
@@ -1880,23 +2056,57 @@ def create_app():
         # --------------------------
         ip_rows = []
         if view == "ip":
+            # Tri (déjà utilisé côté template)
+            sort_key = (request.args.get("sort") or "last_seen").strip().lower()
+            sort_dir = (request.args.get("dir") or "desc").strip().lower()
+            if sort_dir not in ("asc", "desc"):
+                sort_dir = "desc"
+
+            sort_map = {
+                "ip": "a.ip",
+                "first_seen": "datetime(a.first_seen)",
+                "last_seen": "datetime(a.last_seen)",
+                "last_platform": "l.last_platform",
+                "last_player": "l.last_player",
+                "last_played": "l.last_title",
+                "plays": "a.play_count",
+                "watch": "l.last_watch_ms",  # ✅ watch = dernier media, pas total IP
+            }
+            order_expr = sort_map.get(sort_key, "datetime(a.last_seen)")
+            order_sql = f"{order_expr} {sort_dir.upper()}"
+
             ip_rows = db.query(
-                """
+                f"""
                 WITH ranked AS (
                   SELECT
                     ip,
                     started_at,
                     stopped_at,
+                    media_type,
+                    title,
+                    grandparent_title,
+                    parent_title,
+                    watch_ms,
+                    duration_ms,
                     COALESCE(NULLIF(device,''), NULLIF(client_product,''), '-') AS platform,
                     COALESCE(NULLIF(client_name,''), NULLIF(client_product,''), '-') AS player,
-                    title,
-                    ROW_NUMBER() OVER (PARTITION BY ip ORDER BY stopped_at DESC) AS rn
+                    ROW_NUMBER() OVER (PARTITION BY ip ORDER BY datetime(stopped_at) DESC) AS rn
                   FROM media_session_history
-                  WHERE media_user_id = ?
+                  WHERE media_user_id IN {in_sql}
                     AND ip IS NOT NULL AND ip != ''
                 ),
                 last_per_ip AS (
-                  SELECT ip, stopped_at AS last_seen, platform AS last_platform, player AS last_player, title AS last_played
+                  SELECT
+                    ip,
+                    stopped_at AS last_seen,
+                    platform AS last_platform,
+                    player   AS last_player,
+                    media_type AS last_media_type,
+                    title AS last_title,
+                    grandparent_title AS last_grandparent_title,
+                    parent_title AS last_parent_title,
+                    watch_ms AS last_watch_ms,
+                    duration_ms AS last_duration_ms
                   FROM ranked
                   WHERE rn = 1
                 ),
@@ -1905,10 +2115,9 @@ def create_app():
                     ip,
                     MIN(started_at) AS first_seen,
                     MAX(stopped_at) AS last_seen,
-                    COUNT(*) AS play_count,
-                    SUM(watch_ms) AS watch_ms
+                    COUNT(*) AS play_count
                   FROM media_session_history
-                  WHERE media_user_id = ?
+                  WHERE media_user_id IN {in_sql}
                     AND ip IS NOT NULL AND ip != ''
                   GROUP BY ip
                 )
@@ -1918,19 +2127,59 @@ def create_app():
                   a.last_seen,
                   l.last_platform,
                   l.last_player,
-                  l.last_played,
-                  a.play_count,
-                  a.watch_ms
+                  l.last_media_type,
+                  l.last_title,
+                  l.last_grandparent_title,
+                  l.last_parent_title,
+                  l.last_watch_ms,
+                  l.last_duration_ms,
+                  a.play_count
                 FROM agg a
                 LEFT JOIN last_per_ip l ON l.ip = a.ip
-                ORDER BY datetime(a.last_seen) DESC
+                ORDER BY {order_sql}
                 """,
-                (user_id, user_id),
+                tuple(linked_ids) + tuple(linked_ids),
             )
+
             ip_rows = [dict(r) for r in ip_rows]
+
+            def _fmt_last_played(r: dict) -> str:
+                mt = (r.get("last_media_type") or "").strip().lower()
+                title = (r.get("last_title") or "").strip()
+                gp = (r.get("last_grandparent_title") or "").strip()
+                parent = (r.get("last_parent_title") or "").strip()
+
+                if not title and not gp:
+                    return "-"
+
+                # ⚠️ Chez toi Plex stocke les épisodes en "serie"
+                if mt in ("episode", "serie"):
+                    bits = [b for b in (gp, parent, title) if b]
+                    return " • ".join(bits) if bits else "-"
+
+                # film
+                if mt == "movie":
+                    return title or "-"
+
+                bits = [b for b in (gp, title) if b]
+                return " • ".join(bits) if bits else "-"
+
+            def _fmt_ms(ms: int) -> str:
+                ms = int(ms or 0)
+                h = ms // 3600000
+                m = (ms % 3600000) // 60000
+                return f"{h}h {m}m"
+
             for r in ip_rows:
-                ms2 = r.get("watch_ms") or 0
-                r["watch_time"] = f"{ms2 // 3600000}h {((ms2 % 3600000) // 60000)}m"
+                r["last_played"] = _fmt_last_played(r)
+
+                # ✅ watch time = celui du dernier média joué sur cette IP
+                r["watch_time"] = _fmt_ms(r.get("last_watch_ms") or 0)
+
+                # (optionnel) si tu veux aussi afficher la durée média
+                # r["duration_time"] = _fmt_ms(r.get("last_duration_ms") or 0)
+
+
 
         return render_template(
             "monitoring/user_detail.html",
@@ -6737,6 +6986,29 @@ def create_app():
                 """,
                 new_values,
             )
+
+            # --------------------------------------------------
+            # Purge immédiate des policies système si on n'est plus en warn_then_disable
+            # (évite d'attendre la prochaine exécution d'une tâche)
+            # --------------------------------------------------
+            if expiry_mode != "warn_then_disable":
+                try:
+                    rows = db.query("SELECT id, rule_value_json FROM stream_policies WHERE scope_type='user'") or []
+                    purged = 0
+                    for r in rows:
+                        try:
+                            rule = json.loads(r["rule_value_json"] or "{}")
+                        except Exception:
+                            rule = {}
+                        if rule.get("system_tag") == "expired_subscription":
+                            db.execute("DELETE FROM stream_policies WHERE id = ?", (int(r["id"]),))
+                            purged += 1
+
+                    if purged:
+                        settings_logger.info(f"Purged {purged} expired_subscription system policy(ies) after settings change")
+                except Exception:
+                    settings_logger.error("Failed to purge expired_subscription policies after settings change", exc_info=True)
+
 
             # --------------------------------------------------
             # Update admin password (optional)

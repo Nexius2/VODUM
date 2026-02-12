@@ -31,17 +31,42 @@ SYSTEM_TAG = "expired_subscription"
 
 
 def _parse_date(d: Optional[str]) -> Optional[date]:
+    """
+    Accepte:
+      - 'YYYY-MM-DD'
+      - 'YYYY-MM-DDTHH:MM:SS'
+      - 'YYYY-MM-DD HH:MM:SS'
+      - 'DD/MM/YYYY'
+    """
     if not d:
         return None
+
     s = str(d).strip()
     if not s:
         return None
+
+    # ISO datetime -> garder uniquement la date
+    if "T" in s:
+        s = s.split("T", 1)[0].strip()
+    if " " in s:
+        # ex: '2026-04-11 00:00:00'
+        s = s.split(" ", 1)[0].strip()
+
+    # format FR
+    if "/" in s:
+        parts = s.split("/")
+        if len(parts) == 3:
+            dd, mm, yyyy = parts[0].zfill(2), parts[1].zfill(2), parts[2]
+            try:
+                return date.fromisoformat(f"{yyyy}-{mm}-{dd}")
+            except Exception:
+                return None
+
     try:
-        if "T" in s:
-            s = s.split("T", 1)[0]
         return date.fromisoformat(s)
     except Exception:
         return None
+
 
 
 def _policy_rule(title: str, text: str) -> Dict[str, Any]:
@@ -295,8 +320,15 @@ def run(task_id: int, db) -> None:
         for u in users:
             vodum_user_id = int(u["id"])
             exp = _parse_date(u["expiration_date"])
+
+            # Si la date est invalide/inparsible, on considère que l'user n'est PAS expiré,
+            # et surtout on évite de laisser une policy "expired_subscription" collée.
             if not exp:
+                if policy_id:
+                    _delete_policy(db, policy_id)
+                    removed += 1
                 continue
+
 
             policy_id = _find_system_policy_id(db, vodum_user_id)
 
