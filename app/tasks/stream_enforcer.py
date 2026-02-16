@@ -125,6 +125,17 @@ def _load_user_stream_overrides() -> Dict[int, int]:
         return {}
     return out
 
+def _is_vip_override(vodum_user_id: Optional[int]) -> bool:
+    """
+    VIP override = user has max_streams_override set and > 0
+    (0 is allowed but means 'block' and should NOT bypass other policies)
+    """
+    if vodum_user_id is None:
+        return False
+    try:
+        return int(_USER_STREAM_OVERRIDES.get(int(vodum_user_id), 0)) > 0
+    except Exception:
+        return False
 
 
 
@@ -380,6 +391,11 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
             by_user.setdefault(ukey, []).append(s)
 
         for user_key, user_sessions in by_user.items():
+            vodum_user_id = user_key[0]
+            if _is_vip_override(vodum_user_id):
+                # VIP: override must supersede stream limitation policies
+                continue
+
             ips = set()
             for s in user_sessions:
                 ip = (s.get("ip") or "").strip() or "unknown"
@@ -433,6 +449,10 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
         by_key: Dict[str, List[dict]] = {}
 
         for s in scoped:
+            # VIP users should not be limited by per-IP stream policies
+            if _is_vip_override(s.get("vodum_user_id")):
+                continue
+        
             ip = (s.get("ip") or "").strip() or "unknown"
 
             if ip == "unknown" and ignore_unknown:
