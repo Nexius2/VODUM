@@ -53,6 +53,36 @@
     </div>
   {% endif %}
 </form>
+<!-- Restore confirm modal (nice UI, replaces browser confirm()) -->
+<div id="restoreConfirmModal" class="hidden fixed inset-0 z-50" aria-hidden="true">
+  <div class="absolute inset-0 bg-black/70"></div>
+
+  <div class="relative mx-auto mt-24 w-[92%] max-w-lg">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+      <div class="p-5">
+        <div class="text-sm font-semibold text-slate-100">{{ t("confirm_restore_title") if t("confirm_restore_title") else "Confirm restore" }}</div>
+        <div class="text-xs text-slate-400 mt-2" id="restoreConfirmModalText"></div>
+        <div class="text-[11px] text-slate-500 mt-3">
+          {{ t("confirm_restore_hint") if t("confirm_restore_hint") else "This will overwrite the current database. A container restart may be required." }}
+        </div>
+      </div>
+
+      <div class="border-t border-slate-800"></div>
+
+      <div class="p-4 flex items-center justify-end gap-2">
+        <button type="button" id="restoreConfirmCancel"
+                class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-200">
+          {{ t("cancel") }}
+        </button>
+
+        <button type="button" id="restoreConfirmOk"
+                class="px-4 py-2 rounded-lg bg-primary/80 hover:bg-primary text-white text-sm">
+          {{ t("confirm") if t("confirm") else "Confirm" }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
   const confirmRestoreText = "{{ t('confirm_restore') }}";
@@ -60,6 +90,26 @@
   const checks = document.querySelectorAll('.backup-check');
   const restoreBtn = document.getElementById('restore-selected-btn');
   const hiddenInput = document.getElementById('selected-backup-input');
+
+  // Modal elements
+  const restoreForm = document.getElementById("restore-existing-form");
+  const modal = document.getElementById("restoreConfirmModal");
+  const modalText = document.getElementById("restoreConfirmModalText");
+  const btnCancel = document.getElementById("restoreConfirmCancel");
+  const btnOk = document.getElementById("restoreConfirmOk");
+
+  let pendingSubmit = false;
+
+  function openRestoreConfirm() {
+    modalText.textContent = confirmRestoreText;
+    modal.classList.remove("hidden");
+    modal.setAttribute("aria-hidden", "false");
+  }
+
+  function closeRestoreConfirm() {
+    modal.classList.add("hidden");
+    modal.setAttribute("aria-hidden", "true");
+  }
 
   checks.forEach(cb => {
     cb.addEventListener('change', () => {
@@ -77,16 +127,47 @@
     });
   });
 
-  document
-    .getElementById("restore-existing-form")
-    .addEventListener("submit", e => {
-      if (!hiddenInput.value) {
-        e.preventDefault();
-        return;
-      }
+  restoreForm.addEventListener("submit", (e) => {
+    if (!hiddenInput.value) {
+      e.preventDefault();
+      return;
+    }
 
-      if (!confirm(confirmRestoreText)) {
-        e.preventDefault();
-      }
-    });
+    // First submit: show modal (instead of browser confirm)
+    if (!pendingSubmit) {
+      e.preventDefault();
+      openRestoreConfirm();
+      return;
+    }
+
+    // If pendingSubmit is true, allow submit to continue
+    pendingSubmit = false;
+  });
+
+  btnCancel.addEventListener("click", () => {
+    pendingSubmit = false;
+    closeRestoreConfirm();
+  });
+
+  btnOk.addEventListener("click", () => {
+    pendingSubmit = true;
+    closeRestoreConfirm();
+    restoreForm.submit();
+  });
+
+  // Close modal on backdrop click
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal || (e.target.classList && e.target.classList.contains("bg-black/70"))) {
+      pendingSubmit = false;
+      closeRestoreConfirm();
+    }
+  });
+
+  // Close modal on ESC
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !modal.classList.contains("hidden")) {
+      pendingSubmit = false;
+      closeRestoreConfirm();
+    }
+  });
 </script>

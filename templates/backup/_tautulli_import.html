@@ -1,0 +1,377 @@
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+  <h2 class="text-sm font-semibold mb-4">{{ t("tautulli_import_title") }}</h2>
+
+  <p class="text-xs text-slate-400 mb-3">
+    {{ t("tautulli_import_desc") }}
+    <span class="text-slate-300 font-medium">tautulli.db</span>.
+  </p>
+
+  <form id="tautulliImportForm"
+        action="{{ url_for('backup_page') }}"
+        method="post"
+        enctype="multipart/form-data"
+        class="space-y-3">
+
+    <input type="hidden" name="action" value="tautulli_import">
+
+    <!-- FILE INPUT -->
+    <div>
+      <input id="tautulliDbFile"
+             type="file"
+             name="tautulli_db"
+             accept=".db,.sqlite"
+             class="w-full text-xs bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+
+      <!-- INLINE ERROR -->
+      <p id="tautulliFileError"
+         class="hidden text-xs mt-2 text-red-300 bg-red-900/20 border border-red-900/40 rounded-lg px-3 py-2">
+      </p>
+    </div>
+
+    <!-- START BUTTON -->
+    <button type="button"
+            id="openTautulliImportModal"
+            disabled
+            class="px-4 py-2 rounded-lg text-white text-sm bg-primary/40 cursor-not-allowed opacity-60">
+      {{ t("start_import") }}
+    </button>
+
+    <!-- LIVE STATUS -->
+    <div id="tautulliJobStatus"
+         class="hidden mt-3 text-xs border rounded-xl px-3 py-2">
+      <div class="flex items-center justify-between gap-3">
+        <div class="font-medium" id="tautulliJobStatusTitle">Tautulli import</div>
+        <div class="text-[11px] opacity-80" id="tautulliJobStatusMeta"></div>
+      </div>
+      <div class="mt-1" id="tautulliJobStatusText"></div>
+      <pre id="tautulliJobStatusError"
+           class="hidden mt-2 text-[11px] whitespace-pre-wrap text-red-200 bg-red-900/20 border border-red-900/40 rounded-lg px-2 py-2"></pre>
+    </div>
+
+    <div class="text-[11px] text-slate-500">
+      {{ t("tautulli_import_tip") }}
+    </div>
+  </form>
+</div>
+
+<!-- MODAL -->
+<div id="tautulliImportModal" class="hidden fixed inset-0 z-50" aria-hidden="true">
+  <div class="absolute inset-0 bg-black/70"></div>
+
+  <div class="relative mx-auto mt-24 w-[92%] max-w-xl">
+    <!-- Make the panel relative so we can overlay it during upload/copy -->
+    <div class="relative bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+
+      <!-- OVERLAY (shown on submit) -->
+      <div id="tautulliCopyOverlay"
+           class="absolute inset-0 z-50 hidden items-center justify-center bg-slate-950/70 backdrop-blur-sm">
+        <div class="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
+          <div class="flex items-start gap-4">
+            <div class="mt-1 h-10 w-10 rounded-xl bg-slate-800 flex items-center justify-center">
+              <svg class="h-5 w-5 animate-spin text-slate-200" viewBox="0 0 24 24" fill="none">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor"
+                      d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+              </svg>
+            </div>
+
+            <div class="flex-1">
+              <div class="text-lg font-semibold text-slate-100">
+                {{ t("please_wait") if t("please_wait") else "Please wait…" }}
+              </div>
+              <div class="mt-1 text-sm text-slate-300">
+                {{ t("tautulli_copying_db") if t("tautulli_copying_db") else "Copying Tautulli database and starting the import." }}
+              </div>
+              <div class="mt-3 text-xs text-slate-500">
+                {{ t("dont_close_tab") if t("dont_close_tab") else "Don’t close this window while the file is being uploaded." }}
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-6 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+            <div class="h-full w-1/2 animate-pulse rounded-full bg-slate-200/60"></div>
+          </div>
+        </div>
+      </div>
+      <!-- /OVERLAY -->
+
+      <div class="p-5">
+        <div class="text-sm font-semibold">{{ t("tautulli_import_options_title") }}</div>
+        <div class="text-xs text-slate-400 mt-1">{{ t("tautulli_import_options_desc") }}</div>
+
+        <div class="mt-5 space-y-4">
+
+			<!-- SERVER CHOICE (optional, used when auto-mapping is ambiguous) -->
+			<label class="block">
+			  <span class="text-sm text-slate-200 font-medium">{{ t("tautulli_target_server") if t("tautulli_target_server") else "Target Plex server (optional)" }}</span>
+			  <span class="block text-xs text-slate-400 mt-1">
+				{{ t("tautulli_target_server_desc") if t("tautulli_target_server_desc") else "Leave empty to auto-detect. If VODUM can't decide (multiple Plex servers), select one here." }}
+			  </span>
+
+			  <select form="tautulliImportForm"
+					  name="tautulli_target_server_id"
+					  class="mt-2 w-full text-xs bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+				<option value="">{{ t("auto") if t("auto") else "Auto" }}</option>
+				{% for s in plex_servers %}
+				  <option value="{{ s.id }}">{{ s.name }}</option>
+				{% endfor %}
+			  </select>
+			</label>
+
+			<!-- LIBRARIES POLICY -->
+			<div class="border border-slate-800 rounded-xl p-3 bg-slate-950/40">
+			  <div class="text-sm text-slate-200 font-medium">
+				{{ t("tautulli_libraries_policy") if t("tautulli_libraries_policy") else "Libraries import policy" }}
+			  </div>
+			  <div class="text-xs text-slate-400 mt-1">
+				{{ t("tautulli_libraries_policy_desc") if t("tautulli_libraries_policy_desc") else "Recommended: import only libraries that already exist in VODUM (prevents bad matches)." }}
+			  </div>
+
+			  <label class="flex items-start gap-3 cursor-pointer select-none mt-3">
+				<input form="tautulliImportForm"
+					   type="radio"
+					   name="tautulli_libraries_mode"
+					   value="only_existing"
+					   checked
+					   class="mt-1">
+				<span class="block">
+				  <span class="text-sm text-slate-200 font-medium">
+					{{ t("tautulli_import_only_available_libraries") if t("tautulli_import_only_available_libraries") else "Import only available libraries (recommended)" }}
+				  </span>
+				  <span class="block text-xs text-slate-400 mt-1">
+					{{ t("tautulli_import_only_available_libraries_desc") if t("tautulli_import_only_available_libraries_desc") else "Only import sessions that belong to libraries already synced in VODUM." }}
+				  </span>
+				</span>
+			  </label>
+
+			  <label class="flex items-start gap-3 cursor-pointer select-none mt-3">
+				<input form="tautulliImportForm"
+					   type="radio"
+					   name="tautulli_libraries_mode"
+					   value="keep_all"
+					   class="mt-1">
+				<span class="block">
+				  <span class="text-sm text-slate-200 font-medium">
+					{{ t("tautulli_keep_all_libraries") if t("tautulli_keep_all_libraries") else "Keep all libraries" }}
+				  </span>
+				  <span class="block text-xs text-slate-400 mt-1">
+					{{ t("tautulli_keep_all_libraries_desc") if t("tautulli_keep_all_libraries_desc") else "Create missing libraries in VODUM (placeholders) and import everything." }}
+				  </span>
+				</span>
+			  </label>
+			</div>
+
+
+          <label class="flex items-start gap-3 cursor-pointer select-none">
+            <input form="tautulliImportForm"
+                   type="checkbox"
+                   name="tautulli_keep_all_users"
+                   value="1"
+                   class="mt-1">
+            <span class="block">
+              <span class="text-sm text-slate-200 font-medium">{{ t("tautulli_keep_all_users") }}</span>
+              <span class="block text-xs text-slate-400 mt-1">
+                {{ t("tautulli_keep_all_users_desc") }}
+              </span>
+            </span>
+          </label>
+
+          <div class="text-[11px] text-slate-500">
+            {{ t("tautulli_import_tip") }}
+          </div>
+        </div>
+      </div>
+
+      <div class="border-t border-slate-800"></div>
+
+      <div class="p-4 flex items-center justify-end gap-2">
+        <button type="button"
+                id="closeTautulliImportModal"
+                class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-200">
+          {{ t("cancel") }}
+        </button>
+
+        <button type="submit"
+                id="confirmTautulliImportBtn"
+                form="tautulliImportForm"
+                class="px-4 py-2 rounded-lg bg-primary/80 hover:bg-primary text-white text-sm">
+          {{ t("confirm_start_import") }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const tautulliModal = document.getElementById("tautulliImportModal");
+  const openBtn = document.getElementById("openTautulliImportModal");
+  const closeBtn = document.getElementById("closeTautulliImportModal");
+  const confirmBtn = document.getElementById("confirmTautulliImportBtn");
+  const form = document.getElementById("tautulliImportForm");
+  const fileInput = document.getElementById("tautulliDbFile");
+  const errBox = document.getElementById("tautulliFileError");
+
+  const overlay = document.getElementById("tautulliCopyOverlay");
+
+  const statusBox = document.getElementById("tautulliJobStatus");
+  const statusMeta = document.getElementById("tautulliJobStatusMeta");
+  const statusText = document.getElementById("tautulliJobStatusText");
+  const statusErr = document.getElementById("tautulliJobStatusError");
+
+  // Route Flask that returns JSON: {"status": "...", "id": ..., "last_error": ...}
+  // IMPORTANT: this requires the backend route function name to be "tautulli_import_status".
+  const STATUS_URL = "{{ url_for('tautulli_import_status') }}";
+  let statusTimer = null;
+
+  // This text is translated server-side, injected safely as a string.
+  const MSG_SELECT_FILE = "{{ t('tautulli_select_file_first')|e }}";
+
+  function showError(msg) {
+    errBox.textContent = msg;
+    errBox.classList.remove("hidden");
+  }
+  function clearError() {
+    errBox.textContent = "";
+    errBox.classList.add("hidden");
+  }
+
+  function updateButtonState() {
+    const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
+
+    openBtn.disabled = !hasFile;
+
+    if (hasFile) {
+      openBtn.classList.remove("cursor-not-allowed", "opacity-60", "bg-primary/40");
+      openBtn.classList.add("cursor-pointer", "bg-primary/80", "hover:bg-primary");
+      clearError();
+    } else {
+      openBtn.classList.remove("cursor-pointer", "bg-primary/80", "hover:bg-primary");
+      openBtn.classList.add("cursor-not-allowed", "opacity-60", "bg-primary/40");
+    }
+  }
+
+  function openModal() {
+    const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
+    if (!hasFile) {
+      showError(MSG_SELECT_FILE);
+      return;
+    }
+    tautulliModal.classList.remove("hidden");
+    tautulliModal.setAttribute("aria-hidden", "false");
+  }
+
+  function closeModal() {
+    tautulliModal.classList.add("hidden");
+    tautulliModal.setAttribute("aria-hidden", "true");
+  }
+
+  function setStatusBoxStyle(kind) {
+    // kind: "info" | "ok" | "err"
+    statusBox.classList.remove(
+      "bg-slate-950", "border-slate-800", "text-slate-200",
+      "bg-emerald-900/20", "border-emerald-900/40", "text-emerald-100",
+      "bg-red-900/20", "border-red-900/40", "text-red-100"
+    );
+
+    if (kind === "ok") {
+      statusBox.classList.add("bg-emerald-900/20", "border-emerald-900/40", "text-emerald-100");
+    } else if (kind === "err") {
+      statusBox.classList.add("bg-red-900/20", "border-red-900/40", "text-red-100");
+    } else {
+      statusBox.classList.add("bg-slate-950", "border-slate-800", "text-slate-200");
+    }
+  }
+
+  function renderJobStatus(data) {
+    if (!data || !data.status || data.status === "none") {
+      statusBox.classList.add("hidden");
+      return;
+    }
+
+    statusBox.classList.remove("hidden");
+    statusErr.classList.add("hidden");
+    statusErr.textContent = "";
+
+    const s = data.status;
+    const id = data.id ? `#${data.id}` : "";
+    statusMeta.textContent = id;
+
+    if (s === "queued") {
+      setStatusBoxStyle("info");
+      statusText.textContent = "Queued… waiting for the worker to start.";
+    } else if (s === "running") {
+      setStatusBoxStyle("info");
+      statusText.textContent = "Running… importing sessions (this can take a while).";
+    } else if (s === "success") {
+      setStatusBoxStyle("ok");
+      statusText.textContent = "Completed successfully ✔";
+      if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
+    } else if (s === "error") {
+      setStatusBoxStyle("err");
+      statusText.textContent = "Failed ❌";
+      if (data.last_error) {
+        statusErr.textContent = data.last_error;
+        statusErr.classList.remove("hidden");
+      }
+      if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
+    } else {
+      setStatusBoxStyle("info");
+      statusText.textContent = `Status: ${s}`;
+    }
+  }
+
+  async function pollJobStatusOnce() {
+    try {
+      const res = await fetch(STATUS_URL, { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      renderJobStatus(data);
+
+      // If queued/running, keep polling every 2s
+      if (data && (data.status === "queued" || data.status === "running")) {
+        if (!statusTimer) statusTimer = setInterval(pollJobStatusOnce, 2000);
+      }
+    } catch (e) {
+      // silent
+    }
+  }
+
+
+	// SHOW OVERLAY ON SUBMIT (upload/copy can take time)
+	  form.addEventListener("submit", function () {
+		if (overlay) {
+		  overlay.classList.remove("hidden");
+		  overlay.classList.add("flex");
+		}
+
+		// Disable key controls to prevent double submit / closing during upload
+		openBtn.disabled = true;
+		openBtn.classList.add("opacity-60", "cursor-not-allowed");
+		if (closeBtn) closeBtn.disabled = true;
+		if (confirmBtn) confirmBtn.disabled = true;
+
+		// IMPORTANT:
+		// Do NOT disable inputs (especially the file input), otherwise the file won't be sent.
+		const buttons = Array.from(form.querySelectorAll("button"));
+		buttons.forEach(el => {
+		  el.disabled = true;
+		  if (el.classList) el.classList.add("opacity-60", "cursor-not-allowed");
+		});
+	  });
+
+  updateButtonState();
+  fileInput.addEventListener("change", updateButtonState);
+  openBtn.addEventListener("click", openModal);
+  closeBtn.addEventListener("click", closeModal);
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !tautulliModal.classList.contains("hidden")) closeModal();
+  });
+
+  tautulliModal.addEventListener("click", (e) => {
+    if (e.target === tautulliModal || (e.target.classList && e.target.classList.contains("bg-black/70"))) closeModal();
+  });
+
+  // On page load: show status of latest import (if any) and poll if needed
+  pollJobStatusOnce();
+</script>

@@ -1,24 +1,61 @@
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
   <h2 class="text-sm font-semibold mb-4">{{ t("backup_settings") }}</h2>
 
-  <p class="text-xs text-slate-400 mb-3">
-    {{ t("auto_retention_info") }}
-  </p>
-
-  <form action="{{ url_for('backup_page') }}" method="post" class="space-y-4">
-    <input type="hidden" name="action" value="save_settings">
-
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+    <!-- LEFT: settings -->
     <div>
-      <label class="block text-xs text-slate-400 mb-1">
-        {{ t("backup_retention_days") }}
-      </label>
-      <input type="number" min="1" name="backup_retention_days"
-             value="{{ settings.backup_retention_days }}"
-             class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs w-full">
+      <form action="{{ url_for('backup_page') }}" method="post" class="space-y-4">
+        <input type="hidden" name="action" value="save_settings">
+
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">
+            {{ t("backup_retention_days") }}
+          </label>
+          <input type="number" min="1" name="backup_retention_days"
+                 value="{{ settings.backup_retention_days }}"
+                 class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs w-full">
+        </div>
+
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">
+            {{ t("data_retention_years") }}
+          </label>
+          <input type="number" min="0" name="data_retention_years"
+                 value="{{ settings.data_retention_years }}"
+                 class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs w-full">
+          <div class="text-[11px] text-slate-500 mt-1">
+            {{ t("data_retention_years_help") }}
+          </div>
+        </div>
+
+        <button class="px-4 py-2 rounded-lg bg-primary/80 hover:bg-primary text-white text-sm">
+          {{ t("save_settings") }}
+        </button>
+      </form>
     </div>
 
-    <button class="px-4 py-2 rounded-lg bg-primary/80 hover:bg-primary text-white text-sm">
-      {{ t("save_settings") }}
-    </button>
-  </form>
+    <!-- RIGHT: db size -->
+    <div class="xl:border-l xl:border-slate-800 xl:pl-6">
+      <div class="text-xs text-slate-400 mb-1">{{ t("db_size") }}</div>
+
+      {% if db_size_bytes is defined and db_size_bytes %}
+        {% set mb = db_size_bytes / 1024 / 1024 %}
+        {% set gb = mb / 1024 %}
+
+        <div class="text-3xl font-semibold leading-tight">
+          {% if gb >= 1 %}
+            {{ gb|round(2) }} GB
+          {% else %}
+            {{ mb|round(2) }} MB
+          {% endif %}
+        </div>
+
+        <div class="text-[11px] text-slate-500 mt-1">
+          {{ db_size_bytes }} bytes
+        </div>
+      {% else %}
+        <div class="text-sm text-slate-500">—</div>
+      {% endif %}
+    </div>
+  </div>
 </div>

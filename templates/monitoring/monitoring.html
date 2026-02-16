@@ -48,7 +48,7 @@
   {# ✅ HTMX conservé pour les autres onglets (auto-refresh OK) #}
   <div id="monitoring-content"
        hx-get="{{ url_for('monitoring_page', **args) }}"
-       hx-trigger="load, every {{ refresh_ms }}ms"
+       hx-trigger="every {{ refresh_ms }}ms"
        hx-swap="innerHTML">
     {# ✅ contenu initial pour éviter un blanc #}
     {% include tab_template %}

@@ -5,3 +5,4 @@ python-dateutil
 waitress
 itsdangerous
 croniter
+requests
