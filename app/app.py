@@ -35,8 +35,7 @@ task_logger = get_logger("tasks_ui")
 auth_logger = get_logger("auth")
 security_logger = get_logger("security")
 settings_logger = get_logger("settings")
-
-
+        
 from discord_utils import is_discord_ready, validate_discord_bot_token
 
 from api.subscriptions import subscriptions_api, update_user_expiration
@@ -207,6 +206,60 @@ def create_app():
 
     app.register_blueprint(subscriptions_api)
     app.register_blueprint(users_bp)
+
+    def _reset_maintenance_on_startup(app):
+        """
+        If the app was left in maintenance mode after a restore,
+        reset it automatically on container restart.
+
+        Note:
+        - We ONLY do this when maintenance_mode == 1 (restore flow).
+        - We DO NOT enable every task blindly.
+        - We re-enable only the tasks that are enabled by default in db_bootstrap.py.
+        """
+        try:
+            with app.app_context():
+                db = get_db()
+                row = db.query_one("SELECT maintenance_mode FROM settings WHERE id = 1")
+
+                if not row or int(row["maintenance_mode"] or 0) != 1:
+                    return
+
+                # 1) Exit maintenance (restore completed after container restart)
+                db.execute("UPDATE settings SET maintenance_mode = 0 WHERE id = 1")
+                get_logger("boot").warning("Maintenance mode was ON at startup -> reset to OFF")
+
+                # 2) Re-enable ONLY the default/core tasks
+                core_tasks = (
+                    "check_update",
+                    "auto_backup",
+                    "cleanup_backups",
+                    "update_user_status",
+                    "check_servers",
+                    "cleanup_unfriended",
+                    "import_tautulli",
+                )
+
+                placeholders = ",".join(["?"] * len(core_tasks))
+                db.execute(
+                    f"""
+                    UPDATE tasks
+                    SET enabled = 1
+                    WHERE name IN ({placeholders})
+                    """,
+                    core_tasks,
+                )
+
+                get_logger("boot").warning(
+                    "Startup restore recovery: re-enabled core tasks: %s",
+                    ", ".join(core_tasks),
+                )
+
+        except Exception:
+            # Never block startup because of this
+            get_logger("boot").exception("Failed to reset maintenance mode on startup")
+
+
 
 
     # -----------------------------
@@ -1075,11 +1128,21 @@ def create_app():
             else:
                 total = db.query_one(
                     """
-                    SELECT COUNT(DISTINCT media_user_id) AS cnt
-                    FROM media_session_history
-                    WHERE media_user_id IS NOT NULL
+                    WITH base AS (
+                      SELECT
+                        CASE
+                          WHEN mu.vodum_user_id IS NOT NULL THEN ('v:' || mu.vodum_user_id)
+                          ELSE ('m:' || mu.id)
+                        END AS group_key
+                      FROM media_session_history h
+                      JOIN media_users mu ON mu.id = h.media_user_id
+                      WHERE h.media_user_id IS NOT NULL
+                    )
+                    SELECT COUNT(DISTINCT group_key) AS cnt
+                    FROM base
                     """
                 ) or {"cnt": 0}
+
 
 
             total = dict(total) if total else {"cnt": 0}
@@ -1093,12 +1156,12 @@ def create_app():
                 sort_dir = "desc"
 
             SORT_MAP = {
-                "user": "mu.username",
+                "user": "n.username",
                 "last": "lr.last_watch_at",
                 "plays": "a.total_plays",
                 "watch": "a.watch_ms",
                 "ip": "lr.ip",
-                "platform": "COALESCE(lr.device, lr.client_product, '-')",
+                # "platform": "COALESCE(lr.device, lr.client_product, '-')",
                 "player": "COALESCE(lr.client_name, lr.client_product, '-')",
             }
             if sort_key not in SORT_MAP:
@@ -1115,7 +1178,7 @@ def create_app():
                 like = f"%{q}%"
                 end_where = """
                 WHERE (
-                  COALESCE(mu.username,'') LIKE ? OR
+                  COALESCE(n.username,'') LIKE ? OR
                   COALESCE(vu.username,'') LIKE ? OR
                   COALESCE(vu.email,'') LIKE ? OR
                   COALESCE(vu.second_email,'') LIKE ? OR
@@ -1124,29 +1187,57 @@ def create_app():
                   COALESCE(vu.notes,'') LIKE ?
                 )
                 """
+
                 params.extend([like, like, like, like, like, like, like])
 
 
             rows = db.query(
                 f"""
-                WITH ranked AS (
+                WITH base AS (
                   SELECT
                     h.media_user_id,
                     h.stopped_at,
+                    h.watch_ms,
                     h.ip,
                     h.device,
                     h.client_name,
                     h.client_product,
-                    ROW_NUMBER() OVER (
-                      PARTITION BY h.media_user_id
-                      ORDER BY h.stopped_at DESC
-                    ) AS rn
+                    mu.username AS mu_username,
+                    mu.vodum_user_id,
+                    CASE
+                      WHEN mu.vodum_user_id IS NOT NULL THEN ('v:' || mu.vodum_user_id)
+                      ELSE ('m:' || mu.id)
+                    END AS group_key
                   FROM media_session_history h
+                  JOIN media_users mu ON mu.id = h.media_user_id
                   WHERE h.media_user_id IS NOT NULL
+                ),
+                agg AS (
+                  SELECT
+                    group_key,
+                    MAX(stopped_at) AS last_watch_at,
+                    COUNT(*) AS total_plays,
+                    COALESCE(SUM(watch_ms),0) AS watch_ms
+                  FROM base
+                  GROUP BY group_key
+                ),
+                ranked AS (
+                  SELECT
+                    group_key,
+                    stopped_at,
+                    ip,
+                    device,
+                    client_name,
+                    client_product,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY group_key
+                      ORDER BY stopped_at DESC
+                    ) AS rn
+                  FROM base
                 ),
                 last_rows AS (
                   SELECT
-                    media_user_id,
+                    group_key,
                     stopped_at AS last_watch_at,
                     ip,
                     device,
@@ -1155,36 +1246,36 @@ def create_app():
                   FROM ranked
                   WHERE rn = 1
                 ),
-                agg AS (
+                names AS (
                   SELECT
-                    h.media_user_id,
-                    COUNT(*) AS total_plays,
-                    SUM(h.watch_ms) AS watch_ms
-                  FROM media_session_history h
-                  WHERE h.media_user_id IS NOT NULL
-                  GROUP BY h.media_user_id
+                    b.group_key,
+                    MAX(b.vodum_user_id) AS vodum_user_id,
+                    MIN(b.media_user_id) AS user_id,
+                    COALESCE(vu.username, MIN(b.mu_username)) AS username
+                  FROM base b
+                  LEFT JOIN vodum_users vu ON vu.id = b.vodum_user_id
+                  GROUP BY b.group_key
                 )
                 SELECT
-                  mu.id AS user_id,
-                  mu.username,
-                  mu.type AS provider,
-                  mu.server_id,
+                  n.user_id AS user_id,
+                  n.username AS username,
                   lr.last_watch_at,
                   a.total_plays,
                   a.watch_ms,
                   lr.ip AS last_ip,
                   COALESCE(lr.device, lr.client_product, '-') AS platform,
                   COALESCE(lr.client_name, lr.client_product, '-') AS player
-                  FROM last_rows lr
-                  JOIN agg a ON a.media_user_id = lr.media_user_id
-                  JOIN media_users mu ON mu.id = lr.media_user_id
-                  LEFT JOIN vodum_users vu ON vu.id = mu.vodum_user_id
-                  {end_where}
+                FROM agg a
+                JOIN last_rows lr ON lr.group_key = a.group_key
+                JOIN names n ON n.group_key = a.group_key
+                LEFT JOIN vodum_users vu ON vu.id = n.vodum_user_id
+                {end_where}
                 ORDER BY {order_sql}
                 LIMIT {per_page} OFFSET ?
                 """,
                 tuple(params + [offset]),
             )
+
 
             rows = [dict(r) for r in rows]
             for u in rows:
@@ -1767,19 +1858,20 @@ def create_app():
         # ✅ IMPORTANT :
         # Un même user existe 1 fois par serveur dans media_users.
         # On doit donc agréger tous les media_users.id qui ont le même vodum_user_id + external_user_id + type.
-        linked_rows = db.query(
-            """
-            SELECT id, server_id
-            FROM media_users
-            WHERE vodum_user_id = ?
-              AND external_user_id = ?
-              AND type = ?
-            ORDER BY server_id
-            """,
-            (u["vodum_user_id"], u["external_user_id"], u["type"]),
-        )
+        if u.get("vodum_user_id"):
+            linked_rows = db.query(
+                """
+                SELECT id, server_id
+                FROM media_users
+                WHERE vodum_user_id = ?
+                ORDER BY type, server_id
+                """,
+                (u["vodum_user_id"],),
+            )
+            linked_ids = [r["id"] for r in linked_rows] or [user_id]
+        else:
+            linked_ids = [user_id]
 
-        linked_ids = [r["id"] for r in linked_rows] or [user_id]
 
         # ✅ Tous les media_users liés au même vodum_user (tous types: plex/jellyfin/...)
         all_identity_rows = db.query(
@@ -6331,65 +6423,99 @@ def create_app():
             raise FileNotFoundError(str(backup_path))
 
         # Sauvegarde de précaution
-        backup_dir = ensure_backup_dir()
+        backup_dir = ensure_backup_dir(backup_cfg)
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
 
         if db_path.exists():
-            shutil.copy2(
-                db_path,
-                backup_dir / f"pre_restore_{timestamp}.sqlite",
-            )
+            shutil.copy2(db_path, backup_dir / f"pre_restore_{timestamp}.sqlite")
 
-        shutil.copy2(backup_path, db_path)
+        # Nettoyer WAL/SHM (sinon SQLite peut repartir avec un état incohérent)
+        for suffix in ("-wal", "-shm"):
+            p = db_path.with_name(db_path.name + suffix)
+            if p.exists():
+                try:
+                    p.unlink()
+                except Exception:
+                    pass
+
+        # Copie atomique: tmp -> replace
+        tmp_path = db_path.with_name(db_path.name + f".tmp_restore_{timestamp}")
+        shutil.copy2(backup_path, tmp_path)
+        os.replace(tmp_path, db_path)
+
+
 
     def safe_restore(backup_path: Path):
         """
-        Restaure un fichier de base SQLite.
+        Restore the SQLite database from a backup file safely.
 
-        ⚠️ Fonction volontairement destructive :
-        - désactive les tâches
-        - passe en maintenance
-        - écrase le fichier DB
-        - nécessite un redémarrage du conteneur
-
-        Compatible DBManager (aucun close / commit / rollback manuel)
+        - Close current DB (and reset singleton via DBManager.close())
+        - Replace DB atomically
+        - Remove WAL/SHM (important with SQLite)
+        - Re-open a fresh connection to set maintenance_mode=1 and disable tasks
+        - Exit the process to let Docker restart the container
         """
-        logger = get_logger("backup")
-        db = get_db()
+        log = get_logger("backup")
 
-        # 1️⃣ Désactiver toutes les tâches
-        db.execute(
-            "UPDATE tasks SET enabled = 0"
-        )
+        db_path = Path(current_app.config["DATABASE"])
+        backup_path = Path(backup_path)
 
-        # 2️⃣ Attendre que toutes les tâches soient arrêtées
-        for _ in range(30):
-            row = db.query_one(
-                "SELECT COUNT(*) AS cnt FROM tasks WHERE status = 'running'"
-            )
-            if not row or row["cnt"] == 0:
-                break
-            time.sleep(1)
-        else:
-            raise RuntimeError("Some tasks are still running")
+        if not backup_path.exists():
+            raise FileNotFoundError(str(backup_path))
 
-        # 3️⃣ Passer l’application en maintenance
-        db.execute(
-            "UPDATE settings SET maintenance_mode = 1 WHERE id = 1"
-        )
+        # 1) Close current request DB connection (if any) and remove it from Flask.g
+        try:
+            db = g.pop("db", None)
+            if db is not None:
+                try:
+                    db.close()  # must reset singleton in DBManager.close()
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
-        # ⚠️ IMPORTANT
-        # - pas de close DB
-        # - pas de commit
-        # - pas de rollback
-        # DBManager gère l’état, le process devient volontairement incohérent
+        # 2) Remove SQLite WAL/SHM (avoid inconsistent state after swap)
+        for suffix in ("-wal", "-shm"):
+            p = db_path.with_name(db_path.name + suffix)
+            if p.exists():
+                try:
+                    p.unlink()
+                except Exception:
+                    pass
 
-        # 4️⃣ Restaurer le fichier DB (copie fichier)
-        restore_db_file(backup_path)
+        # 3) Atomic replace (copy to temp then os.replace)
+        tmp_path = db_path.with_suffix(db_path.suffix + ".restore_tmp")
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except Exception:
+                pass
 
-        logger.warning(
-            "[BACKUP] Base restaurée – redémarrage du conteneur requis"
-        )
+        shutil.copy2(str(backup_path), str(tmp_path))
+        os.replace(str(tmp_path), str(db_path))
+
+        # 4) Open a FRESH connection on the restored DB and force maintenance + disable tasks
+        try:
+            restored_db = DBManager(str(db_path))  # new singleton instance created now
+            restored_db.execute("UPDATE settings SET maintenance_mode = 1 WHERE id = 1")
+            restored_db.execute("UPDATE tasks SET enabled = 0")
+            try:
+                restored_db.close()  # resets singleton again (safe)
+            except Exception:
+                pass
+        except Exception:
+            log.exception("Post-restore maintenance/tasks update failed")
+
+        # 5) Restart container (give time to return response)
+        def _delayed_exit():
+            time.sleep(1.5)
+            os._exit(0)
+
+        threading.Thread(target=_delayed_exit, daemon=True).start()
+        log.warning("Database restored. Maintenance mode ON. Process will exit for restart.")
+
+
+
 
     def get_sqlite_db_size_bytes(db_path: str) -> int | None:
         """
@@ -6416,18 +6542,42 @@ def create_app():
             return None
     
 
+    def _looks_like_tautulli_db(path: str) -> tuple[bool, str]:
+        """
+        Returns (ok, details). details contains tables count or the exception message.
+        """
+        try:
+            import sqlite3
+
+            # Ouvre en lecture seule (évite toute création implicite)
+            conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+            cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            tables = {r[0] for r in cur.fetchall()}
+            conn.close()
+
+            required = {"users", "session_history", "session_history_metadata"}
+            missing = sorted(list(required - tables))
+            if missing:
+                return False, f"Missing required tables: {', '.join(missing)} (found={len(tables)})"
+            return True, f"OK (found_tables={len(tables)})"
+
+        except Exception as e:
+            return False, f"{type(e).__name__}: {e}"
+
+
+
     @app.route("/backup", methods=["GET", "POST"])
     def backup_page():
         t = get_translator()
         db = get_db()
 
         # Charger les réglages (dont la rétention)
-        settings = db.query_one(
-            "SELECT * FROM settings LIMIT 1"
-        )
+        settings = db.query_one("SELECT * FROM settings LIMIT 1")
+
+        plex_servers = db.query("SELECT id, name FROM servers WHERE type='plex' ORDER BY name ASC")
+
 
         db_size_bytes = get_sqlite_db_size_bytes(app.config["DATABASE"])
-
         backups = list_backups(backup_cfg)
 
         if request.method == "POST":
@@ -6439,15 +6589,9 @@ def create_app():
             if action == "create":
                 try:
                     name = create_backup_file(get_db, backup_cfg)
-                    flash(
-                        t("backup_created").format(name=name),
-                        "success",
-                    )
+                    flash(t("backup_created").format(name=name), "success")
                 except Exception as e:
-                    flash(
-                        t("backup_create_error").format(error=str(e)),
-                        "error",
-                    )
+                    flash(t("backup_create_error").format(error=str(e)), "error")
 
             # ───────────────────────────────
             # Restauration d'un backup
@@ -6455,26 +6599,27 @@ def create_app():
             elif action == "restore":
                 selected = request.form.get("selected_backup")
 
-                # 1️⃣ Restore depuis un backup existant
+                # 1) Restore depuis un backup existant
                 if selected:
                     backup_path = Path(app.config["BACKUP_DIR"]) / selected
 
                     if not backup_path.exists():
                         flash(t("backup_not_found"), "error")
-                    else:
-                        try:
-                            safe_restore(backup_path)
-                            flash(
-                                t("backup_restore_success_restart"),
-                                "success",
-                            )
-                        except Exception as e:
-                            flash(
-                                t("backup_restore_error").format(error=str(e)),
-                                "error",
-                            )
+                        return redirect(url_for("backup_page"))
 
-                # 2️⃣ Restore par upload
+                    try:
+                        safe_restore(backup_path)
+                        flash(t("backup_restore_success_restart"), "success")
+                        return redirect(url_for("backup_page"))  # <- IMPORTANT
+                    except Exception as e:
+                        flash(t("backup_restore_error").format(error=str(e)), "error")
+                        return redirect(url_for("backup_page"))
+
+
+
+
+
+                # 2) Restore par upload
                 else:
                     file = request.files.get("backup_file")
 
@@ -6488,16 +6633,12 @@ def create_app():
                         file.save(temp_path)
 
                         try:
-                            restore_backup_file(temp_path, backup_cfg)
-                            flash(
-                                t("backup_restore_success_restart"),
-                                "success",
-                            )
+                            safe_restore(temp_path)  # ✅ même méthode que “restore depuis backup existant”
+                            flash(t("backup_restore_success_restart"), "success")
+                            return redirect(url_for("backup_page"))
                         except Exception as e:
-                            flash(
-                                t("backup_restore_error").format(error=str(e)),
-                                "error",
-                            )
+                            flash(t("backup_restore_error").format(error=str(e)), "error")
+                            return redirect(url_for("backup_page"))
                         finally:
                             if temp_path.exists():
                                 temp_path.unlink(missing_ok=True)
@@ -6508,31 +6649,208 @@ def create_app():
             elif action == "save_settings":
                 try:
                     days = int(request.form.get("backup_retention_days", "30"))
+                    years = int(request.form.get("data_retention_years", "0"))
+
+                    # Safety: keep sane values
+                    if days < 1:
+                        days = 30
+                    if years < 0:
+                        years = 0
 
                     db.execute(
-                        "UPDATE settings SET backup_retention_days = ?",
-                        (days,),
+                        "UPDATE settings SET backup_retention_days = ?, data_retention_years = ?",
+                        (days, years),
                     )
-
-                    flash(
-                        t("backup_settings_saved"),
-                        "success",
-                    )
+                    flash(t("backup_settings_saved"), "success")
                 except Exception as e:
-                    flash(
-                        t("backup_settings_error").format(error=str(e)),
-                        "error",
-                    )
+                    flash(t("backup_settings_error").format(error=str(e)), "error")
 
+
+
+            # ───────────────────────────────
+            # Import Tautulli
+            # ───────────────────────────────
+            elif action == "tautulli_import":
+                try:
+                    keep_all_users = 1 if request.form.get("tautulli_keep_all_users") == "1" else 0
+                    keep_all_servers = 0  # legacy
+
+
+                    libraries_mode = (request.form.get("tautulli_libraries_mode") or "only_existing").strip()
+                    import_only_available_libraries = 1 if libraries_mode == "only_existing" else 0
+                    keep_all_libraries = 1 if libraries_mode == "keep_all" else 0
+
+                    target_server_id_raw = (request.form.get("tautulli_target_server_id") or "").strip()
+                    target_server_id = int(target_server_id_raw) if target_server_id_raw.isdigit() else 0
+
+
+                    log = get_logger("backup")
+
+                    file = request.files.get("tautulli_db")
+                    if not file or file.filename == "":
+                        flash("No file provided.", "error")
+                    else:
+                        imports_dir = Path("/appdata/imports")
+                        imports_dir.mkdir(parents=True, exist_ok=True)
+
+                        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+                        final_path = imports_dir / f"tautulli_{ts}.db"
+
+                        # Save to a temporary file first, then atomic move.
+                        tmp_path = imports_dir / f".tautulli_{ts}.uploading"
+                        try:
+                            file.save(str(tmp_path))  # str() pour éviter tout souci Path/Werkzeug
+                        except Exception as e:
+                            log.error(f"[TAUTULLI UI] file.save failed to {tmp_path}: {e}", exc_info=True)
+                            flash(f"Upload failed: {e}", "error")
+                            backups = list_backups(backup_cfg)
+                            tautulli_job = db.query_one("""
+                                SELECT id, status, created_at, started_at, finished_at, stats_json, last_error
+                                FROM tautulli_import_jobs
+                                ORDER BY id DESC
+                                LIMIT 1
+                            """)
+                            return render_template(
+                                "backup/backup.html",
+                                backups=backups,
+                                settings=settings,
+                                db_size_bytes=db_size_bytes,
+                                active_page="backup",
+                                plex_servers=plex_servers,
+                                tautulli_job=tautulli_job,
+                            )
+
+                        # Check size (detect empty/truncated uploads)
+                        size = -1
+                        try:
+                            size = tmp_path.stat().st_size
+                        except Exception:
+                            pass
+
+                        log.info(f"[TAUTULLI UI] uploaded tmp file={tmp_path} size={size} bytes")
+
+                        if size < 4096:
+                            # Keep the file for inspection, do not delete.
+                            bad = imports_dir / f"tautulli_{ts}.too_small"
+                            try:
+                                tmp_path.replace(bad)
+                            except Exception:
+                                pass
+                            flash(
+                                f"Upload looks too small ({size} bytes). File kept as {bad.name} for inspection.",
+                                "error",
+                            )
+                        else:
+                            # Atomic move into final name
+                            try:
+                                tmp_path.replace(final_path)
+                            except Exception as e:
+                                log.error(f"[TAUTULLI UI] atomic move failed: {tmp_path} -> {final_path}: {e}", exc_info=True)
+                                flash(f"Cannot finalize upload file: {e}", "error")
+                            else:
+                                ok, details = _looks_like_tautulli_db(str(final_path))
+                                log.info(f"[TAUTULLI UI] validate {final_path}: ok={ok} details={details}")
+
+                                if not ok:
+                                    # IMPORTANT: do NOT delete -> keep file for debugging
+                                    invalid_path = imports_dir / f"tautulli_{ts}.invalid.db"
+                                    try:
+                                        final_path.replace(invalid_path)
+                                    except Exception:
+                                        invalid_path = final_path  # fallback
+
+                                    flash(
+                                        f"This file does not look like a valid Tautulli DB. "
+                                        f"Reason: {details}. File kept as {invalid_path.name}.",
+                                        "error",
+                                    )
+                                else:
+                                    cur = db.execute(
+                                        """
+                                        INSERT INTO tautulli_import_jobs(
+                                          server_id, file_path,
+                                          keep_all_servers, keep_all_users,
+                                          keep_all_libraries, import_only_available_libraries, target_server_id,
+                                          status
+                                        )
+                                        VALUES (?, ?, ?, ?, ?, ?, ?, 'queued')
+
+                                        """,
+                                        (0, str(final_path), 0, int(keep_all_users), int(keep_all_libraries), int(import_only_available_libraries), int(target_server_id)),
+                                    )
+
+                                    job_id = None
+                                    try:
+                                        job_id = int(cur.lastrowid)
+                                    except Exception:
+                                        pass
+
+                                    log.info(
+                                        f"[TAUTULLI UI] job enqueued (job_id={job_id}) file={final_path} "
+                                        f"keep_all_servers={keep_all_servers} keep_all_users={keep_all_users}"
+                                    )
+
+                                    flash(
+                                        "Tautulli database uploaded. Import can take a long time — please be patient.",
+                                        "info",
+                                    )
+
+                                    # Trigger task now
+                                    run_task_by_name("import_tautulli")
+
+                except Exception as e:
+                    flash(f"Error while starting import: {e}", "error")
+
+
+
+
+            # Refresh backups list after any POST action
             backups = list_backups(backup_cfg)
+
+        # Dernier job Tautulli (pour afficher l'état sur la page)
+        tautulli_job = db.query_one("""
+            SELECT id, status, created_at, started_at, finished_at, stats_json, last_error
+            FROM tautulli_import_jobs
+            ORDER BY id DESC
+            LIMIT 1
+        """)
+
 
         return render_template(
             "backup/backup.html",
             backups=backups,
             settings=settings,
-            db_size_bytes=db_size_bytes, 
+            db_size_bytes=db_size_bytes,
             active_page="backup",
+            plex_servers=plex_servers,
+            tautulli_job=tautulli_job,
         )
+
+    @app.route("/backup/tautulli-import/status", methods=["GET"])
+    def tautulli_import_status():
+        db = get_db()
+        job = db.query_one("""
+            SELECT id, status, created_at, started_at, finished_at, stats_json, last_error
+            FROM tautulli_import_jobs
+            ORDER BY id DESC
+            LIMIT 1
+        """)
+
+        if not job:
+            return jsonify({"status": "none"})
+
+        # job est une row sqlite => dict(row) ok dans ton codebase
+        j = dict(job)
+
+        return jsonify({
+            "status": j.get("status"),
+            "id": j.get("id"),
+            "created_at": j.get("created_at"),
+            "started_at": j.get("started_at"),
+            "finished_at": j.get("finished_at"),
+            "stats_json": j.get("stats_json"),
+            "last_error": j.get("last_error"),
+        })
 
 
 
@@ -6816,29 +7134,31 @@ def create_app():
     
     @app.before_request
     def maintenance_guard():
-        # Routes toujours autorisées
-        allowed = (
-            request.path.startswith("/static"),
-            request.path.startswith("/set_language"),
-            request.path.startswith("/settings"),
+        # Autorisations minimales (maintenance)
+        allowed_prefixes = (
+            "/static",
+            "/set_language",
+            "/health",
+            "/login",
+            "/logout",
+            "/setup-admin",
         )
 
-        if any(allowed):
+        if request.path.startswith(allowed_prefixes) or request.path in ("/favicon.ico",):
             return
 
-        db = get_db()
-        row = db.query_one(
-            "SELECT maintenance_mode FROM settings WHERE id = 1"
-        )
+        try:
+            db = get_db()
+            row = db.query_one("SELECT maintenance_mode FROM settings WHERE id = 1")
+            if row and int(row["maintenance_mode"] or 0) == 1:
+                return (
+                    render_template("maintenance.html", active_page="settings"),
+                    503,
+                )
+        except Exception:
+            # Si DB KO, on évite de faire planter toutes les routes ici.
+            return
 
-        if row and row["maintenance_mode"] == 1:
-            return (
-                render_template(
-                    "maintenance.html",
-                    active_page="settings",
-                ),
-                503,
-            )
             
             
     @app.route("/settings", methods=["GET", "POST"])
@@ -7332,6 +7652,7 @@ def create_app():
     app.table_exists = table_exists
     app.scheduler_db_provider = scheduler_db_provider
 
+    _reset_maintenance_on_startup(app)
 
     return app
 
