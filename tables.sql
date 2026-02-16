@@ -228,6 +228,8 @@ CREATE TABLE IF NOT EXISTS settings (
     debug_mode INTEGER DEFAULT 0,
 	
 	backup_retention_days INTEGER DEFAULT 30,
+	data_retention_years INTEGER DEFAULT 0,
+
 	
 	brand_name TEXT DEFAULT NULL,
 	
@@ -655,3 +657,22 @@ CREATE TABLE IF NOT EXISTS discord_campaigns (
   FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS tautulli_import_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    server_id INTEGER,
+    file_path TEXT NOT NULL,
+    keep_all_users INTEGER NOT NULL DEFAULT 0,
+    keep_all_libraries INTEGER NOT NULL DEFAULT 0,
+    import_only_available_libraries INTEGER NOT NULL DEFAULT 1,
+    target_server_id INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL CHECK(status IN ('queued','running','success','error')),
+    stats_json TEXT,
+    last_error TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    started_at DATETIME,
+    finished_at DATETIME
+);
+
+
+CREATE INDEX IF NOT EXISTS idx_tautulli_import_jobs_status ON tautulli_import_jobs(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_tautulli_import_jobs_server ON tautulli_import_jobs(server_id);

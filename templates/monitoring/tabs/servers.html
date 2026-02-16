@@ -220,9 +220,12 @@
   if (picker) {
     picker.addEventListener("change", () => {
       const base = "{{ url_for('monitoring_page', tab='servers') }}";
-      window.location.href = `${base}?range=${encodeURIComponent(picker.value || "7d")}`;
+      // base contient déjà "?tab=servers" => on ajoute le param via "&"
+      const sep = base.includes("?") ? "&" : "?";
+      window.location.href = `${base}${sep}range=${encodeURIComponent(picker.value || "7d")}`;
     });
   }
+
 
   async function render() {
     await waitForChart();
