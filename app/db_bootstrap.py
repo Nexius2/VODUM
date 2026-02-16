@@ -144,6 +144,47 @@ def run_migrations():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_stream_enforcements_time ON stream_enforcements(created_at);")
         conn.commit()
 
+    # -------------------------------------------------
+    # 0.3 Tautulli import jobs
+    # -------------------------------------------------
+    if not table_exists(cursor, "tautulli_import_jobs"):
+        print("🛠 Creating table: tautulli_import_jobs")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS tautulli_import_jobs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          server_id INTEGER NOT NULL, -- legacy (0 maintenant)
+          file_path TEXT NOT NULL,
+
+          
+          keep_all_libraries INTEGER NOT NULL DEFAULT 0,
+          import_only_available_libraries INTEGER NOT NULL DEFAULT 1,
+          target_server_id INTEGER NOT NULL DEFAULT 0,
+          keep_all_users   INTEGER NOT NULL DEFAULT 0,
+
+          status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','running','success','error')),
+          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          started_at TIMESTAMP,
+          finished_at TIMESTAMP,
+          stats_json TEXT,
+          last_error TEXT
+        );
+        """)
+        conn.commit()
+
+    # ✅ IMPORTANT : ces migrations doivent être exécutées même si la table existe déjà
+   
+    
+    ensure_column(cursor, "tautulli_import_jobs", "keep_all_libraries", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column(cursor, "tautulli_import_jobs", "import_only_available_libraries", "INTEGER NOT NULL DEFAULT 1")
+    ensure_column(cursor, "tautulli_import_jobs", "target_server_id", "INTEGER NOT NULL DEFAULT 0")
+
+    ensure_column(cursor, "tautulli_import_jobs", "keep_all_users", "INTEGER NOT NULL DEFAULT 0")
+
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tautulli_import_jobs_status ON tautulli_import_jobs(status, created_at);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tautulli_import_jobs_server ON tautulli_import_jobs(server_id);")
+    conn.commit()
+
+
 
     # -------------------------------------------------
     # 1. Vérifier que toutes les tables existent
@@ -160,6 +201,7 @@ def run_migrations():
         "settings": [],
         "user_identities": [],
         "media_jobs": [],
+        "tautulli_import_jobs": [],
         "tasks": []
     }
 
@@ -262,6 +304,9 @@ def run_migrations():
     # -------------------------------------------------
     ensure_column(cursor, "settings", "brand_name", "TEXT DEFAULT NULL")
     ensure_column(cursor, "settings", "email_history_retention_years", "INTEGER DEFAULT 2")
+    ensure_column(cursor, "settings", "backup_retention_days", "INTEGER DEFAULT 30")
+    ensure_column(cursor, "settings", "data_retention_years", "INTEGER DEFAULT 0")
+
 
     
     # 🔐 Auth admin
@@ -718,6 +763,16 @@ def run_migrations():
         "status": "idle"
     })
 
+    # Tâche cleanup des données (purge des historiques selon data_retention_years)
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "cleanup_data_retention",
+        "description": "task_description.cleanup_data_retention",
+        "schedule": "0 4 * * 0",  # chaque dimanche à 04:00
+        "enabled": 1,
+        "status": "idle"
+    })
+
+
     # Tâche update_user_status
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "update_user_status",
@@ -761,6 +816,15 @@ def run_migrations():
         "schedule": "*/1 * * * *",
         "enabled": 0,
         "status": "disabled"
+    })
+
+    # Tautulli import (on-demand; does nothing if no queued job)
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "import_tautulli",
+        "description": "task_description.import_tautulli",
+        "schedule": "*/1 * * * *",
+        "enabled": 1,
+        "status": "idle"
     })
 
 

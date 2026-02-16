@@ -1,49 +1,41 @@
 import threading
 import time
-import traceback
 import importlib
 from datetime import datetime
 from croniter import croniter
 import os
+
 from db_manager import DBManager
+from logging_utils import get_logger
 
-
+# -------------------------------------------------------------------
+# DB / LOGGER
+# -------------------------------------------------------------------
 DB_PATH = os.environ.get("DATABASE_PATH", "/appdata/database.db")
 db = DBManager(DB_PATH)
 
-
-# 🔥 AJOUT : logger TXT
-from logging_utils import get_logger
 logger = get_logger("tasks_engine")
 
-# -----------------------------------------
-# SEQUENCE DE TÂCHES (séquentiel + verrou)
-# -----------------------------------------
+# -------------------------------------------------------------------
+# LOCKS / QUEUES
+# -------------------------------------------------------------------
 sequence_lock = threading.Lock()
-# ---------------------------
-# QUEUE DES SÉQUENCES
-# ---------------------------
+
 sequence_queue = []
 sequence_thread_running = False
 
-task_queue = []
 queue_lock = threading.Lock()
 worker_running = False
 
-
-db = DBManager()
-
-
 # -------------------------------------------------------------------
-# CONFIG
+# TASK LIMITS
 # -------------------------------------------------------------------
-
-
 TASK_MAX_DURATION = {
     "sync_plex": 60 * 60,       # 1h
     "sync_jellyfin": 30 * 60,   # 30 min
 }
 DEFAULT_TASK_MAX_DURATION = 30 * 60
+
 
 
 # -------------------------------------------------------------------
@@ -316,7 +308,18 @@ def run_task(task_id: int):
         logger.debug(f"Calling run() for task '{name}'")
 
         # 🔒 APPEL UNIFORME — règle officielle
-        run_func(task_id, db)
+        result = run_func(task_id, db)
+
+        # IMPORTANT: certaines tâches (ex: import_tautulli) retournent un dict "status"
+        # mais tasks_engine ne le log pas -> on a l'impression que "tout va bien" alors que rien ne s'est passé.
+        if result is not None:
+            try:
+                logger.info(f"Task '{name}' returned: {result}")
+                task_logs(task_id, "info", f"Task '{name}' returned", details=result)
+            except Exception:
+                # ne jamais casser le worker juste pour un log
+                pass
+
 
         duration = time.time() - start_time
         if duration > max_duration:
@@ -411,25 +414,6 @@ def run_task(task_id: int):
             pass
 
 
-#    except Exception as e:
-#        msg = f"Error while running {name}: {e}"
-#        logger.error(msg, exc_info=True)
-#        task_logs(task_id, "error", msg)
-
-        try:
-            db.execute(
-                """
-                UPDATE tasks
-                SET
-                    status = CASE WHEN queued_count > 0 THEN 'queued' ELSE 'error' END,
-                    last_error = ?,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
-                (str(e), task_id)
-            )
-        except Exception:
-            pass
 
 
     finally:
@@ -785,41 +769,11 @@ def scheduler_loop():
         try:
             # -------------------------------------------------
             # 0) Auto-enable / disable des tâches dépendantes
-            #    (avant de charger WHERE enabled = 1)
             # -------------------------------------------------
             auto_enable_stream_enforcer()
-            
+
             try:
-                # --- apply_plex_access_updates : utile seulement si Plex UP ou jobs en attente
-                plex_up = db.query_one(
-                    """
-                    SELECT COUNT(*) AS cnt
-                    FROM servers
-                    WHERE type = 'plex'
-                      AND LOWER(status) = 'up'
-                    """
-                )["cnt"]
-
-                pending_jobs = db.query_one(
-                    """
-                    SELECT COUNT(*) AS cnt
-                    FROM media_jobs
-                    WHERE processed = 0
-                    """
-                )["cnt"]
-
-                should_enable = 1 if (plex_up > 0 or pending_jobs > 0) else 0
-
-                db.execute(
-                    """
-                    UPDATE tasks
-                    SET enabled = ?,
-                        status  = CASE WHEN ? = 1 THEN 'idle' ELSE 'disabled' END
-                    WHERE name = 'apply_plex_access_updates'
-                    """,
-                    (should_enable, should_enable),
-                )
-
+                auto_enable_plex_jobs_worker()
             except Exception as e:
                 logger.warning(
                     f"Erreur auto-enable apply_plex_access_updates: {e}",
@@ -827,37 +781,13 @@ def scheduler_loop():
                 )
 
             try:
-                # --- apply_jellyfin_access_updates : utile seulement si Jellyfin UP ou jobs Jellyfin en attente
-                jellyfin_up = db.query_one(
-                    """
-                    SELECT COUNT(*) AS cnt
-                    FROM servers
-                    WHERE type = 'jellyfin'
-                      AND LOWER(status) = 'up'
-                    """
-                )["cnt"]
-
-                pending_jellyfin_jobs = db.query_one(
-                    """
-                    SELECT COUNT(*) AS cnt
-                    FROM media_jobs mj
-                    JOIN servers s ON s.id = mj.server_id
-                    WHERE mj.processed = 0
-                      AND s.type = 'jellyfin'
-                    """
-                )["cnt"]
-
-                should_enable = 1 if (jellyfin_up > 0 or pending_jellyfin_jobs > 0) else 0
-
-                db.execute(
-                    """
-                    UPDATE tasks
-                    SET enabled = ?,
-                        status  = CASE WHEN ? = 1 THEN 'idle' ELSE 'disabled' END
-                    WHERE name = 'apply_jellyfin_access_updates'
-                    """,
-                    (should_enable, should_enable),
+                auto_enable_jellyfin_jobs_worker()
+            except Exception as e:
+                logger.warning(
+                    f"Erreur auto-enable apply_jellyfin_access_updates: {e}",
+                    exc_info=True
                 )
+
 
             except Exception as e:
                 logger.warning(

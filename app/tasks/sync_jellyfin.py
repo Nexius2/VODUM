@@ -396,8 +396,10 @@ def _ensure_vodum_user_for_username(
             (provider_type, int(server_id), str(external_user_id)),
         )
 
-        if row_ident and row_ident.get("vodum_user_id"):
-            current_vuid = int(row_ident["vodum_user_id"])
+        vuid_val = row_ident["vodum_user_id"] if row_ident is not None else None
+        if vuid_val is not None:
+            current_vuid = int(vuid_val)
+
 
             # Si l'identité est déjà liée, mais vers un placeholder,
             # et qu'on trouve un vodum_user "meilleur" avec même username,

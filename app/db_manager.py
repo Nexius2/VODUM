@@ -134,8 +134,25 @@ class DBManager:
 
     def close(self) -> None:
         """
-        Fermeture explicite (rarement nécessaire).
+        Fermeture explicite.
+
+        IMPORTANT:
+        DBManager est un singleton strict. Si on ferme la connexion,
+        il faut réinitialiser l'instance, sinon les prochaines requêtes
+        vont réutiliser une connexion déjà fermée -> "Cannot operate on a closed database".
         """
         with self._lock:
-            self.conn.close()
-            logging.getLogger(__name__).info("DBManager connection closed")
+            try:
+                if getattr(self, "conn", None) is not None:
+                    self.conn.close()
+            except Exception:
+                # on ne bloque pas sur un close
+                pass
+
+            # reset complet pour permettre une ré-init propre au prochain DBManager(...)
+            self.conn = None
+            self._initialized = False
+            type(self)._instance = None
+
+        logging.getLogger(__name__).info("DBManager connection closed + singleton reset")
+

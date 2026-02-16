@@ -57,7 +57,7 @@
   "auto_retention_info": "Automatic retention information",
   "available_backups": "Available backups",
   "back": "Back",
-  "backup": "Backup",
+  "backup": "Backup & Import",
   "backup_create_error": "Error while creating backup: {error}",
   "backup_created": "Backup created: {name}",
   "backup_no_file": "No file provided",
@@ -744,7 +744,59 @@
   "delete_after_expiry_days_help": "Removes media server access after X days. Plex: the user is not deleted from Plex, only the library shares are revoked.",
   "user_id": "User ID",
   "task.stream_enforcer": "Stream enforcer",
-  "task_description.stream_enforcer": "Enforces streaming policies and limits active sessions."
+  "task_description.stream_enforcer": "Enforces streaming policies and limits active sessions.",
+  "tautulli_import_title": "Import Tautulli",
+  "tautulli_import_desc": "Upload your",
+  "tautulli_db_file_label": "Tautulli database file (.db)",
+  "start_import": "Start import",
+  "tautulli_import_options_title": "Tautulli import options",
+  "tautulli_import_options_desc": "Choose how VODUM should import historical data from Tautulli.",
+  "tautulli_keep_all_servers": "Keep all servers (not recommanded)",
+  "tautulli_keep_all_servers_desc": "Import the Plex server referenced by this Tautulli DB even if it does not exist in VODUM. If enabled, VODUM will create an offline Plex server entry and import into it.",
+  "tautulli_keep_all_users": "Keep all users (not recommanded)",
+  "tautulli_keep_all_users_desc": "Import users even if they do not exist in VODUM. Those users will be created as expired to avoid emails/policies being triggered.",
+  "confirm_start_import": "Confirm & start",
+  "tautulli_select_file_first": "Please select a Tautulli database file first (.db).",
+  "tautulli_import_tip": "Tip: you can disconnect — VODUM will keep the import result and show it later.",
+  "task.import_tautulli": "Import Tautulli history",
+  "task_description.import_tautulli": "Import watch history from a Tautulli database (tautulli.db).",
+  "task.expired_subscription_manager": "Expired subscriptions manager",
+  "confirm_restore_title": "Confirm restore",
+  "confirm_restore_hint": "This will overwrite the current database. Continue?",
+  "db_size_hint": "Database size",
+  "please_wait": "Please wait",
+  "tautulli_copying_db": "Copying Tautulli database...",
+  "dont_close_tab": "Do not close this tab during the operation.",
+  "please_wait": "Please wait…",
+  "tautulli_copying_db": "Copying Tautulli database and starting the import.",
+  "dont_close_tab": "Don’t close this window while the file is being uploaded.",
+"data_retention_years": "Delete data after (years)",
+"data_retention_years_help": "0 = unlimited (keep data forever)",
+"task_description.cleanup_data_retention": "Cleanup old data (history retention)",
+
+"tautulli_import_options": "Tautulli import options",
+"tautulli_import_options_desc": "Choose how VODUM should import historical data from Tautulli.",
+
+"tautulli_target_server": "Target server",
+"tautulli_target_server_desc": "Select which VODUM server the imported data will belong to.",
+
+"tautulli_libraries_policy": "Libraries policy",
+"tautulli_libraries_policy_desc": "Define how libraries should be handled during import.",
+
+"tautulli_import_only_available_libraries": "Import only existing libraries",
+"tautulli_import_only_available_libraries_desc": "Skip libraries that do not exist in VODUM.",
+
+"tautulli_keep_all_libraries": "Keep all libraries",
+"tautulli_keep_all_libraries_desc": "Import all libraries even if they are not configured.",
+
+"tautulli_keep_all_users": "Keep all users (not recommended)",
+"tautulli_keep_all_users_desc": "Import users even if they do not exist in VODUM. They will be created as expired to avoid triggering emails/policies.",
+
+"confirm_start": "Confirm & start",
+"cancel": "Cancel"
+
+
+  
 
 
 

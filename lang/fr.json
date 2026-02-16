@@ -57,7 +57,7 @@
   "auto_retention_info": "Informations sur la rétention automatique",
   "available_backups": "Sauvegardes disponibles",
   "back": "Retour",
-  "backup": "Sauvegarde",
+  "backup": "Sauvegarde & Import",
   "backup_create_error": "Erreur lors de la création du backup : {error}",
   "backup_created": "Backup créé : {name}",
   "backup_no_file": "Aucun fichier fourni",
@@ -744,7 +744,56 @@
   "delete_after_expiry_days_help": "Retire les accès au media server après X jours. Plex : l’utilisateur n’est pas supprimé de Plex, seuls les partages sont retirés.",
   "user_id": "User ID",
   "task.stream_enforcer": "Contrôle des flux",
-  "task_description.stream_enforcer": "Applique les règles de streaming et contrôle les sessions actives."
+  "task_description.stream_enforcer": "Applique les règles de streaming et contrôle les sessions actives.",
+  "tautulli_import_title": "Importer Tautulli",
+  "tautulli_import_desc": "Envoie ton fichier",
+  "tautulli_db_file_label": "Fichier base Tautulli (.db)",
+  "start_import": "Démarrer l'import",
+  "tautulli_import_options_title": "Options d'import Tautulli",
+  "tautulli_import_options_desc": "Choisis comment VODUM doit importer l’historique depuis Tautulli.",
+  "tautulli_keep_all_servers": "Conserver tous les serveurs (not recommanded)",
+  "tautulli_keep_all_servers_desc": "Importe le serveur Plex référencé par cette DB Tautulli même s’il n’existe pas dans VODUM. Si activé, VODUM crée un serveur Plex hors-ligne et importe dedans.",
+  "tautulli_keep_all_users": "Conserver tous les utilisateurs (not recommanded)",
+  "tautulli_keep_all_users_desc": "Importe les utilisateurs même s’ils n’existent pas dans VODUM. Ils seront créés comme expirés pour éviter tout envoi d’e-mails/policies.",
+  "confirm_start_import": "Confirmer & démarrer",
+  "tautulli_select_file_first": "Sélectionne d’abord un fichier de base Tautulli (.db).",
+  "tautulli_import_tip": "Astuce : tu peux te déconnecter — VODUM conservera le résultat et l’affichera plus tard.",
+  "task.import_tautulli": "Importer l’historique Tautulli",
+  "task_description.import_tautulli": "Importe l’historique de visionnage depuis une base de données Tautulli (tautulli.db).",
+  "task.expired_subscription_manager": "Gestion des abonnements expirés",
+  "confirm_restore_title": "Confirmer la restauration",
+  "confirm_restore_hint": "Cela écrasera la base de données actuelle. Continuer ?",
+  "db_size_hint": "Taille de la base",
+  "please_wait": "Veuillez patienter",
+  "tautulli_copying_db": "Copie de la base Tautulli en cours...",
+  "dont_close_tab": "Ne fermez pas cet onglet pendant l’opération.",
+"data_retention_years": "Supprimer les données après (années)",
+"data_retention_years_help": "0 = illimité (conserver les données indéfiniment)",
+"task_description.cleanup_data_retention": "Nettoyage des anciennes données (rétention historique)",
+
+"tautulli_import_options": "Options d’import Tautulli",
+"tautulli_import_options_desc": "Choisissez comment VODUM doit importer les données historiques depuis Tautulli.",
+
+"tautulli_target_server": "Serveur cible",
+"tautulli_target_server_desc": "Serveur VODUM auquel rattacher les données importées.",
+
+"tautulli_libraries_policy": "Politique des bibliothèques",
+"tautulli_libraries_policy_desc": "Détermine comment gérer les bibliothèques lors de l’import.",
+
+"tautulli_import_only_available_libraries": "Importer uniquement les bibliothèques existantes",
+"tautulli_import_only_available_libraries_desc": "Ignore les bibliothèques absentes dans VODUM.",
+
+"tautulli_keep_all_libraries": "Conserver toutes les bibliothèques",
+"tautulli_keep_all_libraries_desc": "Importer toutes les bibliothèques, même si elles ne sont pas configurées.",
+
+"tautulli_keep_all_users": "Conserver tous les utilisateurs (non recommandé)",
+"tautulli_keep_all_users_desc": "Importer les utilisateurs même s’ils n’existent pas dans VODUM. Ils seront créés comme expirés pour éviter les déclenchements d’emails/politiques.",
+
+"confirm_start": "Confirmer et démarrer",
+"cancel": "Annuler"
+
+
+
 
   
 }
