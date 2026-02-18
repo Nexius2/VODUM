@@ -17,6 +17,18 @@ db = DBManager(DB_PATH)
 logger = get_logger("tasks_engine")
 
 # -------------------------------------------------------------------
+# Global master switch (settings.enable_cron_jobs)
+# -------------------------------------------------------------------
+def _cron_jobs_enabled() -> bool:
+    try:
+        row = db.query_one("SELECT enable_cron_jobs FROM settings WHERE id = 1")
+        return int(row["enable_cron_jobs"]) == 1 if row and row["enable_cron_jobs"] is not None else True
+    except Exception:
+        # If settings row doesn't exist yet (fresh DB), don't block tasks_engine
+        return True
+
+
+# -------------------------------------------------------------------
 # LOCKS / QUEUES
 # -------------------------------------------------------------------
 sequence_lock = threading.Lock()
@@ -31,9 +43,15 @@ worker_running = False
 # TASK LIMITS
 # -------------------------------------------------------------------
 TASK_MAX_DURATION = {
-    "sync_plex": 60 * 60,       # 1h
-    "sync_jellyfin": 30 * 60,   # 30 min
+    "sync_plex": 60 * 60,
+    "sync_jellyfin": 30 * 60,
+
+    # Monitoring / workers : doivent être rapides
+    "monitor_collect_sessions": 60,        # 1 min
+    "monitor_enqueue_refresh": 60,         # 1 min
+    "media_jobs_worker": 120,              # 2 min
 }
+
 DEFAULT_TASK_MAX_DURATION = 30 * 60
 
 
@@ -48,6 +66,10 @@ DEFAULT_TASK_MAX_DURATION = 30 * 60
 
 
 def run_task_by_name(task_name: str):
+    if not _cron_jobs_enabled():
+        logger.info(f"Cron disabled (global); ignoring manual run: {task_name}")
+        return False
+
     row = db.query_one(
         "SELECT id, status, enabled FROM tasks WHERE name = ?",
         (task_name,)
@@ -153,6 +175,9 @@ def task_logs(task_id, status, message, details=None):
 
 
 def enqueue_task(task_id: int):
+    if not _cron_jobs_enabled():
+        logger.info(f"Cron disabled (global); ignoring enqueue for task_id={task_id}")
+        return
 
     row = db.query_one(
         "SELECT enabled FROM tasks WHERE id = ?",
@@ -190,7 +215,35 @@ def enqueue_task(task_id: int):
                 daemon=True
             ).start()
 
+def _kick_worker_if_needed():
+    """
+    Si la DB contient des tâches en attente (queued_count > 0) et que le worker
+    n'est pas en cours, on le démarre.
 
+    Important: au boot, le recovery peut laisser des tasks en 'queued' sans
+    jamais repasser par enqueue_task() -> donc sans démarrer le worker.
+    """
+    global worker_running
+
+    try:
+        row = db.query_one("SELECT COUNT(*) AS cnt FROM tasks WHERE queued_count > 0 AND enabled = 1")
+        pending = int(row["cnt"]) if row else 0
+    except Exception as e:
+        logger.error(f"[WORKER] Unable to check pending queue: {e}", exc_info=True)
+        return
+
+    if pending <= 0:
+        return
+
+    with queue_lock:
+        if not worker_running:
+            worker_running = True
+            logger.warning(f"[WORKER] Kick worker: {pending} queued task(s) detected in DB")
+            threading.Thread(
+                target=_task_worker,
+                name="vodum-task-worker",
+                daemon=True
+            ).start()
 
 
 def _task_worker():
@@ -198,32 +251,46 @@ def _task_worker():
 
     try:
         while True:
-            row = db.query_one(
-                """
-                SELECT id
-                FROM tasks
-                WHERE queued_count > 0
-                  AND enabled = 1
-                ORDER BY updated_at ASC
-                LIMIT 1
-                """
-            )
-
-            if not row:
-                worker_running = False
+            # 1) Récupère une tâche en file d'attente
+            try:
+                row = db.query_one(
+                    """
+                    SELECT id
+                    FROM tasks
+                    WHERE queued_count > 0
+                      AND enabled = 1
+                    ORDER BY updated_at ASC
+                    LIMIT 1
+                    """
+                )
+            except Exception as e:
+                logger.error(f"[WORKER] DB error while fetching queued task: {e}", exc_info=True)
                 return
 
+            # 2) Plus rien à traiter => on sort et on libère le worker
+            if not row:
+                return
+
+            task_id = int(row["id"])
+
+            # 3) Exécute réellement la tâche
             try:
-                run_task(row["id"])
+                run_task(task_id)
             except Exception as e:
-                logger.error(
-                    f"[WORKER] Error running task {row['id']}",
-                    exc_info=True
-                )
+                # run_task gère déjà beaucoup de cas, mais on sécurise
+                logger.error(f"[WORKER] Unhandled error while running task id={task_id}: {e}", exc_info=True)
+                try:
+                    task_logs(task_id, "error", f"Unhandled worker error: {e}")
+                except Exception:
+                    pass
+
+            # 4) Petite pause pour éviter de marteler la DB
+            time.sleep(0.2)
 
     finally:
         # 🔐 GARANTIE : le worker se libère toujours
         worker_running = False
+
 
 
 
@@ -308,7 +375,31 @@ def run_task(task_id: int):
         logger.debug(f"Calling run() for task '{name}'")
 
         # 🔒 APPEL UNIFORME — règle officielle
-        result = run_func(task_id, db)
+        # 🔒 APPEL UNIFORME — avec timeout RÉEL (évite qu’une task bloque tout le worker)
+        result_box = {"value": None, "exc": None}
+
+        def _runner():
+            try:
+                result_box["value"] = run_func(task_id, db)
+            except Exception as e:
+                result_box["exc"] = e
+
+        t = threading.Thread(
+            target=_runner,
+            name=f"vodum-task-{name}-{task_id}",
+            daemon=True
+        )
+        t.start()
+        t.join(timeout=max_duration)
+
+        if t.is_alive():
+            raise TimeoutError(f"Task {name} exceeded maximum duration ({max_duration}s)")
+
+        if result_box["exc"] is not None:
+            raise result_box["exc"]
+
+        result = result_box["value"]
+
 
         # IMPORTANT: certaines tâches (ex: import_tautulli) retournent un dict "status"
         # mais tasks_engine ne le log pas -> on a l'impression que "tout va bien" alors que rien ne s'est passé.
@@ -760,11 +851,20 @@ def scheduler_loop():
             """
         )
         logger.info("Recovery tasks: reset running/queued states OK")
+        _kick_worker_if_needed()
+
     except Exception as e:
         logger.warning(f"Recovery tasks failed: {e}", exc_info=True)
 
     while True:
+        if not _cron_jobs_enabled():
+            # Cron OFF => don't auto-enable or schedule anything
+            time.sleep(30)
+            continue
+
         now = datetime.now()
+        _kick_worker_if_needed()
+
 
         try:
             # -------------------------------------------------
@@ -956,23 +1056,21 @@ def start_scheduler():
     # 2) Auto-enable / disable des tâches de sync au boot
     # -------------------------------------------------
     try:
-
-
-        auto_enable_sync_tasks()
-        auto_enable_monitoring_tasks()
-        auto_enable_plex_jobs_worker()
-        auto_enable_jellyfin_jobs_worker()
-
-
-
-
-        logger.info("Sync task auto-enable run at startup")
+        if _cron_jobs_enabled():
+            auto_enable_sync_tasks()
+            auto_enable_monitoring_tasks()
+            auto_enable_plex_jobs_worker()
+            auto_enable_jellyfin_jobs_worker()
+            logger.info("Sync task auto-enable run at startup")
+        else:
+            logger.info("Cron disabled (global); skipping auto-enable at startup")
 
     except Exception as e:
         logger.error(
             f"sync tasks auto-enable at startup failed: {e}",
             exc_info=True
         )
+
 
 
     # -------------------------------------------------

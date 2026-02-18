@@ -7,6 +7,72 @@ DISCORD_API = "https://discord.com/api/v10"
 class DiscordSendError(Exception):
     pass
 
+def _as_dict(row_or_dict):
+    if row_or_dict is None:
+        return {}
+    if isinstance(row_or_dict, dict):
+        return row_or_dict
+    try:
+        return dict(row_or_dict)  # sqlite3.Row
+    except Exception:
+        return {}
+
+# -------------------------------------------------------------------
+# Bot selection / token resolution
+# -------------------------------------------------------------------
+
+def resolve_discord_bot(db, settings: dict) -> dict:
+    """
+    Returns a dict: {id, name, token, bot_username, bot_user_id, bot_type}.
+    - If settings.discord_bot_id is set, pulls from discord_bots.
+    - Else falls back to legacy settings.discord_bot_token.
+
+    NOTE: db is expected to be a DBManager-like object with query_one().
+    """
+    s = _as_dict(settings)
+    bot_id = s.get('discord_bot_id')
+    try:
+        bot_id = int(bot_id) if bot_id not in (None, '', 0, '0') else None
+    except Exception:
+        bot_id = None
+
+    if bot_id and db is not None:
+        try:
+            row = db.query_one("SELECT * FROM discord_bots WHERE id = ?", (bot_id,))
+            if row:
+                b = dict(row)
+                b['token'] = (b.get('token') or '').strip()
+                return b
+        except Exception:
+            pass
+
+    # Legacy fallback
+    token = (s.get('discord_bot_token') or '').strip()
+    return {
+        'id': None,
+        'name': 'Legacy token',
+        'token': token,
+        'bot_username': None,
+        'bot_user_id': None,
+        'bot_type': 'custom',
+    }
+
+
+def enrich_discord_settings(db, settings: dict) -> dict:
+    """
+    Mutates and returns settings with:
+    - discord_bot_token_effective
+    - discord_bot_username_effective
+    - discord_bot_source ('bot_table'|'legacy')
+    """
+    s = _as_dict(settings)
+    bot = resolve_discord_bot(db, s)
+    s['discord_bot_token_effective'] = (bot.get('token') or '').strip()
+    s['discord_bot_username_effective'] = bot.get('bot_username') or None
+    s['discord_bot_source'] = 'bot_table' if bot.get('id') else 'legacy'
+    return s
+
+
 
 def is_discord_ready(settings: dict) -> bool:
     if not settings:
@@ -15,7 +81,9 @@ def is_discord_ready(settings: dict) -> bool:
         enabled = int(settings.get("discord_enabled") or 0) == 1
     except Exception:
         enabled = False
-    token = (settings.get("discord_bot_token") or "").strip()
+    s = _as_dict(settings)
+    token = (s.get('discord_bot_token_effective') or s.get('discord_bot_token') or '').strip()
+
     return bool(enabled and token)
 
 
@@ -53,6 +121,42 @@ def validate_discord_bot_token(bot_token: str, timeout: int = 10) -> tuple[bool,
 
     except Exception as e:
         return False, f"Discord validation failed: {e}"
+
+
+
+
+def fetch_discord_bot_identity(bot_token: str, timeout: int = 10) -> tuple[bool, dict]:
+    """
+    Returns (ok, data).
+    If ok=True, data includes: {id, username, global_name} when available.
+    If ok=False, data includes: {error}.
+    """
+    bot_token = (bot_token or "").strip()
+    if not bot_token:
+        return False, {"error": "Missing bot token"}
+
+    try:
+        r = requests.get(
+            f"{DISCORD_API}/users/@me",
+            headers=_auth_headers(bot_token),
+            timeout=timeout,
+        )
+
+        if r.status_code == 200:
+            data = r.json() or {}
+            return True, {
+                "id": data.get("id"),
+                "username": data.get("username"),
+                "global_name": data.get("global_name"),
+            }
+
+        if r.status_code in (401, 403):
+            return False, {"error": "Invalid bot token"}
+
+        return False, {"error": f"Discord API error {r.status_code}: {r.text}"}
+
+    except Exception as e:
+        return False, {"error": f"Discord validation failed: {e}"}
 
 
 def _sleep_from_429(resp: requests.Response) -> None:

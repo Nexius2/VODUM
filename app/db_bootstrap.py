@@ -274,6 +274,7 @@ def run_migrations():
 
     # 1.2 vodum_users per-user stream override (NEW)
     ensure_column(cursor, "vodum_users", "max_streams_override", "INTEGER DEFAULT NULL")
+    ensure_column(cursor, "vodum_users", "notifications_order_override", "TEXT DEFAULT NULL")
 
 
 
@@ -286,6 +287,7 @@ def run_migrations():
         "description": "TEXT",
         "schedule": "TEXT",
         "enabled": "INTEGER DEFAULT 1",
+        "enabled_prev": "INTEGER DEFAULT NULL",
         "status": "TEXT",
         "last_run": "TIMESTAMP",
         "next_run": "TIMESTAMP",
@@ -319,7 +321,48 @@ def run_migrations():
     # -------------------------------------------------
     ensure_column(cursor, "settings", "discord_enabled", "INTEGER DEFAULT 0")
     ensure_column(cursor, "settings", "discord_bot_token", "TEXT DEFAULT NULL")
+    ensure_column(cursor, "settings", "discord_bot_id", "INTEGER DEFAULT NULL")
+
+    # Table to store one or multiple Discord bot configurations
+    if not table_exists(cursor, "discord_bots"):
+        print("🛠 Creating table: discord_bots")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS discord_bots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            token TEXT DEFAULT NULL,
+            bot_user_id TEXT DEFAULT NULL,
+            bot_username TEXT DEFAULT NULL,
+            bot_type TEXT NOT NULL DEFAULT 'custom' CHECK(bot_type IN ('custom','vodum')),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_discord_bots_type ON discord_bots(bot_type);")
+        conn.commit()
+
+    # One-time migration: move legacy settings.discord_bot_token into discord_bots
+    try:
+        cursor.execute("SELECT discord_bot_id, discord_bot_token FROM settings WHERE id = 1")
+        srow = cursor.fetchone()
+        legacy_bot_id = srow[0] if srow else None
+        legacy_token = (srow[1] or '').strip() if srow else ''
+
+        if (legacy_bot_id is None or legacy_bot_id == 0) and legacy_token:
+            # create a bot record
+            cursor.execute("""
+                INSERT INTO discord_bots(name, token, bot_type)
+                VALUES(?, ?, 'custom')
+            """, ("Primary bot", legacy_token))
+            new_id = cursor.lastrowid
+            cursor.execute("UPDATE settings SET discord_bot_id = ? WHERE id = 1", (new_id,))
+            conn.commit()
+            print("➕ Migrated legacy discord_bot_token into discord_bots (Primary bot)")
+    except Exception as e:
+        # non-fatal
+        print(f"⚠️ Discord bots migration skipped: {e}")
     ensure_column(cursor, "settings", "notifications_order", "TEXT DEFAULT 'email'")
+    ensure_column(cursor, "settings", "user_notifications_can_override", "INTEGER DEFAULT 0")
     cursor.execute("UPDATE settings SET notifications_order = COALESCE(NULLIF(TRIM(notifications_order),''), 'email') WHERE id = 1")
     # Expiration handling mode (NEW)
     # - 'disable' : disable access immediately on expiration (task disable_expired_users)
@@ -673,7 +716,7 @@ def run_migrations():
     # Harmonise les anciens labels (si tu as déjà stocké series/music/video/etc.)
     # History
     cursor.execute("UPDATE media_session_history SET media_type='serie'  WHERE media_type IN ('series')")
-    cursor.execute("UPDATE media_session_history SET media_type='tracks' WHERE media_type IN ('music','track')")
+    cursor.execute("UPDATE media_session_history SET media_type='music' WHERE media_type IN ('tracks','track')")
 
     # "video" historique : on tranche via grandparent_title (épisode si grandparent existe, sinon film)
     cursor.execute("""
@@ -818,11 +861,13 @@ def run_migrations():
         "status": "disabled"
     })
 
-    # Tautulli import (on-demand; does nothing if no queued job)
+    # Tautulli import (ON-DEMAND)
+    # - No cron schedule: it is launched manually when a Tautulli DB is uploaded.
+    # - Keeping enabled=1 allows run_task_by_name('import_tautulli') to enqueue it.
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "import_tautulli",
         "description": "task_description.import_tautulli",
-        "schedule": "*/1 * * * *",
+        "schedule": None,
         "enabled": 1,
         "status": "idle"
     })
@@ -857,6 +902,35 @@ def run_migrations():
         "enabled": 0,
         "status": "disabled"
     })
+
+    # -------------------------------------------------
+    # MASTER enable_cron_jobs enforcement
+    # If scheduled tasks are globally disabled, we force-disable any enabled task
+    # that could have been inserted by migrations / new code.
+    # -------------------------------------------------
+    try:
+        cursor.execute("SELECT enable_cron_jobs FROM settings WHERE id = 1")
+        row = cursor.fetchone()
+        cron_enabled = int(row[0]) if row and row[0] is not None else 1
+    except Exception:
+        cron_enabled = 1
+
+    if cron_enabled == 0:
+        cursor.execute(
+            '''
+            UPDATE tasks
+            SET
+                enabled_prev = CASE
+                    WHEN enabled_prev IS NULL THEN enabled
+                    ELSE enabled_prev
+                END,
+                enabled = 0,
+                status = 'disabled',
+                updated_at = CURRENT_TIMESTAMP
+            '''
+        )
+        conn.commit()
+        print("✔ Cron disabled: all tasks forced to disabled (state remembered).")
 
 
     # -------------------------------------------------
