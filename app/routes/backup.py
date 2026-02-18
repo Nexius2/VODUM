@@ -258,7 +258,7 @@ def register(app):
             elif action == "tautulli_import":
                 try:
                     keep_all_users = 1 if request.form.get("tautulli_keep_all_users") == "1" else 0
-                    keep_all_servers = 0  # legacy
+                    
 
 
                     libraries_mode = (request.form.get("tautulli_libraries_mode") or "only_existing").strip()
@@ -354,15 +354,22 @@ def register(app):
                                         """
                                         INSERT INTO tautulli_import_jobs(
                                           server_id, file_path,
-                                          keep_all_servers, keep_all_users,
+                                          keep_all_users,
                                           keep_all_libraries, import_only_available_libraries, target_server_id,
                                           status
                                         )
-                                        VALUES (?, ?, ?, ?, ?, ?, ?, 'queued')
-
+                                        VALUES (?, ?, ?, ?, ?, ?, 'queued')
                                         """,
-                                        (0, str(final_path), 0, int(keep_all_users), int(keep_all_libraries), int(import_only_available_libraries), int(target_server_id)),
+                                        (
+                                            0,
+                                            str(final_path),
+                                            int(keep_all_users),
+                                            int(keep_all_libraries),
+                                            int(import_only_available_libraries),
+                                            int(target_server_id),
+                                        ),
                                     )
+
 
                                     job_id = None
                                     try:
@@ -372,8 +379,12 @@ def register(app):
 
                                     log.info(
                                         f"[TAUTULLI UI] job enqueued (job_id={job_id}) file={final_path} "
-                                        f"keep_all_servers={keep_all_servers} keep_all_users={keep_all_users}"
+                                        f"keep_all_users={keep_all_users} "
+                                        f"keep_all_libraries={keep_all_libraries} "
+                                        f"import_only_available_libraries={import_only_available_libraries} "
+                                        f"target_server_id={target_server_id}"
                                     )
+
 
                                     flash(
                                         "Tautulli database uploaded. Import can take a long time — please be patient.",
