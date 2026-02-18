@@ -246,7 +246,7 @@ class JellyfinProvider(BaseProvider):
             elif jf_type in ("episode",):
                 media_category = "serie"
             elif jf_type in ("audio", "musictrack", "song"):
-                media_category = "tracks"
+                media_category = "music"
             else:
                 media_category = "other"
 

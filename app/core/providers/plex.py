@@ -258,7 +258,7 @@ class PlexProvider(BaseProvider):
             elif plex_type == "episode":
                 media_category = "serie"
             elif plex_type == "track":
-                media_category = "tracks"
+                media_category = "music"
             else:
                 media_category = "other"
 

@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 import requests
+import time
 
 
 from core.monitoring.diff import compute_session_events
@@ -12,6 +13,10 @@ from core.providers.registry import get_provider
 from logging_utils import get_logger
 
 logger = get_logger("monitoring.collector")
+
+# Throttle des erreurs par serveur pour éviter le spam (ex: Jellyfin down / timeout)
+_COLLECT_ERROR_LAST_LOG_TS = {}  # key=(server_id, exc_class) -> ts
+_COLLECT_ERROR_THROTTLE_SECONDS = 300  # 5 minutes
 
 
 class AttrDict(dict):
@@ -322,6 +327,23 @@ def collect_sessions_for_server(
                       raw_json, library_section_id
                     )
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(server_id, media_user_id, started_at, media_key, client_name)
+                    DO UPDATE SET
+                      stopped_at = excluded.stopped_at,
+                      watch_ms = CASE
+                        WHEN excluded.watch_ms > media_session_history.watch_ms THEN excluded.watch_ms
+                        ELSE media_session_history.watch_ms
+                      END,
+                      duration_ms = CASE
+                        WHEN excluded.duration_ms > media_session_history.duration_ms THEN excluded.duration_ms
+                        ELSE media_session_history.duration_ms
+                      END,
+                      peak_bitrate = COALESCE(media_session_history.peak_bitrate, excluded.peak_bitrate),
+                      was_transcode = MAX(media_session_history.was_transcode, excluded.was_transcode),
+                      raw_json = COALESCE(excluded.raw_json, media_session_history.raw_json),
+                      ip = COALESCE(excluded.ip, media_session_history.ip),
+                      device = COALESCE(excluded.device, media_session_history.device),
+                      client_product = COALESCE(excluded.client_product, media_session_history.client_product)
                     """,
                     (
                         server_id, provider_name,
@@ -331,16 +353,15 @@ def collect_sessions_for_server(
                         int(live.get("duration_ms") or 0), watch_ms,
                         int(live.get("bitrate") or 0) if live.get("bitrate") is not None else None,
                         int(live.get("is_transcode") or 0),
-
                         live.get("client_name"),
                         live.get("client_product"),
                         live.get("device"),
                         live.get("ip"),
-
                         live.get("raw_json"),
                         live.get("library_section_id"),
                     ),
                 )
+
 
 
             db.execute("DELETE FROM media_sessions WHERE server_id=? AND session_key=?", (server_id, sk))
@@ -356,8 +377,21 @@ def collect_sessions_for_server(
         return report
 
     except Exception as e:
-        # Log en base pour diagnostic (et éviter "offline" injustifié)
-        logger.exception("collect_sessions_for_server failed (server_id=%s)", server_id)
+        # Throttle des erreurs (sinon spam toutes les X secondes si Jellyfin est down)
+        key = (server_id, e.__class__.__name__)
+        now = time.time()
+        last = _COLLECT_ERROR_LAST_LOG_TS.get(key, 0)
+
+        if now - last >= _COLLECT_ERROR_THROTTLE_SECONDS:
+            _COLLECT_ERROR_LAST_LOG_TS[key] = now
+            logger.exception("collect_sessions_for_server failed (server_id=%s)", server_id)
+        else:
+            logger.debug(
+                "collect_sessions_for_server failed (server_id=%s) [throttled]: %s",
+                server_id,
+                str(e),
+            )
+
 
 
         # Règle d’or: si on a une session récente, on reste UP
