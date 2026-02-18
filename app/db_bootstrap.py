@@ -627,6 +627,36 @@ def run_migrations():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_msh_user_time ON media_session_history(media_user_id, started_at)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_msh_media_time ON media_session_history(media_key, started_at)")
 
+    # Unique dedup index (required by collector upserts / imports)
+    try:
+        cursor.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_media_session_history_tautulli_dedup
+            ON media_session_history (server_id, media_user_id, started_at, media_key, client_name)
+        """)
+    except sqlite3.IntegrityError:
+        # Existing DB may already contain duplicates -> dedupe once then retry
+        print("🧹 Detected duplicates in media_session_history. Deduplicating before creating UNIQUE index…")
+
+        # Keep the oldest row (MIN(id)) for each dedupe key
+        cursor.execute("""
+            DELETE FROM media_session_history
+            WHERE id NOT IN (
+                SELECT MIN(id)
+                FROM media_session_history
+                GROUP BY server_id, media_user_id, started_at, media_key, client_name
+            )
+        """)
+
+        # Retry index creation after cleanup
+        cursor.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_media_session_history_tautulli_dedup
+            ON media_session_history (server_id, media_user_id, started_at, media_key, client_name)
+        """)
+
+    conn.commit()
+    print("✔ Monitoring history table verified (media_session_history).")
+
+
     conn.commit()
     print("✔ Monitoring history table verified (media_session_history).")
 
