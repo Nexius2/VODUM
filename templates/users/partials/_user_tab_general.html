@@ -1,0 +1,137 @@
+<form method="post" id="user_main_form">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-6">
+
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-3">
+        <h2 class="text-sm font-semibold">{{ t("general_info") }}</h2>
+
+        {% set colors = {
+          'active': 'bg-emerald-900/40 text-emerald-300',
+          'pre_expired': 'bg-amber-900/40 text-amber-300',
+          'reminder': 'bg-blue-900/40 text-blue-300',
+          'expired': 'bg-rose-900/40 text-rose-300',
+          'invited': 'bg-cyan-900/40 text-cyan-300',
+          'unfriended': 'bg-slate-700 text-slate-300',
+          'suspended': 'bg-purple-900/40 text-purple-300',
+          'unknown': 'bg-slate-800 text-slate-400'
+        } %}
+
+        <span class="px-3 py-1 text-xs rounded-full {{ colors.get(user.status, 'bg-slate-800 text-slate-400') }}">
+          {{ t(user.status) }}
+        </span>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <a class="px-3 py-2 rounded-lg border border-amber-700 text-amber-400 hover:bg-amber-900/20 text-sm"
+           href="{{ url_for('user_detail', user_id=user.id, tab='access', merge='1') }}">
+          {{ t("merge_user") }}
+        </a>
+
+        <button type="submit"
+                class="px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-sm">
+          {{ t("save") }}
+        </button>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <label class="text-sm">
+        {{ t("username") }}
+        <input type="text" value="{{ user.username }}" readonly
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60 cursor-not-allowed">
+      </label>
+
+      <div class="text-sm">
+        <div class="text-slate-400">
+          {{ t("merged_usernames") if t("merged_usernames") else "Merged usernames" }}
+        </div>
+        <div class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+          {% set names = merged_usernames if merged_usernames is defined else [] %}
+          {% if names %}
+            <div class="flex flex-wrap gap-2">
+              {% for n in names %}
+                <span class="px-2 py-0.5 text-xs rounded bg-slate-800 text-slate-200">{{ n }}</span>
+              {% endfor %}
+            </div>
+          {% else %}
+            <span class="text-sm text-slate-400 italic">{{ t("not_available") }}</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <label class="text-sm">
+        {{ t("firstname") }}
+        <input type="text" name="firstname" value="{{ user.firstname or '' }}"
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+      </label>
+
+      <label class="text-sm">
+        {{ t("lastname") }}
+        <input type="text" name="lastname" value="{{ user.lastname or '' }}"
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+      </label>
+
+      <label class="text-sm">
+        {{ t("email") }}
+        <input type="text" value="{{ user.email }}" readonly
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60 cursor-not-allowed">
+      </label>
+
+      <label class="text-sm">
+        {{ t("second_email") }}
+        <input type="text" name="second_email" value="{{ user.second_email or '' }}"
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+      </label>
+
+      <label class="text-sm">
+        {{ t("discord_user_id") }}
+        <input type="text" name="discord_user_id" value="{{ user.discord_user_id or '' }}"
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2"
+               placeholder="123456789012345678">
+      </label>
+
+      <label class="text-sm">
+        {{ t("discord_name") }}
+        <input type="text" name="discord_name" value="{{ user.discord_name or '' }}"
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2"
+               placeholder="MyUser">
+      </label>
+
+      <label class="text-sm">
+        {{ t("expiration") }}
+        <input type="date" name="expiration_date" value="{{ user.expiration_date or '' }}"
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+      </label>
+
+      <label class="text-sm">
+        {{ t("renewal_date") }}
+        <input type="date" name="renewal_date" value="{{ user.renewal_date or '' }}"
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+      </label>
+
+      <label class="text-sm md:col-span-2">
+        {{ t("renewal_method") }}
+        <input type="text" name="renewal_method" value="{{ user.renewal_method or '' }}"
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+      </label>
+
+      <label class="text-sm md:col-span-2">
+        {{ t("max_streams_override") }}
+        <div class="mt-1">
+          <input type="number" name="max_streams_override"
+                 value="{{ user.max_streams_override if user.max_streams_override is not none else '' }}"
+                 class="w-24 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+        </div>
+        <div class="text-xs text-slate-500 mt-2">{{ t("max_streams_override_help") }}</div>
+        <div class="text-xs text-slate-600 mt-1 italic">{{ t("max_streams_override_placeholder") }}</div>
+      </label>
+    </div>
+
+    <div class="mt-6">
+      <h2 class="text-sm font-semibold mb-2">{{ t("notes") }}</h2>
+      <textarea id="notes_field" name="notes" rows="8"
+        class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm resize-vertical">{{ user.notes or '' }}</textarea>
+    </div>
+
+  </div>
+</form>

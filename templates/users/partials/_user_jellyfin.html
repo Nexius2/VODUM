@@ -189,11 +189,14 @@
 
     {# BOUTON #}
     <div class="mt-3">
-      <button type="button"
-              id="jellyfinToggle"
-              class="w-full px-3 py-2 text-xs rounded-xl border border-slate-800 bg-slate-950/40 text-slate-200 hover:bg-slate-950/70">
-        {{ t("collapse_show_more") }}
-      </button>
+	<button type="button"
+			id="jellyfinToggle"
+			data-more="{{ t('collapse_show_more') }}"
+			data-less="{{ t('collapse_show_less') }}"
+			class="w-full px-3 py-2 text-xs rounded-xl border border-slate-800 bg-slate-950/40 text-slate-200 hover:bg-slate-950/70">
+	  {{ t("collapse_show_more") }}
+	</button>
+
     </div>
 
   </div>

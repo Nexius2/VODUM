@@ -1,4 +1,23 @@
 <!-- ====================== SERVERS + LIBRARIES (UNCHANGED) ====================== -->
+<!-- Empty state -->
+{% if servers|length == 0 %}
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-6">
+    <div class="flex items-center justify-between gap-4">
+      <div>
+        <div class="text-sm font-semibold text-slate-200">No servers linked</div>
+        <div class="text-xs text-slate-400 mt-1">
+          This user has no Plex/Jellyfin server associations yet. You can still merge users to regroup identities.
+        </div>
+      </div>
+      <button type="button"
+              class="px-3 py-2 rounded-lg border border-amber-700 text-amber-400 hover:bg-amber-900/20 text-sm"
+              onclick="openMergeOverlay()">
+        {{ t("merge_user") }}
+      </button>
+    </div>
+  </div>
+{% endif %}
+
 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
 
 {% for s in servers %}
@@ -293,7 +312,7 @@
     </div>
 
     <!-- Body -->
-    <d<div class="flex-1 flex flex-col min-h-0">
+    <div class="flex-1 flex flex-col min-h-0">
 
   <!-- ====================== ZONE FIXE (MASTER + ACTIONS) ====================== -->
   <div class="shrink-0 px-6 pt-6 pb-4 space-y-6 border-b border-slate-800 bg-slate-900">
@@ -733,6 +752,22 @@ const TXT_PREVIEW_MEDIA_JOBS = {{ t('merge.preview.media_jobs')|tojson }};
 
   window.openMergeOverlay = openMergeOverlay;
   window.closeMergeOverlay = closeMergeOverlay;
+
+
+// Auto-open merge overlay when arriving with ?merge=1 (from General tab)
+document.addEventListener('DOMContentLoaded', function () {
+  try {
+    const params = new URLSearchParams(window.location.search || '');
+    if (params.get('merge') === '1') {
+      openMergeOverlay();
+      // Optional: remove merge=1 from URL to avoid reopening on refresh
+      params.delete('merge');
+      const qs = params.toString();
+      const newUrl = window.location.pathname + (qs ? ('?' + qs) : '');
+      window.history.replaceState({}, '', newUrl);
+    }
+  } catch (e) { /* ignore */ }
+});
 
   // Close overlay when clicking backdrop
   if (overlay) {

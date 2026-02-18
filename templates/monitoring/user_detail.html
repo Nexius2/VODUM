@@ -1,11 +1,17 @@
-{% extends "base.html" %}
+{% set embed = request.args.get('embed') == '1' %}
+{% extends "base_embed.html" if embed else "base.html" %}
+
 
 {% block title %}Monitoring · User{% endblock %}
 {% block header_title %}Monitoring{% endblock %}
 {% block header_subtitle %}User detail{% endblock %}
 
 {% block content %}
-{% include "monitoring/partials/_tabs.html" %}
+{% if not embed %}
+  {% include "monitoring/partials/_tabs.html" %}
+{% endif %}
+
+
 
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-6">
   <div class="flex items-center justify-between gap-6">
@@ -36,26 +42,26 @@
 {# --------------------------
    Sous-onglets
    -------------------------- #}
-<div class="mb-6">
-  <div class="flex flex-wrap gap-2 border-b border-slate-800">
+<div class="mb-6 relative z-10">
+  <div class="flex flex-wrap gap-2 border-b border-slate-800 pb-2">
     {% set args = dict(request.args) %}
     {% set _ = args.pop("page", None) %}
 
     <a class="px-4 py-2 text-sm rounded-t-xl border border-b-0
               {{ 'bg-slate-900 border-slate-800 text-emerald-400 font-semibold' if view=='profile' else 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200' }}"
-       href="{{ url_for('monitoring_user_detail', user_id=user.id, view='profile') }}">
+       href="{{ url_for('monitoring_user_detail', user_id=user.id, view='profile', embed='1') if embed else url_for('monitoring_user_detail', user_id=user.id, view='profile') }}">
       Profile
     </a>
 
     <a class="px-4 py-2 text-sm rounded-t-xl border border-b-0
               {{ 'bg-slate-900 border-slate-800 text-emerald-400 font-semibold' if view=='history' else 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200' }}"
-       href="{{ url_for('monitoring_user_detail', user_id=user.id, view='history') }}">
+       href="{{ url_for('monitoring_user_detail', user_id=user.id, view='history', embed='1') if embed else url_for('monitoring_user_detail', user_id=user.id, view='history') }}">
       History
     </a>
 
     <a class="px-4 py-2 text-sm rounded-t-xl border border-b-0
               {{ 'bg-slate-900 border-slate-800 text-emerald-400 font-semibold' if view=='ip' else 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200' }}"
-       href="{{ url_for('monitoring_user_detail', user_id=user.id, view='ip') }}">
+       href="{{ url_for('monitoring_user_detail', user_id=user.id, view='ip', embed='1') if embed else url_for('monitoring_user_detail', user_id=user.id, view='ip') }}">
       IP Addresses
     </a>
   </div>

@@ -1,7 +1,7 @@
-<div id="email-history" class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-  <h2 class="text-sm font-semibold mb-2">{{ t("email_history") }}</h2>
+<div id="discord-history" class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+  <h2 class="text-sm font-semibold mb-2">Discord history</h2>
 
-  {% if sent_emails %}
+  {% if sent_discord %}
     <div class="border border-slate-800 rounded-xl overflow-hidden">
       <table class="w-full text-xs">
         <thead class="bg-slate-950/60 text-slate-400">
@@ -12,7 +12,7 @@
           </tr>
         </thead>
         <tbody>
-          {% for m in sent_emails %}
+          {% for m in sent_discord %}
             <tr class="border-t border-slate-800">
               <td class="px-3 py-2">{{ t(m.template_type) }}</td>
               <td class="px-3 py-2 text-slate-400">{{ m.expiration_date }}</td>
@@ -23,16 +23,16 @@
       </table>
     </div>
 
-    {% if email_pages > 1 %}
+    {% if discord_pages > 1 %}
       <div class="mt-3 flex items-center justify-between">
         <div class="text-xs text-slate-500">
-          {{ email_total }} · {{ t("page") if t("page") != "page" else "Page" }} {{ email_page }}/{{ email_pages }}
+          {{ discord_total }} · {{ t("page") if t("page") != "page" else "Page" }} {{ discord_page }}/{{ discord_pages }}
         </div>
 
         <div class="flex items-center gap-2">
-          {% if email_page > 1 %}
+          {% if discord_page > 1 %}
             <a class="px-3 py-2 text-xs rounded-xl border border-slate-800 bg-slate-950/40 text-slate-200 hover:bg-slate-950/70"
-               href="{{ url_for('user_detail', user_id=user.id, tab='notifications', email_page=email_page-1, discord_page=discord_page) }}#email-history">
+               href="{{ url_for('user_detail', user_id=user.id, tab='notifications', email_page=email_page, discord_page=discord_page-1) }}#discord-history">
               ← {{ t("previous") if t("previous") != "previous" else "Previous" }}
             </a>
           {% else %}
@@ -41,9 +41,9 @@
             </span>
           {% endif %}
 
-          {% if email_page < email_pages %}
+          {% if discord_page < discord_pages %}
             <a class="px-3 py-2 text-xs rounded-xl border border-slate-800 bg-slate-950/40 text-slate-200 hover:bg-slate-950/70"
-               href="{{ url_for('user_detail', user_id=user.id, tab='notifications', email_page=email_page+1, discord_page=discord_page) }}#email-history">
+               href="{{ url_for('user_detail', user_id=user.id, tab='notifications', email_page=email_page, discord_page=discord_page+1) }}#discord-history">
               {{ t("next") if t("next") != "next" else "Next" }} →
             </a>
           {% else %}
@@ -56,6 +56,6 @@
     {% endif %}
 
   {% else %}
-    <p class="text-xs text-slate-500">{{ t("no_email_sent") }}</p>
+    <p class="text-xs text-slate-500">{{ t("not_available") }}</p>
   {% endif %}
 </div>

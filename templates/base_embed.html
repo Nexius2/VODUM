@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="{{ session.get('lang', 'en') }}">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}VODUM{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  	<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icon.png') }}">
+	<link rel="icon" type="image/png" sizes="96x96" href="{{ url_for('static', filename='icon_96.png') }}">
+	<link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icon_192.png') }}">
+	<link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='icon_180.png') }}">
+	<meta name="theme-color" content="#0b1220">
+
+  <!-- Tailwind (même source que base.html) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Material icons (comme base.html) -->
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
+
+  <!-- Chart.js (comme base.html) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- CSS custom -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+
+  {% block head %}{% endblock %}
+</head>
+
+<body class="bg-slate-950 text-slate-100">
+  <!-- Pas de sidebar / pas de header -->
+  <main class="p-0 m-0">
+    {% block content %}{% endblock %}
+  </main>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

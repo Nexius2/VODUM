@@ -25,6 +25,22 @@
 
   <hr class="border-slate-800 my-6">
 
+  <!-- Per-user override -->
+  <div class="mt-4 flex items-start gap-3">
+    <input type="checkbox" id="user_notifications_can_override" name="user_notifications_can_override" value="1"
+           class="mt-1 h-4 w-4 rounded border-slate-700 bg-slate-800"
+           {% if settings.user_notifications_can_override %}checked{% endif %}>
+    <div>
+      <label for="user_notifications_can_override" class="text-sm font-medium text-slate-200">
+        {{ t("user_notifications_can_override") }}
+      </label>
+      <div class="text-xs text-slate-400 mt-1">
+        {{ t("user_notifications_can_override_help") }}
+      </div>
+    </div>
+  </div>
+
+
   <!-- Notification system order -->
   <div class="space-y-2">
     <div class="flex items-center gap-2">
