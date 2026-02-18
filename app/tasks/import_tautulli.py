@@ -89,16 +89,78 @@ def _dt_from_unix(ts: int, truncate_to_minute: bool) -> str:
 
 def _ensure_unique_index(conn: sqlite3.Connection) -> None:
     """
-    Create a unique index for deduplication.
-    Dedup by (server_id, media_user_id, started_at, media_key, client_name).
+    Ensure the unique dedup index exists on media_session_history.
+
+    IMPORTANT:
+    On prod databases, old versions / bugs may have created duplicates already.
+    Creating the UNIQUE index would then fail with:
+      UNIQUE constraint failed: media_session_history.server_id, ...
+
+    Strategy:
+    - Try to create the unique index.
+    - If it fails because duplicates exist, deduplicate (keep the "best" row),
+      then retry index creation.
     """
-    conn.execute(
-        """
-        CREATE UNIQUE INDEX IF NOT EXISTS uq_media_session_history_tautulli_dedup
-        ON media_session_history (server_id, media_user_id, started_at, media_key, client_name)
-        """
+    create_sql = """
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_media_session_history_tautulli_dedup
+    ON media_session_history (server_id, media_user_id, started_at, media_key, client_name)
+    """
+
+    try:
+        conn.execute(create_sql)
+        conn.commit()
+        return
+    except sqlite3.IntegrityError:
+        # Duplicates exist -> dedupe then retry
+        pass
+
+    # Deduplicate:
+    # Keep 1 row per (server_id, media_user_id, started_at, media_key, client_name)
+    # Prefer the row with the highest watch_ms, then highest duration_ms, then latest stopped_at, then highest id.
+    #
+    # Uses window functions (SQLite >= 3.25, which is very common).
+    dedupe_sql = """
+    DELETE FROM media_session_history
+    WHERE id IN (
+      SELECT id FROM (
+        SELECT
+          id,
+          ROW_NUMBER() OVER (
+            PARTITION BY server_id, media_user_id, started_at, media_key, client_name
+            ORDER BY
+              COALESCE(watch_ms, 0) DESC,
+              COALESCE(duration_ms, 0) DESC,
+              COALESCE(stopped_at, '') DESC,
+              id DESC
+          ) AS rn
+        FROM media_session_history
+      )
+      WHERE rn > 1
     )
-    conn.commit()
+    """
+
+    try:
+        conn.execute("BEGIN")
+        conn.execute(dedupe_sql)
+        conn.execute(create_sql)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        # Fallback without window functions: keep the lowest id
+        conn.execute("BEGIN")
+        conn.execute(
+            """
+            DELETE FROM media_session_history
+            WHERE id NOT IN (
+              SELECT MIN(id)
+              FROM media_session_history
+              GROUP BY server_id, media_user_id, started_at, media_key, client_name
+            )
+            """
+        )
+        conn.execute(create_sql)
+        conn.commit()
+
 
 
 def _get_known_library_section_ids(vodum_conn: sqlite3.Connection, server_id: int) -> Set[str]:
