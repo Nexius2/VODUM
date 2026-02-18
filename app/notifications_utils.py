@@ -47,3 +47,30 @@ def is_email_ready(settings: Dict) -> bool:
         )
     except Exception:
         return False
+
+def effective_notifications_order(settings: Dict, user: Dict | None = None) -> List[str]:
+    """Return the effective notification order for a given user.
+
+    If settings.user_notifications_can_override == 1 and the user has a non-empty
+    vodum_users.notifications_order_override, that value wins. Otherwise, we fall back
+    to settings.notifications_order.
+    """
+    base = parse_notifications_order((settings or {}).get("notifications_order"))
+    if not user:
+        return base
+
+    try:
+        can_override = int((settings or {}).get("user_notifications_can_override") or 0) == 1
+    except Exception:
+        can_override = False
+
+    if not can_override:
+        return base
+
+    override_raw = (user or {}).get("notifications_order_override")
+    override = parse_notifications_order(override_raw)
+    # If override_raw is empty/None => parse returns ["email"], so we must check raw itself
+    if override_raw and str(override_raw).strip():
+        return override
+
+    return base
