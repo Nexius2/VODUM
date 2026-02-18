@@ -553,7 +553,7 @@ def apply_grant_job(db, job):
             f"  allowSync={allowSync_val}\n"
             f"  allowCameraUpload={allowCameraUpload_val}\n"
             f"  allowChannels={allowChannels_val}\n"
-            f"  shared_sections={shared_sections}"
+            f"  shared_sections={sections}"
         )
 
     except Exception:
