@@ -19,6 +19,10 @@ CREATE TABLE IF NOT EXISTS vodum_users (
 	
     notes TEXT,
 
+    -- Notifications channel order override for this user (optional)
+    notifications_order_override TEXT DEFAULT NULL,
+
+
 	status TEXT DEFAULT 'expired' CHECK (status IN ('active','pre_expired','reminder','expired','invited','unfriended','suspended','unknown')),
 	
 	last_status TEXT,
@@ -233,7 +237,21 @@ CREATE TABLE IF NOT EXISTS settings (
 	
 	brand_name TEXT DEFAULT NULL,
 	
-	mailing_enabled INTEGER DEFAULT 0
+
+    -- Global notification channels order (e.g. "email,discord")
+    notifications_order TEXT DEFAULT 'email',
+    -- Allow per-user override of the notification order
+    user_notifications_can_override INTEGER DEFAULT 0,
+
+	
+    -- Discord
+    discord_enabled INTEGER DEFAULT 0,
+    -- Legacy token (kept for backward-compat)
+    discord_bot_token TEXT DEFAULT NULL,
+    -- Preferred bot reference (discord_bots.id)
+    discord_bot_id INTEGER DEFAULT NULL,
+
+    mailing_enabled INTEGER DEFAULT 0
 
 );
 
@@ -247,6 +265,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     description TEXT,
     schedule TEXT,                    -- cron-like, "0 */1 * * *", etc.
     enabled INTEGER DEFAULT 1,
+	enabled_prev INTEGER DEFAULT NULL,
 
     status TEXT,                      -- idle, running, error
     last_run TIMESTAMP,
@@ -626,6 +645,19 @@ ON stream_enforcements(created_at);
 -----------------------------------------------------------------------
 -- DISCORD (DM notifications + campaigns)
 -----------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS discord_bots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  token TEXT DEFAULT NULL,
+  bot_user_id TEXT DEFAULT NULL,
+  bot_username TEXT DEFAULT NULL,
+  bot_type TEXT NOT NULL DEFAULT 'custom' CHECK(bot_type IN ('custom','vodum')),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_discord_bots_type ON discord_bots(bot_type);
 
 CREATE TABLE IF NOT EXISTS discord_templates (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
