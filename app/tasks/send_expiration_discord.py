@@ -5,8 +5,8 @@ from datetime import datetime, date
 from tasks_engine import task_logs
 from logging_utils import get_logger
 from mailing_utils import build_user_context, render_mail
-from discord_utils import is_discord_ready, send_discord_dm, DiscordSendError
-from notifications_utils import normalize_notifications_order, is_email_ready
+from discord_utils import is_discord_ready, enrich_discord_settings, send_discord_dm, DiscordSendError
+from notifications_utils import normalize_notifications_order, effective_notifications_order, is_email_ready
 from email_sender import send_email
 
 
@@ -36,15 +36,10 @@ def run(task_id: int, db):
     try:
         settings = db.query_one("SELECT * FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
+        settings = enrich_discord_settings(db, settings)
 
         notifications_order = normalize_notifications_order(settings)
 
-        # Respect the global notification order:
-        # - If Discord is NOT the primary channel, do nothing here.
-        # - Email task will handle Email-first (with optional fallback to Discord).
-        if notifications_order[:1] != ["discord"]:
-            task_logs(task_id, "info", "Discord is not the primary notification channel → no action.")
-            return
 
 
 
@@ -61,7 +56,7 @@ def run(task_id: int, db):
 
         users = db.query(
             """
-            SELECT id, username, email, second_email, discord_user_id, expiration_date
+            SELECT id, username, email, second_email, discord_user_id, expiration_date, notifications_order_override
             FROM vodum_users u
             WHERE u.expiration_date IS NOT NULL
               AND COALESCE(u.discord_user_id,'') <> ''
@@ -77,6 +72,11 @@ def run(task_id: int, db):
         sent_count = 0
 
         for u in users:
+            u_dict = dict(u) if not isinstance(u, dict) else u
+            eff_order = effective_notifications_order(settings, u_dict)
+            if eff_order[:1] != ["discord"]:
+                continue
+
             uid = u["id"]
             username = u["username"]
             discord_user_id = (u["discord_user_id"] or "").strip()
@@ -126,7 +126,7 @@ def run(task_id: int, db):
                 content = f"**{title}**\n{body}" if title else body
 
                 try:
-                    send_discord_dm(settings.get("discord_bot_token") or "", discord_user_id, content)
+                    send_discord_dm(settings.get('discord_bot_token_effective') or '', discord_user_id, content)
                     db.execute(
                         """
                         INSERT OR IGNORE INTO sent_discord(user_id, template_type, expiration_date, sent_at)
@@ -139,7 +139,7 @@ def run(task_id: int, db):
                     log.error(f"[DISCORD] send failed user={uid}: {e}")
 
                     # Fallback to Email if configured (order: discord -> email)
-                    if (notifications_order[:2] == ["discord", "email"]) and is_email_ready(settings):
+                    if (eff_order[:2] == ["discord", "email"]) and is_email_ready(settings):
                         recipients = []
                         if email1:
                             recipients.append(email1)

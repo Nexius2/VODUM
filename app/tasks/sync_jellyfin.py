@@ -205,7 +205,6 @@ def _extract_role_from_policy(policy: Dict[str, Any]) -> Optional[str]:
     Rôle simple, adapté à ton champ `media_users.role` :
     - admin si IsAdministrator
     - user sinon
-    Tu peux étendre ensuite (disabled/hidden/etc).
     """
     if not isinstance(policy, dict):
         return None
@@ -217,7 +216,7 @@ def _extract_role_from_policy(policy: Dict[str, Any]) -> Optional[str]:
 def _extract_avatar_path(jellyfin_user_id: str, detail: Dict[str, Any]) -> Optional[str]:
     """
     On stocke une URL *relative* (sans api_key) : le front pourra l’appeler avec l’auth habituelle.
-    PrimaryImageTag existe dans UserDto. :contentReference[oaicite:1]{index=1}
+    PrimaryImageTag existe dans UserDto.
     """
     tag = detail.get("PrimaryImageTag")
     if not tag:

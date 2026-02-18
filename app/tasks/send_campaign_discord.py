@@ -3,7 +3,7 @@
 from tasks_engine import task_logs
 from logging_utils import get_logger
 from mailing_utils import build_user_context, render_mail
-from discord_utils import is_discord_ready, send_discord_dm, DiscordSendError
+from discord_utils import is_discord_ready, enrich_discord_settings, send_discord_dm, DiscordSendError
 
 
 log = get_logger("send_campaign_discord")
@@ -16,6 +16,7 @@ def run(task_id: int, db):
     try:
         settings = db.query_one("SELECT * FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
+        settings = enrich_discord_settings(db, settings)
 
         if not is_discord_ready(settings):
             msg = "Discord disabled or not configured → no action."
@@ -78,7 +79,7 @@ def run(task_id: int, db):
                     content = f"**{content_title}**\n{content_body}" if content_title else content_body
 
                     try:
-                        send_discord_dm(settings.get("discord_bot_token") or "", discord_user_id, content)
+                        send_discord_dm(settings.get('discord_bot_token_effective') or '', discord_user_id, content)
                         sent += 1
                     except DiscordSendError as e:
                         log.error(f"[DISCORD] campaign send failed user={u['id']}: {e}")
