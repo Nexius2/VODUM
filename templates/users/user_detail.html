@@ -7,16 +7,32 @@
 {{ t("user") }}: {{ user.username }}
 {% endblock %}
 
-{% block header_actions %}
-
-{% endblock %}
-
 {% block header_subtitle %}
 {{ t("user_management_subtitle") }}
 {% endblock %}
 
 {% block content %}
 
-{% include "users/partials/_user_general.html" %}
+{% include "users/partials/_user_detail_tabs.html" %}
+
+{% if tab == 'general' %}
+  {% include "users/partials/_user_general.html" %}
+{% elif tab == 'monitoring' %}
+  {% include "users/partials/_user_tab_monitoring_iframe.html" %}
+{% elif tab == 'access' %}
+  {% include "users/partials/_user_servers.html" %}
+{% elif tab == 'notifications' %}
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+    {% include "users/partials/_user_email_history.html" %}
+    {% include "users/partials/_user_discord_history.html" %}
+  </div>
+{% elif tab == 'media' %}
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+    {% include "users/partials/_user_plex.html" %}
+    {% include "users/partials/_user_jellyfin.html" %}
+  </div>
+{% else %}
+  {% include "users/partials/_user_general.html" %}
+{% endif %}
 
 {% endblock %}

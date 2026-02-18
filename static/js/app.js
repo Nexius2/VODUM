@@ -245,12 +245,50 @@ async function runTask(id) {
   }
 }
 
+
+function initUserMediaInfoToggles() {
+  function wire(boxId, fadeId, btnId) {
+    const box = document.getElementById(boxId);
+    const fade = document.getElementById(fadeId);
+    const btn = document.getElementById(btnId);
+    if (!box || !btn) return;
+
+    const labelMore = btn.dataset.more || btn.textContent || "Show more";
+    const labelLess = btn.dataset.less || "Show less";
+
+    // état initial = replié
+    let expanded = false;
+    btn.textContent = labelMore;
+
+    btn.addEventListener("click", () => {
+      expanded = !expanded;
+
+      if (expanded) {
+        box.classList.remove("max-h-48");
+        box.classList.add("max-h-none");
+        if (fade) fade.classList.add("hidden");
+        btn.textContent = labelLess;
+      } else {
+        box.classList.remove("max-h-none");
+        box.classList.add("max-h-48");
+        if (fade) fade.classList.remove("hidden");
+        btn.textContent = labelMore;
+      }
+    });
+  }
+
+  wire("plexBox", "plexFade", "plexToggle");
+  wire("jellyfinBox", "jellyfinFade", "jellyfinToggle");
+}
+
 // ------------ INIT -------------------------------------------
 
 window.addEventListener("DOMContentLoaded", () => {
   // Legacy tabs
   try { initTabs(); } catch (e) { console.error("[vodum] initTabs failed:", e); }
   try { refreshActiveTab(); } catch (e) { console.error("[vodum] refreshActiveTab failed:", e); }
+  try { initUserMediaInfoToggles(); } catch (e) { console.error("[vodum] initUserMediaInfoToggles failed:", e); }
+
 
   // Monitoring Activity charts (si la page est chargée directement sur Activity)
   try {

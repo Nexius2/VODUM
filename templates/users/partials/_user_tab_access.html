@@ -1,0 +1,10 @@
+{% include "users/partials/_user_servers.html" %}
+
+{# si on arrive depuis le bouton "Merge" du General : ?tab=access&merge=1 -> on ouvre l'overlay #}
+{% if request.args.get('merge') == '1' %}
+<script>
+  window.addEventListener('DOMContentLoaded', () => {
+    if (typeof openMergeOverlay === 'function') openMergeOverlay();
+  });
+</script>
+{% endif %}

@@ -302,11 +302,23 @@
     } else if (s === "running") {
       setStatusBoxStyle("info");
       statusText.textContent = "Running… importing sessions (this can take a while).";
-    } else if (s === "success") {
-      setStatusBoxStyle("ok");
-      statusText.textContent = "Completed successfully ✔";
-      if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
-    } else if (s === "error") {
+	} else if (s === "success") {
+	  // Hide stale "success" so it doesn't stick for days.
+	  // finished_at is SQLite CURRENT_TIMESTAMP => "YYYY-MM-DD HH:MM:SS"
+	  const finishedAt = data && data.finished_at ? new Date(data.finished_at.replace(" ", "T") + "Z") : null;
+	  const ageMs = finishedAt ? (Date.now() - finishedAt.getTime()) : 0;
+
+	  // If success is older than 2 hours, don't show the green box
+	  if (finishedAt && ageMs > (2 * 60 * 60 * 1000)) {
+		statusBox.classList.add("hidden");
+		if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
+		return;
+	  }
+
+	  setStatusBoxStyle("ok");
+	  statusText.textContent = "Completed successfully ✔";
+	  if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
+	} else if (s === "error") {
       setStatusBoxStyle("err");
       statusText.textContent = "Failed ❌";
       if (data.last_error) {
