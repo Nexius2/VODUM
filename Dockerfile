@@ -16,6 +16,7 @@ COPY templates/ /app/templates/
 COPY static/ /app/static/
 COPY lang/ /app/lang/
 COPY migrations/ /app/migrations/
+COPY tools/ /app/tools/
 
 # SQL seeds
 COPY tables.sql /app/tables.sql
