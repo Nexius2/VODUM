@@ -32,8 +32,8 @@ def get_provider(server):
     t = (getattr(srv, "type", None) or "").lower()
 
     if t == "plex":
-        return PlexProvider(srv)
+        return PlexProvider(srv, timeout=8)
     if t == "jellyfin":
-        return JellyfinProvider(srv)
+        return JellyfinProvider(srv, timeout=15)
 
     raise ValueError(f"Unsupported provider type: {t}")

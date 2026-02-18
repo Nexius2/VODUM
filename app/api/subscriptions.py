@@ -129,6 +129,9 @@ def api_update_user_expiration(user_id):
 def api_gift_time_to_server(server_id):
     data = request.get_json(silent=True) or {}
     days = data.get("days")
+    target_type = "server"
+    reason = (data.get("reason") or "manual gift").strip()
+
 
     if not isinstance(days, int) or days <= 0:
         return jsonify({"error": "days must be an integer > 0"}), 400

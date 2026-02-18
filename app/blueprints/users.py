@@ -33,13 +33,28 @@ def get_db() -> DBManager:
     return g.db
 
 
-def is_smtp_ready(settings_row: Optional[Dict[str, Any]]) -> bool:
+def is_smtp_ready(settings_row) -> bool:
+    """Retourne True si l'envoi mail est correctement configuré.
+
+    Cette fonction est volontairement tolérante :
+    - accepte dict
+    - accepte sqlite3.Row (ou tout mapping) => conversion dict(...)
+    """
     if not settings_row:
         return False
+
+    if not isinstance(settings_row, dict):
+        try:
+            settings_row = dict(settings_row)
+        except Exception:
+            return False
+
     if not settings_row.get("mailing_enabled"):
         return False
+
     if not (settings_row.get("smtp_host") and (settings_row.get("smtp_user") or settings_row.get("mail_from"))):
         return False
+
     return True
 
 

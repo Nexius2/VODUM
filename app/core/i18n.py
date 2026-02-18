@@ -35,7 +35,7 @@ def load_language_dict(lang_code: str) -> dict:
     # --------------------------------------------------
     # Chargement fichiers JSON
     # --------------------------------------------------
-    lang_dir = os.path.join(current_app.root_path, "lang")
+    lang_dir = current_app.config.get("LANG_DIR") or os.path.join(current_app.root_path, "lang")
     json_path = os.path.join(lang_dir, f"{lang_code}.json")
 
     if not os.path.exists(json_path):
@@ -67,7 +67,7 @@ def load_language_dict(lang_code: str) -> dict:
 
 
 def get_available_languages():
-    lang_dir = os.path.join(current_app.root_path, "lang")
+    lang_dir = current_app.config.get("LANG_DIR") or os.path.join(current_app.root_path, "lang")
     languages = {}
 
     for filename in os.listdir(lang_dir):
