@@ -537,6 +537,10 @@ ON media_session_history(media_key, started_at);
 CREATE INDEX IF NOT EXISTS idx_hist_user_stopped ON media_session_history(media_user_id, stopped_at);
 CREATE INDEX IF NOT EXISTS idx_hist_server_stopped ON media_session_history(server_id, stopped_at);
 
+-- Dedup key for monitoring history + tautulli imports + collector upserts
+CREATE UNIQUE INDEX IF NOT EXISTS uq_media_session_history_tautulli_dedup
+ON media_session_history (server_id, media_user_id, started_at, media_key, client_name);
+
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_media_jobs_dedupe_active
 ON media_jobs(dedupe_key)
