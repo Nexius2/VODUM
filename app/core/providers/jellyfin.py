@@ -128,6 +128,32 @@ class JellyfinProvider(BaseProvider):
         return None
 
     @staticmethod
+    def _to_int(v: Any) -> Optional[int]:
+        """
+        Jellyfin peut renvoyer des nombres en int, float, ou string ("12345").
+        On convertit proprement vers int, sinon None.
+        """
+        if v is None:
+            return None
+        if isinstance(v, bool):
+            return int(v)
+        if isinstance(v, int):
+            return v
+        if isinstance(v, float):
+            return int(v)
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return None
+            # accepte "12345" ou "12345.0"
+            try:
+                return int(float(s))
+            except Exception:
+                return None
+        return None
+
+
+    @staticmethod
     def _pick_ip(session: Dict[str, Any]) -> Optional[str]:
         """
         Jellyfin can expose remote ip depending on config/version and reverse proxy.
@@ -217,7 +243,14 @@ class JellyfinProvider(BaseProvider):
                 is_transcode = 0
 
             transcoding_info = s.get("TranscodingInfo") or {}
-            bitrate = transcoding_info.get("Bitrate")
+
+            # Bitrate Jellyfin : souvent str/float → on normalise
+            bitrate = self._to_int(transcoding_info.get("Bitrate"))
+
+            # fallback : certaines versions mettent Bitrate ailleurs
+            if bitrate is None:
+                bitrate = self._to_int((s.get("NowPlayingItem") or {}).get("Bitrate"))
+
 
             is_paused = play_state.get("IsPaused")
             state = "paused" if is_paused else "playing"
@@ -298,7 +331,7 @@ class JellyfinProvider(BaseProvider):
                     "video_decision": None,
                     "audio_decision": None,
 
-                    "bitrate": int(bitrate) if isinstance(bitrate, int) else None,
+                    "bitrate": bitrate,
                     "video_codec": (transcoding_info.get("VideoCodec") or None),
                     "audio_codec": (transcoding_info.get("AudioCodec") or None),
 

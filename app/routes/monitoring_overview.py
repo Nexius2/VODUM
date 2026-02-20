@@ -84,6 +84,32 @@ def register(app):
             (live_window_sql,),
         ) or {"live_sessions": 0, "transcodes": 0}
         sessions_stats = dict(sessions_stats) if sessions_stats else {"live_sessions": 0, "transcodes": 0}
+        
+        # --------------------------
+        # Snapshot "à l'affichage" (garantit que le peak ne redescend pas)
+        # On limite à 1 insert / 30s pour éviter de spammer la DB si tu refresh souvent.
+        # --------------------------
+        try:
+            live_now = int(sessions_stats.get("live_sessions") or 0)
+            transcodes_now = int(sessions_stats.get("transcodes") or 0)
+
+            db.execute(
+                """
+                INSERT INTO monitoring_snapshots (ts, live_sessions, transcodes)
+                SELECT CURRENT_TIMESTAMP, ?, ?
+                WHERE NOT EXISTS (
+                  SELECT 1
+                  FROM monitoring_snapshots
+                  WHERE ts >= datetime('now', '-30 seconds')
+                )
+                """,
+                (live_now, transcodes_now),
+            )
+
+            # purge (garde 30 jours)
+            db.execute("DELETE FROM monitoring_snapshots WHERE ts < datetime('now','-30 days')")
+        except Exception as e:
+            logger.warning(f"Could not write monitoring snapshot (overview): {e}")
 
         sessions = db.query(
             """
@@ -221,16 +247,30 @@ def register(app):
         # Stats 7d + tops
         # --------------------------
         stats_7d = db.query_one(
-            """
-            SELECT
-              COUNT(*) AS sessions,
-              COUNT(DISTINCT media_user_id) AS active_users,
-              SUM(watch_ms) AS total_watch_ms,
-              AVG(CASE WHEN watch_ms > 0 THEN watch_ms END) AS avg_watch_ms
-            FROM media_session_history
-            WHERE started_at >= datetime('now', '-7 days')
-            """
-        ) or {"sessions": 0, "active_users": 0, "total_watch_ms": 0, "avg_watch_ms": 0}
+                            """
+                            SELECT
+                              COUNT(DISTINCT
+                                CAST(h.server_id AS TEXT) || '|' ||
+                                COALESCE(CAST(h.media_user_id AS TEXT), '') || '|' ||
+                                COALESCE(h.started_at, '') || '|' ||
+                                COALESCE(h.media_key, '') || '|' ||
+                                COALESCE(h.client_name, '')
+                              ) AS sessions,
+
+                              -- Active users (7d) = VODUM users distincts (merge inclus)
+                              -- Si un media_user n'est pas mergé, on le compte quand même comme un user unique.
+                              COUNT(DISTINCT COALESCE(
+                                CAST(mu.vodum_user_id AS TEXT),
+                                'media:' || CAST(mu.id AS TEXT)
+                              )) AS active_users,
+
+                              SUM(h.watch_ms) AS total_watch_ms,
+                              AVG(CASE WHEN h.watch_ms > 0 THEN h.watch_ms END) AS avg_watch_ms
+                            FROM media_session_history h
+                            LEFT JOIN media_users mu ON mu.id = h.media_user_id
+                            WHERE h.started_at >= datetime('now', '-7 days')
+                            """
+                        ) or {"sessions": 0, "active_users": 0, "total_watch_ms": 0, "avg_watch_ms": 0}
         stats_7d = dict(stats_7d) if stats_7d else {"sessions": 0, "active_users": 0, "total_watch_ms": 0, "avg_watch_ms": 0}
 
         top_users_30d = db.query(
@@ -263,47 +303,15 @@ def register(app):
             """
         )
 
+
         # --------------------------
-        # Peak streams (7d) = pic simultané "light"
-        # bucket = 300s (5min). Pour encore + light -> 600 (10min)
+        # Peak streams (7d) = max de Live sessions (snapshots)
         # --------------------------
         concurrent_7d = db.query_one(
             """
-            WITH events AS (
-              -- +1 au début
-              SELECT
-                (CAST(strftime('%s', started_at) AS INTEGER) / 300) * 300 AS bucket_ts,
-                +1 AS delta
-              FROM media_session_history
-              WHERE started_at >= datetime('now', '-7 days')
-                AND started_at IS NOT NULL
-
-              UNION ALL
-
-              -- -1 à la fin
-              SELECT
-                (CAST(strftime('%s', stopped_at) AS INTEGER) / 300) * 300 AS bucket_ts,
-                -1 AS delta
-              FROM media_session_history
-              WHERE started_at >= datetime('now', '-7 days')
-                AND stopped_at IS NOT NULL
-            ),
-            per_bucket AS (
-              SELECT bucket_ts, SUM(delta) AS delta
-              FROM events
-              GROUP BY bucket_ts
-            ),
-            running AS (
-              SELECT
-                bucket_ts,
-                SUM(delta) OVER (
-                  ORDER BY bucket_ts
-                  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-                ) AS concurrent
-              FROM per_bucket
-            )
-            SELECT MAX(concurrent) AS peak_streams
-            FROM running
+            SELECT COALESCE(MAX(live_sessions), 0) AS peak_streams
+            FROM monitoring_snapshots
+            WHERE ts >= datetime('now', '-7 days')
             """
         ) or {"peak_streams": 0}
         concurrent_7d = dict(concurrent_7d) if concurrent_7d else {"peak_streams": 0}
@@ -312,6 +320,7 @@ def register(app):
         live_now = int(sessions_stats.get("live_sessions") or 0)
         peak = int(concurrent_7d.get("peak_streams") or 0)
         concurrent_7d["peak_streams"] = max(peak, live_now)
+
 
         sort_key = None
         sort_dir = None
@@ -924,14 +933,17 @@ def register(app):
             servers_clients = db.query(
                 f"""
                 SELECT
-                  server_id,
-                  COALESCE(client_product, COALESCE(device, 'unknown')) AS client,
+                  h.server_id,
+                  s.name AS server_name,
+                  COALESCE(h.client_product, COALESCE(h.device, 'unknown')) AS client,
                   COUNT(*) AS sessions,
-                  COALESCE(SUM(watch_ms),0) AS watch_ms,
-                  SUM(CASE WHEN was_transcode = 1 THEN 1 ELSE 0 END) AS transcodes
-                FROM media_session_history
+                  COALESCE(SUM(h.watch_ms),0) AS watch_ms,
+                  SUM(CASE WHEN h.was_transcode = 1 THEN 1 ELSE 0 END) AS transcodes
+                FROM media_session_history h
+                JOIN servers s
+                  ON s.id = h.server_id
                 WHERE {where_hist}
-                GROUP BY server_id, client
+                GROUP BY h.server_id, s.name, client
                 ORDER BY sessions DESC
                 LIMIT 200
                 """,
@@ -944,16 +956,19 @@ def register(app):
                 f"""
                 SELECT
                   h.server_id,
+                  s.name AS server_name,
                   h.media_user_id,
                   COALESCE(mu.username, mu.email, 'User #' || h.media_user_id) AS user_label,
                   COUNT(*) AS sessions,
                   COALESCE(SUM(h.watch_ms),0) AS watch_ms,
                   SUM(CASE WHEN h.was_transcode = 1 THEN 1 ELSE 0 END) AS transcodes
                 FROM media_session_history h
+                JOIN servers s
+                  ON s.id = h.server_id
                 LEFT JOIN media_users mu
                   ON mu.id = h.media_user_id
                 WHERE {where_hist}
-                GROUP BY h.server_id, h.media_user_id
+                GROUP BY h.server_id, s.name, h.media_user_id
                 ORDER BY watch_ms DESC
                 LIMIT 200
                 """,
@@ -962,22 +977,24 @@ def register(app):
             servers_top_users = [dict(r) for r in servers_top_users]
 
             # Top contenus (global + par serveur)
-            # -> s’appuie sur title / grandparent_title / parent_title si présents
             servers_top_titles = db.query(
                 f"""
                 SELECT
-                  server_id,
+                  h.server_id,
+                  s.name AS server_name,
                   TRIM(
-                    COALESCE(grandparent_title || ' - ', '') ||
-                    COALESCE(parent_title || ' - ', '') ||
-                    COALESCE(title, 'Unknown')
+                    COALESCE(h.grandparent_title || ' - ', '') ||
+                    COALESCE(h.parent_title || ' - ', '') ||
+                    COALESCE(h.title, 'Unknown')
                   ) AS full_title,
                   COUNT(*) AS sessions,
-                  COALESCE(SUM(watch_ms),0) AS watch_ms,
-                  SUM(CASE WHEN was_transcode = 1 THEN 1 ELSE 0 END) AS transcodes
-                FROM media_session_history
+                  COALESCE(SUM(h.watch_ms),0) AS watch_ms,
+                  SUM(CASE WHEN h.was_transcode = 1 THEN 1 ELSE 0 END) AS transcodes
+                FROM media_session_history h
+                JOIN servers s
+                  ON s.id = h.server_id
                 WHERE {where_hist}
-                GROUP BY server_id, full_title
+                GROUP BY h.server_id, s.name, full_title
                 ORDER BY watch_ms DESC
                 LIMIT 200
                 """,
@@ -989,19 +1006,23 @@ def register(app):
             servers_unique_ips = db.query(
                 f"""
                 SELECT
-                  server_id,
-                  ip,
+                  h.server_id,
+                  s.name AS server_name,
+                  h.ip,
                   COUNT(*) AS sessions,
-                  COALESCE(SUM(watch_ms),0) AS watch_ms
-                FROM media_session_history
+                  COALESCE(SUM(h.watch_ms),0) AS watch_ms
+                FROM media_session_history h
+                JOIN servers s
+                  ON s.id = h.server_id
                 WHERE {where_hist}
-                GROUP BY server_id, ip
+                GROUP BY h.server_id, s.name, h.ip
                 ORDER BY sessions DESC
                 LIMIT 200
                 """,
                 params_hist,
             )
             servers_unique_ips = [dict(r) for r in servers_unique_ips]
+
 
 
 

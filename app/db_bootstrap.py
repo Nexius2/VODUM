@@ -184,6 +184,21 @@ def run_migrations():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_tautulli_import_jobs_server ON tautulli_import_jobs(server_id);")
     conn.commit()
 
+    # -------------------------------------------------
+    # 0.4 Monitoring snapshots table (NEW)
+    # -------------------------------------------------
+    if not table_exists(cursor, "monitoring_snapshots"):
+        print("🛠 Creating table: monitoring_snapshots")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS monitoring_snapshots (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          ts TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          live_sessions INTEGER NOT NULL DEFAULT 0,
+          transcodes INTEGER NOT NULL DEFAULT 0
+        );
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_monitoring_snapshots_ts ON monitoring_snapshots(ts);")
+        conn.commit()
 
 
     # -------------------------------------------------

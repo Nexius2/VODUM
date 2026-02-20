@@ -194,16 +194,27 @@ def register(app):
 
         rows = db.query(
             f"""
-            SELECT
-              COALESCE(media_type, 'unknown') AS media_type,
-              COUNT(*) AS sessions
-            FROM media_session_history
-            WHERE {where}
-            GROUP BY COALESCE(media_type, 'unknown')
+            WITH norm AS (
+              SELECT
+                CASE
+                  WHEN LOWER(TRIM(COALESCE(media_type,''))) IN ('movie', 'film') THEN 'movie'
+                  WHEN LOWER(TRIM(COALESCE(media_type,''))) IN ('serie', 'series', 'episode', 'show', 'season') THEN 'series'
+                  WHEN LOWER(TRIM(COALESCE(media_type,''))) IN ('music', 'audio', 'song', 'track', 'tracks') THEN 'music'
+                  WHEN LOWER(TRIM(COALESCE(media_type,''))) IN ('photo', 'photos', 'image', 'picture', 'pictures') THEN 'photo'
+                  ELSE 'other'
+                END AS media_type
+              FROM media_session_history
+              WHERE {where}
+            )
+            SELECT media_type, COUNT(*) AS sessions
+            FROM norm
+            GROUP BY media_type
             ORDER BY sessions DESC
             """,
             params,
         )
+
+
         return json_rows(rows)
 
 

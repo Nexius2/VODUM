@@ -240,9 +240,29 @@ class PlexProvider(BaseProvider):
 
             # Keep transcode session for bitrate/codecs, but don't use it as the "truth" for is_transcode
             transcode = node.find("TranscodeSession")
-            bitrate = transcode.attrib.get("bandwidth") if transcode is not None else None
+
+            # --- Bitrate (Plex can put it in different places depending on direct play / direct stream / transcode) ---
+            bitrate = None
+
+            # 1) Transcode session bitrate (when transcoding)
+            if transcode is not None:
+                bitrate = transcode.attrib.get("bandwidth") or transcode.attrib.get("peakBandwidth")
+
+            # 2) Sometimes on the session node itself
+            if not bitrate:
+                bitrate = node.attrib.get("bandwidth") or node.attrib.get("bitrate")
+
+            # 3) Sometimes on Player
+            if not bitrate and player is not None:
+                bitrate = player.attrib.get("bandwidth") or player.attrib.get("bitrate")
+
+            # 4) Fallback: Media/Part bitrate
+            if not bitrate:
+                bitrate = _first_decision(node, "bitrate")
+
             video_codec = transcode.attrib.get("videoCodec") if transcode is not None else None
             audio_codec = transcode.attrib.get("audioCodec") if transcode is not None else None
+
 
             title = node.attrib.get("title")
             grandparent = node.attrib.get("grandparentTitle")
