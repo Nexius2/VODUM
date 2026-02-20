@@ -712,3 +712,16 @@ CREATE TABLE IF NOT EXISTS tautulli_import_jobs (
 
 CREATE INDEX IF NOT EXISTS idx_tautulli_import_jobs_status ON tautulli_import_jobs(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_tautulli_import_jobs_server ON tautulli_import_jobs(server_id);
+
+-- ----------------------------
+-- Monitoring snapshots (for peak streams)
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS monitoring_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  live_sessions INTEGER NOT NULL DEFAULT 0,
+  transcodes INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_monitoring_snapshots_ts
+ON monitoring_snapshots(ts);
