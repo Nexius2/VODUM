@@ -431,4 +431,41 @@ def collect_sessions(db) -> Dict[str, Any]:
         except Exception as e:
             report["errors"].append({"server_id": server_id, "provider": provider_name, "error": str(e)})
 
+    # -------------------------------------------------
+    # Snapshot global (for peak streams = MAX(live_sessions) over time)
+    # -------------------------------------------------
+    try:
+        live_window_seconds = 120
+        live_window_sql = f"-{live_window_seconds} seconds"
+
+        row = db.query_one(
+            """
+            SELECT
+              COUNT(*) AS live_sessions,
+              SUM(CASE WHEN is_transcode = 1 THEN 1 ELSE 0 END) AS transcodes
+            FROM media_sessions
+            WHERE datetime(last_seen_at) >= datetime('now', ?)
+            """,
+            (live_window_sql,),
+        ) or {"live_sessions": 0, "transcodes": 0}
+
+        live_sessions = int(row.get("live_sessions") or 0)
+        transcodes = int(row.get("transcodes") or 0)
+
+        db.execute(
+            """
+            INSERT INTO monitoring_snapshots (ts, live_sessions, transcodes)
+            VALUES (CURRENT_TIMESTAMP, ?, ?)
+            """,
+            (live_sessions, transcodes),
+        )
+
+        # purge simple (garde 30 jours)
+        db.execute(
+            "DELETE FROM monitoring_snapshots WHERE ts < datetime('now','-30 days')"
+        )
+
+    except Exception as e:
+        logger.warning(f"Could not write monitoring snapshot: {e}")
+
     return report
