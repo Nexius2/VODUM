@@ -1002,13 +1002,21 @@ def sync_users_from_api(db) -> None:
             vodum_user_id = row["vodum_user_id"]
 
         if vodum_user_id is None and email:
-            row = db.query_one("SELECT id FROM vodum_users WHERE email = ?", (email,))
+            row = db.query_one("SELECT id, username FROM vodum_users WHERE email = ?", (email,))
             if row:
                 vodum_user_id = row["id"]
-                db.execute(
-                    "UPDATE vodum_users SET username = COALESCE(username, ?) WHERE id = ?",
-                    (username, vodum_user_id),
-                )
+
+                # Si le user a été créé via VODUM, on a souvent username=email.split('@')[0].
+                # Dans ce cas, on le remplace par le vrai username Plex quand on le découvre,
+                # pour éviter des usernames différents entre instances.
+                current_username = (row.get("username") or "").strip()
+                email_local = (email.split("@", 1)[0] if email else "").strip()
+
+                if (not current_username) or (current_username.lower() == email_local.lower()):
+                    db.execute(
+                        "UPDATE vodum_users SET username = ? WHERE id = ?",
+                        (username, vodum_user_id),
+                    )
 
         if vodum_user_id is None:
             cur_v = db.execute(
@@ -1077,34 +1085,53 @@ def sync_users_from_api(db) -> None:
                 ensure_ascii=False
             )
 
+            # IMPORTANT : si le user a été créé via VODUM avant que Plex ne renvoie un plex_id,
+            # on peut avoir un "placeholder" media_users avec external_user_id NULL.
+            # Ici, on tente d'abord de matcher sur plex_id, puis on "récupère" le placeholder
+            # (server_id + vodum_user_id + external_user_id IS NULL) pour éviter les doublons.
             row_mu = db.query_one(
                 """
                 SELECT id
                 FROM media_users
                 WHERE server_id = ?
-                  AND external_user_id = ?
                   AND type = 'plex'
+                  AND (external_user_id = ? OR (external_user_id IS NULL AND vodum_user_id = ?))
+                ORDER BY id DESC
+                LIMIT 1
                 """,
-                (server_id, plex_id),
+                (server_id, plex_id, vodum_user_id),
             )
 
             if row_mu:
                 db.execute(
                     """
                     UPDATE media_users
-                    SET vodum_user_id = ?,
-                        username       = ?,
-                        email          = ?,
-                        avatar         = ?,
-                        type           = 'plex',
-                        role           = ?,
-                        joined_at      = ?,
-                        accepted_at    = ?,
-                        details_json   = ?
+                    SET vodum_user_id     = ?,
+                        external_user_id = ?,
+                        username         = ?,
+                        email            = ?,
+                        avatar           = ?,
+                        type             = 'plex',
+                        role             = ?,
+                        joined_at        = ?,
+                        accepted_at      = ?,
+                        details_json     = ?
                     WHERE id = ?
                     """,
-                    (vodum_user_id, username, email, avatar, role_for_server,
+                    (vodum_user_id, plex_id, username, email, avatar, role_for_server,
                      joined_at, accepted_at, details_json, row_mu["id"]),
+                )
+
+                # Nettoyage : supprime d'éventuels placeholders restants (external_user_id NULL)
+                db.execute(
+                    """
+                    DELETE FROM media_users
+                    WHERE server_id = ?
+                      AND type = 'plex'
+                      AND vodum_user_id = ?
+                      AND external_user_id IS NULL
+                    """,
+                    (server_id, vodum_user_id),
                 )
             else:
                 cur_mu = db.execute(
