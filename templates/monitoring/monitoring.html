@@ -16,8 +16,11 @@
 
 {# Interval par onglet (tu peux ajuster) #}
 {% set current_tab = args.get('tab', 'overview') %}
+
 {% if current_tab == 'activity' %}
   {% set refresh_ms = 5000 %}
+{% elif current_tab == 'now_playing' %}
+  {% set refresh_ms = 2500 %}
 {% elif current_tab == 'policies' %}
   {% set refresh_ms = 600000 %}
 {% elif current_tab == 'servers' %}

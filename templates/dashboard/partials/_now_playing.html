@@ -1,0 +1,74 @@
+{% if sessions and sessions|length > 0 %}
+    <div class="space-y-2">
+        {% for s in sessions %}
+            <div class="flex items-start gap-3 rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2">
+
+                {% if s.poster_url %}
+                    <img
+                        src="{{ s.poster_url }}"
+                        alt="poster"
+                        class="w-10 h-14 rounded-lg object-cover border border-slate-700/70 shrink-0"
+                        loading="lazy"
+                    />
+                {% endif %}
+
+                <div class="min-w-0 flex-1">
+
+                    <!-- Badges -->
+                    <div class="flex flex-wrap gap-2 mb-1">
+                        {% set p = (s.provider or '')|lower %}
+                        <span class="text-[10px] px-2 py-0.5 rounded-full border
+                            {% if 'plex' in p %}
+                                border-orange-500 text-orange-300 bg-orange-500/10
+                            {% elif 'jellyfin' in p %}
+                                border-blue-500 text-blue-300 bg-blue-500/10
+                            {% else %}
+                                border-slate-700 text-slate-200 bg-slate-900/30
+                            {% endif %}">
+                            {{ s.provider }}
+                        </span>
+
+                        {% if s.is_transcode %}
+                            <span class="text-[10px] px-2 py-0.5 rounded-full border border-orange-500 text-orange-300">Transcoding</span>
+                        {% else %}
+                            <span class="text-[10px] px-2 py-0.5 rounded-full border border-emerald-600 text-emerald-300">Direct Play</span>
+                        {% endif %}
+
+                        <span class="text-[10px] px-2 py-0.5 rounded-full border border-slate-700 text-slate-200">
+                            {{ s.server_name }}
+                        </span>
+                    </div>
+
+                    <!-- Title -->
+                    <div class="text-sm font-semibold truncate">
+                        {% if (s.media_type or '')|lower in ['episode', 'tv', 'tv_episode'] or s.episode_code %}
+                            {{ s.grandparent_title or "-" }}
+                            {% if s.episode_code %}
+                                <span class="text-slate-400"> · {{ s.episode_code }}</span>
+                            {% endif %}
+                            {% if s.title %}
+                                <span class="text-slate-400"> ·</span> {{ s.title }}
+                            {% endif %}
+                        {% else %}
+                            {{ s.title or "-" }}
+                        {% endif %}
+                    </div>
+
+                    <!-- Meta -->
+                    <div class="text-xs text-slate-400 mt-1 truncate">
+                        User: <span class="text-slate-200">{{ s.username or "-" }}</span>
+                        · State: <span class="text-slate-200">{{ s.state or "-" }}</span>
+                        · Client: <span class="text-slate-200">{{ s.client_name or "-" }}</span>
+                    </div>
+                </div>
+
+                <div class="text-[10px] text-slate-500 whitespace-nowrap pt-0.5">
+                    {{ t("last_check") }} : {{ s.last_seen_at|tz }}
+                </div>
+
+            </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <p class="text-xs text-slate-500">No active session.</p>
+{% endif %}

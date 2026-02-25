@@ -823,6 +823,11 @@
     "dont_close_tab": "Non chiudere questa scheda.",
   "please_wait": "Attendi, per favore…",
   "tautulli_copying_db": "Copia del database di Tautulli…",
-  "task.cleanup_data_retention": "Pulizia dei dati obsoleti (criterio di conservazione)"
+  "task.cleanup_data_retention": "Pulizia dei dati obsoleti (criterio di conservazione)",
+  "merged_users": "Utenti uniti",
+"no_merge_history": "Nessun merge",
+"linked_media_usernames": "Usernames collegati (audit)",
+"username_display_help": "Nome visualizzato in VODUM. Gli username Plex/Jellyfin sono nella scheda Media.",
+"username_placeholder": "Nome visualizzato"
 
 }

@@ -139,7 +139,7 @@
         <div class="flex items-center justify-between border border-slate-800 rounded-xl px-3 py-2">
           <div class="min-w-0">
             <div class="text-sm font-semibold truncate">{{ r.user_label }}</div>
-            <div class="text-xs text-slate-500">Server #{{ r.server_id }} • sessions {{ r.sessions }} • transcodes {{ r.transcodes }}</div>
+            <div class="text-xs text-slate-500">{{ r.server_name or ('Server ' ~ r.server_id) }} • sessions {{ r.sessions }} • transcodes {{ r.transcodes }}</div>
           </div>
           {% set ms = r.watch_ms or 0 %}
           <div class="text-xs text-slate-300 text-right whitespace-nowrap">
@@ -157,7 +157,7 @@
         <div class="flex items-center justify-between border border-slate-800 rounded-xl px-3 py-2">
           <div class="min-w-0">
             <div class="text-sm font-semibold truncate">{{ r.full_title }}</div>
-            <div class="text-xs text-slate-500">Server #{{ r.server_id }} • sessions {{ r.sessions }} • transcodes {{ r.transcodes }}</div>
+            <div class="text-xs text-slate-500">{{ r.server_name or ('Server ' ~ r.server_id) }} • sessions {{ r.sessions }} • transcodes {{ r.transcodes }}</div>
           </div>
           {% set ms = r.watch_ms or 0 %}
           <div class="text-xs text-slate-300 text-right whitespace-nowrap">
@@ -175,7 +175,7 @@
         <div class="flex items-center justify-between border border-slate-800 rounded-xl px-3 py-2">
           <div class="min-w-0">
             <div class="text-sm font-semibold truncate">{{ r.ip }}</div>
-            <div class="text-xs text-slate-500">Server #{{ r.server_id }} • sessions {{ r.sessions }}</div>
+            <div class="text-xs text-slate-500">{{ r.server_name or ('Server ' ~ r.server_id) }} • sessions {{ r.sessions }}</div>
           </div>
           {% set ms = r.watch_ms or 0 %}
           <div class="text-xs text-slate-300 text-right whitespace-nowrap">
@@ -194,7 +194,7 @@
       <div class="border border-slate-800 rounded-xl px-3 py-2">
         <div class="text-sm font-semibold truncate">{{ r.client }}</div>
         <div class="text-xs text-slate-500">
-          Server #{{ r.server_id }} • sessions {{ r.sessions }} • transcodes {{ r.transcodes }}
+          {{ r.server_name or ('Server ' ~ r.server_id) }} • sessions {{ r.sessions }} • transcodes {{ r.transcodes }}
         </div>
       </div>
     {% endfor %}

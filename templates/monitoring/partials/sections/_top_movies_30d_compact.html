@@ -1,18 +1,24 @@
-<div class="text-sm font-semibold mb-4">Most active users (30d)</div>
+<div class="text-sm font-semibold mb-4">Top movies (30d)</div>
 
-{% if top_users_30d and top_users_30d|length > 0 %}
+{% if top_movies_30d and top_movies_30d|length > 0 %}
   <div class="space-y-3">
-    {% for u in top_users_30d[:5] %}
+    {% for c in top_movies_30d[:4] %}
       <div class="flex items-center justify-between">
-        <div class="text-sm font-semibold">{{ u.username or "-" }}</div>
+        <div class="text-sm">
+          <div class="font-semibold">{{ c.title or "-" }}</div>
+          
+        </div>
+
         <div class="text-xs text-slate-400 text-right">
-          <div>{{ u.sessions }} sessions</div>
+          <div>{{ c.viewers }} users</div>
+          <div class="text-slate-500">{{ c.plays }} plays</div>
           <div>
-            {% set ms = u.watch_ms or 0 %}
+            {% set ms = c.watch_ms or 0 %}
             {{ (ms // 3600000) }}h {{ ((ms % 3600000) // 60000) }}m
           </div>
         </div>
       </div>
+
       {% if not loop.last %}<div class="border-t border-slate-800"></div>{% endif %}
     {% endfor %}
   </div>

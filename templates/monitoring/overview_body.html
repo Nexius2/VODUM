@@ -1,34 +1,27 @@
-<!-- Cards -->
-
-<!-- Cards (layout: 2x2 à gauche + 2 grandes bulles à droite) -->
+<!-- Row 1: Servers / Live sessions / Usage overview / Total watch time -->
 <div class="grid grid-cols-1 xl:grid-cols-4 gap-6 mb-6">
-
-  <!-- Ligne 1 (gauche) -->
   {% include "monitoring/partials/cards/_servers.html" %}
   {% include "monitoring/partials/cards/_live_sessions.html" %}
+  {% include "monitoring/partials/cards/_active_users_7d.html" %}
+  {% include "monitoring/partials/cards/_watchtime_7d.html" %}
+</div>
 
-  <!-- Grande bulle droite 1 (span 2 lignes) -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 xl:row-span-2">
+<!-- Row 2: Most active users / Top series / Top movies -->
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
     {% include "monitoring/partials/sections/_top_users_30d_compact.html" %}
   </div>
 
-  <!-- Grande bulle droite 2 (span 2 lignes) -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 xl:row-span-2">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
     {% include "monitoring/partials/sections/_top_content_30d_compact.html" %}
   </div>
 
-  <!-- Ligne 2 (gauche) -->
-  {% include "monitoring/partials/cards/_active_users_7d.html" %}
-  {% include "monitoring/partials/cards/_watchtime_7d.html" %}
-
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    {% include "monitoring/partials/sections/_top_movies_30d_compact.html" %}
+  </div>
 </div>
 
-
-
+<!-- Row 3: Now Playing
 <div class="mb-6">
   {% include "monitoring/partials/sections/_now_playing.html" %}
-</div>
-
-
-
-
+</div> -->
