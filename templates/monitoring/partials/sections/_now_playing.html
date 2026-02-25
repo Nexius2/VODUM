@@ -1,0 +1,76 @@
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+  <div class="text-sm font-semibold mb-4">Now Playing</div>
+
+  {% if sessions and sessions|length > 0 %}
+    <div class="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(300px,1fr))]">
+      {% for s in sessions %}
+        <div class="bg-slate-950/40 border border-slate-800 rounded-2xl p-4">
+			<div class="flex items-start justify-between gap-3 mb-3">
+			  <div class="flex flex-wrap gap-2">
+				{# Provider badge (Plex/Jellyfin) #}
+				{% set p = (s.provider or '')|lower %}
+
+				<span
+				  class="text-xs px-2 py-1 rounded-full border
+					{% if 'plex' in p %}
+					  border-orange-500 text-orange-300 bg-orange-500/10
+					{% elif 'jellyfin' in p %}
+					  border-blue-500 text-blue-300 bg-blue-500/10
+					{% else %}
+					  border-slate-700 text-slate-200 bg-slate-900/30
+					{% endif %}"
+				>
+				  {{ s.provider }}
+				</span>
+
+				{% if s.is_transcode %}
+				  <span class="text-xs px-2 py-1 rounded-full border border-orange-500 text-orange-300">Transcoding</span>
+				{% else %}
+				  <span class="text-xs px-2 py-1 rounded-full border border-emerald-600 text-emerald-300">Direct Play</span>
+				{% endif %}
+
+				<span class="text-xs px-2 py-1 rounded-full border border-slate-700">{{ s.server_name }}</span>
+			  </div>
+
+			  {% if s.poster_url %}
+				<img
+				  src="{{ s.poster_url }}"
+				  alt="poster"
+				  class="w-10 h-14 rounded-lg object-cover border border-slate-700/70 shrink-0"
+				  loading="lazy"
+				/>
+			  {% endif %}
+			</div>
+
+
+			<div class="text-lg font-semibold">
+			  {% if (s.media_type or '')|lower in ['episode', 'tv', 'tv_episode'] or s.episode_code %}
+				{{ s.grandparent_title or "-" }}
+				{% if s.episode_code %}
+				  <span class="text-slate-400"> · {{ s.episode_code }}</span>
+				{% endif %}
+				{% if s.title %}
+				  <span class="text-slate-400"> ·</span> {{ s.title }}
+				{% endif %}
+			  {% else %}
+				{{ s.title or "-" }}
+			  {% endif %}
+			</div>
+
+
+          <div class="text-sm text-slate-400 mt-2">
+            User: <span class="text-slate-200">{{ s.username or "-" }}</span>
+            · State: <span class="text-slate-200">{{ s.state or "-" }}</span>
+            · Client: <span class="text-slate-200">{{ s.client_name or "-" }}</span>
+          </div>
+
+          <div class="text-xs text-slate-500 mt-2">
+            Last seen: {{ s.last_seen_at|tz }}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="text-slate-500">No active session.</div>
+  {% endif %}
+</div>
