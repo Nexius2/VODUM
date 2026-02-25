@@ -668,6 +668,29 @@ def run_migrations():
             ON media_session_history (server_id, media_user_id, started_at, media_key, client_name)
         """)
 
+    # -------------------------------------------------
+    # UNIQUE session key dedup (1 playback = 1 session_key)
+    # -------------------------------------------------
+    # 1) Nettoyage : si ta DB contient déjà des doublons (server_id, session_key),
+    # on garde la plus ancienne ligne (MIN(id)) et on supprime les autres.
+    cursor.execute("""
+        DELETE FROM media_session_history
+        WHERE TRIM(COALESCE(session_key,'')) <> ''
+          AND id NOT IN (
+            SELECT MIN(id)
+            FROM media_session_history
+            WHERE TRIM(COALESCE(session_key,'')) <> ''
+            GROUP BY server_id, session_key
+          )
+    """)
+
+    # 2) Index unique : permet au ON CONFLICT(server_id, session_key) de fonctionner
+    cursor.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_media_session_history_session
+        ON media_session_history (server_id, session_key)
+        WHERE TRIM(COALESCE(session_key,'')) <> ''
+    """)
+
     conn.commit()
     print("✔ Monitoring history table verified (media_session_history).")
 
