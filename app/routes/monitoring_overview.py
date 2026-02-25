@@ -291,13 +291,19 @@ def register(app):
         top_content_30d = db.query(
             """
             SELECT
-              COALESCE(title, '-') AS title,
-              COALESCE(grandparent_title, '') AS grandparent_title,
+              title_norm AS title,
+              grandparent_norm AS grandparent_title,
               COUNT(*) AS sessions,
               SUM(watch_ms) AS watch_ms
-            FROM media_session_history
-            WHERE started_at >= datetime('now', '-30 days')
-            GROUP BY title, grandparent_title
+            FROM (
+              SELECT
+                COALESCE(NULLIF(TRIM(title), ''), '-') AS title_norm,
+                COALESCE(NULLIF(TRIM(grandparent_title), ''), '') AS grandparent_norm,
+                watch_ms
+              FROM media_session_history
+              WHERE started_at >= datetime('now', '-30 days')
+            )
+            GROUP BY title_norm, grandparent_norm
             ORDER BY watch_ms DESC
             LIMIT 10
             """
