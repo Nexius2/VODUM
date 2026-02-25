@@ -327,7 +327,7 @@ def collect_sessions_for_server(
                       raw_json, library_section_id
                     )
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(server_id, media_user_id, started_at, media_key, client_name)
+                    ON CONFLICT(server_id, session_key)
                     DO UPDATE SET
                       stopped_at = excluded.stopped_at,
                       watch_ms = CASE
@@ -404,10 +404,22 @@ def collect_sessions_for_server(
 
         # Sinon, on classe intelligemment
         status = _classify_status_from_exception(e)
-        db.execute(
-            "UPDATE servers SET last_checked=CURRENT_TIMESTAMP, status=? WHERE id=?",
-            (status, server_id),
-        )
+
+        # IMPORTANT:
+        # - "down" => on assume réellement HS (réseau/timeout/etc)
+        # - "unknown" => souvent token/url/config -> on NE DOIT PAS écraser le statut global
+        #   sinon ça fait des serveurs "Unknown" alors qu'ils sont juste idle / collecte KO.
+        if status == "unknown":
+            db.execute(
+                "UPDATE servers SET last_checked=CURRENT_TIMESTAMP WHERE id=?",
+                (server_id,),
+            )
+        else:
+            db.execute(
+                "UPDATE servers SET last_checked=CURRENT_TIMESTAMP, status=? WHERE id=?",
+                (status, server_id),
+            )
+
         raise
 
 

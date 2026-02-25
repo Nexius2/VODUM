@@ -122,16 +122,24 @@ def register(app):
         if request.method == "POST":
             form = request.form
 
-            firstname       = form.get("firstname") or user.get("firstname")
-            lastname        = form.get("lastname") or user.get("lastname")
-            second_email    = form.get("second_email") or user.get("second_email")
-            expiration_date = form.get("expiration_date") or user.get("expiration_date")
-            renewal_date    = form.get("renewal_date") or user.get("renewal_date")
-            renewal_method  = form.get("renewal_method") or user.get("renewal_method")
-            notes           = form.get("notes") if "notes" in form else user.get("notes")
+            # Champs texte classiques (vide ou espaces → on garde l’ancienne valeur)
+            username        = (form.get("username") or "").strip() or user.get("username")
+            firstname       = (form.get("firstname") or "").strip() or user.get("firstname")
+            lastname        = (form.get("lastname") or "").strip() or user.get("lastname")
+            second_email    = (form.get("second_email") or "").strip() or user.get("second_email")
+            expiration_date = (form.get("expiration_date") or "").strip() or user.get("expiration_date")
+            renewal_date    = (form.get("renewal_date") or "").strip() or user.get("renewal_date")
+            renewal_method  = (form.get("renewal_method") or "").strip() or user.get("renewal_method")
 
+            # Notes : on autorise le vide volontaire
+            if "notes" in form:
+                notes = (form.get("notes") or "").strip()
+            else:
+                notes = user.get("notes")
+
+            # Discord : vide volontaire = NULL
             discord_user_id = (form.get("discord_user_id") or "").strip() or None
-            discord_name = (form.get("discord_name") or "").strip() or None
+            discord_name    = (form.get("discord_name") or "").strip() or None
 
             # Optional per-user stream override (NULL if empty; 0 allowed)
             raw_override = form.get("max_streams_override")
@@ -163,13 +171,15 @@ def register(app):
             db.execute(
                 """
                 UPDATE vodum_users
-                SET firstname = ?, lastname = ?, second_email = ?,
+                SET username = ?,
+                    firstname = ?, lastname = ?, second_email = ?,
                     renewal_date = ?, renewal_method = ?, notes = ?,
                     max_streams_override = ?,
                     discord_user_id = ?, discord_name = ?, notifications_order_override = ?
                 WHERE id = ?
                 """,
                 (
+                    username,
                     firstname, lastname, second_email,
                     renewal_date, renewal_method, notes,
                     max_streams_override,
@@ -511,12 +521,15 @@ def register(app):
         merge_suggestions = get_merge_suggestions(db, user_id, limit=None)
 
         # --------------------------------------------------
-        # merged_usernames = tous les usernames "liés" (media_users)
-        # SAUF le username principal (vodum_users.username)
+        # merged_usernames = tous les usernames (media_users) liés à ce vodum_user_id
+        # (qu'ils soient "merge" ou le compte principal)
+        # SAUF le username identique à celui affiché (vodum_users.username)
         # --------------------------------------------------
-        main_username = (user.get("username") or "").strip().lower()
+        main_username = (user.get("username") or "").strip()
+        main_username_norm = main_username.lower() if main_username else ""
 
-        merged_usernames_set = set()
+        # On dédoublonne en insensible à la casse, mais on garde une forme "propre" pour l'affichage
+        merged_usernames_map = {}  # key: lower(username) -> value: username (original)
 
         rows = db.query(
             """
@@ -531,10 +544,18 @@ def register(app):
 
         for r in rows:
             uname = str(r["username"]).strip()
-            if uname and uname.lower() != main_username:
-                merged_usernames_set.add(uname)
+            if not uname:
+                continue
 
-        merged_usernames = sorted(merged_usernames_set, key=lambda x: x.lower())
+            # Ne pas afficher le username media_user si c'est le même que celui affiché (vodum_users.username)
+            if main_username_norm and uname.lower() == main_username_norm:
+                continue
+
+            key = uname.lower()
+            if key not in merged_usernames_map:
+                merged_usernames_map[key] = uname
+
+        merged_usernames = sorted(merged_usernames_map.values(), key=lambda x: x.lower())
 
         # ----------------------------
         # Notification history paging

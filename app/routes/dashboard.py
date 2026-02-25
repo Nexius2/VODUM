@@ -196,18 +196,248 @@ def register(app):
         latest_logs = latest_logs[:10]
 
         # --------------------------
+        # NOW PLAYING (Dashboard bubble) : same data as Monitoring / Now Playing
+        # --------------------------
+        live_window_seconds = 120
+        live_window_sql = f"-{live_window_seconds} seconds"
+
+        sessions = db.query(
+            """
+            SELECT
+              ms.id,
+              ms.server_id,
+              s.name AS server_name,
+              s.type AS provider,
+
+              ms.media_type,
+              ms.title,
+              ms.grandparent_title,
+              ms.parent_title,
+
+              ms.state,
+              ms.client_name,
+              mu.username AS username,
+              ms.is_transcode,
+              ms.last_seen_at,
+
+              ms.raw_json,
+              ms.media_key
+            FROM media_sessions ms
+            JOIN servers s ON s.id = ms.server_id
+            LEFT JOIN media_users mu ON mu.id = ms.media_user_id
+            WHERE datetime(ms.last_seen_at) >= datetime('now', ?)
+            ORDER BY datetime(ms.last_seen_at) DESC
+            """,
+            (live_window_sql,),
+        )
+
+        # --- Enrich Now Playing: SxxExx + poster (same as monitoring_overview.py)
+        def _safe_int(v):
+            try:
+                if v is None:
+                    return None
+                return int(v)
+            except Exception:
+                return None
+
+        sessions = [dict(r) for r in sessions]
+
+        for s in sessions:
+            s["season_number"] = None
+            s["episode_number"] = None
+            s["episode_code"] = None
+            s["poster_url"] = None
+
+            raw = s.get("raw_json")
+            if not raw:
+                continue
+
+            try:
+                data = json.loads(raw)
+            except Exception:
+                data = {}
+
+            provider = (s.get("provider") or "").lower()
+
+            # ---------- PLEX ----------
+            if provider == "plex":
+                attrs = (data.get("VideoOrTrack") or {})
+
+                season = _safe_int(attrs.get("parentIndex"))
+                episode = _safe_int(attrs.get("index"))
+
+                s["season_number"] = season
+                s["episode_number"] = episode
+
+                if season is not None and episode is not None:
+                    s["episode_code"] = f"S{season:02d}E{episode:02d}"
+                elif season is not None:
+                    s["episode_code"] = f"S{season}"
+
+                poster_path = (
+                    attrs.get("grandparentThumb")
+                    or attrs.get("parentThumb")
+                    or attrs.get("thumb")
+                )
+                if poster_path:
+                    s["poster_url"] = url_for(
+                        "api_monitoring_poster",
+                        server_id=s["server_id"],
+                        path=poster_path,
+                    )
+
+            # ---------- JELLYFIN ----------
+            elif provider == "jellyfin":
+                now = (data.get("NowPlayingItem") or {})
+
+                season = _safe_int(now.get("ParentIndexNumber"))
+                episode = _safe_int(now.get("IndexNumber"))
+
+                s["season_number"] = season
+                s["episode_number"] = episode
+
+                if season is not None and episode is not None:
+                    s["episode_code"] = f"S{season:02d}E{episode:02d}"
+                elif season is not None:
+                    s["episode_code"] = f"S{season}"
+
+                poster_item_id = now.get("SeriesId") or now.get("Id") or s.get("media_key")
+                if poster_item_id:
+                    s["poster_url"] = url_for(
+                        "api_monitoring_poster",
+                        server_id=s["server_id"],
+                        item_id=str(poster_item_id),
+                    )
+
+        # --------------------------
         # PAGE RENDERING
         # --------------------------
         return render_template(
             "dashboard/dashboard.html",
-            stats=stats,              # ✅ conservé (rien perdu)
-            users_stats=users_stats,  # ✅ nouveau (pour ton template)
+            stats=stats,             
+            users_stats=users_stats,  
             servers=servers,
             latest_logs=latest_logs,
+            sessions=sessions,        
             active_page="dashboard",
         )
 
+    @app.route("/dashboard/_now_playing")
+    def dashboard_now_playing_partial():
+        db = get_db()
 
+        live_window_seconds = 120
+        live_window_sql = f"-{live_window_seconds} seconds"
+
+        sessions = db.query(
+            """
+            SELECT
+              ms.id,
+              ms.server_id,
+              s.name AS server_name,
+              s.type AS provider,
+
+              ms.media_type,
+              ms.title,
+              ms.grandparent_title,
+              ms.parent_title,
+
+              ms.state,
+              ms.client_name,
+              mu.username AS username,
+              ms.is_transcode,
+              ms.last_seen_at,
+
+              ms.raw_json,
+              ms.media_key
+            FROM media_sessions ms
+            JOIN servers s ON s.id = ms.server_id
+            LEFT JOIN media_users mu ON mu.id = ms.media_user_id
+            WHERE datetime(ms.last_seen_at) >= datetime('now', ?)
+            ORDER BY datetime(ms.last_seen_at) DESC
+            """,
+            (live_window_sql,),
+        )
+
+        def _safe_int(v):
+            try:
+                if v is None:
+                    return None
+                return int(v)
+            except Exception:
+                return None
+
+        sessions = [dict(r) for r in sessions]
+
+        for s in sessions:
+            s["season_number"] = None
+            s["episode_number"] = None
+            s["episode_code"] = None
+            s["poster_url"] = None
+
+            raw = s.get("raw_json")
+            if not raw:
+                continue
+
+            try:
+                data = json.loads(raw)
+            except Exception:
+                data = {}
+
+            provider = (s.get("provider") or "").lower()
+
+            if provider == "plex":
+                attrs = (data.get("VideoOrTrack") or {})
+
+                season = _safe_int(attrs.get("parentIndex"))
+                episode = _safe_int(attrs.get("index"))
+
+                s["season_number"] = season
+                s["episode_number"] = episode
+
+                if season is not None and episode is not None:
+                    s["episode_code"] = f"S{season:02d}E{episode:02d}"
+                elif season is not None:
+                    s["episode_code"] = f"S{season}"
+
+                poster_path = (
+                    attrs.get("grandparentThumb")
+                    or attrs.get("parentThumb")
+                    or attrs.get("thumb")
+                )
+                if poster_path:
+                    s["poster_url"] = url_for(
+                        "api_monitoring_poster",
+                        server_id=s["server_id"],
+                        path=poster_path,
+                    )
+
+            elif provider == "jellyfin":
+                now = (data.get("NowPlayingItem") or {})
+
+                season = _safe_int(now.get("ParentIndexNumber"))
+                episode = _safe_int(now.get("IndexNumber"))
+
+                s["season_number"] = season
+                s["episode_number"] = episode
+
+                if season is not None and episode is not None:
+                    s["episode_code"] = f"S{season:02d}E{episode:02d}"
+                elif season is not None:
+                    s["episode_code"] = f"S{season}"
+
+                poster_item_id = now.get("SeriesId") or now.get("Id") or s.get("media_key")
+                if poster_item_id:
+                    s["poster_url"] = url_for(
+                        "api_monitoring_poster",
+                        server_id=s["server_id"],
+                        item_id=str(poster_item_id),
+                    )
+
+        return render_template(
+            "dashboard/partials/_now_playing.html",
+            sessions=sessions,
+        )
 
 
     # -----------------------------
