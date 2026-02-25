@@ -823,6 +823,11 @@
   "template": "Modèle",
   "templates": "Modèles",
   "title": "Titre",
-  "task.cleanup_data_retention": "Nettoyage des anciennes données (politique de conservation)"
+  "task.cleanup_data_retention": "Nettoyage des anciennes données (politique de conservation)",
+  "merged_users": "Utilisateurs fusionnés",
+"no_merge_history": "Aucun merge",
+"linked_media_usernames": "Usernames liés (audit)",
+"username_display_help": "Nom d’affichage VODUM. Les usernames Plex/Jellyfin sont visibles dans l’onglet Media.",
+"username_placeholder": "Nom affiché"
 
 }

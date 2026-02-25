@@ -135,10 +135,25 @@
 
 </div>
 
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Now Playing (UNDER USERS) : one line per live session -->
+    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-semibold">Now Playing</h2>
+        </div>
 
-    <!-- Servers list -->
+		<div id="dashboard-now-playing"
+			 hx-get="{{ url_for('dashboard_now_playing_partial') }}"
+			 hx-trigger="load, every 2500ms"
+			 hx-swap="innerHTML">
+			{% include "dashboard/partials/_now_playing.html" %}
+		</div>
+
+    </section>
+
+
+    <!-- Servers list (UNDER SERVERS) -->
     <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
         <div class="flex items-center justify-between mb-3">
             <h2 class="text-sm font-semibold">{{ t("servers") }}</h2>
@@ -174,13 +189,18 @@
                 </div>
 
                 <div class="flex items-center gap-2">
-                    {% if s.status == 'up' %}
+                    {% set st = (s.status or 'unknown') %}
+                    {% if st == 'up' %}
                         <span class="text-xs px-2 py-1 rounded-full bg-emerald-900/40 text-emerald-300">
                             {{ t("online") }}
                         </span>
-                    {% else %}
+                    {% elif st == 'down' %}
                         <span class="text-xs px-2 py-1 rounded-full bg-rose-900/40 text-rose-300">
                             {{ t("offline") }}
+                        </span>
+                    {% else %}
+                        <span class="text-xs px-2 py-1 rounded-full bg-slate-800 text-slate-200">
+                            Unknown
                         </span>
                     {% endif %}
                     <span class="text-[10px] text-slate-500">
@@ -196,7 +216,7 @@
     </section>
 
 
-    <!-- Last logs -->
+    <!-- Latest logs (UNDER TASKS) -->
     <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
         <div class="flex items-center justify-between mb-3">
             <h2 class="text-sm font-semibold">{{ t("latest_logs") }}</h2>
@@ -215,15 +235,14 @@
                     {{ log.level }}
                 </span>
 
-				<div class="min-w-0 flex-1">
-					<div class="text-[11px] text-slate-400 truncate">
-						{{ log.source }} · {{ log.created_at }}
-					</div>
-					<div class="text-[12px] text-slate-100 truncate">
-						{{ log.message }}
-					</div>
-				</div>
-
+                <div class="min-w-0 flex-1">
+                    <div class="text-[11px] text-slate-400 truncate">
+                        {{ log.source }} · {{ log.created_at }}
+                    </div>
+                    <div class="text-[12px] text-slate-100 truncate">
+                        {{ log.message }}
+                    </div>
+                </div>
 
             </div>
             {% else %}
@@ -234,5 +253,6 @@
     </section>
 
 </div>
+
 
 {% endblock %}

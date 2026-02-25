@@ -1,4 +1,4 @@
-<div class="text-sm font-semibold mb-4">Most watched content (30d)</div>
+<div class="text-sm font-semibold mb-4">Top series (30d)</div>
 
 {% if top_content_30d and top_content_30d|length > 0 %}
   <div class="space-y-3">
@@ -6,16 +6,19 @@
       <div class="flex items-center justify-between">
         <div class="text-sm">
           <div class="font-semibold">{{ c.title or "-" }}</div>
-          {% if c.grandparent_title %}<div class="text-xs text-slate-500">{{ c.grandparent_title }}</div>{% endif %}
+          
         </div>
+
         <div class="text-xs text-slate-400 text-right">
-          <div>{{ c.sessions }} sessions</div>
+          <div>{{ c.viewers }} users</div>
+          <div class="text-slate-500">{{ c.plays }} plays</div>
           <div>
             {% set ms = c.watch_ms or 0 %}
             {{ (ms // 3600000) }}h {{ ((ms % 3600000) // 60000) }}m
           </div>
         </div>
       </div>
+
       {% if not loop.last %}<div class="border-t border-slate-800"></div>{% endif %}
     {% endfor %}
   </div>

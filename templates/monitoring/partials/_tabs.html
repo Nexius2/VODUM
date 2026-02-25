@@ -6,6 +6,11 @@
     Overview
   </a>
 
+  <a href="{{ url_for('monitoring_page', tab='now_playing') }}"
+     class="pb-2 border-b-2 {% if current=='now_playing' %}border-primary text-primary{% else %}border-transparent text-slate-400 hover:text-slate-200{% endif %}">
+    Now Playing
+  </a>
+
   <a href="{{ url_for('monitoring_page', tab='policies') }}"
      class="pb-2 border-b-2 {% if current=='policies' %}border-primary text-primary{% else %}border-transparent text-slate-400 hover:text-slate-200{% endif %}">
     Policies

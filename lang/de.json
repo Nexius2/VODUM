@@ -823,7 +823,12 @@
     "dont_close_tab": "Bitte dieses Tab nicht schließen.",
   "please_wait": "Bitte warten…",
   "tautulli_copying_db": "Tautulli-Datenbank wird kopiert…",
-  "task.cleanup_data_retention": "Bereinigung alter Daten (Aufbewahrungsrichtlinie)"
+  "task.cleanup_data_retention": "Bereinigung alter Daten (Aufbewahrungsrichtlinie)",
+  "merged_users": "Zusammengeführte Benutzer",
+"no_merge_history": "Keine Zusammenführung",
+"linked_media_usernames": "Verknüpfte Benutzernamen (Audit)",
+"username_display_help": "VODUM-Anzeigename. Plex/Jellyfin-Benutzernamen sind im Media-Tab sichtbar.",
+"username_placeholder": "Anzeigename"
 
   
 }

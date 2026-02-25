@@ -2,7 +2,7 @@
 
 {% if top_users_30d and top_users_30d|length > 0 %}
   <div class="space-y-3">
-    {% for u in top_users_30d[:4] %}
+    {% for u in top_users_30d[:5] %}
       <div class="flex items-center justify-between">
         <div class="text-sm font-semibold">{{ u.username or "-" }}</div>
         <div class="text-xs text-slate-400 text-right">
