@@ -1,0 +1,342 @@
+{# templates/users/partials/_user_general.html #}
+
+{% set _t_identity = t("identity") %}
+{% if _t_identity == "identity" %}{% set _t_identity = "Identity" %}{% endif %}
+
+{% set _t_contact = t("contact_and_notifications") %}
+{% if _t_contact == "contact_and_notifications" %}{% set _t_contact = "Contact & notifications" %}{% endif %}
+
+{% set _t_sub = t("subscription_and_status") %}
+{% if _t_sub == "subscription_and_status" %}{% set _t_sub = "Subscription & status" %}{% endif %}
+
+{% set _t_options = t("options") %}
+{% if _t_options == "options" %}{% set _t_options = "Options" %}{% endif %}
+
+<form method="post" id="user_main_form">
+  <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center gap-3">
+      <div class="text-sm font-semibold text-slate-200">
+        {{ t("general_info") if t("general_info") != "general_info" else "General information" }}
+      </div>
+
+      {% set colors = {
+        'active': 'bg-emerald-900/40 text-emerald-300',
+        'pre_expired': 'bg-amber-900/40 text-amber-300',
+        'reminder': 'bg-blue-900/40 text-blue-300',
+        'expired': 'bg-rose-900/40 text-rose-300',
+        'invited': 'bg-cyan-900/40 text-cyan-300',
+        'unfriended': 'bg-slate-700 text-slate-300',
+        'suspended': 'bg-purple-900/40 text-purple-300',
+        'unknown': 'bg-slate-800 text-slate-400'
+      } %}
+
+      <span class="px-3 py-1 text-xs rounded-full {{ colors.get(user.status, 'bg-slate-800 text-slate-400') }}">
+        {{ t(user.status) }}
+      </span>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <a class="px-3 py-2 rounded-lg border border-amber-700 text-amber-400 hover:bg-amber-900/20 text-sm"
+         href="{{ url_for('user_detail', user_id=user.id, tab='access', merge='1') }}">
+        {{ t("merge_user") }}
+      </a>
+
+      <button type="submit"
+              class="px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-sm">
+        {{ t("save") }}
+      </button>
+    </div>
+  </div>
+
+  <div class="space-y-6">
+
+  <!-- ======================= Identity ======================= -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-sm font-semibold text-slate-200 mb-4">
+      {{ _t_identity }}
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <label class="text-sm">
+		{{ t("username") }}
+		<input type="text" name="username" value="{{ user.username }}"
+			   class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2"
+			   autocomplete="off">
+      </label>
+
+      <div class="text-sm">
+        <div class="text-slate-400">
+          {{ t("merged_usernames") if t("merged_usernames") != "merged_usernames" else "Merged usernames" }}
+        </div>
+        <div class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+          {% set names = merged_usernames if merged_usernames is defined else [] %}
+          {% if names %}
+            <div class="flex flex-wrap gap-2">
+              {% for n in names %}
+                <span class="px-2 py-0.5 text-xs rounded bg-slate-800 text-slate-200">{{ n }}</span>
+              {% endfor %}
+            </div>
+          {% else %}
+            <span class="text-sm text-slate-400 italic">{{ t("not_available") }}</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <label class="text-sm">
+        {{ t("firstname") }}
+        <input type="text" name="firstname" value="{{ user.firstname or '' }}"
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+      </label>
+
+      <label class="text-sm">
+        {{ t("lastname") }}
+        <input type="text" name="lastname" value="{{ user.lastname or '' }}"
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+      </label>
+    </div>
+  </div>
+
+
+  <!-- ================= Two column row ================= -->
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+
+    <!-- ===== Contact & notifications ===== -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+      <div class="text-sm font-semibold text-slate-200 mb-4">
+        {{ _t_contact }}
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+        <label class="text-sm sm:col-span-2">
+          {{ t("email") }}
+          <input type="text" value="{{ user.email }}" readonly
+                 class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60 cursor-not-allowed">
+        </label>
+
+        <label class="text-sm sm:col-span-2">
+          {{ t("second_email") }}
+          <input type="text" name="second_email" value="{{ user.second_email or '' }}"
+                 class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+        </label>
+
+        <label class="text-sm">
+          {{ t("discord_user_id") }}
+          <input type="text" name="discord_user_id" value="{{ user.discord_user_id or '' }}"
+                 class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+        </label>
+
+        <label class="text-sm">
+          {{ t("discord_name") }}
+          <input type="text" name="discord_name" value="{{ user.discord_name or '' }}"
+                 class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+        </label>
+
+      </div>
+
+      {% if user_notifications_can_override %}
+        {% set use_global_checked = (not user.notifications_order_override) %}
+
+        <div class="mt-5 pt-5 border-t border-slate-800">
+
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <div class="text-sm font-semibold text-slate-200">
+                {{ t("notification_system_order") }}
+              </div>
+              <div class="text-xs text-slate-500 mt-1">
+                {{ t("user_notification_order_override_help") }}
+              </div>
+            </div>
+
+            <label class="inline-flex items-center gap-2 text-xs text-slate-300 mt-1">
+              <input id="use_global_notifications_order_cb"
+                     type="checkbox"
+                     name="use_global_notifications_order"
+                     value="1"
+                     class="h-4 w-4 rounded border-slate-700 bg-slate-800"
+                     {% if use_global_checked %}checked{% endif %}>
+              {{ t("use_global_settings") }}
+            </label>
+          </div>
+
+          {% set allowed_channels = ["discord", "email"] %}
+          {% set base_order = (settings.notifications_order or "email") %}
+          {% set user_order = (user.notifications_order_override or "") %}
+          {% set current_order = (user_order if user_order else base_order) %}
+          {% set ordered = current_order.split(",") %}
+
+          <div class="mt-4 bg-slate-950 border border-slate-800 rounded-2xl p-4">
+
+            <div class="flex items-center justify-between mb-3">
+              <div class="text-xs text-slate-400">{{ t("order_of_execution") }}</div>
+              <div class="text-xs text-slate-600">{{ t("top_is_tried_first") }}</div>
+            </div>
+
+            <div id="user_notif_order_layer"
+                 class="{% if use_global_checked %}opacity-50 pointer-events-none{% endif %}">
+
+              <ul id="user-notif-order-list" class="space-y-2">
+                {% for ch in ordered %}
+                  <li class="flex items-center justify-between gap-3 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2"
+                      data-channel="{{ ch }}">
+                    <span class="text-slate-200 text-sm font-medium">
+                      {{ t(ch) }}
+                    </span>
+                    <div class="flex items-center gap-2">
+                      <button type="button" class="order-up px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs">↑</button>
+                      <button type="button" class="order-down px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs">↓</button>
+                    </div>
+                  </li>
+                {% endfor %}
+              </ul>
+
+              <input type="hidden"
+                     name="user_notifications_order"
+                     id="user_notifications_order_hidden"
+                     value="{{ ordered | join(',') }}">
+            </div>
+          </div>
+
+        </div>
+
+        <script>
+        (function(){
+          const cb = document.getElementById('use_global_notifications_order_cb');
+          const layer = document.getElementById('user_notif_order_layer');
+          const list = document.getElementById('user-notif-order-list');
+          const hidden = document.getElementById('user_notifications_order_hidden');
+
+          if (!cb || !layer || !list || !hidden) return;
+
+          function updateHidden() {
+            const items = [...list.querySelectorAll('li[data-channel]')];
+            hidden.value = items.map(li => li.dataset.channel).join(',');
+          }
+
+          function moveItem(li, dir) {
+            if (dir === 'up' && li.previousElementSibling) {
+              list.insertBefore(li, li.previousElementSibling);
+            }
+            if (dir === 'down' && li.nextElementSibling) {
+              list.insertBefore(li.nextElementSibling, li);
+            }
+            updateHidden();
+          }
+
+          list.addEventListener('click', e => {
+            const li = e.target.closest('li[data-channel]');
+            if (!li) return;
+            if (e.target.closest('.order-up')) moveItem(li, 'up');
+            if (e.target.closest('.order-down')) moveItem(li, 'down');
+          });
+
+          cb.addEventListener('change', () => {
+            if (cb.checked) {
+              layer.classList.add('opacity-50','pointer-events-none');
+            } else {
+              layer.classList.remove('opacity-50','pointer-events-none');
+            }
+          });
+
+          updateHidden();
+        })();
+        </script>
+
+      {% endif %}
+    </div>
+
+
+    <!-- ===== Subscription & status ===== -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+      <div class="text-sm font-semibold text-slate-200 mb-4">
+        {{ _t_sub }}
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+        <label class="text-sm">
+          {{ t("expiration") }}
+          <input type="date" name="expiration_date"
+                 value="{{ user.expiration_date or '' }}"
+                 class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+        </label>
+
+        <label class="text-sm">
+          {{ t("renewal_date") }}
+          <input type="date" name="renewal_date"
+                 value="{{ user.renewal_date or '' }}"
+                 class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+        </label>
+
+        <label class="text-sm sm:col-span-2">
+          {{ t("renewal_method") }}
+          <input type="text" name="renewal_method"
+                 value="{{ user.renewal_method or '' }}"
+                 class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+        </label>
+
+        <label class="text-sm">
+          {{ t("creation_date") }}
+          <input type="text"
+                 value="{{ (user.created_at|tz).split(' ')[0] if user.created_at else t('not_available') }}"
+                 readonly
+                 class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60 cursor-not-allowed">
+        </label>
+
+        <div class="text-sm">
+          <div class="text-slate-400">{{ t("last_status") }}:</div>
+          <div class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+            {{ t(user.last_status) if user.last_status else t("not_available") }}
+          </div>
+        </div>
+
+        <label class="text-sm sm:col-span-2">
+          {{ t("status_changed_at") }}
+          <input type="text"
+                 value="{{ (user.status_changed_at|tz).split(' ')[0] if user.status_changed_at else t('not_available') }}"
+                 readonly
+                 class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60 cursor-not-allowed">
+        </label>
+
+      </div>
+    </div>
+
+  </div>
+
+
+  <!-- ======================= Options ======================= -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-sm font-semibold text-slate-200 mb-4">
+      {{ _t_options }}
+    </div>
+
+    <label class="text-sm">
+      {{ t("max_streams_override") }}
+      <div class="mt-1">
+        <input type="number" name="max_streams_override"
+               value="{{ user.max_streams_override if user.max_streams_override is not none else '' }}"
+               class="w-24 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+      </div>
+      <div class="text-xs text-slate-500 mt-2">
+        {{ t("max_streams_override_help") }}
+      </div>
+    </label>
+  </div>
+
+
+  <!-- ======================= Notes ======================= -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-sm font-semibold text-slate-200 mb-4">
+      {{ t("notes") }}
+    </div>
+
+    <textarea name="notes" rows="8"
+      class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm resize-vertical">
+      {{ user.notes or '' }}
+    </textarea>
+  </div>
+
+</div>
+</form>
+
