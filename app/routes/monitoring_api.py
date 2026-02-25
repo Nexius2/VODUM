@@ -163,11 +163,28 @@ def register(app):
 
         rows = db.query(
             f"""
+            WITH base AS (
+              SELECT
+                started_at,
+                (CAST(server_id AS TEXT) || '|' ||
+                 CAST(media_user_id AS TEXT) || '|' ||
+                 COALESCE(NULLIF(TRIM(media_key), ''), 'no_media') || '|' ||
+                 strftime('%Y-%m-%d', started_at)
+                ) AS play_key
+              FROM media_session_history
+              WHERE {where}
+            ),
+            plays AS (
+              SELECT
+                play_key,
+                MAX(started_at) AS started_at
+              FROM base
+              GROUP BY play_key
+            )
             SELECT
               strftime('%Y-%m-%d', started_at) AS day,
               COUNT(*) AS sessions
-            FROM media_session_history
-            WHERE {where}
+            FROM plays
             GROUP BY strftime('%Y-%m-%d', started_at)
             ORDER BY day ASC
             """,
@@ -194,8 +211,13 @@ def register(app):
 
         rows = db.query(
             f"""
-            WITH norm AS (
+            WITH base AS (
               SELECT
+                (CAST(server_id AS TEXT) || '|' ||
+                 CAST(media_user_id AS TEXT) || '|' ||
+                 COALESCE(NULLIF(TRIM(media_key), ''), 'no_media') || '|' ||
+                 strftime('%Y-%m-%d', started_at)
+                ) AS play_key,
                 CASE
                   WHEN LOWER(TRIM(COALESCE(media_type,''))) IN ('movie', 'film') THEN 'movie'
                   WHEN LOWER(TRIM(COALESCE(media_type,''))) IN ('serie', 'series', 'episode', 'show', 'season') THEN 'series'
@@ -205,9 +227,16 @@ def register(app):
                 END AS media_type
               FROM media_session_history
               WHERE {where}
+            ),
+            plays AS (
+              SELECT
+                play_key,
+                MAX(media_type) AS media_type
+              FROM base
+              GROUP BY play_key
             )
             SELECT media_type, COUNT(*) AS sessions
-            FROM norm
+            FROM plays
             GROUP BY media_type
             ORDER BY sessions DESC
             """,
@@ -233,13 +262,30 @@ def register(app):
 
         rows = db.query(
             f"""
+            WITH base AS (
+              SELECT
+                h.server_id,
+                (CAST(h.server_id AS TEXT) || '|' ||
+                 CAST(h.media_user_id AS TEXT) || '|' ||
+                 COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
+                 strftime('%Y-%m-%d', h.started_at)
+                ) AS play_key
+              FROM media_session_history h
+              WHERE {where}
+            ),
+            plays AS (
+              SELECT
+                MAX(server_id) AS server_id,
+                play_key
+              FROM base
+              GROUP BY play_key
+            )
             SELECT
-              COALESCE(NULLIF(s.name, ''), 'Server ' || h.server_id) AS server_name,
+              COALESCE(NULLIF(s.name, ''), 'Server ' || p.server_id) AS server_name,
               COUNT(*) AS sessions
-            FROM media_session_history h
-            LEFT JOIN servers s ON s.id = h.server_id
-            WHERE {where}
-            GROUP BY h.server_id
+            FROM plays p
+            LEFT JOIN servers s ON s.id = p.server_id
+            GROUP BY p.server_id
             ORDER BY sessions DESC
             """,
             params,
@@ -264,11 +310,28 @@ def register(app):
 
         rows = db.query(
             f"""
+            WITH base AS (
+              SELECT
+                started_at,
+                (CAST(server_id AS TEXT) || '|' ||
+                 CAST(media_user_id AS TEXT) || '|' ||
+                 COALESCE(NULLIF(TRIM(media_key), ''), 'no_media') || '|' ||
+                 strftime('%Y-%m-%d', started_at)
+                ) AS play_key
+              FROM media_session_history
+              WHERE {where}
+            ),
+            plays AS (
+              SELECT
+                play_key,
+                MAX(started_at) AS started_at
+              FROM base
+              GROUP BY play_key
+            )
             SELECT
               CAST(strftime('%w', started_at) AS INTEGER) AS weekday,
               COUNT(*) AS sessions
-            FROM media_session_history
-            WHERE {where}
+            FROM plays
             GROUP BY CAST(strftime('%w', started_at) AS INTEGER)
             ORDER BY weekday
             """,
@@ -297,14 +360,39 @@ def register(app):
 
         rows = db.query(
             f"""
+            WITH base AS (
+              SELECT
+                h.started_at,
+                MIN(
+                  COALESCE(h.watch_ms, 0),
+                  CASE
+                    WHEN COALESCE(h.duration_ms, 0) > 0 THEN h.duration_ms
+                    ELSE COALESCE(h.watch_ms, 0)
+                  END
+                ) AS watch_ms_capped,
+                (CAST(h.server_id AS TEXT) || '|' ||
+                 CAST(h.media_user_id AS TEXT) || '|' ||
+                 COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
+                 strftime('%Y-%m-%d', h.started_at)
+                ) AS play_key
+              FROM media_session_history h
+              WHERE h.media_user_id = ?
+                AND {where}
+            ),
+            plays AS (
+              SELECT
+                play_key,
+                MAX(started_at) AS started_at,
+                MAX(watch_ms_capped) AS watch_ms
+              FROM base
+              GROUP BY play_key
+            )
             SELECT
-              strftime('%Y-%m-%d', h.started_at) AS day,
+              strftime('%Y-%m-%d', started_at) AS day,
               COUNT(*) AS plays,
-              SUM(h.watch_ms) AS watch_ms
-            FROM media_session_history h
-            WHERE h.media_user_id = ?
-              AND {where}
-            GROUP BY strftime('%Y-%m-%d', h.started_at)
+              COALESCE(SUM(watch_ms), 0) AS watch_ms
+            FROM plays
+            GROUP BY strftime('%Y-%m-%d', started_at)
             ORDER BY day ASC
             """,
             params,
