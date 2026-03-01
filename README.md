@@ -107,7 +107,6 @@ This removes the need to manually track and warn users.
 
 VODUM never relies on local flags only: **changes are applied on the servers themselves**.
 
-
 ---
 
 ### 📊 Monitoring & Policies
@@ -146,43 +145,166 @@ Policies make VODUM an **active regulation system**, not just a passive dashboar
 
 ---
 
-## 🚀 Installation (Docker / Unraid)
+# 🚀 Installation
 
-VODUM is distributed as a Docker image and is **fully compatible with Unraid**.
+VODUM is distributed as a Docker image and can run on:
 
-## 🚀 Docker (Unraid)
+- Any standard **Linux system with Docker**
+- **Unraid**
 
-> Until VODUM becomes available on **Community Applications (CA)**,
-> you can install it manually on Unraid using the official template settings.
+Choose the method that fits your environment.
 
-This method requires **no Docker knowledge** and uses **exactly the same configuration**
-as the future CA template.
+---
+
+# 🐧 Installation on Linux (Docker)
+
+VODUM runs on any Linux distribution (Ubuntu, Debian, Linux Mint, etc.)
+as long as **Docker and Docker Compose** are installed.
+
+> This method does NOT require Unraid.
+
+---
+
+## ✅ Option 1 — Install from DockerHub (Recommended)
+
+### 1️⃣ Create required directories
+
+```bash
+mkdir -p ~/vodum/{appdata,logs,backups}
+cd ~/vodum
+```
+
+### 2️⃣ Run using Docker
+
+```bash
+docker run -d \
+  --name vodum \
+  -p 8097:5000 \
+  -e TZ="Europe/Paris" \
+  -e UID=1000 \
+  -e GID=1000 \
+  -e DATABASE_PATH="/appdata/database.db" \
+  -v ~/vodum/appdata:/appdata \
+  -v ~/vodum/logs:/logs \
+  -v ~/vodum/backups:/backups \
+  --restart unless-stopped \
+  nexius2/vodum:latest
+```
+
+Access VODUM at:
+
+```
+http://YOUR_SERVER_IP:8097
+```
+
+---
+
+## 🧩 Option 2 — Docker Compose (Recommended for production)
+
+Create a `docker-compose.yml` file:
+
+```yaml
+services:
+  vodum:
+    image: nexius2/vodum:latest
+    container_name: vodum
+    ports:
+      - "8097:5000"
+    environment:
+      TZ: Europe/Paris
+      UID: "1000"
+      GID: "1000"
+      DATABASE_PATH: /appdata/database.db
+    volumes:
+      - ./appdata:/appdata
+      - ./logs:/logs
+      - ./backups:/backups
+    restart: unless-stopped
+```
+
+Then run:
+
+```bash
+docker compose up -d
+```
+
+---
+
+## 🔍 Important: UID / GID
+
+On most Linux systems:
+
+```
+UID=1000
+GID=1000
+```
+
+Verify with:
+
+```bash
+id -u
+id -g
+```
+
+Adjust if necessary.
+
+---
+
+## ⚠️ Common Error: "failed to read Dockerfile"
+
+If you see:
+
+```
+failed to read dockerfile: open Dockerfile: no such file or directory
+```
+
+It means Docker Compose is trying to **build from source** instead of using the DockerHub image.
+
+To fix:
+
+- Ensure your compose file uses:
+
+```
+image: nexius2/vodum:latest
+```
+
+- Remove any `build:` section
+- Do NOT use `--build` when running `docker compose up`
+
+---
+
+# 🐳 Installation on Unraid
+
+VODUM is fully compatible with Unraid.
+
+> Until VODUM becomes available on Community Applications (CA),
+> you can install it manually using the official template settings.
 
 ---
 
 ## ➕ Add VODUM to Unraid
 
-1. Open the **Unraid Web UI**
-2. Go to **Docker**
-3. Click **Add Container**
-4. Switch to **Advanced View**
+1. Open the Unraid Web UI
+2. Go to Docker
+3. Click Add Container
+4. Switch to Advanced View
 
 ---
 
 ## 🧩 Container configuration
 
-Fill in the fields **exactly as shown below**.
-
 ### 🔹 Basic settings
 
-**Name**
+Name  
 VODUM
 
-**Repository**
+Repository  
 nexius2/vodum:latest
 
-**Network Type**
+Network Type  
 bridge
+
+---
 
 ### 🔌 Port Mappings
 
@@ -205,7 +327,7 @@ bridge
 ### ⚙️ Environment Variables
 
 | Variable | Value | Description |
-|--------|------|-------------|
+|----------|-------|-------------|
 | TZ | Europe/Paris | Timezone |
 | UID | 99 | User ID |
 | GID | 100 | Group ID |
@@ -215,23 +337,27 @@ bridge
 
 ## ▶️ Start the container
 
-5. Click **Apply**
-6. Wait for the image to download and the container to start
+5. Click Apply  
+6. Wait for the image to download and start
 
 ---
 
 ## 🌐 Web Interface
 
-Once the container is running, open VODUM at:
+Open:
+
+```
 http://<unraid-ip>:8097
+```
 
 ---
 
 ## Community & Support
 
-💬 Join the Discord server for discussions and troubleshooting:
+💬 Join the Discord server for discussions and troubleshooting:  
 https://discord.gg/5PU7TnegZt
 
+---
 
 ## 📸 Interface Preview
 
