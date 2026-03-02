@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% set active_page = 'communications' %}
+
+{% block title %}{{ t("communications") }} - VODUM{% endblock %}
+{% block header_title %}{{ t("communications") }}{% endblock %}
+{% block header_subtitle %}{{ t("communications_subtitle") }}{% endblock %}
+
+{% block content %}
+
+{% set current_subpage = 'history' %}
+{% include "communications/_communications_nav.html" %}
+
+<div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+  <table class="w-full text-xs">
+    <thead class="bg-slate-950/60 text-slate-400 text-left">
+      <tr>
+        <th class="px-4 py-2">{{ t('kind') }}</th>
+        <th class="px-4 py-2">{{ t('user') }}</th>
+        <th class="px-4 py-2">{{ t('channel_used') }}</th>
+        <th class="px-4 py-2">{{ t('status') }}</th>
+        <th class="px-4 py-2">{{ t('error') }}</th>
+        <th class="px-4 py-2">{{ t('sent_at') }}</th>
+        <th class="px-4 py-2">{{ t('details') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for h in history %}
+      <tr class="border-t border-slate-800 hover:bg-slate-800/40">
+        <td class="px-4 py-2">
+          {% if h.kind == 'template' %}
+            <span class="px-2 py-1 rounded bg-slate-800 text-slate-200">{{ t('template') }}</span>
+            {% if h.template_key %}<span class="ml-2 text-slate-400"><code>{{ h.template_key }}</code></span>{% endif %}
+          {% else %}
+            <span class="px-2 py-1 rounded bg-slate-800 text-slate-200">{{ t('campaign') }}</span>
+            {% if h.campaign_name %}<span class="ml-2 text-slate-400">{{ h.campaign_name }}</span>{% endif %}
+          {% endif %}
+        </td>
+        <td class="px-4 py-2">{{ h.user_username or '-' }}</td>
+        <td class="px-4 py-2">{{ t(h.channel_used) }}</td>
+        <td class="px-4 py-2">
+          {% if h.status == 'sent' %}
+            <span class="px-2 py-1 rounded-full bg-emerald-900/40 text-emerald-300">{{ t('sent') }}</span>
+          {% else %}
+            <span class="px-2 py-1 rounded-full bg-rose-900/40 text-rose-300">{{ t('failed') }}</span>
+          {% endif %}
+        </td>
+        <td class="px-4 py-2 text-slate-400">{{ h.error or '-' }}</td>
+        <td class="px-4 py-2">{{ h.sent_at }}</td>
+        <td class="px-4 py-2">
+          {% if h.meta and h.meta|length %}
+            <details class="text-[11px]">
+              <summary class="cursor-pointer text-slate-400 hover:text-slate-200">{{ t('view') }}</summary>
+              <pre class="mt-2 whitespace-pre-wrap text-slate-300">{{ h.meta_json }}</pre>
+            </details>
+          {% else %}
+            <span class="text-slate-500">-</span>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<p class="mt-3 text-[11px] text-slate-500">{{ t('comm_history_note') }}</p>
+
+{% endblock %}

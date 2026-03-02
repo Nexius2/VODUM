@@ -64,6 +64,22 @@ def register(app):
         user = dict(user)
 
         # --------------------------------------------------
+        # Subscription template (optional)
+        # --------------------------------------------------
+        subscription_template = None
+        try:
+            if user.get("subscription_template_id") is not None:
+                subscription_template = db.query_one(
+                    "SELECT id, name FROM subscription_templates WHERE id=?",
+                    (int(user["subscription_template_id"]),),
+                )
+        except Exception:
+            subscription_template = None
+
+        user["subscription_template_name"] = subscription_template["name"] if subscription_template else None
+
+
+        # --------------------------------------------------
         # Settings (needed for per-user notification override)
         # --------------------------------------------------
         settings = db.query_one("SELECT * FROM settings WHERE id = 1")

@@ -1,0 +1,22 @@
+
+/* Small polish for inline HTML blocks used in existing vodum-docs */
+.md-typeset hr { margin: 1.2em 0; }
+.md-typeset .hint-badge{
+  display:inline-block;padding:6px 10px;border-radius:999px;
+  border:1px solid var(--md-default-fg-color--lighter);
+  font-size:12px;opacity:.9
+}
+.md-typeset .card{
+  border:1px solid var(--md-default-fg-color--lighter);
+  border-radius:16px;
+  padding:16px;
+  margin:16px 0;
+}
+.md-typeset .two-col{
+  display:grid;
+  grid-template-columns: 1fr;
+  gap:16px;
+}
+@media (min-width: 900px){
+  .md-typeset .two-col{ grid-template-columns: 1fr 1fr; }
+}

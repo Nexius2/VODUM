@@ -683,8 +683,8 @@ def register(app):
                     rj = json.loads(existing["rule_value_json"] or "{}")
                 except Exception:
                     rj = {}
-                if rj.get("system_tag"):
-                    flash("System policy is read-only.", "error")
+                if rj.get("system_tag") or rj.get("locked"):
+                    flash("Policy is read-only.", "error")
                     return redirect(url_for("monitoring_page", tab="policies"))
 
         rule_type = request.form.get("rule_type", "").strip()
@@ -789,8 +789,8 @@ def register(app):
                 rj = json.loads(existing["rule_value_json"] or "{}")
             except Exception:
                 rj = {}
-            if rj.get("system_tag"):
-                flash("System policy cannot be deleted manually.", "error")
+            if rj.get("system_tag") or rj.get("locked"):
+                flash("Policy is read-only and cannot be deleted manually.", "error")
                 return redirect(url_for("monitoring_page", tab="policies"))
 
         db.execute("DELETE FROM stream_policies WHERE id=?", (policy_id,))

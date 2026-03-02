@@ -7,21 +7,52 @@
 
 {% block content %}
 
-<div id="page-alert" class="hidden mb-6"></div>
+<div class="mb-6">
+  <div class="flex flex-wrap gap-3 border-b border-slate-800">
+    <a href="{{ url_for('subscriptions', tab='templates') }}"
+       class="pb-2 border-b-2 {{ 'border-primary text-primary' if tab=='templates' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
+      {{ t("subscriptions_tab_templates") }}
+    </a>
 
-<form id="gift-form"
-      action="{{ url_for('subscriptions_api.api_gift_subscription') }}"
-      method="post"
-      onsubmit="event.preventDefault(); submitGift();">
+    <a href="{{ url_for('subscriptions', tab='applications') }}"
+       class="pb-2 border-b-2 {{ 'border-primary text-primary' if tab=='applications' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
+      {{ t("subscriptions_tab_applications") }}
+    </a>
 
+    <a href="{{ url_for('subscriptions', tab='gifts') }}"
+       class="pb-2 border-b-2 {{ 'border-primary text-primary' if tab=='gifts' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
+      {{ t("subscriptions_tab_gifts") }}
+    </a>
+  </div>
+</div>
+
+
+{% if tab == 'templates' %}
   <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
-    {% include "subscriptions/_gift_form.html" %}
-    {% include "subscriptions/_gift_history.html" %}
+    {% include "subscriptions/_templates_editor.html" %}
+    {% include "subscriptions/_templates_list.html" %}
   </div>
 
-  {% include "subscriptions/_gift_modal.html" %}
-</form>
+{% elif tab == 'applications' %}
+  {% include "subscriptions/_applications.html" %}
 
-{% include "subscriptions/_scripts.html" %}
+{% else %}
+  <div id="page-alert" class="hidden mb-6"></div>
+
+  <form id="gift-form"
+        action="{{ url_for('subscriptions_api.api_gift_subscription') }}"
+        method="post"
+        onsubmit="event.preventDefault(); submitGift();">
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
+      {% include "subscriptions/_gift_form.html" %}
+      {% include "subscriptions/_gift_history.html" %}
+    </div>
+
+  </form>
+
+  {% include "subscriptions/_gift_modal.html" %}
+  {% include "subscriptions/_scripts.html" %}
+{% endif %}
 
 {% endblock %}

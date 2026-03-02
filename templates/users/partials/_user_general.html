@@ -311,6 +311,17 @@
       {{ _t_options }}
     </div>
 
+    <div class="text-sm mb-4">
+      <div class="text-slate-400">{{ t("subscription_template") }}:</div>
+      <div class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+        {% if user.subscription_template_name %}
+          {{ user.subscription_template_name }}
+        {% else %}
+          <span class="text-slate-500">{{ t("subscription_none") }}</span>
+        {% endif %}
+      </div>
+    </div>
+
     <label class="text-sm">
       {{ t("max_streams_override") }}
       <div class="mt-1">

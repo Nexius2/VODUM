@@ -1,0 +1,345 @@
+<!-- LEFT: TEMPLATE EDITOR -->
+<div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6">
+
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="text-sm uppercase tracking-wide text-slate-400">
+      {{ t("subscription_templates_editor") }}
+    </h2>
+    <span class="text-xs text-slate-500">{{ t("subscription_templates_editor_hint") }}</span>
+    <span id="tpl_policies_count_badge" class="text-xs text-slate-500 hidden"></span>
+  </div>
+
+  <form method="post" action="{{ url_for('subscription_templates_save') }}" class="space-y-4" onsubmit="return syncPoliciesJson();">
+    <input type="hidden" name="template_id" id="template_id" value="">
+    <input type="hidden" name="policies_json" id="policies_json" value="[]">
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="text-sm">
+        <label class="block text-xs text-slate-400 mb-1">{{ t("name") }}</label>
+        <input type="text" name="name" id="tpl_name" required
+               class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+      </div>
+
+      <div class="text-sm">
+        <label class="block text-xs text-slate-400 mb-1">{{ t("notes") }}</label>
+        <input type="text" name="notes" id="tpl_notes"
+               class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+      </div>
+    </div>
+
+    <div class="mt-4">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-xs uppercase tracking-wide text-slate-400">{{ t("policies") }}</h3>
+        <span class="text-xs text-slate-500">{{ t("subscription_templates_policies_help") }}</span>
+      </div>
+
+      <!-- Policy builder -->
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label class="text-xs text-slate-400">{{ t("policies_rule") }}</label>
+          <select id="p_rule_type" class="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2">
+            <option value="max_streams_per_user">{{ t("policies_rule_max_streams_user") }}</option>
+            <option value="max_ips_per_user">{{ t("policies_rule_max_ips_user") }}</option>
+            <option value="max_streams_per_ip">{{ t("policies_rule_max_streams_ip") }}</option>
+            <option value="max_transcodes_global">{{ t("policies_rule_max_transcodes_server") }}</option>
+            <option value="ban_4k_transcode">{{ t("policies_rule_ban_4k_transcode") }}</option>
+            <option value="max_bitrate_kbps">{{ t("policies_rule_max_bitrate") }}</option>
+            <option value="device_allowlist">{{ t("policies_rule_device_allowlist") }}</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="text-xs text-slate-400">{{ t("policies_provider") }}</label>
+          <select id="p_provider" class="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2">
+            <option value="">{{ t("policies_provider_both") }}</option>
+            <option value="plex">{{ t("policies_provider_plex") }}</option>
+            <option value="jellyfin">{{ t("policies_provider_jellyfin") }}</option>
+          </select>
+
+          <label class="text-xs text-slate-400 mt-3 block">{{ t("policies_server_filter") }} <span class="text-slate-500">({{ t("optional") }})</span></label>
+          <select id="p_server_id" class="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2">
+            <option value="">{{ t("policies_all_servers") }}</option>
+            {% for s in servers %}
+              <option value="{{ s.id }}">{{ s.name }} ({{ s.type }})</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label class="text-xs text-slate-400">{{ t("policies_priority") }}</label>
+          <input id="p_priority" value="100" class="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2">
+
+          <label class="text-xs text-slate-400 mt-3 block">{{ t("policies_enabled") }}</label>
+          <select id="p_enabled" class="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2">
+            <option value="1" selected>{{ t("enabled") }}</option>
+            <option value="0">{{ t("disabled") }}</option>
+          </select>
+        </div>
+
+        <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label class="text-xs text-slate-400">{{ t("policies_max_value") }}</label>
+            <input id="p_max_value" placeholder="{{ t('policies_max_value_placeholder') }}"
+                   class="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2">
+            <label class="mt-3 flex items-center gap-2 text-xs text-slate-300">
+              <input type="checkbox" id="p_allow_local_ip" value="1">
+              {{ t("policies_allow_local_ip") }}
+            </label>
+          </div>
+
+          <div>
+            <label class="text-xs text-slate-400">{{ t("policies_max_bitrate_kbps") }}</label>
+            <input id="p_max_kbps" placeholder="{{ t('policies_max_bitrate_placeholder') }}"
+                   class="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2">
+          </div>
+
+          <div>
+            <label class="text-xs text-slate-400">{{ t("policies_allowed_devices") }}</label>
+            <input id="p_allowed_devices" placeholder="{{ t('policies_allowed_devices_placeholder') }}"
+                   class="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2">
+          </div>
+        </div>
+
+        <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs text-slate-400">{{ t("policies_warn_title") }}</label>
+            <input id="p_warn_title" value="{{ t('policies_warn_title_default') }}"
+                   class="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2">
+          </div>
+          <div>
+            <label class="text-xs text-slate-400">{{ t("policies_warn_text") }}</label>
+            <input id="p_warn_text" value="{{ t('policies_warn_text_default') }}"
+                   class="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2">
+          </div>
+        </div>
+
+        <div class="md:col-span-3">
+          <label class="text-xs text-slate-400">{{ t("policies_selector") }}</label>
+          <select id="p_selector" class="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2">
+            <option value="kill_newest">{{ t("policies_selector_kill_newest") }}</option>
+            <option value="kill_oldest">{{ t("policies_selector_kill_oldest") }}</option>
+            <option value="kill_transcoding_first">{{ t("policies_selector_kill_transcoding") }}</option>
+          </select>
+        </div>
+
+        <div class="md:col-span-3 flex gap-2">
+          <button type="button" onclick="addPolicyToTemplate()"
+                  class="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-dark text-xs font-medium">
+            {{ t("subscription_templates_add_policy") }}
+          </button>
+          <button type="button" onclick="resetPolicyBuilder()"
+                  class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium">
+            {{ t("reset") }}
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Policy list preview -->
+      <div class="mt-4 bg-slate-950 border border-slate-800 rounded-xl overflow-hidden">
+        <table class="w-full text-xs">
+          <thead class="bg-slate-950/60 text-slate-400 text-left">
+            <tr>
+              <th class="px-4 py-2 w-10"></th>
+              <th class="px-4 py-2">{{ t("rule") }}</th>
+              <th class="px-4 py-2">{{ t("provider") }}</th>
+              <th class="px-4 py-2">{{ t("priority") }}</th>
+              <th class="px-4 py-2">{{ t("enabled") }}</th>
+            </tr>
+          </thead>
+          <tbody id="tpl_policies_table">
+            <tr><td class="px-4 py-3 text-slate-500" colspan="5">{{ t("subscription_templates_no_policies") }}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="pt-2">
+      <button type="submit" id="tpl_submit_btn"
+              class="px-3 py-2 rounded-lg bg-primary hover:bg-primary-dark text-sm font-medium">
+        {{ t("create") }}
+      </button>
+    </div>
+  </form>
+
+</div>
+
+<script>
+  // Build a local policies array, persisted into hidden input on submit
+  let TEMPLATE_POLICIES = [];
+  let EDIT_INDEX = null;
+
+  function syncPoliciesJson() {
+    document.getElementById("policies_json").value = JSON.stringify(TEMPLATE_POLICIES || []);
+    return true;
+  }
+
+  function resetPolicyBuilder() {
+    EDIT_INDEX = null;
+    document.getElementById("p_rule_type").value = "max_streams_per_user";
+    document.getElementById("p_provider").value = "";
+    document.getElementById("p_server_id").value = "";
+    document.getElementById("p_priority").value = "100";
+    document.getElementById("p_enabled").value = "1";
+    document.getElementById("p_max_value").value = "";
+    document.getElementById("p_allow_local_ip").checked = false;
+    document.getElementById("p_max_kbps").value = "";
+    document.getElementById("p_allowed_devices").value = "";
+    document.getElementById("p_warn_title").value = "{{ t('policies_warn_title_default') }}";
+    document.getElementById("p_warn_text").value = "{{ t('policies_warn_text_default') }}";
+    document.getElementById("p_selector").value = "kill_newest";
+  }
+
+  function getPolicyFromBuilder() {
+    const rule_type = document.getElementById("p_rule_type").value;
+    const provider = document.getElementById("p_provider").value;
+    const server_id = document.getElementById("p_server_id").value;
+    const priority = document.getElementById("p_priority").value || "100";
+    const is_enabled = document.getElementById("p_enabled").value;
+
+    const selector = document.getElementById("p_selector").value;
+    const warn_title = document.getElementById("p_warn_title").value || "{{ t('policies_warn_title_default') }}";
+    const warn_text = document.getElementById("p_warn_text").value || "{{ t('policies_warn_text_default') }}";
+
+    const max_value = document.getElementById("p_max_value").value;
+    const allow_local_ip = document.getElementById("p_allow_local_ip").checked;
+
+    const max_kbps = document.getElementById("p_max_kbps").value;
+    const allowed_devices = document.getElementById("p_allowed_devices").value;
+
+    const rule = { selector, warn_title, warn_text };
+
+    if (["max_streams_per_user","max_streams_per_ip","max_ips_per_user","max_transcodes_global"].includes(rule_type)) {
+      const mv = parseInt(max_value || "1", 10);
+      rule.max = isNaN(mv) ? 1 : mv;
+    }
+    if (["max_streams_per_user","max_streams_per_ip","max_ips_per_user"].includes(rule_type)) {
+      rule.allow_local_ip = !!allow_local_ip;
+    }
+    if (rule_type === "max_bitrate_kbps") {
+      const mk = parseInt(max_kbps || "20000", 10);
+      rule.max_kbps = isNaN(mk) ? 20000 : mk;
+    }
+    if (rule_type === "device_allowlist") {
+      const list = (allowed_devices || "").split(",").map(s => s.trim()).filter(Boolean);
+      rule.allowed = list;
+    }
+    return {
+      rule_type,
+      provider: provider || null,
+      server_id: server_id || null,
+      priority: parseInt(priority, 10) || 100,
+      is_enabled: is_enabled === "1" ? 1 : 0,
+      rule
+    };
+  }
+
+  function addPolicyToTemplate() {
+    const p = getPolicyFromBuilder();
+    if (!p.rule_type) return;
+
+    if (EDIT_INDEX !== null) {
+      TEMPLATE_POLICIES[EDIT_INDEX] = p;
+    } else {
+      TEMPLATE_POLICIES.push(p);
+    }
+    EDIT_INDEX = null;
+    renderPoliciesTable();
+    syncPoliciesJson();
+    resetPolicyBuilder();
+  }
+
+  function editPolicy(i) {
+    const p = TEMPLATE_POLICIES[i];
+    if (!p) return;
+    EDIT_INDEX = i;
+
+    document.getElementById("p_rule_type").value = p.rule_type;
+    document.getElementById("p_provider").value = p.provider || "";
+    document.getElementById("p_server_id").value = p.server_id || "";
+    document.getElementById("p_priority").value = p.priority || 100;
+    document.getElementById("p_enabled").value = String(p.is_enabled ?? 1);
+
+    const rule = p.rule || {};
+    document.getElementById("p_selector").value = rule.selector || "kill_newest";
+    document.getElementById("p_warn_title").value = rule.warn_title || "{{ t('policies_warn_title_default') }}";
+    document.getElementById("p_warn_text").value = rule.warn_text || "{{ t('policies_warn_text_default') }}";
+
+    document.getElementById("p_max_value").value = rule.max ?? "";
+    document.getElementById("p_allow_local_ip").checked = !!rule.allow_local_ip;
+    document.getElementById("p_max_kbps").value = rule.max_kbps ?? "";
+    document.getElementById("p_allowed_devices").value = (rule.allowed || []).join(", ");
+  }
+
+  function deletePolicy(i) {
+    TEMPLATE_POLICIES.splice(i, 1);
+    renderPoliciesTable();
+    syncPoliciesJson();
+  }
+
+  function renderPoliciesTable() {
+    const tbody = document.getElementById("tpl_policies_table");
+    if (!tbody) return;
+
+    const badge = document.getElementById("tpl_policies_count_badge");
+    if (badge) {
+      badge.textContent = `${TEMPLATE_POLICIES.length} {{ t('policies') }}`;
+      badge.classList.toggle('hidden', TEMPLATE_POLICIES.length === 0);
+    }
+
+    if (!TEMPLATE_POLICIES.length) {
+      tbody.innerHTML = '<tr><td class="px-4 py-3 text-slate-500" colspan="5">{{ t("subscription_templates_no_policies") }}</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = TEMPLATE_POLICIES.map((p, i) => {
+      const prov = p.provider ? p.provider : "{{ t('policies_provider_both_short') }}";
+      const enabled = p.is_enabled ? "{{ t('enabled') }}" : "{{ t('disabled') }}";
+      return `
+        <tr class="border-t border-slate-800">
+          <td class="px-4 py-2">
+            <div class="flex gap-2">
+              <button type="button" class="text-slate-300 hover:text-white" onclick="editPolicy(${i})">{{ t("edit") }}</button>
+              <button type="button" class="text-rose-300 hover:text-rose-200" onclick="deletePolicy(${i})">{{ t("delete") }}</button>
+            </div>
+          </td>
+          <td class="px-4 py-2 text-slate-200">${p.rule_type}</td>
+          <td class="px-4 py-2 text-slate-400">${prov}</td>
+          <td class="px-4 py-2 text-slate-400">${p.priority}</td>
+          <td class="px-4 py-2 text-slate-400">${enabled}</td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  // Load template data when editing from right list
+  function loadTemplateForEdit(tpl) {
+    document.getElementById("template_id").value = tpl.id;
+    document.getElementById("tpl_name").value = tpl.name || "";
+    document.getElementById("tpl_notes").value = tpl.notes || "";
+    TEMPLATE_POLICIES = [];
+    try {
+      TEMPLATE_POLICIES = JSON.parse(tpl.policies_json || "[]") || [];
+    } catch(e) {
+      TEMPLATE_POLICIES = [];
+    }
+    document.getElementById("tpl_submit_btn").textContent = "{{ t('save') }}";
+    renderPoliciesTable();
+    syncPoliciesJson();
+    resetPolicyBuilder();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // Ensure hidden JSON always matches local array (defensive)
+  document.addEventListener("DOMContentLoaded", () => {
+    const form = document.getElementById("tpl_form");
+    if (form) {
+      form.addEventListener("submit", () => {
+        syncPoliciesJson();
+      });
+    }
+    renderPoliciesTable();
+    syncPoliciesJson();
+  });
+
+</script>

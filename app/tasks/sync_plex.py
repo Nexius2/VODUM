@@ -156,6 +156,10 @@ def sync_plex_owner_for_server(db, server):
         )
         if row:
             vodum_user_id = row["id"]
+            db.execute(
+                "UPDATE vodum_users SET username = COALESCE(username, ?) WHERE id = ?",
+                (username, int(vodum_user_id)),
+            )
         else:
             vodum_user_id = db.execute(
                 """

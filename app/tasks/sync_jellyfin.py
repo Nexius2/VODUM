@@ -427,8 +427,19 @@ def _ensure_vodum_user_for_username(
                     """,
                     (int(best_vuid), provider_type, int(server_id), str(external_user_id)),
                 )
+
+                # ✅ Remplit le vodum username si vide
+                db.execute(
+                    "UPDATE vodum_users SET username = COALESCE(username, ?) WHERE id = ?",
+                    (uname, int(best_vuid)),
+                )
                 return int(best_vuid)
 
+            # ✅ Remplit le vodum username si vide
+            db.execute(
+                "UPDATE vodum_users SET username = COALESCE(username, ?) WHERE id = ?",
+                (uname, int(current_vuid)),
+            )
             return current_vuid
 
         # Identité absente -> tenter de rattacher à un vodum_user existant (username)
@@ -440,6 +451,12 @@ def _ensure_vodum_user_for_username(
                 VALUES (?, ?, ?, ?)
                 """,
                 (int(best_vuid), provider_type, int(server_id), str(external_user_id)),
+            )
+
+            # ✅ Remplit le vodum username si vide
+            db.execute(
+                "UPDATE vodum_users SET username = COALESCE(username, ?) WHERE id = ?",
+                (uname, int(best_vuid)),
             )
             return int(best_vuid)
 

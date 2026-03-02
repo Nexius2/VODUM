@@ -1,0 +1,59 @@
+<!-- RIGHT: TEMPLATE LIST -->
+<div class="lg:col-span-5">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 lg:sticky lg:top-6">
+
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-sm uppercase tracking-wide text-slate-400">
+        {{ t("subscription_templates_list") }}
+      </h2>
+      <span class="text-xs text-slate-500">{{ templates|length }}</span>
+    </div>
+
+    {% if not templates %}
+      <p class="text-slate-500 text-sm">{{ t("subscription_templates_empty") }}</p>
+    {% else %}
+      <div class="space-y-3">
+        {% for tpl in templates %}
+          <div class="rounded-xl border border-slate-800 bg-slate-950 p-4">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <div class="font-medium text-slate-200">{{ tpl.name }}</div>
+                {% if tpl.notes %}
+                  <div class="text-xs text-slate-500 mt-1">{{ tpl.notes }}</div>
+                {% endif %}
+                <div class="text-[11px] text-slate-500 mt-2">
+                  {{ t("policies") }}: {{ tpl.policies_count }}
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <button type="button"
+                        class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs"
+                        onclick='loadTemplateForEdit({{ tpl|tojson }})'>
+                  {{ t("edit") }}
+                </button>
+
+                <form method="post" action="{{ url_for('subscription_templates_duplicate', template_id=tpl.id) }}">
+                  <button type="submit"
+                          class="px-2 py-1 rounded bg-indigo-800/40 hover:bg-indigo-800/60 text-indigo-200 text-xs">
+                    {{ t("duplicate") }}
+                  </button>
+                </form>
+
+                <form method="post" action="{{ url_for('subscription_templates_delete', template_id=tpl.id) }}"
+                      onsubmit="return confirm('{{ t('subscription_template_delete_confirm') }}');">
+                  <button type="submit"
+                          class="px-2 py-1 rounded bg-rose-800/40 hover:bg-rose-800/60 text-rose-200 text-xs">
+                    {{ t("delete") }}
+                  </button>
+                </form>
+              </div>
+
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+  </div>
+</div>

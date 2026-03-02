@@ -139,17 +139,12 @@
 
     <!-- Now Playing (UNDER USERS) : one line per live session -->
     <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-        <div class="flex items-center justify-between mb-3">
-            <h2 class="text-sm font-semibold">Now Playing</h2>
+        <div id="dashboard-now-playing"
+             hx-get="{{ url_for('dashboard_now_playing_partial') }}"
+             hx-trigger="load, every 2500ms"
+             hx-swap="outerHTML">
+            {% include "dashboard/partials/_now_playing.html" %}
         </div>
-
-		<div id="dashboard-now-playing"
-			 hx-get="{{ url_for('dashboard_now_playing_partial') }}"
-			 hx-trigger="load, every 2500ms"
-			 hx-swap="innerHTML">
-			{% include "dashboard/partials/_now_playing.html" %}
-		</div>
-
     </section>
 
 

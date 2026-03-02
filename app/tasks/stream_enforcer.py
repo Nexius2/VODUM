@@ -314,24 +314,25 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
         max_streams = int(rule.get("max", 1))
         allow_local_ip = bool(rule.get("allow_local_ip", False))
 
-        # Group by user (global) OR by (server+user) if policy is server-scoped
-        by_key: Dict[Tuple[Optional[int], str], List[dict]] = {}
+        # Group by user:
+        # - If policy is explicitly global => count across all servers
+        # - If policy forces a server context (server_id set OR scope_type='server') => count per server
+        # - Otherwise (scope=user without server_id) => count across all servers (user-wide limit)
+        per_server_counting = bool(policy.get("server_id")) or (policy.get("scope_type") == "server")
 
-        if _is_global_policy(policy):
+        by_key: Dict[Tuple[Optional[int], str, Optional[int]], List[dict]] = {}
+
+        if _is_global_policy(policy) or not per_server_counting:
             # ✅ COMPTE SUR TOUS LES SERVEURS
             for s in scoped:
-                ukey = _normalize_user_key(s)
-                by_key.setdefault(ukey, []).append(s)
+                vodum_user_id, ext = _normalize_user_key(s)
+                by_key.setdefault((vodum_user_id, ext, None), []).append(s)
         else:
-            # ✅ MODE "par serveur" (si scope=server, scope=user, ou server_id forcé)
-            tmp: Dict[Tuple[int, Tuple[Optional[int], str]], List[dict]] = {}
+            # ✅ COMPTE PAR SERVEUR
             for s in scoped:
                 sid = int(s["server_id"])
-                ukey = _normalize_user_key(s)
-                tmp.setdefault((sid, ukey), []).append(s)
-            # on aplati (on gardera la logique kill per violation)
-            for (_sid, ukey), lst in tmp.items():
-                by_key.setdefault(ukey, []).extend(lst)
+                vodum_user_id, ext = _normalize_user_key(s)
+                by_key.setdefault((vodum_user_id, ext, sid), []).append(s)
 
         for user_key, user_sessions in by_key.items():
             # Per-user override (vodum_users.max_streams_override) supersedes policy max.
@@ -465,25 +466,32 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
             by_key.setdefault(key, []).append(s)
 
         for key, ip_sessions in by_key.items():
-            if len(ip_sessions) > max_streams:
-                server_id = int(ip_sessions[0]["server_id"])
-                provider = ip_sessions[0]["provider"]
+            if len(ip_sessions) <= max_streams:
+                continue
 
-                ip_value = key.split("|", 1)[1] if ("|" in key) else key
-                reason = f"max_streams_per_ip({ip_value}): {len(ip_sessions)} > {max_streams}"
+            ip_value = key.split("|", 1)[1] if ("|" in key) else key
+            reason = f"max_streams_per_ip({ip_value}): {len(ip_sessions)} > {max_streams}"
 
-                violations.append({
-                    "policy": policy,
-                    "kind": "ip_streams",
-                    "server_id": server_id,
-                    "provider": provider,
-                    "target_user": (None, ip_value),  # ext:<ip>
-                    "sessions": ip_sessions,
-                    "reason": reason,
-                    "selector": selector,
-                    "warn_title": warn_title,
-                    "warn_text": warn_text,
-                })
+            # IMPORTANT: choisir la cible ICI pour garantir server_id/provider cohérents
+            target = _pick_kill_target(ip_sessions, selector)
+            if not target:
+                continue
+
+            server_id = int(target["server_id"])
+            provider = target["provider"]
+
+            violations.append({
+                "policy": policy,
+                "kind": "ip_streams",
+                "server_id": server_id,
+                "provider": provider,
+                "target_user": (None, ip_value),
+                "sessions": [target],   # mono-session => kill toujours sur le bon serveur
+                "reason": reason,
+                "selector": selector,
+                "warn_title": warn_title,
+                "warn_text": warn_text,
+            })
 
 
 
