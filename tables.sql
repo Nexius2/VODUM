@@ -255,6 +255,20 @@ CREATE TABLE IF NOT EXISTS settings (
 
 );
 
+-----------------------------------------------------------------------
+--  SUBSCRIPTION TEMPLATES
+-----------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS subscription_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    notes TEXT,
+    policies_json TEXT NOT NULL DEFAULT '[]',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_subscription_templates_name
+ON subscription_templates(name);
 
 -----------------------------------------------------------------------
 --  TASKS (scheduler)
@@ -692,6 +706,81 @@ CREATE TABLE IF NOT EXISTS discord_campaigns (
   error TEXT,
   FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE SET NULL
 );
+
+
+-----------------------------------------------------------------------
+-- COMMUNICATIONS (Unified: Email + Discord)
+-----------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS comm_templates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  key TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+  days_before INTEGER DEFAULT NULL,
+  subject TEXT NOT NULL,
+  body TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS comm_template_attachments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  template_id INTEGER NOT NULL,
+  filename TEXT NOT NULL,
+  mime_type TEXT,
+  path TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(template_id) REFERENCES comm_templates(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_comm_template_attachments_template ON comm_template_attachments(template_id);
+
+CREATE TABLE IF NOT EXISTS comm_campaigns (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  body TEXT NOT NULL,
+  server_id INTEGER,
+  status TEXT DEFAULT 'pending',
+  is_test INTEGER DEFAULT 0 CHECK(is_test IN (0,1)),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  sent_at TIMESTAMP,
+  FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS comm_campaign_attachments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  campaign_id INTEGER NOT NULL,
+  filename TEXT NOT NULL,
+  mime_type TEXT,
+  path TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(campaign_id) REFERENCES comm_campaigns(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_comm_campaign_attachments_campaign ON comm_campaign_attachments(campaign_id);
+
+CREATE TABLE IF NOT EXISTS comm_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL CHECK(kind IN ('template','campaign')),
+  template_id INTEGER,
+  campaign_id INTEGER,
+  user_id INTEGER,
+  channel_used TEXT NOT NULL CHECK(channel_used IN ('email','discord')),
+  status TEXT NOT NULL CHECK(status IN ('sent','failed')),
+  error TEXT,
+  sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  meta_json TEXT,
+  FOREIGN KEY(template_id) REFERENCES comm_templates(id) ON DELETE SET NULL,
+  FOREIGN KEY(campaign_id) REFERENCES comm_campaigns(id) ON DELETE SET NULL,
+  FOREIGN KEY(user_id) REFERENCES vodum_users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_comm_history_sent_at ON comm_history(sent_at DESC);
+CREATE INDEX IF NOT EXISTS idx_comm_history_user ON comm_history(user_id, sent_at DESC);
+
 
 CREATE TABLE IF NOT EXISTS tautulli_import_jobs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
