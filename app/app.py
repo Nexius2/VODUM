@@ -256,9 +256,7 @@ def create_app():
     from routes.servers import register as register_servers
     from routes.subscriptions_page import register as register_subscriptions_page
     from routes.tasks import register as register_tasks
-    from routes.mailing_pages import register as register_mailing_pages
-    from routes.mailing_templates import register as register_mailing_templates
-    from routes.discord import register as register_discord
+    from routes.communications import register as register_communications
     from routes.backup import register as register_backup
     from routes.auth import register as register_auth
     from routes.settings import register as register_settings
@@ -276,9 +274,7 @@ def create_app():
     register_servers(app)
     register_subscriptions_page(app)
     register_tasks(app)
-    register_mailing_pages(app)
-    register_mailing_templates(app)
-    register_discord(app)
+    register_communications(app)
     register_backup(app)
     register_auth(app)
     register_settings(app)

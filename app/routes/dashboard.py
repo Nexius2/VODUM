@@ -201,6 +201,24 @@ def register(app):
         live_window_seconds = 120
         live_window_sql = f"-{live_window_seconds} seconds"
 
+        # Global counts (do NOT limit)
+        totals = db.query_one(
+            """
+            SELECT
+              COUNT(*) AS total_live,
+              COALESCE(SUM(CASE WHEN ms.is_transcode = 1 THEN 1 ELSE 0 END), 0) AS total_transcode
+            FROM media_sessions ms
+            WHERE datetime(ms.last_seen_at) >= datetime('now', ?)
+            """,
+            (live_window_sql,),
+        )
+
+        totals = dict(totals) if totals else {}
+
+        total_live = int(totals.get("total_live") or 0)
+        total_transcode = int(totals.get("total_transcode") or 0)
+
+        # Dashboard preview only: last 6 sessions
         sessions = db.query(
             """
             SELECT
@@ -227,6 +245,7 @@ def register(app):
             LEFT JOIN media_users mu ON mu.id = ms.media_user_id
             WHERE datetime(ms.last_seen_at) >= datetime('now', ?)
             ORDER BY datetime(ms.last_seen_at) DESC
+            LIMIT 6
             """,
             (live_window_sql,),
         )
@@ -314,11 +333,13 @@ def register(app):
         # --------------------------
         return render_template(
             "dashboard/dashboard.html",
-            stats=stats,             
-            users_stats=users_stats,  
+            stats=stats,
+            users_stats=users_stats,
             servers=servers,
             latest_logs=latest_logs,
-            sessions=sessions,        
+            sessions=sessions,
+            total_live=total_live,
+            total_transcode=total_transcode,
             active_page="dashboard",
         )
 
@@ -328,6 +349,23 @@ def register(app):
 
         live_window_seconds = 120
         live_window_sql = f"-{live_window_seconds} seconds"
+
+        # Dashboard preview only: last 6 sessions
+        totals = db.query_one(
+            """
+            SELECT
+              COUNT(*) AS total_live,
+              COALESCE(SUM(CASE WHEN ms.is_transcode = 1 THEN 1 ELSE 0 END), 0) AS total_transcode
+            FROM media_sessions ms
+            WHERE datetime(ms.last_seen_at) >= datetime('now', ?)
+            """,
+            (live_window_sql,),
+        )
+
+        totals = dict(totals) if totals else {}
+
+        total_live = int(totals.get("total_live") or 0)
+        total_transcode = int(totals.get("total_transcode") or 0)
 
         sessions = db.query(
             """
@@ -355,6 +393,7 @@ def register(app):
             LEFT JOIN media_users mu ON mu.id = ms.media_user_id
             WHERE datetime(ms.last_seen_at) >= datetime('now', ?)
             ORDER BY datetime(ms.last_seen_at) DESC
+            LIMIT 6
             """,
             (live_window_sql,),
         )
@@ -437,6 +476,8 @@ def register(app):
         return render_template(
             "dashboard/partials/_now_playing.html",
             sessions=sessions,
+            total_live=total_live,
+            total_transcode=total_transcode,
         )
 
 

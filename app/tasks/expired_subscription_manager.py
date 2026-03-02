@@ -319,6 +319,10 @@ def run(task_id: int, db) -> None:
 
         for u in users:
             vodum_user_id = int(u["id"])
+
+            # Toujours calculer policy_id AVANT, car on peut vouloir nettoyer même si la date est invalide
+            policy_id = _find_system_policy_id(db, vodum_user_id)
+
             exp = _parse_date(u["expiration_date"])
 
             # Si la date est invalide/inparsible, on considère que l'user n'est PAS expiré,
@@ -328,9 +332,6 @@ def run(task_id: int, db) -> None:
                     _delete_policy(db, policy_id)
                     removed += 1
                 continue
-
-
-            policy_id = _find_system_policy_id(db, vodum_user_id)
 
             if exp >= today:
                 # renewed (or not expired yet) => remove system policy if any

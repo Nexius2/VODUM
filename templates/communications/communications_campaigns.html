@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% set active_page = 'communications' %}
+
+{% block title %}{{ t("communications") }} - VODUM{% endblock %}
+{% block header_title %}{{ t("communications") }}{% endblock %}
+{% block header_subtitle %}{{ t("communications_subtitle") }}{% endblock %}
+
+{% block content %}
+
+{% set current_subpage = 'campaigns' %}
+{% include "communications/_communications_nav.html" %}
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+  <!-- LEFT : editor -->
+  <div class="lg:col-span-1 bg-slate-900 border border-slate-800 rounded-2xl p-4">
+
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-sm font-semibold">
+        {% if loaded_campaign %}{{ t('comm_campaign_edit') }}{% else %}{{ t('comm_campaign_new') }}{% endif %}
+      </h2>
+
+      <div class="flex items-center gap-2">
+        <span class="text-[11px] text-slate-400">{{ t('use_for_test') }}</span>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="campaign_test_switch" class="sr-only peer" {% if loaded_campaign and loaded_campaign.is_test %}checked{% endif %}>
+          <div class="w-11 h-6 bg-slate-600 rounded-full peer-checked:bg-emerald-500 transition"></div>
+          <div class="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full transition peer-checked:translate-x-5"></div>
+        </label>
+      </div>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" class="space-y-4">
+      <input type="hidden" name="action" id="campaign_action" value="{% if loaded_campaign %}save{% else %}create{% endif %}">
+      <input type="hidden" name="campaign_id" value="{{ loaded_campaign.id if loaded_campaign else '' }}">
+      <input type="hidden" name="is_test" id="is_test" value="{{ 1 if loaded_campaign and loaded_campaign.is_test else 0 }}">
+
+      <div class="text-xs">
+        <label class="block mb-1">{{ t('name') }}</label>
+        <input type="text" name="name" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs" value="{{ loaded_campaign.name if loaded_campaign else '' }}" required>
+      </div>
+
+      <div class="text-xs">
+        <label class="block mb-1">{{ t('target_server') }}</label>
+        <select name="server_id" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+          <option value="">{{ t('all_servers') }}</option>
+          {% for s in servers %}
+            <option value="{{ s.id }}" {% if loaded_campaign and loaded_campaign.server_id==s.id %}selected{% endif %}>{{ s.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="text-xs">
+        <label class="block mb-1">{{ t('subject') }}</label>
+        <input type="text" name="subject" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs" value="{{ loaded_campaign.subject if loaded_campaign else '' }}" required>
+        <p class="mt-1 text-[11px] text-slate-500">{{ t('comm_subject_help') }}</p>
+      </div>
+
+      <div class="text-xs">
+        <label class="block mb-1">{{ t('body') }}</label>
+        <textarea name="body" rows="14" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-2 text-xs resize-none" required>{{ loaded_campaign.body if loaded_campaign else '' }}</textarea>
+        <p class="text-[11px] text-slate-500 mt-2">
+          {{ t('comm_vars_help') }}
+          <code>{username}</code>, <code>{email}</code>, <code>{expiration_date}</code>
+        </p>
+      </div>
+
+      <div class="text-xs">
+        <label class="block mb-1">{{ t('attachments') }}</label>
+        <input type="file" name="attachments" multiple class="w-full text-xs text-slate-300">
+        <p class="mt-1 text-[11px] text-slate-500">{{ t('comm_attachments_help') }}</p>
+
+        {% if loaded_campaign and loaded_campaign.attachments %}
+          <div class="mt-2 space-y-1">
+            {% for a in loaded_campaign.attachments %}
+              <div class="text-[11px] text-slate-400">📎 {{ a.filename }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+
+      <div class="flex flex-wrap gap-2">
+        <button type="submit" class="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-dark text-xs font-medium">
+          {% if loaded_campaign %}{{ t('save') }}{% else %}{{ t('create') }}{% endif %}
+        </button>
+
+        {% if loaded_campaign %}
+          <button type="submit" name="action" value="send" class="px-3 py-1.5 rounded-lg bg-emerald-700/60 hover:bg-emerald-700 text-xs font-medium">
+            {{ t('send') }}
+          </button>
+
+          <button type="submit" name="action" value="delete" class="px-3 py-1.5 rounded-lg bg-rose-700/50 hover:bg-rose-700 text-xs font-medium" onclick="return confirm('{{ t('confirm_delete') }}')">
+            {{ t('delete') }}
+          </button>
+
+          <a href="{{ url_for('communications_campaigns_page') }}" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium">
+            {{ t('new') }}
+          </a>
+        {% endif %}
+      </div>
+
+    </form>
+
+  </div>
+
+  <!-- RIGHT : list -->
+  <div class="lg:col-span-2">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+      <table class="w-full text-xs">
+        <thead class="bg-slate-950/60 text-slate-400 text-left">
+          <tr>
+            <th class="px-4 py-2">{{ t('name') }}</th>
+            <th class="px-4 py-2">{{ t('subject') }}</th>
+            <th class="px-4 py-2">{{ t('server') }}</th>
+            <th class="px-4 py-2">{{ t('is_test') }}</th>
+            <th class="px-4 py-2">{{ t('status') }}</th>
+            <th class="px-4 py-2">{{ t('created_at') }}</th>
+            <th class="px-4 py-2">{{ t('sent_at') }}</th>
+            <th class="px-4 py-2"></th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for c in campaigns %}
+          <tr class="border-t border-slate-800 hover:bg-slate-800/40">
+            <td class="px-4 py-2">{{ c.name }}</td>
+            <td class="px-4 py-2">{{ c.subject }}</td>
+            <td class="px-4 py-2">
+              {% if not c.server_id %}
+                <span class="text-emerald-300">{{ t('all_servers') }}</span>
+              {% else %}
+                {{ c.server_id }}
+              {% endif %}
+            </td>
+            <td class="px-4 py-2">{% if c.is_test %}<span class="text-emerald-300">{{ t('yes') }}</span>{% else %}<span class="text-slate-400">{{ t('no') }}</span>{% endif %}</td>
+            <td class="px-4 py-2">
+              {% set colors = {
+                'pending': 'bg-slate-800 text-slate-300',
+                'sending': 'bg-blue-900/40 text-blue-300',
+                'finished': 'bg-emerald-900/40 text-emerald-300',
+                'error': 'bg-rose-900/40 text-rose-300'
+              } %}
+              <span class="px-2 py-1 rounded-full {{ colors.get(c.status, 'bg-slate-700 text-slate-300') }}">{{ t(c.status) }}</span>
+            </td>
+            <td class="px-4 py-2">{{ c.created_at or t('not_available') }}</td>
+            <td class="px-4 py-2">{{ c.sent_at or t('not_available') }}</td>
+            <td class="px-4 py-2 text-right">
+              <a href="{{ url_for('communications_campaigns_page', load=c.id) }}" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700">{{ t('open') }}</a>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const sw = document.getElementById('campaign_test_switch');
+  const hidden = document.getElementById('is_test');
+  if (sw && hidden) {
+    sw.addEventListener('change', () => hidden.value = sw.checked ? '1' : '0');
+  }
+});
+</script>
+
+{% endblock %}

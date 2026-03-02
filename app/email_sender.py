@@ -7,7 +7,7 @@ from typing import Dict, Tuple
 from email_layout_utils import build_email_parts
 
 
-def send_email(subject: str, body: str, to_email: str, smtp_settings: Dict) -> Tuple[bool, str | None]:
+def send_email(subject: str, body: str, to_email: str, smtp_settings: Dict, attachments: list[dict] | None = None) -> Tuple[bool, str | None]:
     """Send an email using current SMTP settings.
 
     Returns (success, error_message).
@@ -36,6 +36,23 @@ def send_email(subject: str, body: str, to_email: str, smtp_settings: Dict) -> T
 
     msg.set_content(plain, subtype="plain", charset="utf-8")
     msg.add_alternative(full_html, subtype="html", charset="utf-8")
+
+    # Attachments (filesystem paths)
+    for att in (attachments or []):
+        try:
+            filename = (att or {}).get('filename') or 'attachment'
+            mime_type = (att or {}).get('mime_type') or 'application/octet-stream'
+            path = (att or {}).get('path')
+            if not path:
+                continue
+            maintype, subtype = (mime_type.split('/', 1) + ['octet-stream'])[:2]
+            with open(path, 'rb') as f:
+                data = f.read()
+            msg.add_attachment(data, maintype=maintype, subtype=subtype, filename=filename)
+        except Exception:
+            # best effort: never fail the whole send just because one attachment is broken
+            continue
+
 
     try:
         with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:

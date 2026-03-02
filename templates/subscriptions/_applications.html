@@ -1,0 +1,113 @@
+<div class="space-y-6">
+
+  <!-- Bulk apply -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-sm uppercase tracking-wide text-slate-400">{{ t("subscription_apply_bulk_title") }}</h2>
+      <span class="text-xs text-slate-500">{{ t("subscription_apply_bulk_help") }}</span>
+    </div>
+
+    <form method="post" action="{{ url_for('subscription_apply_server_bulk') }}"
+          onsubmit="return confirm('{{ t('subscription_apply_replace_confirm') }}');"
+          class="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+      <div class="text-sm">
+        <label class="block text-xs text-slate-400 mb-1">{{ t("server") }}</label>
+        <select name="server_id" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+          {% for s in servers %}
+            <option value="{{ s.id }}">{{ s.name }} ({{ s.type }})</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="text-sm">
+        <label class="block text-xs text-slate-400 mb-1">{{ t("subscription_template") }}</label>
+        <select name="template_id" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+          {% for tpl in templates %}
+            <option value="{{ tpl.id }}">{{ tpl.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="text-sm flex items-end">
+        <input type="hidden" name="confirm_replace" value="1">
+        <button class="w-full px-3 py-2 rounded-lg bg-primary hover:bg-primary-dark text-sm font-medium">
+          {{ t("apply") }}
+        </button>
+      </div>
+
+    </form>
+  </div>
+
+  <!-- Per-user table -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+    <div class="p-6 border-b border-slate-800">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm uppercase tracking-wide text-slate-400">{{ t("subscription_apply_users_title") }}</h2>
+        <span class="text-xs text-slate-500">{{ users|length }}</span>
+      </div>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs">
+        <thead class="bg-slate-950/60 text-slate-400 text-left">
+          <tr>
+            <th class="px-4 py-2">{{ t("user") }}</th>
+            <th class="px-4 py-2">{{ t("subscription_template") }}</th>
+            <th class="px-4 py-2">{{ t("subscription_overridden") }}</th>
+            <th class="px-4 py-2 text-right">{{ t("actions") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+            <tr class="border-t border-slate-800">
+              <td class="px-4 py-2">
+                <div class="text-slate-200 font-medium">{{ u.username or ('#' ~ u.id) }}</div>
+                <div class="text-[11px] text-slate-500">#{{ u.id }} • {{ u.status }}</div>
+              </td>
+
+              <td class="px-4 py-2 text-slate-300">
+                {{ u.subscription_template_name if u.subscription_template_name else t("subscription_none") }}
+              </td>
+
+              <td class="px-4 py-2">
+                {% if u.max_streams_override is not none %}
+                  <span class="inline-flex items-center gap-1 text-rose-300" title="{{ t('subscription_overridden_tooltip') }}">
+                    ✅
+                  </span>
+                {% else %}
+                  <span class="text-slate-600">—</span>
+                {% endif %}
+              </td>
+
+              <td class="px-4 py-2 text-right">
+                <form method="post" action="{{ url_for('subscription_apply_user') }}"
+                      class="inline-flex items-center gap-2"
+                      onsubmit="return confirm('{{ t('subscription_apply_replace_confirm') }}');">
+                  <input type="hidden" name="user_id" value="{{ u.id }}">
+                  <input type="hidden" name="confirm_replace" value="1">
+                  <select name="template_id" class="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1">
+                    {% for tpl in templates %}
+                      <option value="{{ tpl.id }}" {% if u.subscription_template_id == tpl.id %}selected{% endif %}>{{ tpl.name }}</option>
+                    {% endfor %}
+                  </select>
+                  <button class="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-dark text-xs font-medium">
+                    {{ t("apply") }}
+                  </button>
+                  <a class="text-slate-300 hover:text-white text-xs" href="{{ url_for('user_detail', user_id=u.id) }}">{{ t("view") }}</a>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+
+          {% if not users %}
+            <tr>
+              <td class="px-4 py-3 text-slate-500" colspan="4">{{ t("subscription_apply_no_users") }}</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>

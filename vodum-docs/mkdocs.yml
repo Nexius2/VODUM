@@ -1,0 +1,74 @@
+
+site_name: VODUM Docs
+site_description: Official documentation for VODUM (Plex/Jellyfin user & subscription management)
+site_url: https://nexius2.github.io/vodum-docs/
+use_directory_urls: true
+
+repo_name: Nexius2/VODUM
+repo_url: https://github.com/Nexius2/VODUM
+edit_uri: edit/main/docs/
+
+
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - content.code.copy
+    - content.action.edit
+    - content.action.view
+  palette:
+    - scheme: slate
+      primary: blue
+      accent: cyan
+    - scheme: default
+      primary: blue
+      accent: cyan
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - def_list
+  - footnotes
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+extra_css:
+  - assets/stylesheets/extra.css
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Interface:
+      - Dashboard: dashboard.md
+      - Monitoring: monitoring.md
+      - Users: users.md
+      - Subscriptions: subscriptions.md
+      - Policies: policies.md
+      - Servers: servers.md
+      - Libraries: libraries.md
+      - Tasks: tasks.md
+      - Mailing: mailing.md
+      - Discord: discord.md
+      - Backup & Restore: backup.md
+      - Logs: logs.md
+      - Settings: settings.md
+  - Technical:
+      - Architecture: architecture.md
+      - Security: security.md
+      - Troubleshooting: troubleshooting.md
+      - FAQ: faq.md
+      - About: about.md

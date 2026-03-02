@@ -129,11 +129,6 @@ def register(app):
                 ),
                 "brand_name": request.form.get("brand_name", settings.get("brand_name")),
 
-                "notifications_order": _sanitize_notifications_order(
-                    request.form.get("notifications_order", settings.get("notifications_order") or "email")
-                ),
-                "user_notifications_can_override": 1 if request.form.get("user_notifications_can_override") == "1" else 0,
-
 
                 "expiry_mode": expiry_mode,
                 "warn_then_disable_days": warn_then_disable_days,
@@ -169,8 +164,6 @@ def register(app):
                     timezone = :timezone,
                     admin_email = :admin_email,
                     brand_name = :brand_name,
-                    notifications_order = :notifications_order,
-                    user_notifications_can_override = :user_notifications_can_override,
                     default_subscription_days = :default_subscription_days,
                     delete_after_expiry_days = :delete_after_expiry_days,
                     expiry_mode = :expiry_mode,

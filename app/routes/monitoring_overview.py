@@ -884,6 +884,8 @@ ranked AS (
                 except Exception:
                     p["_rule"] = {}
                 p["_is_system"] = bool(p["_rule"].get("system_tag"))
+                p["_is_locked"] = bool(p["_rule"].get("locked"))
+                p["_subscription_name"] = p["_rule"].get("subscription_name") or ""
 
             edit_policy = None
             edit_policy_id = request.args.get("edit_policy_id", type=int)

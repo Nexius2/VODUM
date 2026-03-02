@@ -253,6 +253,7 @@ def api_users_create():
     username = (payload.get("username") or "").strip() or (email.split("@", 1)[0] if email else "")
     firstname = (payload.get("firstname") or "").strip()
     lastname = (payload.get("lastname") or "").strip()
+    vodum_username = None
 
     # --- Dates: support aliases + parsing tolerant ---
     raw_exp = payload.get("expiration_date") or payload.get("expirationDate") or payload.get("expiration") or ""
@@ -332,7 +333,7 @@ def api_users_create():
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            username,
+            vodum_username,
             firstname,
             lastname,
             email or None,

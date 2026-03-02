@@ -288,9 +288,15 @@
 					  </span>
 					{% endif %}
 
-					{% if p._is_system %}
+					{% if p._is_system or p._is_locked %}
 					  <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-950 border border-slate-700 text-[11px] text-slate-300">
 						{{ t("system") }}
+					  </span>
+					{% endif %}
+
+					{% if p._is_locked and p._subscription_name %}
+					  <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-indigo-950/40 border border-indigo-800 text-[11px] text-indigo-200">
+						{{ t("subscription") }}: {{ p._subscription_name }}
 					  </span>
 					{% endif %}
 				  </div>
@@ -322,7 +328,7 @@
 
               <td class="p-3 text-right">
                 <div class="flex items-center justify-end gap-3">
-                  {% if p._is_system %}
+                  {% if p._is_system or p._is_locked %}
                     <span class="text-slate-500 text-xs">{{ t("read_only") }}</span>
                   {% else %}
                     <a class="text-slate-300 hover:text-white" href="{{ url_for('stream_policy_edit', policy_id=p.id) }}">{{ t("edit") }}</a>

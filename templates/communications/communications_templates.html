@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% set active_page = 'communications' %}
+
+{% block title %}{{ t("communications") }} - VODUM{% endblock %}
+{% block header_title %}{{ t("communications") }}{% endblock %}
+{% block header_subtitle %}{{ t("communications_subtitle") }}{% endblock %}
+
+{% block content %}
+
+{% set current_subpage = 'templates' %}
+{% include "communications/_communications_nav.html" %}
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+  <!-- LEFT : editor -->
+  <div class="lg:col-span-1 bg-slate-900 border border-slate-800 rounded-2xl p-4">
+
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-sm font-semibold">
+        {% if loaded_template %}{{ t('comm_template_edit') }}{% else %}{{ t('comm_template_new') }}{% endif %}
+      </h2>
+
+      <div class="flex items-center gap-2">
+        <span class="text-[11px] text-slate-400">{{ t('enabled') }}</span>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="template_enabled_switch" class="sr-only peer" {% if (loaded_template and loaded_template.enabled) or (not loaded_template) %}checked{% endif %}>
+          <div class="w-11 h-6 bg-slate-600 rounded-full peer-checked:bg-emerald-500 transition"></div>
+          <div class="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full transition peer-checked:translate-x-5"></div>
+        </label>
+      </div>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" class="space-y-4">
+      <input type="hidden" name="action" value="{% if loaded_template %}save{% else %}create{% endif %}">
+      <input type="hidden" name="template_id" value="{{ loaded_template.id if loaded_template else '' }}">
+      <input type="hidden" name="enabled" id="template_enabled" value="{{ 1 if (loaded_template and loaded_template.enabled) or (not loaded_template) else 0 }}">
+
+      {% if not loaded_template %}
+      <div class="text-xs">
+        <label class="block mb-1">{{ t('key') }}</label>
+        <input type="text" name="key" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs" required>
+        <p class="mt-1 text-[11px] text-slate-500">{{ t('comm_key_help') }}</p>
+      </div>
+      {% else %}
+      <div class="text-xs">
+        <label class="block mb-1">{{ t('key') }}</label>
+        <input type="text" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-slate-400" value="{{ loaded_template.key }}" disabled>
+      </div>
+      {% endif %}
+
+      <div class="text-xs">
+        <label class="block mb-1">{{ t('name') }}</label>
+        <input type="text" name="name" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs" value="{{ loaded_template.name if loaded_template else '' }}" required>
+      </div>
+
+      <div class="text-xs">
+        <label class="block mb-1">{{ t('days_before') }}</label>
+        <input type="number" name="days_before" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs" value="{{ loaded_template.days_before if loaded_template and loaded_template.days_before is not none else '' }}">
+        <p class="mt-1 text-[11px] text-slate-500">{{ t('comm_days_before_help') }}</p>
+      </div>
+
+      <div class="text-xs">
+        <label class="block mb-1">{{ t('subject') }}</label>
+        <input type="text" name="subject" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs" value="{{ loaded_template.subject if loaded_template else '' }}" required>
+        <p class="mt-1 text-[11px] text-slate-500">{{ t('comm_subject_help') }}</p>
+      </div>
+
+      <div class="text-xs">
+        <label class="block mb-1">{{ t('body') }}</label>
+        <textarea name="body" rows="14" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-2 text-xs resize-none" required>{{ loaded_template.body if loaded_template else '' }}</textarea>
+        <p class="text-[11px] text-slate-500 mt-2">
+          {{ t('comm_vars_help') }}
+          <code>{username}</code>, <code>{email}</code>, <code>{expiration_date}</code>
+        </p>
+      </div>
+
+      <div class="text-xs">
+        <label class="block mb-1">{{ t('attachments') }}</label>
+        <input type="file" name="attachments" multiple class="w-full text-xs text-slate-300">
+        <p class="mt-1 text-[11px] text-slate-500">{{ t('comm_attachments_help') }}</p>
+
+        {% if loaded_template and loaded_template.attachments %}
+          <div class="mt-2 space-y-1">
+            {% for a in loaded_template.attachments %}
+              <div class="text-[11px] text-slate-400">📎 {{ a.filename }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+
+      <div class="flex flex-wrap gap-2">
+        <button type="submit" class="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-dark text-xs font-medium">{{ t('save') if loaded_template else t('create') }}</button>
+
+        {% if loaded_template %}
+          <button type="submit" name="action" value="delete" class="px-3 py-1.5 rounded-lg bg-rose-700/50 hover:bg-rose-700 text-xs font-medium" onclick="return confirm('{{ t('confirm_delete') }}')">{{ t('delete') }}</button>
+          <a href="{{ url_for('communications_templates_page') }}" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium">{{ t('new') }}</a>
+        {% endif %}
+      </div>
+
+    </form>
+
+  </div>
+
+  <!-- RIGHT : list -->
+  <div class="lg:col-span-2">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+      <table class="w-full text-xs">
+        <thead class="bg-slate-950/60 text-slate-400 text-left">
+          <tr>
+            <th class="px-4 py-2">{{ t('key') }}</th>
+            <th class="px-4 py-2">{{ t('name') }}</th>
+            <th class="px-4 py-2">{{ t('enabled') }}</th>
+            <th class="px-4 py-2">{{ t('days_before') }}</th>
+            <th class="px-4 py-2">{{ t('subject') }}</th>
+            <th class="px-4 py-2"></th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for tpl in templates %}
+          <tr class="border-t border-slate-800 hover:bg-slate-800/40">
+            <td class="px-4 py-2"><code>{{ tpl.key }}</code></td>
+            <td class="px-4 py-2">{{ tpl.name }}</td>
+            <td class="px-4 py-2">{% if tpl.enabled %}<span class="text-emerald-300">{{ t('yes') }}</span>{% else %}<span class="text-slate-400">{{ t('no') }}</span>{% endif %}</td>
+            <td class="px-4 py-2">{{ tpl.days_before if tpl.days_before is not none else '-' }}</td>
+            <td class="px-4 py-2">{{ tpl.subject }}</td>
+            <td class="px-4 py-2 text-right">
+              <a href="{{ url_for('communications_templates_page', load=tpl.id) }}" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700">{{ t('open') }}</a>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="mt-3 text-[11px] text-slate-500">
+      {{ t('comm_templates_note') }}
+    </div>
+  </div>
+
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const sw = document.getElementById('template_enabled_switch');
+  const hidden = document.getElementById('template_enabled');
+  if (sw && hidden) {
+    sw.addEventListener('change', () => hidden.value = sw.checked ? '1' : '0');
+  }
+});
+</script>
+
+{% endblock %}

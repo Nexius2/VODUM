@@ -1,0 +1,513 @@
+{% extends "base.html" %}
+{% set active_page = 'communications' %}
+
+{% block title %}{{ t("communications") }} - VODUM{% endblock %}
+{% block header_title %}{{ t("communications") }}{% endblock %}
+{% block header_subtitle %}{{ t("communications_subtitle") }}{% endblock %}
+
+{% block header_actions %}{% endblock %}
+
+{% block content %}
+
+{% set current_subpage = 'configuration' %}
+{% include "communications/_communications_nav.html" %}
+
+<!-- <p class="text-sm text-slate-400 mb-4">
+  {{ t('comm_config_intro') }}
+</p> -->
+
+<form id="comm_config_form" method="post">
+  <input type="hidden" name="action" value="save_all">
+
+	<div class="flex items-center justify-end mb-3">
+	  <div id="autosave_status" class="text-xs text-slate-500"></div>
+	</div>
+
+	<div class="grid grid-cols-1 gap-6">
+
+    <!-- Email -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-semibold">{{ t('email') }}</h2>
+
+        <!-- iOS-style toggle -->
+        <label class="relative inline-flex items-center cursor-pointer" title="{{ t('comm_email_enable') }}">
+          <input type="checkbox"
+                 name="mailing_enabled"
+                 value="1"
+                 class="sr-only peer"
+                 {% if settings.mailing_enabled %}checked{% endif %}>
+          <div class="w-11 h-6 bg-slate-600 rounded-full peer peer-checked:bg-green-500 transition-colors"></div>
+          <div class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5 shadow"></div>
+        </label>
+      </div>
+
+      <p class="mt-2 text-sm text-slate-400">{{ t('comm_email_help') }}</p>
+
+      <div id="email_content" class="mt-4 space-y-3">
+        <div class="text-xs">
+          <label class="block mb-1">{{ t('mail_from') }}</label>
+          <input type="text" name="mail_from" value="{{ settings.mail_from or '' }}"
+                 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+        </div>
+
+        <div class="text-xs">
+          <label class="block mb-1">{{ t('smtp_provider') }}</label>
+          <select id="smtp_provider" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+            <option value="custom">{{ t('custom_smtp') }}</option>
+            <option value="gmail">{{ t('gmail') }}</option>
+            <option value="outlook">{{ t('outlook') }}</option>
+            <option value="yahoo">{{ t('yahoo') }}</option>
+          </select>
+        </div>
+
+        <div class="bg-slate-950/40 border border-slate-800 rounded-2xl p-3">
+          <h3 class="text-sm font-semibold mb-2">{{ t("smtp_help_title") }}</h3>
+
+          <!-- GMAIL -->
+          <div id="help_gmail" class="smtp-help hidden">
+            <div class="font-semibold mb-1 text-red-300">{{ t("gmail") }}</div>
+            <p class="text-slate-400">{{ t("smtp_gmail_requires") }}</p>
+            <ul class="list-disc list-inside text-slate-400 space-y-1 mt-1">
+              <li>✔ {{ t("smtp_gmail_2fa") }}</li>
+              <li>✔ {{ t("smtp_gmail_app_password") }}</li>
+            </ul>
+            <p class="text-slate-400 mt-2">{{ t("smtp_gmail_password_warning") }}</p>
+            <a href="https://myaccount.google.com/apppasswords" target="_blank"
+               class="inline-block mt-3 px-3 py-1.5 rounded-lg bg-yellow-600 hover:bg-yellow-500 text-xs font-semibold text-black">
+              🔐 {{ t("smtp_gmail_create_app_password") }}
+            </a>
+            <p class="text-slate-400 mt-3">
+              {{ t("smtp_server") }} : <strong>smtp.gmail.com</strong><br>
+              {{ t("smtp_port") }} : <strong>587</strong> — {{ t("smtp_tls_recommended") }}
+            </p>
+          </div>
+
+          <!-- OUTLOOK -->
+          <div id="help_outlook" class="smtp-help hidden">
+            <div class="font-semibold mb-1 text-blue-300">{{ t("outlook") }}</div>
+            <p class="text-slate-400 mb-2">{{ t("smtp_outlook_requires") }}</p>
+            <ul class="list-disc list-inside text-slate-400 space-y-1">
+              <li>✔ {{ t("smtp_outlook_account_required") }}</li>
+              <li>✔ {{ t("smtp_outlook_smtp_enabled") }}</li>
+            </ul>
+            <p class="text-slate-400 mt-3">
+              {{ t("smtp_server") }} : <strong>smtp.office365.com</strong><br>
+              {{ t("smtp_port") }} : <strong>587</strong> — {{ t("smtp_tls_required") }}
+            </p>
+          </div>
+
+          <!-- YAHOO -->
+          <div id="help_yahoo" class="smtp-help hidden">
+            <div class="font-semibold mb-1 text-purple-300">{{ t("yahoo") }}</div>
+            <p class="text-slate-400">{{ t("smtp_yahoo_requires_app_password") }}</p>
+            <p class="text-slate-400 mt-3">
+              {{ t("smtp_server") }} : <strong>smtp.mail.yahoo.com</strong><br>
+              {{ t("smtp_port") }} : <strong>587</strong> — {{ t("smtp_tls_recommended") }}
+            </p>
+          </div>
+
+          <!-- CUSTOM -->
+          <div id="help_custom" class="smtp-help">
+            <div class="font-semibold mb-1">{{ t("smtp_provider") }} : {{ t("custom_smtp") }}</div>
+            <p class="text-slate-400">{{ t("smtp_custom_select_provider_help") }}</p>
+            <p class="text-slate-400 mt-3">{{ t("smtp_custom_requirements_intro") }}</p>
+            <ul class="list-disc list-inside text-slate-400 space-y-1 mt-1">
+              <li>✔ {{ t("smtp_custom_host") }}</li>
+              <li>✔ {{ t("smtp_custom_port") }}</li>
+              <li>✔ {{ t("smtp_custom_tls_ssl") }}</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="text-xs">
+          <label class="block mb-1">{{ t('smtp_host') }}</label>
+          <input type="text" id="smtp_host" name="smtp_host" value="{{ settings.smtp_host or '' }}"
+                 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="text-xs">
+            <label class="block mb-1">{{ t('smtp_port') }}</label>
+            <input type="number" id="smtp_port" name="smtp_port" value="{{ settings.smtp_port or '' }}"
+                   class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+          </div>
+          <div class="text-xs flex items-end">
+            <label class="flex items-center gap-2 text-xs">
+              <input type="checkbox" id="smtp_tls" name="smtp_tls" value="1" {% if settings.smtp_tls %}checked{% endif %}>
+              {{ t('smtp_tls') }}
+            </label>
+          </div>
+        </div>
+
+        <div class="text-xs">
+          <label class="block mb-1">{{ t('smtp_user') }}</label>
+          <input type="text" name="smtp_user" value="{{ settings.smtp_user or '' }}"
+                 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+        </div>
+
+        <div class="text-xs">
+          <label class="block mb-1">{{ t('smtp_pass') }}</label>
+          <div class="relative">
+            <input type="password" id="smtp_pass" name="smtp_pass" value="{{ settings.smtp_pass or '' }}"
+                   class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs pr-10">
+            <button type="button" id="toggle_pass"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                    aria-label="Toggle password">👁️</button>
+          </div>
+          <p class="mt-1 text-[11px] text-slate-500">{{ t('comm_password_help') }}</p>
+        </div>
+
+        <div class="pt-1">
+          <button form="test_email_form" type="submit" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium">{{ t('test') }}</button>
+          <p class="mt-2 text-[11px] text-slate-500">{{ t('comm_test_email_help') }}</p>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- Discord -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-semibold">{{ t('discord') }}</h2>
+
+        <!-- iOS-style toggle -->
+        <label class="relative inline-flex items-center cursor-pointer" title="{{ t('comm_discord_enable') }}">
+          <input type="checkbox"
+                 name="discord_enabled"
+                 value="1"
+                 class="sr-only peer"
+                 {% if settings.discord_enabled %}checked{% endif %}>
+          <div class="w-11 h-6 bg-slate-600 rounded-full peer peer-checked:bg-green-500 transition-colors"></div>
+          <div class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5 shadow"></div>
+        </label>
+      </div>
+
+      <p class="mt-2 text-sm text-slate-400">{{ t('comm_discord_help') }}</p>
+
+      <div id="discord_content" class="mt-4 space-y-3">
+        <div class="text-xs">
+          <label class="block mb-1">{{ t('discord_bot_token') }}</label>
+          <div class="relative">
+            <input type="password" id="discord_bot_token" name="discord_bot_token" value="{{ settings.discord_bot_token or '' }}"
+                   class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs pr-10">
+            <button type="button" id="toggle_discord_token"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                    aria-label="Toggle discord token">👁️</button>
+          </div>
+          <p class="mt-1 text-[11px] text-slate-500">{{ t('comm_discord_token_help') }}</p>
+        </div>
+
+        <div class="pt-1">
+          <button form="test_discord_form" type="submit" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium">{{ t('test') }}</button>
+          <p class="mt-2 text-[11px] text-slate-500">{{ t('comm_test_discord_help') }}</p>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- General -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-semibold">{{ t('general') }}</h2>
+      </div>
+
+      <p class="mt-2 text-sm text-slate-400">{{ t('comm_general_help') }}</p>
+
+      <div class="mt-4 space-y-4">
+
+        <div class="text-xs">
+          <label class="block mb-1">{{ t('comm_send_mode') }}</label>
+          {% set mode = (settings.notifications_send_mode or 'first') %}
+          <select name="notifications_send_mode" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+            <option value="first" {% if mode=='first' %}selected{% endif %}>{{ t('comm_send_mode_first') }}</option>
+            <option value="all" {% if mode=='all' %}selected{% endif %}>{{ t('comm_send_mode_all') }}</option>
+          </select>
+          <p class="mt-1 text-[11px] text-slate-500">{{ t('comm_send_mode_help') }}</p>
+        </div>
+
+        <div class="text-xs">
+          <label class="block mb-1">{{ t('comm_channels_order') }}</label>
+
+          {% set order_value = (settings.notifications_order or 'email,discord') %}
+          <input type="hidden" id="notifications_order" name="notifications_order" value="{{ order_value }}">
+
+          <div class="bg-slate-950/40 border border-slate-800 rounded-2xl p-3">
+            <div class="flex items-center justify-between mb-2">
+              <div class="text-slate-300 text-xs font-medium">{{ t('comm_channels_order_title') }}</div>
+              <div class="text-[11px] text-slate-500">{{ t('comm_channels_order_hint') }}</div>
+            </div>
+
+            <div id="order_list" class="space-y-2"></div>
+
+            <p class="mt-2 text-[11px] text-slate-500">{{ t('comm_channels_order_example') }}</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <input type="checkbox" name="user_notifications_can_override" value="1" {% if settings.user_notifications_can_override %}checked{% endif %}>
+          <span class="text-xs text-slate-300">{{ t('comm_allow_user_override') }}</span>
+        </div>
+
+        <div class="text-[11px] text-slate-500 pt-2">
+          {{ t('comm_user_override_note') }}
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</form>
+
+<!-- Test forms (outside main save form so they don't overwrite settings) -->
+<form id="test_email_form" method="post" class="hidden">
+  <input type="hidden" name="action" value="test_email">
+</form>
+
+<form id="test_discord_form" method="post" class="hidden">
+  <input type="hidden" name="action" value="test_discord">
+  <input type="hidden" name="discord_bot_token" id="test_discord_token" value="">
+</form>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+
+  const configForm = document.getElementById("comm_config_form");
+  const statusEl = document.getElementById("autosave_status");
+
+  function setStatus(text) {
+    if (!statusEl) return;
+    statusEl.textContent = text || "";
+  }
+
+  // Show/hide sections based on enable toggles
+  const emailToggle = document.querySelector('input[name="mailing_enabled"]');
+  const discordToggle = document.querySelector('input[name="discord_enabled"]');
+  const emailContent = document.getElementById("email_content");
+  const discordContent = document.getElementById("discord_content");
+
+  function syncVisibility() {
+    if (emailContent && emailToggle) {
+      emailContent.classList.toggle("hidden", !emailToggle.checked);
+    }
+    if (discordContent && discordToggle) {
+      discordContent.classList.toggle("hidden", !discordToggle.checked);
+    }
+  }
+
+  // Auto-save (debounced) for the whole form
+  let saveTimer = null;
+  async function saveNow() {
+    if (!configForm) return;
+    setStatus("Saving…");
+
+    const formData = new FormData(configForm);
+
+    try {
+      const res = await fetch(window.location.pathname, {
+        method: "POST",
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+        body: formData,
+        credentials: "same-origin",
+      });
+
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      setStatus("Saved");
+      window.setTimeout(() => setStatus(""), 1200);
+    } catch (e) {
+      setStatus("Save failed");
+      window.setTimeout(() => setStatus(""), 2500);
+      console.error("Auto-save failed", e);
+    }
+  }
+
+  function scheduleSave(delayMs) {
+    if (!configForm) return;
+    if (saveTimer) window.clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(saveNow, delayMs);
+  }
+
+  if (configForm) {
+    configForm.querySelectorAll("input, select, textarea").forEach((el) => {
+      if (el.tagName === "BUTTON") return;
+
+      if (el.type === "password") {
+        // only save secrets on blur to avoid saving while typing
+        el.addEventListener("blur", () => scheduleSave(0));
+        return;
+      }
+
+      el.addEventListener("input", () => scheduleSave(700));
+      el.addEventListener("change", () => scheduleSave(0));
+    });
+  }
+
+  if (emailToggle) emailToggle.addEventListener("change", () => { syncVisibility(); scheduleSave(0); });
+  if (discordToggle) discordToggle.addEventListener("change", () => { syncVisibility(); scheduleSave(0); });
+  syncVisibility();
+
+  // SMTP provider auto-fill + help switch
+  const providerSelect = document.getElementById("smtp_provider");
+  const hostInput = document.getElementById("smtp_host");
+  const portInput = document.getElementById("smtp_port");
+  const tlsInput  = document.getElementById("smtp_tls");
+
+  function showHelp(v) {
+    document.querySelectorAll(".smtp-help").forEach(el => el.classList.add("hidden"));
+    const el = document.getElementById("help_" + v);
+    if (el) el.classList.remove("hidden");
+    else {
+      const custom = document.getElementById("help_custom");
+      if (custom) custom.classList.remove("hidden");
+    }
+  }
+
+  function applyProvider(v) {
+    if (!hostInput || !portInput) return;
+    if (v === "gmail") {
+      hostInput.value = "smtp.gmail.com";
+      portInput.value = 587;
+      if (tlsInput) tlsInput.checked = true;
+    } else if (v === "outlook") {
+      hostInput.value = "smtp.office365.com";
+      portInput.value = 587;
+      if (tlsInput) tlsInput.checked = true;
+    } else if (v === "yahoo") {
+      hostInput.value = "smtp.mail.yahoo.com";
+      portInput.value = 587;
+      if (tlsInput) tlsInput.checked = true;
+    }
+  }
+
+  function guessProviderFromHost(host) {
+    host = (host || "").trim().toLowerCase();
+    if (host === "smtp.gmail.com") return "gmail";
+    if (host === "smtp.office365.com") return "outlook";
+    if (host === "smtp.mail.yahoo.com") return "yahoo";
+    return "custom";
+  }
+
+  if (providerSelect) {
+    const guessed = guessProviderFromHost(hostInput ? hostInput.value : "");
+    providerSelect.value = guessed;
+    showHelp(providerSelect.value);
+
+    providerSelect.addEventListener("change", () => {
+      const v = providerSelect.value;
+      showHelp(v);
+      if (v !== "custom") applyProvider(v);
+    });
+  }
+
+  // Toggle SMTP password visibility
+  const passInput = document.getElementById("smtp_pass");
+  const passBtn   = document.getElementById("toggle_pass");
+  if (passInput && passBtn) {
+    passBtn.addEventListener("click", () => {
+      const isPwd = passInput.type === "password";
+      passInput.type = isPwd ? "text" : "password";
+      passBtn.textContent = isPwd ? "🙈" : "👁️";
+    });
+  }
+
+  // Toggle Discord token visibility
+  const discordTokenInput = document.getElementById("discord_bot_token");
+  const discordTokenBtn   = document.getElementById("toggle_discord_token");
+  if (discordTokenInput && discordTokenBtn) {
+    discordTokenBtn.addEventListener("click", () => {
+      const isPwd = discordTokenInput.type === "password";
+      discordTokenInput.type = isPwd ? "text" : "password";
+      discordTokenBtn.textContent = isPwd ? "🙈" : "👁️";
+    });
+  }
+
+  // Discord test uses the current typed token (even if not saved)
+  const testDiscordForm  = document.getElementById("test_discord_form");
+  const testDiscordToken = document.getElementById("test_discord_token");
+  if (testDiscordForm && testDiscordToken && discordTokenInput) {
+    testDiscordForm.addEventListener("submit", () => {
+      testDiscordToken.value = discordTokenInput.value || "";
+    });
+  }
+
+  // Friendly channel order UI
+  const orderInput = document.getElementById("notifications_order");
+  const orderList  = document.getElementById("order_list");
+  if (orderInput && orderList) {
+    const labels = {
+      email:   { title: "Email",   subtitle: "Email notification" },
+      discord: { title: "Discord", subtitle: "Discord DM" },
+    };
+
+    function parseOrder(v) {
+      const parts = (v || "").split(",").map(s => s.trim()).filter(Boolean);
+      const uniq = [];
+      for (const p of parts) {
+        if ((p === "email" || p === "discord") && !uniq.includes(p)) uniq.push(p);
+      }
+      if (!uniq.includes("email")) uniq.push("email");
+      if (!uniq.includes("discord")) uniq.push("discord");
+      return uniq;
+    }
+
+    function render() {
+      const order = parseOrder(orderInput.value);
+      orderInput.value = order.join(",");
+
+      orderList.innerHTML = "";
+      order.forEach((k, idx) => {
+        const row = document.createElement("div");
+        row.className = "flex items-center justify-between bg-slate-950 border border-slate-800 rounded-xl px-3 py-2";
+
+        const left = document.createElement("div");
+		left.innerHTML = `<div class=\"text-sm text-slate-200 font-medium\">${labels[k].title}</div>
+								  <div class=\"text-[11px] text-slate-500\">${labels[k].subtitle}</div>`;
+
+        const right = document.createElement("div");
+        right.className = "flex items-center gap-2";
+
+        const up = document.createElement("button");
+        up.type = "button";
+        up.className = "w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs";
+        up.textContent = "↑";
+        up.disabled = idx === 0;
+
+        const down = document.createElement("button");
+        down.type = "button";
+        down.className = "w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs";
+        down.textContent = "↓";
+        down.disabled = idx === order.length - 1;
+
+        up.addEventListener("click", () => {
+          if (idx === 0) return;
+          const tmp = order[idx - 1];
+          order[idx - 1] = order[idx];
+          order[idx] = tmp;
+          orderInput.value = order.join(",");
+          render();
+        });
+
+        down.addEventListener("click", () => {
+          if (idx === order.length - 1) return;
+          const tmp = order[idx + 1];
+          order[idx + 1] = order[idx];
+          order[idx] = tmp;
+          orderInput.value = order.join(",");
+          render();
+        });
+
+        right.appendChild(up);
+        right.appendChild(down);
+
+        row.appendChild(left);
+        row.appendChild(right);
+        orderList.appendChild(row);
+      });
+    }
+
+    render();
+  }
+});
+</script>
+
+{% endblock %}

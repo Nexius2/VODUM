@@ -1,354 +1,214 @@
-#!/usr/bin/env python3
+"""send_expiration_emails.py — unified communications
 
+This task keeps the historical name for backward compatibility, but it now uses
+Unified Communications:
+- comm_templates (preavis / relance / fin)
+- comm_history (real delivery history, channel used)
+
+Legacy tables (sent_emails / sent_discord) are still updated to avoid duplicate
+notifications across restarts and to keep older dashboards stable.
 """
-send_expiration_emails.py — VERSION CORRIGÉE
------------------------------------------------
-✓ Rendu correct des variables {username}, {days_left}, {expiration_date}
-✓ Utilise build_user_context + render_mail (comme l’UI)
-✓ Emails secondaires conservés
-✓ Anti-doublons fiable
-✓ Logging fichier + tasks_engine
-"""
-from datetime import datetime, date
-from tasks_engine import task_logs
+
+from __future__ import annotations
+
+import json
+from datetime import date, datetime
+
 from logging_utils import get_logger
-from mailing_utils import build_user_context, render_mail
-from notifications_utils import normalize_notifications_order, effective_notifications_order, is_email_ready
-from discord_utils import is_discord_ready, enrich_discord_settings, send_discord_dm, DiscordSendError
-from email_sender import send_email
-import re
+from web.helpers import get_db
+from tasks.task_logs import task_logs
+
+from communications_engine import send_to_user, record_history, fetch_template_attachments
+
 log = get_logger("send_expiration_emails")
 
 
+def _parse_date_iso(d: str | None) -> date | None:
+    if not d:
+        return None
+    try:
+        return datetime.strptime(d[:10], "%Y-%m-%d").date()
+    except Exception:
+        return None
 
 
+def _get_template_map(db):
+    rows = db.query("SELECT * FROM comm_templates WHERE key IN ('preavis','relance','fin')")
+    m = {}
+    for r in rows or []:
+        m[r["key"]] = dict(r)
+    return m
 
-# --------------------------------------------------------
-# Helper : envoyer un email
-# --------------------------------------------------------
-def was_sent_recently(db, user_id: int, template_type: str, cooldown_hours: int = 24) -> bool:
-    """
-    Cooldown robuste:
-    - fonctionne si sent_at est stocké en TEXT (YYYY-MM-DD HH:MM:SS)
-    - fonctionne si sent_at est stocké en INTEGER (epoch)
-    """
-    window = f"-{int(cooldown_hours)} hours"
 
-    row = db.query_one(
-        """
-        SELECT 1
-        FROM sent_emails
-        WHERE user_id = ?
-          AND template_type = ?
-          AND (
-                -- cas 1: sent_at est un datetime texte
-                (typeof(sent_at) != 'integer' AND julianday(sent_at) >= julianday('now', ?))
-                OR
-                -- cas 2: sent_at est un epoch integer
-                (typeof(sent_at) = 'integer' AND sent_at >= CAST(strftime('%s','now', ?) AS INTEGER))
-              )
-        LIMIT 1
-        """,
-        (user_id, template_type, window, window),
+def _get_days_before(template_row: dict | None, fallback: int | None) -> int | None:
+    if not template_row:
+        return fallback
+    v = template_row.get("days_before")
+    if v is None:
+        return fallback
+    try:
+        return int(v)
+    except Exception:
+        return fallback
+
+
+def _already_sent_email(db, user_id: int, template_key: str, exp_iso: str) -> bool:
+    r = db.query_one(
+        "SELECT 1 FROM sent_emails WHERE user_id=? AND template_type=? AND expiration_date=?",
+        (user_id, template_key, exp_iso),
     )
-    return bool(row)
+    return bool(r)
 
 
+def _already_sent_discord(db, user_id: int, template_key: str, exp_iso: str) -> bool:
+    r = db.query_one(
+        "SELECT 1 FROM sent_discord WHERE user_id=? AND template_type=? AND expiration_date=?",
+        (user_id, template_key, exp_iso),
+    )
+    return bool(r)
 
 
-# --------------------------------------------------------
-# Tâche principale
-# --------------------------------------------------------
-def run(task_id: int, db):
-    """
-    Envoi des emails liés aux expirations d’abonnement
-    (préavis, relance, fin)
-    """
+def _format_message(subject: str, body: str, user: dict, exp_iso: str) -> tuple[str, str]:
+    username = user.get("username") or ""
+    email = user.get("email") or ""
+    msg_subject = (subject or "").replace("{username}", username).replace("{email}", email).replace("{expiration_date}", exp_iso)
+    msg_body = (body or "").replace("{username}", username).replace("{email}", email).replace("{expiration_date}", exp_iso)
+    return msg_subject, msg_body
 
-    task_logs(task_id, "info", "Tâche send_expiration_emails démarrée…")
-    log.info("=== SEND EXPIRATION EMAILS : STARTING ===")
+
+def run(task_id: int | None = None):
+    db = get_db()
 
     try:
-        # --------------------------------------------------------
-        # 1) Vérification configuration globale
-        # --------------------------------------------------------
+        task_logs(task_id, "info", "Task send_expiration_emails (unified) started")
+
         settings = db.query_one("SELECT * FROM settings WHERE id = 1")
-        settings = dict(settings) if settings else None
+        settings = dict(settings) if settings else {}
 
-        if not settings or not settings["mailing_enabled"]:
-            msg = "Mailing disabled → no action."
-            log.warning(msg)
-            task_logs(task_id, "info", msg)
-            return
+        # Templates (unified)
+        templates = _get_template_map(db)
 
-        log.debug("Mailing enabled. Loading templates…")
+        # Backward-compat: legacy global delays can still be used as fallback
+        try:
+            legacy_preavis = int(settings.get("preavis_days") or 0)
+        except Exception:
+            legacy_preavis = 0
+        try:
+            legacy_relance = int(settings.get("reminder_days") or 0)
+        except Exception:
+            legacy_relance = 0
 
-        notifications_order = normalize_notifications_order(settings)
+        preavis_days = _get_days_before(templates.get("preavis"), legacy_preavis) or None
+        relance_days = _get_days_before(templates.get("relance"), legacy_relance) or None
 
+        log.info(f"Unified delays → preavis={preavis_days} | relance={relance_days}")
 
-        discord_ready = is_discord_ready(settings)
-
-
-        preavis_days = int(settings["preavis_days"])
-        reminder_days = int(settings["reminder_days"])
-
-        log.info(
-            f"Mailing delays → preavis={preavis_days}j | reminder={reminder_days}j"
-        )
-
-
-        # --------------------------------------------------------
-        # 2) Charger tous les templates
-        # --------------------------------------------------------
-        templates = {
-            row["type"]: row
-            for row in db.query("SELECT * FROM email_templates")
-        }
-
-        # --------------------------------------------------------
-        # 3) Charger les utilisateurs concernés
-        # --------------------------------------------------------
+        # Users concerned
         users = db.query(
             """
             SELECT id, username, email, second_email, expiration_date, discord_user_id, notifications_order_override
             FROM vodum_users u
             WHERE u.expiration_date IS NOT NULL
-              AND EXISTS (
-                SELECT 1
-                FROM media_users mu
-                WHERE mu.vodum_user_id = u.id
-              )
+              AND EXISTS (SELECT 1 FROM media_users mu WHERE mu.vodum_user_id = u.id)
             """
         )
 
         today = date.today()
-        sent_count = 0
+        sent_users_ok = 0
+        sent_users_failed = 0
 
-        log.info(f"{len(users)} Users analyzed")
         task_logs(task_id, "info", f"{len(users)} Users analyzed")
 
-        # --------------------------------------------------------
-        # 4) Boucle utilisateurs
-        # --------------------------------------------------------
-        for u in users:
-            # Effective notification order (global or per-user override)
-            eff_order = effective_notifications_order(settings, dict(u) if not isinstance(u, dict) else u)
-            if eff_order[:1] != ["email"]:
+        for u in users or []:
+            u = dict(u)
+            uid = int(u["id"])
+            exp = _parse_date_iso(u.get("expiration_date"))
+            if not exp:
                 continue
 
-            uid = u["id"]
-            username = u["username"]
-            email1 = u["email"]
-            email2 = u["second_email"]
-            exp_raw = u["expiration_date"]
+            exp_iso = exp.isoformat()
+            days_left = (exp - today).days
 
-            discord_user_id = (u["discord_user_id"] or "").strip()
+            # Choose which template applies
+            tpl_key = None
+            if days_left < 0:
+                tpl_key = "fin"
+            else:
+                if preavis_days is not None and days_left == int(preavis_days):
+                    tpl_key = "preavis"
+                elif relance_days is not None and days_left == int(relance_days):
+                    tpl_key = "relance"
 
-            if not email1 and not email2:
+            if not tpl_key:
                 continue
 
-            try:
-                exp_date = datetime.fromisoformat(exp_raw).date()
-            except Exception:
-                log.error(f"[USER] #{uid} Invalid expiration date : {exp_raw}")
+            tpl = templates.get(tpl_key)
+            if not tpl or int(tpl.get("enabled") or 0) != 1:
                 continue
 
-            days_left = (exp_date - today).days
-            exp_iso = exp_date.isoformat()
+            subject, body = _format_message(tpl.get("subject") or "", tpl.get("body") or "", u, exp_iso)
+            attachments = fetch_template_attachments(db, int(tpl["id"]))
 
+            # Run unified engine. It will decide which channel(s) to use.
+            attempts = send_to_user(
+                db=db,
+                settings=settings,
+                user=u,
+                subject=subject,
+                body=body,
+                attachments=attachments,
+            )
 
-            recipients = []
-            if email1:
-                recipients.append(email1)
-            if email2 and email2 not in recipients:
-                recipients.append(email2)
+            any_sent = any(a.status == "sent" for a in attempts)
 
-            # ----------------------------------------------------
-            # FIN D'ABONNEMENT
-            # ----------------------------------------------------
-            if exp_date < today:
-                tpl = templates.get("fin")
-                if tpl:
-                    already = db.query_one(
-                        """
-                        SELECT 1 FROM sent_emails
-                        WHERE user_id = ?
-                          AND template_type = 'fin'
-                          AND expiration_date = ?
-                        """,
-                        (uid, exp_iso),
-                    )
+            # Save unified history + legacy sent_* anti-dup markers
+            for att in attempts:
+                meta = {
+                    "template_key": tpl_key,
+                    "expiration_date": exp_iso,
+                    "days_left": days_left,
+                    "template_id": tpl.get("id"),
+                    "attachments": [a.get("filename") for a in (attachments or [])],
+                }
+                record_history(
+                    db=db,
+                    kind="template",
+                    template_id=int(tpl.get("id")),
+                    campaign_id=None,
+                    user_id=uid,
+                    attempt=att,
+                    meta=meta,
+                )
 
-                    # ⛔ STOP spam horaire
-                    if already or was_sent_recently(db, uid, "fin", cooldown_hours=24):
-                        continue
-
-                    success_any = False
-                    for r in recipients:
-                        context = build_user_context({
-                            "username": username,
-                            "email": r,
-                            "expiration_date": exp_date.isoformat(),
-                            "days_left": days_left,
-                        })
-
-                        subject = render_mail(tpl["subject"], context)
-                        body = render_mail(tpl["body"], context)
-
-                        ok, _err = send_email(subject, body, r, settings)
-                        if ok:
-                            success_any = True
-
-                    
-                    # Fallback to Discord if configured (order: email -> discord) and email failed
-                    if (not success_any) and (eff_order[:2] == ["email", "discord"]) and discord_ready and discord_user_id:
-                        # Avoid duplicates in Discord history
-                        already_d = db.query_one(
-                            "SELECT 1 FROM sent_discord WHERE user_id=? AND template_type=? AND expiration_date=?",
-                            (uid, "fin", exp_iso),
-                        )
-                        if not already_d:
-                            ctx = build_user_context({
-                                "username": username,
-                                "expiration_date": exp_iso,
-                                "days_left": days_left,
-                            })
-                            # Reuse discord templates for the same type
-                            d_tpl = db.query_one("SELECT * FROM discord_templates WHERE type='fin'")
-                            if d_tpl:
-                                d_title = render_mail(d_tpl["title"] or "", ctx).strip()
-                                d_body = render_mail(d_tpl["body"] or "", ctx).strip()
-                                d_content = f"**{d_title}**\n{d_body}" if d_title else d_body
-                                try:
-                                    send_discord_dm(settings.get('discord_bot_token_effective') or '', discord_user_id, d_content)
-                                    db.execute(
-                                        "INSERT OR IGNORE INTO sent_discord(user_id, template_type, expiration_date, sent_at) VALUES (?, ?, ?, CAST(strftime('%s','now') AS INTEGER))",
-                                        (uid, "fin", exp_iso),
-                                    )
-                                    sent_count += 1
-                                except DiscordSendError:
-                                    pass
-                    if success_any:
+                # Only mark legacy tables when the channel actually succeeded.
+                if att.status == "sent":
+                    if att.channel == "email" and not _already_sent_email(db, uid, tpl_key, exp_iso):
                         db.execute(
                             """
-                            INSERT OR IGNORE INTO sent_emails(
-                                user_id,
-                                template_type,
-                                expiration_date,
-                                sent_at
-                            )
-                            VALUES (?, 'fin', ?, CAST(strftime('%s','now') AS INTEGER))
+                            INSERT OR IGNORE INTO sent_emails(user_id, template_type, expiration_date, sent_at)
+                            VALUES (?, ?, ?, datetime('now'))
                             """,
-                            (uid, exp_iso),
+                            (uid, tpl_key, exp_iso),
                         )
-                        sent_count += 1
-                        log.debug(f"[DB] sent_emails inserted: user={uid} type=fin exp={exp_iso} sent_at=now")
-
-
-
-
-            # ----------------------------------------------------
-            # PRÉAVIS / RELANCE
-            # ----------------------------------------------------
-            for type_ in ("preavis", "relance"):
-                tpl = templates.get(type_)
-                if not tpl:
-                    continue
-
-                if type_ == "preavis":
-                    days_before = preavis_days
-                else:  # relance
-                    days_before = reminder_days
-
-                if days_before <= 0:
-                    continue
-
-                if 0 < days_left <= days_before:
-                    already = db.query_one(
-                        """
-                        SELECT 1 FROM sent_emails
-                        WHERE user_id=? AND template_type=? AND expiration_date=?
-                        """,
-                        (uid, type_, exp_iso),
-                    )
-
-                    if already or was_sent_recently(db, uid, type_, cooldown_hours=24):
-                        continue
-
-                    success_any = False
-                    for r in recipients:
-                        context = build_user_context({
-                            "username": username,
-                            "email": r,
-                            "expiration_date": exp_date.isoformat(),
-                            "days_left": days_left,
-                        })
-
-                        subject = render_mail(tpl["subject"], context)
-                        body = render_mail(tpl["body"], context)
-
-                        ok, _err = send_email(subject, body, r, settings)
-                        if ok:
-                            success_any = True
-
-                    
-                    # Fallback to Discord if configured (order: email -> discord) and email failed
-                    if (not success_any) and (eff_order[:2] == ["email", "discord"]) and discord_ready and discord_user_id:
-                        already_d = db.query_one(
-                            "SELECT 1 FROM sent_discord WHERE user_id=? AND template_type=? AND expiration_date=?",
-                            (uid, type_, exp_iso),
-                        )
-                        if not already_d:
-                            ctx = build_user_context({
-                                "username": username,
-                                "expiration_date": exp_iso,
-                                "days_left": days_left,
-                            })
-                            d_tpl = db.query_one("SELECT * FROM discord_templates WHERE type=?", (type_,))
-                            if d_tpl:
-                                d_title = render_mail(d_tpl["title"] or "", ctx).strip()
-                                d_body = render_mail(d_tpl["body"] or "", ctx).strip()
-                                d_content = f"**{d_title}**\n{d_body}" if d_title else d_body
-                                try:
-                                    send_discord_dm(settings.get('discord_bot_token_effective') or '', discord_user_id, d_content)
-                                    db.execute(
-                                        "INSERT OR IGNORE INTO sent_discord(user_id, template_type, expiration_date, sent_at) VALUES (?, ?, ?, CAST(strftime('%s','now') AS INTEGER))",
-                                        (uid, type_, exp_iso),
-                                    )
-                                    sent_count += 1
-                                except DiscordSendError:
-                                    pass
-                    if success_any:
+                    if att.channel == "discord" and not _already_sent_discord(db, uid, tpl_key, exp_iso):
                         db.execute(
                             """
-                            INSERT OR IGNORE INTO sent_emails(
-                                user_id,
-                                template_type,
-                                expiration_date,
-                                sent_at
-                            )
+                            INSERT OR IGNORE INTO sent_discord(user_id, template_type, expiration_date, sent_at)
                             VALUES (?, ?, ?, CAST(strftime('%s','now') AS INTEGER))
                             """,
-                            (uid, type_, exp_iso),
+                            (uid, tpl_key, exp_iso),
                         )
-                        sent_count += 1
-                        log.debug(f"[DB] sent_emails inserted: user={uid} type={type_} exp={exp_iso} sent_at=now")
 
-    
+            if any_sent:
+                sent_users_ok += 1
+            else:
+                sent_users_failed += 1
 
-
-        msg = f"send_expiration_emails finished — {sent_count} Email(s) sent"
+        msg = f"send_expiration_emails finished — ok={sent_users_ok} failed={sent_users_failed}"
         log.info(msg)
-
-        if sent_count > 0:
-            task_logs(task_id, "success", msg)
-        else:
-            task_logs(task_id, "info", msg)
+        task_logs(task_id, "info", msg)
 
     except Exception as e:
         log.error("Error in send_expiration_emails", exc_info=True)
         task_logs(task_id, "error", f"Error send_expiration_emails : {e}")
         raise
-
-    finally:
-        log.info("=== SEND EXPIRATION EMAILS : END ===")
