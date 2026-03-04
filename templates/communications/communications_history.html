@@ -45,7 +45,7 @@
           {% endif %}
         </td>
         <td class="px-4 py-2 text-slate-400">{{ h.error or '-' }}</td>
-        <td class="px-4 py-2">{{ h.sent_at }}</td>
+        <td class="px-4 py-2">{{ h.sent_at|tz }}</td>
         <td class="px-4 py-2">
           {% if h.meta and h.meta|length %}
             <details class="text-[11px]">

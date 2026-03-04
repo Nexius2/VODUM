@@ -52,7 +52,7 @@ def register(app):
         allowed_fields = {"filterMovies", "filterTelevision", "filterMusic"}
         if field not in allowed_fields:
             flash("invalid_field", "error")
-            return redirect(url_for("user_detail", user_id=user_id))
+            return redirect(url_for("user_detail", user_id=user_id, tab="access"))
 
         mu = db.query_one(
             """
@@ -156,7 +156,7 @@ def register(app):
         #    (celle de replicate_plex_flags_same_owner + création media_jobs + queue task)
 
         flash("user_saved", "success")
-        return redirect(url_for("user_detail", user_id=user_id))
+        return redirect(url_for("user_detail", user_id=user_id, tab="access"))
 
 
 
@@ -412,7 +412,7 @@ def register(app):
 
 
 
-        return redirect(url_for("user_detail", user_id=user_id))
+        return redirect(url_for("user_detail", user_id=user_id, tab="access"))
 
 
 

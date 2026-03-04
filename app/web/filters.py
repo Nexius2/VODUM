@@ -96,19 +96,42 @@ def cron_human(expr):
 
 def tz_filter(dt):
     """
-    Convertit un datetime UTC vers le fuseau horaire configuré dans settings.
+    Convertit une date UTC vers le fuseau horaire configuré dans settings.
     Accepte :
-    - datetime object
+    - datetime
     - string ISO "YYYY-MM-DD HH:MM:SS"
+    - epoch seconds (int/float) ou string digits ("1772193763")
+    - epoch milliseconds (13 digits)
     """
     if dt is None:
         return "-"
 
-    if isinstance(dt, str):
+    # epoch int/float
+    if isinstance(dt, (int, float)):
         try:
-            dt = datetime.fromisoformat(dt)
+            ts = float(dt)
+            if ts > 1e12:  # ms
+                ts = ts / 1000.0
+            dt = datetime.fromtimestamp(ts, tz=timezone.utc)
         except Exception:
             return dt
+
+    # string: iso or digits
+    if isinstance(dt, str):
+        s = dt.strip()
+        if s.isdigit():
+            try:
+                ts = int(s)
+                if ts > 1_000_000_000_000:  # ms
+                    ts = ts // 1000
+                dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+            except Exception:
+                return dt
+        else:
+            try:
+                dt = datetime.fromisoformat(s)
+            except Exception:
+                return dt
 
     if not isinstance(dt, datetime):
         return dt
@@ -128,6 +151,6 @@ def tz_filter(dt):
 
     try:
         local_tz = ZoneInfo(tzname)
-        return dt.astimezone(local_tz).strftime("%Y-%m-%d %H:%M")
+        return dt.astimezone(local_tz).strftime("%Y-%m-%d %H:%M:%S")
     except Exception:
-        return dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M")
+        return dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")

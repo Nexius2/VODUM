@@ -16,7 +16,7 @@ from datetime import date, datetime
 
 from logging_utils import get_logger
 from web.helpers import get_db
-from tasks.task_logs import task_logs
+from task_logs import task_logs
 
 from communications_engine import send_to_user, record_history, fetch_template_attachments
 
