@@ -1,48 +1,233 @@
-import_tautulli  semble se lancer regulierement meme sans import programmé
+# VODUM – Development TODO
 
+This document lists the planned improvements, bug fixes, and future features for VODUM.
 
-- prevoir du multi admin
-  * dans settings, prevoir un onglets accounts
-  * dans cet onglet, on peut add, remove edit admin account.
-  * admin account on l'acces complet sur admin UI
-Complexité : LS
-Faisabilité : haute, mais à faire après découpage du code
+---
 
+# 1. Tasks / Automation Issues
 
-- ajouter une interface utilisateurs pour qu'ils puissent voir l'etat de leur compte et certaines stats des serveurs et leur stats
-  * appelons l'ui actuel admin UI
-  * appelons l'ui utilisateur user UI
-  * prevoir l'affichage du nom de domaine. a renseigné dans les settings admin ui et dans la page user ui / general
-  * user peut voir son compte et l'integralité de ces données accessible via vodum_user exept notes.
-  * notes become admin_notes and we should add user_notes
-  * user ne peut modifier que son firstname, lastname, secondary_email, discord uer id and name, notiffication system order si l'option est cocher dans settings admin_ui
-  * user can see what server and library he has access to
-  * user monitoring: une page dedié au monitoring ou il peut voir (uniquement des data le concernant):
-    1) total watch time / sessions for the last 24h, 7 days, 30cdays
-	2) un donuts pour affiché les media type
-	3) un graphe pour afficher les sessions (per days,7d,30d, 1y, all time)
-	4) top players pour voir sur quoi il regarde
-	5) son historique
-  * integration de wwiw dans l'ui user???
-  * ajouter un champs mdp avec posibilité pour le user de le modifier. attention, il doit au moins y avoir un system de notification de configurer pour ca pour le recovery.
-  * ajouter un login via plex .... comment ca marche avec du multi serveur??? normalement, c'est un compte user donc pas de soucis, mais a verifier.
-Complexité : XL
-Faisabilité : oui, mais à faire après decoupage et multi admin
-	
+- [ ] **`import_tautulli` task runs unexpectedly**
+  - The `import_tautulli` task appears to run periodically even when no schedule is configured.
+  - Investigate why the task is triggered automatically.
+  - Ensure the task runs **only when explicitly scheduled**.
 
+---
 
-- dans monitoring overview, afficher dans une bulle le nombre de sessions et de transcode par serveur.
+# 2. Plex User Creation Issues
 
+- [ ] **Plex invitation email is not sent**
+  - When creating a Plex user, the invitation email is not sent.
+  - The user therefore does not receive the Plex invitation link.
 
+- [ ] **Duplicate user state in Plex**
+  - Users remain in the **Invites** section.
+  - The same user may also appear in the **Users** list.
 
+- [ ] **Library permissions not applied on user creation**
+  - When creating a user, the assigned libraries are not correctly applied.
+  - Verify the access grant process.
 
-- dans le profil utilisateur, posibilité d'avoir un lien qui pointe vers le user sur plex.
-  * attention, il peut y avoir plusieurs serveur pour un meme user. il faut donc un system pour choisir le serveur dans ce cas la. ou ouvrir les x pages plex.
-  
+- [ ] **Email sending fails if SMTP is not configured**
+  - When SMTP is not configured, the process fails.
+  - Expected behavior:
+    - either skip email sending gracefully
+    - or show a clear error message in logs/UI.
 
-  
+---
 
-  
+# 3. UI Consistency
 
+## User Detail Page
 
+- [ ] **Date formatting inconsistency**
+  - Creation date and expiration date are not displayed consistently.
+  - Verify formatting for:
+    - creation date
+    - expiration date
+    - renewal date
 
+---
+
+# 4. Monitoring Improvements
+
+## Monitoring Overview
+
+- [ ] **Add server tooltip statistics**
+  - Display a tooltip showing:
+    - number of **active sessions**
+    - number of **transcoding sessions**
+  - Data should be displayed **per server**.
+
+---
+
+# 5. Plex User Profile Integration
+
+- [ ] **Link to open user directly in Plex**
+  - Add a button in the user profile that opens the user in Plex.
+
+### Considerations
+
+A user may exist on **multiple Plex servers**.
+
+Possible solutions:
+- allow selecting which server to open
+- or open **multiple Plex server pages**
+
+---
+
+# 6. Multi-Admin System
+
+Support multiple administrator accounts.
+
+## Admin Account Management
+
+Add a new section:
+
+**Settings → Accounts**
+
+Features:
+
+- [ ] Create admin account
+- [ ] Edit admin account
+- [ ] Remove admin account
+
+Admin accounts should have:
+
+- Full access to the **Admin UI**
+
+---
+
+# 7. User Portal (User UI)
+
+Introduce a **separate interface for end users**.
+
+Terminology:
+
+- **Admin UI** → current interface
+- **User UI** → new interface for end users
+
+---
+
+## 7.1 Domain Configuration
+
+- [ ] Add a **domain configuration setting**
+- Configured in **Admin UI → Settings**
+- Displayed in **User UI → General page**
+
+---
+
+## 7.2 User Profile Access
+
+Users should be able to view their account information.
+
+Changes required:
+
+- [ ] Rename `notes` → `admin_notes`
+- [ ] Add new field `user_notes`
+
+Users can edit only the following fields:
+
+- firstname
+- lastname
+- secondary_email
+- discord_user_id
+- discord_username
+- notification_system_order
+
+Editing should only be allowed if enabled in **Admin UI settings**.
+
+---
+
+## 7.3 Server & Library Access
+
+Users should be able to see:
+
+- [ ] which **servers** they have access to
+- [ ] which **libraries** they can access
+
+---
+
+## 7.4 User Monitoring Dashboard
+
+Add a **monitoring page dedicated to the user** showing only their own activity.
+
+### Usage Statistics
+
+Display:
+
+- total watch time
+- total sessions
+
+Time ranges:
+
+- last 24 hours
+- last 7 days
+- last 30 days
+
+### Media Type Distribution
+
+- [ ] Donut chart showing media types (movies, series, etc.)
+
+### Session Activity
+
+- [ ] Graph displaying sessions over time:
+  - per day
+  - last 7 days
+  - last 30 days
+  - last year
+  - all time
+
+### Device / Player Statistics
+
+- [ ] Top players / devices used
+
+### Viewing History
+
+- [ ] Full playback history
+
+---
+
+## 7.5 WWIW Integration
+
+Evaluate integration of **WWIW (What Will I Watch)** into the User UI.
+
+Possible features:
+
+- personalized recommendations
+- browsing suggestions
+
+---
+
+## 7.6 User Authentication & Password Management
+
+- [ ] Add password management for users
+- Users should be able to **change their password**
+
+Requirements:
+
+- At least **one notification system must be configured**  
+  (email or other) for password recovery.
+
+---
+
+## 7.7 Plex Authentication
+
+Investigate **login via Plex account**.
+
+Considerations:
+
+- Users may belong to **multiple Plex servers**
+- Authentication should rely on the **Plex user account**, not the server.
+
+Verify compatibility with:
+
+- multi-server setups
+- current VODUM user linking logic
+
+---
+
+# Future Ideas
+
+- Improve **cross-tool integration**
+- Enhance **analytics for user activity**
+- Expand **recommendation systems**

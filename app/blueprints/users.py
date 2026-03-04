@@ -19,7 +19,7 @@ from core.providers.jellyfin_users import (
     jellyfin_set_policy_folders,
     jellyfin_reset_password_required,
 )
-from core.providers.plex_users import plex_invite_and_share
+from communications_engine import send_to_user, fetch_template_attachments, record_history
 
 
 log = get_logger("users_create")
@@ -621,6 +621,14 @@ def api_users_create():
                     "username": server_username or username,
                 })
 
+        # ------------------------------------------------------------
+        # USER CREATION NOTIFICATION (EMAIL ONLY, 1 TEMPLATE MAX)
+        # Rules:
+        # - If no comm_templates(trigger_event='user_creation') => send NOTHING
+        # - Email only (no Discord)
+        # - Only one template is used (first one by id)
+        # - days_after > 0 => schedule in comm_scheduled (picked by send_expiration_emails flush)
+        # ------------------------------------------------------------
         if smtp_ok and email:
             try:
                 dedupe_key = f"{provider}:{server.get('id')}"
@@ -628,23 +636,46 @@ def api_users_create():
                     dedupe_key = f"plex_token:{(server.get('token') or '')}"
 
                 if dedupe_key not in sent_welcome_keys:
-                    tpl = get_welcome_template(db, provider, server_id)
-                    if tpl:
-                        server_url = (server.get("public_url") or server.get("url") or server.get("local_url") or "").strip()
-                        ctx = build_user_context({
-                            "username": username,
-                            "email": email,
-                            "expiration_date": expiration_date or "",
-                            "firstname": firstname,
-                            "lastname": lastname,
-                            "server_name": server.get("name") or "",
-                            "server_url": server_url,
-                            "login_username": username,
-                            "temporary_password": (block.get("jellyfin_password") or "") if provider == "jellyfin" else "",
-                        })
-                        subject = render_mail(tpl.get("subject") or "", ctx)
-                        body = render_mail(tpl.get("body") or "", ctx)
-                        send_email_via_settings(settings, email, subject, body)
+                    ct_row = db.query_one(
+                        """
+                        SELECT *
+                        FROM comm_templates
+                        WHERE enabled = 1
+                          AND trigger_event = 'user_creation'
+                          AND trigger_provider IN ('all', ?)
+                        ORDER BY id ASC
+                        LIMIT 1
+                        """,
+                        (provider,),
+                    )
+                    ct = dict(ct_row) if ct_row else None
+
+                    # If no template => do nothing (explicit requirement)
+                    if ct:
+                        # User creation: allow before/after selection too.
+                        # - days_after > 0 => schedule later
+                        # - days_before (any value) => immediate (can't send in the past)
+                        try:
+                            days_after = int(ct.get("days_after")) if ct.get("days_after") is not None else None
+                        except Exception:
+                            days_after = None
+
+                        if days_after is not None and days_after > 0:
+                            # Schedule for later
+                            db.execute(
+                                """
+                                INSERT INTO comm_scheduled(template_id, vodum_user_id, provider, server_id, send_at, status, created_at, updated_at)
+                                VALUES(?, ?, ?, ?, datetime('now', ?), 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                                """,
+                                (int(ct["id"]), int(vodum_user_id), provider, int(server_id), f"+{days_after} days"),
+                            )
+                        else:
+                            # Send NOW (EMAIL ONLY)
+                            exp_iso = (expiration_date or "")[:10]
+                            subj = (ct.get("subject") or "").replace("{username}", username).replace("{email}", email).replace("{expiration_date}", exp_iso)
+                            msg = (ct.get("body") or "").replace("{username}", username).replace("{email}", email).replace("{expiration_date}", exp_iso)
+
+                            send_email_via_settings(settings, email, subj, msg)
 
                     sent_welcome_keys.add(dedupe_key)
 

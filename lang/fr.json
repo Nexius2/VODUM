@@ -988,6 +988,22 @@
   "sent": "Envoyé",
   "smtp_tls": "Utiliser TLS (STARTTLS)",
   "subscription_and_status": "Abonnement & statut",
-  "test": "Test"
+  "test": "Test",
+  "comm_trigger_event": "Déclencheur",
+"comm_trigger_expiration": "Expiration d'abonnement",
+"comm_trigger_user_creation": "Création d’utilisateur",
+"comm_trigger_provider": "Cible (Plex/Jellyfin)",
+"comm_provider_all": "Tous",
+"comm_trigger_provider_help": "Limite l’envoi aux comptes Plex, Jellyfin, ou aux deux.",
+"days_after": "Jours après",
+"comm_days_after_help": "Pour les templates déclenchés après création user. 0 = immédiat, >0 = planifié.",
+"comm_trigger_help_bubble": "📌 Expiration → Jours avant. Création user → Jours après (0 immédiat / >0 planifié). Filtre Plex/Jellyfin pour cibler le bon provider.",
+"comm_delay": "Décalage",
+"comm_delay_direction": "Sens du décalage",
+"comm_delay_before": "Avant",
+"comm_delay_after": "Après",
+"comm_delay_before_short": "Avant :",
+"comm_delay_after_short": "Après :",
+"comm_delay_help": "Choisis si l’envoi se fait avant ou après le déclencheur, puis indique le nombre de jours."
 
 }

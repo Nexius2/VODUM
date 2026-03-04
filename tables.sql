@@ -717,12 +717,41 @@ CREATE TABLE IF NOT EXISTS comm_templates (
   key TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
   enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+
+  -- NEW: trigger system
+  trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation')),
+  trigger_provider TEXT NOT NULL DEFAULT 'all' CHECK(trigger_provider IN ('all','plex','jellyfin')),
+
+  -- expiration flow
   days_before INTEGER DEFAULT NULL,
+
+  -- user creation flow
+  days_after INTEGER DEFAULT NULL,
+
   subject TEXT NOT NULL,
   body TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS comm_scheduled (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  template_id INTEGER NOT NULL,
+  vodum_user_id INTEGER NOT NULL,
+  provider TEXT NOT NULL CHECK(provider IN ('plex','jellyfin')),
+  server_id INTEGER,
+  send_at TIMESTAMP NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','sent','error')),
+  last_error TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(template_id) REFERENCES comm_templates(id) ON DELETE CASCADE,
+  FOREIGN KEY(vodum_user_id) REFERENCES vodum_users(id) ON DELETE CASCADE,
+  FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_comm_scheduled_due ON comm_scheduled(status, send_at);
+CREATE INDEX IF NOT EXISTS idx_comm_scheduled_user ON comm_scheduled(vodum_user_id);
 
 CREATE TABLE IF NOT EXISTS comm_template_attachments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
