@@ -988,7 +988,24 @@
   "sent": "Gesendet",
   "smtp_tls": "TLS (STARTTLS) verwenden",
   "subscription_and_status": "Abonnement & Status",
-  "test": "Test"
+  "test": "Test",
+  "comm_trigger_expiration": "Subscription expiration",
+  "comm_trigger_event_help": "Wähle das Ereignis, das die Benachrichtigung auslöst. Du kannst sie vor oder nach diesem Ereignis planen.",
+"comm_timing": "Zeitpunkt",
+"comm_timing_before": "Vorher",
+"comm_timing_after": "Nachher",
+"comm_timing_days": "Tage",
+"comm_timing_help": "Beispiel: Ablauf + Vorher 7 → 7 Tage vor dem Ablaufdatum senden. Benutzererstellung + Nachher 0 → sofort senden. (Benutzererstellung: nur E-Mail)",
+"comm_trigger_provider_help": "Senden auf Plex, Jellyfin oder beide beschränken. (Benutzererstellung: nur E-Mail)",
+"days_after": "Tage danach",
+"comm_days_after_help": "Optional. Wird für Automationen verwendet, die X Tage nach einem Ereignis auslösen.",
+"comm_delay": "Versatz",
+"comm_delay_direction": "Richtung des Versatzes",
+"comm_delay_before": "Davor",
+"comm_delay_after": "Danach",
+"comm_delay_before_short": "Davor:",
+"comm_delay_after_short": "Danach:",
+"comm_delay_help": "Wähle, ob die Benachrichtigung vor oder nach dem Trigger gesendet wird, und setze dann die Anzahl der Tage."
 
  
 }

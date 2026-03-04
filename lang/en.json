@@ -988,7 +988,23 @@
   "sent": "Sent",
   "smtp_tls": "Use TLS (STARTTLS)",
   "subscription_and_status": "Subscription & status",
-  "test": "Test"
+  "test": "Test",
+  "comm_trigger_event": "Trigger",
+"comm_trigger_expiration": "Subscription expiration",
+"comm_trigger_user_creation": "User creation",
+"comm_trigger_provider": "Target (Plex/Jellyfin)",
+"comm_provider_all": "All",
+"comm_trigger_provider_help": "Limit sending to Plex, Jellyfin, or both.",
+"days_after": "Days after",
+"comm_days_after_help": "For templates triggered after user creation. 0 = immediate, >0 = scheduled.",
+"comm_trigger_help_bubble": "📌 Expiration → Days before. User creation → Days after (0 immediate / >0 scheduled). Use Plex/Jellyfin filter to target the right provider.",
+"comm_delay": "Delay",
+"comm_delay_direction": "Delay direction",
+"comm_delay_before": "Before",
+"comm_delay_after": "After",
+"comm_delay_before_short": "Before:",
+"comm_delay_after_short": "After:",
+"comm_delay_help": "Choose whether the notification is sent before or after the trigger, then set the number of days."
 
   
 }

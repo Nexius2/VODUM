@@ -18,9 +18,158 @@ from logging_utils import get_logger
 from web.helpers import get_db
 from task_logs import task_logs
 
-from communications_engine import send_to_user, record_history, fetch_template_attachments
+from communications_engine import send_to_user, record_history, fetch_template_attachments, SendAttempt
+from email_sender import send_email
 
 log = get_logger("send_expiration_emails")
+
+def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
+    """
+    Flush comm_scheduled queue.
+
+    Rules:
+    - If trigger_event == 'user_creation' => EMAIL ONLY (no Discord).
+    - Otherwise => unified engine (email+discord depending on config).
+    """
+    rows = db.query(
+        """
+        SELECT
+          q.id AS scheduled_id,
+          q.template_id,
+          q.vodum_user_id,
+          q.provider,
+          q.server_id,
+          q.send_at,
+          q.status,
+          t.key AS template_key,
+          t.subject,
+          t.body,
+          t.trigger_event
+        FROM comm_scheduled q
+        JOIN comm_templates t ON t.id = q.template_id
+        WHERE q.status = 'pending'
+          AND datetime(q.send_at) <= datetime('now')
+          AND t.enabled = 1
+        ORDER BY q.send_at ASC, q.id ASC
+        LIMIT 200
+        """
+    )
+    due = [dict(r) for r in (rows or [])]
+    if not due:
+        return 0, 0
+
+    sent = 0
+    failed = 0
+
+    for q in due:
+        scheduled_id = int(q["scheduled_id"])
+        tpl_id = int(q["template_id"])
+        uid = int(q["vodum_user_id"])
+        trigger_event = (q.get("trigger_event") or "expiration").lower()
+
+        user = db.query_one(
+            """
+            SELECT id, username, email, second_email, expiration_date, discord_user_id, notifications_order_override
+            FROM vodum_users
+            WHERE id = ?
+            """,
+            (uid,),
+        )
+        user = dict(user) if user else None
+        if not user:
+            db.execute(
+                "UPDATE comm_scheduled SET status='error', last_error=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                ("User not found", scheduled_id),
+            )
+            failed += 1
+            continue
+
+        exp_iso = (user.get("expiration_date") or "")[:10]
+        subject, body = _format_message(q.get("subject") or "", q.get("body") or "", user, exp_iso)
+        attachments = fetch_template_attachments(db, tpl_id)
+
+        # ---- USER CREATION: EMAIL ONLY ----
+        if trigger_event == "user_creation":
+            to_email = (user.get("email") or "").strip() or (user.get("second_email") or "").strip()
+            ok = False
+            err = None
+            if not to_email:
+                ok = False
+                err = "No user email"
+            else:
+                ok, err = send_email(subject, body, to_email, settings, attachments=attachments)
+
+            attempt = SendAttempt(channel="email", status="sent" if ok else "failed", error=err)
+
+            record_history(
+                db=db,
+                kind="template",
+                template_id=tpl_id,
+                campaign_id=None,
+                user_id=uid,
+                attempt=attempt,
+                meta={
+                    "template_key": q.get("template_key"),
+                    "trigger_event": "user_creation",
+                    "provider": q.get("provider"),
+                    "server_id": q.get("server_id"),
+                    "scheduled_id": scheduled_id,
+                    "send_at": q.get("send_at"),
+                    "attachments": [a.get("filename") for a in (attachments or [])],
+                },
+            )
+
+            if ok:
+                db.execute("UPDATE comm_scheduled SET status='sent', last_error=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?", (scheduled_id,))
+                sent += 1
+            else:
+                db.execute("UPDATE comm_scheduled SET status='error', last_error=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (err or "Email failed", scheduled_id))
+                failed += 1
+
+            continue  # IMPORTANT: never send Discord for user_creation
+
+        # ---- OTHER EVENTS (expiration): unified engine (email+discord) ----
+        attempts = send_to_user(
+            db=db,
+            settings=settings,
+            user=user,
+            subject=subject,
+            body=body,
+            attachments=attachments,
+        )
+        any_ok = any(a.status == "sent" for a in attempts)
+
+        for att in attempts:
+            record_history(
+                db=db,
+                kind="template",
+                template_id=tpl_id,
+                campaign_id=None,
+                user_id=uid,
+                attempt=att,
+                meta={
+                    "template_key": q.get("template_key"),
+                    "trigger_event": trigger_event,
+                    "provider": q.get("provider"),
+                    "server_id": q.get("server_id"),
+                    "scheduled_id": scheduled_id,
+                    "send_at": q.get("send_at"),
+                    "attachments": [a.get("filename") for a in (attachments or [])],
+                },
+            )
+
+        if any_ok:
+            db.execute("UPDATE comm_scheduled SET status='sent', last_error=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?", (scheduled_id,))
+            sent += 1
+        else:
+            err = "; ".join([a.error for a in attempts if a.error])[:1000] if attempts else "No channel available"
+            db.execute("UPDATE comm_scheduled SET status='error', last_error=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (err, scheduled_id))
+            failed += 1
+
+    if task_id is not None:
+        task_logs(task_id, "info", f"comm_scheduled flushed: sent={sent} failed={failed}")
+
+    return sent, failed
 
 
 def _parse_date_iso(d: str | None) -> date | None:
@@ -67,6 +216,9 @@ def _already_sent_discord(db, user_id: int, template_key: str, exp_iso: str) -> 
     )
     return bool(r)
 
+def _already_sent_any(db, user_id: int, template_key: str, exp_iso: str) -> bool:
+    # If either email OR discord already sent for this template/date, skip retrying.
+    return _already_sent_email(db, user_id, template_key, exp_iso) or _already_sent_discord(db, user_id, template_key, exp_iso)
 
 def _format_message(subject: str, body: str, user: dict, exp_iso: str) -> tuple[str, str]:
     username = user.get("username") or ""
@@ -84,6 +236,8 @@ def run(task_id: int | None = None):
 
         settings = db.query_one("SELECT * FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
+        # Flush scheduled notifications (user_creation days_after etc.)
+        _flush_comm_scheduled(db, settings, task_id)
 
         # Templates (unified)
         templates = _get_template_map(db)
@@ -129,21 +283,64 @@ def run(task_id: int | None = None):
             exp_iso = exp.isoformat()
             days_left = (exp - today).days
 
-            # Choose which template applies
+            # Choose which template applies (supports BEFORE and AFTER for expiration)
             tpl_key = None
-            if days_left < 0:
+
+            def _get_after(tpl: dict | None) -> int | None:
+                if not tpl:
+                    return None
+                v = tpl.get("days_after")
+                if v is None:
+                    return None
+                try:
+                    return int(v)
+                except Exception:
+                    return None
+
+            # preavis / relance / fin can be:
+            # - days_before => send when days_left == +N
+            # - days_after  => send when days_left == -N  (N days after expiration)
+            preavis_tpl = templates.get("preavis")
+            relance_tpl = templates.get("relance")
+            fin_tpl = templates.get("fin")
+
+            preavis_before = _get_days_before(preavis_tpl, None)
+            relance_before = _get_days_before(relance_tpl, None)
+            fin_before = _get_days_before(fin_tpl, None)
+
+            preavis_after = _get_after(preavis_tpl)
+            relance_after = _get_after(relance_tpl)
+            fin_after = _get_after(fin_tpl)
+
+            # BEFORE checks
+            if preavis_before is not None and days_left == int(preavis_before):
+                tpl_key = "preavis"
+            elif relance_before is not None and days_left == int(relance_before):
+                tpl_key = "relance"
+            elif fin_before is not None and days_left == int(fin_before):
                 tpl_key = "fin"
-            else:
-                if preavis_days is not None and days_left == int(preavis_days):
-                    tpl_key = "preavis"
-                elif relance_days is not None and days_left == int(relance_days):
-                    tpl_key = "relance"
+
+            # AFTER checks (days_left becomes negative after expiration)
+            elif preavis_after is not None and days_left == -int(preavis_after):
+                tpl_key = "preavis"
+            elif relance_after is not None and days_left == -int(relance_after):
+                tpl_key = "relance"
+            elif fin_after is not None and days_left == -int(fin_after):
+                tpl_key = "fin"
+
+            # Fallback (legacy behavior) if fin has no before/after configured:
+            elif (fin_before is None and fin_after is None) and days_left < 0:
+                tpl_key = "fin"
 
             if not tpl_key:
                 continue
 
             tpl = templates.get(tpl_key)
             if not tpl or int(tpl.get("enabled") or 0) != 1:
+                continue
+
+            # Avoid retrying the same template again and again on every run
+            if _already_sent_any(db, uid, tpl_key, exp_iso):
                 continue
 
             subject, body = _format_message(tpl.get("subject") or "", tpl.get("body") or "", u, exp_iso)

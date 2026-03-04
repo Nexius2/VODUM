@@ -523,6 +523,48 @@ def run_migrations():
         """)
         conn.commit()
 
+    # ✅ IMPORTANT: these columns MUST be ensured even if the table already exists
+    ensure_column(
+        cursor,
+        "comm_templates",
+        "trigger_event",
+        "TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation'))",
+    )
+    ensure_column(
+        cursor,
+        "comm_templates",
+        "trigger_provider",
+        "TEXT NOT NULL DEFAULT 'all' CHECK(trigger_provider IN ('all','plex','jellyfin'))",
+    )
+    ensure_column(cursor, "comm_templates", "days_after", "INTEGER DEFAULT NULL")
+    conn.commit()
+
+    # -------------------------------------------------
+    # Communications scheduled queue (NEW)
+    # -------------------------------------------------
+    if not table_exists(cursor, "comm_scheduled"):
+        print("🛠 Creating table: comm_scheduled")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS comm_scheduled (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            template_id INTEGER NOT NULL,
+            vodum_user_id INTEGER NOT NULL,
+            provider TEXT NOT NULL CHECK(provider IN ('plex','jellyfin')),
+            server_id INTEGER,
+            send_at TIMESTAMP NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','sent','error')),
+            last_error TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(template_id) REFERENCES comm_templates(id) ON DELETE CASCADE,
+            FOREIGN KEY(vodum_user_id) REFERENCES vodum_users(id) ON DELETE CASCADE,
+            FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE SET NULL
+        );
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_comm_scheduled_due ON comm_scheduled(status, send_at);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_comm_scheduled_user ON comm_scheduled(vodum_user_id);")
+        conn.commit()
+
     if not table_exists(cursor, "comm_template_attachments"):
         print("🛠 Creating table: comm_template_attachments")
         cursor.execute("""
@@ -1396,6 +1438,56 @@ def run_migrations():
 
     conn.commit()
 
+    # -------------------------------------------------
+    # 3.2 Seed default COMM template: user_creation (EMAIL ONLY)
+    # -------------------------------------------------
+    def ensure_comm_user_creation_template():
+        # Create ONE default template used by the new "user_creation" trigger.
+        # Notes:
+        # - Email only is enforced in users.py (discord_user_id=None)
+        # - Placeholders supported by current code: {username} {email} {expiration_date}
+        key = "user_creation_default"
+        cursor.execute("SELECT 1 FROM comm_templates WHERE key = ?", (key,))
+        if cursor.fetchone():
+            return
+
+        subject = "Welcome - your account is ready"
+        body = (
+            "Hi {username},\n\n"
+            "Your account has been created successfully.\n"
+            "Login email: {email}\n\n"
+            "How to get started:\n"
+            "- Open the Plex/Jellyfin app (TV / mobile / web)\n"
+            "- Sign in with your account\n"
+            "- If this is Plex: accept the share invitation if prompted\n\n"
+            "Subscription expiry date: {expiration_date}\n\n"
+            "Regards,\n"
+            "VODUM Team\n"
+        )
+
+        cursor.execute(
+            """
+            INSERT INTO comm_templates(
+                key, name, enabled,
+                trigger_event, trigger_provider,
+                days_before, days_after,
+                subject, body,
+                created_at, updated_at
+            )
+            VALUES(
+                ?, ?, 1,
+                'user_creation', 'all',
+                NULL, 0,
+                ?, ?,
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            )
+            """,
+            (key, "Default - User creation", subject, body),
+        )
+        print("➕ Default comm_template inserted: user_creation_default (trigger=user_creation)")
+
+    ensure_comm_user_creation_template()
+    conn.commit()
 
     # -------------------------------------------------
     # 4. Templates email par défaut 

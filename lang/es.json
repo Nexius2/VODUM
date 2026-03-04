@@ -988,6 +988,23 @@
   "sent": "Enviado",
   "smtp_tls": "Usar TLS (STARTTLS)",
   "subscription_and_status": "Suscripción y estado",
-  "test": "Prueba"
+  "test": "Prueba",
+  "comm_trigger_expiration": "Subscription expiration",
+  "comm_trigger_event_help": "Elige el evento que dispara la notificación. Puedes programarla antes o después de ese evento.",
+"comm_timing": "Momento",
+"comm_timing_before": "Antes",
+"comm_timing_after": "Después",
+"comm_timing_days": "Días",
+"comm_timing_help": "Ejemplo: Expiración + Antes 7 → enviar 7 días antes de la expiración. Creación de usuario + Después 0 → envío inmediato. (Creación de usuario: solo email)",
+"comm_trigger_provider_help": "Limita el envío a Plex, Jellyfin o ambos. (Creación de usuario: solo email)",
+"days_after": "Días después",
+"comm_days_after_help": "Opcional. Se usa en automatizaciones que se activan X días después de un evento.",
+"comm_delay": "Desfase",
+"comm_delay_direction": "Dirección del desfase",
+"comm_delay_before": "Antes",
+"comm_delay_after": "Después",
+"comm_delay_before_short": "Antes:",
+"comm_delay_after_short": "Después:",
+"comm_delay_help": "Elige si la notificación se envía antes o después del disparador y luego establece el número de días."
 
 }

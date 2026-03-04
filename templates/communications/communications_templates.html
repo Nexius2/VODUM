@@ -10,10 +10,10 @@
 {% set current_subpage = 'templates' %}
 {% include "communications/_communications_nav.html" %}
 
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
 
   <!-- LEFT : editor -->
-  <div class="lg:col-span-1 bg-slate-900 border border-slate-800 rounded-2xl p-4">
+  <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-4">
 
     <div class="flex items-center justify-between mb-4">
       <h2 class="text-sm font-semibold">
@@ -35,7 +35,7 @@
       <input type="hidden" name="template_id" value="{{ loaded_template.id if loaded_template else '' }}">
       <input type="hidden" name="enabled" id="template_enabled" value="{{ 1 if (loaded_template and loaded_template.enabled) or (not loaded_template) else 0 }}">
 
-      {% if not loaded_template %}
+      <!-- {% if not loaded_template %}
       <div class="text-xs">
         <label class="block mb-1">{{ t('key') }}</label>
         <input type="text" name="key" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs" required>
@@ -46,18 +46,76 @@
         <label class="block mb-1">{{ t('key') }}</label>
         <input type="text" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-slate-400" value="{{ loaded_template.key }}" disabled>
       </div>
-      {% endif %}
+      {% endif %} -->
 
       <div class="text-xs">
         <label class="block mb-1">{{ t('name') }}</label>
         <input type="text" name="name" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs" value="{{ loaded_template.name if loaded_template else '' }}" required>
       </div>
 
-      <div class="text-xs">
-        <label class="block mb-1">{{ t('days_before') }}</label>
-        <input type="number" name="days_before" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs" value="{{ loaded_template.days_before if loaded_template and loaded_template.days_before is not none else '' }}">
-        <p class="mt-1 text-[11px] text-slate-500">{{ t('comm_days_before_help') }}</p>
-      </div>
+		<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+		  <div class="text-xs">
+			<label class="block mb-1">{{ t('comm_trigger_event') }}</label>
+			{% set ev = (loaded_template.trigger_event if loaded_template and loaded_template.trigger_event else 'expiration') %}
+			<select name="trigger_event" id="trigger_event" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+			  <option value="expiration" {% if ev == 'expiration' %}selected{% endif %}>{{ t('comm_trigger_expiration') }}</option>
+			  <option value="user_creation" {% if ev == 'user_creation' %}selected{% endif %}>{{ t('comm_trigger_user_creation') }}</option>
+			</select>
+		  </div>
+
+		  <div class="text-xs">
+			<label class="block mb-1">{{ t('comm_trigger_provider') }}</label>
+			{% set pv = (loaded_template.trigger_provider if loaded_template and loaded_template.trigger_provider else 'all') %}
+			<select name="trigger_provider" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+			  <option value="all" {% if pv == 'all' %}selected{% endif %}>{{ t('comm_provider_all') }}</option>
+			  <option value="plex" {% if pv == 'plex' %}selected{% endif %}>Plex</option>
+			  <option value="jellyfin" {% if pv == 'jellyfin' %}selected{% endif %}>Jellyfin</option>
+			</select>
+		  </div>
+		</div>
+
+		{% set delay_dir = 'after' if loaded_template and loaded_template.days_after is not none else 'before' %}
+
+		<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+		  <div class="text-xs">
+			<label class="block mb-1">{{ t('comm_delay_direction') }}</label>
+
+			<div class="flex items-center gap-4">
+			  <label class="inline-flex items-center gap-2 text-xs">
+				<input type="radio" name="delay_direction" value="before" {% if delay_dir == 'before' %}checked{% endif %}>
+				<span>{{ t('comm_delay_before') }}</span>
+			  </label>
+
+			  <label class="inline-flex items-center gap-2 text-xs">
+				<input type="radio" name="delay_direction" value="after" {% if delay_dir == 'after' %}checked{% endif %}>
+				<span>{{ t('comm_delay_after') }}</span>
+			  </label>
+			</div>
+		  </div>
+
+		  <div>
+			<div class="text-xs" id="wrap_days_before">
+			  <label class="block mb-1">{{ t('days_before') }}</label>
+			  <input type="number" name="days_before"
+					 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs"
+					 value="{{ loaded_template.days_before if loaded_template and loaded_template.days_before is not none else '' }}">
+			</div>
+
+			<div class="text-xs hidden" id="wrap_days_after">
+			  <label class="block mb-1">{{ t('days_after') }}</label>
+			  <input type="number" name="days_after"
+					 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs"
+					 value="{{ loaded_template.days_after if loaded_template and loaded_template.days_after is not none else '' }}">
+			</div>
+
+			<p id="help_days_before" class="mt-1 text-[11px] text-slate-500">{{ t('comm_days_before_help') }}</p>
+			<p id="help_days_after" class="mt-1 text-[11px] text-slate-500 hidden">{{ t('comm_days_after_help') }}</p>
+		  </div>
+		</div>
+
+		<div class="text-[11px] text-slate-500">
+		  {{ t('comm_trigger_help_bubble') }}
+		</div>
 
       <div class="text-xs">
         <label class="block mb-1">{{ t('subject') }}</label>
@@ -102,15 +160,17 @@
   </div>
 
   <!-- RIGHT : list -->
-  <div class="lg:col-span-2">
+  <div class="lg:col-span-3">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
       <table class="w-full text-xs">
         <thead class="bg-slate-950/60 text-slate-400 text-left">
           <tr>
-            <th class="px-4 py-2">{{ t('key') }}</th>
+            
             <th class="px-4 py-2">{{ t('name') }}</th>
             <th class="px-4 py-2">{{ t('enabled') }}</th>
-            <th class="px-4 py-2">{{ t('days_before') }}</th>
+			<th class="px-4 py-2">{{ t('comm_trigger_event') }}</th>
+			<th class="px-4 py-2">{{ t('comm_trigger_provider') }}</th>
+			<th class="px-4 py-2">{{ t('comm_delay') }}</th>
             <th class="px-4 py-2">{{ t('subject') }}</th>
             <th class="px-4 py-2"></th>
           </tr>
@@ -118,10 +178,33 @@
         <tbody>
         {% for tpl in templates %}
           <tr class="border-t border-slate-800 hover:bg-slate-800/40">
-            <td class="px-4 py-2"><code>{{ tpl.key }}</code></td>
+            
             <td class="px-4 py-2">{{ tpl.name }}</td>
             <td class="px-4 py-2">{% if tpl.enabled %}<span class="text-emerald-300">{{ t('yes') }}</span>{% else %}<span class="text-slate-400">{{ t('no') }}</span>{% endif %}</td>
-            <td class="px-4 py-2">{{ tpl.days_before if tpl.days_before is not none else '-' }}</td>
+			<td class="px-4 py-2">
+			  {% if tpl.trigger_event == 'user_creation' %}
+				{{ t('comm_trigger_user_creation') }}
+			  {% else %}
+				{{ t('comm_trigger_expiration') }}
+			  {% endif %}
+			</td>
+
+			<td class="px-4 py-2">
+			  {% if tpl.trigger_provider == 'plex' %}Plex
+			  {% elif tpl.trigger_provider == 'jellyfin' %}Jellyfin
+			  {% else %}{{ t('comm_provider_all') }}
+			  {% endif %}
+			</td>
+
+			<td class="px-4 py-2">
+			  {% if tpl.days_before is not none %}
+				{{ t('comm_delay_before_short') }} {{ tpl.days_before }}
+			  {% elif tpl.days_after is not none %}
+				{{ t('comm_delay_after_short') }} {{ tpl.days_after }}
+			  {% else %}
+				-
+			  {% endif %}
+			</td>
             <td class="px-4 py-2">{{ tpl.subject }}</td>
             <td class="px-4 py-2 text-right">
               <a href="{{ url_for('communications_templates_page', load=tpl.id) }}" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700">{{ t('open') }}</a>
@@ -132,9 +215,9 @@
       </table>
     </div>
 
-    <div class="mt-3 text-[11px] text-slate-500">
+    <!-- <div class="mt-3 text-[11px] text-slate-500">
       {{ t('comm_templates_note') }}
-    </div>
+    </div> -->
   </div>
 
 </div>
@@ -146,6 +229,35 @@ document.addEventListener('DOMContentLoaded', () => {
   if (sw && hidden) {
     sw.addEventListener('change', () => hidden.value = sw.checked ? '1' : '0');
   }
+
+  const wrapBefore = document.getElementById('wrap_days_before');
+  const wrapAfter = document.getElementById('wrap_days_after');
+
+function refreshDelayFields() {
+  const sel = document.querySelector('input[name="delay_direction"]:checked');
+  const dir = sel ? sel.value : 'before';
+
+  const wrapBefore = document.getElementById('wrap_days_before');
+  const wrapAfter = document.getElementById('wrap_days_after');
+  const helpBefore = document.getElementById('help_days_before');
+  const helpAfter = document.getElementById('help_days_after');
+
+  if (dir === 'after') {
+    wrapBefore && wrapBefore.classList.add('hidden');
+    wrapAfter && wrapAfter.classList.remove('hidden');
+    helpBefore && helpBefore.classList.add('hidden');
+    helpAfter && helpAfter.classList.remove('hidden');
+  } else {
+    wrapAfter && wrapAfter.classList.add('hidden');
+    wrapBefore && wrapBefore.classList.remove('hidden');
+    helpAfter && helpAfter.classList.add('hidden');
+    helpBefore && helpBefore.classList.remove('hidden');
+  }
+}
+
+const radios = document.querySelectorAll('input[name="delay_direction"]');
+radios.forEach(r => r.addEventListener('change', refreshDelayFields));
+refreshDelayFields();
 });
 </script>
 

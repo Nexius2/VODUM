@@ -988,6 +988,22 @@
   "sent": "Inviato",
   "smtp_tls": "Usa TLS (STARTTLS)",
   "subscription_and_status": "Abbonamento e stato",
-  "test": "Test"
-
+  "test": "Test",
+"comm_trigger_expiration": "Subscription expiration",
+"comm_trigger_event_help": "Scegli l’evento che attiva la notifica. Puoi pianificarla prima o dopo questo evento.",
+"comm_timing": "Tempistica",
+"comm_timing_before": "Prima",
+"comm_timing_after": "Dopo",
+"comm_timing_days": "Giorni",
+"comm_timing_help": "Esempio: Scadenza + Prima 7 → invia 7 giorni prima della scadenza. Creazione utente + Dopo 0 → invio immediato. (Creazione utente: solo email)",
+"comm_trigger_provider_help": "Limita l’invio a Plex, Jellyfin o entrambi. (Creazione utente: solo email)",
+"days_after": "Giorni dopo",
+"comm_days_after_help": "Opzionale. Usato dalle automazioni che scattano X giorni dopo un evento.",
+"comm_delay": "Ritardo",
+"comm_delay_direction": "Direzione del ritardo",
+"comm_delay_before": "Prima",
+"comm_delay_after": "Dopo",
+"comm_delay_before_short": "Prima:",
+"comm_delay_after_short": "Dopo:",
+"comm_delay_help": "Scegli se la notifica viene inviata prima o dopo il trigger, poi imposta il numero di giorni."
 }

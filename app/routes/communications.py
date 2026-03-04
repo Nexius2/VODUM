@@ -326,11 +326,36 @@ def register(app):
                 loaded["attachments"] = fetch_template_attachments(db, int(loaded["id"]))
 
         if request.method == "POST" and request.form.get("action") == "create":
-            key = _sanitize_key(request.form.get("key") or "")
             name = (request.form.get("name") or "").strip()
             subject = (request.form.get("subject") or "").strip()
             body = (request.form.get("body") or "").strip()
             enabled = 1 if request.form.get("enabled") == "1" else 0
+
+            # Key is optional (UI hides it). We generate a stable one from the name.
+            key = _sanitize_key(request.form.get("key") or "")
+            if not key:
+                base = _sanitize_key(name) or "template"
+                key = base
+                n = 2
+                while db.query_one("SELECT 1 FROM comm_templates WHERE key = ?", (key,)):
+                    key = f"{base}_{n}"
+                    n += 1
+
+            trigger_event = (request.form.get("trigger_event") or "expiration").strip().lower()
+            if trigger_event not in ("expiration", "user_creation"):
+                trigger_event = "expiration"
+
+            trigger_provider = (request.form.get("trigger_provider") or "all").strip().lower()
+            if trigger_provider not in ("all", "plex", "jellyfin"):
+                trigger_provider = "all"
+
+            days_after_raw = (request.form.get("days_after") or "").strip()
+            days_after = None
+            if days_after_raw != "":
+                try:
+                    days_after = int(days_after_raw)
+                except Exception:
+                    days_after = None
 
             days_before_raw = (request.form.get("days_before") or "").strip()
             days_before = None
@@ -339,6 +364,17 @@ def register(app):
                     days_before = int(days_before_raw)
                 except Exception:
                     days_before = None
+
+            # UI radio: keep ONLY one value (before OR after)
+            delay_direction = (request.form.get("delay_direction") or "").strip().lower()
+            if delay_direction not in ("before", "after"):
+                # fallback (edit mode): infer from which value is filled
+                delay_direction = "after" if days_after is not None else "before"
+
+            if delay_direction == "before":
+                days_after = None
+            else:
+                days_before = None
 
             if not key or not name or not subject or not body:
                 flash(t("comm_missing_fields"), "error")
@@ -351,10 +387,16 @@ def register(app):
 
             cur = db.execute(
                 """
-                INSERT INTO comm_templates(key, name, enabled, days_before, subject, body, created_at, updated_at)
-                VALUES(?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                INSERT INTO comm_templates(
+                    key, name, enabled,
+                    trigger_event, trigger_provider,
+                    days_before, days_after,
+                    subject, body,
+                    created_at, updated_at
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """,
-                (key, name, enabled, days_before, subject, body),
+                (key, name, enabled, trigger_event, trigger_provider, days_before, days_after, subject, body),
             )
             tid = getattr(cur, 'lastrowid', None)
 
@@ -377,6 +419,22 @@ def register(app):
             body = (request.form.get("body") or "").strip()
             enabled = 1 if request.form.get("enabled") == "1" else 0
 
+            trigger_event = (request.form.get("trigger_event") or "expiration").strip().lower()
+            if trigger_event not in ("expiration", "user_creation"):
+                trigger_event = "expiration"
+
+            trigger_provider = (request.form.get("trigger_provider") or "all").strip().lower()
+            if trigger_provider not in ("all", "plex", "jellyfin"):
+                trigger_provider = "all"
+
+            days_after_raw = (request.form.get("days_after") or "").strip()
+            days_after = None
+            if days_after_raw != "":
+                try:
+                    days_after = int(days_after_raw)
+                except Exception:
+                    days_after = None
+
             days_before_raw = (request.form.get("days_before") or "").strip()
             days_before = None
             if days_before_raw != "":
@@ -385,6 +443,16 @@ def register(app):
                 except Exception:
                     days_before = None
 
+            # UI radio: keep ONLY one value (before OR after)
+            delay_direction = (request.form.get("delay_direction") or "").strip().lower()
+            if delay_direction not in ("before", "after"):
+                delay_direction = "after" if days_after is not None else "before"
+
+            if delay_direction == "before":
+                days_after = None
+            else:
+                days_before = None
+
             if not tid:
                 flash(t("comm_not_found"), "error")
                 return redirect(url_for("communications_templates_page"))
@@ -392,10 +460,19 @@ def register(app):
             db.execute(
                 """
                 UPDATE comm_templates
-                SET name=?, enabled=?, days_before=?, subject=?, body=?, updated_at=CURRENT_TIMESTAMP
+                SET
+                  name=?,
+                  enabled=?,
+                  trigger_event=?,
+                  trigger_provider=?,
+                  days_before=?,
+                  days_after=?,
+                  subject=?,
+                  body=?,
+                  updated_at=CURRENT_TIMESTAMP
                 WHERE id=?
                 """,
-                (name, enabled, days_before, subject, body, tid),
+                (name, enabled, trigger_event, trigger_provider, days_before, days_after, subject, body, tid),
             )
 
             files = request.files.getlist("attachments")
