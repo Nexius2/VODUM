@@ -447,7 +447,16 @@ def register(app):
             LEFT JOIN vodum_users u ON u.id = h.user_id
             LEFT JOIN comm_templates t ON t.id = h.template_id
             LEFT JOIN comm_campaigns c ON c.id = h.campaign_id
-            ORDER BY h.sent_at DESC, h.id DESC
+            ORDER BY
+              COALESCE(
+                CASE
+                  WHEN typeof(h.sent_at) = 'integer' THEN h.sent_at
+                  WHEN typeof(h.sent_at) = 'text' AND h.sent_at GLOB '[0-9]*' THEN CAST(h.sent_at AS INTEGER)
+                  ELSE CAST(strftime('%s', h.sent_at) AS INTEGER)
+                END,
+                0
+              ) DESC,
+              h.id DESC
             LIMIT 500
             """
         )
