@@ -31,59 +31,66 @@
                         />
                     {% endif %}
 
-                    <div class="min-w-0 flex-1">
+					<div class="min-w-0 flex-1">
+						<div class="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 min-w-0">
 
-                        <!-- Badges -->
-                        <div class="flex flex-wrap gap-2 mb-1">
-                            {% set p = (s.provider or '')|lower %}
-                            <span class="text-[10px] px-2 py-0.5 rounded-full border
-                                {% if 'plex' in p %}
-                                    border-orange-500 text-orange-300 bg-orange-500/10
-                                {% elif 'jellyfin' in p %}
-                                    border-blue-500 text-blue-300 bg-blue-500/10
-                                {% else %}
-                                    border-slate-700 text-slate-200 bg-slate-900/30
-                                {% endif %}">
-                                {{ s.provider }}
-                            </span>
+							<!-- Badges (left) -->
+							<div class="min-w-0">
+								<div class="flex flex-wrap gap-2">
+									{% set p = (s.provider or '')|lower %}
+									<span class="text-[10px] px-2 py-0.5 rounded-full border
+										{% if 'plex' in p %}
+											border-orange-500 text-orange-300 bg-orange-500/10
+										{% elif 'jellyfin' in p %}
+											border-blue-500 text-blue-300 bg-blue-500/10
+										{% else %}
+											border-slate-700 text-slate-200 bg-slate-900/30
+										{% endif %}">
+										{{ s.provider }}
+									</span>
 
-                            {% if s.is_transcode %}
-                                <span class="text-[10px] px-2 py-0.5 rounded-full border border-orange-500 text-orange-300">Transcoding</span>
-                            {% else %}
-                                <span class="text-[10px] px-2 py-0.5 rounded-full border border-emerald-600 text-emerald-300">Direct Play</span>
-                            {% endif %}
+									{% if s.is_transcode %}
+										<span class="text-[10px] px-2 py-0.5 rounded-full border border-orange-500 text-orange-300">Transcoding</span>
+									{% else %}
+										<span class="text-[10px] px-2 py-0.5 rounded-full border border-emerald-600 text-emerald-300">Direct Play</span>
+									{% endif %}
 
-                            <span class="text-[10px] px-2 py-0.5 rounded-full border border-slate-700 text-slate-200">
-                                {{ s.server_name }}
-                            </span>
-                        </div>
+									<span class="text-[10px] px-2 py-0.5 rounded-full border border-slate-700 text-slate-200">
+										{{ s.server_name }}
+									</span>
+								</div>
+							</div>
 
-                        <!-- Title -->
-                        <div class="text-sm font-semibold truncate">
-                            {% if (s.media_type or '')|lower in ['episode', 'tv', 'tv_episode'] or s.episode_code %}
-                                {{ s.grandparent_title or "-" }}
-                                {% if s.episode_code %}
-                                    <span class="text-slate-400"> · {{ s.episode_code }}</span>
-                                {% endif %}
-                                {% if s.title %}
-                                    <span class="text-slate-400"> ·</span> {{ s.title }}
-                                {% endif %}
-                            {% else %}
-                                {{ s.title or "-" }}
-                            {% endif %}
-                        </div>
+							<!-- Last check (right, first row only) -->
+							<div class="text-[10px] text-slate-500 whitespace-nowrap justify-self-end pt-0.5">
+								{{ t("last_check") }} : {{ s.last_seen_at|tz }}
+							</div>
 
-                        <!-- Meta -->
-                        <div class="text-xs text-slate-400 mt-1 truncate">
-                            User: <span class="text-slate-200">{{ s.username or "-" }}</span>
-                            · State: <span class="text-slate-200">{{ s.state or "-" }}</span>
-                            · Client: <span class="text-slate-200">{{ s.client_name or "-" }}</span>
-                        </div>
-                    </div>
+							<!-- Title (full width under last_check) -->
+							<div class="col-span-2 text-sm font-semibold truncate min-w-0">
+								{% if (s.media_type or '')|lower in ['episode', 'tv', 'tv_episode'] or s.episode_code %}
+									{{ s.grandparent_title or "-" }}
+									{% if s.episode_code %}
+										<span class="text-slate-400"> · {{ s.episode_code }}</span>
+									{% endif %}
+									{% if s.title %}
+										<span class="text-slate-400"> ·</span> {{ s.title }}
+									{% endif %}
+								{% else %}
+									{{ s.title or "-" }}
+								{% endif %}
+							</div>
 
-                    <div class="text-[10px] text-slate-500 whitespace-nowrap pt-0.5">
-                        {{ t("last_check") }} : {{ s.last_seen_at|tz }}
-                    </div>
+							<!-- Meta (full width under last_check) -->
+							<div class="col-span-2 text-xs text-slate-400 truncate min-w-0">
+								User: <span class="text-slate-200">{{ s.username or "-" }}</span>
+								· State: <span class="text-slate-200">{{ s.state or "-" }}</span>
+								· Client: <span class="text-slate-200">{{ s.client_name or "-" }}</span>
+							</div>
+
+						</div>
+					</div>
+
 
                 </div>
             {% endfor %}

@@ -74,47 +74,57 @@
 		  </div>
 		</div>
 
-		{% set delay_dir = 'after' if loaded_template and loaded_template.days_after is not none else 'before' %}
+		{#
+		  UI rule:
+		  - trigger_event = user_creation  => only "days_after" is allowed
+		  - trigger_event = expiration     => [X] days (before/after) the event
+		#}
+		{% set ev2 = (loaded_template.trigger_event if loaded_template and loaded_template.trigger_event else 'expiration') %}
+		{% set _dir = 'before' %}
+		{% set _offset = 0 %}
+		{% if loaded_template %}
+		  {% if loaded_template.days_before is not none %}
+			{% set _dir = 'before' %}
+			{% set _offset = loaded_template.days_before %}
+		  {% elif loaded_template.days_after is not none %}
+			{% set _dir = 'after' %}
+			{% set _offset = loaded_template.days_after %}
+		  {% endif %}
+		{% endif %}
 
-		<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-		  <div class="text-xs">
-			<label class="block mb-1">{{ t('comm_delay_direction') }}</label>
+		<div class="text-xs">
+		  <label class="block mb-1">{{ t('comm_delay') }}</label>
 
-			<div class="flex items-center gap-4">
-			  <label class="inline-flex items-center gap-2 text-xs">
-				<input type="radio" name="delay_direction" value="before" {% if delay_dir == 'before' %}checked{% endif %}>
-				<span>{{ t('comm_delay_before') }}</span>
-			  </label>
+		  <!-- Expiration : [X] days (before/after) the event -->
+		  <div id="delay_block_expiration" class="flex flex-wrap items-center gap-2">
+			<input id="days_offset" type="number" min="0"
+				   class="w-20 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs"
+				   value="{{ _offset if ev2 == 'expiration' else 0 }}">
+			<span class="text-slate-400">{{ t('days') }}</span>
+			<select id="delay_direction_select" name="delay_direction" class="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+			  <option value="before" {% if _dir == 'before' %}selected{% endif %}>{{ t('comm_delay_before') }}</option>
+			  <option value="after" {% if _dir == 'after' %}selected{% endif %}>{{ t('comm_delay_after') }}</option>
+			</select>
+			<span class="text-slate-400">{{ t('comm_delay_event') }}</span>
 
-			  <label class="inline-flex items-center gap-2 text-xs">
-				<input type="radio" name="delay_direction" value="after" {% if delay_dir == 'after' %}checked{% endif %}>
-				<span>{{ t('comm_delay_after') }}</span>
-			  </label>
-			</div>
+			{# Keep server-side compatibility (routes expect days_before/days_after) #}
+			<input type="hidden" id="days_before_hidden" name="days_before" value="{% if ev2 == 'expiration' and _dir == 'before' %}{{ _offset }}{% endif %}">
+			<input type="hidden" id="days_after_hidden" name="days_after" value="{% if ev2 == 'expiration' and _dir == 'after' %}{{ _offset }}{% endif %}">
 		  </div>
 
-		  <div>
-			<div class="text-xs" id="wrap_days_before">
-			  <label class="block mb-1">{{ t('days_before') }}</label>
-			  <input type="number" name="days_before"
-					 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs"
-					 value="{{ loaded_template.days_before if loaded_template and loaded_template.days_before is not none else '' }}">
-			</div>
+		  <!-- User creation : [X] days after account creation (no "before") -->
+		  <div id="delay_block_user_creation" class="hidden flex flex-wrap items-center gap-2">
+			<input type="number" name="days_after" min="0"
+				   class="w-20 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs"
+				   value="{{ (loaded_template.days_after if loaded_template and loaded_template.days_after is not none else 0) if ev2 == 'user_creation' else 0 }}">
+			<span class="text-slate-400">{{ t('days') }}</span>
+			<span class="text-slate-400">{{ t('comm_delay_after') }}</span>
+			<span class="text-slate-400">{{ t('comm_user_creation_event') }}</span>
 
-			<div class="text-xs hidden" id="wrap_days_after">
-			  <label class="block mb-1">{{ t('days_after') }}</label>
-			  <input type="number" name="days_after"
-					 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs"
-					 value="{{ loaded_template.days_after if loaded_template and loaded_template.days_after is not none else '' }}">
-			</div>
-
-			<p id="help_days_before" class="mt-1 text-[11px] text-slate-500">{{ t('comm_days_before_help') }}</p>
-			<p id="help_days_after" class="mt-1 text-[11px] text-slate-500 hidden">{{ t('comm_days_after_help') }}</p>
+			{# Ensure server gets a valid direction even if something reads it #}
+			<input type="hidden" name="delay_direction" value="after">
+			<input type="hidden" name="days_before" value="">
 		  </div>
-		</div>
-
-		<div class="text-[11px] text-slate-500">
-		  {{ t('comm_trigger_help_bubble') }}
 		</div>
 
       <div class="text-xs">
@@ -230,34 +240,68 @@ document.addEventListener('DOMContentLoaded', () => {
     sw.addEventListener('change', () => hidden.value = sw.checked ? '1' : '0');
   }
 
-  const wrapBefore = document.getElementById('wrap_days_before');
-  const wrapAfter = document.getElementById('wrap_days_after');
+const triggerSel = document.getElementById('trigger_event');
 
-function refreshDelayFields() {
-  const sel = document.querySelector('input[name="delay_direction"]:checked');
-  const dir = sel ? sel.value : 'before';
+const blockExpiration = document.getElementById('delay_block_expiration');
+const blockUserCreation = document.getElementById('delay_block_user_creation');
 
-  const wrapBefore = document.getElementById('wrap_days_before');
-  const wrapAfter = document.getElementById('wrap_days_after');
-  const helpBefore = document.getElementById('help_days_before');
-  const helpAfter = document.getElementById('help_days_after');
+const daysOffset = document.getElementById('days_offset');
+const dirSelect = document.getElementById('delay_direction_select');
+const hiddenBefore = document.getElementById('days_before_hidden');
+const hiddenAfter = document.getElementById('days_after_hidden');
+
+function setBlockDisabled(blockEl, disabled) {
+  if (!blockEl) return;
+  const els = blockEl.querySelectorAll('input, select, textarea, button');
+  els.forEach(el => {
+    if (disabled) el.setAttribute('disabled', 'disabled');
+    else el.removeAttribute('disabled');
+  });
+}
+
+function syncHiddenDelayValues() {
+  if (!daysOffset || !dirSelect || !hiddenBefore || !hiddenAfter) return;
+
+  const raw = (daysOffset.value || '').trim();
+  const n = raw === '' ? 0 : parseInt(raw, 10);
+  const offset = Number.isFinite(n) && n >= 0 ? n : 0;
+  const dir = (dirSelect.value || 'before');
 
   if (dir === 'after') {
-    wrapBefore && wrapBefore.classList.add('hidden');
-    wrapAfter && wrapAfter.classList.remove('hidden');
-    helpBefore && helpBefore.classList.add('hidden');
-    helpAfter && helpAfter.classList.remove('hidden');
+    hiddenBefore.value = '';
+    hiddenAfter.value = String(offset);
   } else {
-    wrapAfter && wrapAfter.classList.add('hidden');
-    wrapBefore && wrapBefore.classList.remove('hidden');
-    helpAfter && helpAfter.classList.add('hidden');
-    helpBefore && helpBefore.classList.remove('hidden');
+    hiddenAfter.value = '';
+    hiddenBefore.value = String(offset);
   }
 }
 
-const radios = document.querySelectorAll('input[name="delay_direction"]');
-radios.forEach(r => r.addEventListener('change', refreshDelayFields));
-refreshDelayFields();
+function refreshDelayUI() {
+  const ev = triggerSel ? (triggerSel.value || 'expiration') : 'expiration';
+
+  if (ev === 'user_creation') {
+    blockExpiration && blockExpiration.classList.add('hidden');
+    blockUserCreation && blockUserCreation.classList.remove('hidden');
+
+    // Prevent hidden expiration fields from being submitted
+    setBlockDisabled(blockExpiration, true);
+    setBlockDisabled(blockUserCreation, false);
+  } else {
+    blockUserCreation && blockUserCreation.classList.add('hidden');
+    blockExpiration && blockExpiration.classList.remove('hidden');
+
+    setBlockDisabled(blockUserCreation, true);
+    setBlockDisabled(blockExpiration, false);
+
+    syncHiddenDelayValues();
+  }
+}
+
+triggerSel && triggerSel.addEventListener('change', refreshDelayUI);
+daysOffset && daysOffset.addEventListener('input', syncHiddenDelayValues);
+dirSelect && dirSelect.addEventListener('change', syncHiddenDelayValues);
+
+refreshDelayUI();
 });
 </script>
 

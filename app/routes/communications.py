@@ -365,16 +365,36 @@ def register(app):
                 except Exception:
                     days_before = None
 
-            # UI radio: keep ONLY one value (before OR after)
+            # -----------------------------
+            # Delay rules
+            # - user_creation  => ONLY days_after (cannot be "before")
+            # - expiration     => [X] days (before/after) the event
+            # -----------------------------
             delay_direction = (request.form.get("delay_direction") or "").strip().lower()
             if delay_direction not in ("before", "after"):
-                # fallback (edit mode): infer from which value is filled
-                delay_direction = "after" if days_after is not None else "before"
+                delay_direction = "before"
 
-            if delay_direction == "before":
-                days_after = None
-            else:
+            # Normalize negatives
+            if isinstance(days_before, int) and days_before < 0:
+                days_before = 0
+            if isinstance(days_after, int) and days_after < 0:
+                days_after = 0
+
+            if trigger_event == "user_creation":
                 days_before = None
+                if days_after is None:
+                    days_after = 0
+                delay_direction = "after"
+            else:
+                # expiration: keep ONLY one value (before OR after)
+                if delay_direction == "after":
+                    offset = days_after if days_after is not None else (days_before if days_before is not None else 0)
+                    days_after = offset
+                    days_before = None
+                else:
+                    offset = days_before if days_before is not None else (days_after if days_after is not None else 0)
+                    days_before = offset
+                    days_after = None
 
             if not key or not name or not subject or not body:
                 flash(t("comm_missing_fields"), "error")
@@ -443,15 +463,36 @@ def register(app):
                 except Exception:
                     days_before = None
 
-            # UI radio: keep ONLY one value (before OR after)
+            # -----------------------------
+            # Delay rules
+            # - user_creation  => ONLY days_after (cannot be "before")
+            # - expiration     => [X] days (before/after) the event
+            # -----------------------------
             delay_direction = (request.form.get("delay_direction") or "").strip().lower()
             if delay_direction not in ("before", "after"):
-                delay_direction = "after" if days_after is not None else "before"
+                delay_direction = "before"
 
-            if delay_direction == "before":
-                days_after = None
-            else:
+            # Normalize negatives
+            if isinstance(days_before, int) and days_before < 0:
+                days_before = 0
+            if isinstance(days_after, int) and days_after < 0:
+                days_after = 0
+
+            if trigger_event == "user_creation":
                 days_before = None
+                if days_after is None:
+                    days_after = 0
+                delay_direction = "after"
+            else:
+                # expiration: keep ONLY one value (before OR after)
+                if delay_direction == "after":
+                    offset = days_after if days_after is not None else (days_before if days_before is not None else 0)
+                    days_after = offset
+                    days_before = None
+                else:
+                    offset = days_before if days_before is not None else (days_after if days_after is not None else 0)
+                    days_before = offset
+                    days_after = None
 
             if not tid:
                 flash(t("comm_not_found"), "error")

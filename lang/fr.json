@@ -1004,6 +1004,11 @@
 "comm_delay_after": "Après",
 "comm_delay_before_short": "Avant :",
 "comm_delay_after_short": "Après :",
-"comm_delay_help": "Choisis si l’envoi se fait avant ou après le déclencheur, puis indique le nombre de jours."
+"comm_delay_help": "Choisis si l’envoi se fait avant ou après le déclencheur, puis indique le nombre de jours.",
+"days": "jours",
+"comm_delay_event": "l’événement",
+"comm_user_creation_event": "la création du compte",
+"invalid_expiration_date_format": "Format de date d’expiration invalide. Utilisez YYYY-MM-DD.",
+"invalid_renewal_date_format": "Format de date de renouvellement invalide. Utilisez YYYY-MM-DD."
 
 }

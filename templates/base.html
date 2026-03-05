@@ -4,9 +4,11 @@
   <meta charset="utf-8">
   <title>{% block title %}VODUM{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  	<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icon.png') }}">
-	<link rel="icon" type="image/png" sizes="96x96" href="{{ url_for('static', filename='icon.png') }}">
-	<link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icon.png') }}">
+
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icon.png') }}">
+  <link rel="icon" type="image/png" sizes="96x96" href="{{ url_for('static', filename='icon.png') }}">
+  <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icon.png') }}">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/logo.svg') }}">
 
   <!-- Tailwind CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -23,196 +25,236 @@
       darkMode: 'class'
     }
   </script>
+
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 
+  <!-- Flatpickr (date picker: force YYYY-MM-DD + locale from <html lang>) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
-  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/logo.svg') }}">
-<style>
-  .log-update {
-    background: linear-gradient(
-      90deg,
-      rgba(99,102,241,0.12),
-      rgba(99,102,241,0.02)
-    );
-    border-left: 3px solid rgba(99,102,241,0.6);
-  }
-</style>
+  <style>
+    .log-update {
+      background: linear-gradient(
+        90deg,
+        rgba(99,102,241,0.12),
+        rgba(99,102,241,0.02)
+      );
+      border-left: 3px solid rgba(99,102,241,0.6);
+    }
 
+    /* Flatpickr dark-ish theme to match VODUM */
+    .flatpickr-calendar {
+      background: #0b1220 !important;
+      border: 1px solid rgba(148,163,184,0.18) !important;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.45) !important;
+    }
+    .flatpickr-months .flatpickr-month,
+    .flatpickr-current-month,
+    .flatpickr-weekdays,
+    .flatpickr-day {
+      color: #e2e8f0 !important;
+    }
+    .flatpickr-weekday {
+      color: rgba(226,232,240,0.7) !important;
+    }
+    .flatpickr-day:hover {
+      background: rgba(99,102,241,0.18) !important;
+    }
+    .flatpickr-day.selected,
+    .flatpickr-day.startRange,
+    .flatpickr-day.endRange {
+      background: rgba(99,102,241,0.75) !important;
+      border-color: rgba(99,102,241,0.75) !important;
+    }
+    .flatpickr-day.today {
+      border-color: rgba(99,102,241,0.6) !important;
+    }
+    .flatpickr-time input,
+    .flatpickr-am-pm {
+      color: #e2e8f0 !important;
+      background: transparent !important;
+    }
+  </style>
 </head>
+
 <body class="bg-slate-950 text-slate-100">
   <div class="min-h-screen flex">
     <!-- Sidebar -->
-	<aside class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col
-				   sticky top-0 h-screen">
+    <aside class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col sticky top-0 h-screen">
 
-	  <!-- Header -->
-	  <div class="h-16 flex items-center px-4 border-b border-slate-800">
-		<span class="text-xl font-bold tracking-tight">{{ app_brand_name }}
-</span>
-	  </div>
+      <!-- Header -->
+      <div class="h-16 flex items-center px-4 border-b border-slate-800">
+        <span class="text-xl font-bold tracking-tight">{{ app_brand_name }}</span>
+      </div>
 
-	  <!-- Menu (scroll interne si nécessaire) -->
-	  <nav class="flex-1 px-2 py-4 space-y-1 text-sm overflow-y-auto">
-		<a href="{{ url_for('dashboard') }}"
-		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='dashboard' }}">
-		  <span class="material-icons-outlined mr-2 text-base">dashboard</span>
-		  {{ t("dashboard") }}
-		</a>
-		<a href="{{ url_for('monitoring_page') }}"
-		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='monitoring' }}">
-		  <span class="material-icons-outlined mr-2 text-base">tv</span>
-		  {{ t("monitoring") }}
-		</a>
-		<a href="{{ url_for('users_list') }}"
-		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='users' }}">
-		  <span class="material-icons-outlined mr-2 text-base">group</span>
-		  {{ t("users") }}
-		</a>
-		<a href="{{ url_for('servers_list') }}"
-		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='servers' }}">
-		  <span class="material-icons-outlined mr-2 text-base">dns</span>
-		  {{ t("servers_libraries") }}
-		</a>
-		<a href="{{ url_for('subscriptions') }}"
-		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='subscriptions' }}">
-		  <span class="material-icons-outlined mr-2 text-base">redeem</span>
-		  {{ t("subscriptions") }}
-		</a>
-		<a href="{{ url_for('tasks_page') }}"
-		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='tasks' }}">
-		  <span class="material-icons-outlined mr-2 text-base">schedule</span>
-		  {{ t("tasks") }}
-		</a>		<a href="{{ url_for('communications_page') }}"
-		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='communications' }}">
-		  <span class="material-icons-outlined mr-2 text-base">forum</span>
-		  {{ t("communications") }}
-		</a>
-		<a href="{{ url_for('backup_page') }}"
-		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='backup' }}">
-		  <span class="material-icons-outlined mr-2 text-base">save</span>
-		  {{ t("backup") }}
-		</a>
-		<a href="{{ url_for('settings_page') }}"
-		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='settings' }}">
-		  <span class="material-icons-outlined mr-2 text-base">settings</span>
-		  {{ t("settings") }}
-		</a>
-		<a href="{{ url_for('logs_page') }}"
-		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='logs' }}">
-		  <span class="material-icons-outlined mr-2 text-base">list</span>
-		  {{ t("logs") }}
-		</a>
-		<a href="https://nexius2.github.io/vodum-docs/"
-		   target="_blank"
-		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800">
-		  <span class="material-icons-outlined mr-2 text-base">
-			help_outline
-		  </span>
-		  {{ t("documentation") }}
-		</a>
-		<a href="{{ url_for('about_page') }}"
-		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='about' }}">
-		  <span class="material-icons-outlined mr-2 text-base">info</span>
-		  {{ t("about") }}
-		</a>
-		<a href="{{ url_for('logout') }}"
-		   class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800">
-		  <span class="material-icons-outlined mr-2 text-base">logout</span>
-		  {{ t("common.logout") }}
-		</a>
+      <!-- Menu (scroll interne si nécessaire) -->
+      <nav class="flex-1 px-2 py-4 space-y-1 text-sm overflow-y-auto">
+        <a href="{{ url_for('dashboard') }}"
+           class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='dashboard' }}">
+          <span class="material-icons-outlined mr-2 text-base">dashboard</span>
+          {{ t("dashboard") }}
+        </a>
 
-	  </nav>
+        <a href="{{ url_for('monitoring_page') }}"
+           class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='monitoring' }}">
+          <span class="material-icons-outlined mr-2 text-base">tv</span>
+          {{ t("monitoring") }}
+        </a>
 
-	<!-- Indicateur activité tâches (visible seulement si active > 0) -->
-	<div id="taskActivity" class="px-3 pb-2 text-xs text-slate-400 hidden">
-	  <span class="inline-flex items-center gap-2">
-		<span class="inline-block h-3 w-3 rounded-full border-2 border-slate-600 border-t-slate-200 animate-spin"></span>
-		<span>Running <span id="taskActivityCount">0</span> tasks</span>
-	  </span>
-	</div>
+        <a href="{{ url_for('users_list') }}"
+           class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='users' }}">
+          <span class="material-icons-outlined mr-2 text-base">group</span>
+          {{ t("users") }}
+        </a>
 
-	  <!-- Footer version toujours visible -->
-	<div class="p-3 text-xs text-slate-500 border-t border-slate-800 flex items-center justify-between gap-2">
-	  <div class="truncate">
-		VODUM · {{ g.app_version|default('dev') }}
-	  </div>
+        <a href="{{ url_for('servers_list') }}"
+           class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='servers' }}">
+          <span class="material-icons-outlined mr-2 text-base">dns</span>
+          {{ t("servers_libraries") }}
+        </a>
 
-	{% if g.update_available %}
-	  <span class="ml-2 relative inline-flex group">
-		<span
-		  class="inline-flex items-center gap-1
-				 px-2 py-0.5 rounded-md
-				 text-[10px] font-medium tracking-wide
-				 bg-indigo-500/10 text-indigo-300
-				 border border-indigo-500/30"
-		>
-		  <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24"
-			   stroke="currentColor" stroke-width="2">
-			<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-		  </svg>
-		  UPDATE
-		</span>
+        <a href="{{ url_for('subscriptions') }}"
+           class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='subscriptions' }}">
+          <span class="material-icons-outlined mr-2 text-base">redeem</span>
+          {{ t("subscriptions") }}
+        </a>
 
-		<!-- Tooltip -->
-		<span
-		  class="pointer-events-none absolute -top-9 right-0
-				 opacity-0 group-hover:opacity-100
-				 translate-y-1 group-hover:translate-y-0
-				 transition-all duration-150
-				 px-2 py-1 rounded-md
-				 text-[11px] text-slate-100
-				 bg-slate-900 border border-slate-700
-				 shadow-lg whitespace-nowrap"
-		>
-		  Update available
-		</span>
-	  </span>
-	{% endif %}
+        <a href="{{ url_for('tasks_page') }}"
+           class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='tasks' }}">
+          <span class="material-icons-outlined mr-2 text-base">schedule</span>
+          {{ t("tasks") }}
+        </a>
 
-	</div>
+        <a href="{{ url_for('communications_page') }}"
+           class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='communications' }}">
+          <span class="material-icons-outlined mr-2 text-base">forum</span>
+          {{ t("communications") }}
+        </a>
 
-	</aside>
+        <a href="{{ url_for('backup_page') }}"
+           class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='backup' }}">
+          <span class="material-icons-outlined mr-2 text-base">save</span>
+          {{ t("backup") }}
+        </a>
 
+        <a href="{{ url_for('settings_page') }}"
+           class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='settings' }}">
+          <span class="material-icons-outlined mr-2 text-base">settings</span>
+          {{ t("settings") }}
+        </a>
+
+        <a href="{{ url_for('logs_page') }}"
+           class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='logs' }}">
+          <span class="material-icons-outlined mr-2 text-base">list</span>
+          {{ t("logs") }}
+        </a>
+
+        <a href="https://nexius2.github.io/vodum-docs/"
+           target="_blank"
+           class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800">
+          <span class="material-icons-outlined mr-2 text-base">help_outline</span>
+          {{ t("documentation") }}
+        </a>
+
+        <a href="{{ url_for('about_page') }}"
+           class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='about' }}">
+          <span class="material-icons-outlined mr-2 text-base">info</span>
+          {{ t("about") }}
+        </a>
+
+        <a href="{{ url_for('logout') }}"
+           class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800">
+          <span class="material-icons-outlined mr-2 text-base">logout</span>
+          {{ t("common.logout") }}
+        </a>
+      </nav>
+
+      <!-- Indicateur activité tâches (visible seulement si active > 0) -->
+      <div id="taskActivity" class="px-3 pb-2 text-xs text-slate-400 hidden">
+        <span class="inline-flex items-center gap-2">
+          <span class="inline-block h-3 w-3 rounded-full border-2 border-slate-600 border-t-slate-200 animate-spin"></span>
+          <span>Running <span id="taskActivityCount">0</span> tasks</span>
+        </span>
+      </div>
+
+      <!-- Footer version toujours visible -->
+      <div class="p-3 text-xs text-slate-500 border-t border-slate-800 flex items-center justify-between gap-2">
+        <div class="truncate">
+          VODUM · {{ g.app_version|default('dev') }}
+        </div>
+
+        {% if g.update_available %}
+          <span class="ml-2 relative inline-flex group">
+            <span
+              class="inline-flex items-center gap-1
+                     px-2 py-0.5 rounded-md
+                     text-[10px] font-medium tracking-wide
+                     bg-indigo-500/10 text-indigo-300
+                     border border-indigo-500/30"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24"
+                   stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              UPDATE
+            </span>
+
+            <!-- Tooltip -->
+            <span
+              class="pointer-events-none absolute -top-9 right-0
+                     opacity-0 group-hover:opacity-100
+                     translate-y-1 group-hover:translate-y-0
+                     transition-all duration-150
+                     px-2 py-1 rounded-md
+                     text-[11px] text-slate-100
+                     bg-slate-900 border border-slate-700
+                     shadow-lg whitespace-nowrap"
+            >
+              Update available
+            </span>
+          </span>
+        {% endif %}
+      </div>
+    </aside>
 
     <!-- Main content -->
     <div class="flex-1 flex flex-col">
       <!-- Header -->
-		<header class="h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-950/80 backdrop-blur">
+      <header class="h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-950/80 backdrop-blur">
+        <div class="flex flex-col">
+          <h1 class="text-xl font-semibold text-slate-200">
+            {% block header_title %}{% endblock %}
+          </h1>
+          <p class="text-xs text-slate-400">
+            {% block header_subtitle %}{% endblock %}
+          </p>
+        </div>
 
-		  <div class="flex flex-col">
-			<h1 class="text-xl font-semibold text-slate-200">
-				{% block header_title %}{% endblock %}
-			</h1>
-			<p class="text-xs text-slate-400">
-				{% block header_subtitle %}{% endblock %}
-			</p>
-		  </div>
-
-		  <!-- Zone à droite du header (pour Save) -->
-		  <div>
-			  {% block header_actions %}{% endblock %}
-		  </div>
-
-		</header>
-
+        <!-- Zone à droite du header (pour Save) -->
+        <div>
+          {% block header_actions %}{% endblock %}
+        </div>
+      </header>
 
       <!-- Page content -->
       <main class="flex-1 p-6">
-		<div id="clientFlash" class="space-y-2 mb-4 hidden"></div>
+        <div id="clientFlash" class="space-y-2 mb-4 hidden"></div>
+
         {% with messages = get_flashed_messages(with_categories=true) %}
           {% if messages %}
             <div class="space-y-2 mb-4">
-            {% for category, message in messages %}
-              <div class="text-xs px-3 py-2 rounded-lg
-                {% if category=='success' %}bg-emerald-900/40 text-emerald-100
-                {% elif category=='error' %}bg-rose-900/40 text-rose-100
-                {% else %}bg-slate-800 text-slate-100{% endif %}">
-                {{ t(message) }}
-              </div>
-            {% endfor %}
+              {% for category, message in messages %}
+                <div class="text-xs px-3 py-2 rounded-lg
+                  {% if category=='success' %}bg-emerald-900/40 text-emerald-100
+                  {% elif category=='error' %}bg-rose-900/40 text-rose-100
+                  {% else %}bg-slate-800 text-slate-100{% endif %}">
+                  {{ t(message) }}
+                </div>
+              {% endfor %}
             </div>
           {% endif %}
         {% endwith %}
+
         {% block content %}{% endblock %}
       </main>
     </div>
@@ -222,5 +264,61 @@
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+  <script>
+    /**
+     * VODUM date pickers
+     * - Uses Flatpickr to enforce YYYY-MM-DD everywhere (independent from OS/browser locale)
+     * - Loads locale dynamically based on <html lang="..."> (no hardcoded language list)
+     *
+     * Usage: add class "vodum-date" to any input you want as a date picker.
+     */
+    (function () {
+      function loadScript(src) {
+        return new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = src;
+          s.async = true;
+          s.onload = resolve;
+          s.onerror = reject;
+          document.head.appendChild(s);
+        });
+      }
+
+      function getBaseLang() {
+        const raw = (document.documentElement.getAttribute('lang') || 'en').toLowerCase();
+        return raw.split('-', 1)[0] || 'en';
+      }
+
+      async function initVodumDatePickers() {
+        if (!window.flatpickr) return;
+
+        const base = getBaseLang();
+
+        try {
+          await loadScript(`https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/${base}.js`);
+        } catch (e) {
+          // ignore: fallback to default
+        }
+
+        const locale =
+          (window.flatpickr.l10ns && window.flatpickr.l10ns[base])
+            ? window.flatpickr.l10ns[base]
+            : window.flatpickr.l10ns.default;
+
+        document.querySelectorAll('input.vodum-date').forEach((el) => {
+          if (el._vodumFlatpickr) return;
+
+          el._vodumFlatpickr = flatpickr(el, {
+            allowInput: true,
+            dateFormat: "Y-m-d",
+            locale: locale,
+            disableMobile: true
+          });
+        });
+      }
+
+      document.addEventListener('DOMContentLoaded', initVodumDatePickers);
+    })();
+  </script>
 </body>
 </html>

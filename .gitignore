@@ -28,3 +28,7 @@ Thumbs.db
 
 # Docker
 docker-data/
+
+# Files
+create-container-test.sh
+get-container.sh

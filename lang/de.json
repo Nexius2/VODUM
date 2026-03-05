@@ -1005,7 +1005,12 @@
 "comm_delay_after": "Danach",
 "comm_delay_before_short": "Davor:",
 "comm_delay_after_short": "Danach:",
-"comm_delay_help": "Wähle, ob die Benachrichtigung vor oder nach dem Trigger gesendet wird, und setze dann die Anzahl der Tage."
+"comm_delay_help": "Wähle, ob die Benachrichtigung vor oder nach dem Trigger gesendet wird, und setze dann die Anzahl der Tage.",
+"days": "Tage",
+"comm_delay_event": "das Ereignis",
+"comm_user_creation_event": "die Kontoerstellung",
+"invalid_expiration_date_format": "Invalid expiration date format. Use YYYY-MM-DD.",
+"invalid_renewal_date_format": "Invalid renewal date format. Use YYYY-MM-DD."
 
  
 }
