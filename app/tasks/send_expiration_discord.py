@@ -8,7 +8,7 @@ enabled in the database.
 """
 
 from logging_utils import get_logger
-from tasks.task_logs import task_logs
+from tasks_engine import task_logs
 
 log = get_logger("send_expiration_discord")
 

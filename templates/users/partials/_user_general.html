@@ -257,16 +257,21 @@
 
         <label class="text-sm">
           {{ t("expiration") }}
-          <input type="date" name="expiration_date"
+          <input type="text" name="expiration_date"
                  value="{{ user.expiration_date or '' }}"
-                 class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+				 placeholder="YYYY-MM-DD"
+				 autocomplete="off"
+                 class="vodum-date mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
         </label>
 
         <label class="text-sm">
           {{ t("renewal_date") }}
-          <input type="date" name="renewal_date"
-                 value="{{ user.renewal_date or '' }}"
-                 class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+		<input type="text"
+			   name="renewal_date"
+			   value="{{ user.renewal_date or '' }}"
+			   placeholder="YYYY-MM-DD"
+			   autocomplete="off"
+			   class="vodum-date mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
         </label>
 
         <label class="text-sm sm:col-span-2">

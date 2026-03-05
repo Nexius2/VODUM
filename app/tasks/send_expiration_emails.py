@@ -16,7 +16,9 @@ from datetime import date, datetime
 
 from logging_utils import get_logger
 from web.helpers import get_db
-from task_logs import task_logs
+from tasks_engine import task_logs
+from notifications_utils import is_email_ready
+from discord_utils import enrich_discord_settings, is_discord_ready
 
 from communications_engine import send_to_user, record_history, fetch_template_attachments, SendAttempt
 from email_sender import send_email
@@ -236,6 +238,18 @@ def run(task_id: int | None = None):
 
         settings = db.query_one("SELECT * FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
+        
+        # If no channel is ready, do nothing (avoid pointless DB work and errors)
+        s2 = enrich_discord_settings(db, settings)
+        email_ok = is_email_ready(settings)
+        discord_ok = is_discord_ready(s2)
+
+        if not email_ok and not discord_ok:
+            msg = "Mailing + Discord disabled or not configured → no action."
+            task_logs(task_id, "info", msg)
+            log.warning(msg)
+            return
+        
         # Flush scheduled notifications (user_creation days_after etc.)
         _flush_comm_scheduled(db, settings, task_id)
 

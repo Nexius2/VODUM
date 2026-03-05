@@ -1005,5 +1005,10 @@
 "comm_delay_after": "Dopo",
 "comm_delay_before_short": "Prima:",
 "comm_delay_after_short": "Dopo:",
-"comm_delay_help": "Scegli se la notifica viene inviata prima o dopo il trigger, poi imposta il numero di giorni."
+"comm_delay_help": "Scegli se la notifica viene inviata prima o dopo il trigger, poi imposta il numero di giorni.",
+"days": "giorni",
+"comm_delay_event": "l'evento",
+"comm_user_creation_event": "la creazione dell'account",
+"invalid_expiration_date_format": "Invalid expiration date format. Use YYYY-MM-DD.",
+"invalid_renewal_date_format": "Invalid renewal date format. Use YYYY-MM-DD."
 }

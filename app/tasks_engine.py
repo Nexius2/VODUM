@@ -45,6 +45,7 @@ worker_running = False
 TASK_MAX_DURATION = {
     "sync_plex": 60 * 60,
     "sync_jellyfin": 30 * 60,
+    "import_tautulli": 6 * 60 * 60,  # 6h (migration possible, gros volumes)
 
     # Monitoring / workers : doivent être rapides
     "monitor_collect_sessions": 60,        # 1 min

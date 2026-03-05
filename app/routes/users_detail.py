@@ -40,6 +40,31 @@ auth_logger = get_logger("auth")
 security_logger = get_logger("security")
 settings_logger = get_logger("settings")
 
+def _iso_date_or_none(raw: str):
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%d/%m/%Y", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(raw, fmt).date().isoformat()
+        except Exception:
+            pass
+
+    m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})$", raw)
+    if m:
+        y, mo, d = m.group(1), m.group(2).zfill(2), m.group(3).zfill(2)
+        try:
+            return datetime.strptime(f"{y}-{mo}-{d}", "%Y-%m-%d").date().isoformat()
+        except Exception:
+            return None
+
+    try:
+        date_part = raw.split("T", 1)[0].split(" ", 1)[0]
+        return datetime.fromisoformat(date_part).date().isoformat()
+    except Exception:
+        return None
+
 def register(app):
     @app.route("/users/<int:user_id>", methods=["GET", "POST"])
     def user_detail(user_id):
@@ -143,8 +168,26 @@ def register(app):
             firstname       = (form.get("firstname") or "").strip() or user.get("firstname")
             lastname        = (form.get("lastname") or "").strip() or user.get("lastname")
             second_email    = (form.get("second_email") or "").strip() or user.get("second_email")
-            expiration_date = (form.get("expiration_date") or "").strip() or user.get("expiration_date")
-            renewal_date    = (form.get("renewal_date") or "").strip() or user.get("renewal_date")
+            raw_exp = (form.get("expiration_date") or "").strip()
+            raw_ren = (form.get("renewal_date") or "").strip()
+
+            # Keep existing values by default (do NOT wipe on parse failure)
+            expiration_date = user.get("expiration_date")
+            renewal_date = user.get("renewal_date")
+
+            if raw_exp:
+                parsed = _iso_date_or_none(raw_exp)
+                if parsed is not None:
+                    expiration_date = parsed
+                else:
+                    flash("invalid_expiration_date_format", "error")
+
+            if raw_ren:
+                parsed = _iso_date_or_none(raw_ren)
+                if parsed is not None:
+                    renewal_date = parsed
+                else:
+                    flash("invalid_renewal_date_format", "error")
             renewal_method  = (form.get("renewal_method") or "").strip() or user.get("renewal_method")
 
             # Notes : on autorise le vide volontaire

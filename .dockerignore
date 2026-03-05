@@ -1,11 +1,43 @@
-__pycache__/
+# Git
+.git
+.gitignore
+README.md
+
+# Python
+__pycache__
 *.pyc
 *.pyo
 *.pyd
+
+# Virtual env
+venv
+.venv
+.env
+.env.local
+
+# Databases
 *.db
 *.sqlite
 *.sqlite3
-.env
-.git
-.gitignore
-.dockerignore
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode
+.idea
+
+# Local docker / dev
+docker-data/
+
+# Local scripts (not needed in container)
+create-container-test.sh
+get-container.sh
+
+# Tests
+tests/

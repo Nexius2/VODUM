@@ -885,159 +885,175 @@ def import_tautulli_db(
 def run(task_id, db):
     """
     Entrypoint VODUM tasks_engine:
-    - takes 1 queued job in tautulli_import_jobs
-    - set running
-    - import
-    - persist stats_json + status file for UI
-    - optional: email admin when done
+    - consume ALL queued jobs in tautulli_import_jobs (oldest first)
+    - mark each job running -> success/error
+    - persist stats_json + status file for UI (last job)
+    - delete uploaded file after each job
     """
     from logging_utils import get_logger
     from email_sender import send_email
 
     logger = get_logger("task_import_tautulli")
 
-    job = db.query_one(
-        """
-        SELECT *
-        FROM tautulli_import_jobs
-        WHERE status='queued'
-        ORDER BY created_at ASC
-        LIMIT 1
-        """
-    )
+    processed = 0
+    results = []
 
-    if not job:
-        # log explicite + compteur pour diagnostiquer "upload ok mais rien importé"
-        row_cnt = db.query_one("SELECT COUNT(*) AS c FROM tautulli_import_jobs WHERE status='queued'")
-        queued_count = int(row_cnt["c"]) if row_cnt and row_cnt["c"] is not None else 0
-        logger.info(f"No queued Tautulli import job found (queued_count={queued_count})")
-        return {"status": "idle", "message": "no queued job", "queued_count": queued_count}
-
-
-    job_d = dict(job)
-
-    job_id = int(job_d["id"])
-    file_path = (job_d.get("file_path") or "").strip()
-    keep_all_users = int(job_d.get("keep_all_users") or 0) == 1
-    keep_all_libraries = int(job_d.get("keep_all_libraries") or 0) == 1
-    import_only_available_libraries = int(job_d.get("import_only_available_libraries") or 1) == 1
-    target_server_id = int(job_d.get("target_server_id") or 0)
-
-
-
-    db.execute(
-        """
-        UPDATE tautulli_import_jobs
-        SET status='running', started_at=CURRENT_TIMESTAMP, last_error=NULL
-        WHERE id=? AND status='queued'
-        """,
-        (job_id,),
-    )
-
-    if not file_path or not os.path.exists(file_path):
-        err = f"File not found: {file_path}"
-        db.execute(
+    while True:
+        job = db.query_one(
             """
-            UPDATE tautulli_import_jobs
-            SET status='error', finished_at=CURRENT_TIMESTAMP, last_error=?
-            WHERE id=?
-            """,
-            (err, job_id),
-        )
-        _write_status_file({"status": "error", "job_id": job_id, "error": err})
-        logger.error(err)
-        return {"status": "error", "error": err}
-
-    if not _is_valid_tautulli_db(file_path):
-        err = "Invalid Tautulli database (missing required tables)"
-        db.execute(
+            SELECT *
+            FROM tautulli_import_jobs
+            WHERE status='queued'
+            ORDER BY created_at ASC
+            LIMIT 1
             """
-            UPDATE tautulli_import_jobs
-            SET status='error', finished_at=CURRENT_TIMESTAMP, last_error=?
-            WHERE id=?
-            """,
-            (err, job_id),
-        )
-        _write_status_file({"status": "error", "job_id": job_id, "error": err})
-        logger.error(err)
-        # IMPORTANT: do not return before cleanup -> handled in finally below
-        return {"status": "error", "job_id": job_id, "error": err}
-
-
-    try:
-        stats = import_tautulli_db(
-            db,
-            file_path,
-            keep_all_users=keep_all_users,
-            keep_all_libraries=keep_all_libraries,
-            import_only_available_libraries=import_only_available_libraries,
-            target_server_id=target_server_id,
         )
 
-        payload = {
-            "scanned": stats.scanned,
-            "inserted": stats.inserted,
-            "skipped_duplicates": stats.skipped_duplicates,
-            "skipped_unknown_user": stats.skipped_unknown_user,
-            "skipped_unknown_library": stats.skipped_unknown_library,
-            "skipped_missing_user_key": stats.skipped_missing_user_key,
-            "skipped_missing_required": stats.skipped_missing_required,
-        }
+        if not job:
+            row_cnt = db.query_one("SELECT COUNT(*) AS c FROM tautulli_import_jobs WHERE status='queued'")
+            queued_count = int(row_cnt["c"]) if row_cnt and row_cnt["c"] is not None else 0
+
+            if processed == 0:
+                logger.info(f"No queued Tautulli import job found (queued_count={queued_count})")
+                return {"status": "idle", "message": "no queued job", "queued_count": queued_count}
+
+            logger.info(f"Tautulli import batch finished: processed={processed}, remaining_queued={queued_count}")
+            return {"status": "success", "processed": processed, "remaining_queued": queued_count, "results": results}
+
+        job_d = dict(job)
+        job_id = int(job_d["id"])
+        file_path = (job_d.get("file_path") or "").strip()
+
+        keep_all_users = int(job_d.get("keep_all_users") or 0) == 1
+        keep_all_libraries = int(job_d.get("keep_all_libraries") or 0) == 1
+        import_only_available_libraries = int(job_d.get("import_only_available_libraries") or 1) == 1
+        target_server_id = int(job_d.get("target_server_id") or 0)
 
         db.execute(
             """
             UPDATE tautulli_import_jobs
-            SET status='success', finished_at=CURRENT_TIMESTAMP, stats_json=?, last_error=NULL
-            WHERE id=?
+            SET status='running', started_at=CURRENT_TIMESTAMP, last_error=NULL
+            WHERE id=? AND status='queued'
             """,
-            (json.dumps(payload, ensure_ascii=False), job_id),
+            (job_id,),
         )
 
-        _write_status_file({"status": "success", "job_id": job_id, "stats": payload})
-        logger.info(f"Tautulli import success (job_id={job_id}) {payload}")
+        job_result = {"job_id": job_id, "status": "error"}
 
-        # optional admin email...
         try:
-            settings = db.query_one("SELECT * FROM settings WHERE id=1")
-            if settings:
-                settings_d = dict(settings)
-                if int(settings_d.get("mailing_enabled") or 0) == 1:
-                    to_email = (settings_d.get("admin_email") or "").strip()
-                    if to_email:
-                        subject = "VODUM - Tautulli import completed"
-                        body = "Import completed successfully.\n\n" + json.dumps(payload, indent=2, ensure_ascii=False)
-                        ok, err2 = send_email(subject, body, to_email, settings_d)
-                        if not ok:
-                            logger.warning(f"Email notification failed: {err2}")
+            if not file_path or not os.path.exists(file_path):
+                err = f"File not found: {file_path}"
+                db.execute(
+                    """
+                    UPDATE tautulli_import_jobs
+                    SET status='error', finished_at=CURRENT_TIMESTAMP, last_error=?
+                    WHERE id=?
+                    """,
+                    (err, job_id),
+                )
+                _write_status_file({"status": "error", "job_id": job_id, "error": err})
+                logger.error(err)
+                job_result = {"job_id": job_id, "status": "error", "error": err}
+                results.append(job_result)
+                processed += 1
+                continue
+
+            if not _is_valid_tautulli_db(file_path):
+                err = "Invalid Tautulli database (missing required tables)"
+                db.execute(
+                    """
+                    UPDATE tautulli_import_jobs
+                    SET status='error', finished_at=CURRENT_TIMESTAMP, last_error=?
+                    WHERE id=?
+                    """,
+                    (err, job_id),
+                )
+                _write_status_file({"status": "error", "job_id": job_id, "error": err})
+                logger.error(err)
+                job_result = {"job_id": job_id, "status": "error", "error": err}
+                results.append(job_result)
+                processed += 1
+                continue
+
+            stats = import_tautulli_db(
+                db,
+                file_path,
+                keep_all_users=keep_all_users,
+                keep_all_libraries=keep_all_libraries,
+                import_only_available_libraries=import_only_available_libraries,
+                target_server_id=target_server_id,
+            )
+
+            payload = {
+                "scanned": stats.scanned,
+                "inserted": stats.inserted,
+                "skipped_duplicates": stats.skipped_duplicates,
+                "skipped_unknown_user": stats.skipped_unknown_user,
+                "skipped_unknown_library": stats.skipped_unknown_library,
+                "skipped_missing_user_key": stats.skipped_missing_user_key,
+                "skipped_missing_required": stats.skipped_missing_required,
+            }
+
+            db.execute(
+                """
+                UPDATE tautulli_import_jobs
+                SET status='success', finished_at=CURRENT_TIMESTAMP, stats_json=?, last_error=NULL
+                WHERE id=?
+                """,
+                (json.dumps(payload, ensure_ascii=False), job_id),
+            )
+
+            _write_status_file({"status": "success", "job_id": job_id, "stats": payload})
+            logger.info(f"Tautulli import success (job_id={job_id}) {payload}")
+
+            # optional admin email...
+            try:
+                settings = db.query_one("SELECT * FROM settings WHERE id=1")
+                if settings:
+                    settings_d = dict(settings)
+                    if int(settings_d.get("mailing_enabled") or 0) == 1:
+                        to_email = (settings_d.get("admin_email") or "").strip()
+                        if to_email:
+                            subject = "VODUM - Tautulli import completed"
+                            body = "Import completed successfully.\n\n" + json.dumps(payload, indent=2, ensure_ascii=False)
+                            ok, err2 = send_email(subject, body, to_email, settings_d)
+                            if not ok:
+                                logger.warning(f"Email notification failed: {err2}")
+            except Exception as e:
+                logger.warning(f"Notification step failed: {e}")
+
+            job_result = {"job_id": job_id, "status": "success", "stats": payload}
+            results.append(job_result)
+            processed += 1
+
         except Exception as e:
-            logger.warning(f"Notification step failed: {e}")
+            err = str(e)
+            db.execute(
+                """
+                UPDATE tautulli_import_jobs
+                SET status='error', finished_at=CURRENT_TIMESTAMP, last_error=?
+                WHERE id=?
+                """,
+                (err[:2000], job_id),
+            )
 
-        return {"status": "success", "job_id": job_id, "stats": payload}
+            _write_status_file({"status": "error", "job_id": job_id, "error": err})
+            logger.error(f"Tautulli import failed (job_id={job_id}): {err}", exc_info=True)
 
-    except Exception as e:
-        err = str(e)
-        db.execute(
-            """
-            UPDATE tautulli_import_jobs
-            SET status='error', finished_at=CURRENT_TIMESTAMP, last_error=?
-            WHERE id=?
-            """,
-            (err[:2000], job_id),
-        )
+            job_result = {"job_id": job_id, "status": "error", "error": err}
+            results.append(job_result)
+            processed += 1
 
-        _write_status_file({"status": "error", "job_id": job_id, "error": err})
-        logger.error(f"Tautulli import failed (job_id={job_id}): {err}", exc_info=True)
-        return {"status": "error", "job_id": job_id, "error": err}
-
-    finally:
-        # Always delete the uploaded file AFTER processing attempt (success or error)
-        try:
-            os.remove(file_path)
-            logger.info(f"Deleted uploaded Tautulli DB after processing: {file_path}")
-        except FileNotFoundError:
-            logger.warning(f"Tautulli DB already deleted: {file_path}")
-        except Exception as e:
-            logger.warning(f"Failed to delete Tautulli DB '{file_path}': {e}")
+        finally:
+            # Always delete the uploaded file AFTER processing attempt (success or error)
+            try:
+                if file_path:
+                    os.remove(file_path)
+                    logger.info(f"Deleted uploaded Tautulli DB after processing: {file_path}")
+            except FileNotFoundError:
+                logger.warning(f"Tautulli DB already deleted: {file_path}")
+            except Exception as e:
+                logger.warning(f"Failed to delete Tautulli DB '{file_path}': {e}")
 
 
 

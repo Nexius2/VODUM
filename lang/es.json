@@ -1005,6 +1005,11 @@
 "comm_delay_after": "Después",
 "comm_delay_before_short": "Antes:",
 "comm_delay_after_short": "Después:",
-"comm_delay_help": "Elige si la notificación se envía antes o después del disparador y luego establece el número de días."
+"comm_delay_help": "Elige si la notificación se envía antes o después del disparador y luego establece el número de días.",
+"days": "días",
+"comm_delay_event": "el evento",
+"comm_user_creation_event": "la creación de la cuenta",
+"invalid_expiration_date_format": "Invalid expiration date format. Use YYYY-MM-DD.",
+"invalid_renewal_date_format": "Invalid renewal date format. Use YYYY-MM-DD."
 
 }

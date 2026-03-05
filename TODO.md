@@ -6,7 +6,7 @@ This document lists the planned improvements, bug fixes, and future features for
 
 # 1. Tasks / Automation Issues
 
-- [ ] **`import_tautulli` task runs unexpectedly**
+- [X] **`import_tautulli` task runs unexpectedly**
   - The `import_tautulli` task appears to run periodically even when no schedule is configured.
   - Investigate why the task is triggered automatically.
   - Ensure the task runs **only when explicitly scheduled**.
@@ -15,19 +15,19 @@ This document lists the planned improvements, bug fixes, and future features for
 
 # 2. Plex User Creation Issues
 
-- [ ] **Plex invitation email is not sent**
+- [/] **Plex invitation email is not sent**
   - When creating a Plex user, the invitation email is not sent.
   - The user therefore does not receive the Plex invitation link.
 
-- [ ] **Duplicate user state in Plex**
+- [X] **Duplicate user state in Plex**
   - Users remain in the **Invites** section.
   - The same user may also appear in the **Users** list.
 
-- [ ] **Library permissions not applied on user creation**
+- [X] **Library permissions not applied on user creation**
   - When creating a user, the assigned libraries are not correctly applied.
   - Verify the access grant process.
 
-- [ ] **Email sending fails if SMTP is not configured**
+- [X] **Email sending fails if SMTP is not configured**
   - When SMTP is not configured, the process fails.
   - Expected behavior:
     - either skip email sending gracefully
@@ -39,7 +39,7 @@ This document lists the planned improvements, bug fixes, and future features for
 
 ## User Detail Page
 
-- [ ] **Date formatting inconsistency**
+- [X] **Date formatting inconsistency**
   - Creation date and expiration date are not displayed consistently.
   - Verify formatting for:
     - creation date

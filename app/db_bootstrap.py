@@ -1313,7 +1313,21 @@ def run_migrations():
         "enabled": 1,
         "status": "idle"
     })
-
+    # --- FORCE import_tautulli en ON-DEMAND (pas de cron) ---
+    cursor.execute("""
+        UPDATE tasks
+        SET
+            schedule = NULL,
+            next_run  = NULL,
+            enabled   = 1,
+            status    = CASE
+                          WHEN status = 'running' THEN status
+                          ELSE 'idle'
+                        END,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE name = 'import_tautulli'
+    """)
+    conn.commit()
 
     # Ajouter la tâche send_expiration_emails si absente
     cursor.execute("""
@@ -1595,14 +1609,14 @@ def run_migrations():
         "status": "disabled"
     })
 
-    # Tâche check_mailing_status : vérifie chaque heure l'activation du mailing
-    #ensure_row(cursor, "tasks", "name = :name", {
-    #    "name": "check_mailing_status",
-    #    "description": "Vérifie le paramètre mailing_enabled et active/désactive les tâches d'envoi",
-    #    "schedule": "*/5 * * * *",  # toutes les 5 minutes
-    #    "enabled": 1,
-    #    "status": "idle"
-    #})
+    # Tâche check_mailing_status : active/désactive automatiquement les tâches Email/Discord
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "check_mailing_status",
+        "description": "task_description.check_mailing_status",
+        "schedule": "*/5 * * * *",  # toutes les 5 minutes
+        "enabled": 1,
+        "status": "idle"
+    })
 
 
     # Tâche stream_enforcer 

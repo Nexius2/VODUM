@@ -20,7 +20,7 @@ from core.providers.jellyfin_users import (
     jellyfin_reset_password_required,
 )
 from communications_engine import send_to_user, fetch_template_attachments, record_history
-
+from core.providers.plex_users import plex_invite_and_share
 
 log = get_logger("users_create")
 
@@ -443,38 +443,74 @@ def api_users_create():
                 external_user_id = None
                 server_username = None
 
-                for s in group_servers:
-                    sid2 = int(s["id"])
-                    selected_for_this_server = libs_by_server.get(sid2, [])
+                # IMPORTANT: avoid sending multiple Plex invites for the same user.
+                # If we have multiple Plex servers linked by the same token, we only
+                # send ONE invite (on the server selected in this block).
+                # Additional servers will be handled after acceptance (via jobs / manual apply).
 
-                    if not selected_for_this_server:
-                        continue
+                # Choose the primary server for the invite:
+                primary_sid = int(server_id)
+                if primary_sid not in libs_by_server:
+                    # if user picked libraries only from linked servers, fallback to first server having libs
+                    primary_sid = int(next(iter(libs_by_server.keys())))
 
-                    invited = plex_invite_and_share(
-                        s,
-                        email=email,
-                        libraries_names=[x["name"] for x in selected_for_this_server],
-                        allow_sync=allow_sync,
-                        allow_camera_upload=allow_camera,
-                        allow_channels=allow_channels,
-                        filter_movies=filter_movies,
-                        filter_television=filter_tv,
-                        filter_music=filter_music,
-                    )
+                invite_state = {"is_friend": False, "is_pending": False}
 
-                    if not external_user_id and invited.get("external_user_id"):
-                        external_user_id = invited.get("external_user_id")
-                    if not server_username and invited.get("username"):
-                        server_username = invited.get("username")
+                # 1) Invite/update on primary server
+                primary_server = next((x for x in group_servers if int(x.get("id")) == primary_sid), None)
+                if primary_server is not None:
+                    selected_primary = libs_by_server.get(primary_sid, [])
+                    if selected_primary:
+                        invite_state = plex_invite_and_share(
+                            primary_server,
+                            email=email,
+                            libraries_names=[x["name"] for x in selected_primary],
+                            allow_sync=allow_sync,
+                            allow_camera_upload=allow_camera,
+                            allow_channels=allow_channels,
+                            filter_movies=filter_movies,
+                            filter_television=filter_tv,
+                            filter_music=filter_music,
+                        )
 
-                details_json["plex_share"] = {
-                    "allowSync": allow_sync,
-                    "allowCameraUpload": allow_camera,
-                    "allowChannels": allow_channels,
-                    "filterMovies": filter_movies,
-                    "filterTelevision": filter_tv,
-                    "filterMusic": filter_music,
-                    "linked_group_token": "1" if tok else "0",
+                        if not external_user_id and invite_state.get("external_user_id"):
+                            external_user_id = invite_state.get("external_user_id")
+                        if not server_username and invite_state.get("username"):
+                            server_username = invite_state.get("username")
+
+                # 2) If user is ALREADY friend, we can update other servers immediately.
+                # If invite is pending, do NOT re-invite on other servers (this is what creates
+                # the 'Manage Library Access' + 'Library Requests Sent' double presence).
+                if invite_state.get("is_friend"):
+                    for s in group_servers:
+                        sid2 = int(s["id"])
+                        if sid2 == primary_sid:
+                            continue
+                        selected_for_this_server = libs_by_server.get(sid2, [])
+                        if not selected_for_this_server:
+                            continue
+
+                        st2 = plex_invite_and_share(
+                            s,
+                            email=email,
+                            libraries_names=[x["name"] for x in selected_for_this_server],
+                            allow_sync=allow_sync,
+                            allow_camera_upload=allow_camera,
+                            allow_channels=allow_channels,
+                            filter_movies=filter_movies,
+                            filter_television=filter_tv,
+                            filter_music=filter_music,
+                        )
+
+                        if not external_user_id and st2.get("external_user_id"):
+                            external_user_id = st2.get("external_user_id")
+                        if not server_username and st2.get("username"):
+                            server_username = st2.get("username")
+
+                details_json["plex_invite_state"] = {
+                    "is_friend": bool(invite_state.get("is_friend")),
+                    "is_pending": bool(invite_state.get("is_pending")),
+                    "primary_server_id": int(primary_sid),
                 }
 
                 details_json["plex_linked_servers"] = [{"id": int(s["id"]), "name": s.get("name")} for s in group_servers]
@@ -604,7 +640,11 @@ def api_users_create():
                     [(media_user_id, lid) for lid in selected_lib_ids],
                 )
 
-                if bool(block.get("enqueue_plex_jobs")):
+                enqueue_jobs = bool(block.get("enqueue_plex_jobs")) or bool(
+                    (details_json.get("plex_invite_state") or {}).get("is_pending")
+                )
+
+                if enqueue_jobs:
                     for lid in selected_lib_ids:
                         db.execute(
                             """
