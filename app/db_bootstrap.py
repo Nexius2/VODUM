@@ -945,34 +945,36 @@ def run_migrations():
         conn.commit()
 
     # -------------------------------------------------
-    # media_sessions: garantir l'unicité requise par
+    # Monitoring: garantir l'unicité requise pour
     # ON CONFLICT(server_id, session_key)
     # -------------------------------------------------
 
-    # Nettoyage des doublons éventuels avant création de l'index unique
-    cursor.execute("""
+    if table_exists(cursor, "media_sessions"):
+        # Nettoyage d'éventuels doublons historiques avant création de l'index unique
+        cursor.execute("""
         DELETE FROM media_sessions
         WHERE id NOT IN (
             SELECT MIN(id)
             FROM media_sessions
             GROUP BY server_id, session_key
         )
-    """)
+        """)
+        conn.commit()
 
-    # IMPORTANT:
-    # le collector utilise:
-    #   ON CONFLICT(server_id, session_key) DO UPDATE
-    # donc il faut absolument une contrainte unique équivalente
-    cursor.execute("""
+        # IMPORTANT:
+        # app/core/monitoring/collector.py utilise :
+        #   ON CONFLICT(server_id, session_key) DO UPDATE
+        # donc il faut absolument une contrainte UNIQUE correspondante
+        cursor.execute("""
         CREATE UNIQUE INDEX IF NOT EXISTS uq_media_sessions_server_session
         ON media_sessions(server_id, session_key)
-    """)
+        """)
+        conn.commit()
 
-    # Index classiques
+    # Index (idempotent)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_sessions_last_seen ON media_sessions(server_id, last_seen_at)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_sessions_user ON media_sessions(media_user_id, last_seen_at)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_events_ts ON media_events(server_id, ts)")
-    
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_events_user_ts ON media_events(media_user_id, ts)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_events_type_ts ON media_events(event_type, ts)")
     conn.commit()
