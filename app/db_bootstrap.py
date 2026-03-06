@@ -944,10 +944,35 @@ def run_migrations():
         """)
         conn.commit()
 
-    # Index (idempotent)
+    # -------------------------------------------------
+    # media_sessions: garantir l'unicité requise par
+    # ON CONFLICT(server_id, session_key)
+    # -------------------------------------------------
+
+    # Nettoyage des doublons éventuels avant création de l'index unique
+    cursor.execute("""
+        DELETE FROM media_sessions
+        WHERE id NOT IN (
+            SELECT MIN(id)
+            FROM media_sessions
+            GROUP BY server_id, session_key
+        )
+    """)
+
+    # IMPORTANT:
+    # le collector utilise:
+    #   ON CONFLICT(server_id, session_key) DO UPDATE
+    # donc il faut absolument une contrainte unique équivalente
+    cursor.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_media_sessions_server_session
+        ON media_sessions(server_id, session_key)
+    """)
+
+    # Index classiques
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_sessions_last_seen ON media_sessions(server_id, last_seen_at)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_sessions_user ON media_sessions(media_user_id, last_seen_at)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_events_ts ON media_events(server_id, ts)")
+    
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_events_user_ts ON media_events(media_user_id, ts)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_events_type_ts ON media_events(event_type, ts)")
     conn.commit()

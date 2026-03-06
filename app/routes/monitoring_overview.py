@@ -125,6 +125,9 @@ def register(app):
               ms.parent_title,
 
               ms.state,
+              ms.progress_ms,
+              ms.duration_ms,
+
               ms.client_name,
               mu.username AS username,
               ms.is_transcode,
@@ -152,9 +155,53 @@ def register(app):
             except Exception:
                 return None
 
+        def _fmt_ms(ms: Optional[int]) -> str:
+            try:
+                ms = int(ms or 0)
+            except Exception:
+                ms = 0
+            if ms < 0:
+                ms = 0
+            total_sec = ms // 1000
+            h = total_sec // 3600
+            m = (total_sec % 3600) // 60
+            s = total_sec % 60
+            return f"{h}:{m:02d}:{s:02d}" if h > 0 else f"{m}:{s:02d}"
+
         sessions = [dict(r) for r in sessions]
 
         for s in sessions:
+        
+            # --- Progress / duration (for UI progress bar) ---
+            try:
+                prog = int(s.get("progress_ms") or 0)
+            except Exception:
+                prog = 0
+
+            try:
+                dur = int(s.get("duration_ms") or 0)
+            except Exception:
+                dur = 0
+
+            if prog < 0:
+                prog = 0
+            if dur < 0:
+                dur = 0
+
+            if dur > 0:
+                pct = (prog / dur) * 100.0
+                if pct < 0:
+                    pct = 0.0
+                if pct > 100:
+                    pct = 100.0
+                s["progress_pct"] = round(pct, 1)
+                s["progress_text"] = f"{_fmt_ms(prog)} / {_fmt_ms(dur)}"
+                s["remaining_text"] = _fmt_ms(max(0, dur - prog))
+            else:
+                s["progress_pct"] = 0
+                s["progress_text"] = None
+                s["remaining_text"] = None
+        
             s["season_number"] = None
             s["episode_number"] = None
             s["episode_code"] = None

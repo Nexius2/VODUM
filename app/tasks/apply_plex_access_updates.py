@@ -84,6 +84,120 @@ def row_get(row, key, default=None):
     except Exception:
         return default
 
+def resolve_plex_user(account, media_user_row):
+    """
+    Résout un MyPlexUser de façon robuste.
+    Ordre de recherche :
+    1. external_user_id (le plus fiable)
+    2. email
+    3. username
+    4. title
+    5. fallback account.user(...)
+    """
+    ext_id = str(row_get(media_user_row, "external_user_id") or "").strip()
+    db_email = str(row_get(media_user_row, "email") or "").strip().lower()
+    db_username = str(row_get(media_user_row, "username") or "").strip()
+
+    try:
+        plex_users = list(account.users())
+    except Exception:
+        logger.exception("Unable to list Plex users via account.users()")
+        plex_users = []
+
+    def norm(v):
+        return str(v or "").strip()
+
+    def norm_lower(v):
+        return norm(v).lower()
+
+    # 1) Match par external_user_id
+    if ext_id:
+        for pu in plex_users:
+            if norm(getattr(pu, "id", None)) == ext_id:
+                return pu
+
+    # 2) Match par email
+    if db_email:
+        for pu in plex_users:
+            if norm_lower(getattr(pu, "email", None)) == db_email:
+                return pu
+
+    # 3) Match par username
+    if db_username:
+        for pu in plex_users:
+            if norm(getattr(pu, "username", None)) == db_username:
+                return pu
+
+    # 4) Match par title
+    if db_username:
+        for pu in plex_users:
+            if norm(getattr(pu, "title", None)) == db_username:
+                return pu
+
+    # 5) fallback ancien comportement
+    if db_username:
+        try:
+            return account.user(db_username)
+        except Exception:
+            pass
+
+    if db_email:
+        try:
+            return account.user(db_email)
+        except Exception:
+            pass
+
+    available = [
+        {
+            "id": norm(getattr(pu, "id", None)),
+            "username": norm(getattr(pu, "username", None)),
+            "title": norm(getattr(pu, "title", None)),
+            "email": norm(getattr(pu, "email", None)),
+        }
+        for pu in plex_users
+    ]
+
+    raise RuntimeError(
+        "Unable to resolve Plex user from media_users row "
+        f"(external_user_id={ext_id!r}, username={db_username!r}, email={db_email!r}). "
+        f"Available Plex users sample={available[:10]}"
+    )
+
+
+def sync_media_user_identity_from_plex(db, media_user_row, plex_user_obj):
+    """
+    Auto-corrige media_users.username / email si Plex a changé.
+    """
+    media_user_id = row_get(media_user_row, "id")
+    if not media_user_id:
+        return
+
+    new_username = (
+        str(getattr(plex_user_obj, "username", None) or getattr(plex_user_obj, "title", None) or "").strip()
+    )
+    new_email = str(getattr(plex_user_obj, "email", None) or "").strip()
+
+    old_username = str(row_get(media_user_row, "username") or "").strip()
+    old_email = str(row_get(media_user_row, "email") or "").strip()
+
+    if new_username == old_username and new_email == old_email:
+        return
+
+    db.execute(
+        """
+        UPDATE media_users
+        SET username = ?,
+            email = ?
+        WHERE id = ?
+        """,
+        (new_username or old_username, new_email or old_email, media_user_id),
+    )
+
+    logger.info(
+        f"[PLEX USER DRIFT] media_user_id={media_user_id} "
+        f"username: {old_username!r} -> {new_username!r}, "
+        f"email: {old_email!r} -> {new_email!r}"
+    )
 
 def log_updatefriend_payload(action: str, server_row, user_row, plex_obj, plex_user_obj,
                             sections, allowSync, allowCameraUpload, allowChannels,
@@ -567,15 +681,23 @@ def apply_grant_job(db, job):
     install_plex_http_logger(getattr(account, "_session", None), "PLEX_ACCOUNT")
 
     try:
-        plex_user = account.user(user["username"])
+        plex_user = resolve_plex_user(account, user)
+        sync_media_user_identity_from_plex(db, user, plex_user)
         logger.info(
             "Plex debug user: "
+            f"db_external_user_id='{row_get(user, 'external_user_id')}' "
             f"db_username='{user['username']}' "
+            f"db_email='{row_get(user, 'email')}' "
+            f"plex_id='{getattr(plex_user, 'id', None)}' "
             f"plex_username='{getattr(plex_user, 'username', None)}' "
             f"plex_email='{getattr(plex_user, 'email', None)}'"
         )
     except Exception:
-        logger.exception(f"Unable to retrieve MyPlexUser for {user['username']}")
+        logger.exception(
+            f"Unable to retrieve MyPlexUser for username={user['username']} "
+            f"external_user_id={row_get(user, 'external_user_id')} "
+            f"email={row_get(user, 'email')}"
+        )
         raise
 
     machine_id = plex.machineIdentifier
@@ -675,15 +797,23 @@ def apply_sync_job(db, job):
     install_plex_http_logger(getattr(account, "_session", None), "PLEX_ACCOUNT")
 
     try:
-        plex_user = account.user(user["username"])
+        plex_user = resolve_plex_user(account, user)
+        sync_media_user_identity_from_plex(db, user, plex_user)
         logger.info(
             "Plex debug user: "
+            f"db_external_user_id='{row_get(user, 'external_user_id')}' "
             f"db_username='{user['username']}' "
+            f"db_email='{row_get(user, 'email')}' "
+            f"plex_id='{getattr(plex_user, 'id', None)}' "
             f"plex_username='{getattr(plex_user, 'username', None)}' "
             f"plex_email='{getattr(plex_user, 'email', None)}'"
         )
     except Exception:
-        logger.exception(f"Unable to retrieve MyPlexUser for {user['username']}")
+        logger.exception(
+            f"Unable to retrieve MyPlexUser for username={user['username']} "
+            f"external_user_id={row_get(user, 'external_user_id')} "
+            f"email={row_get(user, 'email')}"
+        )
         raise
 
     rows = db.query(
@@ -778,9 +908,14 @@ def apply_revoke_job(db, job):
     install_plex_http_logger(getattr(account, "_session", None), "PLEX_ACCOUNT")
 
     try:
-        plex_user = account.user(user["username"])
+        plex_user = resolve_plex_user(account, user)
+        sync_media_user_identity_from_plex(db, user, plex_user)
     except Exception:
-        logger.exception(f"Unable to retrieve MyPlexUser for {user['username']}")
+        logger.exception(
+            f"Unable to retrieve MyPlexUser for username={user['username']} "
+            f"external_user_id={row_get(user, 'external_user_id')} "
+            f"email={row_get(user, 'email')}"
+        )
         raise
 
     machine_id = plex.machineIdentifier
