@@ -230,8 +230,9 @@ def _format_message(subject: str, body: str, user: dict, exp_iso: str) -> tuple[
     return msg_subject, msg_body
 
 
-def run(task_id: int | None = None):
-    db = get_db()
+def run(task_id: int | None = None, db=None):
+    if db is None:
+        db = get_db()
 
     try:
         task_logs(task_id, "info", "Task send_expiration_emails (unified) started")

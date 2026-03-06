@@ -20,7 +20,8 @@
 {% if current_tab == 'activity' %}
   {% set refresh_ms = 5000 %}
 {% elif current_tab == 'now_playing' %}
-  {% set refresh_ms = 2500 %}
+  {# Important: trop petit => yoyo visuel avec le ticker JS #}
+  {% set refresh_ms = 15000 %}
 {% elif current_tab == 'policies' %}
   {% set refresh_ms = 600000 %}
 {% elif current_tab == 'servers' %}
@@ -60,6 +61,7 @@
 
 <script>
 (function () {
+  // ---------------- Users search (existant) ----------------
   function initMonitoringUsersSearch() {
     const form = document.getElementById("monitoring_users_filter_form");
     const input = document.getElementById("monitoring_users_search_input");
@@ -92,14 +94,143 @@
     });
   }
 
+  // ---------------- Now Playing ticker + anti-yoyo ----------------
+  function fmtMs(ms) {
+    ms = Math.max(0, Number(ms || 0));
+    const totalSec = Math.floor(ms / 1000);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    return h > 0
+      ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+      : `${m}:${String(s).padStart(2,'0')}`;
+  }
+
+  function getNpCache() {
+    if (!window.__vodum_np_cache) window.__vodum_np_cache = {};
+    return window.__vodum_np_cache;
+  }
+
+  function syncCacheFromDom() {
+    const cache = getNpCache();
+    document.querySelectorAll(".now-playing-progress").forEach(el => {
+      const sid = el.dataset.sessionId;
+      if (!sid) return;
+      cache[sid] = {
+        progressMs: Number(el.dataset.progressMs || 0),
+        durationMs: Number(el.dataset.durationMs || 0),
+        state: (el.dataset.state || "").toLowerCase(),
+        updatedAt: Date.now()
+      };
+    });
+  }
+
+  function tickNowPlaying() {
+    const els = document.querySelectorAll(".now-playing-progress");
+    if (!els || els.length === 0) return;
+
+    const cache = getNpCache();
+
+    els.forEach(el => {
+      const state = (el.dataset.state || "").toLowerCase();
+      const dur = Number(el.dataset.durationMs || 0);
+      let prog = Number(el.dataset.progressMs || 0);
+
+      if (!dur || dur <= 0) return;
+
+      // Avance seulement si playing
+      if (state === "playing") {
+        prog += 1000; // +1 seconde
+        if (prog > dur) prog = dur;
+        el.dataset.progressMs = String(prog);
+      }
+
+      const pct = Math.max(0, Math.min(100, (prog / dur) * 100));
+      const bar = el.querySelector(".progress-bar");
+      const left = el.querySelector(".progress-left");
+      const right = el.querySelector(".progress-right");
+
+      if (bar) bar.style.width = pct.toFixed(1) + "%";
+      if (left) left.textContent = `${fmtMs(prog)} / ${fmtMs(dur)}`;
+      if (right) right.textContent = "-" + fmtMs(Math.max(0, dur - prog));
+
+      // Met à jour le cache (anti-yoyo)
+      const sid = el.dataset.sessionId;
+      if (sid) {
+        cache[sid] = {
+          progressMs: prog,
+          durationMs: dur,
+          state: state,
+          updatedAt: Date.now()
+        };
+      }
+    });
+  }
+
+  function ensureNowPlayingTicker() {
+    // évite de créer plusieurs intervals si le script est ré-exécuté
+    if (window.__vodum_now_playing_ticker_started) return;
+    window.__vodum_now_playing_ticker_started = true;
+    setInterval(tickNowPlaying, 1000);
+  }
+
+  // Anti-yoyo: si HTMX renvoie un progress un peu plus faible, on conserve le local.
+  function installHtmxNowPlayingGuards() {
+    if (window.__vodum_np_htmx_guards_installed) return;
+    window.__vodum_np_htmx_guards_installed = true;
+
+    document.body.addEventListener("htmx:beforeSwap", function () {
+      syncCacheFromDom();
+    });
+
+    document.body.addEventListener("htmx:afterSwap", function () {
+      const cache = getNpCache();
+      const TOLERANCE_MS = 15000; // recul < 15s => backend en retard => on ignore
+
+      document.querySelectorAll(".now-playing-progress").forEach(el => {
+        const sid = el.dataset.sessionId;
+        if (!sid || !cache[sid]) return;
+
+        const state = (el.dataset.state || "").toLowerCase();
+        const dur = Number(el.dataset.durationMs || 0);
+        let prog = Number(el.dataset.progressMs || 0);
+
+        if (!dur || dur <= 0) return;
+
+        const cachedProg = Number(cache[sid].progressMs || 0);
+
+        // Si le backend "recul" un peu, on garde la progression locale
+        if (state === "playing") {
+          const diff = cachedProg - prog; // positif => backend en retard
+          if (diff > 0 && diff < TOLERANCE_MS) {
+            el.dataset.progressMs = String(cachedProg);
+
+            const pct = Math.max(0, Math.min(100, (cachedProg / dur) * 100));
+            const bar = el.querySelector(".progress-bar");
+            const left = el.querySelector(".progress-left");
+            const right = el.querySelector(".progress-right");
+
+            if (bar) bar.style.width = pct.toFixed(1) + "%";
+            if (left) left.textContent = `${fmtMs(cachedProg)} / ${fmtMs(dur)}`;
+            if (right) right.textContent = "-" + fmtMs(Math.max(0, dur - cachedProg));
+          }
+        }
+      });
+    });
+  }
+
+  function initAll() {
+    initMonitoringUsersSearch();
+    ensureNowPlayingTicker();
+    installHtmxNowPlayingGuards();
+  }
+
   // 1) chargement normal
-  document.addEventListener("DOMContentLoaded", initMonitoringUsersSearch);
+  document.addEventListener("DOMContentLoaded", initAll);
 
   // 2) chargement via HTMX (tabs swap)
-  document.addEventListener("htmx:load", initMonitoringUsersSearch);
+  document.addEventListener("htmx:load", initAll);
 })();
 </script>
-
-
 
 {% endblock %}
