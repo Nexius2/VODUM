@@ -38,7 +38,7 @@ def build_user_context(user: dict):
             days_left = ""
 
     return {
-        "username": user.get("username", "") or "",
+        "username": user.get("firstname") or user.get("username", "") or "",
         "email": user.get("email", "") or "",
         "expiration_date": str(expiration) if expiration else "",
         "days_left": days_left,

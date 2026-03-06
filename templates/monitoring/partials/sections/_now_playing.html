@@ -79,7 +79,7 @@
 
               <div class="flex items-center justify-between text-xs text-slate-400 mt-1">
                 <span class="progress-left">{{ s.progress_text }}</span>
-                <span class="progress-right {{ 'text-orange-300' if s.is_transcode else '' }}">-{{ s.remaining_text }}</span>
+                <span class="progress-right {{ 'text-orange-300' if s.is_transcode else 'text-emerald-300' }}">-{{ s.remaining_text }}</span>
               </div>
             </div>
           {% endif %}

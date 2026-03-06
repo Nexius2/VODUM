@@ -366,11 +366,41 @@ def run_migrations():
 
 
     
-    # 🔐 Auth admin
+    # Auth admin
     ensure_column(cursor, "settings", "admin_password_hash", "TEXT DEFAULT NULL")
     ensure_column(cursor, "settings", "auth_enabled", "INTEGER DEFAULT 1")
-    
+    ensure_column(cursor, "settings", "web_secure_cookies", "INTEGER DEFAULT 0")
+    ensure_column(cursor, "settings", "web_cookie_samesite", "TEXT DEFAULT 'Lax'")
     print("✔ Settings columns verified (brand_name).")
+    # -------------------------------------------------
+    # Anti brute-force login
+    # -------------------------------------------------
+    if not table_exists(cursor, "auth_login_attempts"):
+        print("🛠 Creating table: auth_login_attempts")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS auth_login_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scope TEXT NOT NULL CHECK(scope IN ('ip', 'email')),
+            scope_value TEXT NOT NULL,
+            failed_attempts INTEGER NOT NULL DEFAULT 0,
+            first_failed_at TIMESTAMP DEFAULT NULL,
+            last_failed_at TIMESTAMP DEFAULT NULL,
+            locked_until TIMESTAMP DEFAULT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(scope, scope_value)
+        );
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_auth_login_attempts_scope "
+            "ON auth_login_attempts(scope, scope_value);"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_auth_login_attempts_locked_until "
+            "ON auth_login_attempts(locked_until);"
+        )
+        conn.commit()
+    
     # -------------------------------------------------
     # 2.1.1 Discord settings + user fields (NEW)
     # -------------------------------------------------
@@ -1737,6 +1767,8 @@ def run_migrations():
         "debug_mode": 0,
         "admin_password_hash": None,
         "auth_enabled": 1,
+        "web_secure_cookies": 0,
+        "web_cookie_samesite": "Lax",
     })
 
 

@@ -3,6 +3,7 @@ import json
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo  # kept for backward compat in other imports
 from flask import Flask, g
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import Config
 from tasks_engine import start_scheduler
@@ -198,6 +199,14 @@ def create_app():
     lang_dir = _resolve_asset_dir(base_dir, "lang")
 
     app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
+
+    # Si VODUM est derrière un reverse proxy (NPM, Traefik, SWAG, Cloudflare Tunnel, etc.)
+    # on fait confiance aux headers X-Forwarded-* pour récupérer le vrai schéma/proto.
+    trust_proxy = (os.environ.get("VODUM_TRUST_PROXY", "1") or "1").strip() not in (
+        "0", "false", "False", "no", "NO"
+    )
+    if trust_proxy:
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     # Absolute path to lang/
     app.config["LANG_DIR"] = lang_dir

@@ -25,5 +25,41 @@
       <span class="text-sm text-slate-300">{{ t("debug_mode") }}</span>
     </div>
 
+    <div class="border-t border-slate-800 pt-4 mt-4">
+      <h3 class="text-sm font-semibold text-slate-200 mb-1">{{ t("web_security") }}</h3>
+      <p class="text-xs text-slate-400 mb-4">
+        {{ t("web_security_desc") }}
+      </p>
+
+      <div class="space-y-4">
+
+        <div class="flex items-start gap-2">
+          <input type="checkbox" name="web_secure_cookies" value="1"
+                 {% if settings.web_secure_cookies %}checked{% endif %}
+                 class="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-800">
+          <div>
+            <div class="text-sm text-slate-300">{{ t("secure_cookies_https_only") }}</div>
+            <div class="text-xs text-slate-500 mt-1">
+              {{ t("secure_cookies_help") }}
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm mb-1 text-slate-300">{{ t("cookie_samesite") }}</label>
+          <select name="web_cookie_samesite"
+                  class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+            <option value="Lax" {% if (settings.web_cookie_samesite or 'Lax') == 'Lax' %}selected{% endif %}>Lax</option>
+            <option value="Strict" {% if settings.web_cookie_samesite == 'Strict' %}selected{% endif %}>Strict</option>
+            <option value="None" {% if settings.web_cookie_samesite == 'None' %}selected{% endif %}>None</option>
+          </select>
+          <p class="text-xs text-slate-500 mt-1">
+            {{ t("cookie_samesite_help") }}
+          </p>
+        </div>
+
+      </div>
+    </div>
+
   </div>
 </div>

@@ -11,9 +11,30 @@
         </a>
     </div>
 
-    <span class="text-[11px] text-slate-400 whitespace-nowrap">
-        {{ total_live|default(0) }} live · {{ total_transcode|default(0) }} transcode
-    </span>
+	{% set live = total_live|default(0) %}
+	{% set transcode = total_transcode|default(0) %}
+	{% set direct = live - transcode %}
+
+	<span class="text-[11px] whitespace-nowrap">
+
+		{% if live == 0 %}
+			<span class="text-slate-500 font-medium">0 live</span>
+		{% else %}
+
+			<span class="text-white font-medium">{{ live }}</span> live
+
+			{% if direct > 0 %}
+				· <span class="text-emerald-300 font-medium">{{ direct }}</span> direct play
+			{% endif %}
+
+			{% if transcode > 0 %}
+				· <span class="text-orange-300 font-medium">{{ transcode }}</span> transcode
+			{% endif %}
+
+		{% endif %}
+
+	</span>
+
 </div>
 
 

@@ -5,6 +5,7 @@ import json
 
 from db_manager import DBManager
 from logging_utils import get_logger
+from tasks.update_user_status import compute_status
 
 log = get_logger("api.subscriptions")
 
@@ -47,18 +48,20 @@ def _remove_expired_subscription_policy_for_user(db, user_id: int) -> int:
 def update_user_expiration(user_id, new_expiration_date, reason="manual"):
     """
     Met à jour la date d'expiration d'un utilisateur.
-    Reset les templates envoyés uniquement si on entre dans un nouveau cycle.
+    Met aussi à jour immédiatement son statut contractuel
+    (active / pre_expired / reminder / expired) sans attendre la tâche globale.
     """
     db = DBManager(os.environ.get("DATABASE_PATH", "/appdata/database.db"))
 
-    # ✅ users -> vodum_users
     row = db.query_one(
-        "SELECT expiration_date FROM vodum_users WHERE id = ?",
+        "SELECT expiration_date, status FROM vodum_users WHERE id = ?",
         (user_id,)
     )
 
     if not row:
         return False, "User not found"
+
+    old_status = row["status"]
 
     try:
         old_exp = date.fromisoformat(row["expiration_date"])
@@ -67,15 +70,64 @@ def update_user_expiration(user_id, new_expiration_date, reason="manual"):
 
     new_exp = date.fromisoformat(new_expiration_date)
 
-    # Mise à jour de la date
-    db.execute(
-        """
-        UPDATE vodum_users
-        SET expiration_date = ?
-        WHERE id = ?
-        """,
-        (new_expiration_date, user_id)
-    )
+    # --------------------------------------------------
+    # Recalcul immédiat du statut pour CE user uniquement
+    # --------------------------------------------------
+    new_status = None
+    try:
+        settings = db.query_one(
+            "SELECT preavis_days, reminder_days FROM settings WHERE id = 1"
+        )
+
+        if settings:
+            preavis_days = int(settings["preavis_days"])
+            reminder_days = int(settings["reminder_days"])
+
+            new_status = compute_status(
+                new_expiration_date,
+                date.today(),
+                preavis_days,
+                reminder_days,
+            )
+    except Exception:
+        log.warning(
+            f"[USER #{user_id}] Failed to recompute status during expiration update",
+            exc_info=True
+        )
+        new_status = None
+
+    # --------------------------------------------------
+    # Mise à jour date + statut si recalcul disponible
+    # --------------------------------------------------
+    if new_status is not None and new_status != old_status:
+        db.execute(
+            """
+            UPDATE vodum_users
+            SET expiration_date = ?,
+                status = ?,
+                last_status = ?,
+                status_changed_at = datetime('now')
+            WHERE id = ?
+            """,
+            (new_expiration_date, new_status, old_status, user_id)
+        )
+        log.info(
+            f"[USER #{user_id}] Expiration updated ({row['expiration_date']} -> {new_expiration_date}) "
+            f"| status {old_status} -> {new_status} | reason={reason}"
+        )
+    else:
+        db.execute(
+            """
+            UPDATE vodum_users
+            SET expiration_date = ?
+            WHERE id = ?
+            """,
+            (new_expiration_date, user_id)
+        )
+        log.info(
+            f"[USER #{user_id}] Expiration updated ({row['expiration_date']} -> {new_expiration_date}) "
+            f"| status unchanged ({old_status}) | reason={reason}"
+        )
 
     # Si on renouvelle (date future), on supprime la policy système "expired_subscription"
     # (important si le mode a changé et que expired_subscription_manager ne tourne plus)
@@ -84,11 +136,9 @@ def update_user_expiration(user_id, new_expiration_date, reason="manual"):
         if removed:
             log.info(f"[USER #{user_id}] Removed {removed} expired_subscription system policy(ies) after renewal")
 
-
-    # 🔁 Nouveau cycle → reset sent_emails
+    # Nouveau cycle détecté
     if new_exp > old_exp:
-        log.info(f"[USER #{user_id}] Renewal detected ({old_exp} → {new_exp}) | keeping email history")
-
+        log.info(f"[USER #{user_id}] Renewal detected ({old_exp} -> {new_exp}) | keeping email history")
 
     return True, "Expiration updated"
 

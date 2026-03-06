@@ -1076,7 +1076,17 @@ def sync_users_from_api(db) -> None:
                         "filterMovies": data.get("filter_movies") or "",
                         "filterTelevision": data.get("filter_television") or "",
                         "filterMusic": data.get("filter_music") or "",
-                    }
+                    },
+                    "plex_user": {
+                        "subscription_active": data.get("subscription_active"),
+                        "subscription_status": data.get("subscription_status"),
+                        "subscription_plan": data.get("subscription_plan"),
+                        "joined_at": data.get("joined_at"),
+                        "accepted_at": data.get("accepted_at"),
+                        "username": data.get("username"),
+                        "email": data.get("email"),
+                        "avatar": data.get("avatar"),
+                    },
                 },
                 ensure_ascii=False
             )
