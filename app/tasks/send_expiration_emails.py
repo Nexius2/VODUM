@@ -22,6 +22,7 @@ from discord_utils import enrich_discord_settings, is_discord_ready
 
 from communications_engine import send_to_user, record_history, fetch_template_attachments, SendAttempt
 from email_sender import send_email
+from mailing_utils import build_user_context, render_mail
 
 log = get_logger("send_expiration_emails")
 
@@ -223,10 +224,13 @@ def _already_sent_any(db, user_id: int, template_key: str, exp_iso: str) -> bool
     return _already_sent_email(db, user_id, template_key, exp_iso) or _already_sent_discord(db, user_id, template_key, exp_iso)
 
 def _format_message(subject: str, body: str, user: dict, exp_iso: str) -> tuple[str, str]:
-    username = user.get("username") or ""
-    email = user.get("email") or ""
-    msg_subject = (subject or "").replace("{username}", username).replace("{email}", email).replace("{expiration_date}", exp_iso)
-    msg_body = (body or "").replace("{username}", username).replace("{email}", email).replace("{expiration_date}", exp_iso)
+    ctx_input = dict(user or {})
+    ctx_input["expiration_date"] = exp_iso
+
+    context = build_user_context(ctx_input)
+
+    msg_subject = render_mail(subject or "", context)
+    msg_body = render_mail(body or "", context)
     return msg_subject, msg_body
 
 
