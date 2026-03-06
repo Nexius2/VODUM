@@ -58,6 +58,8 @@ def register(app):
             """
         )
 
+        configured_server_count = len(servers or [])
+
         server_stats = db.query_one(
             """
             SELECT
@@ -84,6 +86,38 @@ def register(app):
             (live_window_sql,),
         ) or {"live_sessions": 0, "transcodes": 0}
         sessions_stats = dict(sessions_stats) if sessions_stats else {"live_sessions": 0, "transcodes": 0}
+
+        sessions_stats["live_sessions"] = int(sessions_stats.get("live_sessions") or 0)
+        sessions_stats["transcodes"] = int(sessions_stats.get("transcodes") or 0)
+        sessions_stats["direct_plays"] = max(
+            0,
+            sessions_stats["live_sessions"] - sessions_stats["transcodes"]
+        )
+
+        live_servers = db.query(
+            """
+            SELECT
+              ms.server_id,
+              s.name AS server_name,
+              COUNT(*) AS live_sessions,
+              SUM(CASE WHEN ms.is_transcode = 1 THEN 1 ELSE 0 END) AS transcodes
+            FROM media_sessions ms
+            JOIN servers s ON s.id = ms.server_id
+            WHERE s.type IN ('plex','jellyfin')
+              AND datetime(ms.last_seen_at) >= datetime('now', ?)
+            GROUP BY ms.server_id, s.name
+            HAVING COUNT(*) > 0
+            ORDER BY transcodes DESC, live_sessions DESC, s.name ASC
+            LIMIT 6
+            """,
+            (live_window_sql,),
+        )
+
+        live_servers = [dict(r) for r in (live_servers or [])]
+        for row in live_servers:
+            row["live_sessions"] = int(row.get("live_sessions") or 0)
+            row["transcodes"] = int(row.get("transcodes") or 0)
+            row["direct_plays"] = max(0, row["live_sessions"] - row["transcodes"])
         
         # --------------------------
         # Snapshot "à l'affichage" (garantit que le peak ne redescend pas)
@@ -1531,8 +1565,10 @@ ranked AS (
                 active_page="monitoring",
                 tab=tab,
                 servers=servers,
+                configured_server_count=configured_server_count,
                 server_stats=server_stats,
                 sessions_stats=sessions_stats,
+                live_servers=live_servers,
                 sessions=sessions,
                 events=events,
                 live_window_seconds=live_window_seconds,
@@ -1570,8 +1606,10 @@ ranked AS (
             active_page="monitoring",
             tab=tab,
             servers=servers,
+            configured_server_count=configured_server_count,
             server_stats=server_stats,
             sessions_stats=sessions_stats,
+            live_servers=live_servers,
             sessions=sessions,
             events=events,
             live_window_seconds=live_window_seconds,

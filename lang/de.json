@@ -1010,7 +1010,14 @@
 "comm_delay_event": "das Ereignis",
 "comm_user_creation_event": "die Kontoerstellung",
 "invalid_expiration_date_format": "Invalid expiration date format. Use YYYY-MM-DD.",
-"invalid_renewal_date_format": "Invalid renewal date format. Use YYYY-MM-DD."
+"invalid_renewal_date_format": "Invalid renewal date format. Use YYYY-MM-DD.",
+
+  "web_security": "Websicherheit",
+  "web_security_desc": "Diese Einstellungen steuern das Verhalten des Sitzungscookies, wenn VODUM über einen Webserver bereitgestellt wird.",
+  "secure_cookies_https_only": "Sichere Cookies (nur HTTPS)",
+  "secure_cookies_help": "Empfohlen, wenn VODUM über HTTPS erreichbar ist. Das Sitzungscookie wird nicht über unverschlüsseltes HTTP gesendet.",
+  "cookie_samesite": "Cookie SameSite",
+  "cookie_samesite_help": "Verwenden Sie standardmäßig Lax. Verwenden Sie None nur, wenn Sie websiteübergreifende Cookies benötigen, und nur mit HTTPS."
 
  
 }

@@ -137,6 +137,11 @@ def register(app):
                 "enable_cron_jobs": 1 if request.form.get("enable_cron_jobs") == "1" else 0,
                 "maintenance_mode": 1 if request.form.get("maintenance_mode") == "1" else 0,
                 "debug_mode": 1 if request.form.get("debug_mode") == "1" else 0,
+                "web_secure_cookies": 1 if request.form.get("web_secure_cookies") == "1" else 0,
+                "web_cookie_samesite": request.form.get(
+                    "web_cookie_samesite",
+                    settings.get("web_cookie_samesite") or "Lax"
+                ),
             }
 
             # --------------------------------------------------
@@ -153,6 +158,13 @@ def register(app):
                     new_values[key] = int(new_values[key])
                 except Exception:
                     new_values[key] = settings[key]
+
+            if new_values["web_cookie_samesite"] not in ("Lax", "Strict", "None"):
+                new_values["web_cookie_samesite"] = settings.get("web_cookie_samesite") or "Lax"
+
+            # SameSite=None impose Secure=True sur les navigateurs modernes
+            if new_values["web_cookie_samesite"] == "None":
+                new_values["web_secure_cookies"] = 1
 
             # --------------------------------------------------
             # UPDATE settings (source unique)
@@ -173,10 +185,18 @@ def register(app):
                     disable_on_expiry = :disable_on_expiry,
                     enable_cron_jobs = :enable_cron_jobs,
                     maintenance_mode = :maintenance_mode,
-                    debug_mode = :debug_mode
+                    debug_mode = :debug_mode,
+                    web_secure_cookies = :web_secure_cookies,
+                    web_cookie_samesite = :web_cookie_samesite
                 WHERE id = 1
                 """,
                 new_values,
+            )
+
+            # Appliquer immédiatement au process Flask courant
+            current_app.config["SESSION_COOKIE_SAMESITE"] = new_values["web_cookie_samesite"]
+            current_app.config["SESSION_COOKIE_SECURE"] = bool(new_values["web_secure_cookies"]) or (
+                new_values["web_cookie_samesite"] == "None"
             )
 
             # --------------------------------------------------

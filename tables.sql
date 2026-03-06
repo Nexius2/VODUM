@@ -223,6 +223,8 @@ CREATE TABLE IF NOT EXISTS settings (
 	admin_password_hash TEXT,
     auth_enabled INTEGER DEFAULT 1,
 
+    web_secure_cookies INTEGER DEFAULT 0,
+    web_cookie_samesite TEXT DEFAULT 'Lax',
 
     enable_cron_jobs INTEGER DEFAULT 1,
     default_expiration_days INTEGER DEFAULT 90,
@@ -254,6 +256,28 @@ CREATE TABLE IF NOT EXISTS settings (
     mailing_enabled INTEGER DEFAULT 0
 
 );
+
+-----------------------------------------------------------------------
+--  AUTH LOGIN ATTEMPTS (anti brute force)
+-----------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS auth_login_attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scope TEXT NOT NULL CHECK(scope IN ('ip', 'email')),
+    scope_value TEXT NOT NULL,
+    failed_attempts INTEGER NOT NULL DEFAULT 0,
+    first_failed_at TIMESTAMP DEFAULT NULL,
+    last_failed_at TIMESTAMP DEFAULT NULL,
+    locked_until TIMESTAMP DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(scope, scope_value)
+);
+
+CREATE INDEX IF NOT EXISTS idx_auth_login_attempts_scope
+ON auth_login_attempts(scope, scope_value);
+
+CREATE INDEX IF NOT EXISTS idx_auth_login_attempts_locked_until
+ON auth_login_attempts(locked_until);
 
 -----------------------------------------------------------------------
 --  SUBSCRIPTION TEMPLATES

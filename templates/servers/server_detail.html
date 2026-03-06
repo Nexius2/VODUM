@@ -119,8 +119,7 @@
 <!-- FORMULAIRE SUPPRESSION EN DEHORS (HTML VALIDE) -->
 <form id="delete_form"
       method="post"
-      action="{{ url_for('server_delete', server_id=server.id) }}"
-      onsubmit="return confirm('❌ {{ t('confirm_delete_server') }}');">
+      action="{{ url_for('server_delete', server_id=server.id) }}">
 </form>
 
 <!-- SECTION BIBLIOTHÈQUES -->
@@ -177,20 +176,131 @@
   {% endif %}
 </div>
 
-<script>
-  // Toggle token (même comportement que Mailing)
-  document.addEventListener("DOMContentLoaded", () => {
-    const input = document.getElementById("server_token");
-    const btn   = document.getElementById("toggle_server_token");
-    if (!input || !btn) return;
+<!-- DELETE SERVER CONFIRM MODAL -->
+<div id="deleteServerConfirmModal" class="hidden fixed inset-0 z-50" aria-hidden="true">
+  <div class="absolute inset-0 bg-black/70"></div>
 
-    btn.addEventListener("click", () => {
-      if (input.type === "password") {
-        input.type = "text";
-        btn.textContent = "🙈";
-      } else {
-        input.type = "password";
-        btn.textContent = "👁️";
+  <div class="relative mx-auto mt-24 w-[92%] max-w-lg">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+      <div class="p-5">
+        <div class="flex items-center gap-2">
+          <div class="h-9 w-9 rounded-full bg-rose-900/40 text-rose-300 flex items-center justify-center text-sm">
+            ✕
+          </div>
+          <div>
+            <div class="text-sm font-semibold text-slate-100">
+              {{ t("delete") }} {{ t("server") }}
+            </div>
+            <div class="text-xs text-slate-400 mt-1">
+              {{ server.name }}
+            </div>
+          </div>
+        </div>
+
+        <div class="text-sm text-slate-300 mt-4">
+          {{ t("confirm_delete_server") }}
+        </div>
+
+        <div class="text-[11px] text-slate-500 mt-3">
+          {{ t("server") }}: {{ server.name }} · {{ t(server.type) }}
+        </div>
+      </div>
+
+      <div class="border-t border-slate-800"></div>
+
+      <div class="p-4 flex items-center justify-end gap-2">
+        <button type="button" id="deleteServerConfirmCancel"
+                class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-200">
+          {{ t("cancel") }}
+        </button>
+
+        <button type="button" id="deleteServerConfirmOk"
+                class="px-4 py-2 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-sm">
+          {{ t("delete") }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    // Toggle token
+    const input = document.getElementById("server_token");
+    const btn = document.getElementById("toggle_server_token");
+
+    if (input && btn) {
+      btn.addEventListener("click", () => {
+        if (input.type === "password") {
+          input.type = "text";
+          btn.textContent = "🙈";
+        } else {
+          input.type = "password";
+          btn.textContent = "👁️";
+        }
+      });
+    }
+
+    // Delete server modal
+    const deleteForm = document.getElementById("delete_form");
+    const deleteButton = document.querySelector('button[form="delete_form"]');
+    const deleteModal = document.getElementById("deleteServerConfirmModal");
+    const deleteCancel = document.getElementById("deleteServerConfirmCancel");
+    const deleteOk = document.getElementById("deleteServerConfirmOk");
+
+    if (!deleteForm || !deleteButton || !deleteModal || !deleteCancel || !deleteOk) {
+      return;
+    }
+
+    let allowDeleteSubmit = false;
+
+    function openDeleteModal() {
+      deleteModal.classList.remove("hidden");
+      deleteModal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeDeleteModal() {
+      deleteModal.classList.add("hidden");
+      deleteModal.setAttribute("aria-hidden", "true");
+    }
+
+    deleteButton.addEventListener("click", (e) => {
+      e.preventDefault();
+      openDeleteModal();
+    });
+
+    deleteCancel.addEventListener("click", () => {
+      allowDeleteSubmit = false;
+      closeDeleteModal();
+    });
+
+    deleteOk.addEventListener("click", () => {
+      allowDeleteSubmit = true;
+      closeDeleteModal();
+      deleteForm.requestSubmit();
+    });
+
+    deleteForm.addEventListener("submit", (e) => {
+      if (!allowDeleteSubmit) {
+        e.preventDefault();
+        openDeleteModal();
+        return;
+      }
+
+      allowDeleteSubmit = false;
+    });
+
+    deleteModal.addEventListener("click", (e) => {
+      if (e.target === deleteModal || (e.target.classList && e.target.classList.contains("bg-black/70"))) {
+        allowDeleteSubmit = false;
+        closeDeleteModal();
+      }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !deleteModal.classList.contains("hidden")) {
+        allowDeleteSubmit = false;
+        closeDeleteModal();
       }
     });
   });

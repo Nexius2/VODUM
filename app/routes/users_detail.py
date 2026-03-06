@@ -495,6 +495,7 @@ def register(app):
                 mu.role AS media_role,
                 mu.joined_at,
                 mu.accepted_at,
+                mu.raw_json,
                 mu.details_json,
 
                 CASE

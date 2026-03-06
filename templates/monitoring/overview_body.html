@@ -1,3 +1,5 @@
+{% if configured_server_count|default(0) <= 1 %}
+
 <!-- Row 1: Servers / Live sessions / Usage overview / Total watch time -->
 <div class="grid grid-cols-1 xl:grid-cols-4 gap-6 mb-6">
   {% include "monitoring/partials/cards/_servers.html" %}
@@ -20,6 +22,34 @@
     {% include "monitoring/partials/sections/_top_movies_30d_compact.html" %}
   </div>
 </div>
+
+{% else %}
+
+<!-- Row 1: Servers / Usage overview / Total watch time -->
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
+  {% include "monitoring/partials/cards/_servers.html" %}
+  {% include "monitoring/partials/cards/_active_users_7d.html" %}
+  {% include "monitoring/partials/cards/_watchtime_7d.html" %}
+</div>
+
+<!-- Row 2: Live sessions / Most active users / Top series / Top movies -->
+<div class="grid grid-cols-1 xl:grid-cols-4 gap-6 mb-6">
+  {% include "monitoring/partials/cards/_live_sessions.html" %}
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    {% include "monitoring/partials/sections/_top_users_30d_compact.html" %}
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    {% include "monitoring/partials/sections/_top_content_30d_compact.html" %}
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    {% include "monitoring/partials/sections/_top_movies_30d_compact.html" %}
+  </div>
+</div>
+
+{% endif %}
 
 <!-- Row 3: Now Playing
 <div class="mb-6">

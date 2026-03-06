@@ -3,15 +3,14 @@
 This document lists the planned improvements, bug fixes, and future features for VODUM.
 
 ---
+# 1. VODUM security
 
-# 1. Tasks / Automation Issues
-
-- [X] **`import_tautulli` task runs unexpectedly**
-  - The `import_tautulli` task appears to run periodically even when no schedule is configured.
-  - Investigate why the task is triggered automatically.
-  - Ensure the task runs **only when explicitly scheduled**.
-
----
+- [X] **HTTPS**
+- [X] **SECRET_KEY **
+  - generate key in appdata
+  
+- [X] **SESSION_COOKIE_SECURE **
+- [X] **brut force security **
 
 # 2. Plex User Creation Issues
 
@@ -19,40 +18,39 @@ This document lists the planned improvements, bug fixes, and future features for
   - When creating a Plex user, the invitation email is not sent.
   - The user therefore does not receive the Plex invitation link.
 
-- [X] **Duplicate user state in Plex**
-  - Users remain in the **Invites** section.
-  - The same user may also appear in the **Users** list.
-
-- [X] **Library permissions not applied on user creation**
-  - When creating a user, the assigned libraries are not correctly applied.
-  - Verify the access grant process.
-
-- [X] **Email sending fails if SMTP is not configured**
-  - When SMTP is not configured, the process fails.
-  - Expected behavior:
-    - either skip email sending gracefully
-    - or show a clear error message in logs/UI.
-
 ---
 
-# 3. UI Consistency
+# 3. Mailing Consistency
 
-## User Detail Page
+## User template
 
-- [X] **Date formatting inconsistency**
-  - Creation date and expiration date are not displayed consistently.
-  - Verify formatting for:
-    - creation date
-    - expiration date
-    - renewal date
+- [X] **Template sending var username**
+  - searche for first name with username in fallback
 
+- [X] **When updating user expiration date, user status is wrong until next user status update**
+  - update the user status when changing expiration date
 ---
 
 # 4. Monitoring Improvements
 
 ## Monitoring Overview
 
-- [ ] **Add server tooltip statistics**
+- [X] **Total watch time on overview page may display wrong watch time & avg session**
+  - ...
+
+- [X] **Usage overview on overview page may display wrong active users & sessions**
+  - ...
+
+- [X] ***Libraries page on monitoring may not display last stream**
+  - ...
+
+- [X] **Users page on monitoring may not display last stream**
+  - ...
+
+- [X] **servers page on monitoring may not display data**
+  - ...
+
+- [X] **Add server tooltip statistics**
   - Display a tooltip showing:
     - number of **active sessions**
     - number of **transcoding sessions**
@@ -62,7 +60,7 @@ This document lists the planned improvements, bug fixes, and future features for
 
 # 5. Plex User Profile Integration
 
-- [ ] **Link to open user directly in Plex**
+- [X] **Link to open user directly in Plex**
   - Add a button in the user profile that opens the user in Plex.
 
 ### Considerations
