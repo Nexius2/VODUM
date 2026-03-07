@@ -72,7 +72,7 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
 
         user = db.query_one(
             """
-            SELECT id, username, email, second_email, expiration_date, discord_user_id, notifications_order_override
+            SELECT id, username, firstname, lastname, email, second_email, expiration_date, discord_user_id, notifications_order_override
             FROM vodum_users
             WHERE id = ?
             """,
@@ -279,7 +279,7 @@ def run(task_id: int | None = None, db=None):
         # Users concerned
         users = db.query(
             """
-            SELECT id, username, email, second_email, expiration_date, discord_user_id, notifications_order_override
+            SELECT id, username, firstname, lastname, email, second_email, expiration_date, discord_user_id, notifications_order_override
             FROM vodum_users u
             WHERE u.expiration_date IS NOT NULL
               AND EXISTS (SELECT 1 FROM media_users mu WHERE mu.vodum_user_id = u.id)

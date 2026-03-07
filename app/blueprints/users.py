@@ -712,8 +712,17 @@ def api_users_create():
                         else:
                             # Send NOW (EMAIL ONLY)
                             exp_iso = (expiration_date or "")[:10]
-                            subj = (ct.get("subject") or "").replace("{username}", username).replace("{email}", email).replace("{expiration_date}", exp_iso)
-                            msg = (ct.get("body") or "").replace("{username}", username).replace("{email}", email).replace("{expiration_date}", exp_iso)
+
+                            context = build_user_context({
+                                "username": username,
+                                "firstname": firstname,
+                                "lastname": lastname,
+                                "email": email,
+                                "expiration_date": exp_iso,
+                            })
+
+                            subj = render_mail(ct.get("subject") or "", context)
+                            msg = render_mail(ct.get("body") or "", context)
 
                             send_email_via_settings(settings, email, subj, msg)
 

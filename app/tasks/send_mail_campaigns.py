@@ -206,6 +206,8 @@ def run(task_id: int, db):
                             vu.id AS id,
                             vu.email AS email,
                             vu.username AS username,
+                            vu.firstname AS firstname,
+                            vu.lastname AS lastname,
                             vu.expiration_date AS expiration_date
                         FROM vodum_users vu
                         JOIN media_users mu ON mu.vodum_user_id = vu.id
@@ -238,6 +240,8 @@ def run(task_id: int, db):
 
                 context = build_user_context({
                     "username": username,
+                    "firstname": user.get("firstname"),
+                    "lastname": user.get("lastname"),
                     "email": email,
                     "expiration_date": exp_raw,
                     "days_left": days_left,
