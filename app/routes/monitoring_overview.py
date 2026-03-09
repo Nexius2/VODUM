@@ -348,6 +348,7 @@ def register(app):
               SELECT
                 h.server_id,
                 h.started_at,
+                h.stopped_at,
                 h.media_key,
                 h.watch_ms,
                 h.duration_ms,
@@ -365,11 +366,11 @@ def register(app):
                 (CAST(h.server_id AS TEXT) || '|' ||
                  COALESCE(CAST(mu.vodum_user_id AS TEXT), 'media:' || CAST(mu.id AS TEXT)) || '|' ||
                  COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                 strftime('%Y-%m-%d', h.started_at)
+                 strftime('%Y-%m-%d %H:%M', h.started_at)
                 ) AS play_key
               FROM media_session_history h
               LEFT JOIN media_users mu ON mu.id = h.media_user_id
-              WHERE h.started_at >= datetime('now', '-7 days')
+              WHERE h.stopped_at >= datetime('now', '-7 days')
             ),
             plays AS (
               SELECT
@@ -396,6 +397,7 @@ def register(app):
               SELECT
                 h.server_id,
                 h.started_at,
+                h.stopped_at,
                 h.media_key,
                 COALESCE(vu.username, mu.username, '-') AS username,
                 COALESCE(CAST(vu.id AS TEXT), 'media:' || CAST(mu.id AS TEXT)) AS viewer_id,
@@ -409,12 +411,12 @@ def register(app):
                 (CAST(h.server_id AS TEXT) || '|' ||
                  COALESCE(CAST(vu.id AS TEXT), 'media:' || CAST(mu.id AS TEXT)) || '|' ||
                  COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                 strftime('%Y-%m-%d', h.started_at)
+                 strftime('%Y-%m-%d %H:%M', h.started_at)
                 ) AS play_key
               FROM media_session_history h
               LEFT JOIN media_users mu ON mu.id = h.media_user_id
               LEFT JOIN vodum_users vu ON vu.id = mu.vodum_user_id
-              WHERE h.started_at >= datetime('now', '-30 days')
+              WHERE h.stopped_at >= datetime('now', '-30 days')
             ),
             plays AS (
               SELECT
@@ -445,6 +447,7 @@ def register(app):
               SELECT
                 h.server_id,
                 h.started_at,
+                h.stopped_at,
                 TRIM(h.grandparent_title) AS series_title,
                 h.media_key,
                 COALESCE(
@@ -461,11 +464,11 @@ def register(app):
                 (CAST(h.server_id AS TEXT) || '|' ||
                  COALESCE(CAST(mu.vodum_user_id AS TEXT), 'media:' || CAST(mu.id AS TEXT)) || '|' ||
                  COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                 strftime('%Y-%m-%d', h.started_at)
+                 strftime('%Y-%m-%d %H:%M', h.started_at)
                 ) AS play_key
               FROM media_session_history h
               LEFT JOIN media_users mu ON mu.id = h.media_user_id
-              WHERE h.started_at >= datetime('now', '-30 days')
+              WHERE h.stopped_at >= datetime('now', '-30 days')
                 AND TRIM(COALESCE(h.grandparent_title, '')) <> ''
             ),
             plays AS (
@@ -498,6 +501,7 @@ def register(app):
               SELECT
                 h.server_id,
                 h.started_at,
+                h.stopped_at,
                 TRIM(COALESCE(NULLIF(h.title, ''), '-')) AS movie_title,
                 h.media_key,
                 COALESCE(
@@ -514,11 +518,11 @@ def register(app):
                 (CAST(h.server_id AS TEXT) || '|' ||
                  COALESCE(CAST(mu.vodum_user_id AS TEXT), 'media:' || CAST(mu.id AS TEXT)) || '|' ||
                  COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                 strftime('%Y-%m-%d', h.started_at)
+                 strftime('%Y-%m-%d %H:%M', h.started_at)
                 ) AS play_key
               FROM media_session_history h
               LEFT JOIN media_users mu ON mu.id = h.media_user_id
-              WHERE h.started_at >= datetime('now', '-30 days')
+              WHERE h.stopped_at >= datetime('now', '-30 days')
                 AND TRIM(COALESCE(h.grandparent_title, '')) = ''   -- uniquement films
             ),
             plays AS (
@@ -836,7 +840,7 @@ def register(app):
                        ELSE ('m:' || mu.id)
                      END || '|' ||
                      COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                     strftime('%Y-%m-%d', h.started_at)
+                     strftime('%Y-%m-%d %H:%M', h.started_at)
                     ) AS play_key
                   FROM media_session_history h
                   JOIN media_users mu ON mu.id = h.media_user_id
@@ -1037,7 +1041,7 @@ ranked AS (
                       FROM media_session_history h
                       WHERE h.server_id = l.server_id
                         AND h.library_section_id = l.section_id
-                      GROUP BY (CAST(h.server_id AS TEXT) || '|' || CAST(h.media_user_id AS TEXT) || '|' || COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' || strftime('%Y-%m-%d', h.started_at))
+                      GROUP BY (CAST(h.server_id AS TEXT) || '|' || CAST(h.media_user_id AS TEXT) || '|' || COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' || strftime('%Y-%m-%d %H:%M', h.started_at))
                     )
                   ) AS total_plays,
 
@@ -1057,7 +1061,7 @@ ranked AS (
                       FROM media_session_history h
                       WHERE h.server_id = l.server_id
                         AND h.library_section_id = l.section_id
-                      GROUP BY (CAST(h.server_id AS TEXT) || '|' || CAST(h.media_user_id AS TEXT) || '|' || COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' || strftime('%Y-%m-%d', h.started_at))
+                      GROUP BY (CAST(h.server_id AS TEXT) || '|' || CAST(h.media_user_id AS TEXT) || '|' || COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' || strftime('%Y-%m-%d %H:%M', h.started_at))
                     )
                   ) AS played_ms
 
@@ -1139,7 +1143,7 @@ ranked AS (
                     (CAST(server_id AS TEXT) || '|' ||
                      CAST(media_user_id AS TEXT) || '|' ||
                      COALESCE(NULLIF(TRIM(media_key), ''), 'no_media') || '|' ||
-                     strftime('%Y-%m-%d', started_at)
+                     strftime('%Y-%m-%d %H:%M', started_at)
                     ) AS play_key
                   FROM media_session_history
                   WHERE {where_hist}
@@ -1187,7 +1191,7 @@ ranked AS (
                     (CAST(server_id AS TEXT) || '|' ||
                      CAST(media_user_id AS TEXT) || '|' ||
                      COALESCE(NULLIF(TRIM(media_key), ''), 'no_media') || '|' ||
-                     strftime('%Y-%m-%d', started_at)
+                     strftime('%Y-%m-%d %H:%M', started_at)
                     ) AS play_key
                   FROM media_session_history
                   WHERE {where_hist}
@@ -1249,7 +1253,7 @@ ranked AS (
                     (CAST(server_id AS TEXT) || '|' ||
                      CAST(media_user_id AS TEXT) || '|' ||
                      COALESCE(NULLIF(TRIM(media_key), ''), 'no_media') || '|' ||
-                     strftime('%Y-%m-%d', started_at)
+                     strftime('%Y-%m-%d %H:%M', started_at)
                     ) AS play_key
                   FROM media_session_history
                   WHERE {where_hist}
@@ -1282,13 +1286,26 @@ ranked AS (
                     server_id,
                     started_at,
                     media_key,
+
                     CASE
-                      WHEN LOWER(COALESCE(media_type,'')) IN ('movie', 'film') THEN 'movie'
-                      WHEN LOWER(COALESCE(media_type,'')) IN ('serie', 'series', 'episode', 'show', 'season') THEN 'serie'
-                      WHEN LOWER(COALESCE(media_type,'')) IN ('music', 'audio', 'song', 'track', 'tracks') THEN 'music'
-                      WHEN LOWER(COALESCE(media_type,'')) IN ('photo', 'photos', 'image', 'picture', 'pictures') THEN 'photo'
+                      -- Priorité au grandparent_title : très fiable pour les épisodes Plex
+                      WHEN TRIM(COALESCE(grandparent_title, '')) <> '' THEN 'serie'
+                      WHEN LOWER(TRIM(COALESCE(media_type,''))) IN ('serie', 'series', 'episode', 'show', 'season') THEN 'serie'
+                      WHEN LOWER(TRIM(COALESCE(media_type,''))) IN ('movie', 'film', 'video') THEN 'movie'
+                      WHEN LOWER(TRIM(COALESCE(media_type,''))) IN ('music', 'audio', 'song', 'track', 'tracks') THEN 'music'
+                      WHEN LOWER(TRIM(COALESCE(media_type,''))) IN ('photo', 'photos', 'image', 'picture', 'pictures') THEN 'photo'
                       ELSE 'other'
                     END AS media_type,
+
+                    CASE
+                      WHEN TRIM(COALESCE(grandparent_title, '')) <> '' THEN 400
+                      WHEN LOWER(TRIM(COALESCE(media_type,''))) IN ('serie', 'series', 'episode', 'show', 'season') THEN 400
+                      WHEN LOWER(TRIM(COALESCE(media_type,''))) IN ('movie', 'film', 'video') THEN 300
+                      WHEN LOWER(TRIM(COALESCE(media_type,''))) IN ('music', 'audio', 'song', 'track', 'tracks') THEN 200
+                      WHEN LOWER(TRIM(COALESCE(media_type,''))) IN ('photo', 'photos', 'image', 'picture', 'pictures') THEN 100
+                      ELSE 0
+                    END AS media_rank,
+
                     MIN(
                       COALESCE(watch_ms, 0),
                       CASE
@@ -1296,10 +1313,11 @@ ranked AS (
                         ELSE COALESCE(watch_ms, 0)
                       END
                     ) AS watch_ms_capped,
+
                     (CAST(server_id AS TEXT) || '|' ||
                      CAST(media_user_id AS TEXT) || '|' ||
                      COALESCE(NULLIF(TRIM(media_key), ''), 'no_media') || '|' ||
-                     strftime('%Y-%m-%d', started_at)
+                     strftime('%Y-%m-%d %H:%M', started_at)
                     ) AS play_key
                   FROM media_session_history
                   WHERE {where_hist}
@@ -1308,7 +1326,13 @@ ranked AS (
                   SELECT
                     play_key,
                     MAX(server_id) AS server_id,
-                    MAX(media_type) AS media_type,
+                    CASE MAX(media_rank)
+                      WHEN 400 THEN 'serie'
+                      WHEN 300 THEN 'movie'
+                      WHEN 200 THEN 'music'
+                      WHEN 100 THEN 'photo'
+                      ELSE 'other'
+                    END AS media_type,
                     MAX(watch_ms_capped) AS watch_ms
                   FROM base
                   GROUP BY play_key
@@ -1347,7 +1371,7 @@ ranked AS (
                     (CAST(h.server_id AS TEXT) || '|' ||
                      CAST(h.media_user_id AS TEXT) || '|' ||
                      COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                     strftime('%Y-%m-%d', h.started_at)
+                     strftime('%Y-%m-%d %H:%M', h.started_at)
                     ) AS play_key
                   FROM media_session_history h
                   JOIN servers s ON s.id = h.server_id
@@ -1400,7 +1424,7 @@ ranked AS (
                     (CAST(h.server_id AS TEXT) || '|' ||
                      CAST(h.media_user_id AS TEXT) || '|' ||
                      COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                     strftime('%Y-%m-%d', h.started_at)
+                     strftime('%Y-%m-%d %H:%M', h.started_at)
                     ) AS play_key
                   FROM media_session_history h
                   JOIN servers s ON s.id = h.server_id
@@ -1459,7 +1483,7 @@ ranked AS (
                     (CAST(h.server_id AS TEXT) || '|' ||
                      CAST(h.media_user_id AS TEXT) || '|' ||
                      COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                     strftime('%Y-%m-%d', h.started_at)
+                     strftime('%Y-%m-%d %H:%M', h.started_at)
                     ) AS play_key
                   FROM media_session_history h
                   JOIN servers s ON s.id = h.server_id
@@ -1510,7 +1534,7 @@ ranked AS (
                     (CAST(h.server_id AS TEXT) || '|' ||
                      CAST(h.media_user_id AS TEXT) || '|' ||
                      COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                     strftime('%Y-%m-%d', h.started_at)
+                     strftime('%Y-%m-%d %H:%M', h.started_at)
                     ) AS play_key
                   FROM media_session_history h
                   JOIN servers s ON s.id = h.server_id
