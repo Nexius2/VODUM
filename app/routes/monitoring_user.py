@@ -156,15 +156,30 @@ def register(app):
                 h.server_id,
                 h.started_at,
                 h.media_key,
+
                 CASE
-                  WHEN h.media_type IN ('episode', 'serie') THEN 'serie'
-                  WHEN h.media_type = 'movie' THEN 'movie'
+                  -- Priorité au grandparent_title : très fiable pour les épisodes/séries Plex
+                  WHEN TRIM(COALESCE(h.grandparent_title, '')) <> '' THEN 'serie'
+                  WHEN LOWER(TRIM(COALESCE(h.media_type, ''))) IN ('serie', 'series', 'episode', 'show', 'season') THEN 'serie'
+                  WHEN LOWER(TRIM(COALESCE(h.media_type, ''))) IN ('movie', 'film', 'video') THEN 'movie'
+                  WHEN LOWER(TRIM(COALESCE(h.media_type, ''))) IN ('music', 'audio', 'song', 'track', 'tracks') THEN 'music'
+                  WHEN LOWER(TRIM(COALESCE(h.media_type, ''))) IN ('photo', 'photos', 'image', 'picture', 'pictures') THEN 'photo'
                   ELSE 'other'
                 END AS kind,
+
+                CASE
+                  WHEN TRIM(COALESCE(h.grandparent_title, '')) <> '' THEN 400
+                  WHEN LOWER(TRIM(COALESCE(h.media_type, ''))) IN ('serie', 'series', 'episode', 'show', 'season') THEN 400
+                  WHEN LOWER(TRIM(COALESCE(h.media_type, ''))) IN ('movie', 'film', 'video') THEN 300
+                  WHEN LOWER(TRIM(COALESCE(h.media_type, ''))) IN ('music', 'audio', 'song', 'track', 'tracks') THEN 200
+                  WHEN LOWER(TRIM(COALESCE(h.media_type, ''))) IN ('photo', 'photos', 'image', 'picture', 'pictures') THEN 100
+                  ELSE 0
+                END AS kind_rank,
+
                 (CAST(h.server_id AS TEXT) || '|' ||
                  CAST(h.media_user_id AS TEXT) || '|' ||
                  COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                 strftime('%Y-%m-%d', h.started_at)
+                 strftime('%Y-%m-%d %H:%M', h.started_at)
                 ) AS play_key
               FROM media_session_history h
               WHERE h.media_user_id IN ({placeholders})
@@ -173,7 +188,13 @@ def register(app):
             plays AS (
               SELECT
                 play_key,
-                MAX(kind) AS kind
+                CASE MAX(kind_rank)
+                  WHEN 400 THEN 'serie'
+                  WHEN 300 THEN 'movie'
+                  WHEN 200 THEN 'music'
+                  WHEN 100 THEN 'photo'
+                  ELSE 'other'
+                END AS kind
               FROM base
               GROUP BY play_key
             )
@@ -239,7 +260,7 @@ def register(app):
                 (CAST(h.server_id AS TEXT) || '|' ||
                  CAST(h.media_user_id AS TEXT) || '|' ||
                  COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                 strftime('%Y-%m-%d', h.started_at)
+                 strftime('%Y-%m-%d %H:%M', h.started_at)
                 ) AS play_key
               FROM media_session_history h
               WHERE h.media_user_id IN {in_sql}
@@ -294,7 +315,7 @@ def register(app):
                             (CAST(h.server_id AS TEXT) || '|' ||
                              CAST(h.media_user_id AS TEXT) || '|' ||
                              COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                             strftime('%Y-%m-%d', h.started_at)
+                             strftime('%Y-%m-%d %H:%M', h.started_at)
                             ) AS play_key
                           FROM media_session_history h
                           WHERE h.media_user_id IN {in_sql}
@@ -333,7 +354,7 @@ def register(app):
                             (CAST(h.server_id AS TEXT) || '|' ||
                              CAST(h.media_user_id AS TEXT) || '|' ||
                              COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                             strftime('%Y-%m-%d', h.started_at)
+                             strftime('%Y-%m-%d %H:%M', h.started_at)
                             ) AS play_key
                           FROM media_session_history h
                           WHERE h.media_user_id IN {in_sql}
@@ -376,7 +397,7 @@ def register(app):
                     (CAST(h.server_id AS TEXT) || '|' ||
                      CAST(h.media_user_id AS TEXT) || '|' ||
                      COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                     strftime('%Y-%m-%d', h.started_at)
+                     strftime('%Y-%m-%d %H:%M', h.started_at)
                     ) AS play_key
                   FROM media_session_history h
                   WHERE h.media_user_id IN {in_sql}

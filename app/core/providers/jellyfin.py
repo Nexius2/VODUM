@@ -258,7 +258,7 @@ class JellyfinProvider(BaseProvider):
             progress_ms = self._ticks_to_ms(play_state.get("PositionTicks"))
             duration_ms = self._ticks_to_ms(now_playing.get("RunTimeTicks"))
 
-            # title/type peuvent être absents ou "Video" selon le client Jellyfin.
+            # title/type peuvent être absents ou trop génériques ("Video") selon le client Jellyfin.
             title = (
                 now_playing.get("Name")
                 or now_playing.get("OriginalTitle")
@@ -266,25 +266,7 @@ class JellyfinProvider(BaseProvider):
             )
             jf_type = (now_playing.get("Type") or "").strip().lower()
 
-            # ✅ Fallback: si /Sessions est incomplet, récupérer l'item complet
-            if not title or jf_type in ("", "unknown", "other"):
-                item = self._get_item_details(str(item_id))
-                if item:
-                    title = title or item.get("Name") or item.get("OriginalTitle")
-                    jf_type = jf_type or (item.get("Type") or "").strip().lower()
-
-            # --- Normalize media type (Jellyfin renvoie souvent "Video" pour les films)
-            if jf_type in ("movie", "video"):
-                media_category = "movie"
-            elif jf_type in ("episode",):
-                media_category = "serie"
-            elif jf_type in ("audio", "musictrack", "song"):
-                media_category = "music"
-            else:
-                media_category = "other"
-
-
-            # Episode fields when available
+            # Infos épisode/série parfois déjà présentes dans /Sessions
             grandparent_title = (
                 now_playing.get("SeriesName")
                 or now_playing.get("GrandparentTitle")
@@ -295,6 +277,50 @@ class JellyfinProvider(BaseProvider):
                 or now_playing.get("ParentTitle")
                 or None
             )
+
+            item = None
+
+            # ✅ Fallback: si /Sessions est incomplet OU trop générique ("Video"),
+            # récupérer l'item complet pour obtenir le vrai Type.
+            if not title or jf_type in ("", "unknown", "other", "video"):
+                item = self._get_item_details(str(item_id))
+                if item:
+                    title = (
+                        title
+                        or item.get("Name")
+                        or item.get("OriginalTitle")
+                        or item.get("SortName")
+                    )
+
+                    item_type = (item.get("Type") or "").strip().lower()
+                    if item_type:
+                        jf_type = item_type
+
+                    grandparent_title = (
+                        grandparent_title
+                        or item.get("SeriesName")
+                        or item.get("GrandparentTitle")
+                        or None
+                    )
+                    parent_title = (
+                        parent_title
+                        or item.get("SeasonName")
+                        or item.get("ParentTitle")
+                        or None
+                    )
+
+            # --- Normalize media type
+            # Important: chez Jellyfin, "video" peut être un film OU un épisode selon le client.
+            if jf_type == "episode":
+                media_category = "serie"
+            elif jf_type in ("movie",):
+                media_category = "movie"
+            elif jf_type in ("audio", "musictrack", "song"):
+                media_category = "music"
+            elif jf_type == "video":
+                media_category = "serie" if grandparent_title else "movie"
+            else:
+                media_category = "serie" if grandparent_title else "other"
 
             client_name = s.get("Client") or s.get("DeviceName")
             client_product = s.get("ApplicationName") or s.get("AppName") or None
