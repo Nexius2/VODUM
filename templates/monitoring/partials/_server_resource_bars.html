@@ -1,0 +1,35 @@
+{% set provider_name = (row.provider or row.type or '')|lower %}
+
+{% if row.server_resource_available %}
+  <div class="mt-2 space-y-1 {{ max_width_class or 'max-w-full' }}">
+    <div class="flex items-center gap-2 text-[10px]">
+      <span class="w-8 shrink-0 text-slate-500">CPU</span>
+      <div class="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+        <div
+          class="h-full bg-cyan-400/80 rounded-full"
+          style="width: {{ row.server_cpu_pct or 0 }}%"
+        ></div>
+      </div>
+      <span class="w-12 shrink-0 text-right text-slate-300">
+        {{ '%.1f'|format(row.server_cpu_pct or 0) }}%
+      </span>
+    </div>
+
+    <div class="flex items-center gap-2 text-[10px]">
+      <span class="w-8 shrink-0 text-slate-500">RAM</span>
+      <div class="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+        <div
+          class="h-full bg-fuchsia-400/80 rounded-full"
+          style="width: {{ row.server_ram_pct or 0 }}%"
+        ></div>
+      </div>
+      <span class="w-12 shrink-0 text-right text-slate-300">
+        {{ '%.1f'|format(row.server_ram_pct or 0) }}%
+      </span>
+    </div>
+  </div>
+{% elif show_unavailable_message and provider_name == 'jellyfin' %}
+  <div class="mt-2 text-[10px] text-slate-500">
+    CPU / RAM unavailable
+  </div>
+{% endif %}

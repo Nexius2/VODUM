@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Optional
 
 import requests
+import xml.etree.ElementTree as ET
 from flask import (
     render_template, g, request, redirect, url_for, flash, session,
     Response, current_app, jsonify, make_response, abort,
@@ -36,6 +37,158 @@ auth_logger = get_logger("auth")
 security_logger = get_logger("security")
 settings_logger = get_logger("settings")
 
+monitoring_logger = get_logger("monitoring_overview")
+
+_SERVER_RESOURCE_CACHE = {}
+_SERVER_RESOURCE_CACHE_TTL = 10  # secondes
+
+
+def _normalize_pct(value):
+    try:
+        value = float(value)
+    except Exception:
+        return None
+
+    if math.isnan(value) or math.isinf(value):
+        return None
+
+    if value < 0:
+        value = 0.0
+    if value > 100:
+        value = 100.0
+
+    return round(value, 1)
+
+
+def _candidate_bases(server_row):
+    bases = []
+    invalid_literals = {"", "none", "null", "undefined"}
+
+    for key in ("url", "local_url", "public_url"):
+        raw = server_row.get(key)
+        if not raw:
+            continue
+
+        base = str(raw).strip().rstrip("/")
+        if base.lower() in invalid_literals:
+            continue
+
+        if not (base.startswith("http://") or base.startswith("https://")):
+            continue
+
+        if base not in bases:
+            bases.append(base)
+
+    return bases
+
+
+def _empty_server_resource_stats(note=None):
+    return {
+        "server_cpu_pct": None,
+        "server_ram_pct": None,
+        "server_resource_available": False,
+        "server_resource_note": note,
+    }
+
+
+def _fetch_plex_resource_stats(server_row, timeout=4):
+    token = (server_row.get("token") or "").strip()
+    if not token:
+        return _empty_server_resource_stats()
+
+    for base in _candidate_bases(server_row):
+        try:
+            r = requests.get(
+                f"{base}/statistics/resources",
+                params={
+                    "timespan": 6,
+                    "X-Plex-Token": token,
+                },
+                headers={"Accept": "application/xml"},
+                timeout=timeout,
+            )
+            r.raise_for_status()
+
+            root = ET.fromstring(r.text)
+
+            samples = []
+            for node in root.iter():
+                tag = str(node.tag).lower()
+                if tag.endswith("statisticsresource") or tag.endswith("statisticsresources"):
+                    samples.append(node)
+
+            if not samples:
+                continue
+
+            latest = samples[-1]
+
+            cpu_pct = _normalize_pct(latest.attrib.get("processCpuUtilization"))
+            ram_pct = _normalize_pct(latest.attrib.get("processMemoryUtilization"))
+
+            return {
+                "server_cpu_pct": cpu_pct,
+                "server_ram_pct": ram_pct,
+                "server_resource_available": (cpu_pct is not None or ram_pct is not None),
+                "server_resource_note": None,
+            }
+
+        except Exception:
+            continue
+
+    return _empty_server_resource_stats()
+
+
+def _fetch_jellyfin_resource_stats(server_row, timeout=4):
+    """
+    Support UI propre pour Jellyfin, sans inventer de métriques.
+    Avec les données actuellement disponibles dans VODUM (URL + token),
+    on ne dispose pas ici d'un endpoint fiable équivalent à Plex pour
+    récupérer directement le % CPU / RAM du process serveur.
+    """
+    return _empty_server_resource_stats(note="unavailable")
+
+
+def _fetch_server_resource_stats(server_row, timeout=4):
+    try:
+        server_id = int(server_row.get("id") or 0)
+    except Exception:
+        server_id = 0
+
+    now_ts = time.time()
+    cached = _SERVER_RESOURCE_CACHE.get(server_id)
+    if cached and (now_ts - cached["ts"] < _SERVER_RESOURCE_CACHE_TTL):
+        return dict(cached["value"])
+
+    provider = (server_row.get("type") or "").strip().lower()
+
+    if provider == "plex":
+        value = _fetch_plex_resource_stats(server_row, timeout=timeout)
+    elif provider == "jellyfin":
+        value = _fetch_jellyfin_resource_stats(server_row, timeout=timeout)
+    else:
+        value = _empty_server_resource_stats()
+
+    _SERVER_RESOURCE_CACHE[server_id] = {
+        "ts": now_ts,
+        "value": dict(value),
+    }
+    return dict(value)
+
+
+def _apply_server_resource_stats(rows, resource_by_server, server_id_key="server_id"):
+    for row in rows or []:
+        try:
+            server_id = int(row.get(server_id_key) or 0)
+        except Exception:
+            server_id = 0
+
+        resource = resource_by_server.get(server_id) or _empty_server_resource_stats()
+
+        row["server_cpu_pct"] = resource.get("server_cpu_pct")
+        row["server_ram_pct"] = resource.get("server_ram_pct")
+        row["server_resource_available"] = bool(resource.get("server_resource_available"))
+        row["server_resource_note"] = resource.get("server_resource_note")
+
 def register(app):
     @app.route("/monitoring")
     def monitoring_page():
@@ -51,14 +204,24 @@ def register(app):
         # --------------------------
         servers = db.query(
             """
-            SELECT id, name, type, url, local_url, public_url, status, last_checked
+            SELECT id, name, type, url, local_url, public_url, token, status, last_checked
             FROM servers
             WHERE type IN ('plex','jellyfin')
             ORDER BY type, name
             """
         )
+        servers = [dict(r) for r in (servers or [])]
 
         configured_server_count = len(servers or [])
+
+        server_resource_stats = {}
+        if tab in ("overview", "now_playing", "servers"):
+            for srv in servers:
+                try:
+                    sid = int(srv.get("id") or 0)
+                except Exception:
+                    sid = 0
+                server_resource_stats[sid] = _fetch_server_resource_stats(srv)
 
         server_stats = db.query_one(
             """
@@ -118,6 +281,8 @@ def register(app):
             row["live_sessions"] = int(row.get("live_sessions") or 0)
             row["transcodes"] = int(row.get("transcodes") or 0)
             row["direct_plays"] = max(0, row["live_sessions"] - row["transcodes"])
+
+        _apply_server_resource_stats(live_servers, server_resource_stats)
         
         # --------------------------
         # Snapshot "à l'affichage" (garantit que le peak ne redescend pas)
@@ -203,6 +368,7 @@ def register(app):
             return f"{h}:{m:02d}:{s:02d}" if h > 0 else f"{m}:{s:02d}"
 
         sessions = [dict(r) for r in sessions]
+        _apply_server_resource_stats(sessions, server_resource_stats)
 
         for s in sessions:
         
@@ -1240,6 +1406,7 @@ ranked AS (
                 params,
             )
             servers_details = [dict(r) for r in servers_details]
+            _apply_server_resource_stats(servers_details, server_resource_stats)
 
             # Courbe sessions/jour par serveur (multi-datasets côté front)
             servers_sessions_day = db.query(

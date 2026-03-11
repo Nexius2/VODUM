@@ -64,9 +64,11 @@ def _sql_to_dt(value) -> Optional[datetime]:
 
 
 def _client_ip() -> str:
-    forwarded_for = (request.headers.get("X-Forwarded-For") or "").strip()
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
+    """
+    request.remote_addr suffit :
+    - sans trust proxy => IP directe du client
+    - avec trust proxy => ProxyFix l'a déjà corrigée
+    """
     return (request.remote_addr or "unknown").strip()
 
 

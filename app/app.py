@@ -1,8 +1,9 @@
 import os
 import json
+import secrets
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo  # kept for backward compat in other imports
-from flask import Flask, g
+from flask import Flask, g, request, session, abort
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import Config
@@ -27,6 +28,46 @@ settings_logger = get_logger("settings")
 
 _I18N_CACHE: dict[str, dict] = {}
 
+class ConditionalProxyFix:
+    """
+    Applique ProxyFix uniquement si enabled_getter() retourne True.
+    Permet d'activer/désactiver dynamiquement le trust proxy via les settings.
+    """
+    def __init__(self, wsgi_app, enabled_getter):
+        self._raw_app = wsgi_app
+        self._proxy_app = ProxyFix(wsgi_app, x_for=1, x_proto=1, x_host=1)
+        self._enabled_getter = enabled_getter
+
+    def __call__(self, environ, start_response):
+        if self._enabled_getter():
+            return self._proxy_app(environ, start_response)
+        return self._raw_app(environ, start_response)
+
+
+def _env_bool(name: str) -> bool | None:
+    raw = os.environ.get(name)
+    if raw is None:
+        return None
+    return str(raw).strip() not in ("0", "false", "False", "no", "NO")
+
+
+def _read_trust_proxy_from_db(db_path: str) -> bool:
+    try:
+        import sqlite3
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT web_trust_proxy FROM settings WHERE id = 1"
+        ).fetchone()
+        conn.close()
+
+        if not row:
+            return False
+
+        return int(row["web_trust_proxy"] or 0) == 1
+    except Exception:
+        return False
 
 # -----------------------------
 # AUTH RESET (local file)
@@ -200,13 +241,57 @@ def create_app():
 
     app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 
-    # Si VODUM est derrière un reverse proxy (NPM, Traefik, SWAG, Cloudflare Tunnel, etc.)
-    # on fait confiance aux headers X-Forwarded-* pour récupérer le vrai schéma/proto.
-    trust_proxy = (os.environ.get("VODUM_TRUST_PROXY", "1") or "1").strip() not in (
-        "0", "false", "False", "no", "NO"
+    def _get_csrf_token() -> str:
+        token = session.get("_csrf_token")
+        if not token:
+            token = secrets.token_urlsafe(32)
+            session["_csrf_token"] = token
+        return token
+
+    @app.context_processor
+    def inject_csrf_token():
+        return {"csrf_token": _get_csrf_token()}
+
+    @app.before_request
+    def csrf_guard():
+        # Protège uniquement les méthodes qui modifient l'état
+        if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
+            return
+
+        # Pas utile sur ces endpoints publics / techniques
+        allowed_prefixes = ("/static", "/health")
+        if request.path.startswith(allowed_prefixes) or request.path in ("/favicon.ico",):
+            return
+
+        sent_token = (
+            request.form.get("_csrf_token")
+            or request.headers.get("X-CSRF-Token")
+            or ""
+        ).strip()
+
+        session_token = (session.get("_csrf_token") or "").strip()
+
+        if not sent_token or not session_token or sent_token != session_token:
+            abort(403)
+
+    # Trust proxy :
+    # - priorité à la variable d'environnement si elle existe
+    # - sinon fallback sur la valeur stockée en base/settings
+    env_trust_proxy = _env_bool("VODUM_TRUST_PROXY")
+    db_path = os.environ.get("DATABASE_PATH", "/appdata/database.db")
+
+    if env_trust_proxy is None:
+        initial_trust_proxy = _read_trust_proxy_from_db(db_path)
+    else:
+        initial_trust_proxy = env_trust_proxy
+
+    app.config["TRUST_PROXY_ENABLED"] = bool(initial_trust_proxy)
+
+    # Middleware conditionnel : lit app.config à chaque requête
+    app.wsgi_app = ConditionalProxyFix(
+        app.wsgi_app,
+        lambda: bool(app.config.get("TRUST_PROXY_ENABLED", False)),
     )
-    if trust_proxy:
-        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     # Absolute path to lang/
     app.config["LANG_DIR"] = lang_dir
@@ -230,6 +315,9 @@ def create_app():
             g.update_available = False
 
     app.config.from_object(Config)
+
+    # Ne pas écraser la valeur déjà calculée depuis env / DB
+    app.config.setdefault("TRUST_PROXY_ENABLED", False)
 
     # RESET au démarrage (avant routes / scheduler)
     startup_admin_recover_if_requested(app)

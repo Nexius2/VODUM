@@ -86,9 +86,13 @@
         {% for s in servers_details or [] %}
         {% set ms = s.watch_ms or 0 %}
         <tr class="border-b border-slate-800">
-          <td class="py-2 pr-4">
+          <td class="py-2 pr-4 min-w-[260px]">
             <div class="font-semibold">{{ s.name or ('Server ' ~ s.server_id) }}</div>
             <div class="text-xs text-slate-500">{{ (s.type or '')|upper }}</div>
+
+            {% with row=s, max_width_class='max-w-[220px]', show_unavailable_message=True %}
+              {% include "monitoring/partials/_server_resource_bars.html" %}
+            {% endwith %}
           </td>
 
           <td class="py-2 pr-4">

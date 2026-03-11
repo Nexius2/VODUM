@@ -145,12 +145,7 @@
 
     <!-- Now Playing -->
     <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-        <div id="dashboard-now-playing"
-             hx-get="{{ url_for('dashboard_now_playing_partial') }}"
-             hx-trigger="load, every 2500ms"
-             hx-swap="outerHTML">
-            {% include "dashboard/partials/_now_playing.html" %}
-        </div>
+		{% include "dashboard/partials/_now_playing.html" %}
     </section>
 
     <!-- Latest logs -->

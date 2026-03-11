@@ -190,6 +190,13 @@ Verify compatibility with:
   - Confirm displayed stats match real historical totals
 
 ---
+# 5. Security
+
+- [X] **Reverse Proxy Trust Hardening**
+- [X] **CSRF Protection**
+- [X] **Path Traversal Protection**
+- [X] **Secure Client IP Resolution**
+- [X] **Security Configuration Control**
 
 # Future Ideas
 

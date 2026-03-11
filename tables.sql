@@ -225,6 +225,7 @@ CREATE TABLE IF NOT EXISTS settings (
 
     web_secure_cookies INTEGER DEFAULT 0,
     web_cookie_samesite TEXT DEFAULT 'Lax',
+	web_trust_proxy INTEGER DEFAULT 0,
 
     enable_cron_jobs INTEGER DEFAULT 1,
     default_expiration_days INTEGER DEFAULT 90,

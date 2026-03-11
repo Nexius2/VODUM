@@ -25,6 +25,7 @@
       {% endwith %}
 
       <form method="POST" class="space-y-4">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
         <div>
           <label class="block text-sm mb-1 text-slate-300">{{ t("auth.admin_email") }}</label>
           <input
