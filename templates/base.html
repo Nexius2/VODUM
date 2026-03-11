@@ -320,5 +320,38 @@
       document.addEventListener('DOMContentLoaded', initVodumDatePickers);
     })();
   </script>
+  <script>
+    (function () {
+      const csrfToken = "{{ csrf_token }}";
+
+      function ensureCsrfField(form) {
+        if (!form || form.querySelector('input[name="_csrf_token"]')) return;
+
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "_csrf_token";
+        input.value = csrfToken;
+        form.appendChild(input);
+      }
+
+      document.addEventListener("DOMContentLoaded", function () {
+        document.querySelectorAll('form[method="post"], form[method="POST"]').forEach(ensureCsrfField);
+      });
+
+      document.addEventListener("submit", function (e) {
+        const form = e.target;
+        if (form && form.tagName === "FORM") {
+          const method = (form.getAttribute("method") || "get").toLowerCase();
+          if (method === "post") {
+            ensureCsrfField(form);
+          }
+        }
+      });
+
+      document.body.addEventListener("htmx:configRequest", function (event) {
+        event.detail.headers["X-CSRF-Token"] = csrfToken;
+      });
+    })();
+  </script>
 </body>
 </html>

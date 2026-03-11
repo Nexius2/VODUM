@@ -1,4 +1,7 @@
-<div id="dashboard-now-playing">
+<div id="dashboard-now-playing"
+     hx-get="{{ url_for('dashboard_now_playing_partial') }}"
+     hx-trigger="every 2500ms"
+     hx-swap="outerHTML">
 <div class="flex items-center justify-between mb-3">
     <div class="flex items-center gap-3 min-w-0">
         <h2 class="text-sm font-semibold truncate">

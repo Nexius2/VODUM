@@ -12,6 +12,7 @@ import shutil
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
+from werkzeug.utils import secure_filename
 from typing import Optional
 
 import requests
@@ -56,6 +57,35 @@ def get_sqlite_db_size_bytes(db_path: str) -> int | None:
         return None
 
 def register(app):
+
+    def _resolve_backup_path(selected_name: str) -> Path:
+        """
+        Ne permet de restaurer qu'un fichier présent dans BACKUP_DIR.
+        Empêche toute traversée de chemin.
+        """
+        base_dir = Path(app.config["BACKUP_DIR"]).resolve()
+
+        selected_name = (selected_name or "").strip()
+        if not selected_name:
+            raise ValueError("Empty backup name")
+
+        # force un nom de fichier simple
+        safe_name = secure_filename(selected_name)
+        if not safe_name or safe_name != selected_name:
+            raise ValueError("Invalid backup name")
+
+        backup_path = (base_dir / safe_name).resolve()
+
+        # vérifie que le chemin final reste bien dans BACKUP_DIR
+        try:
+            backup_path.relative_to(base_dir)
+        except Exception:
+            raise ValueError("Backup path escapes backup directory")
+
+        if not backup_path.is_file():
+            raise FileNotFoundError(str(backup_path))
+
+        return backup_path
 
     def safe_restore(backup_path: Path):
         """

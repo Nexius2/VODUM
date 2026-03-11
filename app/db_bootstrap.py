@@ -371,6 +371,7 @@ def run_migrations():
     ensure_column(cursor, "settings", "auth_enabled", "INTEGER DEFAULT 1")
     ensure_column(cursor, "settings", "web_secure_cookies", "INTEGER DEFAULT 0")
     ensure_column(cursor, "settings", "web_cookie_samesite", "TEXT DEFAULT 'Lax'")
+    ensure_column(cursor, "settings", "web_trust_proxy", "INTEGER DEFAULT 0")
     print("✔ Settings columns verified (brand_name).")
     # -------------------------------------------------
     # Anti brute-force login
@@ -1769,6 +1770,7 @@ def run_migrations():
         "auth_enabled": 1,
         "web_secure_cookies": 0,
         "web_cookie_samesite": "Lax",
+        "web_trust_proxy": 0,
     })
 
 

@@ -1018,5 +1018,7 @@
   "secure_cookies_https_only": "Cookie sicuri (solo HTTPS)",
   "secure_cookies_help": "Consigliato quando VODUM è accessibile tramite HTTPS. Il cookie di sessione non verrà inviato su HTTP non protetto.",
   "cookie_samesite": "Cookie SameSite",
-  "cookie_samesite_help": "Usa Lax per impostazione predefinita. Usa None solo se ti servono cookie cross-site, e solo con HTTPS."
+  "cookie_samesite_help": "Usa Lax per impostazione predefinita. Usa None solo se ti servono cookie cross-site, e solo con HTTPS.",
+    "trust_reverse_proxy": "Considera attendibile il reverse proxy",
+  "trust_reverse_proxy_help": "Attivalo solo se VODUM è dietro un reverse proxy fidato (Nginx Proxy Manager, Traefik, SWAG, ecc.). Questo consente di usare correttamente gli header X-Forwarded-*."
 }

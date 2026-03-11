@@ -18,6 +18,11 @@ logger = get_logger("monitoring.collector")
 _COLLECT_ERROR_LAST_LOG_TS = {}  # key=(server_id, exc_class) -> ts
 _COLLECT_ERROR_THROTTLE_SECONDS = 300  # 5 minutes
 
+# Délai de grâce avant de considérer une session comme réellement stoppée.
+# Cela évite qu'un timeout Plex/Jellyfin fasse disparaître temporairement
+# toutes les lectures en cours.
+_SESSION_MISSING_GRACE_SECONDS = 60
+
 
 class AttrDict(dict):
     """
@@ -129,6 +134,16 @@ def _has_recent_live_sessions(db, server_id: int, window_seconds: int = 180) -> 
     except Exception:
         return False
 
+def _session_seen_recently(last_seen_at: Optional[str], grace_seconds: int) -> bool:
+    if not last_seen_at:
+        return False
+
+    try:
+        last_dt = datetime.strptime(last_seen_at, "%Y-%m-%d %H:%M:%S")
+        now_dt = datetime.utcnow()
+        return (now_dt - last_dt).total_seconds() < int(grace_seconds)
+    except Exception:
+        return False
 
 def _classify_status_from_exception(e: Exception) -> str:
     """
@@ -309,6 +324,23 @@ def collect_sessions_for_server(
             if sk in cur_map:
                 continue
 
+            live = db.query_one(
+                """
+                SELECT *
+                FROM media_sessions
+                WHERE server_id=? AND session_key=?
+                """,
+                (server_id, sk),
+            )
+
+            if live and _session_seen_recently(
+                live.get("last_seen_at"),
+                _SESSION_MISSING_GRACE_SECONDS,
+            ):
+                # Session absente de la réponse courante, mais vue récemment :
+                # on ne la supprime pas encore pour éviter les faux "stop".
+                continue
+
             report["events"] += 1
 
             db.execute(
@@ -324,15 +356,6 @@ def collect_sessions_for_server(
                     sk, prev.get("external_user_id"), prev.get("media_key"),
                     json.dumps(prev, ensure_ascii=False),
                 ),
-            )
-
-            live = db.query_one(
-                """
-                SELECT *
-                FROM media_sessions
-                WHERE server_id=? AND session_key=?
-                """,
-                (server_id, sk),
             )
 
             if live:

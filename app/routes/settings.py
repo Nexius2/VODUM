@@ -142,6 +142,7 @@ def register(app):
                     "web_cookie_samesite",
                     settings.get("web_cookie_samesite") or "Lax"
                 ),
+                "web_trust_proxy": 1 if request.form.get("web_trust_proxy") == "1" else 0,
             }
 
             # --------------------------------------------------
@@ -187,7 +188,8 @@ def register(app):
                     maintenance_mode = :maintenance_mode,
                     debug_mode = :debug_mode,
                     web_secure_cookies = :web_secure_cookies,
-                    web_cookie_samesite = :web_cookie_samesite
+                    web_cookie_samesite = :web_cookie_samesite,
+                    web_trust_proxy = :web_trust_proxy
                 WHERE id = 1
                 """,
                 new_values,
@@ -198,6 +200,7 @@ def register(app):
             current_app.config["SESSION_COOKIE_SECURE"] = bool(new_values["web_secure_cookies"]) or (
                 new_values["web_cookie_samesite"] == "None"
             )
+            current_app.config["TRUST_PROXY_ENABLED"] = bool(new_values["web_trust_proxy"])
 
             # --------------------------------------------------
             # MASTER scheduled tasks switch (enable_cron_jobs)

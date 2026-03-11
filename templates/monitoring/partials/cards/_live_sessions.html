@@ -72,12 +72,18 @@
 
       <div class="mt-2 space-y-2">
         {% for item in live_servers %}
-          <div class="flex items-center justify-between gap-3">
-            <div class="min-w-0 text-sm font-medium text-white truncate">
-              {{ item.server_name }}
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0 flex-1">
+              <div class="text-sm font-medium text-white truncate">
+                {{ item.server_name }}
+              </div>
+
+              {% with row=item, max_width_class='max-w-full', show_unavailable_message=True %}
+                {% include "monitoring/partials/_server_resource_bars.html" %}
+              {% endwith %}
             </div>
 
-            <div class="shrink-0 text-[11px] whitespace-nowrap">
+            <div class="shrink-0 text-[11px] whitespace-nowrap pt-0.5">
               <span class="text-white font-medium">{{ item.live_sessions }}</span>
               <span class="text-slate-600">/</span>
               <span class="text-emerald-300 font-medium">{{ item.direct_plays }}</span>

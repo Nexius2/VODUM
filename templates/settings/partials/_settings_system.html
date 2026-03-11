@@ -45,6 +45,18 @@
           </div>
         </div>
 
+        <div class="flex items-start gap-2">
+          <input type="checkbox" name="web_trust_proxy" value="1"
+                 {% if settings.web_trust_proxy %}checked{% endif %}
+                 class="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-800">
+          <div>
+            <div class="text-sm text-slate-300">{{ t("trust_reverse_proxy") }}</div>
+            <div class="text-xs text-slate-500 mt-1">
+              {{ t("trust_reverse_proxy_help") }}
+            </div>
+          </div>
+        </div>
+
         <div>
           <label class="block text-sm mb-1 text-slate-300">{{ t("cookie_samesite") }}</label>
           <select name="web_cookie_samesite"
