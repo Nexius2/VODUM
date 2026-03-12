@@ -858,7 +858,7 @@
   "tautulli_import_options": "Tautulli import options",
   "tautulli_import_options_desc": "Choose how VODUM should import historical data from Tautulli.",
   "tautulli_import_options_title": "Tautulli import options",
-  "tautulli_import_tip": "Tip: you can disconnect — VODUM will keep the import result and show it later.",
+  "tautulli_import_tip": "Tip: you can logout — VODUM will keep the import result and show it later.",
   "tautulli_import_title": "Import Tautulli",
   "tautulli_keep_all_libraries": "Keep all libraries",
   "tautulli_keep_all_libraries_desc": "Import all libraries even if they are not configured.",

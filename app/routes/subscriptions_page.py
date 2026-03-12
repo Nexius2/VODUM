@@ -53,8 +53,29 @@ def register(app):
             except Exception:
                 t['policies_count'] = 0
 
-        # Users list for applications tab
-        users = db.query("""
+        # Users list for applications tab (paginated)
+        applications_page = max(request.args.get("applications_page", 1, type=int), 1)
+        applications_per_page = 20
+        applications_offset = (applications_page - 1) * applications_per_page
+        applications_search = (request.args.get("applications_q") or "").strip()
+
+        applications_where = []
+        applications_params = []
+
+        if applications_search:
+            like = f"%{applications_search}%"
+            applications_where.append("""
+                (
+                    COALESCE(vu.username, '') LIKE ?
+                    OR COALESCE(vu.email, '') LIKE ?
+                    OR COALESCE(vu.status, '') LIKE ?
+                    OR COALESCE(st.name, '') LIKE ?
+                    OR CAST(vu.id AS TEXT) LIKE ?
+                )
+            """)
+            applications_params.extend([like, like, like, like, like])
+
+        users_query = """
             SELECT
               vu.id,
               vu.username,
@@ -65,8 +86,36 @@ def register(app):
               st.name AS subscription_template_name
             FROM vodum_users vu
             LEFT JOIN subscription_templates st ON st.id = vu.subscription_template_id
+        """
+
+        count_query = """
+            SELECT COUNT(*) AS total
+            FROM vodum_users vu
+            LEFT JOIN subscription_templates st ON st.id = vu.subscription_template_id
+        """
+
+        if applications_where:
+            where_sql = " WHERE " + " AND ".join(applications_where)
+            users_query += where_sql
+            count_query += where_sql
+
+        users_query += """
             ORDER BY LOWER(COALESCE(vu.username, '')) ASC, vu.id ASC
-        """) or []
+            LIMIT ? OFFSET ?
+        """
+
+        total_row = db.query_one(count_query, tuple(applications_params)) or {"total": 0}
+        applications_total_users = int(total_row["total"] or 0)
+        applications_total_pages = max(math.ceil(applications_total_users / applications_per_page), 1)
+
+        if applications_page > applications_total_pages:
+            applications_page = applications_total_pages
+            applications_offset = (applications_page - 1) * applications_per_page
+
+        users = db.query(
+            users_query,
+            tuple(applications_params + [applications_per_page, applications_offset])
+        ) or []
         users = [dict(u) for u in users]
 
         return render_template(
@@ -75,6 +124,10 @@ def register(app):
             servers=servers,
             templates=templates,
             users=users,
+            applications_page=applications_page,
+            applications_total_pages=applications_total_pages,
+            applications_total_users=applications_total_users,
+            applications_q=applications_search,
         )
 
 
