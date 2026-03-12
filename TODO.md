@@ -163,43 +163,17 @@ Verify compatibility with:
 
 ---
 
-# 4. Monitoring follow-up
+# 4. bugs
 
-- [X] **Audit all monitoring queries for date-window consistency**
-  - Ensure all historical period filters use `stopped_at`
-  - Avoid mixed logic between `started_at` and `stopped_at` across tabs
+- [X] **Easter egg**
+- [X] ** deleting server is too long**
 
-- [X] **Audit all monitoring aggregations for session dedup consistency**
-  - Ensure all `play_key` constructions use the same logic
-  - Avoid per-day dedup where per-play/per-minute dedup is expected
-
-- [X] **Audit all monitoring tabs for media type consistency**
-  - Ensure series detection uses reliable fields such as `grandparent_title`
-  - Avoid inconsistent `media_type` normalization between Overview / Activity / Servers / Users
-
-- [X] **Review remaining monitoring queries after recent fixes**
-  - Verify Overview
-  - Verify Activity
-  - Verify Users
-  - Verify Servers
-  - Verify History
-  - Verify Libraries
-
-- [X] **Validate 7d / 1m / 6m / 12m ranges everywhere**
-  - Confirm all ranges are truly gliding windows
-  - Confirm displayed stats match real historical totals
 
 ---
-# 5. Security
+# 5. Jellyfin
 
-- [X] **Reverse Proxy Trust Hardening**
-- [X] **CSRF Protection**
-- [X] **Path Traversal Protection**
-- [X] **Secure Client IP Resolution**
-- [X] **Security Configuration Control**
+- [X] **now playing jellyfin not displaying**
+
 
 # Future Ideas
 
-- Improve **cross-tool integration**
-- Enhance **analytics for user activity**
-- Expand **recommendation systems**

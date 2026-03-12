@@ -13,6 +13,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+import random
 
 import requests
 from flask import (
@@ -25,9 +26,10 @@ from logging_utils import get_logger, read_last_logs, read_all_logs
 from tasks_engine import run_task, start_scheduler, run_task_sequence, run_task_by_name, enqueue_task
 from mailing_utils import build_user_context, render_mail
 from discord_utils import is_discord_ready, validate_discord_bot_token
-from core.i18n import get_translator, get_available_languages
+from core.i18n import get_translator, get_available_languages, load_language_dict
 from core.backup import BackupConfig, ensure_backup_dir, create_backup_file, list_backups, restore_backup_file
 from werkzeug.security import generate_password_hash, check_password_hash
+from external.dashboard_quote_easter_egg import build_dashboard_quote_card
 
 from web.helpers import get_db, scheduler_db_provider, table_exists, add_log, send_email_via_settings, get_backup_cfg
 
@@ -35,6 +37,7 @@ task_logger = get_logger("tasks_ui")
 auth_logger = get_logger("auth")
 security_logger = get_logger("security")
 settings_logger = get_logger("settings")
+
 
 def register(app):
     @app.route("/")
@@ -328,6 +331,11 @@ def register(app):
                         item_id=str(poster_item_id),
                     )
 
+        idle_card = None
+        if total_live <= 0:
+            idle_card = build_dashboard_quote_card()
+
+
         # --------------------------
         # PAGE RENDERING
         # --------------------------
@@ -340,6 +348,7 @@ def register(app):
             sessions=sessions,
             total_live=total_live,
             total_transcode=total_transcode,
+            idle_card=idle_card,
             active_page="dashboard",
         )
 
@@ -473,11 +482,17 @@ def register(app):
                         item_id=str(poster_item_id),
                     )
 
+        idle_card = None
+        if total_live <= 0:
+            idle_card = build_dashboard_quote_card()
+
+
         return render_template(
             "dashboard/partials/_now_playing.html",
             sessions=sessions,
             total_live=total_live,
             total_transcode=total_transcode,
+            idle_card=idle_card,
         )
 
 

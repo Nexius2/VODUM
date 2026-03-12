@@ -1253,7 +1253,19 @@ def run_migrations():
     conn.commit()
     print("✔ Monitoring media_type normalized.")
 
+    # -------------------------------------------------
+    # 2.6 Server deletion performance indexes
+    # -------------------------------------------------
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_users_server ON media_users(server_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_libraries_server ON libraries(server_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_user_libraries_library ON media_user_libraries(library_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_identities_server ON user_identities(server_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_welcome_email_templates_server ON welcome_email_templates(server_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_stream_enforcement_state_server ON stream_enforcement_state(server_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_stream_enforcements_server ON stream_enforcements(server_id, created_at)")
+    conn.commit()
 
+    print("✔ Server deletion performance indexes verified.")
 
 
     # -------------------------------------------------
@@ -1741,6 +1753,14 @@ def run_migrations():
         "status": "disabled"
     })
 
+    # Tâche refresh_dashboard_quote_cache (quote du jour du dashboard)
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "refresh_dashboard_quote_cache",
+        "description": "task_description.refresh_dashboard_quote_cache",
+        "schedule": "*/30 * * * *",   # vérifie toutes les 30 min, mais ne recalcule qu'une fois par jour
+        "enabled": 1,
+        "status": "idle"
+    })
 
 
     # -------------------------------------------------

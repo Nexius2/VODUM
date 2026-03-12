@@ -1019,6 +1019,9 @@
   "cookie_samesite": "Cookie SameSite",
   "cookie_samesite_help": "Use Lax por defecto. Use None solo si necesita cookies entre sitios, y únicamente con HTTPS.",
     "trust_reverse_proxy": "Confiar en el proxy inverso",
-  "trust_reverse_proxy_help": "Actívelo solo si VODUM está detrás de un proxy inverso de confianza (Nginx Proxy Manager, Traefik, SWAG, etc.). Esto permite usar correctamente los encabezados X-Forwarded-*."
+  "trust_reverse_proxy_help": "Actívelo solo si VODUM está detrás de un proxy inverso de confianza (Nginx Proxy Manager, Traefik, SWAG, etc.). Esto permite usar correctamente los encabezados X-Forwarded-*.",
+  "task_description.refresh_dashboard_quote_cache": "Construye la cita del día del dashboard.",
+    "server_delete_started": "La eliminación del servidor se inició en segundo plano. Esto puede tardar un poco.",
+  "server_delete_already_running": "Ya hay una eliminación en curso para este servidor."
 
 }
