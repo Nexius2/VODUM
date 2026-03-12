@@ -222,6 +222,13 @@ def register(app):
             if rj.get("locked") and rj.get("subscription_name"):
                 db.execute("DELETE FROM stream_policies WHERE id=?", (int(r["id"]),))
 
+    def _clear_template_snapshot(db, vodum_user_id: int):
+        _delete_locked_subscription_policies(db, vodum_user_id)
+        db.execute(
+            "UPDATE vodum_users SET subscription_template_id=NULL WHERE id=?",
+            (vodum_user_id,),
+        )
+
     def _apply_template_snapshot(db, vodum_user_id: int, template_id: int):
         tpl = db.query_one("SELECT id, name, policies_json FROM subscription_templates WHERE id=?", (template_id,))
         if not tpl:
@@ -285,15 +292,27 @@ def register(app):
         template_id_raw = (request.form.get("template_id") or "").strip()
         confirm = (request.form.get("confirm_replace") or "0") == "1"
 
-        if not user_id_raw.isdigit() or not template_id_raw.isdigit():
+        clear_subscription = template_id_raw in ("", "none", "null")
+
+        if not user_id_raw.isdigit() or (not clear_subscription and not template_id_raw.isdigit()):
             flash("subscription_apply_invalid", "error")
             return redirect(url_for("subscriptions", tab="applications"))
 
         user_id = int(user_id_raw)
-        template_id = int(template_id_raw)
+        template_id = int(template_id_raw) if not clear_subscription else None
 
         u = db.query_one("SELECT subscription_template_id FROM vodum_users WHERE id=?", (user_id,))
         existing_id = int(u["subscription_template_id"]) if (u and u["subscription_template_id"] is not None) else None
+
+        if clear_subscription:
+            if existing_id is not None and not confirm:
+                flash("subscription_apply_replace_warning", "warning")
+                return redirect(url_for("subscriptions", tab="applications"))
+
+            _clear_template_snapshot(db, user_id)
+            add_log(db, "subscriptions", f"Subscription removed for user #{user_id}")
+            flash("subscription_apply_success", "success")
+            return redirect(url_for("subscriptions", tab="applications"))
 
         if existing_id and existing_id != template_id and not confirm:
             flash("subscription_apply_replace_warning", "warning")
@@ -316,25 +335,25 @@ def register(app):
         template_id_raw = (request.form.get("template_id") or "").strip()
         confirm = (request.form.get("confirm_replace") or "0") == "1"
 
-        if not server_id_raw.isdigit() or not template_id_raw.isdigit():
+        clear_subscription = template_id_raw in ("", "none", "null")
+
+        if not server_id_raw.isdigit() or (not clear_subscription and not template_id_raw.isdigit()):
             flash("subscription_apply_invalid", "error")
             return redirect(url_for("subscriptions", tab="applications"))
 
         server_id = int(server_id_raw)
-        template_id = int(template_id_raw)
+        template_id = int(template_id_raw) if not clear_subscription else None
 
-        # Find users linked to this server
         rows = db.query(
             "SELECT DISTINCT vodum_user_id FROM media_users WHERE server_id=? AND vodum_user_id IS NOT NULL",
             (server_id,),
         ) or []
-        user_ids = [int(r["vodum_user_id"]) for r in rows if r.get("vodum_user_id")]
+        user_ids = [int(r["vodum_user_id"]) for r in rows if r["vodum_user_id"] is not None]
 
         if not user_ids:
             flash("subscription_apply_no_users", "warning")
             return redirect(url_for("subscriptions", tab="applications"))
 
-        # Optional: if not confirmed and at least one user already has a template, warn
         if not confirm:
             any_has = db.query_one(
                 "SELECT 1 FROM vodum_users WHERE id IN (%s) AND subscription_template_id IS NOT NULL LIMIT 1" %
@@ -346,22 +365,37 @@ def register(app):
                 return redirect(url_for("subscriptions", tab="applications"))
 
         applied = 0
+
         try:
+            if clear_subscription:
+                for uid in user_ids:
+                    _clear_template_snapshot(db, uid)
+                    applied += 1
+
+                add_log(
+                    db,
+                    "subscriptions",
+                    f"Subscription removed in bulk for server #{server_id} ({applied} users)"
+                )
+                flash("subscription_apply_bulk_success", "success")
+                return redirect(url_for("subscriptions", tab="applications"))
+
             tpl = db.query_one("SELECT name FROM subscription_templates WHERE id=?", (template_id,))
             tname = (tpl["name"] if tpl else "")
+
             for uid in user_ids:
                 _apply_template_snapshot(db, uid, template_id)
                 applied += 1
+
+            add_log(
+                db,
+                "subscriptions",
+                f"Template bulk-applied to server #{server_id}: {tname} (template_id={template_id}) to {applied} users"
+            )
+            flash("subscription_apply_bulk_success", "success")
+            return redirect(url_for("subscriptions", tab="applications"))
+
         except Exception:
             flash("subscription_apply_failed", "error")
             return redirect(url_for("subscriptions", tab="applications"))
-
-        add_log(db, "subscriptions", f"Template bulk-applied to server #{server_id}: {tname} (template_id={template_id}) to {applied} users")
-        flash("subscription_apply_bulk_success", "success")
-        return redirect(url_for("subscriptions", tab="applications"))
-# -----------------------------
-    # TÂCHES
-    # -----------------------------
-    
-
 

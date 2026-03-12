@@ -1,32 +1,59 @@
 <!-- LEFT: TEMPLATE EDITOR -->
-<div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6">
+<div class="lg:col-span-8 xl:col-span-8 bg-slate-900 border border-slate-800 rounded-2xl p-6">
 
-  <div class="flex items-center justify-between mb-4">
-    <h2 class="text-sm uppercase tracking-wide text-slate-400">
-      {{ t("subscription_templates_editor") }}
-    </h2>
-    <span class="text-xs text-slate-500">{{ t("subscription_templates_editor_hint") }}</span>
-    <span id="tpl_policies_count_badge" class="text-xs text-slate-500 hidden"></span>
+  <div class="flex items-center justify-between mb-4 gap-3">
+    <div>
+      <h2 class="text-sm uppercase tracking-wide text-slate-400">
+        {{ t("subscription_templates_editor") }}
+      </h2>
+      <div class="text-xs text-slate-500 mt-1">{{ t("subscription_templates_editor_hint") }}</div>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <span id="tpl_policies_count_badge" class="text-xs text-slate-500 hidden"></span>
+
+      <!--<button type="button"
+              id="tpl_reset_btn"
+              onclick="resetTemplateEditor()"
+              class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm font-medium">
+        {{ t("reset") }}
+      </button>-->
+
+      <button type="submit"
+              form="tpl_form"
+              id="tpl_submit_btn"
+              class="px-3 py-2 rounded-lg bg-primary hover:bg-primary-dark text-sm font-medium">
+        {{ t("create") }}
+      </button>
+    </div>
   </div>
 
-  <form method="post" action="{{ url_for('subscription_templates_save') }}" class="space-y-4" onsubmit="return syncPoliciesJson();">
+  <form id="tpl_form" method="post" action="{{ url_for('subscription_templates_save') }}" class="space-y-4" onsubmit="return syncPoliciesJson();">
     <input type="hidden" name="template_id" id="template_id" value="">
     <input type="hidden" name="policies_json" id="policies_json" value="[]">
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div class="text-sm">
-        <label class="block text-xs text-slate-400 mb-1">{{ t("name") }}</label>
-        <input type="text" name="name" id="tpl_name" required
-               class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+    <!-- TEMPLATE INFO -->
+    <div class="bg-slate-950 border border-slate-800 rounded-xl p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-xs uppercase tracking-wide text-slate-400">{{ t("subscription_templates_editor") }}</h3>
       </div>
 
-      <div class="text-sm">
-        <label class="block text-xs text-slate-400 mb-1">{{ t("notes") }}</label>
-        <input type="text" name="notes" id="tpl_notes"
-               class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="text-sm">
+          <label class="block text-xs text-slate-400 mb-1">{{ t("name") }}</label>
+          <input type="text" name="name" id="tpl_name" required
+                 class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2">
+        </div>
+
+        <div class="text-sm">
+          <label class="block text-xs text-slate-400 mb-1">{{ t("notes") }}</label>
+          <input type="text" name="notes" id="tpl_notes"
+                 class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2">
+        </div>
       </div>
     </div>
 
+    <!-- POLICIES -->
     <div class="mt-4">
       <div class="flex items-center justify-between mb-2">
         <h3 class="text-xs uppercase tracking-wide text-slate-400">{{ t("policies") }}</h3>
@@ -123,7 +150,7 @@
         </div>
 
         <div class="md:col-span-3 flex gap-2">
-          <button type="button" onclick="addPolicyToTemplate()"
+          <button type="button" id="p_add_btn" onclick="addPolicyToTemplate()"
                   class="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-dark text-xs font-medium">
             {{ t("subscription_templates_add_policy") }}
           </button>
@@ -140,38 +167,47 @@
         <table class="w-full text-xs">
           <thead class="bg-slate-950/60 text-slate-400 text-left">
             <tr>
-              <th class="px-4 py-2 w-10"></th>
+              <th class="px-4 py-2 w-24">{{ t("actions") }}</th>
               <th class="px-4 py-2">{{ t("rule") }}</th>
               <th class="px-4 py-2">{{ t("provider") }}</th>
+              <th class="px-4 py-2">{{ t("server") }}</th>
               <th class="px-4 py-2">{{ t("priority") }}</th>
               <th class="px-4 py-2">{{ t("enabled") }}</th>
+              <th class="px-4 py-2">{{ t("details") }}</th>
             </tr>
           </thead>
           <tbody id="tpl_policies_table">
-            <tr><td class="px-4 py-3 text-slate-500" colspan="5">{{ t("subscription_templates_no_policies") }}</td></tr>
+            <tr><td class="px-4 py-3 text-slate-500" colspan="7">{{ t("subscription_templates_no_policies") }}</td></tr>
           </tbody>
         </table>
       </div>
-    </div>
-
-    <div class="pt-2">
-      <button type="submit" id="tpl_submit_btn"
-              class="px-3 py-2 rounded-lg bg-primary hover:bg-primary-dark text-sm font-medium">
-        {{ t("create") }}
-      </button>
     </div>
   </form>
 
 </div>
 
 <script>
-  // Build a local policies array, persisted into hidden input on submit
   let TEMPLATE_POLICIES = [];
   let EDIT_INDEX = null;
 
   function syncPoliciesJson() {
     document.getElementById("policies_json").value = JSON.stringify(TEMPLATE_POLICIES || []);
     return true;
+  }
+
+  function updateTemplateSubmitButton() {
+    const btn = document.getElementById("tpl_submit_btn");
+    const templateId = document.getElementById("template_id").value;
+    if (!btn) return;
+    btn.textContent = templateId ? "{{ t('save') }}" : "{{ t('create') }}";
+  }
+
+  function updatePolicyActionButton() {
+    const btn = document.getElementById("p_add_btn");
+    if (!btn) return;
+    btn.textContent = EDIT_INDEX !== null
+      ? "{{ t('save') }}"
+      : "{{ t('subscription_templates_add_policy') }}";
   }
 
   function resetPolicyBuilder() {
@@ -188,6 +224,19 @@
     document.getElementById("p_warn_title").value = "{{ t('policies_warn_title_default') }}";
     document.getElementById("p_warn_text").value = "{{ t('policies_warn_text_default') }}";
     document.getElementById("p_selector").value = "kill_newest";
+    updatePolicyActionButton();
+  }
+
+  function resetTemplateEditor() {
+    document.getElementById("template_id").value = "";
+    document.getElementById("tpl_name").value = "";
+    document.getElementById("tpl_notes").value = "";
+    TEMPLATE_POLICIES = [];
+    EDIT_INDEX = null;
+    syncPoliciesJson();
+    renderPoliciesTable();
+    resetPolicyBuilder();
+    updateTemplateSubmitButton();
   }
 
   function getPolicyFromBuilder() {
@@ -224,6 +273,7 @@
       const list = (allowed_devices || "").split(",").map(s => s.trim()).filter(Boolean);
       rule.allowed = list;
     }
+
     return {
       rule_type,
       provider: provider || null,
@@ -243,6 +293,7 @@
     } else {
       TEMPLATE_POLICIES.push(p);
     }
+
     EDIT_INDEX = null;
     renderPoliciesTable();
     syncPoliciesJson();
@@ -269,12 +320,78 @@
     document.getElementById("p_allow_local_ip").checked = !!rule.allow_local_ip;
     document.getElementById("p_max_kbps").value = rule.max_kbps ?? "";
     document.getElementById("p_allowed_devices").value = (rule.allowed || []).join(", ");
+
+    updatePolicyActionButton();
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function deletePolicy(i) {
     TEMPLATE_POLICIES.splice(i, 1);
+    EDIT_INDEX = null;
     renderPoliciesTable();
     syncPoliciesJson();
+    updatePolicyActionButton();
+  }
+
+  function getRuleTypeLabel(ruleType) {
+    const labels = {
+      "max_streams_per_user": "{{ t('policies_rule_max_streams_user')|e }}",
+      "max_ips_per_user": "{{ t('policies_rule_max_ips_user')|e }}",
+      "max_streams_per_ip": "{{ t('policies_rule_max_streams_ip')|e }}",
+      "max_transcodes_global": "{{ t('policies_rule_max_transcodes_server')|e }}",
+      "ban_4k_transcode": "{{ t('policies_rule_ban_4k_transcode')|e }}",
+      "max_bitrate_kbps": "{{ t('policies_rule_max_bitrate')|e }}",
+      "device_allowlist": "{{ t('policies_rule_device_allowlist')|e }}"
+    };
+    return labels[ruleType] || ruleType || "-";
+  }
+
+  function getProviderLabel(provider) {
+    if (provider === "plex") return "{{ t('policies_provider_plex')|e }}";
+    if (provider === "jellyfin") return "{{ t('policies_provider_jellyfin')|e }}";
+    return "{{ t('policies_provider_both')|e }}";
+  }
+
+  function getServerLabel(serverId) {
+    if (!serverId) return "{{ t('policies_all_servers')|e }}";
+    const option = document.querySelector(`#p_server_id option[value="${serverId}"]`);
+    return option ? option.textContent : `#${serverId}`;
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function getPolicyDetails(p) {
+    const rule = p.rule || {};
+    const parts = [];
+
+    if (rule.max !== undefined && rule.max !== null && rule.max !== "") {
+      parts.push(`max=${rule.max}`);
+    }
+
+    if (rule.max_kbps !== undefined && rule.max_kbps !== null && rule.max_kbps !== "") {
+      parts.push(`max_kbps=${rule.max_kbps}`);
+    }
+
+    if (Array.isArray(rule.allowed) && rule.allowed.length) {
+      parts.push(`allowed=${rule.allowed.join(", ")}`);
+    }
+
+    if (rule.allow_local_ip) {
+      parts.push("LAN");
+    }
+
+    if (rule.selector) {
+      parts.push(`selector=${rule.selector}`);
+    }
+
+    return parts.length ? parts.join(" • ") : "—";
   }
 
   function renderPoliciesTable() {
@@ -284,62 +401,60 @@
     const badge = document.getElementById("tpl_policies_count_badge");
     if (badge) {
       badge.textContent = `${TEMPLATE_POLICIES.length} {{ t('policies') }}`;
-      badge.classList.toggle('hidden', TEMPLATE_POLICIES.length === 0);
+      badge.classList.toggle("hidden", TEMPLATE_POLICIES.length === 0);
     }
 
     if (!TEMPLATE_POLICIES.length) {
-      tbody.innerHTML = '<tr><td class="px-4 py-3 text-slate-500" colspan="5">{{ t("subscription_templates_no_policies") }}</td></tr>';
+      tbody.innerHTML = '<tr><td class="px-4 py-3 text-slate-500" colspan="7">{{ t("subscription_templates_no_policies") }}</td></tr>';
       return;
     }
 
     tbody.innerHTML = TEMPLATE_POLICIES.map((p, i) => {
-      const prov = p.provider ? p.provider : "{{ t('policies_provider_both_short') }}";
       const enabled = p.is_enabled ? "{{ t('enabled') }}" : "{{ t('disabled') }}";
+      const enabledClass = p.is_enabled ? "text-emerald-300" : "text-slate-500";
+
       return `
-        <tr class="border-t border-slate-800">
-          <td class="px-4 py-2">
-            <div class="flex gap-2">
-              <button type="button" class="text-slate-300 hover:text-white" onclick="editPolicy(${i})">{{ t("edit") }}</button>
-              <button type="button" class="text-rose-300 hover:text-rose-200" onclick="deletePolicy(${i})">{{ t("delete") }}</button>
+        <tr class="border-t border-slate-800 align-top">
+          <td class="px-4 py-3">
+            <div class="flex flex-col gap-1">
+              <button type="button" class="text-left text-slate-300 hover:text-white" onclick="editPolicy(${i})">{{ t("edit") }}</button>
+              <button type="button" class="text-left text-rose-300 hover:text-rose-200" onclick="deletePolicy(${i})">{{ t("delete") }}</button>
             </div>
           </td>
-          <td class="px-4 py-2 text-slate-200">${p.rule_type}</td>
-          <td class="px-4 py-2 text-slate-400">${prov}</td>
-          <td class="px-4 py-2 text-slate-400">${p.priority}</td>
-          <td class="px-4 py-2 text-slate-400">${enabled}</td>
+          <td class="px-4 py-3 text-slate-200">${escapeHtml(getRuleTypeLabel(p.rule_type))}</td>
+          <td class="px-4 py-3 text-slate-400">${escapeHtml(getProviderLabel(p.provider))}</td>
+          <td class="px-4 py-3 text-slate-400">${escapeHtml(getServerLabel(p.server_id))}</td>
+          <td class="px-4 py-3 text-slate-400">${escapeHtml(p.priority ?? 100)}</td>
+          <td class="px-4 py-3 ${enabledClass}">${escapeHtml(enabled)}</td>
+          <td class="px-4 py-3 text-slate-400">${escapeHtml(getPolicyDetails(p))}</td>
         </tr>
       `;
     }).join("");
   }
 
-  // Load template data when editing from right list
   function loadTemplateForEdit(tpl) {
     document.getElementById("template_id").value = tpl.id;
     document.getElementById("tpl_name").value = tpl.name || "";
     document.getElementById("tpl_notes").value = tpl.notes || "";
+
     TEMPLATE_POLICIES = [];
     try {
       TEMPLATE_POLICIES = JSON.parse(tpl.policies_json || "[]") || [];
-    } catch(e) {
+    } catch (e) {
       TEMPLATE_POLICIES = [];
     }
-    document.getElementById("tpl_submit_btn").textContent = "{{ t('save') }}";
+
     renderPoliciesTable();
     syncPoliciesJson();
     resetPolicyBuilder();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    updateTemplateSubmitButton();
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  // Ensure hidden JSON always matches local array (defensive)
   document.addEventListener("DOMContentLoaded", () => {
-    const form = document.getElementById("tpl_form");
-    if (form) {
-      form.addEventListener("submit", () => {
-        syncPoliciesJson();
-      });
-    }
     renderPoliciesTable();
     syncPoliciesJson();
+    resetPolicyBuilder();
+    updateTemplateSubmitButton();
   });
-
 </script>

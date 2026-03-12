@@ -233,6 +233,27 @@
 </table>
 </div>
 
+<div class="flex justify-center items-center gap-3 mt-4">
+
+{% if page > 1 %}
+<a href="?page={{ page-1 }}"
+   class="px-3 py-1 rounded bg-slate-700 hover:bg-slate-600">
+   ← Previous
+</a>
+{% endif %}
+
+<span class="text-sm text-slate-400">
+Page {{ page }} / {{ total_pages }}
+</span>
+
+{% if page < total_pages %}
+<a href="?page={{ page+1 }}"
+   class="px-3 py-1 rounded bg-slate-700 hover:bg-slate-600">
+   Next →
+</a>
+{% endif %}
+
+</div>
 
 <!-- SCRIPT TRI + MÉMOIRE -->
 <script>
