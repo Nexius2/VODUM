@@ -1,0 +1,483 @@
+[
+{
+"key":"scarface_little_friend",
+"media_type":"movie",
+"ids":{"imdb":"tt0086250","tmdb":"111"},
+"quotes":{"en":"Say hello to my little friend!","fr":"Dis bonjour à mon petit ami !"}
+},
+{
+"key":"jaws_bigger_boat",
+"media_type":"movie",
+"ids":{"imdb":"tt0073195","tmdb":"578"},
+"quotes":{"en":"You're gonna need a bigger boat.","fr":"Il va nous falloir un plus gros bateau."}
+},
+{
+"key":"apollo13_problem",
+"media_type":"movie",
+"ids":{"imdb":"tt0112384","tmdb":"568"},
+"quotes":{"en":"Houston, we have a problem.","fr":"Houston, nous avons un problème."}
+},
+{
+"key":"shining_heres_johnny",
+"media_type":"movie",
+"ids":{"imdb":"tt0081505","tmdb":"694"},
+"quotes":{"en":"Here's Johnny!","fr":"Voici Johnny !"}
+},
+{
+"key":"taxi_driver_talkin_me",
+"media_type":"movie",
+"ids":{"imdb":"tt0075314","tmdb":"103"},
+"quotes":{"en":"You talkin' to me?","fr":"C'est à moi que tu parles ?"}
+},
+{
+"key":"godfather_offer",
+"media_type":"movie",
+"ids":{"imdb":"tt0068646","tmdb":"238"},
+"quotes":{"en":"I'm gonna make him an offer he can't refuse.","fr":"Je vais lui faire une offre qu'il ne pourra pas refuser."}
+},
+{
+"key":"titanic_king_world",
+"media_type":"movie",
+"ids":{"imdb":"tt0120338","tmdb":"597"},
+"quotes":{"en":"I'm the king of the world!","fr":"Je suis le roi du monde !"}
+},
+{
+"key":"gladiator_entertained",
+"media_type":"movie",
+"ids":{"imdb":"tt0172495","tmdb":"98"},
+"quotes":{"en":"Are you not entertained?","fr":"Vous n'êtes pas divertis ?"}
+},
+{
+"key":"sixth_sense_dead_people",
+"media_type":"movie",
+"ids":{"imdb":"tt0167404","tmdb":"745"},
+"quotes":{"en":"I see dead people.","fr":"Je vois des gens morts."}
+},
+{
+"key":"jerry_maguire_money",
+"media_type":"movie",
+"ids":{"imdb":"tt0116695","tmdb":"9390"},
+"quotes":{"en":"Show me the money!","fr":"Montre-moi l'argent !"}
+},
+{
+"key":"terminator_back",
+"media_type":"movie",
+"ids":{"imdb":"tt0088247","tmdb":"218"},
+"quotes":{"en":"I'll be back.","fr":"Je reviendrai."}
+},
+{
+"key":"terminator2_hasta",
+"media_type":"movie",
+"ids":{"imdb":"tt0103064","tmdb":"280"},
+"quotes":{"en":"Hasta la vista, baby.","fr":"Hasta la vista, baby."}
+},
+{
+"key":"matrix_spoon",
+"media_type":"movie",
+"ids":{"imdb":"tt0133093","tmdb":"603"},
+"quotes":{"en":"There is no spoon.","fr":"Il n'y a pas de cuillère."}
+},
+{
+"key":"lotr_one_ring",
+"media_type":"movie",
+"ids":{"imdb":"tt0120737","tmdb":"120"},
+"quotes":{"en":"One ring to rule them all.","fr":"Un anneau pour les gouverner tous."}
+},
+{
+"key":"dark_knight_why_serious",
+"media_type":"movie",
+"ids":{"imdb":"tt0468569","tmdb":"155"},
+"quotes":{"en":"Why so serious?","fr":"Pourquoi si sérieux ?"}
+},
+{
+"key":"starwars_force",
+"media_type":"movie",
+"ids":{"imdb":"tt0076759","tmdb":"11"},
+"quotes":{"en":"May the Force be with you.","fr":"Que la Force soit avec toi."}
+},
+{
+"key":"starwars_father",
+"media_type":"movie",
+"ids":{"imdb":"tt0080684","tmdb":"1891"},
+"quotes":{"en":"No. I am your father.","fr":"Non. Je suis ton père."}
+},
+{
+"key":"lotr_precious",
+"media_type":"movie",
+"ids":{"imdb":"tt0167260","tmdb":"122"},
+"quotes":{"en":"My precious.","fr":"Mon précieux."}
+},
+{
+"key":"pulpfiction_royale",
+"media_type":"movie",
+"ids":{"imdb":"tt0110912","tmdb":"680"},
+"quotes":{"en":"They call it a Royale with cheese.","fr":"Ils appellent ça un Royal with cheese."}
+},
+{
+"key":"fightclub_first_rule",
+"media_type":"movie",
+"ids":{"imdb":"tt0137523","tmdb":"550"},
+"quotes":{"en":"The first rule of Fight Club is: you do not talk about Fight Club.","fr":"La première règle du Fight Club : il est interdit de parler du Fight Club."}
+},
+{
+"key":"forrest_run",
+"media_type":"movie",
+"ids":{"imdb":"tt0109830","tmdb":"13"},
+"quotes":{"en":"Run, Forrest, run!","fr":"Cours Forrest, cours !"}
+},
+{
+"key":"forrest_life_box",
+"media_type":"movie",
+"ids":{"imdb":"tt0109830","tmdb":"13"},
+"quotes":{"en":"Life is like a box of chocolates.","fr":"La vie c'est comme une boîte de chocolats."}
+},
+{
+"key":"back_future_roads",
+"media_type":"movie",
+"ids":{"imdb":"tt0088763","tmdb":"105"},
+"quotes":{"en":"Roads? Where we're going, we don't need roads.","fr":"Des routes ? Là où on va, on n'a pas besoin de routes."}
+},
+{
+"key":"indiana_snakes",
+"media_type":"movie",
+"ids":{"imdb":"tt0082971","tmdb":"85"},
+"quotes":{"en":"Snakes... why did it have to be snakes?","fr":"Des serpents... pourquoi fallait-il que ce soit des serpents ?"}
+},
+{
+"key":"rocky_adrien",
+"media_type":"movie",
+"ids":{"imdb":"tt0075148","tmdb":"1366"},
+"quotes":{"en":"Adrian!","fr":"Adrian !"}
+},
+{
+"key":"lordrings_youpass",
+"media_type":"movie",
+"ids":{"imdb":"tt0167261","tmdb":"121"},
+"quotes":{"en":"You shall not pass!","fr":"Vous ne passerez pas !"}
+},
+{
+"key":"avatar_see_you",
+"media_type":"movie",
+"ids":{"imdb":"tt0499549","tmdb":"19995"},
+"quotes":{"en":"I see you.","fr":"Je te vois."}
+},
+{
+"key":"jurassic_life",
+"media_type":"movie",
+"ids":{"imdb":"tt0107290","tmdb":"329"},
+"quotes":{"en":"Life finds a way.","fr":"La vie trouve toujours un chemin."}
+},
+{
+"key":"alien_game_over",
+"media_type":"movie",
+"ids":{"imdb":"tt0090605","tmdb":"679"},
+"quotes":{"en":"Game over, man!","fr":"C'est fini, mec !"}
+},
+{
+"key":"batman_im_batman",
+"media_type":"movie",
+"ids":{"imdb":"tt0096895","tmdb":"268"},
+"quotes":{"en":"I'm Batman.","fr":"Je suis Batman."}
+},
+{
+"key":"spiderman_power",
+"media_type":"movie",
+"ids":{"imdb":"tt0145487","tmdb":"557"},
+"quotes":{"en":"With great power comes great responsibility.","fr":"Un grand pouvoir implique de grandes responsabilités."}
+},
+{
+"key":"harry_potter_always",
+"media_type":"movie",
+"ids":{"imdb":"tt1201607","tmdb":"12445"},
+"quotes":{"en":"Always.","fr":"Toujours."}
+},
+{
+"key":"harry_potter_wizard",
+"media_type":"movie",
+"ids":{"imdb":"tt0241527","tmdb":"671"},
+"quotes":{"en":"You're a wizard, Harry.","fr":"Tu es un sorcier, Harry."}
+},
+{
+"key":"lotr_second_breakfast",
+"media_type":"movie",
+"ids":{"imdb":"tt0167261","tmdb":"121"},
+"quotes":{"en":"What about second breakfast?","fr":"Et le deuxième petit déjeuner ?"}
+},
+{
+"key":"godfather_leave_gun",
+"media_type":"movie",
+"ids":{"imdb":"tt0068646","tmdb":"238"},
+"quotes":{"en":"Leave the gun, take the cannoli.","fr":"Laisse le flingue, prends les cannoli."}
+},
+{
+"key":"goodfellas_funny",
+"media_type":"movie",
+"ids":{"imdb":"tt0099685","tmdb":"769"},
+"quotes":{"en":"Funny how?","fr":"Drôle comment ?"}
+},
+{
+"key":"diehard_yippee",
+"media_type":"movie",
+"ids":{"imdb":"tt0095016","tmdb":"562"},
+"quotes":{"en":"Yippee-ki-yay, motherf***er.","fr":"Yippee-ki-yay, pauvre con."}
+},
+{
+"key":"braveheart_freedom",
+"media_type":"movie",
+"ids":{"imdb":"tt0112573","tmdb":"197"},
+"quotes":{"en":"Freedom!","fr":"Liberté !"}
+},
+{
+"key": "matrix_red_pill",
+"media_type": "movie",
+"ids": {"imdb": "tt0133093","tmdb": "603"},
+"quotes": {"en": "This is your last chance. After this, there is no turning back.","fr": "C'est ta dernière chance. Après ça, il n'y aura pas de retour en arrière."}
+},
+{
+"key": "americanpie_pie",
+"media_type": "movie",
+"ids": {"imdb": "tt0163651","tmdb": "2105"},
+"quotes": {"en": "This one time, at band camp...","fr": "Cette fois, au camp de musique..."
+}
+},
+{
+"key": "a_team_plan",
+"media_type": "show",
+"ids": {"imdb": "tt0084967","tmdb": "1932"},
+"quotes": {"en": "I love it when a plan comes together.","fr": "J'aime bien quand un plan se déroule sans accroc."}
+},
+{
+"key":"breakingbad_saymyname",
+"media_type":"tv",
+"ids":{"imdb":"tt0903747","tmdb":"1396"},
+"quotes":{"en":"Say my name.","fr":"Dis mon nom."}
+},
+{
+"key":"breakingbad_knock",
+"media_type":"tv",
+"ids":{"imdb":"tt0903747","tmdb":"1396"},
+"quotes":{"en":"I am the one who knocks.","fr":"C'est moi qui frappe."}
+},
+{
+"key":"got_winter",
+"media_type":"tv",
+"ids":{"imdb":"tt0944947","tmdb":"1399"},
+"quotes":{"en":"Winter is coming.","fr":"L'hiver arrive."}
+},
+{
+"key":"got_king",
+"media_type":"tv",
+"ids":{"imdb":"tt0944947","tmdb":"1399"},
+"quotes":{"en":"The king in the North!","fr":"Le roi du Nord !"}
+},
+{
+"key":"got_dracarys",
+"media_type":"tv",
+"ids":{"imdb":"tt0944947","tmdb":"1399"},
+"quotes":{"en":"Dracarys.","fr":"Dracarys."}
+},
+{
+"key":"got_chaos",
+"media_type":"tv",
+"ids":{"imdb":"tt0944947","tmdb":"1399"},
+"quotes":{"en":"Chaos is a ladder.","fr":"Le chaos est une échelle."}
+},
+{
+"key":"office_thats",
+"media_type":"tv",
+"ids":{"imdb":"tt0386676","tmdb":"2316"},
+"quotes":{"en":"That's what she said.","fr":"C'est ce qu'elle a dit."}
+},
+{
+"key":"office_bankrupt",
+"media_type":"tv",
+"ids":{"imdb":"tt0386676","tmdb":"2316"},
+"quotes":{"en":"I declare bankruptcy!","fr":"Je déclare faillite !"}
+},
+{
+"key":"friends_howyou",
+"media_type":"tv",
+"ids":{"imdb":"tt0108778","tmdb":"1668"},
+"quotes":{"en":"How you doin'?","fr":"Alors, ça va ?"}
+},
+{
+"key":"friends_break",
+"media_type":"tv",
+"ids":{"imdb":"tt0108778","tmdb":"1668"},
+"quotes":{"en":"We were on a break!","fr":"On faisait une pause !"}
+},
+{
+"key":"simpsons_doh",
+"media_type":"tv",
+"ids":{"imdb":"tt0096697","tmdb":"456"},
+"quotes":{"en":"D'oh!","fr":"D'oh !"}
+},
+{
+"key":"simpsons_eatshorts",
+"media_type":"tv",
+"ids":{"imdb":"tt0096697","tmdb":"456"},
+"quotes":{"en":"Eat my shorts!","fr":"Mange mon short !"}
+},
+{
+"key":"mandalorian_way",
+"media_type":"tv",
+"ids":{"imdb":"tt8111088","tmdb":"82856"},
+"quotes":{"en":"This is the way.","fr":"Telle est la voie."}
+},
+{
+"key":"mandalorian_baby",
+"media_type":"tv",
+"ids":{"imdb":"tt8111088","tmdb":"82856"},
+"quotes":{"en":"I have spoken.","fr":"J'ai parlé."}
+},
+{
+"key":"lost_notboat",
+"media_type":"tv",
+"ids":{"imdb":"tt0411008","tmdb":"4607"},
+"quotes":{"en":"We have to go back!","fr":"On doit y retourner !"}
+},
+{
+"key":"lost_live",
+"media_type":"tv",
+"ids":{"imdb":"tt0411008","tmdb":"4607"},
+"quotes":{"en":"Live together, die alone.","fr":"Vivre ensemble ou mourir seuls."}
+},
+{
+"key":"house_everybodylies",
+"media_type":"tv",
+"ids":{"imdb":"tt0412142","tmdb":"1408"},
+"quotes":{"en":"Everybody lies.","fr":"Tout le monde ment."}
+},
+{
+"key":"house_lupus",
+"media_type":"tv",
+"ids":{"imdb":"tt0412142","tmdb":"1408"},
+"quotes":{"en":"It's never lupus.","fr":"Ce n'est jamais un lupus."}
+},
+{
+"key":"sopranos_family",
+"media_type":"tv",
+"ids":{"imdb":"tt0141842","tmdb":"1398"},
+"quotes":{"en":"You don't ever admit the existence of this thing.","fr":"On n'admet jamais l'existence de cette chose."}
+},
+{
+"key":"walkingdead_rick",
+"media_type":"tv",
+"ids":{"imdb":"tt1520211","tmdb":"1402"},
+"quotes":{"en":"We are the walking dead.","fr":"Nous sommes les morts-vivants."}
+},
+{
+"key":"walkingdead_corals",
+"media_type":"tv",
+"ids":{"imdb":"tt1520211","tmdb":"1402"},
+"quotes":{"en":"Carl!","fr":"Carl !"}
+},
+{
+"key":"stranger_things_friends",
+"media_type":"tv",
+"ids":{"imdb":"tt4574334","tmdb":"66732"},
+"quotes":{"en":"Friends don't lie.","fr":"Les amis ne mentent pas."}
+},
+{
+"key":"stranger_things_mornings",
+"media_type":"tv",
+"ids":{"imdb":"tt4574334","tmdb":"66732"},
+"quotes":{"en":"Mornings are for coffee and contemplation.","fr":"Le matin c'est pour le café et la réflexion."}
+},
+{
+"key":"bigbang_bazinga",
+"media_type":"tv",
+"ids":{"imdb":"tt0898266","tmdb":"1418"},
+"quotes":{"en":"Bazinga!","fr":"Bazinga !"}
+},
+{
+"key":"bigbang_roommate",
+"media_type":"tv",
+"ids":{"imdb":"tt0898266","tmdb":"1418"},
+"quotes":{"en":"Our babies will be smart and beautiful.","fr":"Nos bébés seront intelligents et beaux."}
+},
+{
+"key":"brooklyn_noice",
+"media_type":"tv",
+"ids":{"imdb":"tt2467372","tmdb":"48891"},
+"quotes":{"en":"Noice.","fr":"Stylé."}
+},
+{
+"key":"brooklyn_coolcool",
+"media_type":"tv",
+"ids":{"imdb":"tt2467372","tmdb":"48891"},
+"quotes":{"en":"Cool cool cool cool cool.","fr":"Cool cool cool cool cool."}
+},
+{
+"key":"southpark_theykilled",
+"media_type":"tv",
+"ids":{"imdb":"tt0121955","tmdb":"2190"},
+"quotes":{"en":"Oh my God, they killed Kenny!","fr":"Oh mon Dieu, ils ont tué Kenny !"}
+},
+{
+"key":"southpark_bastards",
+"media_type":"tv",
+"ids":{"imdb":"tt0121955","tmdb":"2190"},
+"quotes":{"en":"You bastards!","fr":"Espèces d'enfoirés !"}
+},
+{
+"key":"doctorwho_allonsy",
+"media_type":"tv",
+"ids":{"imdb":"tt0436992","tmdb":"57243"},
+"quotes":{"en":"Allons-y!","fr":"Allons-y !"}
+},
+{
+"key":"doctorwho_geronimo",
+"media_type":"tv",
+"ids":{"imdb":"tt0436992","tmdb":"57243"},
+"quotes":{"en":"Geronimo!","fr":"Geronimo !"}
+},
+{
+"key":"peakyblinders_order",
+"media_type":"tv",
+"ids":{"imdb":"tt2442560","tmdb":"60574"},
+"quotes":{"en":"By order of the Peaky Blinders.","fr":"Par ordre des Peaky Blinders."}
+},
+{
+"key":"peakyblinders_family",
+"media_type":"tv",
+"ids":{"imdb":"tt2442560","tmdb":"60574"},
+"quotes":{"en":"Family means everything.","fr":"La famille est tout."}
+},
+{
+"key":"rickmorty_wubbalubba",
+"media_type":"tv",
+"ids":{"imdb":"tt2861424","tmdb":"60625"},
+"quotes":{"en":"Wubba lubba dub dub!","fr":"Wubba lubba dub dub !"}
+},
+{
+"key":"rickmorty_science",
+"media_type":"tv",
+"ids":{"imdb":"tt2861424","tmdb":"60625"},
+"quotes":{"en":"Nobody exists on purpose.","fr":"Personne n'existe pour une raison."}
+},
+{
+"key":"sherlock_elementary",
+"media_type":"tv",
+"ids":{"imdb":"tt1475582","tmdb":"19885"},
+"quotes":{"en":"I'm not a psychopath, I'm a high-functioning sociopath.","fr":"Je ne suis pas un psychopathe, je suis un sociopathe de haut niveau."}
+},
+{
+"key":"sherlock_game",
+"media_type":"tv",
+"ids":{"imdb":"tt1475582","tmdb":"19885"},
+"quotes":{"en":"The game is on.","fr":"La partie est lancée."}
+},
+{
+"key":"westworld_choice",
+"media_type":"tv",
+"ids":{"imdb":"tt0475784","tmdb":"63247"},
+"quotes":{"en":"These violent delights have violent ends.","fr":"Ces plaisirs violents ont des fins violentes."}
+},
+{
+"key":"true_detective_time",
+"media_type":"tv",
+"ids":{"imdb":"tt2356777","tmdb":"46648"},
+"quotes":{"en":"Time is a flat circle.","fr":"Le temps est un cercle plat."}
+}
+]

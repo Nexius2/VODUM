@@ -174,10 +174,7 @@ def _reset_maintenance_on_startup(app: Flask):
     If the app was left in maintenance mode after a restore,
     reset it automatically on container restart.
 
-    Note:
-    - We ONLY do this when maintenance_mode == 1 (restore flow).
-    - We DO NOT enable every task blindly.
-    - We re-enable only the tasks that are enabled by default in db_bootstrap.py.
+    Restore the previous enabled state of tasks using enabled_prev.
     """
     try:
         db = DBManager(app.config["DATABASE"])
@@ -188,28 +185,35 @@ def _reset_maintenance_on_startup(app: Flask):
         if int(settings["maintenance_mode"] or 0) != 1:
             return
 
+        # Leave maintenance mode
         db.execute("UPDATE settings SET maintenance_mode = 0 WHERE id = 1")
 
-        # Re-enable only default core tasks (as in original behavior)
-        core_tasks = [
-            "check_servers",
-            "update_user_status",
-            "cleanup_backups",
-            "cleanup_unfriended",
-            "check_update",
-        ]
-        try:
-            for tname in core_tasks:
-                db.execute(
-                    "UPDATE scheduled_tasks SET enabled = 1 WHERE name = ? AND (enabled IS NULL OR enabled = 0)",
-                    (tname,),
-                )
-            get_logger("boot").warning(
-                "Startup restore recovery: re-enabled core tasks: %s",
-                ", ".join(core_tasks),
-            )
-        except Exception:
-            get_logger("boot").exception("Startup restore recovery: failed to restore core task states")
+        # Restore tasks to their previous state
+        db.execute(
+            """
+            UPDATE tasks
+            SET
+                enabled = CASE
+                    WHEN enabled_prev IS NULL THEN enabled
+                    ELSE enabled_prev
+                END,
+                status = CASE
+                    WHEN (
+                        CASE
+                            WHEN enabled_prev IS NULL THEN enabled
+                            ELSE enabled_prev
+                        END
+                    ) = 1 THEN 'idle'
+                    ELSE 'disabled'
+                END,
+                enabled_prev = NULL,
+                updated_at = CURRENT_TIMESTAMP
+            """
+        )
+
+        get_logger("boot").warning(
+            "Startup restore recovery: maintenance cleared and task states restored"
+        )
 
     except Exception:
         get_logger("boot").exception("Failed to reset maintenance mode on startup")

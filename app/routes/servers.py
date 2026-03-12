@@ -35,6 +35,264 @@ task_logger = get_logger("tasks_ui")
 auth_logger = get_logger("auth")
 security_logger = get_logger("security")
 settings_logger = get_logger("settings")
+SERVER_DELETE_LOCK = threading.Lock()
+SERVER_DELETE_IN_PROGRESS = set()
+
+server_delete_logger = get_logger("server_delete")
+
+SERVER_DELETE_LOCK = threading.Lock()
+SERVER_DELETE_IN_PROGRESS = set()
+
+DELETE_BATCH_SIZE = 1000
+
+
+def _delete_in_chunks(conn, sql, params=(), batch_size=DELETE_BATCH_SIZE):
+    total = 0
+    while True:
+        cur = conn.execute(sql, tuple(params) + (batch_size,))
+        deleted = cur.rowcount if cur.rowcount is not None else 0
+        conn.commit()
+
+        if deleted <= 0:
+            break
+
+        total += deleted
+
+        if deleted < batch_size:
+            break
+
+    return total
+
+
+def _background_delete_server(app, db_path, server_id, server_name):
+    delete_key = f"server:{server_id}"
+    conn = None
+
+    try:
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
+        conn.row_factory = sqlite3.Row
+
+        conn.execute("PRAGMA foreign_keys = ON;")
+        conn.execute("PRAGMA journal_mode = WAL;")
+        conn.execute("PRAGMA synchronous = NORMAL;")
+        conn.execute("PRAGMA busy_timeout = 30000;")
+
+        server_delete_logger.info(
+            f"[server_delete] Start background deletion for server_id={server_id} name={server_name}"
+        )
+
+        # 1) Très grosses tables monitoring / jobs
+        deleted_sessions = _delete_in_chunks(
+            conn,
+            """
+            DELETE FROM media_sessions
+            WHERE rowid IN (
+                SELECT rowid
+                FROM media_sessions
+                WHERE server_id = ?
+                LIMIT ?
+            )
+            """,
+            (server_id,),
+        )
+
+        deleted_events = _delete_in_chunks(
+            conn,
+            """
+            DELETE FROM media_events
+            WHERE rowid IN (
+                SELECT rowid
+                FROM media_events
+                WHERE server_id = ?
+                LIMIT ?
+            )
+            """,
+            (server_id,),
+        )
+
+        deleted_history = _delete_in_chunks(
+            conn,
+            """
+            DELETE FROM media_session_history
+            WHERE rowid IN (
+                SELECT rowid
+                FROM media_session_history
+                WHERE server_id = ?
+                LIMIT ?
+            )
+            """,
+            (server_id,),
+        )
+
+        deleted_jobs = _delete_in_chunks(
+            conn,
+            """
+            DELETE FROM media_jobs
+            WHERE rowid IN (
+                SELECT rowid
+                FROM media_jobs
+                WHERE server_id = ?
+                LIMIT ?
+            )
+            """,
+            (server_id,),
+        )
+
+        # 2) Tables enforcement / identities / imports
+        deleted_state = _delete_in_chunks(
+            conn,
+            """
+            DELETE FROM stream_enforcement_state
+            WHERE rowid IN (
+                SELECT rowid
+                FROM stream_enforcement_state
+                WHERE server_id = ?
+                LIMIT ?
+            )
+            """,
+            (server_id,),
+        )
+
+        deleted_enforcements = _delete_in_chunks(
+            conn,
+            """
+            DELETE FROM stream_enforcements
+            WHERE rowid IN (
+                SELECT rowid
+                FROM stream_enforcements
+                WHERE server_id = ?
+                LIMIT ?
+            )
+            """,
+            (server_id,),
+        )
+
+        deleted_identities = _delete_in_chunks(
+            conn,
+            """
+            DELETE FROM user_identities
+            WHERE rowid IN (
+                SELECT rowid
+                FROM user_identities
+                WHERE server_id = ?
+                LIMIT ?
+            )
+            """,
+            (server_id,),
+        )
+
+        deleted_import_jobs = _delete_in_chunks(
+            conn,
+            """
+            DELETE FROM tautulli_import_jobs
+            WHERE rowid IN (
+                SELECT rowid
+                FROM tautulli_import_jobs
+                WHERE server_id = ?
+                LIMIT ?
+            )
+            """,
+            (server_id,),
+        )
+
+        deleted_welcome_templates = _delete_in_chunks(
+            conn,
+            """
+            DELETE FROM welcome_email_templates
+            WHERE rowid IN (
+                SELECT rowid
+                FROM welcome_email_templates
+                WHERE server_id = ?
+                LIMIT ?
+            )
+            """,
+            (server_id,),
+        )
+
+        # 3) Liaison libraries -> media_user_libraries
+        deleted_mul = _delete_in_chunks(
+            conn,
+            """
+            DELETE FROM media_user_libraries
+            WHERE rowid IN (
+                SELECT mul.rowid
+                FROM media_user_libraries mul
+                JOIN libraries l ON l.id = mul.library_id
+                WHERE l.server_id = ?
+                LIMIT ?
+            )
+            """,
+            (server_id,),
+        )
+
+        # 4) Libraries puis media_users
+        deleted_libraries = _delete_in_chunks(
+            conn,
+            """
+            DELETE FROM libraries
+            WHERE rowid IN (
+                SELECT rowid
+                FROM libraries
+                WHERE server_id = ?
+                LIMIT ?
+            )
+            """,
+            (server_id,),
+        )
+
+        deleted_media_users = _delete_in_chunks(
+            conn,
+            """
+            DELETE FROM media_users
+            WHERE rowid IN (
+                SELECT rowid
+                FROM media_users
+                WHERE server_id = ?
+                LIMIT ?
+            )
+            """,
+            (server_id,),
+        )
+
+        # 5) Final : supprimer le serveur
+        conn.execute("DELETE FROM servers WHERE id = ?", (server_id,))
+        conn.commit()
+
+        server_delete_logger.info(
+            "[server_delete] Done for server_id=%s name=%s | "
+            "media_sessions=%s media_events=%s media_session_history=%s media_jobs=%s "
+            "stream_enforcement_state=%s stream_enforcements=%s user_identities=%s "
+            "tautulli_import_jobs=%s welcome_email_templates=%s "
+            "media_user_libraries=%s libraries=%s media_users=%s",
+            server_id,
+            server_name,
+            deleted_sessions,
+            deleted_events,
+            deleted_history,
+            deleted_jobs,
+            deleted_state,
+            deleted_enforcements,
+            deleted_identities,
+            deleted_import_jobs,
+            deleted_welcome_templates,
+            deleted_mul,
+            deleted_libraries,
+            deleted_media_users,
+        )
+
+    except Exception as e:
+        server_delete_logger.exception(
+            f"[server_delete] Failed for server_id={server_id} name={server_name}: {e}"
+        )
+    finally:
+        try:
+            if conn is not None:
+                conn.close()
+        except Exception:
+            pass
+
+        with SERVER_DELETE_LOCK:
+            SERVER_DELETE_IN_PROGRESS.discard(delete_key)
 
 def register(app):
     @app.route("/servers/<int:server_id>/sync")
@@ -174,9 +432,24 @@ def register(app):
             """
         )
 
+        with SERVER_DELETE_LOCK:
+            deleting_server_ids = {
+                int(str(x).split(":", 1)[1])
+                for x in SERVER_DELETE_IN_PROGRESS
+                if str(x).startswith("server:")
+            }
+
+        with SERVER_DELETE_LOCK:
+            deleting_server_ids = {
+                int(str(x).split(":", 1)[1])
+                for x in SERVER_DELETE_IN_PROGRESS
+                if str(x).startswith("server:")
+            }
+
         return render_template(
             "servers/servers.html",
             servers=servers,
+            deleting_server_ids=deleting_server_ids,
             active_page="servers",
             active_tab="servers",
         )
@@ -360,19 +633,32 @@ def register(app):
             flash("server_not_found", "error")
             return redirect(url_for("servers_list"))
 
+        delete_key = f"server:{server_id}"
+
+        with SERVER_DELETE_LOCK:
+            if delete_key in SERVER_DELETE_IN_PROGRESS:
+                flash("server_delete_already_running", "warning")
+                return redirect(url_for("servers_list"))
+
+            SERVER_DELETE_IN_PROGRESS.add(delete_key)
+
         try:
-            # IMPORTANT: on supprime uniquement les entrées "par serveur" (media_users),
-            # pas les utilisateurs globaux vodum_users.
-            db.execute("DELETE FROM media_users WHERE server_id = ?", (server_id,))
+            app_obj = current_app._get_current_object()
+            db_path = current_app.config["DATABASE"]
 
-            # Ensuite on peut supprimer le serveur.
-            # Les tables liées en ON DELETE CASCADE (libraries, media_jobs, user_identities, etc.)
-            # seront nettoyées automatiquement.
-            db.execute("DELETE FROM servers WHERE id = ?", (server_id,))
+            threading.Thread(
+                target=_background_delete_server,
+                args=(app_obj, db_path, int(server_id), server["name"]),
+                daemon=True,
+                name=f"delete-server-{server_id}",
+            ).start()
 
-            flash("server_deleted", "success")
+            flash("server_delete_started", "success")
 
         except Exception as e:
+            with SERVER_DELETE_LOCK:
+                SERVER_DELETE_IN_PROGRESS.discard(delete_key)
+
             flash(f"server_delete_failed ({e})", "error")
 
         return redirect(url_for("servers_list"))

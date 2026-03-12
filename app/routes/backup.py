@@ -139,8 +139,30 @@ def register(app):
         # 4) Open a FRESH connection on the restored DB and force maintenance + disable tasks
         try:
             restored_db = DBManager(str(db_path))  # new singleton instance created now
-            restored_db.execute("UPDATE settings SET maintenance_mode = 1 WHERE id = 1")
-            restored_db.execute("UPDATE tasks SET enabled = 0")
+
+            restored_db.execute(
+                """
+                UPDATE settings
+                SET maintenance_mode = 1
+                WHERE id = 1
+                """
+            )
+
+            # Mémorise l'état précédent UNE seule fois, puis désactive tout
+            restored_db.execute(
+                """
+                UPDATE tasks
+                SET
+                    enabled_prev = CASE
+                        WHEN enabled_prev IS NULL THEN enabled
+                        ELSE enabled_prev
+                    END,
+                    enabled = 0,
+                    status = 'disabled',
+                    updated_at = CURRENT_TIMESTAMP
+                """
+            )
+
             try:
                 restored_db.close()  # resets singleton again (safe)
             except Exception:
@@ -216,16 +238,19 @@ def register(app):
 
                 # 1) Restore depuis un backup existant
                 if selected:
-                    backup_path = Path(app.config["BACKUP_DIR"]) / selected
-
-                    if not backup_path.exists():
+                    try:
+                        backup_path = _resolve_backup_path(selected)
+                    except FileNotFoundError:
                         flash(t("backup_not_found"), "error")
+                        return redirect(url_for("backup_page"))
+                    except Exception as e:
+                        flash(t("backup_restore_error").format(error=str(e)), "error")
                         return redirect(url_for("backup_page"))
 
                     try:
                         safe_restore(backup_path)
                         flash(t("backup_restore_success_restart"), "success")
-                        return redirect(url_for("backup_page"))  # <- IMPORTANT
+                        return redirect(url_for("backup_page"))
                     except Exception as e:
                         flash(t("backup_restore_error").format(error=str(e)), "error")
                         return redirect(url_for("backup_page"))

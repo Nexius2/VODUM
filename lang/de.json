@@ -1019,7 +1019,10 @@
   "cookie_samesite": "Cookie SameSite",
   "cookie_samesite_help": "Verwenden Sie standardmäßig Lax. Verwenden Sie None nur, wenn Sie websiteübergreifende Cookies benötigen, und nur mit HTTPS.",
     "trust_reverse_proxy": "Reverse Proxy vertrauen",
-  "trust_reverse_proxy_help": "Nur aktivieren, wenn VODUM hinter einem vertrauenswürdigen Reverse Proxy läuft (Nginx Proxy Manager, Traefik, SWAG usw.). Dadurch können X-Forwarded-*-Header korrekt verwendet werden."
+  "trust_reverse_proxy_help": "Nur aktivieren, wenn VODUM hinter einem vertrauenswürdigen Reverse Proxy läuft (Nginx Proxy Manager, Traefik, SWAG usw.). Dadurch können X-Forwarded-*-Header korrekt verwendet werden.",
+  "task_description.refresh_dashboard_quote_cache": "Erstellt das Tageszitat des Dashboards.",
+    "server_delete_started": "Die Serverlöschung wurde im Hintergrund gestartet. Das kann einen Moment dauern.",
+  "server_delete_already_running": "Für diesen Server läuft bereits eine Löschung."
 
  
 }

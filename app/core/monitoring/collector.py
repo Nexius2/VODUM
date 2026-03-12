@@ -237,7 +237,7 @@ def collect_sessions_for_server(
             media_user_id = resolve_media_user_id(
                 db,
                 server_id,
-                provider,
+                provider_name,
                 sess.get("external_user_id"),
                 sess.get("username"),
             )
@@ -334,11 +334,9 @@ def collect_sessions_for_server(
             )
 
             if live and _session_seen_recently(
-                live.get("last_seen_at"),
+                live["last_seen_at"],
                 _SESSION_MISSING_GRACE_SECONDS,
             ):
-                # Session absente de la réponse courante, mais vue récemment :
-                # on ne la supprime pas encore pour éviter les faux "stop".
                 continue
 
             report["events"] += 1
@@ -643,10 +641,14 @@ def collect_sessions(db) -> Dict[str, Any]:
             WHERE datetime(last_seen_at) >= datetime('now', ?)
             """,
             (live_window_sql,),
-        ) or {"live_sessions": 0, "transcodes": 0}
+        )
 
-        live_sessions = int(row.get("live_sessions") or 0)
-        transcodes = int(row.get("transcodes") or 0)
+        if row:
+            live_sessions = int(row["live_sessions"] or 0)
+            transcodes = int(row["transcodes"] or 0)
+        else:
+            live_sessions = 0
+            transcodes = 0
 
         db.execute(
             """

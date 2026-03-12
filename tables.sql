@@ -52,7 +52,8 @@ CREATE TABLE IF NOT EXISTS user_identities (
 
 CREATE INDEX IF NOT EXISTS idx_user_identities_vodum
 ON user_identities(vodum_user_id);
-
+CREATE INDEX IF NOT EXISTS idx_user_identities_server
+ON user_identities(server_id);
 
 -----------------------------------------------------------------------
 --  TABLE USERS (media servers only)
@@ -82,6 +83,8 @@ CREATE TABLE IF NOT EXISTS media_users (
     FOREIGN KEY(vodum_user_id) REFERENCES vodum_users(id)
 );
 
+CREATE INDEX IF NOT EXISTS idx_media_users_server
+ON media_users(server_id);
 
 -----------------------------------------------------------------------
 --  DATABASE SERVERS 
@@ -117,7 +120,8 @@ CREATE TABLE IF NOT EXISTS libraries (
     FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE
 );
 
-
+CREATE INDEX IF NOT EXISTS idx_libraries_server
+ON libraries(server_id);
 
 
 -----------------------------------------------------------------------
@@ -132,6 +136,9 @@ CREATE TABLE IF NOT EXISTS media_user_libraries (
     FOREIGN KEY(media_user_id) REFERENCES media_users(id) ON DELETE CASCADE, 
     FOREIGN KEY(library_id) REFERENCES libraries(id) ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS idx_media_user_libraries_library
+ON media_user_libraries(library_id);
 
 -----------------------------------------------------------------------
 --  EMAIL TEMPLATES
@@ -163,6 +170,8 @@ CREATE TABLE IF NOT EXISTS welcome_email_templates (
     FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE
 );
 
+CREATE INDEX IF NOT EXISTS idx_welcome_email_templates_server
+ON welcome_email_templates(server_id);
 
 -----------------------------------------------------------------------
 --  SENT EMAILS HISTORY
@@ -652,7 +661,8 @@ CREATE TABLE IF NOT EXISTS stream_enforcement_state (
 
 CREATE INDEX IF NOT EXISTS idx_stream_state_actor
 ON stream_enforcement_state(actor_key);
-
+CREATE INDEX IF NOT EXISTS idx_stream_enforcement_state_server
+ON stream_enforcement_state(server_id);
 
 
 -----------------------------------------------------------------------
@@ -679,7 +689,8 @@ CREATE TABLE IF NOT EXISTS stream_enforcements (
 
 CREATE INDEX IF NOT EXISTS idx_stream_enforcements_time
 ON stream_enforcements(created_at);
-
+CREATE INDEX IF NOT EXISTS idx_stream_enforcements_server
+ON stream_enforcements(server_id, created_at);
 
 
 -----------------------------------------------------------------------

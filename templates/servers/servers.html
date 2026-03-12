@@ -73,13 +73,19 @@
     {% endif %}
 
     {% for s in top_servers %}
-    <a href="{{ url_for('server_detail', server_id=s.id) }}"
-       class="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col gap-2 text-sm w-full
-			hover:bg-slate-800 transition cursor-pointer h-full min-h-[160px]"
+    {% set is_deleting = deleting_server_ids is defined and s.id in deleting_server_ids %}
+    <a href="{% if not is_deleting %}{{ url_for('server_detail', server_id=s.id) }}{% else %}#{% endif %}"
+       class="relative overflow-hidden bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col gap-2 text-sm w-full h-full min-h-[160px] {% if not is_deleting %}hover:bg-slate-800 transition cursor-pointer{% else %}cursor-not-allowed opacity-80{% endif %}"
+       {% if is_deleting %}onclick="return false;" aria-disabled="true"{% endif %}>
 
+      {% if is_deleting %}
+      <div class="absolute inset-x-0 top-0 z-10 bg-red-700/90 text-white text-[11px] font-semibold uppercase tracking-wide px-3 py-1 text-center">
+        Deleting...
+      </div>
+      <div class="absolute inset-0 bg-red-950/10 z-0 pointer-events-none"></div>
+      {% endif %}
 
-      <!-- Header -->
-      <div class="flex items-center justify-between">
+      <div class="relative z-[1] flex items-center justify-between {% if is_deleting %}mt-5{% endif %}">
         <div class="flex items-center gap-2 font-semibold">
           {{ s.name }}
 
@@ -92,7 +98,9 @@
           {% endif %}
         </div>
 
-        {% if s.status == 'up' %}
+        {% if is_deleting %}
+          <span class="px-2 py-0.5 rounded-full bg-red-900/50 text-red-200 text-[10px]">Deleting</span>
+        {% elif s.status == 'up' %}
           <span class="px-2 py-0.5 rounded-full bg-emerald-900/40 text-emerald-300 text-[10px]">{{ t("online") }}</span>
         {% elif s.status == 'down' %}
           <span class="px-2 py-0.5 rounded-full bg-rose-900/40 text-rose-300 text-[10px]">{{ t("offline") }}</span>
@@ -101,13 +109,11 @@
         {% endif %}
       </div>
 
-      <!-- URL -->
-      <div class="text-[11px] text-slate-400 leading-tight">
+      <div class="relative z-[1] text-[11px] text-slate-400 leading-tight">
         {{ s.url or s.public_url or s.local_url or t("url_not_defined") }}
       </div>
 
-      <!-- Stats -->
-      <div class="text-[11px] text-slate-400 leading-tight">
+      <div class="relative z-[1] text-[11px] text-slate-400 leading-tight">
         {{ s.libraries_count }} {{ t("libraries") }} · {{ s.users_count }} {{ t("users") }}
       </div>
 
@@ -126,13 +132,19 @@
 <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" style="grid-auto-rows:1fr;">
 
   {% for s in other_servers %}
-  <a href="{{ url_for('server_detail', server_id=s.id) }}"
-     class="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col gap-2 text-sm w-full
-		hover:bg-slate-800 transition cursor-pointer h-full min-h-[160px]"
+  {% set is_deleting = deleting_server_ids is defined and s.id in deleting_server_ids %}
+  <a href="{% if not is_deleting %}{{ url_for('server_detail', server_id=s.id) }}{% else %}#{% endif %}"
+     class="relative overflow-hidden bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col gap-2 text-sm w-full h-full min-h-[160px] {% if not is_deleting %}hover:bg-slate-800 transition cursor-pointer{% else %}cursor-not-allowed opacity-80{% endif %}"
+     {% if is_deleting %}onclick="return false;" aria-disabled="true"{% endif %}>
 
+    {% if is_deleting %}
+    <div class="absolute inset-x-0 top-0 z-10 bg-red-700/90 text-white text-[11px] font-semibold uppercase tracking-wide px-3 py-1 text-center">
+      Deleting...
+    </div>
+    <div class="absolute inset-0 bg-red-950/10 z-0 pointer-events-none"></div>
+    {% endif %}
 
-    <!-- Header -->
-    <div class="flex items-center justify-between">
+    <div class="relative z-[1] flex items-center justify-between {% if is_deleting %}mt-5{% endif %}">
       <div class="flex items-center gap-2 font-semibold">
         {{ s.name }}
 
@@ -145,7 +157,9 @@
         {% endif %}
       </div>
 
-      {% if s.status == 'up' %}
+      {% if is_deleting %}
+        <span class="px-2 py-0.5 rounded-full bg-red-900/50 text-red-200 text-[10px]">Deleting</span>
+      {% elif s.status == 'up' %}
         <span class="px-2 py-0.5 rounded-full bg-emerald-900/40 text-emerald-300 text-[10px]">{{ t("online") }}</span>
       {% elif s.status == 'down' %}
         <span class="px-2 py-0.5 rounded-full bg-rose-900/40 text-rose-300 text-[10px]">{{ t("offline") }}</span>
@@ -154,13 +168,11 @@
       {% endif %}
     </div>
 
-    <!-- URL -->
-    <div class="text-[11px] text-slate-400 leading-tight">
+    <div class="relative z-[1] text-[11px] text-slate-400 leading-tight">
       {{ s.url or s.public_url or s.local_url or t("url_not_defined") }}
     </div>
 
-    <!-- Stats -->
-    <div class="text-[11px] text-slate-400 leading-tight">
+    <div class="relative z-[1] text-[11px] text-slate-400 leading-tight">
       {{ s.libraries_count }} {{ t("libraries") }} · {{ s.users_count }} {{ t("users") }}
     </div>
 
