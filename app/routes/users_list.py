@@ -53,6 +53,11 @@ def register(app):
         # Search query
         search = request.args.get("q", "").strip()
 
+        # Pagination
+        page = request.args.get("page", 1, type=int)
+        per_page = 20
+        offset = (page - 1) * per_page
+
         # Default view (daily): hide expired unless explicitly selected or show_archived enabled
         # -> CHANGÉ : on ne cache plus rien par défaut.
         # On conserve ces variables pour ne rien perdre / compat, mais on ne les applique plus automatiquement.
@@ -109,13 +114,31 @@ def register(app):
         query += """
             GROUP BY u.id
             ORDER BY u.username ASC
+            LIMIT ?
+            OFFSET ?
         """
+        params.extend([per_page, offset])
+
+        count_query = """
+            SELECT COUNT(DISTINCT u.id) as total
+            FROM vodum_users u
+            LEFT JOIN media_users mu ON mu.vodum_user_id = u.id
+            LEFT JOIN media_user_libraries mul ON mul.media_user_id = mu.id
+        """
+
+        if conditions:
+            count_query += " WHERE " + " AND ".join(conditions)
+
+        total_users = db.query_one(count_query, params[:len(params)-2])["total"]
+        total_pages = math.ceil(total_users / per_page)
 
         users = db.query(query, params)
 
         return render_template(
             "users/users.html",
             users=users,
+            page=page,
+            total_pages=total_pages,
             selected_statuses=selected_statuses,
             show_archived=show_archived,
             search=search,
