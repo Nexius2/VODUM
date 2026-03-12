@@ -47,7 +47,18 @@
 </style>
 
 
+{% set next_order = 'desc' if order == 'asc' else 'asc' %}
 
+{% macro users_sort_url(sort_key) -%}
+  {{ url_for(
+      'users_list',
+      q=search,
+      status=selected_statuses,
+      sort=sort_key,
+      order=('desc' if sort == sort_key and order == 'asc' else 'asc'),
+      page=1
+  ) }}
+{%- endmacro %}
 
 <!-- Filtres -->
 <form method="get" id="users_filter_form" class="flex flex-wrap items-center gap-3 mb-6">
@@ -118,70 +129,63 @@
 <!-- TABLE USERS -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
 <table class="w-full text-sm">
-    <thead class="bg-slate-950/60 text-slate-400">
-        <tr>
-            <!-- NAME -->
-            <th class="px-4 py-3 text-left sortable" onclick="sortTable(0, this)">
-                <div class="flex items-center gap-1 cursor-pointer">
-                    <span>{{ t("name") }}</span>
-                    <svg class="arrow" viewBox="0 0 24 24">
-                        <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
-                    </svg>
-                </div>
-            </th>
+	<thead class="bg-slate-950/60 text-slate-400">
+		<tr>
+			<th class="px-4 py-3 text-left sortable {% if sort == 'username' %}sorted sorted-{{ order }}{% endif %}">
+				<a href="{{ users_sort_url('username') }}" class="flex items-center gap-1">
+					<span>{{ t("name") }}</span>
+					<svg class="arrow" viewBox="0 0 24 24">
+						<path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
+					</svg>
+				</a>
+			</th>
 
-            <!-- EMAIL -->
-            <th class="px-4 py-3 text-left sortable" onclick="sortTable(1, this)">
-                <div class="flex items-center gap-1 cursor-pointer">
-                    <span>{{ t("email") }}</span>
-                    <svg class="arrow" viewBox="0 0 24 24">
-                        <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
-                    </svg>
-                </div>
-            </th>
+			<th class="px-4 py-3 text-left sortable {% if sort == 'email' %}sorted sorted-{{ order }}{% endif %}">
+				<a href="{{ users_sort_url('email') }}" class="flex items-center gap-1">
+					<span>{{ t("email") }}</span>
+					<svg class="arrow" viewBox="0 0 24 24">
+						<path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
+					</svg>
+				</a>
+			</th>
 
-            <!-- STATUS -->
-            <th class="px-4 py-3 text-left sortable" onclick="sortTable(2, this)">
-                <div class="flex items-center gap-1 cursor-pointer">
-                    <span>{{ t("status") }}</span>
-                    <svg class="arrow" viewBox="0 0 24 24">
-                        <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
-                    </svg>
-                </div>
-            </th>
+			<th class="px-4 py-3 text-left sortable {% if sort == 'status' %}sorted sorted-{{ order }}{% endif %}">
+				<a href="{{ users_sort_url('status') }}" class="flex items-center gap-1">
+					<span>{{ t("status") }}</span>
+					<svg class="arrow" viewBox="0 0 24 24">
+						<path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
+					</svg>
+				</a>
+			</th>
 
-            <!-- EXPIRATION -->
-            <th class="px-4 py-3 text-left sortable" onclick="sortTable(3, this)">
-                <div class="flex items-center gap-1 cursor-pointer">
-                    <span>{{ t("expiration") }}</span>
-                    <svg class="arrow" viewBox="0 0 24 24">
-                        <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
-                    </svg>
-                </div>
-            </th>
+			<th class="px-4 py-3 text-left sortable {% if sort == 'expiration_date' %}sorted sorted-{{ order }}{% endif %}">
+				<a href="{{ users_sort_url('expiration_date') }}" class="flex items-center gap-1">
+					<span>{{ t("expiration") }}</span>
+					<svg class="arrow" viewBox="0 0 24 24">
+						<path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
+					</svg>
+				</a>
+			</th>
 
-            <!-- SERVERS -->
-            <th class="px-4 py-3 text-left sortable" onclick="sortTable(4, this)">
-                <div class="flex items-center gap-1 cursor-pointer">
-                    <span>{{ t("servers") }}</span>
-                    <svg class="arrow" viewBox="0 0 24 24">
-                        <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
-                    </svg>
-                </div>
-            </th>
+			<th class="px-4 py-3 text-left sortable {% if sort == 'servers_count' %}sorted sorted-{{ order }}{% endif %}">
+				<a href="{{ users_sort_url('servers_count') }}" class="flex items-center gap-1">
+					<span>{{ t("servers") }}</span>
+					<svg class="arrow" viewBox="0 0 24 24">
+						<path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
+					</svg>
+				</a>
+			</th>
 
-            <!-- LIBRARIES -->
-            <th class="px-4 py-3 text-left sortable" onclick="sortTable(5, this)">
-                <div class="flex items-center gap-1 cursor-pointer">
-                    <span>{{ t("libraries") }}</span>
-                    <svg class="arrow" viewBox="0 0 24 24">
-                        <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
-                    </svg>
-                </div>
-            </th>
-
-        </tr>
-    </thead>
+			<th class="px-4 py-3 text-left sortable {% if sort == 'libraries_count' %}sorted sorted-{{ order }}{% endif %}">
+				<a href="{{ users_sort_url('libraries_count') }}" class="flex items-center gap-1">
+					<span>{{ t("libraries") }}</span>
+					<svg class="arrow" viewBox="0 0 24 24">
+						<path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
+					</svg>
+				</a>
+			</th>
+		</tr>
+	</thead>
 
     <tbody>
         {% for u in users %}
@@ -233,158 +237,35 @@
 </table>
 </div>
 
-<div class="flex justify-center items-center gap-3 mt-4">
+{% if total_pages > 1 %}
+<div class="flex items-center justify-between mt-4">
+  <div class="text-xs text-slate-500">
+    Page {{ page }} / {{ total_pages }} ({{ total_users }} users)
+  </div>
 
-{% if page > 1 %}
-<a href="?page={{ page-1 }}"
-   class="px-3 py-1 rounded bg-slate-700 hover:bg-slate-600">
-   ← Previous
-</a>
-{% endif %}
+  <div class="flex gap-2">
+    {% if page > 1 %}
+      <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
+         href="{{ url_for('users_list', page=1, q=search, status=selected_statuses, sort=sort, order=order) }}">First</a>
 
-<span class="text-sm text-slate-400">
-Page {{ page }} / {{ total_pages }}
-</span>
+      <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
+         href="{{ url_for('users_list', page=page-1, q=search, status=selected_statuses, sort=sort, order=order) }}">Prev</a>
+    {% endif %}
 
-{% if page < total_pages %}
-<a href="?page={{ page+1 }}"
-   class="px-3 py-1 rounded bg-slate-700 hover:bg-slate-600">
-   Next →
-</a>
-{% endif %}
+    {% if page < total_pages %}
+      <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
+         href="{{ url_for('users_list', page=page+1, q=search, status=selected_statuses, sort=sort, order=order) }}">Next</a>
 
+      <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
+         href="{{ url_for('users_list', page=total_pages, q=search, status=selected_statuses, sort=sort, order=order) }}">Last</a>
+    {% endif %}
+  </div>
 </div>
+{% endif %}
 
-<!-- SCRIPT TRI + MÉMOIRE -->
+<!-- SCRIPT FILTRES -->
 <script>
-function sortTable(columnIndex, thElement) {
-    const table = document.querySelector("table");
-    if (!table) return;
-
-    const tbody = table.querySelector("tbody");
-    if (!tbody) return;
-
-    const rows = Array.from(tbody.querySelectorAll("tr"))
-        .filter(r => !r.querySelector("td[colspan]"));
-
-    const thList = table.querySelectorAll("th.sortable");
-
-    thList.forEach(th => {
-        th.classList.remove("sorted", "sorted-asc", "sorted-desc");
-    });
-
-    const currentOrder = thElement.dataset.order === "asc" ? "desc" : "asc";
-    thElement.dataset.order = currentOrder;
-    thElement.classList.add(
-        "sorted",
-        currentOrder === "asc" ? "sorted-asc" : "sorted-desc"
-    );
-
-    /* =========================
-       HELPERS
-       ========================= */
-
-    // 🔑 Valeur réelle utilisée pour le tri (i18n-safe)
-    function getCellValue(cell) {
-        if (cell?.dataset?.sortValue !== undefined) {
-            return cell.dataset.sortValue;
-        }
-        return cell?.innerText || "";
-    }
-
-    // 🔢 Conversion vers valeur comparable
-    function convert(v) {
-        v = (v || "").trim();
-
-        // valeur absente → toujours à la fin
-        if (v === "") return Number.POSITIVE_INFINITY;
-
-        // YYYY-MM-DD
-        if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
-            return new Date(v).getTime();
-        }
-
-        // DD/MM/YYYY
-        if (/^\d{2}\/\d{2}\/\d{4}$/.test(v)) {
-            const [d, m, y] = v.split("/").map(Number);
-            return new Date(y, m - 1, d).getTime();
-        }
-
-        // nombre simple
-        if (!isNaN(v)) return Number(v);
-
-        // fallback string
-        return v.toLowerCase();
-    }
-
-    /* =========================
-       STATUS ORDER (métier)
-       ========================= */
-    const STATUS_ORDER = {
-        "active": 1,
-        "pre_expired": 2,
-        "reminder": 3,
-        "expired": 4,
-        "invited": 5,
-        "unfriended": 6,
-        "suspended": 7,
-        "none": 98,
-        "unknown": 99
-    };
-
-    const sorted = rows.sort((a, b) => {
-
-        /* 🔥 TRI MÉTIER POUR STATUS (col index 2) */
-        if (columnIndex === 2) {
-            const getStatusKey = (row) => {
-                const span = row.children[2]?.querySelector("span");
-                return span?.dataset?.status || "none";
-            };
-
-            const A = STATUS_ORDER[getStatusKey(a)] ?? 999;
-            const B = STATUS_ORDER[getStatusKey(b)] ?? 999;
-
-            return currentOrder === "asc" ? A - B : B - A;
-        }
-
-        /* 🔹 TRI CLASSIQUE */
-        const A = convert(getCellValue(a.children[columnIndex]));
-        const B = convert(getCellValue(b.children[columnIndex]));
-
-        if (A > B) return currentOrder === "asc" ? 1 : -1;
-        if (A < B) return currentOrder === "asc" ? -1 : 1;
-        return 0;
-    });
-
-    tbody.innerHTML = "";
-    sorted.forEach(r => tbody.appendChild(r));
-
-    localStorage.setItem("users_sort_col", String(columnIndex));
-    localStorage.setItem("users_sort_order", currentOrder);
-}
-
-/* =========================
-   RESTORE SORT + AUTO FILTER
-   ========================= */
 document.addEventListener("DOMContentLoaded", () => {
-    // -------------------------
-    // 1) RESTORE SORT STATE
-    // -------------------------
-    const col = localStorage.getItem("users_sort_col");
-    const order = localStorage.getItem("users_sort_order");
-
-    if (col !== null) {
-        const th = document.querySelectorAll("th.sortable")[Number(col)];
-        if (th) {
-            // inversion volontaire car sortTable toggle l’ordre
-            th.dataset.order = order === "asc" ? "desc" : "asc";
-            sortTable(Number(col), th);
-        }
-    }
-
-    // -------------------------
-    // 2) AUTO FILTER + PERSIST
-    // -------------------------
     const form = document.getElementById("users_filter_form");
     if (!form) return;
 
@@ -410,19 +291,39 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function submitForm() {
         saveFilters();
+
+        const pageInput = form.querySelector('input[name="page"]');
+        if (pageInput) {
+            pageInput.value = "1";
+        } else {
+            const hiddenPage = document.createElement("input");
+            hiddenPage.type = "hidden";
+            hiddenPage.name = "page";
+            hiddenPage.value = "1";
+            form.appendChild(hiddenPage);
+        }
+
         if (form.requestSubmit) form.requestSubmit();
         else form.submit();
     }
 
-    // Restore uniquement si l’URL n’a pas déjà des filtres
     (function restoreFilters() {
         const url = new URL(window.location.href);
-        if (url.searchParams.has("status") || url.searchParams.has("q")) return;
+
+        // IMPORTANT :
+        // si l'URL contient déjà page, status ou q, on ne restaure rien automatiquement
+        // sinon on casse la pagination / navigation.
+        if (
+            url.searchParams.has("page") ||
+            url.searchParams.has("status") ||
+            url.searchParams.has("q")
+        ) {
+            return;
+        }
 
         try {
             const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
 
-            // Status : si rien sauvegardé -> on coche tout
             if (Array.isArray(saved.statuses) && saved.statuses.length > 0) {
                 statusCheckboxes.forEach(cb => {
                     cb.checked = saved.statuses.includes(cb.value);
@@ -431,26 +332,22 @@ document.addEventListener("DOMContentLoaded", () => {
                 statusCheckboxes.forEach(cb => cb.checked = true);
             }
 
-            // Search
-            //if (searchInput && typeof saved.q === "string") {
-            //    searchInput.value = saved.q;
-            //}
-			if (searchInput) {
-			  searchInput.value = "";
-			}
+            if (searchInput && typeof saved.q === "string") {
+                searchInput.value = saved.q;
+            }
 
-            // Applique seulement si on a qqch à restaurer
             const hasSomething =
                 (Array.isArray(saved.statuses) && saved.statuses.length > 0) ||
                 (typeof saved.q === "string" && saved.q.trim() !== "");
 
-            if (hasSomething) submitForm();
+            if (hasSomething) {
+                submitForm();
+            }
         } catch (e) {
             console.warn("restoreFilters failed", e);
         }
     })();
 
-    // Search debounce
     if (searchInput) {
         searchInput.addEventListener("input", () => {
             clearTimeout(timer);
@@ -466,7 +363,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // Status checkboxes -> submit immédiat
     statusCheckboxes.forEach(cb => {
         cb.addEventListener("change", () => {
             clearTimeout(timer);

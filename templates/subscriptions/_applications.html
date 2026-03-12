@@ -45,18 +45,23 @@
 	  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
 		<div class="flex items-center justify-between">
 		  <h2 class="text-sm uppercase tracking-wide text-slate-400">{{ t("subscription_apply_users_title") }}</h2>
-		  <span id="subscriptionUsersCount" class="text-xs text-slate-500 md:hidden">{{ users|length }}</span>
+		  <span id="subscriptionUsersCount" class="text-xs text-slate-500 md:hidden">{{ users|length }} / {{ applications_total_users }}</span>
 		</div>
 
 		<div class="flex items-center gap-3">
-		  <input
-			type="text"
-			id="subscriptionUsersSearch"
-			placeholder="{{ t('search') }}…"
-			class="w-full md:w-72 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200"
-		  >
+		  <form method="get" action="{{ url_for('subscriptions') }}" class="w-full md:w-auto">
+			<input type="hidden" name="tab" value="applications">
+			<input
+			  type="text"
+			  id="subscriptionUsersSearch"
+			  name="applications_q"
+			  value="{{ applications_q or '' }}"
+			  placeholder="{{ t('search') }}…"
+			  class="w-full md:w-72 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200"
+			>
+		  </form>
 		  <span id="subscriptionUsersCountDesktop" class="hidden md:inline text-xs text-slate-500 whitespace-nowrap">
-			{{ users|length }}
+			{{ users|length }} / {{ applications_total_users }}
 		  </span>
 		</div>
 	  </div>
@@ -129,9 +134,7 @@
 			  </tr>
 			{% endif %}
 		  
-			<tr id="subscriptionUsersNoResult" class="hidden border-t border-slate-800">
-			  <td class="px-4 py-3 text-slate-500" colspan="5">{{ t("subscription_apply_no_users") }}</td>
-			</tr>
+
 		  
         </tbody>
       </table>
@@ -179,6 +182,32 @@
     </div>
   </div>
 </div>
+
+  {% if applications_total_pages > 1 %}
+    <div class="flex items-center justify-between mt-4">
+      <div class="text-xs text-slate-500">
+        Page {{ applications_page }} / {{ applications_total_pages }} ({{ applications_total_users }} users)
+      </div>
+
+      <div class="flex gap-2">
+        {% if applications_page > 1 %}
+          <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
+             href="{{ url_for('subscriptions', tab='applications', applications_page=1, applications_q=applications_q) }}">First</a>
+
+          <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
+             href="{{ url_for('subscriptions', tab='applications', applications_page=applications_page-1, applications_q=applications_q) }}">Prev</a>
+        {% endif %}
+
+        {% if applications_page < applications_total_pages %}
+          <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
+             href="{{ url_for('subscriptions', tab='applications', applications_page=applications_page+1, applications_q=applications_q) }}">Next</a>
+
+          <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
+             href="{{ url_for('subscriptions', tab='applications', applications_page=applications_total_pages, applications_q=applications_q) }}">Last</a>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
 
 <script>
   document.addEventListener("DOMContentLoaded", () => {
@@ -269,59 +298,27 @@
 <script>
   document.addEventListener("DOMContentLoaded", () => {
     const searchInput = document.getElementById("subscriptionUsersSearch");
-    const rows = Array.from(document.querySelectorAll(".subscription-user-row"));
-    const noResultRow = document.getElementById("subscriptionUsersNoResult");
-    const countMobile = document.getElementById("subscriptionUsersCount");
-    const countDesktop = document.getElementById("subscriptionUsersCountDesktop");
-    const limit = 20;
+    const searchForm = searchInput ? searchInput.closest("form") : null;
+    let timer = null;
 
-    function updateUsersList() {
-      const query = (searchInput?.value || "").trim().toLowerCase();
-      let matched = 0;
-      let visible = 0;
-
-      rows.forEach((row) => {
-        const haystack = (row.dataset.search || "").toLowerCase();
-        const isMatch = !query || haystack.includes(query);
-
-        if (isMatch) {
-          matched += 1;
-          if (visible < limit) {
-            row.classList.remove("hidden");
-            visible += 1;
-          } else {
-            row.classList.add("hidden");
-          }
-        } else {
-          row.classList.add("hidden");
-        }
-      });
-
-      if (noResultRow) {
-        if (matched === 0) {
-          noResultRow.classList.remove("hidden");
-        } else {
-          noResultRow.classList.add("hidden");
-        }
-      }
-
-      const countText = query
-        ? `${Math.min(matched, limit)} / ${matched}`
-        : `${Math.min(rows.length, limit)} / ${rows.length}`;
-
-      if (countMobile) {
-        countMobile.textContent = countText;
-      }
-      if (countDesktop) {
-        countDesktop.textContent = countText;
-      }
+    if (!searchInput || !searchForm) {
+      return;
     }
 
-    if (searchInput) {
-      searchInput.addEventListener("input", updateUsersList);
-    }
+    searchInput.addEventListener("input", () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        searchForm.requestSubmit();
+      }, 500);
+    });
 
-    updateUsersList();
+    searchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        clearTimeout(timer);
+        searchForm.requestSubmit();
+      }
+    });
   });
 </script>
 
