@@ -54,19 +54,31 @@ def register(app):
         search = request.args.get("q", "").strip()
 
         # Pagination
-        page = request.args.get("page", 1, type=int)
+        page = max(request.args.get("page", 1, type=int), 1)
         per_page = 20
         offset = (page - 1) * per_page
+
+        # Sorting (backend)
+        sort = (request.args.get("sort") or "username").strip()
+        order = (request.args.get("order") or "asc").strip().lower()
+        if order not in ("asc", "desc"):
+            order = "asc"
+
+        sort_map = {
+            "username": "u.username",
+            "email": "u.email",
+            "status": "u.status",
+            "expiration_date": "u.expiration_date",
+            "servers_count": "servers_count",
+            "libraries_count": "libraries_count",
+        }
+        sort_column = sort_map.get(sort, "u.username")
 
         # Default view (daily): hide expired unless explicitly selected or show_archived enabled
         # -> CHANGÉ : on ne cache plus rien par défaut.
         # On conserve ces variables pour ne rien perdre / compat, mais on ne les applique plus automatiquement.
         default_excluded = {"expired"}
         all_statuses = ["active", "pre_expired", "reminder", "expired", "invited", "unfriended", "suspended", "unknown"]
-
-        # AVANT: si pas de sélection -> on excluait expired automatiquement
-        # MAINTENANT: si pas de sélection -> on ne filtre PAS par status (donc on affiche tout le monde)
-        # Donc: on ne touche pas selected_statuses ici.
 
         query = """
             SELECT
@@ -87,7 +99,6 @@ def register(app):
         params = []
 
         # Status filter (IN)
-        # -> On filtre uniquement si l’admin a explicitement coché au moins 1 status
         if selected_statuses:
             placeholders = ",".join(["?"] * len(selected_statuses))
             conditions.append(f"u.status IN ({placeholders})")
@@ -111,9 +122,12 @@ def register(app):
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
 
-        query += """
+        query += f"""
             GROUP BY u.id
-            ORDER BY u.username ASC
+            ORDER BY
+                CASE WHEN {sort_column} IS NULL OR {sort_column} = '' THEN 1 ELSE 0 END ASC,
+                {sort_column} {order.upper()},
+                u.username ASC
             LIMIT ?
             OFFSET ?
         """
@@ -129,8 +143,15 @@ def register(app):
         if conditions:
             count_query += " WHERE " + " AND ".join(conditions)
 
-        total_users = db.query_one(count_query, params[:len(params)-2])["total"]
-        total_pages = math.ceil(total_users / per_page)
+        count_params = params[:-2]
+        total_row = db.query_one(count_query, count_params) or {"total": 0}
+        total_users = int(total_row["total"] or 0)
+        total_pages = max(math.ceil(total_users / per_page), 1)
+
+        if page > total_pages:
+            page = total_pages
+            offset = (page - 1) * per_page
+            params = count_params + [per_page, offset]
 
         users = db.query(query, params)
 
@@ -139,9 +160,12 @@ def register(app):
             users=users,
             page=page,
             total_pages=total_pages,
+            total_users=total_users,
             selected_statuses=selected_statuses,
             show_archived=show_archived,
             search=search,
+            sort=sort,
+            order=order,
             active_page="users",
         )
 

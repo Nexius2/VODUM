@@ -496,8 +496,10 @@ def register(app):
                 "page": page,
                 "total_pages": total_pages,
                 "total_rows": total_rows,
+                "first_url": build_url(1),
                 "prev_url": build_url(page - 1),
                 "next_url": build_url(page + 1),
+                "last_url": build_url(total_pages),
             }
 
         # --------------------------
