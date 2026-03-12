@@ -310,47 +310,53 @@
   </div>
 
 
-  <!-- ======================= Options ======================= -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-    <div class="text-sm font-semibold text-slate-200 mb-4">
-      {{ _t_options }}
-    </div>
+  <!-- ======================= Options + Notes ======================= -->
+  <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
 
-    <div class="text-sm mb-4">
-      <div class="text-slate-400">{{ t("subscription_template") }}:</div>
-      <div class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-        {% if user.subscription_template_name %}
-          {{ user.subscription_template_name }}
-        {% else %}
-          <span class="text-slate-500">{{ t("subscription_none") }}</span>
-        {% endif %}
+    <!-- ======================= Options ======================= -->
+    <div class="xl:col-span-1 bg-slate-900 border border-slate-800 rounded-2xl p-5">
+      <div class="text-sm font-semibold text-slate-200 mb-4">
+        {{ _t_options }}
+      </div>
+
+      <div class="space-y-5">
+
+        <div class="text-sm">
+          <div class="text-slate-400 mb-1">{{ t("subscription_template") }}</div>
+          <div class="mt-1 max-w-md bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+            {% if user.subscription_template_name %}
+              {{ user.subscription_template_name }}
+            {% else %}
+              <span class="text-slate-500">{{ t("subscription_none") }}</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <label class="text-sm block">
+          {{ t("max_streams_override") }}
+          <div class="mt-1">
+            <input type="number" name="max_streams_override"
+                   value="{{ user.max_streams_override if user.max_streams_override is not none else '' }}"
+                   class="w-24 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+          </div>
+          <div class="text-xs text-slate-500 mt-2">
+            {{ t("max_streams_override_help") }}
+          </div>
+        </label>
+
       </div>
     </div>
 
-    <label class="text-sm">
-      {{ t("max_streams_override") }}
-      <div class="mt-1">
-        <input type="number" name="max_streams_override"
-               value="{{ user.max_streams_override if user.max_streams_override is not none else '' }}"
-               class="w-24 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+    <!-- ======================= Notes ======================= -->
+    <div class="xl:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-5">
+      <div class="text-sm font-semibold text-slate-200 mb-4">
+        {{ t("notes") }}
       </div>
-      <div class="text-xs text-slate-500 mt-2">
-        {{ t("max_streams_override_help") }}
-      </div>
-    </label>
-  </div>
 
-
-  <!-- ======================= Notes ======================= -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-    <div class="text-sm font-semibold text-slate-200 mb-4">
-      {{ t("notes") }}
+      <textarea name="notes" rows="8"
+        class="w-full min-h-[220px] bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm resize-vertical">{{ user.notes or '' }}</textarea>
     </div>
 
-    <textarea name="notes" rows="8"
-      class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm resize-vertical">
-      {{ user.notes or '' }}
-    </textarea>
   </div>
 
 </div>
