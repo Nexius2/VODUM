@@ -324,23 +324,64 @@
           <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
             <div class="text-xs text-slate-400 mb-2">{{ t("referrer") }}</div>
 
-            <div class="flex items-center gap-2">
-              <div id="referrer_display"
-                   class="flex-1 min-h-[44px] bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm flex items-center">
-                {% if referral and referral.referrer_username %}
-                  {{ referral.referrer_username }}{% if referral.referrer_email %} — {{ referral.referrer_email }}{% endif %}
-                {% elif referrer_fallback %}
-                  {{ referrer_fallback.username }}{% if referrer_fallback.email %} — {{ referrer_fallback.email }}{% endif %}
-                {% else %}
-                  <span class="text-slate-500">{{ t("no_referrer") }}</span>
-                {% endif %}
-              </div>
+            {% set referrer_locked = referral and referral.status in ("qualified", "rewarded") %}
 
+            <div class="flex items-stretch gap-2">
+				<div id="referrer_display"
+					 class="min-w-0 flex-1 min-h-[44px] bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm flex items-center overflow-hidden">
+
+				  <div class="min-w-0 w-full leading-tight">
+
+					{% if referral and referral.referrer_username %}
+
+					  <div class="font-medium text-slate-200 truncate">
+						{{ referral.referrer_username }}
+					  </div>
+
+					  {% if referral.referrer_email %}
+					  <div class="text-xs text-slate-400 truncate">
+						{{ referral.referrer_email }}
+					  </div>
+					  {% endif %}
+
+					{% elif referrer_fallback %}
+
+					  <div class="font-medium text-slate-200 truncate">
+						{{ referrer_fallback.username }}
+					  </div>
+
+					  {% if referrer_fallback.email %}
+					  <div class="text-xs text-slate-400 truncate">
+						{{ referrer_fallback.email }}
+					  </div>
+					  {% endif %}
+
+					{% else %}
+
+					  <span class="text-slate-500">{{ t("no_referrer") }}</span>
+
+					{% endif %}
+
+				  </div>
+
+				</div>
+
+              {% if not referrer_locked %}
               <button type="button"
                       id="btn_open_referrer_modal"
-                      class="min-w-[170px] px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm">
-                {{ t("choose_referrer") }}
+                      class="h-11 w-11 shrink-0 inline-flex items-center justify-center rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200"
+                      title="{{ t('choose_referrer') }}"
+                      aria-label="{{ t('choose_referrer') }}">
+                <svg xmlns="http://www.w3.org/2000/svg"
+                     viewBox="0 0 24 24"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="1.8"
+                     class="w-5 h-5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232a3 3 0 114.243 4.243L8 20l-4 1 1-4L15.232 5.232z"/>
+                </svg>
               </button>
+              {% endif %}
             </div>
 
             <div class="grid grid-cols-2 gap-3 mt-4">
