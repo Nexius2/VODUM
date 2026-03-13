@@ -200,6 +200,18 @@ def register(app):
             discord_user_id = (form.get("discord_user_id") or "").strip() or None
             discord_name    = (form.get("discord_name") or "").strip() or None
 
+            referral_settings = db.query_one("SELECT * FROM user_referral_settings WHERE id = 1")
+            referral_settings = dict(referral_settings) if referral_settings else {}
+
+            referrer_user_id_raw = (form.get("referrer_user_id") or "").strip()
+            requested_referrer_user_id = int(referrer_user_id_raw) if referrer_user_id_raw.isdigit() else None
+
+            current_referral = db.query_one(
+                "SELECT * FROM user_referrals WHERE referred_user_id = ? LIMIT 1",
+                (user_id,),
+            )
+            current_referral = dict(current_referral) if current_referral else None
+
             # Optional per-user stream override (NULL if empty; 0 allowed)
             raw_override = form.get("max_streams_override")
             max_streams_override = None
@@ -246,6 +258,139 @@ def register(app):
                     user_id,
                 ),
             )
+
+            current_referrer_user_id = int(current_referral["referrer_user_id"]) if current_referral and current_referral.get("referrer_user_id") else None
+
+            if requested_referrer_user_id == user_id:
+                flash("Referrer cannot be the same user", "error")
+                return redirect(url_for("user_detail", user_id=user_id, tab="general"))
+
+            if requested_referrer_user_id != current_referrer_user_id:
+                if current_referral and current_referral.get("status") in ("qualified", "rewarded"):
+                    flash("Referrer cannot be changed after qualification/reward", "error")
+                    return redirect(url_for("user_detail", user_id=user_id, tab="general"))
+
+                if current_referral and int(referral_settings.get("allow_referrer_change_before_qualification") or 0) != 1:
+                    flash("Referrer change is disabled", "error")
+                    return redirect(url_for("user_detail", user_id=user_id, tab="general"))
+
+                if requested_referrer_user_id is None:
+                    db.execute("UPDATE vodum_users SET referrer_user_id = NULL WHERE id = ?", (user_id,))
+                    if current_referral:
+                        db.execute(
+                            """
+                            UPDATE user_referrals
+                            SET status = 'cancelled',
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE id = ?
+                            """,
+                            (int(current_referral["id"]),),
+                        )
+                        db.execute(
+                            """
+                            INSERT INTO user_referral_events(
+                                referral_id, event_type, actor,
+                                old_referrer_user_id, new_referrer_user_id, details_json
+                            )
+                            VALUES (?, 'cancelled', 'ui', ?, NULL, ?)
+                            """,
+                            (
+                                int(current_referral["id"]),
+                                current_referrer_user_id,
+                                json.dumps({"source": "user_detail"}, ensure_ascii=False),
+                            ),
+                        )
+                else:
+                    referrer = db.query_one(
+                        "SELECT id, status FROM vodum_users WHERE id = ?",
+                        (requested_referrer_user_id,),
+                    )
+                    if not referrer:
+                        flash("Referrer not found", "error")
+                        return redirect(url_for("user_detail", user_id=user_id, tab="general"))
+
+                    if (referrer["status"] or "").lower() != "active":
+                        flash("Referrer must be active", "error")
+                        return redirect(url_for("user_detail", user_id=user_id, tab="general"))
+
+                    db.execute(
+                        "UPDATE vodum_users SET referrer_user_id = ? WHERE id = ?",
+                        (requested_referrer_user_id, user_id),
+                    )
+
+                    qualification_days = int(referral_settings.get("qualification_days") or 60)
+                    reward_days = int(referral_settings.get("reward_days") or 60)
+
+                    if current_referral:
+                        db.execute(
+                            """
+                            UPDATE user_referrals
+                            SET referrer_user_id = ?,
+                                status = 'pending',
+                                start_at = CURRENT_TIMESTAMP,
+                                qualification_due_at = datetime('now', ?),
+                                qualified_at = NULL,
+                                reward_granted_at = NULL,
+                                reward_expiration_before = NULL,
+                                reward_expiration_after = NULL,
+                                notification_sent_at = NULL,
+                                last_error = NULL,
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE id = ?
+                            """,
+                            (
+                                requested_referrer_user_id,
+                                f"+{qualification_days} days",
+                                int(current_referral["id"]),
+                            ),
+                        )
+                        db.execute(
+                            """
+                            INSERT INTO user_referral_events(
+                                referral_id, event_type, actor,
+                                old_referrer_user_id, new_referrer_user_id, details_json
+                            )
+                            VALUES (?, 'referrer_changed', 'ui', ?, ?, ?)
+                            """,
+                            (
+                                int(current_referral["id"]),
+                                current_referrer_user_id,
+                                requested_referrer_user_id,
+                                json.dumps({"source": "user_detail"}, ensure_ascii=False),
+                            ),
+                        )
+                    else:
+                        db.execute(
+                            """
+                            INSERT INTO user_referrals(
+                                referrer_user_id,
+                                referred_user_id,
+                                status,
+                                referral_source,
+                                start_at,
+                                qualification_due_at,
+                                qualification_days_snapshot,
+                                reward_days_snapshot,
+                                created_at,
+                                updated_at
+                            )
+                            VALUES(
+                                ?, ?, 'pending', 'manual',
+                                CURRENT_TIMESTAMP,
+                                datetime('now', ?),
+                                ?, ?,
+                                CURRENT_TIMESTAMP,
+                                CURRENT_TIMESTAMP
+                            )
+                            """,
+                            (
+                                requested_referrer_user_id,
+                                user_id,
+                                f"+{qualification_days} days",
+                                qualification_days,
+                                reward_days,
+                            ),
+                        )
 
             # Gestion expiration (vodum_users.expiration_date est contractuel)
             if expiration_date != user.get("expiration_date"):
@@ -675,7 +820,70 @@ def register(app):
             (user_id, per_page, discord_offset),
         )
 
+        referral = db.query_one(
+            """
+            SELECT
+                r.*,
+                referrer.username AS referrer_username,
+                referrer.email AS referrer_email
+            FROM user_referrals r
+            LEFT JOIN vodum_users referrer ON referrer.id = r.referrer_user_id
+            WHERE r.referred_user_id = ?
+            LIMIT 1
+            """,
+            (user_id,),
+        )
+        referral = dict(referral) if referral else None
 
+        referrer_fallback = None
+        if not referral and user.get("referrer_user_id"):
+            row = db.query_one(
+                """
+                SELECT id, username, email
+                FROM vodum_users
+                WHERE id = ?
+                LIMIT 1
+                """,
+                (user["referrer_user_id"],),
+            )
+            referrer_fallback = dict(row) if row else None
+
+        referral_stats = db.query_one(
+            """
+            SELECT
+                COUNT(*) AS total_referrals,
+                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_referrals,
+                SUM(CASE WHEN status = 'qualified' THEN 1 ELSE 0 END) AS qualified_referrals,
+                SUM(CASE WHEN status = 'rewarded' THEN 1 ELSE 0 END) AS rewarded_referrals
+            FROM user_referrals
+            WHERE referrer_user_id = ?
+            """,
+            (user_id,),
+        )
+        referral_stats = dict(referral_stats) if referral_stats else {
+            "total_referrals": 0,
+            "pending_referrals": 0,
+            "qualified_referrals": 0,
+            "rewarded_referrals": 0,
+        }
+
+        referred_users = db.query(
+            """
+            SELECT
+                u.id,
+                u.username,
+                u.email,
+                u.status,
+                r.status AS referral_status,
+                r.qualification_due_at
+            FROM user_referrals r
+            JOIN vodum_users u ON u.id = r.referred_user_id
+            WHERE r.referrer_user_id = ?
+            ORDER BY u.username ASC
+            """,
+            (user_id,),
+        ) or []
+        referred_users = [dict(x) for x in referred_users]
 
         return render_template(
             "users/user_detail.html",
@@ -705,6 +913,11 @@ def register(app):
             monitoring_mu_id=monitoring_mu_id,
             settings=settings,
             user_notifications_can_override=user_notifications_can_override,
+            
+            referral=referral,
+            referrer_fallback=referrer_fallback,
+            referral_stats=referral_stats,
+            referred_users=referred_users,
         )
 
 

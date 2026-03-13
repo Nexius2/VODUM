@@ -5,35 +5,49 @@ from typing import Any, Iterable, Optional
 import os
 
 
-
 class DBManager:
     """
-    DBManager est l'autorité UNIQUE pour l'accès SQLite.
-    - 1 seule connexion
-    - 1 seul writer
-    - WAL configuré une seule fois
-    - Accès thread-safe
+    DBManager = 1 instance par chemin de base.
+
+    - même chemin DB => même instance
+    - autre chemin DB => autre instance
+    - connexion SQLite partagée par chemin
+    - accès thread-safe
     """
 
-    _instance = None
+    _instances: dict[str, "DBManager"] = {}
     _instance_lock = threading.Lock()
 
+    @staticmethod
+    def _resolve_db_path(db_path: str | None = None) -> str:
+        raw_path = db_path or os.environ.get("DATABASE_PATH", "/appdata/database.db")
+        return os.path.abspath(raw_path)
+
     def __new__(cls, db_path: str | None = None):
-        # Singleton strict
+        resolved_path = cls._resolve_db_path(db_path)
+
         with cls._instance_lock:
-            if cls._instance is None:
-                cls._instance = super().__new__(cls)
-                cls._instance._initialized = False
-        return cls._instance
+            instance = cls._instances.get(resolved_path)
+            if instance is None:
+                instance = super().__new__(cls)
+                instance._initialized = False
+                instance._instance_key = resolved_path
+                cls._instances[resolved_path] = instance
+
+        return instance
 
     def __init__(self, db_path: str | None = None):
-        if self._initialized:
+        resolved_path = self._resolve_db_path(db_path)
+
+        if getattr(self, "_initialized", False):
+            if getattr(self, "db_path", None) != resolved_path:
+                raise ValueError(
+                    f"DBManager already initialized for '{self.db_path}', "
+                    f"cannot reuse same instance for '{resolved_path}'"
+                )
             return
 
-        if not db_path:
-            db_path = os.environ.get("DATABASE_PATH", "/appdata/database.db")
-
-        self.db_path = db_path
+        self.db_path = resolved_path
         self._lock = threading.Lock()
 
         self.conn = sqlite3.connect(
@@ -42,23 +56,23 @@ class DBManager:
         )
         self.conn.row_factory = sqlite3.Row
 
-        # PRAGMAs – exécutés UNE SEULE FOIS
         self._configure_connection()
 
         self._initialized = True
-        logging.getLogger(__name__).info("DBManager initialized (single connection)")
+        logging.getLogger(__name__).info(
+            "DBManager initialized for %s",
+            self.db_path,
+        )
 
     def _configure_connection(self) -> None:
         cur = self.conn.cursor()
-        cur.execute("PRAGMA foreign_keys = ON;")
-        cur.execute("PRAGMA journal_mode = WAL;")
-        cur.execute("PRAGMA synchronous = NORMAL;")
-        cur.execute("PRAGMA busy_timeout = 5000;")
-        cur.close()
-
-    # ----------------------------
-    # API publique
-    # ----------------------------
+        try:
+            cur.execute("PRAGMA foreign_keys = ON;")
+            cur.execute("PRAGMA journal_mode = WAL;")
+            cur.execute("PRAGMA synchronous = NORMAL;")
+            cur.execute("PRAGMA busy_timeout = 5000;")
+        finally:
+            cur.close()
 
     def execute(
         self,
@@ -67,10 +81,6 @@ class DBManager:
         *,
         commit: bool = True
     ) -> sqlite3.Cursor:
-        """
-        Exécute une requête WRITE (INSERT/UPDATE/DELETE).
-        Accès sérialisé.
-        """
         with self._lock:
             cur = self.conn.cursor()
             try:
@@ -80,6 +90,7 @@ class DBManager:
                 return cur
             except Exception:
                 self.conn.rollback()
+                cur.close()
                 raise
 
     def executemany(
@@ -89,9 +100,6 @@ class DBManager:
         *,
         commit: bool = True
     ) -> None:
-        """
-        Exécute plusieurs requêtes WRITE en une transaction.
-        """
         with self._lock:
             cur = self.conn.cursor()
             try:
@@ -109,50 +117,48 @@ class DBManager:
         sql: str,
         params: Iterable[Any] = ()
     ) -> list[sqlite3.Row]:
-        """
-        Exécute une requête READ.
-        Les lectures passent aussi par la même connexion
-        (safe avec WAL).
-        """
         with self._lock:
             cur = self.conn.cursor()
-            cur.execute(sql, params)
-            rows = cur.fetchall()
-            cur.close()
-            return rows
+            try:
+                cur.execute(sql, params)
+                return cur.fetchall()
+            finally:
+                cur.close()
 
     def query_one(
         self,
         sql: str,
         params: Iterable[Any] = ()
     ) -> Optional[sqlite3.Row]:
-        """
-        Exécute une requête READ et retourne une seule ligne.
-        """
         rows = self.query(sql, params)
         return rows[0] if rows else None
 
     def close(self) -> None:
         """
-        Fermeture explicite.
-
-        IMPORTANT:
-        DBManager est un singleton strict. Si on ferme la connexion,
-        il faut réinitialiser l'instance, sinon les prochaines requêtes
-        vont réutiliser une connexion déjà fermée -> "Cannot operate on a closed database".
+        Ferme la connexion associée à CETTE base uniquement
+        puis enlève l'instance du cache.
         """
         with self._lock:
             try:
                 if getattr(self, "conn", None) is not None:
                     self.conn.close()
-            except Exception:
-                # on ne bloque pas sur un close
-                pass
+            except Exception as e:
+                logging.getLogger(__name__).warning(
+                    "DBManager close warning for %s: %s",
+                    getattr(self, "db_path", "<unknown>"),
+                    e,
+                    exc_info=True,
+                )
+            finally:
+                self.conn = None
+                self._initialized = False
 
-            # reset complet pour permettre une ré-init propre au prochain DBManager(...)
-            self.conn = None
-            self._initialized = False
-            type(self)._instance = None
+        with type(self)._instance_lock:
+            key = getattr(self, "_instance_key", None)
+            if key and type(self)._instances.get(key) is self:
+                del type(self)._instances[key]
 
-        logging.getLogger(__name__).info("DBManager connection closed + singleton reset")
-
+        logging.getLogger(__name__).info(
+            "DBManager connection closed + cache entry removed for %s",
+            getattr(self, "db_path", "<unknown>"),
+        )

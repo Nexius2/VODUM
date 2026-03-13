@@ -226,6 +226,126 @@ def run_migrations():
             raise RuntimeError(f"❌ ERROR: table '{table}' does not exist ! "
                                f"-> Check that tables.sql has been imported correctly.")
 
+    # -------------------------------------------------
+    # USER REFERRAL SETTINGS
+    # -------------------------------------------------
+    if not table_exists(cursor, "user_referral_settings"):
+        print("🛠 Creating table: user_referral_settings")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_referral_settings (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+
+            enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1)),
+            reward_enabled INTEGER NOT NULL DEFAULT 1 CHECK(reward_enabled IN (0,1)),
+            qualification_days INTEGER NOT NULL DEFAULT 60,
+            reward_days INTEGER NOT NULL DEFAULT 60,
+
+            allow_referrer_change_before_qualification INTEGER NOT NULL DEFAULT 1 CHECK(allow_referrer_change_before_qualification IN (0,1)),
+            auto_notify_reward INTEGER NOT NULL DEFAULT 1 CHECK(auto_notify_reward IN (0,1)),
+
+            eligible_statuses TEXT NOT NULL DEFAULT 'active',
+
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+        conn.commit()
+
+    ensure_row(cursor, "user_referral_settings", "id = :id", {
+        "id": 1,
+        "enabled": 0,
+        "reward_enabled": 1,
+        "qualification_days": 60,
+        "reward_days": 60,
+        "allow_referrer_change_before_qualification": 1,
+        "auto_notify_reward": 1,
+        "eligible_statuses": "active",
+    })
+    conn.commit()
+
+    # -------------------------------------------------
+    # USER REFERRALS
+    # -------------------------------------------------
+    if not table_exists(cursor, "user_referrals"):
+        print("🛠 Creating table: user_referrals")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_referrals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            referrer_user_id INTEGER NOT NULL,
+            referred_user_id INTEGER NOT NULL UNIQUE,
+
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK(status IN ('pending','qualified','rewarded','cancelled')),
+
+            referral_source TEXT DEFAULT 'manual',
+
+            start_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            qualification_due_at TIMESTAMP,
+            qualified_at TIMESTAMP DEFAULT NULL,
+
+            qualification_days_snapshot INTEGER NOT NULL DEFAULT 60,
+            reward_days_snapshot INTEGER NOT NULL DEFAULT 60,
+
+            reward_granted_at TIMESTAMP DEFAULT NULL,
+            reward_expiration_before TEXT DEFAULT NULL,
+            reward_expiration_after TEXT DEFAULT NULL,
+
+            notification_sent_at TIMESTAMP DEFAULT NULL,
+            notification_template_id INTEGER DEFAULT NULL,
+            last_error TEXT DEFAULT NULL,
+
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+            FOREIGN KEY(referrer_user_id) REFERENCES vodum_users(id) ON DELETE CASCADE,
+            FOREIGN KEY(referred_user_id) REFERENCES vodum_users(id) ON DELETE CASCADE
+        );
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_referrals_referrer_user_id ON user_referrals(referrer_user_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_referrals_status ON user_referrals(status);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_referrals_qualification_due_at ON user_referrals(qualification_due_at);")
+        conn.commit()
+
+    ensure_column(cursor, "user_referrals", "notification_template_id", "INTEGER DEFAULT NULL")
+    ensure_column(cursor, "user_referrals", "last_error", "TEXT DEFAULT NULL")
+    conn.commit()
+
+    # -------------------------------------------------
+    # USER REFERRAL EVENTS
+    # -------------------------------------------------
+    if not table_exists(cursor, "user_referral_events"):
+        print("🛠 Creating table: user_referral_events")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_referral_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            referral_id INTEGER NOT NULL,
+            event_type TEXT NOT NULL
+                CHECK(event_type IN (
+                    'created',
+                    'referrer_changed',
+                    'qualified',
+                    'reward_granted',
+                    'notification_sent',
+                    'cancelled'
+                )),
+
+            actor TEXT DEFAULT 'system',
+            old_referrer_user_id INTEGER DEFAULT NULL,
+            new_referrer_user_id INTEGER DEFAULT NULL,
+            details_json TEXT DEFAULT NULL,
+
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+            FOREIGN KEY(referral_id) REFERENCES user_referrals(id) ON DELETE CASCADE,
+            FOREIGN KEY(old_referrer_user_id) REFERENCES vodum_users(id) ON DELETE SET NULL,
+            FOREIGN KEY(new_referrer_user_id) REFERENCES vodum_users(id) ON DELETE SET NULL
+        );
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_referral_events_referral_id ON user_referral_events(referral_id);")
+        conn.commit()
+
     print("✔ All tables exist.")
 
     # -------------------------------------------------
@@ -290,7 +410,13 @@ def run_migrations():
     # 1.2 vodum_users per-user stream override (NEW)
     ensure_column(cursor, "vodum_users", "max_streams_override", "INTEGER DEFAULT NULL")
     ensure_column(cursor, "vodum_users", "notifications_order_override", "TEXT DEFAULT NULL")
-    # Subscription template assignment (NEW)
+
+    # Missing columns on upgraded databases
+    ensure_column(cursor, "vodum_users", "renewal_method", "TEXT DEFAULT NULL")
+    ensure_column(cursor, "vodum_users", "renewal_date", "TEXT DEFAULT NULL")
+    ensure_column(cursor, "vodum_users", "referrer_user_id", "INTEGER DEFAULT NULL")
+
+    # Subscription template assignment
     ensure_column(cursor, "vodum_users", "subscription_template_id", "INTEGER DEFAULT NULL")
 
 
@@ -559,7 +685,7 @@ def run_migrations():
         cursor,
         "comm_templates",
         "trigger_event",
-        "TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation'))",
+        "TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','referral_reward'))",
     )
     ensure_column(
         cursor,
@@ -569,6 +695,50 @@ def run_migrations():
     )
     ensure_column(cursor, "comm_templates", "days_after", "INTEGER DEFAULT NULL")
     conn.commit()
+
+    def comm_templates_has_referral_reward_trigger():
+        cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='comm_templates'")
+        row = cursor.fetchone()
+        if not row or not row[0]:
+            return False
+        sql = row[0].lower()
+        return "'referral_reward'" in sql
+
+    if table_exists(cursor, "comm_templates") and not comm_templates_has_referral_reward_trigger():
+        print("🛠 Upgrading comm_templates.trigger_event CHECK (add referral_reward)")
+        cursor.execute("ALTER TABLE comm_templates RENAME TO comm_templates_old")
+
+        cursor.execute("""
+        CREATE TABLE comm_templates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            key TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+            days_before INTEGER DEFAULT NULL,
+            subject TEXT NOT NULL,
+            body TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','referral_reward')),
+            trigger_provider TEXT NOT NULL DEFAULT 'all' CHECK(trigger_provider IN ('all','plex','jellyfin')),
+            days_after INTEGER DEFAULT NULL
+        );
+        """)
+
+        cursor.execute("""
+        INSERT INTO comm_templates (
+            id, key, name, enabled, days_before, subject, body,
+            created_at, updated_at, trigger_event, trigger_provider, days_after
+        )
+        SELECT
+            id, key, name, enabled, days_before, subject, body,
+            created_at, updated_at, trigger_event, trigger_provider, days_after
+        FROM comm_templates_old
+        """)
+
+        cursor.execute("DROP TABLE comm_templates_old")
+        conn.commit()
+        print("✔ comm_templates.trigger_event constraint upgraded.")
 
     # -------------------------------------------------
     # Communications scheduled queue (NEW)
@@ -1281,6 +1451,8 @@ def run_migrations():
         "status": "disabled"
     })
 
+
+
     # Tâche cleanup_logs (suppression logs > 7 jours)
     #ensure_row(cursor, "tasks", "name = :name", {
     #    "name": "cleanup_logs",
@@ -1560,17 +1732,61 @@ def run_migrations():
             )
             VALUES(
                 ?, ?, 1,
-                'user_creation', 'all',
+                'referral_reward', 'all',
                 NULL, 0,
                 ?, ?,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             )
             """,
-            (key, "Default - User creation", subject, body),
+            (key, "Default - Referral reward", subject, body),
         )
         print("➕ Default comm_template inserted: user_creation_default (trigger=user_creation)")
 
     ensure_comm_user_creation_template()
+    conn.commit()
+
+    # -------------------------------------------------
+    # 3.3 Seed default COMM template: referral reward
+    # -------------------------------------------------
+    def ensure_comm_referral_reward_template():
+        key = "referral_reward_default"
+        cursor.execute("SELECT 1 FROM comm_templates WHERE key = ?", (key,))
+        if cursor.fetchone():
+            return
+
+        subject = "Referral reward granted"
+        body = (
+            "Hello {username},\n\n"
+            "Good news: you earned {referral_reward_days} bonus days thanks to {referred_username}.\n\n"
+            "Previous expiration date: {referrer_old_expiration_date}\n"
+            "New expiration date: {referrer_new_expiration_date}\n\n"
+            "Thank you for your referral.\n\n"
+            "Regards,\n"
+            "VODUM Team\n"
+        )
+
+        cursor.execute(
+            """
+            INSERT INTO comm_templates(
+                key, name, enabled,
+                trigger_event, trigger_provider,
+                days_before, days_after,
+                subject, body,
+                created_at, updated_at
+            )
+            VALUES(
+                ?, ?, 1,
+                'expiration', 'all',
+                NULL, NULL,
+                ?, ?,
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            )
+            """,
+            (key, "Default - Referral reward", subject, body),
+        )
+        print("➕ Default comm_template inserted: referral_reward_default")
+
+    ensure_comm_referral_reward_template()
     conn.commit()
 
     # -------------------------------------------------
@@ -1762,6 +1978,31 @@ def run_migrations():
         "status": "idle"
     })
 
+    # Auto-réparation :
+    # si la tâche existe déjà mais est restée désactivée sur une ancienne base,
+    # on la remet ON uniquement si elle n'a encore jamais tourné.
+    cursor.execute(
+        """
+        UPDATE tasks
+        SET
+            enabled = 1,
+            status = 'idle',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE name = 'refresh_dashboard_quote_cache'
+          AND COALESCE(enabled, 0) = 0
+          AND last_run IS NULL
+        """
+    )
+
+    # Tâche referral rewards
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "process_referral_rewards",
+        "description": "task_description.process_referral_rewards",
+        "schedule": "15 2 * * *",
+        "enabled": 1,
+        "status": "idle",
+    })
+    conn.commit()
 
     # -------------------------------------------------
     # Paramètres de base (settings)

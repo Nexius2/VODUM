@@ -259,19 +259,19 @@
           {{ t("expiration") }}
           <input type="text" name="expiration_date"
                  value="{{ user.expiration_date or '' }}"
-				 placeholder="YYYY-MM-DD"
-				 autocomplete="off"
+                 placeholder="YYYY-MM-DD"
+                 autocomplete="off"
                  class="vodum-date mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
         </label>
 
         <label class="text-sm">
           {{ t("renewal_date") }}
-		<input type="text"
-			   name="renewal_date"
-			   value="{{ user.renewal_date or '' }}"
-			   placeholder="YYYY-MM-DD"
-			   autocomplete="off"
-			   class="vodum-date mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+          <input type="text"
+                 name="renewal_date"
+                 value="{{ user.renewal_date or '' }}"
+                 placeholder="YYYY-MM-DD"
+                 autocomplete="off"
+                 class="vodum-date mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
         </label>
 
         <label class="text-sm sm:col-span-2">
@@ -305,6 +305,115 @@
         </label>
 
       </div>
+
+      <div class="mt-6 pt-6 border-t border-slate-800">
+        <div class="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <div class="text-sm font-semibold text-slate-200">
+              {{ t("users_tab_referrals") }}
+            </div>
+            <div class="text-xs text-slate-500 mt-1">
+              {{ t("user_referral_section_help") }}
+            </div>
+          </div>
+        </div>
+
+        <input type="hidden" name="referrer_user_id" id="referrer_user_id" value="{{ referral.referrer_user_id if referral else (user.referrer_user_id or '') }}">
+
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+            <div class="text-xs text-slate-400 mb-2">{{ t("referrer") }}</div>
+
+            <div class="flex items-center gap-2">
+              <div id="referrer_display"
+                   class="flex-1 min-h-[44px] bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm flex items-center">
+                {% if referral and referral.referrer_username %}
+                  {{ referral.referrer_username }}{% if referral.referrer_email %} — {{ referral.referrer_email }}{% endif %}
+                {% elif referrer_fallback %}
+                  {{ referrer_fallback.username }}{% if referrer_fallback.email %} — {{ referrer_fallback.email }}{% endif %}
+                {% else %}
+                  <span class="text-slate-500">{{ t("no_referrer") }}</span>
+                {% endif %}
+              </div>
+
+              <button type="button"
+                      id="btn_open_referrer_modal"
+                      class="min-w-[170px] px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm">
+                {{ t("choose_referrer") }}
+              </button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 mt-4">
+              <div>
+                <div class="text-xs text-slate-400 mb-1">{{ t("referral_status") }}</div>
+                <div class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm">
+                  {% if referral %}
+                    {{ t('referral_' ~ referral.status) if t('referral_' ~ referral.status) != ('referral_' ~ referral.status) else referral.status }}
+                  {% else %}
+                    <span class="text-slate-500">{{ t("not_available") }}</span>
+                  {% endif %}
+                </div>
+              </div>
+
+              <div>
+                <div class="text-xs text-slate-400 mb-1">{{ t("referral_qualification_due_at") }}</div>
+                <div class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm">
+                  {{ referral.qualification_due_at[:10] if referral and referral.qualification_due_at else t("not_available") }}
+                </div>
+              </div>
+
+              <div>
+                <div class="text-xs text-slate-400 mb-1">{{ t("referral_reward_days_label") }}</div>
+                <div class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm">
+                  {{ referral.reward_days_snapshot if referral and referral.reward_days_snapshot is not none else t("not_available") }}
+                </div>
+              </div>
+
+              <div>
+                <div class="text-xs text-slate-400 mb-1">{{ t("referrals_total") }}</div>
+                <div class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm">
+                  {{ referral_stats.total_referrals or 0 }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <div class="text-xs text-slate-400">{{ t("referred_users") }}</div>
+                <div class="text-[11px] text-slate-500 mt-1">{{ t("referred_users_help") }}</div>
+              </div>
+              <div class="text-xs text-slate-500">
+                {{ referred_users|length }}
+              </div>
+            </div>
+
+            {% if referred_users %}
+              <div class="space-y-2 max-h-56 overflow-y-auto pr-1">
+                {% for child in referred_users %}
+                  <a href="{{ url_for('user_detail', user_id=child.id) }}"
+                     class="flex items-center justify-between gap-3 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 hover:bg-slate-800">
+                    <div class="min-w-0">
+                      <div class="text-sm text-slate-100 truncate">{{ child.username }}</div>
+                      <div class="text-xs text-slate-400 truncate">{{ child.email or t("not_available") }}</div>
+                    </div>
+                    <div class="text-right shrink-0">
+                      <div class="text-xs text-slate-400">{{ t("status") }}</div>
+                      <div class="text-xs text-slate-200">{{ t(child.status) }}</div>
+                    </div>
+                  </a>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-4 text-sm text-slate-500">
+                {{ t("no_referred_users") }}
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
     </div>
 
   </div>
@@ -360,5 +469,113 @@
   </div>
 
 </div>
+
+  <div id="modal_referrer_picker" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/60"></div>
+
+    <div class="relative max-w-3xl mx-auto mt-16 bg-slate-950 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800">
+        <div>
+          <div class="text-lg font-semibold">{{ t("choose_referrer") }}</div>
+          <div class="text-sm text-slate-400">{{ t("search_user") }}</div>
+        </div>
+        <button type="button" id="btn_close_referrer_modal" class="text-slate-300 hover:text-white">✕</button>
+      </div>
+
+      <div class="p-6 space-y-4">
+        <input type="text"
+               id="referrer_search_input"
+               class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm"
+               placeholder="{{ t('search_user') }}">
+
+        <div id="referrer_candidates"
+             class="max-h-[50vh] overflow-y-auto border border-slate-800 rounded-2xl divide-y divide-slate-800 bg-slate-900"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function(){
+    const modal = document.getElementById('modal_referrer_picker');
+    const openBtn = document.getElementById('btn_open_referrer_modal');
+    const closeBtn = document.getElementById('btn_close_referrer_modal');
+    const clearBtn = null;
+    const input = document.getElementById('referrer_search_input');
+    const list = document.getElementById('referrer_candidates');
+    const hidden = document.getElementById('referrer_user_id');
+    const display = document.getElementById('referrer_display');
+
+    if (!modal || !openBtn || !closeBtn || !input || !list || !hidden || !display) return;
+
+    async function loadCandidates(q='') {
+      const r = await fetch(`/api/users/referrer-candidates?q=${encodeURIComponent(q)}`, {
+        headers: {'Accept':'application/json'}
+      });
+      const rows = await r.json();
+
+      const noneRow = `
+        <button type="button"
+                class="w-full text-left px-4 py-3 hover:bg-slate-800 border-b border-slate-800"
+                data-id=""
+                data-username="{{ t('no_referrer') }}"
+                data-email="">
+          <div class="text-sm font-medium text-slate-100">{{ t("no_referrer") }}</div>
+          <div class="text-xs text-slate-500 mt-1">{{ t("referrer_none_help") }}</div>
+        </button>
+      `;
+
+      if (!rows.length) {
+        list.innerHTML = noneRow + `<div class="px-4 py-3 text-sm text-slate-400">{{ t("no_user_found") }}</div>`;
+        return;
+      }
+
+      list.innerHTML = noneRow + rows.map(u => `
+        <button type="button"
+                class="w-full text-left px-4 py-3 hover:bg-slate-800"
+                data-id="${u.id}"
+                data-username="${(u.username || '').replace(/"/g, '&quot;')}"
+                data-email="${(u.email || '').replace(/"/g, '&quot;')}">
+          <div class="text-sm font-medium text-slate-100">${u.username || '—'}</div>
+          <div class="text-xs text-slate-400">${u.email || ''}</div>
+          <div class="text-xs text-slate-500 mt-1">{{ t("referrals_total") }}: ${u.referrals_count || 0}</div>
+        </button>
+      `).join('');
+    }
+
+    function openModal() {
+      modal.classList.remove('hidden');
+      input.value = '';
+      loadCandidates('');
+      setTimeout(() => input.focus(), 30);
+    }
+
+    function closeModal() {
+      modal.classList.add('hidden');
+    }
+
+    openBtn.addEventListener('click', openModal);
+    closeBtn.addEventListener('click', closeModal);
+    modal.querySelector('.absolute.inset-0')?.addEventListener('click', closeModal);
+
+    input.addEventListener('input', () => loadCandidates(input.value.trim()));
+
+    list.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-id]');
+      if (!btn) return;
+
+      if (!btn.dataset.id) {
+        hidden.value = '';
+        display.innerHTML = `<span class="text-slate-500">{{ t("no_referrer") }}</span>`;
+        closeModal();
+        return;
+      }
+
+      hidden.value = btn.dataset.id || '';
+      display.textContent = `${btn.dataset.username || ''}${btn.dataset.email ? ' — ' + btn.dataset.email : ''}`;
+      closeModal();
+    });
+  })();
+  </script>
+
 </form>
 

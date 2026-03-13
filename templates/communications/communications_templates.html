@@ -60,6 +60,7 @@
 			<select name="trigger_event" id="trigger_event" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
 			  <option value="expiration" {% if ev == 'expiration' %}selected{% endif %}>{{ t('comm_trigger_expiration') }}</option>
 			  <option value="user_creation" {% if ev == 'user_creation' %}selected{% endif %}>{{ t('comm_trigger_user_creation') }}</option>
+			  <option value="referral_reward" {% if ev == 'referral_reward' %}selected{% endif %}>{{ t('comm_trigger_referral_reward') }}</option>
 			</select>
 		  </div>
 
@@ -194,6 +195,8 @@
 			<td class="px-4 py-2">
 			  {% if tpl.trigger_event == 'user_creation' %}
 				{{ t('comm_trigger_user_creation') }}
+			  {% elif tpl.trigger_event == 'referral_reward' %}
+				{{ t('comm_trigger_referral_reward') }}
 			  {% else %}
 				{{ t('comm_trigger_expiration') }}
 			  {% endif %}
@@ -283,18 +286,30 @@ function refreshDelayUI() {
     blockExpiration && blockExpiration.classList.add('hidden');
     blockUserCreation && blockUserCreation.classList.remove('hidden');
 
-    // Prevent hidden expiration fields from being submitted
     setBlockDisabled(blockExpiration, true);
     setBlockDisabled(blockUserCreation, false);
-  } else {
-    blockUserCreation && blockUserCreation.classList.add('hidden');
-    blockExpiration && blockExpiration.classList.remove('hidden');
-
-    setBlockDisabled(blockUserCreation, true);
-    setBlockDisabled(blockExpiration, false);
-
-    syncHiddenDelayValues();
+    return;
   }
+
+  if (ev === 'referral_reward') {
+    blockExpiration && blockExpiration.classList.add('hidden');
+    blockUserCreation && blockUserCreation.classList.add('hidden');
+
+    setBlockDisabled(blockExpiration, true);
+    setBlockDisabled(blockUserCreation, true);
+
+    if (hiddenBefore) hiddenBefore.value = '';
+    if (hiddenAfter) hiddenAfter.value = '0';
+    return;
+  }
+
+  blockUserCreation && blockUserCreation.classList.add('hidden');
+  blockExpiration && blockExpiration.classList.remove('hidden');
+
+  setBlockDisabled(blockUserCreation, true);
+  setBlockDisabled(blockExpiration, false);
+
+  syncHiddenDelayValues();
 }
 
 triggerSel && triggerSel.addEventListener('change', refreshDelayUI);

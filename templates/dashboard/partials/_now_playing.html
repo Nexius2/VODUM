@@ -4,13 +4,15 @@
 
 <div class="flex items-center justify-between mb-3">
     <div class="flex items-center gap-3 min-w-0">
-        <h2 class="text-sm font-semibold truncate">
-            {% if live > 0 %}
-                Now Playing
-            {% else %}
-                Sentence of the day
-            {% endif %}
-        </h2>
+		<h2 class="text-sm font-semibold truncate">
+			{% if live > 0 %}
+				Now Playing
+			{% elif idle_card %}
+				Sentence of the day
+			{% else %}
+				Now Playing
+			{% endif %}
+		</h2>
 
         <a href="{{ url_for('monitoring_page', tab='now_playing') }}"
            class="text-[11px] text-slate-500 hover:text-primary transition-colors font-medium">

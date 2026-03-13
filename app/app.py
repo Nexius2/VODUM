@@ -126,8 +126,8 @@ def startup_admin_recover_if_requested(app: Flask):
         )
         try:
             cur.close()
-        except Exception:
-            pass
+        except Exception as e:
+            app.logger.warning(f"Unable to close startup recovery cursor: {e}", exc_info=True)
 
         os.remove(RESET_FILE)
 
@@ -171,13 +171,17 @@ APP_VERSION = load_version()
 
 def _reset_maintenance_on_startup(app: Flask):
     """
-    If the app was left in maintenance mode after a restore,
-    reset it automatically on container restart.
+    Si l'app a été laissée en maintenance après une restauration DB,
+    on remet un état propre au démarrage.
 
-    Restore the previous enabled state of tasks using enabled_prev.
+    - maintenance_mode -> 0
+    - enabled <- enabled_prev si présent
+    - status recalculé proprement
+    - enabled_prev vidé
     """
     try:
         db = DBManager(app.config["DATABASE"])
+
         settings = db.query_one("SELECT maintenance_mode FROM settings WHERE id = 1")
         if not settings:
             return
@@ -203,8 +207,9 @@ def _reset_maintenance_on_startup(app: Flask):
                             WHEN enabled_prev IS NULL THEN enabled
                             ELSE enabled_prev
                         END
-                    ) = 1 THEN 'idle'
-                    ELSE 'disabled'
+                    ) = 0 THEN 'disabled'
+                    WHEN COALESCE(queued_count, 0) > 0 THEN 'queued'
+                    ELSE 'idle'
                 END,
                 enabled_prev = NULL,
                 updated_at = CURRENT_TIMESTAMP
@@ -212,7 +217,7 @@ def _reset_maintenance_on_startup(app: Flask):
         )
 
         get_logger("boot").warning(
-            "Startup restore recovery: maintenance cleared and task states restored"
+            "Startup restore recovery: maintenance cleared and task states restored from enabled_prev"
         )
 
     except Exception:

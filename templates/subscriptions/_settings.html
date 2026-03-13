@@ -1,0 +1,141 @@
+<form method="post" action="{{ url_for('subscriptions', tab='settings') }}" class="space-y-6">
+  <input type="hidden" name="tab" value="settings">
+
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
+
+    <div class="bg-slate-900 p-6 rounded-xl border border-slate-800">
+      <h2 class="text-lg font-semibold text-slate-200 mb-1">
+        {{ t("default_subscription_settings") }}
+      </h2>
+      <p class="text-sm text-slate-400 mb-6">
+        {{ t("settings_section_subscription_desc") }}
+      </p>
+
+      <div class="space-y-6">
+
+        <div>
+          <label class="block text-sm mb-1 text-slate-300">
+            {{ t("default_subscription_duration_days") }}
+          </label>
+          <input
+            type="number"
+            min="1"
+            name="default_expiration_days"
+            value="{{ settings.default_subscription_days }}"
+            class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm"
+          >
+        </div>
+
+        <div>
+          <label class="block text-sm mb-1 text-slate-300">
+            {{ t("delete_user_after_expiry") }}
+          </label>
+          <input
+            type="number"
+            min="1"
+            name="delete_after_expiry_days"
+            value="{{ settings.delete_after_expiry_days }}"
+            class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm"
+          >
+          <p class="text-xs text-slate-500 mt-1">
+            {{ t("delete_after_expiry_days_help") }}
+          </p>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="bg-slate-900 p-6 rounded-xl border border-slate-800">
+      <h2 class="text-lg font-semibold text-slate-200 mb-1">
+        {{ t("subscription_expiration_behavior") }}
+      </h2>
+      <p class="text-sm text-slate-400 mb-6">
+        {{ t("subscriptions_settings_expiry_desc") }}
+      </p>
+
+      {% set _mode = settings.expiry_mode or "none" %}
+
+      <div class="space-y-4">
+
+        <label class="flex items-start gap-3 p-4 rounded-xl border border-slate-800 bg-slate-950/40">
+          <input
+            type="radio"
+            name="expiry_mode"
+            value="none"
+            {% if _mode == "none" %}checked{% endif %}
+            class="mt-1 w-4 h-4 rounded-full border-slate-600 bg-slate-800"
+          >
+          <span>
+            <span class="block text-sm text-slate-200 font-semibold">
+              {{ t("subscription_expiry_mode_none_title") }}
+            </span>
+            <span class="block text-xs text-slate-400 mt-1">
+              {{ t("subscription_expiry_mode_none_help") }}
+            </span>
+          </span>
+        </label>
+
+        <label class="flex items-start gap-3 p-4 rounded-xl border border-slate-800 bg-slate-950/40">
+          <input
+            type="radio"
+            name="expiry_mode"
+            value="disable"
+            {% if _mode == "disable" %}checked{% endif %}
+            class="mt-1 w-4 h-4 rounded-full border-slate-600 bg-slate-800"
+          >
+          <span>
+            <span class="block text-sm text-slate-200 font-semibold">
+              {{ t("subscription_expiry_mode_disable_title") }}
+            </span>
+            <span class="block text-xs text-slate-400 mt-1">
+              {{ t("subscription_expiry_mode_disable_help") }}
+            </span>
+          </span>
+        </label>
+
+        <label class="flex items-start gap-3 p-4 rounded-xl border border-slate-800 bg-slate-950/40">
+          <input
+            type="radio"
+            name="expiry_mode"
+            value="warn_then_disable"
+            {% if _mode == "warn_then_disable" %}checked{% endif %}
+            class="mt-1 w-4 h-4 rounded-full border-slate-600 bg-slate-800"
+          >
+          <span class="w-full">
+            <span class="block text-sm text-slate-200 font-semibold">
+              {{ t("subscription_expiry_mode_warn_title") }}
+            </span>
+            <span class="block text-xs text-slate-400 mt-1">
+              {{ t("subscription_expiry_mode_warn_help") }}
+            </span>
+
+            <div class="mt-4">
+              <label class="block text-xs text-slate-400 mb-1">
+                {{ t("warn_then_disable_days_label") }}
+              </label>
+              <input
+                type="number"
+                min="1"
+                name="warn_then_disable_days"
+                value="{{ settings.warn_then_disable_days or 7 }}"
+                class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm"
+              >
+              <p class="text-xs text-slate-500 mt-1">
+                {{ t("warn_then_disable_days_help") }}
+              </p>
+            </div>
+          </span>
+        </label>
+
+      </div>
+    </div>
+
+  </div>
+
+  <div class="flex justify-end">
+    <button type="submit"
+            class="px-4 py-2 bg-primary hover:bg-primary-dark rounded text-white text-sm">
+      {{ t("save") }}
+    </button>
+  </div>
+</form>

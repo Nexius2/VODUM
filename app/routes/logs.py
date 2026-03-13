@@ -111,7 +111,7 @@ def register(app):
                     "source": source_part,
                     "message": message_part,
                 })
-            except:
+            except Exception:
                 parsed_logs.append({
                     "created_at": "",
                     "level": "INFO",

@@ -177,5 +177,31 @@ Verify compatibility with:
 
 # Future Ideas
 
+# Recent Improvements & Fixes
+
+## Core Stability Improvements
+
+Several internal fixes were implemented to improve the reliability and maintainability of VODUM.
+
+- Improved **database manager (`DBManager`)** to avoid potential issues with SQLite connection reuse and to make the database access layer more robust.
+- Clarified how Flask requests access the database by cleaning up the **DB helper layer**.
+- Improved the **database restore recovery logic** to ensure tasks and maintenance mode return to a consistent state after a restoration.
+- Enhanced the **i18n language system** so the interface automatically detects the user's browser language when no language is stored in session.
+- Replaced several silent `except:` / `pass` blocks with proper logging to improve debugging without breaking runtime stability.
+
+These changes do not alter user-facing features but make the system **more predictable and easier to debug**.
+
+
+## Feature & UI Improvements
+
+- [X] Add **referral system** (user sponsorship / invitation support)
+
+- [X] In **Create User**, add the ability to **select a subscription**
+
+- [X] On the **dashboard**, display **Sentence of the Day** only when a quote is available and **no media is currently playing**
+
+- [X] Fix issue where the **Easter Egg quote** sometimes failed to load when no media was playing (task had been unintentionally disabled)
+
+- [X] In **Create User**, reorganize the form to place **Subscription selection after First Name and Last Name** for better UX
 
 
