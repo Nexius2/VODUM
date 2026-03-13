@@ -1732,13 +1732,13 @@ def run_migrations():
             )
             VALUES(
                 ?, ?, 1,
-                'referral_reward', 'all',
+                'user_creation', 'all',
                 NULL, 0,
                 ?, ?,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             )
             """,
-            (key, "Default - Referral reward", subject, body),
+            (key, "Default - User creation", subject, body),
         )
         print("➕ Default comm_template inserted: user_creation_default (trigger=user_creation)")
 
@@ -1776,8 +1776,8 @@ def run_migrations():
             )
             VALUES(
                 ?, ?, 1,
-                'expiration', 'all',
-                NULL, NULL,
+                'referral_reward', 'all',
+                NULL, 0,
                 ?, ?,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             )
