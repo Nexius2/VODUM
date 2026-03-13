@@ -1,6 +1,6 @@
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from email.message import EmailMessage
 from typing import Any, Dict, List, Optional
 
@@ -159,6 +159,100 @@ def _valid_email(email: str) -> bool:
         return False
     return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email))
 
+def _parse_json_list(raw: str) -> list:
+    try:
+        data = json.loads(raw or "[]")
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _delete_locked_subscription_policies(db: DBManager, vodum_user_id: int) -> None:
+    rows = db.query(
+        "SELECT id, rule_value_json FROM stream_policies WHERE scope_type='user' AND scope_id=?",
+        (vodum_user_id,),
+    ) or []
+
+    for r in rows:
+        try:
+            rule_json = json.loads(r["rule_value_json"] or "{}")
+        except Exception:
+            rule_json = {}
+
+        if rule_json.get("locked") and rule_json.get("subscription_name"):
+            db.execute("DELETE FROM stream_policies WHERE id=?", (int(r["id"]),))
+
+
+def _apply_subscription_template_snapshot(db: DBManager, vodum_user_id: int, template_id: int) -> str:
+    tpl = db.query_one(
+        "SELECT id, name, policies_json FROM subscription_templates WHERE id=?",
+        (template_id,),
+    )
+    if not tpl:
+        raise ValueError("Subscription template not found")
+
+    tpl = dict(tpl)
+    template_name = tpl.get("name") or ""
+    policies = _parse_json_list(tpl.get("policies_json") or "[]")
+
+    _delete_locked_subscription_policies(db, vodum_user_id)
+
+    any_enabled = False
+
+    for p in policies:
+        if not isinstance(p, dict):
+            continue
+
+        rule_type = (p.get("rule_type") or "").strip()
+        if not rule_type:
+            continue
+
+        rule = p.get("rule") if isinstance(p.get("rule"), dict) else {}
+        rule = dict(rule)
+        rule["locked"] = True
+        rule["subscription_name"] = template_name
+
+        provider = (p.get("provider") or "").strip() or None
+        server_id = int(p["server_id"]) if str(p.get("server_id", "")).isdigit() else None
+        is_enabled = 1 if str(p.get("is_enabled", "1")) == "1" else 0
+        priority = int(p.get("priority") or 100)
+
+        if is_enabled == 1:
+            any_enabled = True
+
+        db.execute(
+            """
+            INSERT INTO stream_policies(scope_type, scope_id, provider, server_id, is_enabled, priority, rule_type, rule_value_json)
+            VALUES ('user', ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                vodum_user_id,
+                provider,
+                server_id,
+                is_enabled,
+                priority,
+                rule_type,
+                json.dumps(rule),
+            ),
+        )
+
+    db.execute(
+        "UPDATE vodum_users SET subscription_template_id=? WHERE id=?",
+        (template_id, vodum_user_id),
+    )
+
+    if any_enabled:
+        db.execute(
+            """
+            UPDATE tasks
+            SET enabled = 1,
+                status = CASE WHEN status = 'disabled' THEN 'idle' ELSE status END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE name = 'stream_enforcer'
+            """
+        )
+
+    return template_name
 
 @users_bp.get("/api/servers")
 def api_servers():
@@ -242,6 +336,38 @@ def api_server_libraries(server_id: int):
     )
     return jsonify([dict(r) for r in rows])
 
+@users_bp.get("/api/users/referrer-candidates")
+def api_referrer_candidates():
+    db = get_db()
+    q = (request.args.get("q") or "").strip()
+    like = f"%{q}%"
+
+    rows = db.query(
+        """
+        SELECT
+            u.id,
+            u.username,
+            u.email,
+            u.expiration_date,
+            COUNT(r.id) AS referrals_count
+        FROM vodum_users u
+        LEFT JOIN user_referrals r ON r.referrer_user_id = u.id
+        WHERE u.status = 'active'
+          AND (
+                ? = ''
+                OR COALESCE(u.username,'') LIKE ?
+                OR COALESCE(u.email,'') LIKE ?
+                OR COALESCE(u.firstname,'') LIKE ?
+                OR COALESCE(u.lastname,'') LIKE ?
+              )
+        GROUP BY u.id
+        ORDER BY u.username ASC
+        LIMIT 50
+        """,
+        (q, like, like, like, like),
+    ) or []
+
+    return jsonify([dict(r) for r in rows])
 
 @users_bp.post("/api/users/create")
 def api_users_create():
@@ -265,6 +391,53 @@ def api_users_create():
     renewal_method = (payload.get("renewal_method") or payload.get("renewalMethod") or "").strip() or None
 
     notes = (payload.get("notes") or "").strip()
+
+    # Fallback: if expiration date is empty, use today + default_subscription_days
+    settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+    settings = dict(settings) if settings else {}
+
+    if not expiration_date:
+        try:
+            default_days = int(settings.get("default_subscription_days") or 90)
+        except Exception:
+            default_days = 90
+
+        if default_days < 1:
+            default_days = 90
+
+        expiration_date = (datetime.utcnow().date() + timedelta(days=default_days)).isoformat()
+
+    referrer_user_id_raw = payload.get("referrer_user_id")
+    referrer_user_id = None
+    if referrer_user_id_raw not in (None, "", "null", "none"):
+        if not str(referrer_user_id_raw).isdigit():
+            return jsonify({"ok": False, "error": "Invalid referrer_user_id"}), 400
+        referrer_user_id = int(referrer_user_id_raw)
+
+        referrer = db.query_one(
+            "SELECT id, username, status FROM vodum_users WHERE id = ?",
+            (referrer_user_id,),
+        )
+        if not referrer:
+            return jsonify({"ok": False, "error": "Referrer not found"}), 400
+
+        if (referrer["status"] or "").lower() != "active":
+            return jsonify({"ok": False, "error": "Referrer must be active"}), 400
+
+    subscription_template_id_raw = payload.get("subscription_template_id")
+    subscription_template_id = None
+    if subscription_template_id_raw not in (None, "", "null", "none"):
+        if not str(subscription_template_id_raw).isdigit():
+            return jsonify({"ok": False, "error": "Invalid subscription_template_id"}), 400
+
+        subscription_template_id = int(subscription_template_id_raw)
+
+        tpl = db.query_one(
+            "SELECT id FROM subscription_templates WHERE id = ?",
+            (subscription_template_id,),
+        )
+        if not tpl:
+            return jsonify({"ok": False, "error": "Subscription template not found"}), 400
 
     server_blocks = payload.get("servers") or []
     if not isinstance(server_blocks, list) or not server_blocks:
@@ -321,35 +494,110 @@ def api_users_create():
         initial_status = "invited"
 
     # --- INSERT: include renewal_method + renewal_date ---
-    cur = db.execute(
-        """
-        INSERT INTO vodum_users(
-            username, firstname, lastname,
-            email, second_email,
-            expiration_date,
-            renewal_method, renewal_date,
-            notes, status
+    try:
+        cur = db.execute(
+            """
+            INSERT INTO vodum_users(
+                username, firstname, lastname,
+                email, second_email,
+                expiration_date,
+                renewal_method, renewal_date,
+                notes, status,
+                referrer_user_id
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                vodum_username,
+                firstname,
+                lastname,
+                email or None,
+                second_email or None,
+                expiration_date,
+                renewal_method,
+                renewal_date,
+                notes,
+                initial_status,
+                referrer_user_id,
+            ),
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            vodum_username,
-            firstname,
-            lastname,
-            email or None,
-            second_email or None,
-            expiration_date,
-            renewal_method,
-            renewal_date,
-            notes,
-            initial_status,
-        ),
-    )
+    except Exception as e:
+        log.error(f"Create Vodum user failed: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": f"Failed to create Vodum user: {e}"}), 500
     vodum_user_id = cur.lastrowid
     try:
         cur.close()
     except Exception:
         pass
+
+    if referrer_user_id is not None:
+        referral_settings = db.query_one("SELECT * FROM user_referral_settings WHERE id = 1")
+        referral_settings = dict(referral_settings) if referral_settings else {}
+
+        qualification_days = int(referral_settings.get("qualification_days") or 60)
+        reward_days = int(referral_settings.get("reward_days") or 60)
+
+        db.execute(
+            """
+            INSERT INTO user_referrals(
+                referrer_user_id,
+                referred_user_id,
+                status,
+                referral_source,
+                start_at,
+                qualification_due_at,
+                qualification_days_snapshot,
+                reward_days_snapshot,
+                created_at,
+                updated_at
+            )
+            VALUES(
+                ?, ?, 'pending', 'manual',
+                CURRENT_TIMESTAMP,
+                datetime('now', ?),
+                ?, ?,
+                CURRENT_TIMESTAMP,
+                CURRENT_TIMESTAMP
+            )
+            """,
+            (
+                referrer_user_id,
+                int(vodum_user_id),
+                f"+{qualification_days} days",
+                qualification_days,
+                reward_days,
+            ),
+        )
+
+        referral_row = db.query_one(
+            "SELECT id FROM user_referrals WHERE referred_user_id = ?",
+            (int(vodum_user_id),),
+        )
+        if referral_row:
+            db.execute(
+                """
+                INSERT INTO user_referral_events(
+                    referral_id, event_type, actor,
+                    old_referrer_user_id, new_referrer_user_id, details_json
+                )
+                VALUES (?, 'created', 'ui', NULL, ?, ?)
+                """,
+                (
+                    int(referral_row["id"]),
+                    referrer_user_id,
+                    json.dumps({
+                        "source": "create_user",
+                        "referred_user_id": int(vodum_user_id),
+                    }, ensure_ascii=False),
+                ),
+            )
+
+    if subscription_template_id is not None:
+        try:
+            _apply_subscription_template_snapshot(db, int(vodum_user_id), subscription_template_id)
+        except Exception as e:
+            log.error(f"Apply subscription template failed for vodum_user_id={vodum_user_id}: {e}", exc_info=True)
+            return jsonify({"ok": False, "error": f"Failed to apply subscription template: {e}"}), 500
 
     created_accounts: List[Dict[str, Any]] = []
     mailing_errors: List[str] = []

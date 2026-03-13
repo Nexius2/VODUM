@@ -14,9 +14,17 @@ from core.backup import BackupConfig
 
 
 # -----------------------------
-# DB helpers (request-scoped)
+# DB helpers
 # -----------------------------
 def get_db() -> DBManager:
+    """
+    Retourne l'instance DBManager associée à la DB de l'application.
+
+    Important :
+    - g.db sert seulement de cache par requête Flask
+    - la vraie durée de vie de la connexion est gérée par DBManager
+      (une instance par chemin de base)
+    """
     if "db" not in g:
         g.db = DBManager(current_app.config["DATABASE"])
     return g.db
@@ -26,13 +34,15 @@ def scheduler_db_provider(database_path: str | None = None) -> DBManager:
     """
     Provider DB hors-request.
     - Si database_path est fourni, il est utilisé.
-    - Sinon, on tente DATABASE_PATH env puis (en dernier recours) current_app.
+    - Sinon, on tente DATABASE_PATH env puis current_app.config["DATABASE"].
     """
     if database_path:
         return DBManager(database_path)
+
     env_path = os.environ.get("DATABASE_PATH")
     if env_path:
         return DBManager(env_path)
+
     return DBManager(current_app.config["DATABASE"])
 
 
@@ -42,6 +52,11 @@ def init_app_i18n(app):
 
 
 def close_db(_exception=None):
+    """
+    On retire simplement la référence request-local.
+    On ne ferme PAS la connexion ici, car DBManager gère une connexion partagée
+    par chemin de DB pour tout le process.
+    """
     g.pop("db", None)
 
 

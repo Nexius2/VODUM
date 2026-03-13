@@ -23,6 +23,11 @@
        class="pb-2 border-b-2 {{ 'border-primary text-primary' if tab=='gifts' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
       {{ t("subscriptions_tab_gifts") }}
     </a>
+
+    <a href="{{ url_for('subscriptions', tab='settings') }}"
+       class="pb-2 border-b-2 {{ 'border-primary text-primary' if tab=='settings' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
+      {{ t("subscriptions_tab_settings") }}
+    </a>
   </div>
 </div>
 
@@ -35,6 +40,9 @@
 
 {% elif tab == 'applications' %}
   {% include "subscriptions/_applications.html" %}
+
+{% elif tab == 'settings' %}
+  {% include "subscriptions/_settings.html" %}
 
 {% else %}
   <div id="page-alert" class="hidden mb-6"></div>

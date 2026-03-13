@@ -282,8 +282,11 @@ def _task_worker():
                 logger.error(f"[WORKER] Unhandled error while running task id={task_id}: {e}", exc_info=True)
                 try:
                     task_logs(task_id, "error", f"Unhandled worker error: {e}")
-                except Exception:
-                    pass
+                except Exception as log_exc:
+                    logger.warning(
+                        f"[WORKER] Unable to write task_logs for task id={task_id}: {log_exc}",
+                        exc_info=True,
+                    )
 
             # 4) Petite pause pour éviter de marteler la DB
             time.sleep(0.2)
@@ -364,8 +367,11 @@ def run_task(task_id: int):
                 "UPDATE tasks SET status='error', last_error=? WHERE id=?",
                 (str(e), task_id)
             )
-        except Exception:
-            pass
+        except Exception as db_exc:
+            logger.error(
+                f"Unable to persist import/load error for task {task_id}: {db_exc}",
+                exc_info=True,
+            )
 
         return  # STOP NET
         
@@ -408,9 +414,11 @@ def run_task(task_id: int):
             try:
                 logger.info(f"Task '{name}' returned: {result}")
                 task_logs(task_id, "info", f"Task '{name}' returned", details=result)
-            except Exception:
-                # ne jamais casser le worker juste pour un log
-                pass
+            except Exception as log_exc:
+                logger.warning(
+                    f"Unable to log task return payload for '{name}' (id={task_id}): {log_exc}",
+                    exc_info=True,
+                )
 
 
         duration = time.time() - start_time
@@ -499,11 +507,17 @@ def run_task(task_id: int):
                     itr = croniter(schedule, datetime.now())
                     next_exec = itr.get_next(datetime)
                     db.execute("UPDATE tasks SET next_run=? WHERE id=?", (next_exec, task_id))
-                except Exception:
-                    pass
-                
-        except Exception:
-            pass
+                except Exception as next_run_exc:
+                    logger.warning(
+                        f"Unable to update next_run after error for task '{name}' (id={task_id}): {next_run_exc}",
+                        exc_info=True,
+                    )
+
+        except Exception as persist_exc:
+            logger.error(
+                f"Unable to persist error state for task '{name}' (id={task_id}): {persist_exc}",
+                exc_info=True,
+            )
 
 
 
@@ -980,9 +994,15 @@ def scheduler_loop():
                     logger.info(f"First forced execution (one-shot): {name}")
                     try:
                         next_future = croniter(schedule, now).get_next(datetime)
-                        db.execute("UPDATE tasks SET next_run=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (next_future, task_id))
-                    except Exception:
-                        pass
+                        db.execute(
+                            "UPDATE tasks SET next_run=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                            (next_future, task_id),
+                        )
+                    except Exception as bootstrap_next_exc:
+                        logger.warning(
+                            f"Unable to set bootstrap next_run for '{name}' (id={task_id}): {bootstrap_next_exc}",
+                            exc_info=True,
+                        )
 
                     enqueue_task(task_id)
 
@@ -992,8 +1012,11 @@ def scheduler_loop():
                             "UPDATE tasks SET last_run=datetime('now'), updated_at=CURRENT_TIMESTAMP WHERE id=? AND last_run IS NULL",
                             (task_id,),
                         )
-                    except Exception:
-                        pass
+                    except Exception as bootstrap_last_run_exc:
+                        logger.warning(
+                            f"Unable to mark bootstrap last_run for '{name}' (id={task_id}): {bootstrap_last_run_exc}",
+                            exc_info=True,
+                        )
 
                     continue
 

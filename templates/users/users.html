@@ -5,10 +5,12 @@
 {% block header_title %}{{ t("users") }}{% endblock %}
 {% block header_subtitle %}{{ t("users_subtitle") }}{% endblock %}
 {% block header_actions %}
+  {% if tab == "users" %}
   <button id="btn_create_user" type="button"
           class="text-sm px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white">
     + Create user
   </button>
+  {% endif %}
 {% endblock %}
 
 
@@ -45,7 +47,26 @@
         color: rgb(52 211 153);
     }
 </style>
+<div class="mb-6 text-base">
+  <div class="flex flex-wrap items-center gap-6 border-b border-slate-800">
 
+    <a href="{{ url_for('users_list', tab='users') }}"
+       class="pb-2 border-b-2 {{ 'border-primary text-primary' if tab=='users' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
+      {{ t("users_tab_users") }}
+    </a>
+
+    <a href="{{ url_for('users_list', tab='referrals') }}"
+       class="pb-2 border-b-2 {{ 'border-primary text-primary' if tab=='referrals' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
+      {{ t("users_tab_referrals") }}
+    </a>
+
+    <a href="{{ url_for('users_list', tab='referral_settings') }}"
+       class="pb-2 border-b-2 {{ 'border-primary text-primary' if tab=='referral_settings' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
+      {{ t("users_tab_referral_settings") }}
+    </a>
+
+  </div>
+</div>
 
 {% set next_order = 'desc' if order == 'asc' else 'asc' %}
 
@@ -60,6 +81,7 @@
   ) }}
 {%- endmacro %}
 
+{% if tab == "users" %}
 <!-- Filtres -->
 <form method="get" id="users_filter_form" class="flex flex-wrap items-center gap-3 mb-6">
 
@@ -271,27 +293,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const searchInput = form.querySelector('input[name="q"]');
     const statusCheckboxes = form.querySelectorAll('input[name="status"]');
-
-    const STORAGE_KEY = "vodum_users_filters_v1";
     let timer = null;
 
-    function saveFilters() {
-        try {
-            const statuses = Array.from(statusCheckboxes)
-                .filter(cb => cb.checked)
-                .map(cb => cb.value);
-
-            const q = searchInput ? (searchInput.value || "") : "";
-
-            localStorage.setItem(STORAGE_KEY, JSON.stringify({ statuses, q }));
-        } catch (e) {
-            console.warn("saveFilters failed", e);
-        }
-    }
-
     function submitForm() {
-        saveFilters();
-
         const pageInput = form.querySelector('input[name="page"]');
         if (pageInput) {
             pageInput.value = "1";
@@ -307,51 +311,10 @@ document.addEventListener("DOMContentLoaded", () => {
         else form.submit();
     }
 
-    (function restoreFilters() {
-        const url = new URL(window.location.href);
-
-        // IMPORTANT :
-        // si l'URL contient déjà page, status ou q, on ne restaure rien automatiquement
-        // sinon on casse la pagination / navigation.
-        if (
-            url.searchParams.has("page") ||
-            url.searchParams.has("status") ||
-            url.searchParams.has("q")
-        ) {
-            return;
-        }
-
-        try {
-            const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-
-            if (Array.isArray(saved.statuses) && saved.statuses.length > 0) {
-                statusCheckboxes.forEach(cb => {
-                    cb.checked = saved.statuses.includes(cb.value);
-                });
-            } else {
-                statusCheckboxes.forEach(cb => cb.checked = true);
-            }
-
-            if (searchInput && typeof saved.q === "string") {
-                searchInput.value = saved.q;
-            }
-
-            const hasSomething =
-                (Array.isArray(saved.statuses) && saved.statuses.length > 0) ||
-                (typeof saved.q === "string" && saved.q.trim() !== "");
-
-            if (hasSomething) {
-                submitForm();
-            }
-        } catch (e) {
-            console.warn("restoreFilters failed", e);
-        }
-    })();
-
     if (searchInput) {
         searchInput.addEventListener("input", () => {
             clearTimeout(timer);
-            timer = setTimeout(submitForm, 800);
+            timer = setTimeout(submitForm, 500);
         });
 
         searchInput.addEventListener("keydown", (e) => {
@@ -372,6 +335,268 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 </script>
 
+{% elif tab == "referrals" %}
+
+<form method="get" class="flex flex-wrap items-center gap-3 mb-6">
+  <input type="hidden" name="tab" value="referrals">
+
+  <input type="text"
+         name="q"
+         placeholder="{{ t('search') }}…"
+         value="{{ search }}"
+         class="bg-slate-900 border border-slate-800 rounded-lg text-sm px-3 py-2 w-56">
+
+  <details class="relative">
+    <summary class="list-none cursor-pointer bg-slate-900 border border-slate-800 rounded-lg text-sm px-3 py-2 flex items-center gap-2">
+      <span>{{ t("status") }}</span>
+      <span class="text-xs text-slate-400">
+        ({{ (selected_statuses|length) if selected_statuses else "all" }})
+      </span>
+      <svg class="w-4 h-4 opacity-70" viewBox="0 0 24 24">
+        <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
+      </svg>
+    </summary>
+
+    <div class="absolute z-20 mt-2 w-64 bg-slate-950 border border-slate-800 rounded-xl p-3 shadow-xl">
+      {% set all_referral_statuses = ['pending','qualified','rewarded','cancelled'] %}
+
+      <div class="flex items-center justify-between mb-2">
+        <button type="button"
+                class="text-xs text-slate-300 hover:text-white underline"
+                onclick="this.closest('details').querySelectorAll('input[name=status]').forEach(i => i.checked = true);">
+          Select all
+        </button>
+
+        <button type="button"
+                class="text-xs text-slate-300 hover:text-white underline"
+                onclick="this.closest('details').querySelectorAll('input[name=status]').forEach(i => i.checked = false);">
+          Select none
+        </button>
+      </div>
+
+      <div class="space-y-2 max-h-56 overflow-y-auto pr-1">
+        {% for s in all_referral_statuses %}
+          <label class="flex items-center justify-between gap-2 text-sm">
+            <span class="text-slate-200">{{ t('referral_' ~ s) }}</span>
+            <input type="checkbox" name="status" value="{{ s }}"
+                   {% if (not selected_statuses) or (s in selected_statuses) %}checked{% endif %}>
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+  </details>
+</form>
+
+<div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+    <div class="text-xs text-slate-400">{{ t("referrals_total") }}</div>
+    <div class="text-2xl font-semibold mt-1">{{ referral_stats.total_referrals or 0 }}</div>
+  </div>
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+    <div class="text-xs text-slate-400">{{ t("referrals_pending") }}</div>
+    <div class="text-2xl font-semibold mt-1">{{ referral_stats.pending_referrals or 0 }}</div>
+  </div>
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+    <div class="text-xs text-slate-400">{{ t("referrals_qualified") }}</div>
+    <div class="text-2xl font-semibold mt-1">{{ referral_stats.qualified_referrals or 0 }}</div>
+  </div>
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+    <div class="text-xs text-slate-400">{{ t("referrals_rewarded") }}</div>
+    <div class="text-2xl font-semibold mt-1">{{ referral_stats.rewarded_referrals or 0 }}</div>
+  </div>
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+    <div class="text-xs text-slate-400">{{ t("referrals_days_granted") }}</div>
+    <div class="text-2xl font-semibold mt-1">{{ referral_stats.granted_days or 0 }}</div>
+  </div>
+</div>
+
+<div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="bg-slate-950/60 text-slate-400">
+      <tr>
+        <th class="px-4 py-3 text-left">{{ t("referrer") }}</th>
+        <th class="px-4 py-3 text-left">{{ t("referred_user") }}</th>
+        <th class="px-4 py-3 text-left">{{ t("referral_status") }}</th>
+        <th class="px-4 py-3 text-left">{{ t("referral_start_at") }}</th>
+        <th class="px-4 py-3 text-left">{{ t("referral_qualification_due_at") }}</th>
+        <th class="px-4 py-3 text-left">{{ t("referral_reward_days_label") }}</th>
+        <th class="px-4 py-3 text-left">#</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in referrals %}
+      <tr class="border-t border-slate-800 hover:bg-slate-800/50">
+        <td class="px-4 py-3">
+          <div class="font-medium text-slate-100">{{ r.referrer_username }}</div>
+          <div class="text-xs text-slate-400">{{ r.referrer_email or '' }}</div>
+        </td>
+        <td class="px-4 py-3">
+          <a href="{{ url_for('user_detail', user_id=r.referred_user_id) }}" class="hover:text-white">
+            <div class="font-medium text-slate-100">{{ r.referred_username }}</div>
+            <div class="text-xs text-slate-400">{{ r.referred_email or '' }}</div>
+          </a>
+        </td>
+        <td class="px-4 py-3">
+          {% set referral_colors = {
+            'pending': 'bg-amber-900/40 text-amber-300',
+            'qualified': 'bg-cyan-900/40 text-cyan-300',
+            'rewarded': 'bg-emerald-900/40 text-emerald-300',
+            'cancelled': 'bg-rose-900/40 text-rose-300'
+          } %}
+          <span class="text-xs px-2 py-1 rounded-full {{ referral_colors.get(r.status, 'bg-slate-800 text-slate-300') }}">
+            {{ t('referral_' ~ r.status) }}
+          </span>
+        </td>
+        <td class="px-4 py-3 text-slate-300">{{ r.start_at[:10] if r.start_at else '' }}</td>
+        <td class="px-4 py-3 text-slate-300">{{ r.qualification_due_at[:10] if r.qualification_due_at else '' }}</td>
+        <td class="px-4 py-3 text-slate-300">{{ r.reward_days_snapshot or 0 }}</td>
+        <td class="px-4 py-3 text-slate-300">{{ r.referrer_total or 0 }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="7" class="px-4 py-6 text-center text-slate-500">
+          {{ t("no_user_found") }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if total_pages > 1 %}
+<div class="flex items-center justify-between mt-4">
+  <div class="text-xs text-slate-500">
+    Page {{ page }} / {{ total_pages }} ({{ total_referrals }} referrals)
+  </div>
+
+  <div class="flex gap-2">
+    {% if page > 1 %}
+      <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
+         href="{{ url_for('users_list', tab='referrals', page=1, q=search, status=selected_statuses, sort=sort, order=order) }}">First</a>
+
+      <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
+         href="{{ url_for('users_list', tab='referrals', page=page-1, q=search, status=selected_statuses, sort=sort, order=order) }}">Prev</a>
+    {% endif %}
+
+    {% if page < total_pages %}
+      <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
+         href="{{ url_for('users_list', tab='referrals', page=page+1, q=search, status=selected_statuses, sort=sort, order=order) }}">Next</a>
+
+      <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
+         href="{{ url_for('users_list', tab='referrals', page=total_pages, q=search, status=selected_statuses, sort=sort, order=order) }}">Last</a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% elif tab == "referral_settings" %}
+
+<form method="post" class="space-y-6">
+  <input type="hidden" name="action" value="save_referral_settings">
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-sm font-semibold text-slate-200 mb-1">
+      {{ t("referral_settings_title") }}
+    </div>
+    <div class="text-xs text-slate-500 mb-5">
+      {{ t("referral_settings_intro") }}
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+      <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-4">
+        <div>
+          <div class="text-sm font-medium text-slate-200">{{ t("referral_settings_block_program") }}</div>
+          <div class="text-xs text-slate-500 mt-1">{{ t("referral_settings_block_program_help") }}</div>
+        </div>
+
+        <label class="flex items-start gap-3 text-sm">
+          <input type="checkbox" name="enabled" value="1" class="mt-1"
+                 {% if referral_settings.enabled %}checked{% endif %}>
+          <div>
+            <div>{{ t("referral_enabled") }}</div>
+            <div class="text-xs text-slate-500 mt-1">{{ t("referral_enabled_help") }}</div>
+          </div>
+        </label>
+
+        <label class="text-sm block">
+          <div>{{ t("referral_qualification_days") }}</div>
+          <div class="text-xs text-slate-500 mt-1">{{ t("referral_qualification_days_help") }}</div>
+          <input type="number" min="1" name="qualification_days"
+                 value="{{ referral_settings.qualification_days or 60 }}"
+                 class="w-full mt-2 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2">
+        </label>
+
+        <label class="flex items-start gap-3 text-sm">
+          <input type="checkbox" name="allow_referrer_change_before_qualification" value="1" class="mt-1"
+                 {% if referral_settings.allow_referrer_change_before_qualification %}checked{% endif %}>
+          <div>
+            <div>{{ t("referral_allow_referrer_change_before_qualification") }}</div>
+            <div class="text-xs text-slate-500 mt-1">{{ t("referral_allow_referrer_change_before_qualification_help") }}</div>
+          </div>
+        </label>
+      </div>
+
+      <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-4">
+        <div>
+          <div class="text-sm font-medium text-slate-200">{{ t("referral_settings_block_reward") }}</div>
+          <div class="text-xs text-slate-500 mt-1">{{ t("referral_settings_block_reward_help") }}</div>
+        </div>
+
+        <label class="flex items-start gap-3 text-sm">
+          <input type="checkbox" name="reward_enabled" value="1" class="mt-1"
+                 {% if referral_settings.reward_enabled %}checked{% endif %}>
+          <div>
+            <div>{{ t("referral_reward_enabled") }}</div>
+            <div class="text-xs text-slate-500 mt-1">{{ t("referral_reward_enabled_help") }}</div>
+          </div>
+        </label>
+
+        <label class="text-sm block">
+          <div>{{ t("referral_reward_days") }}</div>
+          <div class="text-xs text-slate-500 mt-1">{{ t("referral_reward_days_help") }}</div>
+          <input type="number" min="0" name="reward_days"
+                 value="{{ referral_settings.reward_days or 60 }}"
+                 class="w-full mt-2 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2">
+        </label>
+
+        <label class="flex items-start gap-3 text-sm">
+          <input type="checkbox" name="auto_notify_reward" value="1" class="mt-1"
+                 {% if referral_settings.auto_notify_reward %}checked{% endif %}>
+          <div>
+            <div>{{ t("referral_auto_notify_reward") }}</div>
+            <div class="text-xs text-slate-500 mt-1">{{ t("referral_auto_notify_reward_help") }}</div>
+          </div>
+        </label>
+      </div>
+
+    </div>
+
+    <div class="mt-6 bg-slate-950 border border-slate-800 rounded-2xl p-4">
+      <div class="text-sm font-medium text-slate-200 mb-1">{{ t("referral_eligible_statuses") }}</div>
+      <div class="text-xs text-slate-500 mb-4">{{ t("referral_eligible_statuses_help") }}</div>
+
+      {% set _eligible = (referral_settings.eligible_statuses or 'active').split(',') %}
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {% for s in ['active','pre_expired','reminder','expired','invited','unfriended','suspended','unknown'] %}
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="eligible_statuses" value="{{ s }}" {% if s in _eligible %}checked{% endif %}>
+            <span>{{ t(s) }}</span>
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="flex justify-end">
+    <button type="submit"
+            class="px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white">
+      {{ t("save") }}
+    </button>
+  </div>
+</form>
+
+{% endif %}
 
 <!-- CREATE USER MODAL -->
 <div id="modal_create_user" class="fixed inset-0 z-50 hidden">
@@ -415,11 +640,42 @@ document.addEventListener("DOMContentLoaded", () => {
           <label class="text-xs text-slate-400">Lastname</label>
           <input id="cu_lastname" type="text" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" placeholder="Lastname">
         </div>
-      </div>
+        <div class="md:col-span-2">
+          <label class="text-xs text-slate-400">Subscription</label>
+          <select id="cu_subscription_template_id" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm">
+            <option value="">-- none --</option>
+            {% for tpl in subscription_templates %}
+              <option value="{{ tpl.id }}">{{ tpl.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+		
+        <div class="md:col-span-2">
+          <label class="text-xs text-slate-400">{{ t("referrer") }}</label>
+          <div class="text-[11px] text-slate-500 mt-1 mb-2">
+            {{ t("referrer_picker_help") }}
+          </div>
 
-      <div>
-        <label class="text-xs text-slate-400">Notes</label>
-        <textarea id="cu_notes" rows="3" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" placeholder="internal notes..."></textarea>
+          <input type="hidden" id="cu_referrer_user_id" value="">
+
+          <div class="flex items-center gap-2">
+            <div id="cu_referrer_display"
+                 class="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-400 min-h-[42px] flex items-center">
+              {{ t("no_referrer") }}
+            </div>
+
+            <button type="button"
+                    class="min-w-[170px] px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm"
+                    onclick="VodumCreateUser.openReferrerModal()">
+              {{ t("choose_referrer") }}
+            </button>
+          </div>
+        </div>
+		
+        <div class="md:col-span-2">
+          <label class="text-xs text-slate-400">Notes</label>
+          <textarea id="cu_notes" rows="3" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" placeholder="internal notes..."></textarea>
+        </div>
       </div>
 
       <!-- SERVERS BLOCKS -->
@@ -448,17 +704,48 @@ document.addEventListener("DOMContentLoaded", () => {
   </div>
 </div>
 
+<div id="modal_create_user_referrer" class="fixed inset-0 z-[60] hidden">
+  <div class="absolute inset-0 bg-black/60" onclick="VodumCreateUser.closeReferrerModal()"></div>
+
+  <div class="relative max-w-3xl mx-auto mt-16 bg-slate-950 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800">
+      <div>
+        <div class="text-lg font-semibold">{{ t("choose_referrer") }}</div>
+        <div class="text-sm text-slate-400">{{ t("search_user") }}</div>
+      </div>
+      <button class="text-slate-300 hover:text-white" onclick="VodumCreateUser.closeReferrerModal()">✕</button>
+    </div>
+
+    <div class="p-6 space-y-4">
+      <input id="cu_referrer_search"
+             type="text"
+             class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm"
+             placeholder="{{ t('search_user') }}">
+
+      <div id="cu_referrer_results"
+           class="max-h-[50vh] overflow-y-auto border border-slate-800 rounded-2xl divide-y divide-slate-800 bg-slate-900"></div>
+    </div>
+  </div>
+</div>
+
+{% set _default_subscription_days = (settings.default_subscription_days if settings and settings.default_subscription_days is not none else 90) %}
+
 <script>
 (function(){
+  const DEFAULT_SUBSCRIPTION_DAYS = {{ _default_subscription_days|int }};
+
   const api = {
     servers: '/api/servers',
     libs: (serverId) => `/api/servers/${serverId}/libraries`,
     create: '/api/users/create',
+    referrers: (q='') => `/api/users/referrer-candidates?q=${encodeURIComponent(q)}`,
   };
 
   const state = {
     servers: [],
     blocks: [],
+    referrerUserId: null,
+    referrerUserLabel: '',
   };
 
   function el(html){
@@ -487,14 +774,110 @@ document.addEventListener("DOMContentLoaded", () => {
     else box.classList.add('border-slate-800');
   }
 
+  function computeDefaultExpirationDate(days){
+    const d = new Date();
+    d.setHours(12, 0, 0, 0);
+    d.setDate(d.getDate() + parseInt(days || 0, 10));
+    return d.toISOString().slice(0, 10);
+  }
+
+  function applyDefaultExpirationDate(force=false){
+    const input = document.getElementById('cu_expiration');
+    if(!input) return;
+
+    if(force || !input.value){
+      input.value = computeDefaultExpirationDate(DEFAULT_SUBSCRIPTION_DAYS);
+    }
+  }
+
+  function resetCreateUserForm(){
+    document.getElementById('cu_email').value = '';
+    document.getElementById('cu_second_email').value = '';
+    document.getElementById('cu_username').value = '';
+    document.getElementById('cu_firstname').value = '';
+    document.getElementById('cu_lastname').value = '';
+    document.getElementById('cu_notes').value = '';
+    document.getElementById('cu_subscription_template_id').value = '';
+    clearReferrer();
+    applyDefaultExpirationDate(true);
+
+    state.blocks = [];
+    document.getElementById('cu_servers_container').innerHTML = '';
+    addServerBlock();
+  }
+
   function open(){
     document.getElementById('modal_create_user').classList.remove('hidden');
     document.getElementById('cu_feedback').classList.add('hidden');
-    if(state.blocks.length===0) addServerBlock();
+    resetCreateUserForm();
   }
 
   function close(){
     document.getElementById('modal_create_user').classList.add('hidden');
+    document.getElementById('cu_feedback').classList.add('hidden');
+  }
+
+  function openReferrerModal(){
+    document.getElementById('modal_create_user_referrer').classList.remove('hidden');
+    document.getElementById('cu_referrer_search').value = '';
+    loadReferrerCandidates('');
+    setTimeout(() => {
+      document.getElementById('cu_referrer_search')?.focus();
+    }, 20);
+  }
+
+  function closeReferrerModal(){
+    document.getElementById('modal_create_user_referrer').classList.add('hidden');
+  }
+
+  function setReferrer(user){
+    state.referrerUserId = parseInt(user.id, 10);
+    state.referrerUserLabel = `${user.username || ''}${user.email ? ' — ' + user.email : ''}`;
+
+    document.getElementById('cu_referrer_user_id').value = String(state.referrerUserId);
+    document.getElementById('cu_referrer_display').textContent = state.referrerUserLabel || '{{ t("no_referrer") }}';
+
+    closeReferrerModal();
+  }
+
+  function clearReferrer(){
+    state.referrerUserId = null;
+    state.referrerUserLabel = '';
+    document.getElementById('cu_referrer_user_id').value = '';
+    document.getElementById('cu_referrer_display').textContent = '{{ t("no_referrer") }}';
+  }
+
+  async function loadReferrerCandidates(q=''){
+    const rows = await fetchJSON(api.referrers(q));
+    const box = document.getElementById('cu_referrer_results');
+
+    const noneRow = `
+      <button type="button"
+              class="w-full text-left px-4 py-3 hover:bg-slate-800 border-b border-slate-800"
+              data-id=""
+              data-username="{{ t('no_referrer') }}"
+              data-email="">
+        <div class="text-sm font-medium text-slate-100">{{ t("no_referrer") }}</div>
+        <div class="text-xs text-slate-500 mt-1">{{ t("referrer_none_help") }}</div>
+      </button>
+    `;
+
+    if(!rows.length){
+      box.innerHTML = noneRow + `<div class="px-4 py-3 text-sm text-slate-400">{{ t("no_user_found") }}</div>`;
+      return;
+    }
+
+    box.innerHTML = noneRow + rows.map(u => `
+      <button type="button"
+              class="w-full text-left px-4 py-3 hover:bg-slate-800"
+              data-id="${u.id}"
+              data-username="${(u.username || '').replace(/"/g, '&quot;')}"
+              data-email="${(u.email || '').replace(/"/g, '&quot;')}">
+        <div class="text-sm font-medium text-slate-100">${u.username || '—'}</div>
+        <div class="text-xs text-slate-400">${u.email || ''}</div>
+        <div class="text-xs text-slate-500 mt-1">{{ t("referrals_total") }}: ${u.referrals_count || 0}</div>
+      </button>
+    `).join('');
   }
 
   async function initServers(){
@@ -735,6 +1118,8 @@ document.addEventListener("DOMContentLoaded", () => {
         firstname: document.getElementById('cu_firstname').value.trim(),
         lastname: document.getElementById('cu_lastname').value.trim(),
         expiration_date: document.getElementById('cu_expiration').value,
+        subscription_template_id: document.getElementById('cu_subscription_template_id').value || '',
+		referrer_user_id: document.getElementById('cu_referrer_user_id').value || '',
         notes: document.getElementById('cu_notes').value.trim(),
         servers: state.blocks
           .filter(b => b.server_id)
@@ -759,7 +1144,19 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify(payload)
       });
 
-      const data = await r.json().catch(()=>({ok:false,error:'Invalid JSON response'}));
+      const raw = await r.text();
+      let data;
+      try{
+        data = JSON.parse(raw);
+      }catch(e){
+        data = {
+          ok: false,
+          error: raw && !raw.toLowerCase().includes('<!doctype html')
+            ? raw
+            : 'Server error during user creation. Check backend logs.'
+        };
+      }
+
       if(!r.ok || !data.ok){
         feedback(data.error || 'Create failed', 'error');
         return;
@@ -783,7 +1180,37 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  window.VodumCreateUser = {open, close, addServerBlock, removeServerBlock, submit};
+  window.VodumCreateUser = {
+    open,
+    close,
+    addServerBlock,
+    removeServerBlock,
+    submit,
+    openReferrerModal,
+    closeReferrerModal,
+    clearReferrer
+  };
+
+  document.getElementById('cu_referrer_search')?.addEventListener('input', (e) => {
+    loadReferrerCandidates((e.target.value || '').trim());
+  });
+
+  document.getElementById('cu_referrer_results')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-id]');
+    if(!btn) return;
+
+    if (!btn.dataset.id) {
+      clearReferrer();
+      closeReferrerModal();
+      return;
+    }
+
+    setReferrer({
+      id: btn.dataset.id,
+      username: btn.dataset.username || '',
+      email: btn.dataset.email || '',
+    });
+  });
 
   document.getElementById('btn_create_user')?.addEventListener('click', async () => {
     try{

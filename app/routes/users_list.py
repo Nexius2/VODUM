@@ -39,136 +39,340 @@ security_logger = get_logger("security")
 settings_logger = get_logger("settings")
 
 def register(app):
-    @app.route("/users")
+    @app.route("/users", methods=["GET", "POST"])
     def users_list():
         db = get_db()
 
-        # Multi-status (checkboxes): ?status=active&status=reminder...
-        selected_statuses = request.args.getlist("status")
+        tab = (request.args.get("tab") or "users").strip().lower()
+        if tab not in ("users", "referrals", "referral_settings"):
+            tab = "users"
 
-        # Toggle: show archived statuses (expired/unfriended/suspended)
-        # (On garde la variable pour compat / futur, mais on ne cache plus par défaut)
-        show_archived = request.args.get("show_archived", "0") == "1"
+        if request.method == "POST":
+            form_action = (request.form.get("action") or "").strip()
 
-        # Search query
+            if form_action == "save_referral_settings":
+                enabled = 1 if request.form.get("enabled") == "1" else 0
+                reward_enabled = 1 if request.form.get("reward_enabled") == "1" else 0
+                allow_referrer_change_before_qualification = 1 if request.form.get("allow_referrer_change_before_qualification") == "1" else 0
+                auto_notify_reward = 1 if request.form.get("auto_notify_reward") == "1" else 0
+
+                try:
+                    qualification_days = max(int(request.form.get("qualification_days") or 60), 1)
+                except Exception:
+                    qualification_days = 60
+
+                try:
+                    reward_days = max(int(request.form.get("reward_days") or 60), 0)
+                except Exception:
+                    reward_days = 60
+
+                eligible_statuses = request.form.getlist("eligible_statuses")
+                if not eligible_statuses:
+                    eligible_statuses = ["active"]
+
+                db.execute(
+                    """
+                    UPDATE user_referral_settings
+                    SET enabled = ?,
+                        reward_enabled = ?,
+                        qualification_days = ?,
+                        reward_days = ?,
+                        allow_referrer_change_before_qualification = ?,
+                        auto_notify_reward = ?,
+                        eligible_statuses = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = 1
+                    """,
+                    (
+                        enabled,
+                        reward_enabled,
+                        qualification_days,
+                        reward_days,
+                        allow_referrer_change_before_qualification,
+                        auto_notify_reward,
+                        ",".join(eligible_statuses),
+                    ),
+                )
+
+                flash("referral_settings_saved", "success")
+                return redirect(url_for("users_list", tab="referral_settings"))
+
+        # --------------------------------------------------
+        # Common params
+        # --------------------------------------------------
         search = request.args.get("q", "").strip()
-
-        # Pagination
         page = max(request.args.get("page", 1, type=int), 1)
         per_page = 20
         offset = (page - 1) * per_page
 
-        # Sorting (backend)
-        sort = (request.args.get("sort") or "username").strip()
-        order = (request.args.get("order") or "asc").strip().lower()
-        if order not in ("asc", "desc"):
-            order = "asc"
+        # --------------------------------------------------
+        # Users tab preferences memory
+        # - keep sort/order/status in session
+        # - do NOT keep search text
+        # --------------------------------------------------
+        if tab == "users":
+            session_sort = (session.get("users_list_sort") or "username").strip()
+            session_order = (session.get("users_list_order") or "asc").strip().lower()
+            session_statuses = session.get("users_list_statuses") or []
 
-        sort_map = {
-            "username": "u.username",
-            "email": "u.email",
-            "status": "u.status",
-            "expiration_date": "u.expiration_date",
-            "servers_count": "servers_count",
-            "libraries_count": "libraries_count",
+            arg_statuses = request.args.getlist("status")
+            selected_statuses = arg_statuses if "status" in request.args else session_statuses
+
+            sort = (request.args.get("sort") or session_sort or "username").strip()
+            order = (request.args.get("order") or session_order or "asc").strip().lower()
+
+            if order not in ("asc", "desc"):
+                order = "asc"
+
+            session["users_list_sort"] = sort
+            session["users_list_order"] = order
+            session["users_list_statuses"] = selected_statuses
+
+        else:
+            selected_statuses = request.args.getlist("status")
+            sort = (request.args.get("sort") or "username").strip()
+            order = (request.args.get("order") or "asc").strip().lower()
+
+            if order not in ("asc", "desc"):
+                order = "asc"
+
+        subscription_templates = db.query(
+            "SELECT id, name FROM subscription_templates ORDER BY name ASC"
+        ) or []
+
+        referral_settings = db.query_one(
+            "SELECT * FROM user_referral_settings WHERE id = 1"
+        )
+        referral_settings = dict(referral_settings) if referral_settings else {
+            "enabled": 0,
+            "reward_enabled": 1,
+            "qualification_days": 60,
+            "reward_days": 60,
+            "allow_referrer_change_before_qualification": 1,
+            "auto_notify_reward": 1,
+            "eligible_statuses": "active",
         }
-        sort_column = sort_map.get(sort, "u.username")
 
-        # Default view (daily): hide expired unless explicitly selected or show_archived enabled
-        # -> CHANGÉ : on ne cache plus rien par défaut.
-        # On conserve ces variables pour ne rien perdre / compat, mais on ne les applique plus automatiquement.
-        default_excluded = {"expired"}
-        all_statuses = ["active", "pre_expired", "reminder", "expired", "invited", "unfriended", "suspended", "unknown"]
-
-        query = """
+        referral_stats = db.query_one(
+            """
             SELECT
-                u.*,
+                COUNT(*) AS total_referrals,
+                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_referrals,
+                SUM(CASE WHEN status = 'qualified' THEN 1 ELSE 0 END) AS qualified_referrals,
+                SUM(CASE WHEN status = 'rewarded' THEN 1 ELSE 0 END) AS rewarded_referrals,
+                COALESCE(SUM(CASE
+                    WHEN reward_granted_at IS NOT NULL THEN COALESCE(reward_days_snapshot, 0)
+                    ELSE 0
+                END), 0) AS granted_days
+            FROM user_referrals
+            """
+        )
+        referral_stats = dict(referral_stats) if referral_stats else {
+            "total_referrals": 0,
+            "pending_referrals": 0,
+            "qualified_referrals": 0,
+            "rewarded_referrals": 0,
+            "granted_days": 0,
+        }
 
-                COUNT(DISTINCT mu.server_id) AS servers_count,
-                COUNT(DISTINCT mul.library_id) AS libraries_count
+        # --------------------------------------------------
+        # TAB = USERS
+        # --------------------------------------------------
+        users = []
+        referrals = []
+        total_users = 0
+        total_referrals = 0
+        total_pages = 1
 
-            FROM vodum_users u
-            LEFT JOIN media_users mu
-                ON mu.vodum_user_id = u.id
+        if tab == "users":
+            sort_map = {
+                "username": "u.username",
+                "email": "u.email",
+                "status": "u.status",
+                "expiration_date": "u.expiration_date",
+                "servers_count": "servers_count",
+                "libraries_count": "libraries_count",
+            }
+            sort_column = sort_map.get(sort, "u.username")
 
-            LEFT JOIN media_user_libraries mul
-                ON mul.media_user_id = mu.id
-        """
+            query = """
+                SELECT
+                    u.*,
+                    COUNT(DISTINCT mu.server_id) AS servers_count,
+                    COUNT(DISTINCT mul.library_id) AS libraries_count
+                FROM vodum_users u
+                LEFT JOIN media_users mu ON mu.vodum_user_id = u.id
+                LEFT JOIN media_user_libraries mul ON mul.media_user_id = mu.id
+            """
 
-        conditions = []
-        params = []
+            conditions = []
+            params = []
 
-        # Status filter (IN)
-        if selected_statuses:
-            placeholders = ",".join(["?"] * len(selected_statuses))
-            conditions.append(f"u.status IN ({placeholders})")
-            params.extend(selected_statuses)
+            if selected_statuses:
+                placeholders = ",".join(["?"] * len(selected_statuses))
+                conditions.append(f"u.status IN ({placeholders})")
+                params.extend(selected_statuses)
 
-        # Global search across multiple fields
-        if search:
-            like = f"%{search}%"
-            conditions.append(
-                "("
-                "COALESCE(u.username,'') LIKE ? OR "
-                "COALESCE(u.email,'') LIKE ? OR "
-                "COALESCE(u.second_email,'') LIKE ? OR "
-                "COALESCE(u.firstname,'') LIKE ? OR "
-                "COALESCE(u.lastname,'') LIKE ? OR "
-                "COALESCE(u.notes,'') LIKE ?"
-                ")"
-            )
-            params.extend([like, like, like, like, like, like])
+            if search:
+                like = f"%{search}%"
+                conditions.append(
+                    "("
+                    "COALESCE(u.username,'') LIKE ? OR "
+                    "COALESCE(u.email,'') LIKE ? OR "
+                    "COALESCE(u.second_email,'') LIKE ? OR "
+                    "COALESCE(u.firstname,'') LIKE ? OR "
+                    "COALESCE(u.lastname,'') LIKE ? OR "
+                    "COALESCE(u.notes,'') LIKE ?"
+                    ")"
+                )
+                params.extend([like, like, like, like, like, like])
 
-        if conditions:
-            query += " WHERE " + " AND ".join(conditions)
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
 
-        query += f"""
-            GROUP BY u.id
-            ORDER BY
-                CASE WHEN {sort_column} IS NULL OR {sort_column} = '' THEN 1 ELSE 0 END ASC,
-                {sort_column} {order.upper()},
-                u.username ASC
-            LIMIT ?
-            OFFSET ?
-        """
-        params.extend([per_page, offset])
+            query += f"""
+                GROUP BY u.id
+                ORDER BY
+                    CASE WHEN {sort_column} IS NULL OR {sort_column} = '' THEN 1 ELSE 0 END ASC,
+                    {sort_column} {order.upper()},
+                    u.username ASC
+                LIMIT ?
+                OFFSET ?
+            """
+            params.extend([per_page, offset])
 
-        count_query = """
-            SELECT COUNT(DISTINCT u.id) as total
-            FROM vodum_users u
-            LEFT JOIN media_users mu ON mu.vodum_user_id = u.id
-            LEFT JOIN media_user_libraries mul ON mul.media_user_id = mu.id
-        """
+            count_query = """
+                SELECT COUNT(DISTINCT u.id) as total
+                FROM vodum_users u
+                LEFT JOIN media_users mu ON mu.vodum_user_id = u.id
+                LEFT JOIN media_user_libraries mul ON mul.media_user_id = mu.id
+            """
+            if conditions:
+                count_query += " WHERE " + " AND ".join(conditions)
 
-        if conditions:
-            count_query += " WHERE " + " AND ".join(conditions)
+            count_params = params[:-2]
+            total_row = db.query_one(count_query, count_params) or {"total": 0}
+            total_users = int(total_row["total"] or 0)
+            total_pages = max(math.ceil(total_users / per_page), 1)
 
-        count_params = params[:-2]
-        total_row = db.query_one(count_query, count_params) or {"total": 0}
-        total_users = int(total_row["total"] or 0)
-        total_pages = max(math.ceil(total_users / per_page), 1)
+            if page > total_pages:
+                page = total_pages
+                offset = (page - 1) * per_page
+                params = count_params + [per_page, offset]
 
-        if page > total_pages:
-            page = total_pages
-            offset = (page - 1) * per_page
-            params = count_params + [per_page, offset]
+            users = db.query(query, params) or []
 
-        users = db.query(query, params)
+        # --------------------------------------------------
+        # TAB = REFERRALS
+        # --------------------------------------------------
+        elif tab == "referrals":
+            sort_map = {
+                "referrer": "referrer_username",
+                "referred": "referred_username",
+                "status": "r.status",
+                "start_at": "r.start_at",
+                "qualification_due_at": "r.qualification_due_at",
+                "reward_granted_at": "r.reward_granted_at",
+                "reward_days_snapshot": "r.reward_days_snapshot",
+                "referrer_total": "referrer_total",
+            }
+            sort_column = sort_map.get(sort, "r.start_at")
+
+            query = """
+                SELECT
+                    r.*,
+                    referrer.username AS referrer_username,
+                    referrer.email AS referrer_email,
+                    referred.username AS referred_username,
+                    referred.email AS referred_email,
+                    referred.status AS referred_status,
+                    (
+                        SELECT COUNT(*)
+                        FROM user_referrals rr
+                        WHERE rr.referrer_user_id = r.referrer_user_id
+                    ) AS referrer_total
+                FROM user_referrals r
+                JOIN vodum_users referrer ON referrer.id = r.referrer_user_id
+                JOIN vodum_users referred ON referred.id = r.referred_user_id
+            """
+
+            conditions = []
+            params = []
+
+            if selected_statuses:
+                placeholders = ",".join(["?"] * len(selected_statuses))
+                conditions.append(f"r.status IN ({placeholders})")
+                params.extend(selected_statuses)
+
+            if search:
+                like = f"%{search}%"
+                conditions.append(
+                    "("
+                    "COALESCE(referrer.username,'') LIKE ? OR "
+                    "COALESCE(referrer.email,'') LIKE ? OR "
+                    "COALESCE(referred.username,'') LIKE ? OR "
+                    "COALESCE(referred.email,'') LIKE ?"
+                    ")"
+                )
+                params.extend([like, like, like, like])
+
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
+
+            query += f"""
+                ORDER BY
+                    CASE WHEN {sort_column} IS NULL OR {sort_column} = '' THEN 1 ELSE 0 END ASC,
+                    {sort_column} {order.upper()},
+                    r.id DESC
+                LIMIT ?
+                OFFSET ?
+            """
+            params.extend([per_page, offset])
+
+            count_query = """
+                SELECT COUNT(*) AS total
+                FROM user_referrals r
+                JOIN vodum_users referrer ON referrer.id = r.referrer_user_id
+                JOIN vodum_users referred ON referred.id = r.referred_user_id
+            """
+            if conditions:
+                count_query += " WHERE " + " AND ".join(conditions)
+
+            count_params = params[:-2]
+            total_row = db.query_one(count_query, count_params) or {"total": 0}
+            total_referrals = int(total_row["total"] or 0)
+            total_pages = max(math.ceil(total_referrals / per_page), 1)
+
+            if page > total_pages:
+                page = total_pages
+                offset = (page - 1) * per_page
+                params = count_params + [per_page, offset]
+
+            referrals = db.query(query, params) or []
+
+        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        settings = dict(settings) if settings else {}
 
         return render_template(
             "users/users.html",
+            tab=tab,
             users=users,
+            referrals=referrals,
+            referral_settings=referral_settings,
+            referral_stats=referral_stats,
             page=page,
             total_pages=total_pages,
             total_users=total_users,
+            total_referrals=total_referrals,
             selected_statuses=selected_statuses,
-            show_archived=show_archived,
             search=search,
             sort=sort,
             order=order,
+            subscription_templates=subscription_templates,
+            settings=settings,
             active_page="users",
         )
-
+        
     ##################################
 
 

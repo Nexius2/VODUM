@@ -247,6 +247,30 @@
 "quotes": {"en": "I love it when a plan comes together.","fr": "J'aime bien quand un plan se déroule sans accroc."}
 },
 {
+  "key": "300_force_honneur",
+  "media_type": "movie",
+  "ids": {
+    "imdb": "tt0416449",
+    "tmdb": "1271"
+  },
+  "quotes": {
+    "en": "Strength and honor.",
+    "fr": "Force et honneur."
+  }
+},
+{
+  "key": "walkingdead_lucille",
+  "media_type": "tv",
+  "ids": {
+    "imdb": "tt1520211",
+    "tmdb": "1402"
+  },
+  "quotes": {
+    "en": "I hope you got your shittin' pants on... because you are about to shit your pants.",
+    "fr": "J'espère que vous avez mis votre pantalon pour faire caca... parce que vous allez vous faire dessus."
+  }
+},
+{
 "key":"breakingbad_saymyname",
 "media_type":"tv",
 "ids":{"imdb":"tt0903747","tmdb":"1396"},

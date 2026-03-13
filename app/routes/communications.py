@@ -342,7 +342,7 @@ def register(app):
                     n += 1
 
             trigger_event = (request.form.get("trigger_event") or "expiration").strip().lower()
-            if trigger_event not in ("expiration", "user_creation"):
+            if trigger_event not in ("expiration", "user_creation", "referral_reward"):
                 trigger_event = "expiration"
 
             trigger_provider = (request.form.get("trigger_provider") or "all").strip().lower()
@@ -384,6 +384,10 @@ def register(app):
                 days_before = None
                 if days_after is None:
                     days_after = 0
+                delay_direction = "after"
+            elif trigger_event == "referral_reward":
+                days_before = None
+                days_after = 0
                 delay_direction = "after"
             else:
                 # expiration: keep ONLY one value (before OR after)
@@ -440,7 +444,7 @@ def register(app):
             enabled = 1 if request.form.get("enabled") == "1" else 0
 
             trigger_event = (request.form.get("trigger_event") or "expiration").strip().lower()
-            if trigger_event not in ("expiration", "user_creation"):
+            if trigger_event not in ("expiration", "user_creation", "referral_reward"):
                 trigger_event = "expiration"
 
             trigger_provider = (request.form.get("trigger_provider") or "all").strip().lower()
@@ -482,6 +486,10 @@ def register(app):
                 days_before = None
                 if days_after is None:
                     days_after = 0
+                delay_direction = "after"
+            elif trigger_event == "referral_reward":
+                days_before = None
+                days_after = 0
                 delay_direction = "after"
             else:
                 # expiration: keep ONLY one value (before OR after)

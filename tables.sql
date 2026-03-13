@@ -10,24 +10,31 @@ CREATE TABLE IF NOT EXISTS vodum_users (
     lastname TEXT,
     email TEXT,
     second_email TEXT,
-    --avatar TEXT,
 
     expiration_date TIMESTAMP,
     renewal_method TEXT,
     renewal_date TEXT,
-	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-	
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
     notes TEXT,
 
     -- Notifications channel order override for this user (optional)
     notifications_order_override TEXT DEFAULT NULL,
+    subscription_template_id INTEGER DEFAULT NULL,
 
+    -- Referral
+    referrer_user_id INTEGER DEFAULT NULL,
 
-	status TEXT DEFAULT 'expired' CHECK (status IN ('active','pre_expired','reminder','expired','invited','unfriended','suspended','unknown')),
-	
-	last_status TEXT,
-    status_changed_at TIMESTAMP
+    status TEXT DEFAULT 'expired' CHECK (status IN ('active','pre_expired','reminder','expired','invited','unfriended','suspended','unknown')),
+
+    last_status TEXT,
+    status_changed_at TIMESTAMP,
+
+    FOREIGN KEY(referrer_user_id) REFERENCES vodum_users(id) ON DELETE SET NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_vodum_users_referrer_user_id
+ON vodum_users(referrer_user_id);
 
 
 -----------------------------------------------------------------------
@@ -303,6 +310,104 @@ CREATE TABLE IF NOT EXISTS subscription_templates (
 
 CREATE INDEX IF NOT EXISTS idx_subscription_templates_name
 ON subscription_templates(name);
+
+-----------------------------------------------------------------------
+--  USER REFERRAL SETTINGS
+-----------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_referral_settings (
+    id INTEGER PRIMARY KEY CHECK(id = 1),
+
+    enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1)),
+    reward_enabled INTEGER NOT NULL DEFAULT 1 CHECK(reward_enabled IN (0,1)),
+    qualification_days INTEGER NOT NULL DEFAULT 60,
+    reward_days INTEGER NOT NULL DEFAULT 60,
+
+    allow_referrer_change_before_qualification INTEGER NOT NULL DEFAULT 1 CHECK(allow_referrer_change_before_qualification IN (0,1)),
+    auto_notify_reward INTEGER NOT NULL DEFAULT 1 CHECK(auto_notify_reward IN (0,1)),
+
+    eligible_statuses TEXT NOT NULL DEFAULT 'active',
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-----------------------------------------------------------------------
+--  USER REFERRALS
+-----------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_referrals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    referrer_user_id INTEGER NOT NULL,
+    referred_user_id INTEGER NOT NULL UNIQUE,
+
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK(status IN ('pending','qualified','rewarded','cancelled')),
+
+    referral_source TEXT DEFAULT 'manual',
+
+    start_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    qualification_due_at TIMESTAMP,
+    qualified_at TIMESTAMP DEFAULT NULL,
+
+    qualification_days_snapshot INTEGER NOT NULL DEFAULT 60,
+    reward_days_snapshot INTEGER NOT NULL DEFAULT 60,
+
+    reward_granted_at TIMESTAMP DEFAULT NULL,
+    reward_expiration_before TEXT DEFAULT NULL,
+    reward_expiration_after TEXT DEFAULT NULL,
+
+    notification_sent_at TIMESTAMP DEFAULT NULL,
+    notification_template_id INTEGER DEFAULT NULL,
+    last_error TEXT DEFAULT NULL,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY(referrer_user_id) REFERENCES vodum_users(id) ON DELETE CASCADE,
+    FOREIGN KEY(referred_user_id) REFERENCES vodum_users(id) ON DELETE CASCADE,
+    FOREIGN KEY(notification_template_id) REFERENCES comm_templates(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_referrals_referrer_user_id
+ON user_referrals(referrer_user_id);
+
+CREATE INDEX IF NOT EXISTS idx_user_referrals_status
+ON user_referrals(status);
+
+CREATE INDEX IF NOT EXISTS idx_user_referrals_qualification_due_at
+ON user_referrals(qualification_due_at);
+
+-----------------------------------------------------------------------
+--  USER REFERRAL EVENTS
+-----------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_referral_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    referral_id INTEGER NOT NULL,
+    event_type TEXT NOT NULL
+        CHECK(event_type IN (
+            'created',
+            'referrer_changed',
+            'qualified',
+            'reward_granted',
+            'notification_sent',
+            'cancelled'
+        )),
+
+    actor TEXT DEFAULT 'system',
+    old_referrer_user_id INTEGER DEFAULT NULL,
+    new_referrer_user_id INTEGER DEFAULT NULL,
+    details_json TEXT DEFAULT NULL,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY(referral_id) REFERENCES user_referrals(id) ON DELETE CASCADE,
+    FOREIGN KEY(old_referrer_user_id) REFERENCES vodum_users(id) ON DELETE SET NULL,
+    FOREIGN KEY(new_referrer_user_id) REFERENCES vodum_users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_referral_events_referral_id
+ON user_referral_events(referral_id);
 
 -----------------------------------------------------------------------
 --  TASKS (scheduler)
@@ -755,7 +860,7 @@ CREATE TABLE IF NOT EXISTS comm_templates (
   enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
 
   -- NEW: trigger system
-  trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation')),
+  trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','referral_reward')),
   trigger_provider TEXT NOT NULL DEFAULT 'all' CHECK(trigger_provider IN ('all','plex','jellyfin')),
 
   -- expiration flow
