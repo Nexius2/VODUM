@@ -388,8 +388,80 @@ def collect_sessions_for_server(
 
                 updated = 0
 
-                # 1) D'abord, on tente une mise à jour par session_key
-                if session_key:
+                # 1) D'abord, on tente une mise à jour sur la clé logique d'historique
+                #    (évite qu'un vieux record importé Tautulli soit écrasé juste parce
+                #    qu'un session_key numérique matche par hasard)
+                if (
+                    media_user_id is not None
+                    and started_at
+                    and media_key
+                    and client_name
+                ):
+                    try:
+                        cur = db.execute(
+                            """
+                            UPDATE media_session_history
+                            SET
+                              stopped_at = ?,
+                              watch_ms = CASE
+                                WHEN ? > watch_ms THEN ?
+                                ELSE watch_ms
+                              END,
+                              duration_ms = CASE
+                                WHEN ? > duration_ms THEN ?
+                                ELSE duration_ms
+                              END,
+                              peak_bitrate = COALESCE(peak_bitrate, ?),
+                              was_transcode = MAX(was_transcode, ?),
+                              raw_json = COALESCE(?, raw_json),
+                              ip = COALESCE(?, ip),
+                              device = COALESCE(?, device),
+                              client_product = COALESCE(?, client_product),
+                              library_section_id = COALESCE(?, library_section_id),
+                              session_key = COALESCE(session_key, ?)
+                            WHERE server_id = ?
+                              AND media_user_id = ?
+                              AND started_at = ?
+                              AND media_key = ?
+                              AND client_name = ?
+                            """,
+                            (
+                                stopped_at,
+                                watch_ms, watch_ms,
+                                duration_ms, duration_ms,
+                                peak_bitrate,
+                                was_transcode,
+                                raw_json,
+                                ip,
+                                device,
+                                client_product,
+                                library_section_id,
+                                session_key,
+                                server_id,
+                                media_user_id,
+                                started_at,
+                                media_key,
+                                client_name,
+                            ),
+                        )
+                        updated = int(getattr(cur, "rowcount", 0) or 0)
+                    except Exception as e:
+                        _log_history_write_error(
+                            server_id,
+                            provider_name,
+                            "update_by_tautulli_dedup",
+                            live,
+                            e,
+                        )
+                        raise
+
+                # 2) Ensuite seulement, mise à jour par session_key
+                #    mais JAMAIS sur session_key seul : on exige aussi le même media_key
+                if (
+                    updated == 0
+                    and session_key
+                    and media_key
+                ):
                     try:
                         cur = db.execute(
                             """
@@ -413,6 +485,7 @@ def collect_sessions_for_server(
                               library_section_id = COALESCE(?, library_section_id)
                             WHERE server_id = ?
                               AND session_key = ?
+                              AND media_key = ?
                             """,
                             (
                                 stopped_at,
@@ -427,6 +500,7 @@ def collect_sessions_for_server(
                                 library_section_id,
                                 server_id,
                                 session_key,
+                                media_key,
                             ),
                         )
                         updated = int(getattr(cur, "rowcount", 0) or 0)
@@ -439,15 +513,6 @@ def collect_sessions_for_server(
                             e,
                         )
                         raise
-
-                # 2) Si rien trouvé, on tente une mise à jour sur la clé "tautulli dedup"
-                if (
-                    updated == 0
-                    and media_user_id is not None
-                    and started_at
-                    and media_key
-                    and client_name
-                ):
                     try:
                         cur = db.execute(
                             """

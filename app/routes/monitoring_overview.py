@@ -189,6 +189,91 @@ def _apply_server_resource_stats(rows, resource_by_server, server_id_key="server
         row["server_resource_available"] = bool(resource.get("server_resource_available"))
         row["server_resource_note"] = resource.get("server_resource_note")
 
+def _build_history_poster_url(row):
+    row = dict(row or {})
+    try:
+        server_id = int(row.get("server_id") or 0)
+    except Exception:
+        server_id = 0
+
+    if server_id <= 0:
+        return None
+
+    provider = (row.get("provider") or "").strip().lower()
+    raw = row.get("raw_json")
+    media_type = (row.get("media_type") or "").strip().lower()
+    media_group_key = (row.get("media_group_key") or "").strip().lower()
+
+    is_series = (
+        media_group_key.startswith("series:")
+        or media_type in ("serie", "series", "show", "episode", "tv", "season")
+    )
+
+    data = {}
+    if raw:
+        try:
+            data = json.loads(raw)
+        except Exception:
+            data = {}
+
+    if provider == "plex":
+        attrs = (data.get("VideoOrTrack") or {})
+
+        if is_series:
+            poster_path = (
+                attrs.get("grandparentThumb")
+                or attrs.get("parentThumb")
+                or attrs.get("thumb")
+            )
+        else:
+            poster_path = (
+                attrs.get("thumb")
+                or attrs.get("parentThumb")
+                or attrs.get("grandparentThumb")
+            )
+
+        # Fallback import Tautulli
+        if not poster_path:
+            if is_series:
+                grandparent_rating_key = str(attrs.get("grandparentRatingKey") or "").strip()
+                parent_rating_key = str(attrs.get("parentRatingKey") or "").strip()
+                media_key = str(row.get("media_key") or "").strip()
+
+                if grandparent_rating_key:
+                    poster_path = f"/library/metadata/{grandparent_rating_key}/thumb"
+                elif parent_rating_key:
+                    poster_path = f"/library/metadata/{parent_rating_key}/thumb"
+                elif media_key:
+                    poster_path = f"/library/metadata/{media_key}/thumb"
+            else:
+                media_key = str(row.get("media_key") or "").strip()
+                if media_key:
+                    poster_path = f"/library/metadata/{media_key}/thumb"
+
+        if poster_path:
+            return url_for(
+                "api_monitoring_poster",
+                server_id=server_id,
+                path=poster_path,
+            )
+
+    elif provider == "jellyfin":
+        now = (data.get("NowPlayingItem") or data.get("Item") or {})
+
+        if is_series:
+            poster_item_id = now.get("SeriesId") or now.get("Id") or row.get("media_key")
+        else:
+            poster_item_id = now.get("Id") or now.get("SeriesId") or row.get("media_key")
+
+        if poster_item_id:
+            return url_for(
+                "api_monitoring_poster",
+                server_id=server_id,
+                item_id=str(poster_item_id),
+            )
+
+    return None
+
 def register(app):
     @app.route("/monitoring")
     def monitoring_page():
@@ -742,6 +827,11 @@ def register(app):
         rows = []
         filters = {}
         pagination = None
+        library_top_cards = []
+        library_users = []
+        library_range = "30d"
+        library_user = "all"
+        hidden_libraries_count = 0
         
 
         if tab == "history":
@@ -1161,17 +1251,33 @@ ranked AS (
             per_page = 30
             offset = (page - 1) * per_page
 
-            total = db.query_one("SELECT COUNT(*) AS cnt FROM libraries") or {"cnt": 0}
-            total = dict(total) if total else {"cnt": 0}
+            # -------------------------------------------------
+            # Filtres TOP PLAYED
+            # -------------------------------------------------
+            library_range = (request.args.get("lib_range") or "30d").strip().lower()
+            if library_range not in ("7d", "30d", "90d", "1y", "all"):
+                library_range = "30d"
 
+            library_user = (request.args.get("lib_user") or "all").strip()
+            library_user_id = None
+            if library_user != "all":
+                try:
+                    library_user_id = int(library_user)
+                except Exception:
+                    library_user_id = None
+                    library_user = "all"
+
+            # -------------------------------------------------
+            # Filtres table
+            # -------------------------------------------------
             cookie_sort = request.cookies.get(f"monitoring_{tab}_sort")
             cookie_dir  = request.cookies.get(f"monitoring_{tab}_dir")
 
             sort_key = (request.args.get("sort") or cookie_sort or "last").strip()
-            sort_dir = (request.args.get("dir") or cookie_dir or "asc").strip().lower()
+            sort_dir = (request.args.get("dir") or cookie_dir or "desc").strip().lower()
 
             if sort_dir not in ("asc", "desc"):
-                sort_dir = "asc"
+                sort_dir = "desc"
 
             SORT_MAP = {
                 "server": "s.name",
@@ -1184,17 +1290,23 @@ ranked AS (
             }
 
             if sort_key not in SORT_MAP:
-                sort_key = "server"
+                sort_key = "last"
 
             order_sql = f"{SORT_MAP[sort_key]} {'ASC' if sort_dir == 'asc' else 'DESC'}"
+
+            total = db.query_one("SELECT COUNT(*) AS cnt FROM libraries") or {"cnt": 0}
+            total = dict(total) if total else {"cnt": 0}
 
             rows = db.query(
                 f"""
                 SELECT
+                  l.id AS library_id,
+                  l.section_id AS library_section_id,
                   l.name AS library_name,
+                  s.id AS server_id,
                   s.name AS server_name,
+                  s.type AS provider,
                   l.type AS media_type,
-
                   l.item_count AS item_count,
 
                   (
@@ -1211,7 +1323,12 @@ ranked AS (
                       FROM media_session_history h
                       WHERE h.server_id = l.server_id
                         AND h.library_section_id = l.section_id
-                      GROUP BY (CAST(h.server_id AS TEXT) || '|' || CAST(h.media_user_id AS TEXT) || '|' || COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' || strftime('%Y-%m-%d %H:%M', h.started_at))
+                      GROUP BY (
+                        CAST(h.server_id AS TEXT) || '|' ||
+                        CAST(h.media_user_id AS TEXT) || '|' ||
+                        COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
+                        strftime('%Y-%m-%d %H:%M', h.started_at)
+                      )
                     )
                   ) AS total_plays,
 
@@ -1231,7 +1348,12 @@ ranked AS (
                       FROM media_session_history h
                       WHERE h.server_id = l.server_id
                         AND h.library_section_id = l.section_id
-                      GROUP BY (CAST(h.server_id AS TEXT) || '|' || CAST(h.media_user_id AS TEXT) || '|' || COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' || strftime('%Y-%m-%d %H:%M', h.started_at))
+                      GROUP BY (
+                        CAST(h.server_id AS TEXT) || '|' ||
+                        CAST(h.media_user_id AS TEXT) || '|' ||
+                        COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
+                        strftime('%Y-%m-%d %H:%M', h.started_at)
+                      )
                     )
                   ) AS played_ms
 
@@ -1243,11 +1365,15 @@ ranked AS (
                 (offset,),
             )
 
-
             rows = [dict(r) for r in rows]
+            hidden_libraries_count = 0
+
             for r in rows:
                 ms = r.get("played_ms") or 0
                 r["played_duration"] = f"{ms // 3600000}h {((ms % 3600000) // 60000)}m"
+                r["has_last_stream"] = bool(r.get("last_stream_at"))
+                if not r["has_last_stream"]:
+                    hidden_libraries_count += 1
 
             total_rows = int(total.get("cnt") or 0)
             total_pages = max(1, (total_rows + per_page - 1) // per_page)
@@ -1267,6 +1393,236 @@ ranked AS (
                 "next_url": build_url(page + 1),
                 "last_url": build_url(total_pages),
             }
+
+            # -------------------------------------------------
+            # Liste users pour filtre du top played
+            # On filtre sur le user VODUM de référence, pas sur media_users
+            # -------------------------------------------------
+            library_users = db.query(
+                """
+                SELECT DISTINCT
+                  vu.id,
+                  COALESCE(
+                    NULLIF(TRIM(vu.username), ''),
+                    NULLIF(TRIM(vu.email), ''),
+                    'User #' || vu.id
+                  ) AS label
+                FROM media_session_history h
+                JOIN media_users mu ON mu.id = h.media_user_id
+                JOIN vodum_users vu ON vu.id = mu.vodum_user_id
+                ORDER BY label COLLATE NOCASE
+                """
+            )
+            library_users = [dict(u) for u in (library_users or [])]
+
+            # -------------------------------------------------
+            # TOP PLAYED PAR LIBRARY
+            # -------------------------------------------------
+            range_to_sql = {
+                "7d": "-7 days",
+                "30d": "-30 days",
+                "90d": "-90 days",
+                "1y": "-1 year",
+            }
+
+            where_hist = ["1=1"]
+            params_hist = []
+
+            if library_range != "all":
+                where_hist.append("h.stopped_at >= datetime('now', ?)")
+                params_hist.append(range_to_sql[library_range])
+
+            if library_user_id is not None:
+                where_hist.append("vu_ref.id = ?")
+                params_hist.append(library_user_id)
+
+            where_hist_sql = " AND ".join(where_hist)
+
+            top_rows = db.query(
+                f"""
+                WITH hist AS (
+                  SELECT
+                    h.id AS hist_id,
+                    l.id AS library_id,
+                    l.name AS library_name,
+                    l.type AS media_type,
+                    s.id AS server_id,
+                    s.name AS server_name,
+                    s.type AS provider,
+                    vu_ref.id AS vodum_user_id,
+                    h.media_user_id,
+                    h.media_key,
+                    h.raw_json,
+                    h.stopped_at,
+                    h.started_at,
+                    CAST(h.library_section_id AS TEXT) AS history_library_section_id,
+                    LOWER(TRIM(COALESCE(h.media_type, ''))) AS history_media_type,
+
+                    CASE
+                      WHEN LOWER(TRIM(COALESCE(h.media_type, ''))) IN ('serie', 'series', 'show', 'episode', 'tv', 'season')
+                           AND TRIM(COALESCE(h.grandparent_title, '')) <> ''
+                        THEN TRIM(h.grandparent_title)
+                      ELSE TRIM(COALESCE(h.title, 'Unknown'))
+                    END AS display_title,
+
+                    CASE
+                      WHEN LOWER(TRIM(COALESCE(h.media_type, ''))) IN ('serie', 'series', 'show', 'episode', 'tv', 'season')
+                           AND TRIM(COALESCE(h.grandparent_title, '')) <> ''
+                        THEN 'series:' || LOWER(TRIM(h.grandparent_title))
+                      WHEN NULLIF(TRIM(h.media_key), '') IS NOT NULL
+                        THEN 'media:' || TRIM(h.media_key)
+                      ELSE 'title:' || LOWER(TRIM(COALESCE(h.title, 'Unknown')))
+                    END AS media_group_key,
+
+                    (
+                      CAST(h.server_id AS TEXT) || '|' ||
+                      CAST(h.library_section_id AS TEXT) || '|' ||
+                      CAST(vu_ref.id AS TEXT) || '|' ||
+                      COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
+                      strftime('%Y-%m-%d %H:%M', h.started_at)
+                    ) AS play_key
+
+                  FROM media_session_history h
+                  JOIN libraries l
+                    ON l.server_id = h.server_id
+                   AND CAST(l.section_id AS TEXT) = CAST(h.library_section_id AS TEXT)
+                  JOIN servers s
+                    ON s.id = l.server_id
+                  JOIN media_users mu_ref
+                    ON mu_ref.id = h.media_user_id
+                  JOIN vodum_users vu_ref
+                    ON vu_ref.id = mu_ref.vodum_user_id
+                  WHERE {where_hist_sql}
+                    AND COALESCE(NULLIF(TRIM(h.library_section_id), ''), '') <> ''
+                ),
+                plays AS (
+                  SELECT
+                    play_key,
+                    MAX(library_id) AS library_id,
+                    MAX(library_name) AS library_name,
+                    MAX(media_type) AS media_type,
+                    MAX(server_id) AS server_id,
+                    MAX(server_name) AS server_name,
+                    MAX(provider) AS provider,
+                    MAX(vodum_user_id) AS vodum_user_id,
+                    MAX(media_key) AS media_key,
+                    MAX(display_title) AS display_title,
+                    MAX(media_group_key) AS media_group_key,
+                    MAX(stopped_at) AS stopped_at
+                  FROM hist
+                  GROUP BY play_key
+                ),
+                media_agg AS (
+                  SELECT
+                    library_id,
+                    library_name,
+                    media_type,
+                    server_id,
+                    server_name,
+                    provider,
+                    media_group_key,
+                    MAX(display_title) AS display_title,
+                    MAX(media_key) AS media_key,
+                    COUNT(*) AS plays,
+                    COUNT(DISTINCT vodum_user_id) AS user_count,
+                    MAX(stopped_at) AS last_play_at
+                  FROM plays
+                  GROUP BY
+                    library_id,
+                    library_name,
+                    media_type,
+                    server_id,
+                    server_name,
+                    provider,
+                    media_group_key
+                ),
+                latest_snapshots AS (
+                  SELECT
+                    library_id,
+                    media_group_key,
+                    raw_json,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY library_id, media_group_key
+                      ORDER BY stopped_at DESC, hist_id DESC
+                    ) AS rn
+                  FROM hist
+                ),
+                ranked AS (
+                  SELECT
+                    m.*,
+                    ls.raw_json,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY m.library_id
+                      ORDER BY m.plays DESC, m.user_count DESC, m.last_play_at DESC, m.display_title ASC
+                    ) AS row_in_library
+                  FROM media_agg m
+                  LEFT JOIN latest_snapshots ls
+                    ON ls.library_id = m.library_id
+                   AND ls.media_group_key = m.media_group_key
+                   AND ls.rn = 1
+                )
+                SELECT
+                  library_id,
+                  library_name,
+                  media_type,
+                  server_id,
+                  server_name,
+                  provider,
+                  media_group_key,
+                  display_title,
+                  media_key,
+                  plays,
+                  user_count,
+                  last_play_at,
+                  raw_json,
+                  row_in_library
+                FROM ranked
+                WHERE row_in_library <= 6
+                ORDER BY library_name COLLATE NOCASE, row_in_library ASC
+                """,
+                tuple(params_hist),
+            )
+
+            top_rows = [dict(r) for r in (top_rows or [])]
+
+            cards_by_library = {}
+            for r in top_rows:
+                card = cards_by_library.get(r["library_id"])
+                if not card:
+                    card = {
+                        "library_id": r["library_id"],
+                        "library_name": r["library_name"],
+                        "server_name": r["server_name"],
+                        "media_type": r.get("media_type"),
+                        "items": [],
+                        "total_plays": 0,
+                        "total_users": 0,
+                    }
+                    cards_by_library[r["library_id"]] = card
+
+                item = dict(r)
+                item["poster_url"] = _build_history_poster_url(item)
+
+                card["items"].append(item)
+                card["total_plays"] += int(item.get("plays") or 0)
+
+            library_top_cards = list(cards_by_library.values())
+
+            for card in library_top_cards:
+                users_seen = set()
+                for item in card["items"]:
+                    try:
+                        users_seen.add(int(item.get("user_count") or 0))
+                    except Exception:
+                        pass
+                card["total_users"] = sum(int(x.get("user_count") or 0) for x in card["items"])
+
+            library_top_cards.sort(
+                key=lambda c: (
+                    -(c.get("total_plays") or 0),
+                    str(c.get("library_name") or "").lower(),
+                )
+            )
 
         # --------------------------
         # Servers tab (stats combinées + par serveur + tops + breakdowns)
@@ -1790,6 +2146,11 @@ ranked AS (
                 servers_top_users=servers_top_users,
                 servers_top_titles=servers_top_titles,
                 servers_unique_ips=servers_unique_ips,
+                library_top_cards=library_top_cards,
+                library_users=library_users,
+                library_range=library_range,
+                library_user=library_user,
+                hidden_libraries_count=hidden_libraries_count,
             ))
             if sort_key and sort_dir:
                 resp.set_cookie(f"monitoring_{tab}_sort", str(sort_key), max_age=60*60*24*365)
@@ -1831,6 +2192,11 @@ ranked AS (
             servers_top_users=servers_top_users,
             servers_top_titles=servers_top_titles,
             servers_unique_ips=servers_unique_ips,
+            library_top_cards=library_top_cards,
+            library_users=library_users,
+            library_range=library_range,
+            library_user=library_user,
+            hidden_libraries_count=hidden_libraries_count,
         ))
         
         if sort_key and sort_dir:

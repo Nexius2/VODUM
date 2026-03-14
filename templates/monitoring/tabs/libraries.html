@@ -1,78 +1,234 @@
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-  <div class="flex items-center justify-between mb-4">
-    <div class="text-sm font-semibold">Libraries</div>
-    <div class="text-xs text-slate-400">30 rows / page</div>
+<div class="space-y-6">
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="flex items-center justify-between mb-4">
+      <div class="text-sm font-semibold">Libraries</div>
+      <div class="text-xs text-slate-400">30 rows / page</div>
+    </div>
+
+    {% if rows is not defined %}
+      <div class="text-slate-500">
+        Backend not wired yet: variable <code class="text-slate-300">rows</code> missing.
+      </div>
+    {% else %}
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+          {% set current_sort = sort_key or "last" %}
+          {% set current_dir  = sort_dir or "desc" %}
+
+          <tr class="border-b border-slate-800 text-left">
+
+          {% macro th(label, key) %}
+            {% set active = (current_sort == key) %}
+            {% set next_dir = "desc" if (active and current_dir == "asc") else "asc" %}
+            {% set args = dict(request.args) %}
+            {% set _ = args.update({
+              "tab": "libraries",
+              "sort": key,
+              "dir": next_dir,
+              "page": 1
+            }) %}
+            <th class="py-2 pr-4 whitespace-nowrap">
+              <a href="{{ url_for('monitoring_page', **args) }}"
+                 class="inline-flex items-center gap-2 {{ 'text-emerald-400 font-semibold' if active else 'text-slate-400 hover:text-slate-200' }}">
+                {{ label }}
+                {% if active %}
+                  {{ '▲' if current_dir == 'asc' else '▼' }}
+                {% else %}
+                  ↕
+                {% endif %}
+              </a>
+            </th>
+          {% endmacro %}
+
+          {{ th("Server", "server") }}
+          {{ th("Library", "library") }}
+          {{ th("Type", "type") }}
+          {{ th("Items", "items") }}
+          {{ th("Last stream", "last") }}
+          {{ th("Plays", "plays") }}
+          {{ th("Duration", "duration") }}
+
+          </tr>
+          </thead>
+
+          <tbody>
+            {% for r in rows %}
+              <tr class="border-b border-slate-800 {% if not r.has_last_stream %}hidden library-extra-row{% endif %}">
+                <td class="py-3 pr-4">{{ r.server_name }}</td>
+                <td class="py-3 pr-4 font-semibold">{{ r.library_name }}</td>
+                <td class="py-3 pr-4">{{ r.media_type or "-" }}</td>
+                <td class="py-3 pr-4">{{ r.item_count or "-" }}</td>
+                <td class="py-3 pr-4">{{ r.last_stream_at|tz if r.last_stream_at else "-" }}</td>
+                <td class="py-3 pr-4">{{ r.total_plays or 0 }}</td>
+                <td class="py-3 pr-4">{{ r.played_duration or "0h 0m" }}</td>
+              </tr>
+            {% endfor %}
+
+            {% if rows|length == 0 %}
+              <tr>
+                <td colspan="7" class="py-6 text-slate-500">No data yet.</td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+
+      {% if hidden_libraries_count %}
+        <div class="mt-3">
+          <button
+            type="button"
+            id="libraries-view-more-toggle"
+            class="text-xs text-slate-400 hover:text-slate-200 transition-colors"
+            onclick="
+              (function(btn){
+                var expanded = btn.dataset.expanded === '1';
+                var rows = document.querySelectorAll('.library-extra-row');
+
+                rows.forEach(function(el){
+                  if (expanded) {
+                    el.classList.add('hidden');
+                  } else {
+                    el.classList.remove('hidden');
+                  }
+                });
+
+                btn.dataset.expanded = expanded ? '0' : '1';
+                btn.textContent = expanded ? 'View more' : 'View less';
+              })(this)
+            "
+            data-expanded="0"
+          >
+            View more
+          </button>
+        </div>
+      {% endif %}
+
+      {% if pagination is defined %}
+        {% include "monitoring/partials/_pagination.html" %}
+      {% endif %}
+    {% endif %}
   </div>
 
-  {% if rows is not defined %}
-    <div class="text-slate-500">
-      Backend not wired yet: variable <code class="text-slate-300">rows</code> missing.
-    </div>
-  {% else %}
-    <div class="overflow-x-auto">
-      <table class="w-full text-sm">
-		<thead>
-		{% set current_sort = sort_key or "server" %}
-		{% set current_dir  = sort_dir or "asc" %}
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-5">
+      <div>
+        <div class="text-sm font-semibold">Top played by library</div>
+        <div class="text-xs text-slate-400 mt-1">
+          Only libraries with watched media in the selected period are shown.
+        </div>
+      </div>
 
-		<tr class="border-b border-slate-800 text-left">
+      <form method="get" action="{{ url_for('monitoring_page') }}" class="flex flex-wrap items-center gap-2">
+        <input type="hidden" name="tab" value="libraries">
 
-		{% macro th(label, key) %}
-		  {% set active = (current_sort == key) %}
-		  {% set next_dir = "desc" if (active and current_dir == "asc") else "asc" %}
-		  {% set args = dict(request.args) %}
-		  {% set _ = args.update({
-			  "tab": "libraries",
-			  "sort": key,
-			  "dir": next_dir,
-			  "page": 1
-		  }) %}
-		  <th class="py-2 pr-4">
-			<a href="{{ url_for('monitoring_page', **args) }}"
-			   class="inline-flex items-center gap-2
-					  {{ 'text-emerald-400 font-semibold' if active else 'text-slate-400' }}">
-			  {{ label }}
-			  {% if active %}
-				{{ '▲' if current_dir == 'asc' else '▼' }}
-			  {% else %}
-				↕
-			  {% endif %}
-			</a>
-		  </th>
-		{% endmacro %}
+        {% if request.args.get("sort") %}
+          <input type="hidden" name="sort" value="{{ request.args.get('sort') }}">
+        {% endif %}
+        {% if request.args.get("dir") %}
+          <input type="hidden" name="dir" value="{{ request.args.get('dir') }}">
+        {% endif %}
 
-		{{ th("Server", "server") }}
-		{{ th("Library", "library") }}
-		{{ th("Type", "type") }}
-		{{ th("Items", "items") }}
-		{{ th("Last stream", "last") }}
-		{{ th("Plays", "plays") }}
-		{{ th("Duration", "duration") }}
-
-		</tr>
-		</thead>
-
-        <tbody>
-          {% for r in rows %}
-            <tr class="border-b border-slate-800">
-              <td class="py-3 pr-4 font-semibold">{{ r.library_name }}</td>
-              <td class="py-3 pr-4">{{ r.server_name }}</td>
-              <td class="py-3 pr-4">{{ r.media_type or "-" }}</td>
-              <td class="py-3 pr-4">{{ r.item_count or "-" }}</td>
-              <td class="py-3 pr-4">{{ r.last_stream_at|tz or "-" }}</td>
-              <td class="py-3 pr-4">{{ r.total_plays or 0 }}</td>
-              <td class="py-3 pr-4">{{ r.played_duration or "0h 0m" }}</td>
-            </tr>
+        <select
+          name="lib_user"
+          onchange="this.form.submit()"
+          class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200"
+        >
+          <option value="all" {% if library_user == "all" %}selected{% endif %}>All users</option>
+          {% for u in library_users %}
+            <option value="{{ u.id }}" {% if library_user|string == u.id|string %}selected{% endif %}>
+              {{ u.label }}
+            </option>
           {% endfor %}
-          {% if rows|length == 0 %}
-            <tr><td colspan="7" class="py-6 text-slate-500">No data yet.</td></tr>
-          {% endif %}
-        </tbody>
-      </table>
+        </select>
+
+        <select
+          name="lib_range"
+          onchange="this.form.submit()"
+          class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200"
+        >
+          <option value="7d"  {% if library_range == "7d" %}selected{% endif %}>Last 7 days</option>
+          <option value="30d" {% if library_range == "30d" %}selected{% endif %}>Last 30 days</option>
+          <option value="90d" {% if library_range == "90d" %}selected{% endif %}>Last 90 days</option>
+          <option value="1y"  {% if library_range == "1y" %}selected{% endif %}>Last year</option>
+          <option value="all" {% if library_range == "all" %}selected{% endif %}>All time</option>
+        </select>
+      </form>
     </div>
 
-    {% if pagination is defined %}
-      {% include "monitoring/partials/_pagination.html" %}
+    {% if library_top_cards and library_top_cards|length > 0 %}
+      <div class="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-5">
+        {% for card in library_top_cards %}
+          <div class="rounded-2xl border border-slate-800 overflow-hidden bg-slate-950/70">
+            <div class="relative h-36 border-b border-slate-800 overflow-hidden">
+              {% set top_item = card["items"][0] if card["items"] else None %}
+
+              {% if top_item and top_item.poster_url %}
+                <img
+                  src="{{ top_item.poster_url }}"
+                  alt="{{ top_item.display_title }}"
+                  class="absolute inset-0 w-full h-full object-cover opacity-75"
+                  loading="lazy"
+                >
+              {% else %}
+                <div class="absolute inset-0 bg-slate-800"></div>
+              {% endif %}
+
+			<div class="absolute inset-0 bg-gradient-to-r from-slate-950/40 via-slate-950/10 to-slate-950/40"></div>
+			<div class="absolute inset-0 bg-gradient-to-b from-transparent via-slate-950/20 to-slate-950/75"></div>
+
+              <div class="relative z-10 h-full flex flex-col justify-between p-4">
+                <div class="flex items-start justify-between gap-3">
+                  <div>
+                    <div class="text-xl font-semibold text-white">{{ card.library_name }}</div>
+                    <div class="text-xs text-slate-300 mt-1">
+                      {{ card.server_name }}
+                    </div>
+                    <div class="text-[11px] text-slate-400 mt-1">
+                      {{ card.total_plays }} plays
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="divide-y divide-slate-800">
+              {% for item in card["items"] %}
+                <div class="flex items-start gap-3 p-3">
+                  <div class="w-12 h-16 rounded-lg overflow-hidden bg-slate-800 shrink-0">
+                    {% if item.poster_url %}
+                      <img
+                        src="{{ item.poster_url }}"
+                        alt="{{ item.display_title }}"
+                        class="w-full h-full object-cover"
+                        loading="lazy"
+                      >
+                    {% endif %}
+                  </div>
+
+                  <div class="min-w-0 flex-1">
+                    <div class="text-sm font-medium text-slate-100 truncate">
+                      {{ item.display_title }}
+                    </div>
+                    <div class="text-xs text-slate-400 mt-1">
+                      {{ item.plays }} play{% if item.plays != 1 %}s{% endif %}
+                    </div>
+                    <div class="text-xs text-slate-500">
+                      {{ item.user_count }} user{% if item.user_count != 1 %}s{% endif %}
+                    </div>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="text-sm text-slate-500">
+        No watched media found for the selected filters.
+      </div>
     {% endif %}
-  {% endif %}
+  </div>
+
 </div>
