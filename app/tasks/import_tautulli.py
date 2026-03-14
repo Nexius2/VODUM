@@ -676,7 +676,7 @@ def import_tautulli_db(
         # ------------------------------------------------------------
         q = """
         SELECT
-          sh.reference_id        AS session_key,
+          sh.reference_id        AS tautulli_reference_id,
           sh.started             AS started,
           sh.stopped             AS stopped,
           sh.rating_key          AS rating_key,
@@ -690,12 +690,17 @@ def import_tautulli_db(
           u.user_id              AS plex_user_id,
           u.username             AS u_username,
           COALESCE(u.email, sh.user) AS u_email,
-          m.media_type           AS m_media_type,
-          m.title                AS title,
-          m.parent_title         AS parent_title,
-          m.grandparent_title    AS grandparent_title,
-          m.duration             AS duration_ms,
-          m.guid                 AS guid
+          m.media_type              AS m_media_type,
+          m.title                   AS title,
+          m.parent_title            AS parent_title,
+          m.grandparent_title       AS grandparent_title,
+          m.duration                AS duration_ms,
+          m.guid                    AS guid,
+          m.thumb                   AS thumb,
+          m.parent_thumb            AS parent_thumb,
+          m.grandparent_thumb       AS grandparent_thumb,
+          m.parent_rating_key       AS parent_rating_key,
+          m.grandparent_rating_key  AS grandparent_rating_key
         FROM session_history sh
         LEFT JOIN users u
           ON u.user_id = sh.user_id
@@ -833,6 +838,13 @@ def import_tautulli_db(
                     "tautulli": {
                         "guid": row["guid"],
                         "platform": row["platform"],
+                    },
+                    "VideoOrTrack": {
+                        "thumb": row["thumb"],
+                        "parentThumb": row["parent_thumb"],
+                        "grandparentThumb": row["grandparent_thumb"],
+                        "parentRatingKey": row["parent_rating_key"],
+                        "grandparentRatingKey": row["grandparent_rating_key"],
                     }
                 },
                 ensure_ascii=False,
@@ -842,11 +854,13 @@ def import_tautulli_db(
             device = (row["platform"] or "").strip()
             client_product = (row["product"] or "").strip()
 
+            tautulli_reference_id = str(row["tautulli_reference_id"] or "").strip()
+
             batch.append(
                 (
                     int(vodum_server_id),
                     "plex",
-                    str(row["session_key"] or ""),
+                    (f"tautulli:{tautulli_reference_id}" if tautulli_reference_id else None),
                     media_key,
                     external_user_id,
                     int(media_user_id),
@@ -863,7 +877,7 @@ def import_tautulli_db(
                     raw_json,
                     ip,
                     client_product,
-                    vodum_lib_map.get(section_id),
+                    section_id,   # IMPORTANT: vrai section_id Plex, pas l'id interne de libraries
                 )
             )
 
