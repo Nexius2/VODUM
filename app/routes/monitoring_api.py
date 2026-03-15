@@ -116,13 +116,48 @@ def register(app):
             if not item_id:
                 abort(400)
 
-            # small poster size by default
+            image_type = (request.args.get("image_type") or "Primary").strip()
+            image_index = request.args.get("image_index")
+
             w = request.args.get("w", "120")
             q = request.args.get("q", "90")
 
-            path = f"/Items/{item_id}/Images/Primary"
+            path = f"/Items/{item_id}/Images/{image_type}"
+            if image_index not in (None, ""):
+                path += f"/{image_index}"
+
             params = {"maxWidth": w, "quality": q}
             headers = {"X-Emby-Token": token}
+
+            last_err = None
+            for base in bases:
+                try:
+                    r = _try_get(base + path, headers=headers, params=params)
+                    ct = r.headers.get("Content-Type") or "image/jpeg"
+                    return Response(
+                        r.content,
+                        mimetype=ct,
+                        headers={"Cache-Control": "public, max-age=300"},
+                    )
+                except Exception as e:
+                    last_err = e
+                    continue
+
+            if image_type.lower() != "primary":
+                path = f"/Items/{item_id}/Images/Primary"
+                for base in bases:
+                    try:
+                        r = _try_get(base + path, headers=headers, params=params)
+                        ct = r.headers.get("Content-Type") or "image/jpeg"
+                        return Response(
+                            r.content,
+                            mimetype=ct,
+                            headers={"Cache-Control": "public, max-age=300"},
+                        )
+                    except Exception:
+                        continue
+
+            abort(502)
 
             last_err = None
             for base in bases:

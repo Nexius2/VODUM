@@ -524,6 +524,8 @@ def sync_plex_libraries(db, server, libraries):
     """
     Synchronise les libraries Plex pour un serveur donné.
     + met à jour item_count.
+    + réconcilie une library existante si le section_id a changé
+      mais que server_id + name + type correspondent.
     """
     server_id = server["id"]
 
@@ -531,65 +533,177 @@ def sync_plex_libraries(db, server, libraries):
     token = (server.get("token") or "").strip()
 
     rows = db.query(
-        "SELECT id, section_id FROM libraries WHERE server_id = ?",
+        """
+        SELECT id, section_id, name, type
+        FROM libraries
+        WHERE server_id = ?
+        """,
         (server_id,),
     )
 
-    existing = {row["section_id"]: row["id"] for row in rows}
-    found = set()
+    rows = [dict(row) for row in rows]
 
-    # Session requests avec timeout par défaut
+    def _norm(v):
+        return (str(v or "")).strip().casefold()
+
+    # Match principal = vrai section_id Plex
+    existing_by_section = {
+        str(row["section_id"]): dict(row)
+        for row in rows
+        if str(row.get("section_id") or "").strip()
+    }
+
+    # Match de secours = même serveur + même nom + même type
+    # On ne garde qu'une seule entrée par clé ; si doublon déjà présent en base,
+    # on prend la première et on loggue.
+    existing_by_identity = {}
+    for row in rows:
+        key = (_norm(row.get("name")), _norm(row.get("type")))
+        if key not in existing_by_identity:
+            existing_by_identity[key] = dict(row)
+        else:
+            log.warning(
+                f"[SYNC LIBRARIES] Duplicate library identity already in DB for "
+                f"server_id={server_id}, name={row.get('name')}, type={row.get('type')} "
+                f"(ids {existing_by_identity[key]['id']} and {row['id']})"
+            )
+
+    found_ids = set()
+    found_section_ids = set()
+
     session = requests.Session()
 
     for lib in libraries:
-        sid = lib["section_id"]
-        found.add(sid)
+        sid = str(lib.get("section_id") or "").strip()
+        name = (lib.get("name") or "").strip()
+        ltype = (lib.get("type") or "unknown").strip()
 
-        if sid in existing:
+        if not sid:
+            log.warning(f"[SYNC LIBRARIES] Skipped library without section_id on server_id={server_id}: {lib}")
+            continue
+
+        identity_key = (_norm(name), _norm(ltype))
+        matched_row = None
+
+        # 1) Cas nominal : on retrouve la library par section_id
+        if sid in existing_by_section:
+            matched_row = existing_by_section[sid]
+
             db.execute(
                 """
                 UPDATE libraries
                 SET name = ?, type = ?
                 WHERE id = ?
                 """,
-                (lib["name"], lib["type"], existing[sid]),
-            )
-        else:
-            db.execute(
-                """
-                INSERT INTO libraries(server_id, section_id, name, type)
-                VALUES (?, ?, ?, ?)
-                """,
-                (server_id, sid, lib["name"], lib["type"]),
+                (name, ltype, matched_row["id"]),
             )
 
-        # ✅ item_count (best effort)
+        else:
+            # 2) Cas de réconciliation : même name + même type sur le même serveur
+            candidate = existing_by_identity.get(identity_key)
+
+            if candidate:
+                old_sid = str(candidate.get("section_id") or "").strip()
+
+                db.execute(
+                    """
+                    UPDATE libraries
+                    SET section_id = ?, name = ?, type = ?
+                    WHERE id = ?
+                    """,
+                    (sid, name, ltype, candidate["id"]),
+                )
+
+                matched_row = dict(candidate)
+                matched_row["section_id"] = sid
+                matched_row["name"] = name
+                matched_row["type"] = ltype
+
+                log.info(
+                    f"[SYNC LIBRARIES] Reattached library id={candidate['id']} "
+                    f"server_id={server_id} name={name!r} type={ltype!r} "
+                    f"section_id {old_sid!r} -> {sid!r}"
+                )
+
+                # On met à jour les index en mémoire pour éviter toute confusion
+                if old_sid and old_sid in existing_by_section:
+                    existing_by_section.pop(old_sid, None)
+                existing_by_section[sid] = matched_row
+                existing_by_identity[identity_key] = matched_row
+
+            else:
+                # 3) Vraie nouvelle library
+                db.execute(
+                    """
+                    INSERT INTO libraries(server_id, section_id, name, type)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (server_id, sid, name, ltype),
+                )
+
+                inserted = db.query_one(
+                    """
+                    SELECT id, section_id, name, type
+                    FROM libraries
+                    WHERE server_id = ? AND section_id = ?
+                    """,
+                    (server_id, sid),
+                )
+
+                if inserted:
+                    matched_row = dict(inserted)
+                    existing_by_section[sid] = matched_row
+                    existing_by_identity[identity_key] = matched_row
+                    log.info(
+                        f"[SYNC LIBRARIES] New library inserted id={inserted['id']} "
+                        f"server_id={server_id} section_id={sid!r} name={name!r} type={ltype!r}"
+                    )
+                else:
+                    log.warning(
+                        f"[SYNC LIBRARIES] Inserted library not found back "
+                        f"server_id={server_id} section_id={sid!r} name={name!r} type={ltype!r}"
+                    )
+
+        if matched_row:
+            found_ids.add(int(matched_row["id"]))
+        found_section_ids.add(sid)
+
+        # item_count (best effort)
         if base_url and token:
             try:
-                count = _plex_section_total_items(session, base_url, token, str(sid), timeout=10)
+                count = _plex_section_total_items(session, base_url, token, sid, timeout=10)
             except Exception:
                 count = None
 
             if count is not None:
                 db.execute(
                     "UPDATE libraries SET item_count = ? WHERE server_id = ? AND section_id = ?",
-                    (int(count), server_id, str(sid)),
+                    (int(count), server_id, sid),
                 )
 
-    # suppression des libraries disparues
-    for sid, lib_id in existing.items():
-        if sid not in found:
-            log.info(f"[SYNC LIBRARIES] Library removal {lib_id} (section={sid})")
+    # Suppression des vraies libraries disparues :
+    # uniquement celles du serveur qui n'ont été ni revues ni réattachées.
+    for row in rows:
+        lib_id = int(row["id"])
+        sid = str(row.get("section_id") or "").strip()
 
-            db.execute(
-                "DELETE FROM media_user_libraries WHERE library_id = ?",
-                (lib_id,),
-            )
+        if lib_id in found_ids:
+            continue
 
-            db.execute(
-                "DELETE FROM libraries WHERE id = ?",
-                (lib_id,),
-            )
+        log.info(
+            f"[SYNC LIBRARIES] Library removal id={lib_id} "
+            f"(server_id={server_id}, section={sid!r}, name={row.get('name')!r}, type={row.get('type')!r})"
+        )
+
+        db.execute(
+            "DELETE FROM media_user_libraries WHERE library_id = ?",
+            (lib_id,),
+        )
+
+        db.execute(
+            "DELETE FROM libraries WHERE id = ?",
+            (lib_id,),
+        )
 
 
 

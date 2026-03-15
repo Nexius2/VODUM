@@ -349,7 +349,10 @@ def register(app):
                 },
             )
 
-            session["lang"] = new_values["default_language"]
+            if new_values["default_language"] in get_available_languages():
+                session["lang"] = new_values["default_language"]
+            else:
+                session.pop("lang", None)
 
             flash(get_translator()("settings_saved"), "success")
             return redirect(url_for("settings_page"))

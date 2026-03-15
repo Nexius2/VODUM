@@ -3,23 +3,33 @@
 {% if top_content_30d and top_content_30d|length > 0 %}
   <div class="space-y-3">
     {% for c in top_content_30d[:4] %}
-      <div class="flex items-center justify-between">
-        <div class="text-sm">
-          <div class="font-semibold">{{ c.title or "-" }}</div>
-          
-        </div>
+      <div class="relative overflow-hidden rounded-xl border border-slate-800 min-h-[88px] bg-slate-950/70">
+        {% if c.backdrop_url %}
+          <div
+            class="absolute inset-0 bg-center bg-cover"
+            style="background-image: url('{{ c.backdrop_url }}');"
+          ></div>
+          <div class="absolute inset-0 bg-gradient-to-r from-slate-950/40 via-slate-950/10 to-slate-950/40"></div>
+          <div class="absolute inset-0 bg-gradient-to-b from-transparent via-slate-950/20 to-slate-950/75"></div>
+        {% else %}
+          <div class="absolute inset-0 bg-slate-800"></div>
+        {% endif %}
 
-        <div class="text-xs text-slate-400 text-right">
-          <div>{{ c.viewers }} users</div>
-          <div class="text-slate-500">{{ c.plays }} plays</div>
-          <div>
-            {% set ms = c.watch_ms or 0 %}
-            {{ (ms // 3600000) }}h {{ ((ms % 3600000) // 60000) }}m
+        <div class="relative z-10 flex items-center justify-between gap-4 px-4 py-3">
+          <div class="text-sm min-w-0">
+            <div class="font-semibold truncate text-white">{{ c.title or "-" }}</div>
+          </div>
+
+          <div class="text-xs text-slate-300 text-right shrink-0">
+            <div>{{ c.viewers }} users</div>
+            <div class="text-slate-400">{{ c.plays }} plays</div>
+            <div>
+              {% set ms = c.watch_ms or 0 %}
+              {{ (ms // 3600000) }}h {{ ((ms % 3600000) // 60000) }}m
+            </div>
           </div>
         </div>
       </div>
-
-      {% if not loop.last %}<div class="border-t border-slate-800"></div>{% endif %}
     {% endfor %}
   </div>
 {% else %}

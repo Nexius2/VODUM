@@ -93,9 +93,9 @@ def get_available_languages():
 def _resolve_active_language(settings: Optional[dict] = None) -> str:
     """
     Priorité :
-    1. session["lang"]
-    2. langue du navigateur (Accept-Language)
-    3. settings.default_language
+    1. session["lang"]            -> choix manuel courant
+    2. settings.default_language  -> choix manuel enregistré dans les options
+    3. langue du navigateur       -> fallback auto
     4. en
     """
     logger = get_logger("i18n")
@@ -105,6 +105,10 @@ def _resolve_active_language(settings: Optional[dict] = None) -> str:
     if session_lang in available_langs:
         return session_lang
 
+    default_lang = (settings or {}).get("default_language")
+    if default_lang in available_langs:
+        return default_lang
+
     browser_lang = None
     try:
         browser_lang = request.accept_languages.best_match(available_langs)
@@ -113,10 +117,6 @@ def _resolve_active_language(settings: Optional[dict] = None) -> str:
 
     if browser_lang in available_langs:
         return browser_lang
-
-    default_lang = (settings or {}).get("default_language")
-    if default_lang in available_langs:
-        return default_lang
 
     if "en" in available_langs:
         return "en"
