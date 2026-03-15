@@ -274,6 +274,94 @@ def _build_history_poster_url(row):
 
     return None
 
+def _build_history_backdrop_url(row):
+    row = dict(row or {})
+    try:
+        server_id = int(row.get("server_id") or 0)
+    except Exception:
+        server_id = 0
+
+    if server_id <= 0:
+        return None
+
+    provider = (row.get("provider") or "").strip().lower()
+    raw = row.get("raw_json")
+    media_type = (row.get("media_type") or "").strip().lower()
+    media_group_key = (row.get("media_group_key") or "").strip().lower()
+
+    is_series = (
+        media_group_key.startswith("series:")
+        or media_type in ("serie", "series", "show", "episode", "tv", "season")
+    )
+
+    data = {}
+    if raw:
+        try:
+            data = json.loads(raw)
+        except Exception:
+            data = {}
+
+    if provider == "plex":
+        attrs = (data.get("VideoOrTrack") or {})
+
+        if is_series:
+            backdrop_path = (
+                attrs.get("grandparentArt")
+                or attrs.get("art")
+                or attrs.get("parentArt")
+            )
+        else:
+            backdrop_path = (
+                attrs.get("art")
+                or attrs.get("thumb")
+                or attrs.get("parentArt")
+            )
+
+        if not backdrop_path:
+            if is_series:
+                grandparent_rating_key = str(attrs.get("grandparentRatingKey") or "").strip()
+                parent_rating_key = str(attrs.get("parentRatingKey") or "").strip()
+                media_key = str(row.get("media_key") or "").strip()
+
+                if grandparent_rating_key:
+                    backdrop_path = f"/library/metadata/{grandparent_rating_key}/art"
+                elif parent_rating_key:
+                    backdrop_path = f"/library/metadata/{parent_rating_key}/art"
+                elif media_key:
+                    backdrop_path = f"/library/metadata/{media_key}/art"
+            else:
+                media_key = str(row.get("media_key") or "").strip()
+                if media_key:
+                    backdrop_path = f"/library/metadata/{media_key}/art"
+
+        if backdrop_path:
+            return url_for(
+                "api_monitoring_poster",
+                server_id=server_id,
+                path=backdrop_path,
+            )
+
+    elif provider == "jellyfin":
+        now = (data.get("NowPlayingItem") or data.get("Item") or {})
+
+        if is_series:
+            backdrop_item_id = now.get("SeriesId") or now.get("Id") or row.get("media_key")
+        else:
+            backdrop_item_id = now.get("Id") or now.get("SeriesId") or row.get("media_key")
+
+        if backdrop_item_id:
+            return url_for(
+                "api_monitoring_poster",
+                server_id=server_id,
+                item_id=str(backdrop_item_id),
+                image_type="Backdrop",
+                image_index="0",
+                w="900",
+                q="80",
+            )
+
+    return None
+
 def register(app):
     @app.route("/monitoring")
     def monitoring_page():
@@ -697,10 +785,13 @@ def register(app):
             WITH base AS (
               SELECT
                 h.server_id,
+                s.type AS provider,
                 h.started_at,
                 h.stopped_at,
                 TRIM(h.grandparent_title) AS series_title,
                 h.media_key,
+                h.media_type,
+                h.raw_json,
                 COALESCE(
                   CAST(mu.vodum_user_id AS TEXT),
                   'media:' || CAST(mu.id AS TEXT)
@@ -719,26 +810,64 @@ def register(app):
                 ) AS play_key
               FROM media_session_history h
               LEFT JOIN media_users mu ON mu.id = h.media_user_id
+              LEFT JOIN servers s ON s.id = h.server_id
               WHERE h.stopped_at >= datetime('now', '-30 days')
                 AND TRIM(COALESCE(h.grandparent_title, '')) <> ''
             ),
             plays AS (
               SELECT
                 play_key,
+                MAX(server_id) AS server_id,
+                MAX(provider) AS provider,
                 MAX(series_title) AS series_title,
+                MAX(media_key) AS media_key,
+                MAX(media_type) AS media_type,
+                MAX(raw_json) AS raw_json,
                 MAX(viewer_id) AS viewer_id,
-                MAX(watch_ms_capped) AS watch_ms
+                MAX(watch_ms_capped) AS watch_ms,
+                MAX(stopped_at) AS stopped_at
               FROM base
               GROUP BY play_key
+            ),
+            agg AS (
+              SELECT
+                series_title AS title,
+                COUNT(DISTINCT viewer_id) AS viewers,
+                COUNT(*) AS plays,
+                COALESCE(SUM(watch_ms), 0) AS watch_ms
+              FROM plays
+              GROUP BY series_title
+            ),
+            latest AS (
+              SELECT
+                series_title AS title,
+                server_id,
+                provider,
+                media_key,
+                media_type,
+                raw_json,
+                ROW_NUMBER() OVER (
+                  PARTITION BY series_title
+                  ORDER BY stopped_at DESC
+                ) AS rn
+              FROM plays
             )
             SELECT
-              series_title AS title,
-              COUNT(DISTINCT viewer_id) AS viewers,
-              COUNT(*) AS plays,
-              COALESCE(SUM(watch_ms), 0) AS watch_ms
-            FROM plays
-            GROUP BY series_title
-            ORDER BY viewers DESC, watch_ms DESC
+              a.title,
+              a.viewers,
+              a.plays,
+              a.watch_ms,
+              l.server_id,
+              l.provider,
+              l.media_key,
+              l.media_type,
+              l.raw_json,
+              ('series:' || LOWER(TRIM(a.title))) AS media_group_key
+            FROM agg a
+            LEFT JOIN latest l
+              ON l.title = a.title
+             AND l.rn = 1
+            ORDER BY a.viewers DESC, a.watch_ms DESC
             LIMIT 10
             """
         )
@@ -751,10 +880,13 @@ def register(app):
             WITH base AS (
               SELECT
                 h.server_id,
+                s.type AS provider,
                 h.started_at,
                 h.stopped_at,
                 TRIM(COALESCE(NULLIF(h.title, ''), '-')) AS movie_title,
                 h.media_key,
+                h.media_type,
+                h.raw_json,
                 COALESCE(
                   CAST(mu.vodum_user_id AS TEXT),
                   'media:' || CAST(mu.id AS TEXT)
@@ -773,30 +905,75 @@ def register(app):
                 ) AS play_key
               FROM media_session_history h
               LEFT JOIN media_users mu ON mu.id = h.media_user_id
+              LEFT JOIN servers s ON s.id = h.server_id
               WHERE h.stopped_at >= datetime('now', '-30 days')
-                AND TRIM(COALESCE(h.grandparent_title, '')) = ''   -- uniquement films
+                AND TRIM(COALESCE(h.grandparent_title, '')) = ''
             ),
             plays AS (
               SELECT
                 play_key,
+                MAX(server_id) AS server_id,
+                MAX(provider) AS provider,
                 MAX(movie_title) AS movie_title,
+                MAX(media_key) AS media_key,
+                MAX(media_type) AS media_type,
+                MAX(raw_json) AS raw_json,
                 MAX(viewer_id) AS viewer_id,
-                MAX(watch_ms_capped) AS watch_ms
+                MAX(watch_ms_capped) AS watch_ms,
+                MAX(stopped_at) AS stopped_at
               FROM base
               GROUP BY play_key
+            ),
+            agg AS (
+              SELECT
+                movie_title AS title,
+                COUNT(DISTINCT viewer_id) AS viewers,
+                COUNT(*) AS plays,
+                COALESCE(SUM(watch_ms), 0) AS watch_ms
+              FROM plays
+              GROUP BY movie_title
+            ),
+            latest AS (
+              SELECT
+                movie_title AS title,
+                server_id,
+                provider,
+                media_key,
+                media_type,
+                raw_json,
+                ROW_NUMBER() OVER (
+                  PARTITION BY movie_title
+                  ORDER BY stopped_at DESC
+                ) AS rn
+              FROM plays
             )
             SELECT
-              movie_title AS title,
-              COUNT(DISTINCT viewer_id) AS viewers,
-              COUNT(*) AS plays,
-              COALESCE(SUM(watch_ms), 0) AS watch_ms
-            FROM plays
-            GROUP BY movie_title
-            ORDER BY viewers DESC, watch_ms DESC
+              a.title,
+              a.viewers,
+              a.plays,
+              a.watch_ms,
+              l.server_id,
+              l.provider,
+              l.media_key,
+              l.media_type,
+              l.raw_json,
+              ('movie:' || LOWER(TRIM(a.title))) AS media_group_key
+            FROM agg a
+            LEFT JOIN latest l
+              ON l.title = a.title
+             AND l.rn = 1
+            ORDER BY a.viewers DESC, a.watch_ms DESC
             LIMIT 10
             """
         )
 
+        top_content_30d = [dict(r) for r in (top_content_30d or [])]
+        for item in top_content_30d:
+            item["backdrop_url"] = _build_history_backdrop_url(item)
+
+        top_movies_30d = [dict(r) for r in (top_movies_30d or [])]
+        for item in top_movies_30d:
+            item["backdrop_url"] = _build_history_backdrop_url(item)
 
         # --------------------------
         # Peak streams (7d) = max de Live sessions (snapshots)
