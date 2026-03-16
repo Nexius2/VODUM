@@ -554,7 +554,15 @@
         <tbody>
           {% for r in ip_rows %}
             <tr class="border-b border-slate-800">
-              <td class="py-3 pr-4 font-semibold">{{ r.ip }}</td>
+              <td class="py-3 pr-4 font-semibold">
+				<button
+				  type="button"
+				  class="js-ip-lookup text-left text-white hover:text-emerald-400 hover:underline transition-colors"
+				  data-ip="{{ r.ip }}"
+				>
+				  {{ r.ip }}
+				</button>
+              </td>
               <td class="py-3 pr-4 text-slate-300">{{ r.last_seen }}</td>
               <td class="py-3 pr-4 text-slate-300">{{ r.first_seen }}</td>
               <td class="py-3 pr-4">{{ r.last_platform or "-" }}</td>
@@ -571,6 +579,269 @@
       </table>
     </div>
   </div>
+
+  <div id="ipLookupModal"
+       class="hidden fixed inset-0 z-50"
+       aria-hidden="true">
+    <div class="absolute inset-0 bg-black/70"></div>
+
+    <div class="relative mx-auto mt-10 w-[95%] max-w-4xl">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
+        <div class="flex items-start justify-between gap-4 px-5 py-4 border-b border-slate-800">
+          <div>
+            <div class="text-lg font-semibold text-white">IP details</div>
+            <div id="ipLookupModalSubtitle" class="text-sm text-slate-400 mt-1">—</div>
+          </div>
+          <button type="button"
+                  id="ipLookupModalClose"
+                  class="px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800">
+            Close
+          </button>
+        </div>
+
+        <div class="p-5 space-y-5">
+          <div id="ipLookupLoading" class="hidden">
+            <div class="flex items-center gap-3 text-slate-300">
+              <svg class="animate-spin h-5 w-5 text-emerald-400" viewBox="0 0 24 24" fill="none">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+              </svg>
+              <span>Loading IP information…</span>
+            </div>
+          </div>
+
+          <div id="ipLookupError" class="hidden rounded-xl border border-rose-800 bg-rose-950/40 px-4 py-3 text-sm text-rose-300">
+            Unable to load IP information.
+          </div>
+
+          <div id="ipLookupContent" class="hidden space-y-5">
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+              <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+                <div class="text-xs text-slate-400">IP</div>
+                <div id="ipLookupIp" class="mt-1 font-semibold break-all">—</div>
+              </div>
+
+              <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+                <div class="text-xs text-slate-400">Location</div>
+                <div id="ipLookupLocation" class="mt-1 font-semibold">—</div>
+              </div>
+
+              <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+                <div class="text-xs text-slate-400">ISP</div>
+                <div id="ipLookupIsp" class="mt-1 font-semibold break-words">—</div>
+              </div>
+
+              <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+                <div class="text-xs text-slate-400">Timezone</div>
+                <div id="ipLookupTimezone" class="mt-1 font-semibold break-words">—</div>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap gap-2" id="ipLookupBadges"></div>
+
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+                <div class="text-sm font-semibold mb-3">Network details</div>
+                <dl class="space-y-3 text-sm">
+                  <div class="flex items-start justify-between gap-4">
+                    <dt class="text-slate-400">Organization</dt>
+                    <dd id="ipLookupOrg" class="text-right text-slate-200 break-words">—</dd>
+                  </div>
+                  <div class="flex items-start justify-between gap-4">
+                    <dt class="text-slate-400">ASN</dt>
+                    <dd id="ipLookupAsn" class="text-right text-slate-200 break-words">—</dd>
+                  </div>
+                  <div class="flex items-start justify-between gap-4">
+                    <dt class="text-slate-400">Coordinates</dt>
+                    <dd id="ipLookupCoords" class="text-right text-slate-200 break-words">—</dd>
+                  </div>
+                </dl>
+              </div>
+
+              <div class="bg-slate-950 border border-slate-800 rounded-2xl p-2">
+                <div id="ipLookupMapWrap" class="hidden">
+                  <iframe
+                    id="ipLookupMap"
+                    title="IP location map"
+                    class="w-full h-[320px] rounded-xl border-0"
+                    loading="lazy"
+                    referrerpolicy="no-referrer-when-downgrade"
+                    src=""
+                  ></iframe>
+                </div>
+                <div id="ipLookupNoMap"
+                     class="h-[320px] flex items-center justify-center rounded-xl border border-dashed border-slate-800 text-sm text-slate-500">
+                  No map available for this IP.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    const modal = document.getElementById("ipLookupModal");
+    const modalClose = document.getElementById("ipLookupModalClose");
+    const modalSubtitle = document.getElementById("ipLookupModalSubtitle");
+
+    const loadingBox = document.getElementById("ipLookupLoading");
+    const errorBox = document.getElementById("ipLookupError");
+    const contentBox = document.getElementById("ipLookupContent");
+
+    const elIp = document.getElementById("ipLookupIp");
+    const elLocation = document.getElementById("ipLookupLocation");
+    const elIsp = document.getElementById("ipLookupIsp");
+    const elTimezone = document.getElementById("ipLookupTimezone");
+    const elOrg = document.getElementById("ipLookupOrg");
+    const elAsn = document.getElementById("ipLookupAsn");
+    const elCoords = document.getElementById("ipLookupCoords");
+    const badges = document.getElementById("ipLookupBadges");
+
+    const mapWrap = document.getElementById("ipLookupMapWrap");
+    const noMap = document.getElementById("ipLookupNoMap");
+    const mapFrame = document.getElementById("ipLookupMap");
+
+    const triggerButtons = document.querySelectorAll(".js-ip-lookup");
+
+    function openModal() {
+      modal.classList.remove("hidden");
+      modal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeModal() {
+      modal.classList.add("hidden");
+      modal.setAttribute("aria-hidden", "true");
+      mapFrame.src = "";
+    }
+
+    function resetState(ip) {
+      modalSubtitle.textContent = ip || "—";
+      loadingBox.classList.remove("hidden");
+      errorBox.classList.add("hidden");
+      contentBox.classList.add("hidden");
+
+      elIp.textContent = "—";
+      elLocation.textContent = "—";
+      elIsp.textContent = "—";
+      elTimezone.textContent = "—";
+      elOrg.textContent = "—";
+      elAsn.textContent = "—";
+      elCoords.textContent = "—";
+      badges.innerHTML = "";
+
+      mapWrap.classList.add("hidden");
+      noMap.classList.remove("hidden");
+      mapFrame.src = "";
+    }
+
+    function showError(message) {
+      loadingBox.classList.add("hidden");
+      contentBox.classList.add("hidden");
+      errorBox.textContent = message || "Unable to load IP information.";
+      errorBox.classList.remove("hidden");
+    }
+
+    function setText(el, value, fallback = "—") {
+      el.textContent = (value === null || value === undefined || value === "") ? fallback : value;
+    }
+
+    function addBadge(label, tone = "slate") {
+      const palette = {
+        slate: "border-slate-700 bg-slate-800 text-slate-200",
+        emerald: "border-emerald-800 bg-emerald-950/50 text-emerald-300",
+        amber: "border-amber-800 bg-amber-950/50 text-amber-300",
+        rose: "border-rose-800 bg-rose-950/50 text-rose-300",
+        sky: "border-sky-800 bg-sky-950/50 text-sky-300",
+      };
+
+      const span = document.createElement("span");
+      span.className = "inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium " + (palette[tone] || palette.slate);
+      span.textContent = label;
+      badges.appendChild(span);
+    }
+
+    async function loadIpDetails(ip) {
+      resetState(ip);
+      openModal();
+
+      try {
+        const res = await fetch(`/api/monitoring/ip_lookup?ip=${encodeURIComponent(ip)}`, {
+          cache: "no-cache",
+          headers: { "X-Requested-With": "XMLHttpRequest" }
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || `HTTP ${res.status}`);
+        }
+
+        loadingBox.classList.add("hidden");
+        errorBox.classList.add("hidden");
+        contentBox.classList.remove("hidden");
+
+        setText(elIp, data.ip);
+        setText(elLocation, data.display_name);
+        setText(elIsp, data.isp);
+        setText(elTimezone, data.timezone);
+        setText(elOrg, data.org);
+        setText(elAsn, data.asn || data.asname);
+
+        if (data.lat !== null && data.lat !== undefined && data.lon !== null && data.lon !== undefined) {
+          setText(elCoords, `${data.lat}, ${data.lon}`);
+        } else {
+          setText(elCoords, null);
+        }
+
+        if (data.is_private) {
+          addBadge("Private / local IP", "amber");
+        } else {
+          addBadge("Public IP", "emerald");
+        }
+
+        if (data.mobile) addBadge("Mobile network", "sky");
+        if (data.proxy) addBadge("Proxy / VPN", "rose");
+        if (data.hosting) addBadge("Hosting / Datacenter", "amber");
+
+        if (data.map_url) {
+          mapFrame.src = data.map_url;
+          mapWrap.classList.remove("hidden");
+          noMap.classList.add("hidden");
+        } else {
+          mapWrap.classList.add("hidden");
+          noMap.classList.remove("hidden");
+        }
+      } catch (err) {
+        showError("Unable to load IP information for this address.");
+      }
+    }
+
+    triggerButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const ip = btn.dataset.ip || "";
+        if (!ip) return;
+        loadIpDetails(ip);
+      });
+    });
+
+    modalClose.addEventListener("click", closeModal);
+
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal || (e.target.classList && e.target.classList.contains("bg-black/70"))) {
+        closeModal();
+      }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !modal.classList.contains("hidden")) {
+        closeModal();
+      }
+    });
+  })();
+  </script>
 {% endif %}
 
 {% endblock %}

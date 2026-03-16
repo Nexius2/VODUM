@@ -136,13 +136,12 @@ def run(task_id: int, db):
             # Unified expiration sender
             "send_expiration_emails": 1 if (email_ok or discord_ok) else 0,
 
-            # Email only
-            "send_mail_campaigns": 1 if email_ok else 0,
+            # Unified modern campaigns
+            "send_comm_campaigns": 1 if (email_ok or discord_ok) else 0,
 
-            # Discord only
-            "send_campaign_discord": 1 if discord_ok else 0,
-
-            # Deprecated
+            # Legacy / deprecated
+            "send_mail_campaigns": 0,
+            "send_campaign_discord": 0,
             "send_expiration_discord": 0,
         }
 

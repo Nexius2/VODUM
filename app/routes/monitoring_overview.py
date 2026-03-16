@@ -408,589 +408,563 @@ def register(app):
         ) or {"online": 0, "offline": 0, "total": 0}
         server_stats = dict(server_stats) if server_stats else {"online": 0, "offline": 0, "total": 0}
 
+        sessions_stats = {"live_sessions": 0, "transcodes": 0, "direct_plays": 0}
+        live_servers = []
+        sessions = []
+        events = []
+        stats_7d = {"sessions": 0, "active_users": 0, "total_watch_ms": 0, "avg_watch_ms": 0}
+        top_users_30d = []
+        top_content_30d = []
+        top_movies_30d = []
+        concurrent_7d = {"peak_streams": 0}
+
         # --------------------------
-        # Sessions live (overview)
+        # Données "live" uniquement pour overview / now_playing
         # --------------------------
-        sessions_stats = db.query_one(
-            """
-            SELECT
-              COUNT(*) AS live_sessions,
-              SUM(CASE WHEN is_transcode = 1 THEN 1 ELSE 0 END) AS transcodes
-            FROM media_sessions
-            WHERE datetime(last_seen_at) >= datetime('now', ?)
-            """,
-            (live_window_sql,),
-        ) or {"live_sessions": 0, "transcodes": 0}
-        sessions_stats = dict(sessions_stats) if sessions_stats else {"live_sessions": 0, "transcodes": 0}
-
-        sessions_stats["live_sessions"] = int(sessions_stats.get("live_sessions") or 0)
-        sessions_stats["transcodes"] = int(sessions_stats.get("transcodes") or 0)
-        sessions_stats["direct_plays"] = max(
-            0,
-            sessions_stats["live_sessions"] - sessions_stats["transcodes"]
-        )
-
-        live_servers = db.query(
-            """
-            SELECT
-              ms.server_id,
-              s.name AS server_name,
-              COUNT(*) AS live_sessions,
-              SUM(CASE WHEN ms.is_transcode = 1 THEN 1 ELSE 0 END) AS transcodes
-            FROM media_sessions ms
-            JOIN servers s ON s.id = ms.server_id
-            WHERE s.type IN ('plex','jellyfin')
-              AND datetime(ms.last_seen_at) >= datetime('now', ?)
-            GROUP BY ms.server_id, s.name
-            HAVING COUNT(*) > 0
-            ORDER BY transcodes DESC, live_sessions DESC, s.name ASC
-            LIMIT 6
-            """,
-            (live_window_sql,),
-        )
-
-        live_servers = [dict(r) for r in (live_servers or [])]
-        for row in live_servers:
-            row["live_sessions"] = int(row.get("live_sessions") or 0)
-            row["transcodes"] = int(row.get("transcodes") or 0)
-            row["direct_plays"] = max(0, row["live_sessions"] - row["transcodes"])
-
-        _apply_server_resource_stats(live_servers, server_resource_stats)
-        
-        # --------------------------
-        # Snapshot "à l'affichage" (garantit que le peak ne redescend pas)
-        # On limite à 1 insert / 30s pour éviter de spammer la DB si tu refresh souvent.
-        # --------------------------
-        try:
-            live_now = int(sessions_stats.get("live_sessions") or 0)
-            transcodes_now = int(sessions_stats.get("transcodes") or 0)
-
-            db.execute(
+        if tab in ("overview", "now_playing"):
+            sessions_stats = db.query_one(
                 """
-                INSERT INTO monitoring_snapshots (ts, live_sessions, transcodes)
-                SELECT CURRENT_TIMESTAMP, ?, ?
-                WHERE NOT EXISTS (
-                  SELECT 1
-                  FROM monitoring_snapshots
-                  WHERE ts >= datetime('now', '-30 seconds')
-                )
+                SELECT
+                  COUNT(*) AS live_sessions,
+                  SUM(CASE WHEN is_transcode = 1 THEN 1 ELSE 0 END) AS transcodes
+                FROM media_sessions
+                WHERE datetime(last_seen_at) >= datetime('now', ?)
                 """,
-                (live_now, transcodes_now),
+                (live_window_sql,),
+            ) or {"live_sessions": 0, "transcodes": 0}
+            sessions_stats = dict(sessions_stats) if sessions_stats else {"live_sessions": 0, "transcodes": 0}
+
+            sessions_stats["live_sessions"] = int(sessions_stats.get("live_sessions") or 0)
+            sessions_stats["transcodes"] = int(sessions_stats.get("transcodes") or 0)
+            sessions_stats["direct_plays"] = max(
+                0,
+                sessions_stats["live_sessions"] - sessions_stats["transcodes"]
             )
 
-            # purge (garde 30 jours)
-            db.execute("DELETE FROM monitoring_snapshots WHERE ts < datetime('now','-30 days')")
-        except Exception as e:
-            logger.warning(f"Could not write monitoring snapshot (overview): {e}")
+            live_servers = db.query(
+                """
+                SELECT
+                  ms.server_id,
+                  s.name AS server_name,
+                  COUNT(*) AS live_sessions,
+                  SUM(CASE WHEN ms.is_transcode = 1 THEN 1 ELSE 0 END) AS transcodes
+                FROM media_sessions ms
+                JOIN servers s ON s.id = ms.server_id
+                WHERE s.type IN ('plex','jellyfin')
+                  AND datetime(ms.last_seen_at) >= datetime('now', ?)
+                GROUP BY ms.server_id, s.name
+                HAVING COUNT(*) > 0
+                ORDER BY transcodes DESC, live_sessions DESC, s.name ASC
+                LIMIT 6
+                """,
+                (live_window_sql,),
+            )
 
-        sessions = db.query(
-            """
-            SELECT
-              ms.id,
-              ms.server_id,
-              s.name AS server_name,
-              s.type AS provider,
+            live_servers = [dict(r) for r in (live_servers or [])]
+            for row in live_servers:
+                row["live_sessions"] = int(row.get("live_sessions") or 0)
+                row["transcodes"] = int(row.get("transcodes") or 0)
+                row["direct_plays"] = max(0, row["live_sessions"] - row["transcodes"])
 
-              ms.media_type,
-              ms.title,
-              ms.grandparent_title,
-              ms.parent_title,
+            _apply_server_resource_stats(live_servers, server_resource_stats)
 
-              ms.state,
-              ms.progress_ms,
-              ms.duration_ms,
-
-              ms.client_name,
-              mu.username AS username,
-              ms.is_transcode,
-              ms.last_seen_at,
-
-              ms.raw_json,
-              ms.media_key
-            FROM media_sessions ms
-            JOIN servers s ON s.id = ms.server_id
-            LEFT JOIN media_users mu ON mu.id = ms.media_user_id
-            WHERE datetime(ms.last_seen_at) >= datetime('now', ?)
-            ORDER BY datetime(ms.last_seen_at) DESC
-            """,
-            (live_window_sql,),
-        )
-
-        # ------------------------------------------------------------------
-        # Enrich Now Playing: SxxExx + jaquette (sans changer la DB)
-        # ------------------------------------------------------------------
-        def _safe_int(v):
+            # Snapshot affiché, seulement quand on est sur une vue live
             try:
-                if v is None:
-                    return None
-                return int(v)
-            except Exception:
-                return None
+                live_now = int(sessions_stats.get("live_sessions") or 0)
+                transcodes_now = int(sessions_stats.get("transcodes") or 0)
 
-        def _fmt_ms(ms: Optional[int]) -> str:
-            try:
-                ms = int(ms or 0)
-            except Exception:
-                ms = 0
-            if ms < 0:
-                ms = 0
-            total_sec = ms // 1000
-            h = total_sec // 3600
-            m = (total_sec % 3600) // 60
-            s = total_sec % 60
-            return f"{h}:{m:02d}:{s:02d}" if h > 0 else f"{m}:{s:02d}"
-
-        sessions = [dict(r) for r in sessions]
-        _apply_server_resource_stats(sessions, server_resource_stats)
-
-        for s in sessions:
-        
-            # --- Progress / duration (for UI progress bar) ---
-            try:
-                prog = int(s.get("progress_ms") or 0)
-            except Exception:
-                prog = 0
-
-            try:
-                dur = int(s.get("duration_ms") or 0)
-            except Exception:
-                dur = 0
-
-            if prog < 0:
-                prog = 0
-            if dur < 0:
-                dur = 0
-
-            if dur > 0:
-                pct = (prog / dur) * 100.0
-                if pct < 0:
-                    pct = 0.0
-                if pct > 100:
-                    pct = 100.0
-                s["progress_pct"] = round(pct, 1)
-                s["progress_text"] = f"{_fmt_ms(prog)} / {_fmt_ms(dur)}"
-                s["remaining_text"] = _fmt_ms(max(0, dur - prog))
-            else:
-                s["progress_pct"] = 0
-                s["progress_text"] = None
-                s["remaining_text"] = None
-        
-            s["season_number"] = None
-            s["episode_number"] = None
-            s["episode_code"] = None
-            s["poster_url"] = None
-
-            raw = s.get("raw_json")
-            if not raw:
-                continue
-
-            try:
-                data = json.loads(raw)
-            except Exception:
-                data = {}
-
-            provider = (s.get("provider") or "").lower()
-
-            # ---------- PLEX ----------
-            if provider == "plex":
-                attrs = (data.get("VideoOrTrack") or {})
-
-                # Episode numbers (Plex XML attribs are stored in raw_json)
-                # parentIndex = season number, index = episode number
-                season = _safe_int(attrs.get("parentIndex"))
-                episode = _safe_int(attrs.get("index"))
-
-                s["season_number"] = season
-                s["episode_number"] = episode
-
-                if season is not None and episode is not None:
-                    s["episode_code"] = f"S{season:02d}E{episode:02d}"
-                elif season is not None:
-                    s["episode_code"] = f"S{season}"
-
-                # Poster path preference for series:
-                # grandparentThumb (show poster) > parentThumb (season poster) > thumb (item)
-                poster_path = (
-                    attrs.get("grandparentThumb")
-                    or attrs.get("parentThumb")
-                    or attrs.get("thumb")
+                db.execute(
+                    """
+                    INSERT INTO monitoring_snapshots (ts, live_sessions, transcodes)
+                    SELECT CURRENT_TIMESTAMP, ?, ?
+                    WHERE NOT EXISTS (
+                      SELECT 1
+                      FROM monitoring_snapshots
+                      WHERE ts >= datetime('now', '-30 seconds')
+                    )
+                    """,
+                    (live_now, transcodes_now),
                 )
-                if poster_path:
-                    s["poster_url"] = url_for(
-                        "api_monitoring_poster",
-                        server_id=s["server_id"],
-                        path=poster_path,
+
+                db.execute("DELETE FROM monitoring_snapshots WHERE ts < datetime('now','-30 days')")
+            except Exception as e:
+                monitoring_logger.warning(f"Could not write monitoring snapshot (overview): {e}")
+
+            sessions = db.query(
+                """
+                SELECT
+                  ms.id,
+                  ms.server_id,
+                  s.name AS server_name,
+                  s.type AS provider,
+
+                  ms.media_type,
+                  ms.title,
+                  ms.grandparent_title,
+                  ms.parent_title,
+
+                  ms.state,
+                  ms.progress_ms,
+                  ms.duration_ms,
+
+                  ms.client_name,
+                  mu.username AS username,
+                  ms.is_transcode,
+                  ms.last_seen_at,
+
+                  ms.raw_json,
+                  ms.media_key
+                FROM media_sessions ms
+                JOIN servers s ON s.id = ms.server_id
+                LEFT JOIN media_users mu ON mu.id = ms.media_user_id
+                WHERE datetime(ms.last_seen_at) >= datetime('now', ?)
+                ORDER BY datetime(ms.last_seen_at) DESC
+                """,
+                (live_window_sql,),
+            )
+
+            def _safe_int(v):
+                try:
+                    if v is None:
+                        return None
+                    return int(v)
+                except Exception:
+                    return None
+
+            def _fmt_ms(ms: Optional[int]) -> str:
+                try:
+                    ms = int(ms or 0)
+                except Exception:
+                    ms = 0
+                if ms < 0:
+                    ms = 0
+                total_sec = ms // 1000
+                h = total_sec // 3600
+                m = (total_sec % 3600) // 60
+                s = total_sec % 60
+                return f"{h}:{m:02d}:{s:02d}" if h > 0 else f"{m}:{s:02d}"
+
+            sessions = [dict(r) for r in sessions]
+            _apply_server_resource_stats(sessions, server_resource_stats)
+
+            for s in sessions:
+                try:
+                    prog = int(s.get("progress_ms") or 0)
+                except Exception:
+                    prog = 0
+
+                try:
+                    dur = int(s.get("duration_ms") or 0)
+                except Exception:
+                    dur = 0
+
+                if prog < 0:
+                    prog = 0
+                if dur < 0:
+                    dur = 0
+
+                if dur > 0:
+                    pct = (prog / dur) * 100.0
+                    if pct < 0:
+                        pct = 0.0
+                    if pct > 100:
+                        pct = 100.0
+                    s["progress_pct"] = round(pct, 1)
+                    s["progress_text"] = f"{_fmt_ms(prog)} / {_fmt_ms(dur)}"
+                    s["remaining_text"] = _fmt_ms(max(0, dur - prog))
+                else:
+                    s["progress_pct"] = 0
+                    s["progress_text"] = None
+                    s["remaining_text"] = None
+
+                s["season_number"] = None
+                s["episode_number"] = None
+                s["episode_code"] = None
+                s["poster_url"] = None
+
+                raw = s.get("raw_json")
+                if not raw:
+                    continue
+
+                try:
+                    data = json.loads(raw)
+                except Exception:
+                    data = {}
+
+                provider = (s.get("provider") or "").lower()
+
+                if provider == "plex":
+                    attrs = (data.get("VideoOrTrack") or {})
+
+                    season = _safe_int(attrs.get("parentIndex"))
+                    episode = _safe_int(attrs.get("index"))
+
+                    s["season_number"] = season
+                    s["episode_number"] = episode
+
+                    if season is not None and episode is not None:
+                        s["episode_code"] = f"S{season:02d}E{episode:02d}"
+                    elif season is not None:
+                        s["episode_code"] = f"S{season}"
+
+                    poster_path = (
+                        attrs.get("grandparentThumb")
+                        or attrs.get("parentThumb")
+                        or attrs.get("thumb")
                     )
+                    if poster_path:
+                        s["poster_url"] = url_for(
+                            "api_monitoring_poster",
+                            server_id=s["server_id"],
+                            path=poster_path,
+                        )
 
-            # ---------- JELLYFIN ----------
-            elif provider == "jellyfin":
-                now = (data.get("NowPlayingItem") or {})
+                elif provider == "jellyfin":
+                    now = (data.get("NowPlayingItem") or {})
 
-                season = _safe_int(now.get("ParentIndexNumber"))
-                episode = _safe_int(now.get("IndexNumber"))
+                    season = _safe_int(now.get("ParentIndexNumber"))
+                    episode = _safe_int(now.get("IndexNumber"))
 
-                s["season_number"] = season
-                s["episode_number"] = episode
+                    s["season_number"] = season
+                    s["episode_number"] = episode
 
-                if season is not None and episode is not None:
-                    s["episode_code"] = f"S{season:02d}E{episode:02d}"
-                elif season is not None:
-                    s["episode_code"] = f"S{season}"
+                    if season is not None and episode is not None:
+                        s["episode_code"] = f"S{season:02d}E{episode:02d}"
+                    elif season is not None:
+                        s["episode_code"] = f"S{season}"
 
-                # Poster: for episodes, prefer SeriesId (show poster). fallback to item Id.
-                poster_item_id = now.get("SeriesId") or now.get("Id") or s.get("media_key")
-                if poster_item_id:
-                    s["poster_url"] = url_for(
-                        "api_monitoring_poster",
-                        server_id=s["server_id"],
-                        item_id=str(poster_item_id),
-                    )
-
-
-        events = db.query(
-            """
-            SELECT
-              e.id,
-              s.name AS server_name,
-              e.provider,
-              e.event_type,
-              e.ts,
-              e.title
-            FROM media_events e
-            JOIN servers s ON s.id = e.server_id
-            ORDER BY e.ts DESC
-            LIMIT 30
-            """
-        )
+                    poster_item_id = now.get("SeriesId") or now.get("Id") or s.get("media_key")
+                    if poster_item_id:
+                        s["poster_url"] = url_for(
+                            "api_monitoring_poster",
+                            server_id=s["server_id"],
+                            item_id=str(poster_item_id),
+                        )
 
         # --------------------------
-        # Stats 7d + tops
+        # Latest events for overview + activity
         # --------------------------
-        # --------------------------
-        # Stats 7d + tops (cohérents même avec resume)
-        # --------------------------
-        # PROBLÈME (important) :
-        # - si un user stop/reprend un épisode, Plex/Jellyfin peut créer plusieurs sessions
-        # - watch_ms (progress) se retrouve compté plusieurs fois => watchtime énorme
-        # - et les "plays/sessions" explosent aussi
-        #
-        # SOLUTION :
-        # On déduplique en "play" :
-        #   1 play = (viewer fusionné) + (media_key) + (jour) + (serveur)
-        # Puis :
-        # - plays/sessions = COUNT(*) sur ces plays dédupliqués
-        # - watch_ms = MAX(watch_ms capé à duration_ms) par play
-
-        stats_7d = db.query_one(
-            """
-            WITH base AS (
-              SELECT
-                h.server_id,
-                h.started_at,
-                h.stopped_at,
-                h.media_key,
-                h.watch_ms,
-                h.duration_ms,
-                COALESCE(
-                  CAST(mu.vodum_user_id AS TEXT),
-                  'media:' || CAST(mu.id AS TEXT)
-                ) AS viewer_id,
-                MIN(
-                  COALESCE(h.watch_ms, 0),
-                  CASE
-                    WHEN COALESCE(h.duration_ms, 0) > 0 THEN h.duration_ms
-                    ELSE COALESCE(h.watch_ms, 0)
-                  END
-                ) AS watch_ms_capped,
-                (CAST(h.server_id AS TEXT) || '|' ||
-                 COALESCE(CAST(mu.vodum_user_id AS TEXT), 'media:' || CAST(mu.id AS TEXT)) || '|' ||
-                 COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                 strftime('%Y-%m-%d %H:%M', h.started_at)
-                ) AS play_key
-              FROM media_session_history h
-              LEFT JOIN media_users mu ON mu.id = h.media_user_id
-              WHERE h.stopped_at >= datetime('now', '-7 days')
-            ),
-            plays AS (
-              SELECT
-                play_key,
-                MAX(viewer_id) AS viewer_id,
-                MAX(watch_ms_capped) AS watch_ms
-              FROM base
-              GROUP BY play_key
+        if tab in ("overview", "activity"):
+            events = db.query(
+                """
+                SELECT
+                  e.id,
+                  s.name AS server_name,
+                  e.provider,
+                  e.event_type,
+                  e.ts,
+                  e.title
+                FROM media_events e
+                JOIN servers s ON s.id = e.server_id
+                ORDER BY e.ts DESC
+                LIMIT 30
+                """
             )
-            SELECT
-              COUNT(*) AS sessions,
-              COUNT(DISTINCT viewer_id) AS active_users,
-              COALESCE(SUM(watch_ms), 0) AS total_watch_ms,
-              AVG(NULLIF(watch_ms, 0)) AS avg_watch_ms
-            FROM plays
-            """
-        ) or {"sessions": 0, "active_users": 0, "total_watch_ms": 0, "avg_watch_ms": 0}
-        stats_7d = dict(stats_7d) if stats_7d else {"sessions": 0, "active_users": 0, "total_watch_ms": 0, "avg_watch_ms": 0}
-
-        # Top users (30d) : plays + watchtime dédupliqués (1 play = media + jour + serveur)
-        top_users_30d = db.query(
-            """
-            WITH base AS (
-              SELECT
-                h.server_id,
-                h.started_at,
-                h.stopped_at,
-                h.media_key,
-                COALESCE(vu.username, mu.username, '-') AS username,
-                COALESCE(CAST(vu.id AS TEXT), 'media:' || CAST(mu.id AS TEXT)) AS viewer_id,
-                MIN(
-                  COALESCE(h.watch_ms, 0),
-                  CASE
-                    WHEN COALESCE(h.duration_ms, 0) > 0 THEN h.duration_ms
-                    ELSE COALESCE(h.watch_ms, 0)
-                  END
-                ) AS watch_ms_capped,
-                (CAST(h.server_id AS TEXT) || '|' ||
-                 COALESCE(CAST(vu.id AS TEXT), 'media:' || CAST(mu.id AS TEXT)) || '|' ||
-                 COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                 strftime('%Y-%m-%d %H:%M', h.started_at)
-                ) AS play_key
-              FROM media_session_history h
-              LEFT JOIN media_users mu ON mu.id = h.media_user_id
-              LEFT JOIN vodum_users vu ON vu.id = mu.vodum_user_id
-              WHERE h.stopped_at >= datetime('now', '-30 days')
-            ),
-            plays AS (
-              SELECT
-                viewer_id,
-                MAX(username) AS username,
-                play_key,
-                MAX(watch_ms_capped) AS watch_ms
-              FROM base
-              GROUP BY play_key
-            )
-            SELECT
-              username,
-              COUNT(*) AS sessions,
-              COALESCE(SUM(watch_ms), 0) AS watch_ms
-            FROM plays
-            GROUP BY viewer_id
-            ORDER BY watch_ms DESC
-            LIMIT 10
-            """
-        )
-
-        # Top SERIES (30d)
-        # - viewers = users uniques (merge VODUM inclus)
-        # - plays   = épisodes uniques (par user / par jour) -> évite les doubles si resume
-        top_content_30d = db.query(
-            """
-            WITH base AS (
-              SELECT
-                h.server_id,
-                s.type AS provider,
-                h.started_at,
-                h.stopped_at,
-                TRIM(h.grandparent_title) AS series_title,
-                h.media_key,
-                h.media_type,
-                h.raw_json,
-                COALESCE(
-                  CAST(mu.vodum_user_id AS TEXT),
-                  'media:' || CAST(mu.id AS TEXT)
-                ) AS viewer_id,
-                MIN(
-                  COALESCE(h.watch_ms, 0),
-                  CASE
-                    WHEN COALESCE(h.duration_ms, 0) > 0 THEN h.duration_ms
-                    ELSE COALESCE(h.watch_ms, 0)
-                  END
-                ) AS watch_ms_capped,
-                (CAST(h.server_id AS TEXT) || '|' ||
-                 COALESCE(CAST(mu.vodum_user_id AS TEXT), 'media:' || CAST(mu.id AS TEXT)) || '|' ||
-                 COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                 strftime('%Y-%m-%d %H:%M', h.started_at)
-                ) AS play_key
-              FROM media_session_history h
-              LEFT JOIN media_users mu ON mu.id = h.media_user_id
-              LEFT JOIN servers s ON s.id = h.server_id
-              WHERE h.stopped_at >= datetime('now', '-30 days')
-                AND TRIM(COALESCE(h.grandparent_title, '')) <> ''
-            ),
-            plays AS (
-              SELECT
-                play_key,
-                MAX(server_id) AS server_id,
-                MAX(provider) AS provider,
-                MAX(series_title) AS series_title,
-                MAX(media_key) AS media_key,
-                MAX(media_type) AS media_type,
-                MAX(raw_json) AS raw_json,
-                MAX(viewer_id) AS viewer_id,
-                MAX(watch_ms_capped) AS watch_ms,
-                MAX(stopped_at) AS stopped_at
-              FROM base
-              GROUP BY play_key
-            ),
-            agg AS (
-              SELECT
-                series_title AS title,
-                COUNT(DISTINCT viewer_id) AS viewers,
-                COUNT(*) AS plays,
-                COALESCE(SUM(watch_ms), 0) AS watch_ms
-              FROM plays
-              GROUP BY series_title
-            ),
-            latest AS (
-              SELECT
-                series_title AS title,
-                server_id,
-                provider,
-                media_key,
-                media_type,
-                raw_json,
-                ROW_NUMBER() OVER (
-                  PARTITION BY series_title
-                  ORDER BY stopped_at DESC
-                ) AS rn
-              FROM plays
-            )
-            SELECT
-              a.title,
-              a.viewers,
-              a.plays,
-              a.watch_ms,
-              l.server_id,
-              l.provider,
-              l.media_key,
-              l.media_type,
-              l.raw_json,
-              ('series:' || LOWER(TRIM(a.title))) AS media_group_key
-            FROM agg a
-            LEFT JOIN latest l
-              ON l.title = a.title
-             AND l.rn = 1
-            ORDER BY a.viewers DESC, a.watch_ms DESC
-            LIMIT 10
-            """
-        )
-
-        # Top MOVIES (30d)
-        # - viewers = users uniques (merge VODUM inclus)
-        # - plays   = films uniques (par user / par jour)
-        top_movies_30d = db.query(
-            """
-            WITH base AS (
-              SELECT
-                h.server_id,
-                s.type AS provider,
-                h.started_at,
-                h.stopped_at,
-                TRIM(COALESCE(NULLIF(h.title, ''), '-')) AS movie_title,
-                h.media_key,
-                h.media_type,
-                h.raw_json,
-                COALESCE(
-                  CAST(mu.vodum_user_id AS TEXT),
-                  'media:' || CAST(mu.id AS TEXT)
-                ) AS viewer_id,
-                MIN(
-                  COALESCE(h.watch_ms, 0),
-                  CASE
-                    WHEN COALESCE(h.duration_ms, 0) > 0 THEN h.duration_ms
-                    ELSE COALESCE(h.watch_ms, 0)
-                  END
-                ) AS watch_ms_capped,
-                (CAST(h.server_id AS TEXT) || '|' ||
-                 COALESCE(CAST(mu.vodum_user_id AS TEXT), 'media:' || CAST(mu.id AS TEXT)) || '|' ||
-                 COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                 strftime('%Y-%m-%d %H:%M', h.started_at)
-                ) AS play_key
-              FROM media_session_history h
-              LEFT JOIN media_users mu ON mu.id = h.media_user_id
-              LEFT JOIN servers s ON s.id = h.server_id
-              WHERE h.stopped_at >= datetime('now', '-30 days')
-                AND TRIM(COALESCE(h.grandparent_title, '')) = ''
-            ),
-            plays AS (
-              SELECT
-                play_key,
-                MAX(server_id) AS server_id,
-                MAX(provider) AS provider,
-                MAX(movie_title) AS movie_title,
-                MAX(media_key) AS media_key,
-                MAX(media_type) AS media_type,
-                MAX(raw_json) AS raw_json,
-                MAX(viewer_id) AS viewer_id,
-                MAX(watch_ms_capped) AS watch_ms,
-                MAX(stopped_at) AS stopped_at
-              FROM base
-              GROUP BY play_key
-            ),
-            agg AS (
-              SELECT
-                movie_title AS title,
-                COUNT(DISTINCT viewer_id) AS viewers,
-                COUNT(*) AS plays,
-                COALESCE(SUM(watch_ms), 0) AS watch_ms
-              FROM plays
-              GROUP BY movie_title
-            ),
-            latest AS (
-              SELECT
-                movie_title AS title,
-                server_id,
-                provider,
-                media_key,
-                media_type,
-                raw_json,
-                ROW_NUMBER() OVER (
-                  PARTITION BY movie_title
-                  ORDER BY stopped_at DESC
-                ) AS rn
-              FROM plays
-            )
-            SELECT
-              a.title,
-              a.viewers,
-              a.plays,
-              a.watch_ms,
-              l.server_id,
-              l.provider,
-              l.media_key,
-              l.media_type,
-              l.raw_json,
-              ('movie:' || LOWER(TRIM(a.title))) AS media_group_key
-            FROM agg a
-            LEFT JOIN latest l
-              ON l.title = a.title
-             AND l.rn = 1
-            ORDER BY a.viewers DESC, a.watch_ms DESC
-            LIMIT 10
-            """
-        )
-
-        top_content_30d = [dict(r) for r in (top_content_30d or [])]
-        for item in top_content_30d:
-            item["backdrop_url"] = _build_history_backdrop_url(item)
-
-        top_movies_30d = [dict(r) for r in (top_movies_30d or [])]
-        for item in top_movies_30d:
-            item["backdrop_url"] = _build_history_backdrop_url(item)
 
         # --------------------------
-        # Peak streams (7d) = max de Live sessions (snapshots)
+        # Données overview uniquement
         # --------------------------
-        concurrent_7d = db.query_one(
-            """
-            SELECT COALESCE(MAX(live_sessions), 0) AS peak_streams
-            FROM monitoring_snapshots
-            WHERE ts >= datetime('now', '-7 days')
-            """
-        ) or {"peak_streams": 0}
-        concurrent_7d = dict(concurrent_7d) if concurrent_7d else {"peak_streams": 0}
+        if tab == "overview":
 
-        # Sécurité UX : peak >= streams live actuels
-        live_now = int(sessions_stats.get("live_sessions") or 0)
-        peak = int(concurrent_7d.get("peak_streams") or 0)
-        concurrent_7d["peak_streams"] = max(peak, live_now)
+            stats_7d = db.query_one(
+                """
+                WITH base AS (
+                  SELECT
+                    h.server_id,
+                    h.started_at,
+                    h.stopped_at,
+                    h.media_key,
+                    h.watch_ms,
+                    h.duration_ms,
+                    COALESCE(
+                      CAST(mu.vodum_user_id AS TEXT),
+                      'media:' || CAST(mu.id AS TEXT)
+                    ) AS viewer_id,
+                    MIN(
+                      COALESCE(h.watch_ms, 0),
+                      CASE
+                        WHEN COALESCE(h.duration_ms, 0) > 0 THEN h.duration_ms
+                        ELSE COALESCE(h.watch_ms, 0)
+                      END
+                    ) AS watch_ms_capped,
+                    (CAST(h.server_id AS TEXT) || '|' ||
+                     COALESCE(CAST(mu.vodum_user_id AS TEXT), 'media:' || CAST(mu.id AS TEXT)) || '|' ||
+                     COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
+                     strftime('%Y-%m-%d %H:%M', h.started_at)
+                    ) AS play_key
+                  FROM media_session_history h
+                  LEFT JOIN media_users mu ON mu.id = h.media_user_id
+                  WHERE h.stopped_at >= datetime('now', '-7 days')
+                ),
+                plays AS (
+                  SELECT
+                    play_key,
+                    MAX(viewer_id) AS viewer_id,
+                    MAX(watch_ms_capped) AS watch_ms
+                  FROM base
+                  GROUP BY play_key
+                )
+                SELECT
+                  COUNT(*) AS sessions,
+                  COUNT(DISTINCT viewer_id) AS active_users,
+                  COALESCE(SUM(watch_ms), 0) AS total_watch_ms,
+                  AVG(NULLIF(watch_ms, 0)) AS avg_watch_ms
+                FROM plays
+                """
+            ) or {"sessions": 0, "active_users": 0, "total_watch_ms": 0, "avg_watch_ms": 0}
+            stats_7d = dict(stats_7d) if stats_7d else {"sessions": 0, "active_users": 0, "total_watch_ms": 0, "avg_watch_ms": 0}
+
+            top_users_30d = db.query(
+                """
+                WITH base AS (
+                  SELECT
+                    h.server_id,
+                    h.started_at,
+                    h.stopped_at,
+                    h.media_key,
+                    COALESCE(vu.username, mu.username, '-') AS username,
+                    COALESCE(CAST(vu.id AS TEXT), 'media:' || CAST(mu.id AS TEXT)) AS viewer_id,
+                    MIN(
+                      COALESCE(h.watch_ms, 0),
+                      CASE
+                        WHEN COALESCE(h.duration_ms, 0) > 0 THEN h.duration_ms
+                        ELSE COALESCE(h.watch_ms, 0)
+                      END
+                    ) AS watch_ms_capped,
+                    (CAST(h.server_id AS TEXT) || '|' ||
+                     COALESCE(CAST(vu.id AS TEXT), 'media:' || CAST(mu.id AS TEXT)) || '|' ||
+                     COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
+                     strftime('%Y-%m-%d %H:%M', h.started_at)
+                    ) AS play_key
+                  FROM media_session_history h
+                  LEFT JOIN media_users mu ON mu.id = h.media_user_id
+                  LEFT JOIN vodum_users vu ON vu.id = mu.vodum_user_id
+                  WHERE h.stopped_at >= datetime('now', '-30 days')
+                ),
+                plays AS (
+                  SELECT
+                    viewer_id,
+                    MAX(username) AS username,
+                    play_key,
+                    MAX(watch_ms_capped) AS watch_ms
+                  FROM base
+                  GROUP BY play_key
+                )
+                SELECT
+                  username,
+                  COUNT(*) AS sessions,
+                  COALESCE(SUM(watch_ms), 0) AS watch_ms
+                FROM plays
+                GROUP BY viewer_id
+                ORDER BY watch_ms DESC
+                LIMIT 10
+                """
+            )
+
+            top_content_30d = db.query(
+                """
+                WITH base AS (
+                  SELECT
+                    h.server_id,
+                    s.type AS provider,
+                    h.started_at,
+                    h.stopped_at,
+                    TRIM(h.grandparent_title) AS series_title,
+                    h.media_key,
+                    h.media_type,
+                    h.raw_json,
+                    COALESCE(
+                      CAST(mu.vodum_user_id AS TEXT),
+                      'media:' || CAST(mu.id AS TEXT)
+                    ) AS viewer_id,
+                    MIN(
+                      COALESCE(h.watch_ms, 0),
+                      CASE
+                        WHEN COALESCE(h.duration_ms, 0) > 0 THEN h.duration_ms
+                        ELSE COALESCE(h.watch_ms, 0)
+                      END
+                    ) AS watch_ms_capped,
+                    (CAST(h.server_id AS TEXT) || '|' ||
+                     COALESCE(CAST(mu.vodum_user_id AS TEXT), 'media:' || CAST(mu.id AS TEXT)) || '|' ||
+                     COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
+                     strftime('%Y-%m-%d %H:%M', h.started_at)
+                    ) AS play_key
+                  FROM media_session_history h
+                  LEFT JOIN media_users mu ON mu.id = h.media_user_id
+                  LEFT JOIN servers s ON s.id = h.server_id
+                  WHERE h.stopped_at >= datetime('now', '-30 days')
+                    AND TRIM(COALESCE(h.grandparent_title, '')) <> ''
+                ),
+                plays AS (
+                  SELECT
+                    play_key,
+                    MAX(server_id) AS server_id,
+                    MAX(provider) AS provider,
+                    MAX(series_title) AS series_title,
+                    MAX(media_key) AS media_key,
+                    MAX(media_type) AS media_type,
+                    MAX(raw_json) AS raw_json,
+                    MAX(viewer_id) AS viewer_id,
+                    MAX(watch_ms_capped) AS watch_ms,
+                    MAX(stopped_at) AS stopped_at
+                  FROM base
+                  GROUP BY play_key
+                ),
+                agg AS (
+                  SELECT
+                    series_title AS title,
+                    COUNT(DISTINCT viewer_id) AS viewers,
+                    COUNT(*) AS plays,
+                    COALESCE(SUM(watch_ms), 0) AS watch_ms
+                  FROM plays
+                  GROUP BY series_title
+                ),
+                latest AS (
+                  SELECT
+                    series_title AS title,
+                    server_id,
+                    provider,
+                    media_key,
+                    media_type,
+                    raw_json,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY series_title
+                      ORDER BY stopped_at DESC
+                    ) AS rn
+                  FROM plays
+                )
+                SELECT
+                  a.title,
+                  a.viewers,
+                  a.plays,
+                  a.watch_ms,
+                  l.server_id,
+                  l.provider,
+                  l.media_key,
+                  l.media_type,
+                  l.raw_json,
+                  ('series:' || LOWER(TRIM(a.title))) AS media_group_key
+                FROM agg a
+                LEFT JOIN latest l
+                  ON l.title = a.title
+                 AND l.rn = 1
+                ORDER BY a.viewers DESC, a.watch_ms DESC
+                LIMIT 10
+                """
+            )
+
+            top_movies_30d = db.query(
+                """
+                WITH base AS (
+                  SELECT
+                    h.server_id,
+                    s.type AS provider,
+                    h.started_at,
+                    h.stopped_at,
+                    TRIM(COALESCE(NULLIF(h.title, ''), '-')) AS movie_title,
+                    h.media_key,
+                    h.media_type,
+                    h.raw_json,
+                    COALESCE(
+                      CAST(mu.vodum_user_id AS TEXT),
+                      'media:' || CAST(mu.id AS TEXT)
+                    ) AS viewer_id,
+                    MIN(
+                      COALESCE(h.watch_ms, 0),
+                      CASE
+                        WHEN COALESCE(h.duration_ms, 0) > 0 THEN h.duration_ms
+                        ELSE COALESCE(h.watch_ms, 0)
+                      END
+                    ) AS watch_ms_capped,
+                    (CAST(h.server_id AS TEXT) || '|' ||
+                     COALESCE(CAST(mu.vodum_user_id AS TEXT), 'media:' || CAST(mu.id AS TEXT)) || '|' ||
+                     COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
+                     strftime('%Y-%m-%d %H:%M', h.started_at)
+                    ) AS play_key
+                  FROM media_session_history h
+                  LEFT JOIN media_users mu ON mu.id = h.media_user_id
+                  LEFT JOIN servers s ON s.id = h.server_id
+                  WHERE h.stopped_at >= datetime('now', '-30 days')
+                    AND TRIM(COALESCE(h.grandparent_title, '')) = ''
+                ),
+                plays AS (
+                  SELECT
+                    play_key,
+                    MAX(server_id) AS server_id,
+                    MAX(provider) AS provider,
+                    MAX(movie_title) AS movie_title,
+                    MAX(media_key) AS media_key,
+                    MAX(media_type) AS media_type,
+                    MAX(raw_json) AS raw_json,
+                    MAX(viewer_id) AS viewer_id,
+                    MAX(watch_ms_capped) AS watch_ms,
+                    MAX(stopped_at) AS stopped_at
+                  FROM base
+                  GROUP BY play_key
+                ),
+                agg AS (
+                  SELECT
+                    movie_title AS title,
+                    COUNT(DISTINCT viewer_id) AS viewers,
+                    COUNT(*) AS plays,
+                    COALESCE(SUM(watch_ms), 0) AS watch_ms
+                  FROM plays
+                  GROUP BY movie_title
+                ),
+                latest AS (
+                  SELECT
+                    movie_title AS title,
+                    server_id,
+                    provider,
+                    media_key,
+                    media_type,
+                    raw_json,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY movie_title
+                      ORDER BY stopped_at DESC
+                    ) AS rn
+                  FROM plays
+                )
+                SELECT
+                  a.title,
+                  a.viewers,
+                  a.plays,
+                  a.watch_ms,
+                  l.server_id,
+                  l.provider,
+                  l.media_key,
+                  l.media_type,
+                  l.raw_json,
+                  ('movie:' || LOWER(TRIM(a.title))) AS media_group_key
+                FROM agg a
+                LEFT JOIN latest l
+                  ON l.title = a.title
+                 AND l.rn = 1
+                ORDER BY a.viewers DESC, a.watch_ms DESC
+                LIMIT 10
+                """
+            )
+
+            top_content_30d = [dict(r) for r in (top_content_30d or [])]
+            for item in top_content_30d:
+                item["backdrop_url"] = _build_history_backdrop_url(item)
+
+            top_movies_30d = [dict(r) for r in (top_movies_30d or [])]
+            for item in top_movies_30d:
+                item["backdrop_url"] = _build_history_backdrop_url(item)
+
+            concurrent_7d = db.query_one(
+                """
+                SELECT COALESCE(MAX(live_sessions), 0) AS peak_streams
+                FROM monitoring_snapshots
+                WHERE ts >= datetime('now', '-7 days')
+                """
+            ) or {"peak_streams": 0}
+            concurrent_7d = dict(concurrent_7d) if concurrent_7d else {"peak_streams": 0}
+
+            live_now = int(sessions_stats.get("live_sessions") or 0)
+            peak = int(concurrent_7d.get("peak_streams") or 0)
+            concurrent_7d["peak_streams"] = max(peak, live_now)
 
 
         sort_key = None
@@ -1148,23 +1122,40 @@ def register(app):
             q = (request.args.get("q") or "").strip()
 
             # --------------------------
-            # Total rows (avec filtre username)
+            # Total rows (même logique de groupement que la liste)
             # --------------------------
             if q:
                 like = f"%{q}%"
                 total = db.query_one(
                     """
-                    WITH users_with_hist AS (
-                      SELECT DISTINCT media_user_id AS uid
-                      FROM media_session_history
-                      WHERE media_user_id IS NOT NULL
+                    WITH base AS (
+                      SELECT
+                        h.media_user_id AS media_user_id,
+                        mu.username AS mu_username,
+                        mu.vodum_user_id,
+                        CASE
+                          WHEN mu.vodum_user_id IS NOT NULL THEN ('v:' || mu.vodum_user_id)
+                          ELSE ('m:' || mu.id)
+                        END AS group_key
+                      FROM media_session_history h
+                      JOIN media_users mu ON mu.id = h.media_user_id
+                      WHERE h.media_user_id IS NOT NULL
+                    ),
+                    names AS (
+                      SELECT
+                        b.group_key,
+                        MAX(b.vodum_user_id) AS vodum_user_id,
+                        MIN(b.media_user_id) AS user_id,
+                        COALESCE(vu.username, MIN(b.mu_username)) AS username
+                      FROM base b
+                      LEFT JOIN vodum_users vu ON vu.id = b.vodum_user_id
+                      GROUP BY b.group_key
                     )
                     SELECT COUNT(*) AS cnt
-                    FROM media_users mu
-                    JOIN users_with_hist u ON u.uid = mu.id
-                    LEFT JOIN vodum_users vu ON vu.id = mu.vodum_user_id
+                    FROM names n
+                    LEFT JOIN vodum_users vu ON vu.id = n.vodum_user_id
                     WHERE (
-                      COALESCE(mu.username,'') LIKE ? OR
+                      COALESCE(n.username,'') LIKE ? OR
                       COALESCE(vu.username,'') LIKE ? OR
                       COALESCE(vu.email,'') LIKE ? OR
                       COALESCE(vu.second_email,'') LIKE ? OR
@@ -1192,7 +1183,6 @@ def register(app):
                     FROM base
                     """
                 ) or {"cnt": 0}
-
 
 
             total = dict(total) if total else {"cnt": 0}
@@ -1471,11 +1461,69 @@ ranked AS (
 
             order_sql = f"{SORT_MAP[sort_key]} {'ASC' if sort_dir == 'asc' else 'DESC'}"
 
-            total = db.query_one("SELECT COUNT(*) AS cnt FROM libraries") or {"cnt": 0}
+            total = db.query_one(
+                """
+                WITH plays AS (
+                  SELECT
+                    h.server_id,
+                    CAST(h.library_section_id AS TEXT) AS library_section_id
+                  FROM media_session_history h
+                  WHERE COALESCE(NULLIF(TRIM(h.library_section_id), ''), '') <> ''
+                  GROUP BY h.server_id, CAST(h.library_section_id AS TEXT)
+                )
+                SELECT COUNT(*) AS cnt
+                FROM libraries l
+                JOIN plays p
+                  ON p.server_id = l.server_id
+                 AND p.library_section_id = CAST(l.section_id AS TEXT)
+                """
+            ) or {"cnt": 0}
             total = dict(total) if total else {"cnt": 0}
 
             rows = db.query(
                 f"""
+                WITH plays AS (
+                  SELECT
+                    h.server_id,
+                    CAST(h.library_section_id AS TEXT) AS library_section_id,
+                    MAX(h.stopped_at) AS stopped_at,
+                    (
+                      CAST(h.server_id AS TEXT) || '|' ||
+                      CAST(h.media_user_id AS TEXT) || '|' ||
+                      COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
+                      strftime('%Y-%m-%d %H:%M', h.started_at)
+                    ) AS play_key,
+                    MAX(
+                      MIN(
+                        COALESCE(h.watch_ms, 0),
+                        CASE
+                          WHEN COALESCE(h.duration_ms, 0) > 0 THEN h.duration_ms
+                          ELSE COALESCE(h.watch_ms, 0)
+                        END
+                      )
+                    ) AS watch_ms
+                  FROM media_session_history h
+                  WHERE COALESCE(NULLIF(TRIM(h.library_section_id), ''), '') <> ''
+                  GROUP BY
+                    h.server_id,
+                    CAST(h.library_section_id AS TEXT),
+                    (
+                      CAST(h.server_id AS TEXT) || '|' ||
+                      CAST(h.media_user_id AS TEXT) || '|' ||
+                      COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
+                      strftime('%Y-%m-%d %H:%M', h.started_at)
+                    )
+                ),
+                lib_stats AS (
+                  SELECT
+                    server_id,
+                    library_section_id,
+                    MAX(stopped_at) AS last_stream_at,
+                    COUNT(*) AS total_plays,
+                    COALESCE(SUM(watch_ms), 0) AS played_ms
+                  FROM plays
+                  GROUP BY server_id, library_section_id
+                )
                 SELECT
                   l.id AS library_id,
                   l.section_id AS library_section_id,
@@ -1485,57 +1533,14 @@ ranked AS (
                   s.type AS provider,
                   l.type AS media_type,
                   l.item_count AS item_count,
-
-                  (
-                    SELECT MAX(h.stopped_at)
-                    FROM media_session_history h
-                    WHERE h.server_id = l.server_id
-                      AND h.library_section_id = l.section_id
-                  ) AS last_stream_at,
-
-                  (
-                    SELECT COUNT(*)
-                    FROM (
-                      SELECT 1
-                      FROM media_session_history h
-                      WHERE h.server_id = l.server_id
-                        AND h.library_section_id = l.section_id
-                      GROUP BY (
-                        CAST(h.server_id AS TEXT) || '|' ||
-                        CAST(h.media_user_id AS TEXT) || '|' ||
-                        COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                        strftime('%Y-%m-%d %H:%M', h.started_at)
-                      )
-                    )
-                  ) AS total_plays,
-
-                  (
-                    SELECT COALESCE(SUM(watch_ms), 0)
-                    FROM (
-                      SELECT
-                        MAX(
-                          MIN(
-                            COALESCE(h.watch_ms, 0),
-                            CASE
-                              WHEN COALESCE(h.duration_ms, 0) > 0 THEN h.duration_ms
-                              ELSE COALESCE(h.watch_ms, 0)
-                            END
-                          )
-                        ) AS watch_ms
-                      FROM media_session_history h
-                      WHERE h.server_id = l.server_id
-                        AND h.library_section_id = l.section_id
-                      GROUP BY (
-                        CAST(h.server_id AS TEXT) || '|' ||
-                        CAST(h.media_user_id AS TEXT) || '|' ||
-                        COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                        strftime('%Y-%m-%d %H:%M', h.started_at)
-                      )
-                    )
-                  ) AS played_ms
-
+                  ls.last_stream_at,
+                  ls.total_plays,
+                  ls.played_ms
                 FROM libraries l
                 JOIN servers s ON s.id = l.server_id
+                JOIN lib_stats ls
+                  ON ls.server_id = l.server_id
+                 AND ls.library_section_id = CAST(l.section_id AS TEXT)
                 ORDER BY {order_sql}
                 LIMIT {per_page} OFFSET ?
                 """,
@@ -1545,12 +1550,13 @@ ranked AS (
             rows = [dict(r) for r in rows]
             hidden_libraries_count = 0
 
+            rows = [dict(r) for r in rows]
+            hidden_libraries_count = 0
+
             for r in rows:
                 ms = r.get("played_ms") or 0
                 r["played_duration"] = f"{ms // 3600000}h {((ms % 3600000) // 60000)}m"
-                r["has_last_stream"] = bool(r.get("last_stream_at"))
-                if not r["has_last_stream"]:
-                    hidden_libraries_count += 1
+                r["has_last_stream"] = True
 
             total_rows = int(total.get("cnt") or 0)
             total_pages = max(1, (total_rows + per_page - 1) // per_page)

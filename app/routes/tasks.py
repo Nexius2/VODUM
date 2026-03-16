@@ -231,7 +231,7 @@ def register(app):
                 """
                 UPDATE tasks
                 SET enabled = ?
-                WHERE name IN ('send_expiration_emails', 'send_mail_campaigns')
+                WHERE name IN ('send_expiration_emails', 'send_mail_campaigns', 'send_comm_campaigns')
                 """,
                 (enabled,),
             )

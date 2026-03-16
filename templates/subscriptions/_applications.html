@@ -95,8 +95,9 @@
 
               <td class="px-4 py-2">
                 {% if u.max_streams_override is not none %}
-                  <span class="inline-flex items-center gap-1 text-rose-300" title="{{ t('subscription_overridden_tooltip') }}">
-                    ✅
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-lg bg-rose-900/30 text-rose-300 text-xs"
+                        title="{{ t('subscription_overridden_tooltip') }}">
+                    {{ u.max_streams_override }}
                   </span>
                 {% else %}
                   <span class="text-slate-600">—</span>
@@ -280,7 +281,6 @@
         const form = select.closest("form");
         if (!form) return;
 
-        select.disabled = true;
         form.requestSubmit();
       });
     });

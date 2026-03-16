@@ -128,6 +128,87 @@ def fetch_campaign_attachments(db, campaign_id: int) -> List[Dict]:
     )
     return [dict(r) for r in (rows or [])]
 
+def schedule_template_notification(
+    *,
+    db,
+    template_id: int,
+    user_id: int,
+    provider: str,
+    server_id: int | None,
+    send_at_modifier: str | None = None,
+    payload: Optional[Dict] = None,
+    dedupe_key: Optional[str] = None,
+    max_attempts: int = 10,
+) -> None:
+    """
+    Queue a notification in comm_scheduled.
+
+    - send_at_modifier examples:
+        None            -> now
+        "+3 days"       -> now + 3 days
+        "+15 minutes"   -> now + 15 minutes
+    - dedupe_key:
+        if already present, INSERT OR IGNORE prevents duplicates
+    """
+    payload_json = json.dumps(payload or {}, ensure_ascii=False) if payload else None
+
+    if send_at_modifier:
+        db.execute(
+            """
+            INSERT OR IGNORE INTO comm_scheduled(
+                template_id, vodum_user_id, provider, server_id,
+                send_at, status, last_error,
+                attempt_count, max_attempts, next_attempt_at, last_attempt_at,
+                payload_json, dedupe_key, channels_sent,
+                created_at, updated_at
+            )
+            VALUES(
+                ?, ?, ?, ?,
+                datetime('now', ?), 'pending', NULL,
+                0, ?, NULL, NULL,
+                ?, ?, NULL,
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            )
+            """,
+            (
+                int(template_id),
+                int(user_id),
+                provider,
+                server_id,
+                send_at_modifier,
+                int(max_attempts),
+                payload_json,
+                dedupe_key,
+            ),
+        )
+    else:
+        db.execute(
+            """
+            INSERT OR IGNORE INTO comm_scheduled(
+                template_id, vodum_user_id, provider, server_id,
+                send_at, status, last_error,
+                attempt_count, max_attempts, next_attempt_at, last_attempt_at,
+                payload_json, dedupe_key, channels_sent,
+                created_at, updated_at
+            )
+            VALUES(
+                ?, ?, ?, ?,
+                CURRENT_TIMESTAMP, 'pending', NULL,
+                0, ?, NULL, NULL,
+                ?, ?, NULL,
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            )
+            """,
+            (
+                int(template_id),
+                int(user_id),
+                provider,
+                server_id,
+                int(max_attempts),
+                payload_json,
+                dedupe_key,
+            ),
+        )
 
 def _normalize_send_mode(settings: Dict) -> str:
     mode = (settings or {}).get("notifications_send_mode")
@@ -135,6 +216,27 @@ def _normalize_send_mode(settings: Dict) -> str:
     if mode not in ("first", "all"):
         mode = "first"
     return mode
+
+
+def required_channels_for_user(db, settings: Dict, user: Dict) -> List[str]:
+    avail = available_channels(db, settings, user)
+    channels: List[str] = []
+    if avail.get("email"):
+        channels.append("email")
+    if avail.get("discord"):
+        channels.append("discord")
+    return channels
+
+
+def attempts_satisfy_mode(db, settings: Dict, user: Dict, attempts: List[SendAttempt] | None) -> bool:
+    mode = _normalize_send_mode(settings)
+    sent_channels = {a.channel for a in (attempts or []) if getattr(a, "status", None) == "sent"}
+
+    if mode == "all":
+        required = required_channels_for_user(db, settings, user)
+        return bool(required) and all(ch in sent_channels for ch in required)
+
+    return any(getattr(a, "status", None) == "sent" for a in (attempts or []))
 
 
 def send_to_user(
@@ -145,7 +247,10 @@ def send_to_user(
     subject: str,
     body: str,
     attachments: List[Dict] | None,
+    forced_channels: List[str] | None = None,
+    bypass_skip_never_used_accounts: bool = False,
 ) -> List[SendAttempt]:
+
     """Send according to unified rules (FIRST / ALL).
 
     Returns the list of attempts (one per channel that was tried).
@@ -153,15 +258,43 @@ def send_to_user(
     s = _as_dict(settings)
     u = _as_dict(user)
 
+    # ----------------------------------------------------------
+    # Skip users who never used the account
+    # ----------------------------------------------------------
+    if not bypass_skip_never_used_accounts and int(s.get("skip_never_used_accounts") or 0) == 1:
+        user_id = u.get("id")
+
+        if user_id is not None:
+            used = db.query_one(
+                """
+                SELECT 1
+                FROM media_session_history msh
+                JOIN media_users mu ON mu.id = msh.media_user_id
+                WHERE mu.vodum_user_id = ?
+                LIMIT 1
+                """,
+                (user_id,),
+            )
+
+            if not used:
+                log.info(f"Skipping communications for user {user_id} (account never used)")
+                return []
+
     mode = _normalize_send_mode(s)
     avail = available_channels(db, s, u)
 
     # Order: user override (if allowed) else global
     order = effective_notifications_order(s, u)
 
-    # In ALL mode, we send on all available channels.
     channels_to_try: List[str] = []
-    if mode == "all":
+
+    if forced_channels:
+        for ch in forced_channels:
+            ch = (ch or "").strip().lower()
+            if ch in ("email", "discord") and avail.get(ch):
+                if ch not in channels_to_try:
+                    channels_to_try.append(ch)
+    elif mode == "all":
         # deterministic: follow the effective order, but include any other supported channels at the end
         for ch in order:
             if avail.get(ch):

@@ -65,6 +65,89 @@ def _iso_date_or_none(raw: str):
     except Exception:
         return None
 
+def _parse_json_list(raw: str):
+    try:
+        v = json.loads(raw or "[]")
+        return v if isinstance(v, list) else []
+    except Exception:
+        return []
+
+
+def _delete_locked_subscription_policies(db, vodum_user_id: int):
+    rows = db.query(
+        "SELECT id, rule_value_json FROM stream_policies WHERE scope_type='user' AND scope_id=?",
+        (vodum_user_id,),
+    ) or []
+    for r in rows:
+        try:
+            rj = json.loads(r["rule_value_json"] or "{}")
+        except Exception:
+            rj = {}
+        if rj.get("locked") and rj.get("subscription_name"):
+            db.execute("DELETE FROM stream_policies WHERE id=?", (int(r["id"]),))
+
+
+def _clear_template_snapshot(db, vodum_user_id: int):
+    _delete_locked_subscription_policies(db, vodum_user_id)
+    db.execute(
+        "UPDATE vodum_users SET subscription_template_id=NULL WHERE id=?",
+        (vodum_user_id,),
+    )
+
+
+def _apply_template_snapshot(db, vodum_user_id: int, template_id: int):
+    tpl = db.query_one("SELECT id, name, policies_json FROM subscription_templates WHERE id=?", (template_id,))
+    if not tpl:
+        raise ValueError("subscription_template_not_found")
+
+    tpl = dict(tpl)
+    tname = tpl.get("name") or ""
+    policies = _parse_json_list(tpl.get("policies_json") or "[]")
+
+    _delete_locked_subscription_policies(db, vodum_user_id)
+
+    any_enabled = False
+
+    for p in policies:
+        if not isinstance(p, dict):
+            continue
+        rule_type = (p.get("rule_type") or "").strip()
+        if not rule_type:
+            continue
+
+        rule = p.get("rule") if isinstance(p.get("rule"), dict) else {}
+        rule = dict(rule)
+        rule["locked"] = True
+        rule["subscription_name"] = tname
+
+        provider = (p.get("provider") or "").strip() or None
+        server_id = int(p["server_id"]) if str(p.get("server_id", "")).isdigit() else None
+        is_enabled = 1 if str(p.get("is_enabled", "1")) == "1" else 0
+        if is_enabled == 1:
+            any_enabled = True
+        priority = int(p.get("priority") or 100)
+
+        db.execute(
+            """
+            INSERT INTO stream_policies(scope_type, scope_id, provider, server_id, is_enabled, priority, rule_type, rule_value_json)
+            VALUES ('user', ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (vodum_user_id, provider, server_id, is_enabled, priority, rule_type, json.dumps(rule)),
+        )
+
+    db.execute("UPDATE vodum_users SET subscription_template_id=? WHERE id=?", (template_id, vodum_user_id))
+
+    if any_enabled:
+        db.execute("""
+            UPDATE tasks
+            SET enabled = 1,
+                status = CASE WHEN status = 'disabled' THEN 'idle' ELSE status END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE name = 'stream_enforcer'
+        """)
+
+    return tname
+
 def register(app):
     @app.route("/users/<int:user_id>", methods=["GET", "POST"])
     def user_detail(user_id):
@@ -89,6 +172,20 @@ def register(app):
         user = dict(user)
 
         # --------------------------------------------------
+        # Never used: no playback/session history linked to this VODUM user
+        # --------------------------------------------------
+        never_used = not db.query_one(
+            """
+            SELECT 1
+            FROM media_session_history msh
+            JOIN media_users mu ON mu.id = msh.media_user_id
+            WHERE mu.vodum_user_id = ?
+            LIMIT 1
+            """,
+            (user_id,),
+        )
+
+        # --------------------------------------------------
         # Subscription template (optional)
         # --------------------------------------------------
         subscription_template = None
@@ -103,6 +200,9 @@ def register(app):
 
         user["subscription_template_name"] = subscription_template["name"] if subscription_template else None
 
+        subscription_templates = db.query(
+            "SELECT id, name FROM subscription_templates ORDER BY name ASC"
+        ) or []
 
         # --------------------------------------------------
         # Settings (needed for per-user notification override)
@@ -190,6 +290,21 @@ def register(app):
                     flash("invalid_renewal_date_format", "error")
             renewal_method  = (form.get("renewal_method") or "").strip() or user.get("renewal_method")
 
+            subscription_template_id_raw = (form.get("subscription_template_id") or "").strip()
+            if subscription_template_id_raw in ("", "none", "null"):
+                requested_subscription_template_id = None
+            elif subscription_template_id_raw.isdigit():
+                requested_subscription_template_id = int(subscription_template_id_raw)
+            else:
+                flash("subscription_apply_invalid", "error")
+                return redirect(url_for("user_detail", user_id=user_id, tab="general"))
+
+            current_subscription_template_id = (
+                int(user["subscription_template_id"])
+                if user.get("subscription_template_id") is not None
+                else None
+            )
+
             # Notes : on autorise le vide volontaire
             if "notes" in form:
                 notes = (form.get("notes") or "").strip()
@@ -258,6 +373,22 @@ def register(app):
                     user_id,
                 ),
             )
+
+            if requested_subscription_template_id != current_subscription_template_id:
+                try:
+                    if requested_subscription_template_id is None:
+                        _clear_template_snapshot(db, user_id)
+                        add_log(db, "subscriptions", f"Subscription removed from user #{user_id} via user_detail")
+                    else:
+                        applied_name = _apply_template_snapshot(db, user_id, requested_subscription_template_id)
+                        add_log(
+                            db,
+                            "subscriptions",
+                            f"Template applied from user_detail to user #{user_id}: {applied_name} (template_id={requested_subscription_template_id})"
+                        )
+                except ValueError:
+                    flash("subscription_template_not_found", "error")
+                    return redirect(url_for("user_detail", user_id=user_id, tab="general"))
 
             current_referrer_user_id = int(current_referral["referrer_user_id"]) if current_referral and current_referral.get("referrer_user_id") else None
 
@@ -888,6 +1019,8 @@ def register(app):
         return render_template(
             "users/user_detail.html",
             user=user,
+            subscription_templates=subscription_templates,
+            never_used=never_used,
             servers=servers,
             libraries=libraries,
             sent_emails=sent_emails,

@@ -18,8 +18,17 @@ CREATE TABLE IF NOT EXISTS vodum_users (
 
     notes TEXT,
 
-    -- Notifications channel order override for this user (optional)
+    -- Per-user stream override
+    max_streams_override INTEGER DEFAULT NULL,
+
+    -- Notifications
     notifications_order_override TEXT DEFAULT NULL,
+
+    -- Discord
+    discord_user_id TEXT DEFAULT NULL,
+    discord_name TEXT DEFAULT NULL,
+
+    -- Subscription
     subscription_template_id INTEGER DEFAULT NULL,
 
     -- Referral
@@ -92,6 +101,9 @@ CREATE TABLE IF NOT EXISTS media_users (
 
 CREATE INDEX IF NOT EXISTS idx_media_users_server
 ON media_users(server_id);
+
+CREATE INDEX IF NOT EXISTS idx_media_users_vodum_user
+ON media_users(vodum_user_id);
 
 -----------------------------------------------------------------------
 --  DATABASE SERVERS 
@@ -225,44 +237,47 @@ CREATE TABLE IF NOT EXISTS settings (
     smtp_tls INTEGER,
     smtp_user TEXT,
     smtp_pass TEXT,
-	email_history_retention_years INTEGER DEFAULT 2,
+    email_history_retention_years INTEGER DEFAULT 2,
 
     disable_on_expiry INTEGER DEFAULT 0,
     delete_after_expiry_days INTEGER DEFAULT 30,
     send_reminders INTEGER DEFAULT 1,
-	preavis_days INTEGER NOT NULL DEFAULT 30,
-	reminder_days INTEGER NOT NULL DEFAULT 7,
+    preavis_days INTEGER NOT NULL DEFAULT 30,
+    reminder_days INTEGER NOT NULL DEFAULT 7,
 
     default_language TEXT DEFAULT NULL,
     timezone TEXT DEFAULT 'Europe/Paris',
     admin_email TEXT,
-	admin_password_hash TEXT,
+    admin_password_hash TEXT,
     auth_enabled INTEGER DEFAULT 1,
 
     web_secure_cookies INTEGER DEFAULT 0,
     web_cookie_samesite TEXT DEFAULT 'Lax',
-	web_trust_proxy INTEGER DEFAULT 0,
+    web_trust_proxy INTEGER DEFAULT 0,
 
     enable_cron_jobs INTEGER DEFAULT 1,
     default_expiration_days INTEGER DEFAULT 90,
-	default_subscription_days INTEGER DEFAULT 90,
+    default_subscription_days INTEGER DEFAULT 90,
 
     maintenance_mode INTEGER DEFAULT 0,
     debug_mode INTEGER DEFAULT 0,
-	
-	backup_retention_days INTEGER DEFAULT 30,
-	data_retention_years INTEGER DEFAULT 0,
 
-	
-	brand_name TEXT DEFAULT NULL,
-	
+    backup_retention_days INTEGER DEFAULT 30,
+    data_retention_years INTEGER DEFAULT 0,
+
+    brand_name TEXT DEFAULT NULL,
 
     -- Global notification channels order (e.g. "email,discord")
     notifications_order TEXT DEFAULT 'email',
     -- Allow per-user override of the notification order
     user_notifications_can_override INTEGER DEFAULT 0,
+    -- Send policy: first successful channel OR all available channels
+    notifications_send_mode TEXT DEFAULT 'first',
 
-	
+    -- Expiration handling mode
+    expiry_mode TEXT DEFAULT 'disable',
+    warn_then_disable_days INTEGER DEFAULT 7,
+
     -- Discord
     discord_enabled INTEGER DEFAULT 0,
     -- Legacy token (kept for backward-compat)
@@ -270,8 +285,8 @@ CREATE TABLE IF NOT EXISTS settings (
     -- Preferred bot reference (discord_bots.id)
     discord_bot_id INTEGER DEFAULT NULL,
 
-    mailing_enabled INTEGER DEFAULT 0
-
+    mailing_enabled INTEGER DEFAULT 0,
+    skip_never_used_accounts INTEGER DEFAULT 0
 );
 
 -----------------------------------------------------------------------
@@ -884,15 +899,35 @@ CREATE TABLE IF NOT EXISTS comm_scheduled (
   send_at TIMESTAMP NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','sent','error')),
   last_error TEXT,
+
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  max_attempts INTEGER NOT NULL DEFAULT 10,
+  next_attempt_at TIMESTAMP DEFAULT NULL,
+  last_attempt_at TIMESTAMP DEFAULT NULL,
+
+  payload_json TEXT DEFAULT NULL,
+  dedupe_key TEXT DEFAULT NULL,
+  channels_sent TEXT DEFAULT NULL,
+
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
   FOREIGN KEY(template_id) REFERENCES comm_templates(id) ON DELETE CASCADE,
   FOREIGN KEY(vodum_user_id) REFERENCES vodum_users(id) ON DELETE CASCADE,
   FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE SET NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_comm_scheduled_due ON comm_scheduled(status, send_at);
-CREATE INDEX IF NOT EXISTS idx_comm_scheduled_user ON comm_scheduled(vodum_user_id);
+CREATE INDEX IF NOT EXISTS idx_comm_scheduled_due
+ON comm_scheduled(status, send_at);
+
+CREATE INDEX IF NOT EXISTS idx_comm_scheduled_user
+ON comm_scheduled(vodum_user_id);
+
+CREATE INDEX IF NOT EXISTS idx_comm_scheduled_retry
+ON comm_scheduled(status, next_attempt_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_comm_scheduled_dedupe
+ON comm_scheduled(dedupe_key);
 
 CREATE TABLE IF NOT EXISTS comm_template_attachments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -930,7 +965,35 @@ CREATE TABLE IF NOT EXISTS comm_campaign_attachments (
   FOREIGN KEY(campaign_id) REFERENCES comm_campaigns(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_comm_campaign_attachments_campaign ON comm_campaign_attachments(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_comm_campaign_attachments_campaign
+ON comm_campaign_attachments(campaign_id);
+
+CREATE TABLE IF NOT EXISTS comm_campaign_targets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  campaign_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','sent','error')),
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  max_attempts INTEGER NOT NULL DEFAULT 10,
+  next_attempt_at TIMESTAMP DEFAULT NULL,
+  last_attempt_at TIMESTAMP DEFAULT NULL,
+  last_error TEXT,
+  channels_sent TEXT DEFAULT NULL,
+  dedupe_key TEXT DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(campaign_id) REFERENCES comm_campaigns(id) ON DELETE CASCADE,
+  FOREIGN KEY(user_id) REFERENCES vodum_users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_comm_campaign_targets_campaign
+ON comm_campaign_targets(campaign_id, status);
+
+CREATE INDEX IF NOT EXISTS idx_comm_campaign_targets_retry
+ON comm_campaign_targets(status, next_attempt_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_comm_campaign_targets_dedupe
+ON comm_campaign_targets(dedupe_key);
 
 CREATE TABLE IF NOT EXISTS comm_history (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -14,7 +14,10 @@ from communications_engine import (
     fetch_campaign_attachments,
     send_to_user,
     record_history,
+    attempts_satisfy_mode,
+    available_channels,
 )
+from tasks_engine import enqueue_task
 
 
 def _as_int(v, default=None):
@@ -42,6 +45,73 @@ def _sanitize_notifications_order(raw: str) -> str:
         return "email"
     return ",".join(parts)
 
+
+def _enqueue_send_comm_campaigns(db) -> bool:
+    row = db.query_one(
+        """
+        SELECT id, enabled
+        FROM tasks
+        WHERE name = 'send_comm_campaigns'
+        LIMIT 1
+        """
+    )
+    if not row:
+        return False
+
+    if not int(row["enabled"] or 0):
+        return False
+
+    try:
+        before = db.query_one(
+            "SELECT queued_count FROM tasks WHERE id = ?",
+            (int(row["id"]),),
+        )
+        before_q = int(before["queued_count"] or 0) if before else 0
+
+        enqueue_task(int(row["id"]))
+
+        after = db.query_one(
+            "SELECT queued_count FROM tasks WHERE id = ?",
+            (int(row["id"]),),
+        )
+        after_q = int(after["queued_count"] or 0) if after else 0
+
+        return after_q > before_q
+    except Exception:
+        return False
+
+
+def _normalize_send_mode(settings: dict) -> str:
+    mode = (settings or {}).get("notifications_send_mode")
+    mode = (mode or "first").strip().lower()
+    return mode if mode in ("first", "all") else "first"
+
+
+def _campaign_attempts_satisfy_mode(db, settings: dict, user: dict, attempts: list) -> bool:
+    """
+    Campaign success rule:
+    - FIRST: at least one successful channel
+    - ALL  : all available channels for this user must succeed
+    """
+    mode = _normalize_send_mode(settings)
+    avail = available_channels(db, settings, user)
+
+    sent_channels = {a.channel for a in (attempts or []) if getattr(a, "status", None) == "sent"}
+
+    if mode == "all":
+        required = []
+        if avail.get("email"):
+            required.append("email")
+        if avail.get("discord"):
+            required.append("discord")
+
+        # No usable channel => failure
+        if not required:
+            return False
+
+        return all(ch in sent_channels for ch in required)
+
+    return any(getattr(a, "status", None) == "sent" for a in (attempts or []))
 
 def register(app):
 
@@ -175,9 +245,6 @@ def register(app):
                 return redirect(url_for("communications_campaigns_page"))
             campaign = dict(campaign)
 
-            # mark as sending
-            db.execute("UPDATE comm_campaigns SET status='sending', updated_at=CURRENT_TIMESTAMP WHERE id=?", (cid,))
-
             attachments = fetch_campaign_attachments(db, cid)
 
             # Users target: only users linked to at least one media user (same logic as reminders)
@@ -204,12 +271,8 @@ def register(app):
                     (server_id,),
                 )
 
-            sent_ok = 0
-            sent_fail = 0
-
-            # TEST mode: only send to admin_email (email) if available; still uses unified engine rules.
+            # TEST mode stays immediate
             if int(campaign.get("is_test") or 0) == 1:
-                # We'll create a fake user context with admin_email as primary.
                 admin_email = (settings.get("admin_email") or "").strip()
                 if not admin_email:
                     db.execute("UPDATE comm_campaigns SET status='error', updated_at=CURRENT_TIMESTAMP WHERE id=?", (cid,))
@@ -244,55 +307,82 @@ def register(app):
                         meta={"is_test": True, "campaign_id": cid, "campaign_name": campaign.get("name")},
                     )
 
-                any_ok = any(a.status == "sent" for a in attempts)
+                test_ok = _campaign_attempts_satisfy_mode(db, settings, fake_user, attempts)
                 db.execute(
                     "UPDATE comm_campaigns SET status=?, sent_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                    ("finished" if any_ok else "error", cid),
+                    ("finished" if test_ok else "error", cid),
                 )
-                flash(t("comm_campaign_test_sent") if any_ok else t("comm_campaign_send_failed"), "success" if any_ok else "error")
+                flash(
+                    t("comm_campaign_test_sent") if test_ok else t("comm_campaign_send_failed"),
+                    "success" if test_ok else "error"
+                )
                 return redirect(url_for("communications_campaigns_page", load=cid))
 
-            for u in users or []:
-                u = dict(u)
-                attempts = send_to_user(
-                    db=db,
-                    settings=settings,
-                    user=u,
-                    subject=campaign.get("subject") or "",
-                    body=campaign.get("body") or "",
-                    attachments=attachments,
+            target_users = [dict(u) for u in (users or [])]
+            if not target_users:
+                db.execute(
+                    "UPDATE comm_campaigns SET status='error', sent_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                    (cid,),
                 )
+                flash(t("comm_campaign_send_failed"), "error")
+                return redirect(url_for("communications_campaigns_page", load=cid))
 
-                # record one history row per channel attempt
-                for att in attempts:
-                    meta = {
-                        "campaign_id": cid,
-                        "campaign_name": campaign.get("name"),
-                        "server_id": server_id,
-                        "attachments": [a.get("filename") for a in (attachments or [])],
-                    }
-                    record_history(
-                        db=db,
-                        kind="campaign",
-                        template_id=None,
-                        campaign_id=cid,
-                        user_id=u.get("id"),
-                        attempt=att,
-                        meta=meta,
+            # If campaign is not already sending, rebuild queue from scratch
+            if (campaign.get("status") or "").strip().lower() != "sending":
+                db.execute("DELETE FROM comm_campaign_targets WHERE campaign_id = ?", (cid,))
+
+            queued = 0
+            for u in target_users:
+                user_id = int(u["id"])
+                dedupe_key = f"campaign:{cid}:user:{user_id}"
+                cur = db.execute(
+                    """
+                    INSERT OR IGNORE INTO comm_campaign_targets(
+                        campaign_id, user_id, status,
+                        attempt_count, max_attempts, next_attempt_at, last_attempt_at,
+                        last_error, channels_sent, dedupe_key,
+                        created_at, updated_at
                     )
+                    VALUES(
+                        ?, ?, 'pending',
+                        0, 10, NULL, NULL,
+                        NULL, NULL, ?,
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    )
+                    """,
+                    (cid, user_id, dedupe_key),
+                )
+                if getattr(cur, "rowcount", 0):
+                    queued += 1
 
-                if any(a.status == "sent" for a in attempts):
-                    sent_ok += 1
-                else:
-                    sent_fail += 1
-
-            final_status = "finished" if sent_fail == 0 else ("error" if sent_ok == 0 else "finished")
             db.execute(
-                "UPDATE comm_campaigns SET status=?, sent_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                (final_status, cid),
+                "UPDATE comm_campaigns SET status='sending', sent_at=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (cid,),
             )
 
-            flash(t("comm_campaign_sent_summary").format(ok=sent_ok, failed=sent_fail), "success" if sent_ok else "error")
+            task_enqueued = _enqueue_send_comm_campaigns(db)
+
+            add_log(
+                "info",
+                "communications",
+                "Campaign queued",
+                {
+                    "campaign_id": cid,
+                    "queued_targets": queued,
+                    "task_enqueued": task_enqueued,
+                    "attachments": [a.get("filename") for a in (attachments or [])],
+                },
+            )
+
+            if not task_enqueued:
+                db.execute(
+                    "UPDATE comm_campaigns SET status='error', updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                    (cid,),
+                )
+                flash(t("comm_campaign_send_failed"), "error")
+                return redirect(url_for("communications_campaigns_page", load=cid))
+
+            flash(t("comm_campaign_queued_summary").format(ok=len(target_users), failed=0), "success")
             return redirect(url_for("communications_campaigns_page", load=cid))
 
         campaigns = db.query(
@@ -620,6 +710,7 @@ def register(app):
             if action == "save_all":
                 # Email
                 mailing_enabled = 1 if request.form.get("mailing_enabled") == "1" else 0
+                skip_never_used_accounts = 1 if request.form.get("skip_never_used_accounts") == "1" else 0
                 mail_from = (request.form.get("mail_from") or "").strip() or None
                 smtp_host = (request.form.get("smtp_host") or "").strip() or None
                 smtp_port = _as_int(request.form.get("smtp_port"), None)
@@ -653,6 +744,7 @@ def register(app):
                     """
                     UPDATE settings SET
                       mailing_enabled=?,
+                      skip_never_used_accounts=?,
                       mail_from=?,
                       smtp_host=?,
                       smtp_port=?,
@@ -668,6 +760,7 @@ def register(app):
                     """,
                     (
                         mailing_enabled,
+                        skip_never_used_accounts,
                         mail_from,
                         smtp_host,
                         smtp_port,

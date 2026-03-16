@@ -1083,7 +1083,14 @@
   "no_referred_users": "Aucun filleul pour le moment.",
   "comm_trigger_referral_reward": "Récompense de parrainage",
   "subscriptions_tab_settings": "Settings",
-"subscriptions_settings_expiry_desc": "Définis ici la durée par défaut des abonnements et le comportement à l’expiration."
+"subscriptions_settings_expiry_desc": "Définis ici la durée par défaut des abonnements et le comportement à l’expiration.",
+"comm_skip_never_used_accounts": "Ne pas envoyer de communication si le compte n'a jamais été utilisé",
+"comm_skip_never_used_accounts_help": "Si activé, aucun email, campagne ou notification ne sera envoyé aux utilisateurs n'ayant jamais lancé de lecture.",
+"never_used": "Jamais utilisé",
+"comm_campaign_queued_summary": "Campagne mise en file : {ok} utilisateurs en file, {failed} en échec.",
+"task_description.send_comm_campaigns": "Envoie les campagnes unifiées mises en file.",
+"task.send_comm_campaigns": "Envoyer les campagnes mises en file"
+
   
 }
 

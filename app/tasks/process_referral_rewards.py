@@ -5,8 +5,7 @@ from datetime import date, datetime, timedelta
 from db_manager import DBManager
 from logging_utils import get_logger
 from api.subscriptions import update_user_expiration
-from mailing_utils import build_user_context, render_mail
-from communications_engine import send_to_user, record_history
+from communications_engine import schedule_template_notification
 
 log = get_logger("task.process_referral_rewards")
 
@@ -88,6 +87,21 @@ def _find_reward_template(db):
     )
     return dict(row) if row else None
 
+def _get_user_comm_context(db, user_id: int):
+    row = db.query_one(
+        """
+        SELECT s.provider AS provider, mu.server_id AS server_id
+        FROM media_users mu
+        JOIN servers s ON s.id = mu.server_id
+        WHERE mu.vodum_user_id = ?
+        ORDER BY
+            CASE s.provider WHEN 'plex' THEN 0 ELSE 1 END,
+            mu.id ASC
+        LIMIT 1
+        """,
+        (user_id,),
+    )
+    return dict(row) if row else None
 
 def run(task_id=None, db=None):
     if db is None:
@@ -219,63 +233,61 @@ def run(task_id=None, db=None):
         )
 
         if tpl and _safe_int(settings.get("auto_notify_reward"), 1) == 1:
-            ctx = build_user_context({
-                **referrer,
-                "expiration_date": after_exp,
-            })
-            ctx["referred_username"] = r.get("referred_username") or ""
-            ctx["referral_reward_days"] = reward_days
-            ctx["referrer_old_expiration_date"] = before_exp or ""
-            ctx["referrer_new_expiration_date"] = after_exp
+            comm_ctx = _get_user_comm_context(db, referrer_user_id)
 
-            subject = render_mail(tpl.get("subject") or "", ctx)
-            body = render_mail(tpl.get("body") or "", ctx)
-
-            attempts = send_to_user(
-                db=db,
-                settings=global_settings,
-                user=referrer,
-                subject=subject,
-                body=body,
-                attachments=[],
-            )
-
-            any_ok = any(a.status == "sent" for a in attempts)
-            for att in attempts:
-                record_history(
-                    db=db,
-                    kind="template",
-                    template_id=int(tpl["id"]),
-                    campaign_id=None,
-                    user_id=referrer_user_id,
-                    attempt=att,
-                    meta={
-                        "event": "referral_reward",
-                        "referral_id": referral_id,
-                        "referred_user_id": int(r["referred_user_id"]),
-                        "referred_username": r.get("referred_username"),
-                        "reward_days": reward_days,
-                    },
-                )
-
-            if any_ok:
+            if not comm_ctx:
                 db.execute(
                     """
                     UPDATE user_referrals
-                    SET notification_sent_at = CURRENT_TIMESTAMP,
-                        notification_template_id = ?
+                    SET last_error = ?, updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
                     """,
-                    (int(tpl["id"]), referral_id),
+                    ("Reward granted but notification queue failed: no media/server context found", referral_id),
                 )
+                log.warning(
+                    "Referral reward notification not queued: no media/server context for referrer_user_id=%s",
+                    referrer_user_id,
+                )
+            else:
+                provider = (comm_ctx.get("provider") or "").strip().lower()
+                server_id = comm_ctx.get("server_id")
+
+                payload = {
+                    "event": "referral_reward",
+                    "trigger_event": "referral_reward",
+                    "referral_id": referral_id,
+                    "referred_user_id": int(r["referred_user_id"]),
+                    "referred_username": r.get("referred_username") or "",
+                    "reward_days": reward_days,
+                    "referral_reward_days": reward_days,
+                    "referrer_old_expiration_date": before_exp or "",
+                    "referrer_new_expiration_date": after_exp,
+                    "expiration_date": after_exp,
+                }
+
+                dedupe_key = f"referral_reward:{referral_id}:template:{int(tpl['id'])}:user:{referrer_user_id}"
+
+                schedule_template_notification(
+                    db=db,
+                    template_id=int(tpl["id"]),
+                    user_id=referrer_user_id,
+                    provider=provider,
+                    server_id=server_id,
+                    send_at_modifier=None,
+                    payload=payload,
+                    dedupe_key=dedupe_key,
+                    max_attempts=10,
+                )
+
                 _log_event(
                     db,
                     referral_id,
-                    "notification_sent",
+                    "notification_queued",
                     actor="system",
                     details={
                         "template_id": int(tpl["id"]),
                         "reward_days": reward_days,
+                        "dedupe_key": dedupe_key,
                     },
                 )
 
