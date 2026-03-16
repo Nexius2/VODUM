@@ -1084,6 +1084,12 @@
   "no_referred_users": "No referred users yet.",
   "comm_trigger_referral_reward": "Referral reward",
   "subscriptions_tab_settings": "Settings",
-"subscriptions_settings_expiry_desc": "Configure here the default subscription duration and what happens when a subscription expires."
+"subscriptions_settings_expiry_desc": "Configure here the default subscription duration and what happens when a subscription expires.",
+"comm_skip_never_used_accounts": "Do not send communications if the account was never used",
+"comm_skip_never_used_accounts_help": "If enabled, no email, campaign or notification will be sent to users who never started playback.",
+"never_used": "Never used",
+"comm_campaign_queued_summary": "Campaign queued: {ok} users in queue, {failed} failed.",
+"task_description.send_comm_campaigns": "Send queued unified campaigns.",
+"task.send_comm_campaigns": "Send queued campaigns"
   
 }

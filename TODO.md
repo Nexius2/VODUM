@@ -163,16 +163,6 @@ Verify compatibility with:
 
 ---
 
-# 4. bugs
-
-- [X] **Easter egg**
-- [X] ** deleting server is too long**
-
-
----
-# 5. Jellyfin
-
-- [X] **now playing jellyfin not displaying**
 
 
 # Future Ideas
@@ -192,16 +182,23 @@ Several internal fixes were implemented to improve the reliability and maintaina
 These changes do not alter user-facing features but make the system **more predictable and easier to debug**.
 
 
-## Feature & UI Improvements
-
-- [X] Add **referral system** (user sponsorship / invitation support)
-
-- [X] In **Create User**, add the ability to **select a subscription**
-
-- [X] On the **dashboard**, display **Sentence of the Day** only when a quote is available and **no media is currently playing**
-
-- [X] Fix issue where the **Easter Egg quote** sometimes failed to load when no media was playing (task had been unintentionally disabled)
-
-- [X] In **Create User**, reorganize the form to place **Subscription selection after First Name and Last Name** for better UX
+## Feature & Improvements
 
 
+
+- [X] In Monitoring > Libraries, display a “Top Played” section for each library, similar to Plex. In the header, use the backdrop of the top title behind the library name, and below it show the most played media with poster, play count, and user count.
+
+- [X] Add option: do not send expiration email if the account was never used.
+
+- [X] Check monitoring, it looks like not everything is being recorded. (Tautulli has many more entries.)
+
+- [X] It is not possible to change a user’s subscription individually. Also add the ability to change it from the user profile.
+- [X] In Subscriptions / Applications, the override is visible even though it is disabled in the user profile.
+
+- [X] Make sure that every email (or notification) that should be sent is actually sent, even if the app is offline, and that it is processed when the app starts again.
+- [X] Make sure sponsorship/referral (or any other scheduled task) still runs properly if the app is turned off on the scheduled day.
+- [X] Modern campaigns in `comm_campaigns`
+- [X] Guarantee “all channels” behavior in `all` mode
+
+- [X] Slowness when navigating through menus
+- [X] Check that `bootstrap` and `tables.sql` are identical

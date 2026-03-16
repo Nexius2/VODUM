@@ -30,9 +30,17 @@
         'unknown': 'bg-slate-800 text-slate-400'
       } %}
 
-      <span class="px-3 py-1 text-xs rounded-full {{ colors.get(user.status, 'bg-slate-800 text-slate-400') }}">
-        {{ t(user.status) }}
-      </span>
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="px-3 py-1 text-xs rounded-full {{ colors.get(user.status, 'bg-slate-800 text-slate-400') }}">
+          {{ t(user.status) }}
+        </span>
+
+        {% if never_used %}
+          <span class="px-3 py-1 text-xs rounded-full bg-orange-900/40 text-orange-300">
+            {{ t("never_used") if t("never_used") != "never_used" else "Never used" }}
+          </span>
+        {% endif %}
+      </div>
     </div>
 
     <div class="flex items-center gap-3">
@@ -471,16 +479,20 @@
 
       <div class="space-y-5">
 
-        <div class="text-sm">
+        <label class="text-sm block">
           <div class="text-slate-400 mb-1">{{ t("subscription_template") }}</div>
-          <div class="mt-1 max-w-md bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-            {% if user.subscription_template_name %}
-              {{ user.subscription_template_name }}
-            {% else %}
-              <span class="text-slate-500">{{ t("subscription_none") }}</span>
-            {% endif %}
-          </div>
-        </div>
+          <select name="subscription_template_id"
+                  class="mt-1 max-w-md w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+            <option value="" {% if user.subscription_template_id is none %}selected{% endif %}>
+              {{ t("subscription_none") }}
+            </option>
+            {% for tpl in subscription_templates %}
+              <option value="{{ tpl.id }}" {% if user.subscription_template_id == tpl.id %}selected{% endif %}>
+                {{ tpl.name }}
+              </option>
+            {% endfor %}
+          </select>
+        </label>
 
         <label class="text-sm block">
           {{ t("max_streams_override") }}

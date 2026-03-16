@@ -135,44 +135,8 @@
   </div>
 </div>
 
-<div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-6">
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-    <div class="text-sm font-semibold mb-3">Top users (by watch time)</div>
-    <div class="space-y-2 max-h-[360px] overflow-auto pr-2">
-      {% for r in (servers_top_users or [])[:40] %}
-        <div class="flex items-center justify-between border border-slate-800 rounded-xl px-3 py-2">
-          <div class="min-w-0">
-            <div class="text-sm font-semibold truncate">{{ r.user_label }}</div>
-            <div class="text-xs text-slate-500">{{ r.server_name or ('Server ' ~ r.server_id) }} • sessions {{ r.sessions }} • transcodes {{ r.transcodes }}</div>
-          </div>
-          {% set ms = r.watch_ms or 0 %}
-          <div class="text-xs text-slate-300 text-right whitespace-nowrap">
-            {{ ms // 3600000 }}h {{ (ms % 3600000) // 60000 }}m
-          </div>
-        </div>
-      {% endfor %}
-    </div>
-  </div>
-
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-    <div class="text-sm font-semibold mb-3">Top titles (by watch time)</div>
-    <div class="space-y-2 max-h-[360px] overflow-auto pr-2">
-      {% for r in (servers_top_titles or [])[:40] %}
-        <div class="flex items-center justify-between border border-slate-800 rounded-xl px-3 py-2">
-          <div class="min-w-0">
-            <div class="text-sm font-semibold truncate">{{ r.full_title }}</div>
-            <div class="text-xs text-slate-500">{{ r.server_name or ('Server ' ~ r.server_id) }} • sessions {{ r.sessions }} • transcodes {{ r.transcodes }}</div>
-          </div>
-          {% set ms = r.watch_ms or 0 %}
-          <div class="text-xs text-slate-300 text-right whitespace-nowrap">
-            {{ ms // 3600000 }}h {{ (ms % 3600000) // 60000 }}m
-          </div>
-        </div>
-      {% endfor %}
-    </div>
-  </div>
-
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 h-full">
     <div class="text-sm font-semibold mb-3">Top IPs (by sessions)</div>
     <div class="space-y-2 max-h-[360px] overflow-auto pr-2">
       {% for r in (servers_unique_ips or [])[:40] %}
@@ -189,21 +153,23 @@
       {% endfor %}
     </div>
   </div>
-</div>
 
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-  <div class="text-sm font-semibold mb-3">Top clients/devices (by sessions)</div>
-  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 max-h-[360px] overflow-auto pr-2">
-    {% for r in (servers_clients or [])[:80] %}
-      <div class="border border-slate-800 rounded-xl px-3 py-2">
-        <div class="text-sm font-semibold truncate">{{ r.client }}</div>
-        <div class="text-xs text-slate-500">
-          {{ r.server_name or ('Server ' ~ r.server_id) }} • sessions {{ r.sessions }} • transcodes {{ r.transcodes }}
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 h-full">
+    <div class="text-sm font-semibold mb-3">Top clients/devices (by sessions)</div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[360px] overflow-auto pr-2">
+      {% for r in (servers_clients or [])[:80] %}
+        <div class="border border-slate-800 rounded-xl px-3 py-2">
+          <div class="text-sm font-semibold truncate">{{ r.client }}</div>
+          <div class="text-xs text-slate-500">
+            {{ r.server_name or ('Server ' ~ r.server_id) }} • sessions {{ r.sessions }} • transcodes {{ r.transcodes }}
+          </div>
         </div>
-      </div>
-    {% endfor %}
+      {% endfor %}
+    </div>
   </div>
 </div>
+
+
 
 <script>
 (() => {

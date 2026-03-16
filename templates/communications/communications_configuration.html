@@ -44,6 +44,7 @@
 
       <p class="mt-2 text-sm text-slate-400">{{ t('comm_email_help') }}</p>
 
+
       <div id="email_content" class="mt-4 space-y-3">
         <div class="text-xs">
           <label class="block mb-1">{{ t('mail_from') }}</label>
@@ -244,14 +245,50 @@
           </div>
         </div>
 
-        <div class="flex items-center gap-2">
-          <input type="checkbox" name="user_notifications_can_override" value="1" {% if settings.user_notifications_can_override %}checked{% endif %}>
-          <span class="text-xs text-slate-300">{{ t('comm_allow_user_override') }}</span>
-        </div>
 
-        <div class="text-[11px] text-slate-500 pt-2">
-          {{ t('comm_user_override_note') }}
-        </div>
+
+	<div class="mt-4">
+	  <label class="flex items-start gap-3 cursor-pointer">
+		<input
+		  type="checkbox"
+		  name="user_notifications_can_override"
+		  value="1"
+		  class="mt-1 h-4 w-4 rounded border-slate-600 bg-slate-900 text-indigo-500 focus:ring-indigo-500"
+		  {% if settings.user_notifications_can_override %}checked{% endif %}
+		>
+
+		<div>
+		  <div class="text-sm font-medium">
+			{{ t("comm_allow_user_override") }}
+		  </div>
+		  <div class="text-xs text-slate-400">
+			{{ t("comm_user_override_note") }}
+		  </div>
+		</div>
+	  </label>
+	</div>
+
+	<div class="mt-4">
+	  <label class="flex items-start gap-3 cursor-pointer">
+		<input
+		  type="checkbox"
+		  name="skip_never_used_accounts"
+		  value="1"
+		  class="mt-1 h-4 w-4 rounded border-slate-600 bg-slate-900 text-indigo-500 focus:ring-indigo-500"
+		  {% if settings.skip_never_used_accounts %}checked{% endif %}
+		>
+
+		<div>
+		  <div class="text-sm font-medium">
+			{{ t("comm_skip_never_used_accounts") }}
+		  </div>
+		  <div class="text-xs text-slate-400">
+			{{ t("comm_skip_never_used_accounts_help") }}
+		  </div>
+		</div>
+	  </label>
+	</div>
+
 
       </div>
     </div>

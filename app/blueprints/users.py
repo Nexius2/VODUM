@@ -19,7 +19,7 @@ from core.providers.jellyfin_users import (
     jellyfin_set_policy_folders,
     jellyfin_reset_password_required,
 )
-from communications_engine import send_to_user, fetch_template_attachments, record_history
+from communications_engine import send_to_user, fetch_template_attachments, record_history, schedule_template_notification
 from core.providers.plex_users import plex_invite_and_share
 
 log = get_logger("users_create")
@@ -917,13 +917,13 @@ def api_users_create():
         # - Only one template is used (first one by id)
         # - days_after > 0 => schedule in comm_scheduled (picked by send_expiration_emails flush)
         # ------------------------------------------------------------
-        if smtp_ok and email:
+        if email:
             try:
-                dedupe_key = f"{provider}:{server.get('id')}"
+                welcome_gate_key = f"{provider}:{server.get('id')}"
                 if provider == "plex":
-                    dedupe_key = f"plex_token:{(server.get('token') or '')}"
+                    welcome_gate_key = f"plex_token:{(server.get('token') or '')}"
 
-                if dedupe_key not in sent_welcome_keys:
+                if welcome_gate_key not in sent_welcome_keys:
                     ct_row = db.query_one(
                         """
                         SELECT *
@@ -938,43 +938,58 @@ def api_users_create():
                     )
                     ct = dict(ct_row) if ct_row else None
 
-                    # If no template => do nothing (explicit requirement)
                     if ct:
-                        # User creation: allow before/after selection too.
-                        # - days_after > 0 => schedule later
-                        # - days_before (any value) => immediate (can't send in the past)
                         try:
                             days_after = int(ct.get("days_after")) if ct.get("days_after") is not None else None
                         except Exception:
                             days_after = None
 
+                        queue_server_id = int(server_id)
+                        if provider == "plex":
+                            queue_server_id = int(
+                                (details_json.get("plex_invite_state") or {}).get("primary_server_id") or server_id
+                            )
+
+                        queue_dedupe_key = (
+                            f"user_creation:template:{int(ct['id'])}:user:{int(vodum_user_id)}:"
+                            f"provider:{provider}:server:{queue_server_id}"
+                        )
+
+                        payload = {
+                            "trigger_event": "user_creation",
+                            "expiration_date": (expiration_date or "")[:10],
+                            "username": username,
+                            "firstname": firstname,
+                            "lastname": lastname,
+                            "email": email,
+                        }
+
                         if days_after is not None and days_after > 0:
-                            # Schedule for later
-                            db.execute(
-                                """
-                                INSERT INTO comm_scheduled(template_id, vodum_user_id, provider, server_id, send_at, status, created_at, updated_at)
-                                VALUES(?, ?, ?, ?, datetime('now', ?), 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                                """,
-                                (int(ct["id"]), int(vodum_user_id), provider, int(server_id), f"+{days_after} days"),
+                            schedule_template_notification(
+                                db=db,
+                                template_id=int(ct["id"]),
+                                user_id=int(vodum_user_id),
+                                provider=provider,
+                                server_id=queue_server_id,
+                                send_at_modifier=f"+{days_after} days",
+                                payload=payload,
+                                dedupe_key=queue_dedupe_key,
+                                max_attempts=10,
                             )
                         else:
-                            # Send NOW (EMAIL ONLY)
-                            exp_iso = (expiration_date or "")[:10]
+                            schedule_template_notification(
+                                db=db,
+                                template_id=int(ct["id"]),
+                                user_id=int(vodum_user_id),
+                                provider=provider,
+                                server_id=queue_server_id,
+                                send_at_modifier=None,
+                                payload=payload,
+                                dedupe_key=queue_dedupe_key,
+                                max_attempts=10,
+                            )
 
-                            context = build_user_context({
-                                "username": username,
-                                "firstname": firstname,
-                                "lastname": lastname,
-                                "email": email,
-                                "expiration_date": exp_iso,
-                            })
-
-                            subj = render_mail(ct.get("subject") or "", context)
-                            msg = render_mail(ct.get("body") or "", context)
-
-                            send_email_via_settings(settings, email, subj, msg)
-
-                    sent_welcome_keys.add(dedupe_key)
+                    sent_welcome_keys.add(welcome_gate_key)
 
             except Exception as e:
                 mailing_errors.append(f"server_id={server_id}: {e}")

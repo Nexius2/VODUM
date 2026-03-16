@@ -489,6 +489,7 @@ def run_migrations():
     ensure_column(cursor, "settings", "email_history_retention_years", "INTEGER DEFAULT 2")
     ensure_column(cursor, "settings", "backup_retention_days", "INTEGER DEFAULT 30")
     ensure_column(cursor, "settings", "data_retention_years", "INTEGER DEFAULT 0")
+    ensure_column(cursor, "settings", "skip_never_used_accounts", "INTEGER DEFAULT 0")
 
 
     
@@ -766,6 +767,21 @@ def run_migrations():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_comm_scheduled_user ON comm_scheduled(vodum_user_id);")
         conn.commit()
 
+    # -------------------------------------------------
+    # comm_scheduled: retry / payload / dedupe support
+    # -------------------------------------------------
+    ensure_column(cursor, "comm_scheduled", "attempt_count", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column(cursor, "comm_scheduled", "max_attempts", "INTEGER NOT NULL DEFAULT 10")
+    ensure_column(cursor, "comm_scheduled", "next_attempt_at", "TIMESTAMP DEFAULT NULL")
+    ensure_column(cursor, "comm_scheduled", "last_attempt_at", "TIMESTAMP DEFAULT NULL")
+    ensure_column(cursor, "comm_scheduled", "payload_json", "TEXT DEFAULT NULL")
+    ensure_column(cursor, "comm_scheduled", "dedupe_key", "TEXT DEFAULT NULL")
+    ensure_column(cursor, "comm_scheduled", "channels_sent", "TEXT DEFAULT NULL")
+
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_comm_scheduled_retry ON comm_scheduled(status, next_attempt_at)")
+    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_comm_scheduled_dedupe ON comm_scheduled(dedupe_key)")
+    conn.commit()
+
     if not table_exists(cursor, "comm_template_attachments"):
         print("🛠 Creating table: comm_template_attachments")
         cursor.execute("""
@@ -816,6 +832,45 @@ def run_migrations():
         """)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_comm_campaign_attachments_campaign ON comm_campaign_attachments(campaign_id);")
         conn.commit()
+
+    if not table_exists(cursor, "comm_campaign_targets"):
+        print("🛠 Creating table: comm_campaign_targets")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS comm_campaign_targets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','sent','error')),
+            attempt_count INTEGER NOT NULL DEFAULT 0,
+            max_attempts INTEGER NOT NULL DEFAULT 10,
+            next_attempt_at TIMESTAMP DEFAULT NULL,
+            last_attempt_at TIMESTAMP DEFAULT NULL,
+            last_error TEXT,
+            channels_sent TEXT DEFAULT NULL,
+            dedupe_key TEXT DEFAULT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(campaign_id) REFERENCES comm_campaigns(id) ON DELETE CASCADE,
+            FOREIGN KEY(user_id) REFERENCES vodum_users(id) ON DELETE CASCADE
+        );
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_comm_campaign_targets_campaign ON comm_campaign_targets(campaign_id, status);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_comm_campaign_targets_retry ON comm_campaign_targets(status, next_attempt_at);")
+        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_comm_campaign_targets_dedupe ON comm_campaign_targets(dedupe_key);")
+        conn.commit()
+
+    ensure_column(cursor, "comm_campaign_targets", "attempt_count", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column(cursor, "comm_campaign_targets", "max_attempts", "INTEGER NOT NULL DEFAULT 10")
+    ensure_column(cursor, "comm_campaign_targets", "next_attempt_at", "TIMESTAMP DEFAULT NULL")
+    ensure_column(cursor, "comm_campaign_targets", "last_attempt_at", "TIMESTAMP DEFAULT NULL")
+    ensure_column(cursor, "comm_campaign_targets", "last_error", "TEXT")
+    ensure_column(cursor, "comm_campaign_targets", "channels_sent", "TEXT DEFAULT NULL")
+    ensure_column(cursor, "comm_campaign_targets", "dedupe_key", "TEXT DEFAULT NULL")
+
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_comm_campaign_targets_campaign ON comm_campaign_targets(campaign_id, status);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_comm_campaign_targets_retry ON comm_campaign_targets(status, next_attempt_at);")
+    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_comm_campaign_targets_dedupe ON comm_campaign_targets(dedupe_key);")
+    conn.commit()
 
     if not table_exists(cursor, "comm_history"):
         print("🛠 Creating table: comm_history")
@@ -1334,6 +1389,20 @@ def run_migrations():
             """
         )
 
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_history_server_library_stopped
+            ON media_session_history (server_id, library_section_id, stopped_at)
+            """
+        )
+
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_media_users_vodum_user
+            ON media_users (vodum_user_id)
+            """
+        )
+
         # Indexes queue
         cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_media_jobs_pick
@@ -1427,12 +1496,14 @@ def run_migrations():
     # 2.6 Server deletion performance indexes
     # -------------------------------------------------
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_users_server ON media_users(server_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_users_vodum_user ON media_users(vodum_user_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_libraries_server ON libraries(server_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_user_libraries_library ON media_user_libraries(library_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_identities_server ON user_identities(server_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_welcome_email_templates_server ON welcome_email_templates(server_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_stream_enforcement_state_server ON stream_enforcement_state(server_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_stream_enforcements_server ON stream_enforcements(server_id, created_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_server_library_stopped ON media_session_history(server_id, library_section_id, stopped_at)")
     conn.commit()
 
     print("✔ Server deletion performance indexes verified.")
@@ -1597,6 +1668,14 @@ def run_migrations():
         "name": "send_campaign_discord",
         "description": "task_description.send_campaign_discord",
         "schedule": "*/10 * * * *",
+        "enabled": 0,
+        "status": "disabled"
+    })
+
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "send_comm_campaigns",
+        "description": "task_description.send_comm_campaigns",
+        "schedule": "*/5 * * * *",
         "enabled": 0,
         "status": "disabled"
     })
@@ -2016,6 +2095,7 @@ def run_migrations():
         "smtp_tls": 1,
         "smtp_user": "",
         "smtp_pass": "",
+        "skip_never_used_accounts": 0,
 
         # ⛔ NE PAS FORCER LA LANGUE
         "default_language": None,

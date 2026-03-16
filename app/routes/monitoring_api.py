@@ -157,24 +157,6 @@ def register(app):
                     except Exception:
                         continue
 
-            abort(502)
-
-            last_err = None
-            for base in bases:
-                try:
-                    r = _try_get(base + path, headers=headers, params=params)
-                    ct = r.headers.get("Content-Type") or "image/jpeg"
-                    return Response(
-                        r.content,
-                        mimetype=ct,
-                        headers={"Cache-Control": "public, max-age=300"},
-                    )
-                except Exception as e:
-                    last_err = e
-                    continue
-
-            abort(502)
-
         abort(404)
 
 
@@ -393,6 +375,118 @@ def register(app):
         )
         return json_rows(rows)
 
+    @app.route("/api/monitoring/ip_lookup")
+    def api_monitoring_ip_lookup():
+        raw_ip = (request.args.get("ip") or "").strip()
+        if not raw_ip:
+            return jsonify({"ok": False, "error": "missing_ip"}), 400
+
+        try:
+            ip_obj = ipaddress.ip_address(raw_ip)
+        except ValueError:
+            return jsonify({"ok": False, "error": "invalid_ip"}), 400
+
+        if (
+            ip_obj.is_private
+            or ip_obj.is_loopback
+            or ip_obj.is_link_local
+            or ip_obj.is_multicast
+            or ip_obj.is_reserved
+            or ip_obj.is_unspecified
+        ):
+            return jsonify({
+                "ok": True,
+                "ip": raw_ip,
+                "is_private": True,
+                "display_name": "Private / local IP",
+                "country": None,
+                "region": None,
+                "city": None,
+                "zip": None,
+                "lat": None,
+                "lon": None,
+                "timezone": None,
+                "isp": None,
+                "org": None,
+                "asn": None,
+                "asname": None,
+                "mobile": False,
+                "proxy": False,
+                "hosting": False,
+                "map_url": None,
+            })
+
+        fields = ",".join([
+            "status",
+            "message",
+            "country",
+            "regionName",
+            "city",
+            "zip",
+            "lat",
+            "lon",
+            "timezone",
+            "isp",
+            "org",
+            "as",
+            "asname",
+            "mobile",
+            "proxy",
+            "hosting",
+            "query",
+        ])
+
+        lookup_url = f"http://ip-api.com/json/{raw_ip}"
+        try:
+            resp = requests.get(
+                lookup_url,
+                params={"fields": fields},
+                timeout=8,
+            )
+            resp.raise_for_status()
+            data = resp.json() or {}
+        except Exception:
+            return jsonify({"ok": False, "error": "lookup_failed"}), 502
+
+        if data.get("status") != "success":
+            return jsonify({
+                "ok": False,
+                "error": data.get("message") or "lookup_failed",
+            }), 502
+
+        lat = data.get("lat")
+        lon = data.get("lon")
+        map_url = None
+        if lat is not None and lon is not None:
+            map_url = (
+                "https://www.openstreetmap.org/export/embed.html"
+                f"?bbox={float(lon)-0.08}%2C{float(lat)-0.04}%2C{float(lon)+0.08}%2C{float(lat)+0.04}"
+                f"&layer=mapnik&marker={float(lat)}%2C{float(lon)}"
+            )
+
+        return jsonify({
+            "ok": True,
+            "ip": data.get("query") or raw_ip,
+            "is_private": False,
+            "display_name": ", ".join(
+                [x for x in [data.get("city"), data.get("regionName"), data.get("country")] if x]
+            ) or raw_ip,
+            "country": data.get("country"),
+            "region": data.get("regionName"),
+            "city": data.get("city"),
+            "zip": data.get("zip"),
+            "lat": lat,
+            "lon": lon,
+            "timezone": data.get("timezone"),
+            "isp": data.get("isp"),
+            "org": data.get("org"),
+            "asn": data.get("as"),
+            "asname": data.get("asname"),
+            "mobile": bool(data.get("mobile")),
+            "proxy": bool(data.get("proxy")),
+            "hosting": bool(data.get("hosting")),
+            "map_url": map_url,
+        })
 
     @app.route("/api/monitoring/user/<int:user_id>/daily")
     def api_monitoring_user_daily(user_id: int):

@@ -43,18 +43,15 @@
   {% set tab_template = "monitoring/overview_body.html" %}
 {% endif %}
 
-{% if current_tab in ['activity', 'servers'] %}
-  {# ✅ PAS de HTMX sur Activity + Servers => pas de clignotement (charts) #}
+{% if current_tab in ['activity', 'servers', 'history', 'users', 'libraries', 'policies'] %}
   <div id="monitoring-content">
     {% include tab_template %}
   </div>
 {% else %}
-  {# ✅ HTMX conservé pour les autres onglets (auto-refresh OK) #}
   <div id="monitoring-content"
        hx-get="{{ url_for('monitoring_page', **args) }}"
        hx-trigger="every {{ refresh_ms }}ms"
        hx-swap="innerHTML">
-    {# ✅ contenu initial pour éviter un blanc #}
     {% include tab_template %}
   </div>
 {% endif %}
