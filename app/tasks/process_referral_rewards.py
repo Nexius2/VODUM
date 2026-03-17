@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta
 from db_manager import DBManager
 from logging_utils import get_logger
 from api.subscriptions import update_user_expiration
-from communications_engine import schedule_template_notification
+from communications_engine import schedule_template_notification, select_comm_template_for_user
 
 log = get_logger("task.process_referral_rewards")
 
@@ -62,30 +62,7 @@ def _log_event(db, referral_id, event_type, actor="system", old_referrer_user_id
     )
 
 
-def _find_reward_template(db):
-    row = db.query_one(
-        """
-        SELECT *
-        FROM comm_templates
-        WHERE enabled = 1
-          AND trigger_event = 'referral_reward'
-        ORDER BY id ASC
-        LIMIT 1
-        """
-    )
-    if row:
-        return dict(row)
 
-    row = db.query_one(
-        """
-        SELECT *
-        FROM comm_templates
-        WHERE key = 'referral_reward_default'
-          AND enabled = 1
-        LIMIT 1
-        """
-    )
-    return dict(row) if row else None
 
 def _get_user_comm_context(db, user_id: int):
     row = db.query_one(
@@ -143,7 +120,7 @@ def run(task_id=None, db=None):
         (today,),
     ) or []
 
-    tpl = _find_reward_template(db)
+    tpl = None
     global_settings = db.query_one("SELECT * FROM settings WHERE id = 1")
     global_settings = dict(global_settings) if global_settings else {}
 
@@ -232,7 +209,7 @@ def run(task_id=None, db=None):
             },
         )
 
-        if tpl and _safe_int(settings.get("auto_notify_reward"), 1) == 1:
+        if _safe_int(settings.get("auto_notify_reward"), 1) == 1:
             comm_ctx = _get_user_comm_context(db, referrer_user_id)
 
             if not comm_ctx:
@@ -251,6 +228,30 @@ def run(task_id=None, db=None):
             else:
                 provider = (comm_ctx.get("provider") or "").strip().lower()
                 server_id = comm_ctx.get("server_id")
+
+                tpl = select_comm_template_for_user(
+                    db=db,
+                    trigger_event="referral_reward",
+                    provider=provider,
+                    user_id=referrer_user_id,
+                )
+
+                if not tpl:
+                    db.execute(
+                        """
+                        UPDATE user_referrals
+                        SET last_error = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                        """,
+                        ("Reward granted but notification queue skipped: no matching referral template", referral_id),
+                    )
+                    log.warning(
+                        "Referral reward notification skipped: no matching template for referrer_user_id=%s provider=%s",
+                        referrer_user_id,
+                        provider,
+                    )
+                    rewarded += 1
+                    continue
 
                 payload = {
                     "event": "referral_reward",

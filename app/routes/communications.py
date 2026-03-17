@@ -504,13 +504,20 @@ def register(app):
                 INSERT INTO comm_templates(
                     key, name, enabled,
                     trigger_event, trigger_provider,
+                    subscription_scope, subscription_template_id,
                     days_before, days_after,
                     subject, body,
                     created_at, updated_at
                 )
-                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """,
-                (key, name, enabled, trigger_event, trigger_provider, days_before, days_after, subject, body),
+                (
+                    key, name, enabled,
+                    trigger_event, trigger_provider,
+                    subscription_scope, subscription_template_id,
+                    days_before, days_after,
+                    subject, body,
+                ),
             )
             tid = getattr(cur, 'lastrowid', None)
 
@@ -540,6 +547,58 @@ def register(app):
             trigger_provider = (request.form.get("trigger_provider") or "all").strip().lower()
             if trigger_provider not in ("all", "plex", "jellyfin"):
                 trigger_provider = "all"
+
+            subscription_scope_raw = (request.form.get("subscription_scope_value") or "none").strip()
+            subscription_scope = "none"
+            subscription_template_id = None
+
+            if subscription_scope_raw == "all":
+                subscription_scope = "all"
+            elif subscription_scope_raw.startswith("subscription:"):
+                sub_id_raw = subscription_scope_raw.split(":", 1)[1].strip()
+                try:
+                    subscription_template_id = int(sub_id_raw)
+                except Exception:
+                    subscription_template_id = None
+                if subscription_template_id:
+                    sub_exists = db.query_one(
+                        "SELECT id FROM subscription_templates WHERE id = ?",
+                        (subscription_template_id,),
+                    )
+                    if sub_exists:
+                        subscription_scope = "specific"
+                    else:
+                        subscription_scope = "none"
+                        subscription_template_id = None
+                else:
+                    subscription_scope = "none"
+                    subscription_template_id = None
+
+            subscription_scope_raw = (request.form.get("subscription_scope_value") or "none").strip()
+            subscription_scope = "none"
+            subscription_template_id = None
+
+            if subscription_scope_raw == "all":
+                subscription_scope = "all"
+            elif subscription_scope_raw.startswith("subscription:"):
+                sub_id_raw = subscription_scope_raw.split(":", 1)[1].strip()
+                try:
+                    subscription_template_id = int(sub_id_raw)
+                except Exception:
+                    subscription_template_id = None
+                if subscription_template_id:
+                    sub_exists = db.query_one(
+                        "SELECT id FROM subscription_templates WHERE id = ?",
+                        (subscription_template_id,),
+                    )
+                    if sub_exists:
+                        subscription_scope = "specific"
+                    else:
+                        subscription_scope = "none"
+                        subscription_template_id = None
+                else:
+                    subscription_scope = "none"
+                    subscription_template_id = None
 
             days_after_raw = (request.form.get("days_after") or "").strip()
             days_after = None
@@ -604,6 +663,8 @@ def register(app):
                   enabled=?,
                   trigger_event=?,
                   trigger_provider=?,
+                  subscription_scope=?,
+                  subscription_template_id=?,
                   days_before=?,
                   days_after=?,
                   subject=?,
@@ -611,7 +672,13 @@ def register(app):
                   updated_at=CURRENT_TIMESTAMP
                 WHERE id=?
                 """,
-                (name, enabled, trigger_event, trigger_provider, days_before, days_after, subject, body, tid),
+                (
+                    name, enabled, trigger_event, trigger_provider,
+                    subscription_scope, subscription_template_id,
+                    days_before, days_after,
+                    subject, body,
+                    tid,
+                ),
             )
 
             files = request.files.getlist("attachments")
@@ -636,13 +703,26 @@ def register(app):
             flash(t("comm_template_deleted"), "success")
             return redirect(url_for("communications_templates_page"))
 
-        templates = db.query("SELECT * FROM comm_templates ORDER BY key")
+        templates = db.query("""
+            SELECT
+              ct.*,
+              st.name AS subscription_template_name
+            FROM comm_templates ct
+            LEFT JOIN subscription_templates st ON st.id = ct.subscription_template_id
+            ORDER BY ct.key
+        """)
         templates = [dict(r) for r in (templates or [])]
+
+        subscription_templates = db.query(
+            "SELECT id, name FROM subscription_templates ORDER BY name"
+        ) or []
+        subscription_templates = [dict(r) for r in subscription_templates]
 
         return render_template(
             "communications/communications_templates.html",
             templates=templates,
             loaded_template=loaded,
+            subscription_templates=subscription_templates,
             current_subpage="templates",
         )
 

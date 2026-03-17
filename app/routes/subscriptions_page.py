@@ -41,7 +41,7 @@ def register(app):
     def subscriptions():
         db = get_db()
         tab = (request.args.get("tab") or request.form.get("tab") or "templates").strip().lower()
-        if tab not in ("templates", "applications", "gifts", "settings"):
+        if tab not in ("templates", "applications", "policies", "gifts", "settings"):
             tab = "templates"
 
         settings = db.query_one("SELECT * FROM settings WHERE id = 1")
@@ -112,7 +112,19 @@ def register(app):
             return redirect(url_for("subscriptions", tab="settings"))
 
         servers = db.query("SELECT id, name, type FROM servers ORDER BY name") or []
-        templates = db.query("SELECT id, name, notes, policies_json, created_at, updated_at FROM subscription_templates ORDER BY name") or []
+        templates = db.query("""
+            SELECT
+              id,
+              name,
+              notes,
+              duration_days,
+              subscription_value,
+              policies_json,
+              created_at,
+              updated_at
+            FROM subscription_templates
+            ORDER BY name
+        """) or []
         templates = [dict(t) for t in templates]
         for t in templates:
             try:
@@ -185,6 +197,45 @@ def register(app):
         ) or []
         users = [dict(u) for u in users]
 
+        policies = []
+        edit_policy = None
+
+        if tab == "policies":
+            policies = db.query("""
+                SELECT
+                  p.*,
+                  s.name AS server_name,
+                  vu.username AS scope_username
+                FROM stream_policies p
+                LEFT JOIN servers s
+                  ON s.id = p.server_id
+                LEFT JOIN vodum_users vu
+                  ON (p.scope_type = 'user' AND vu.id = p.scope_id)
+                ORDER BY p.is_enabled DESC, p.priority ASC, p.id DESC
+            """) or []
+
+            policies = [dict(r) for r in policies]
+
+            for p in policies:
+                try:
+                    p["_rule"] = json.loads(p.get("rule_value_json") or "{}")
+                except Exception:
+                    p["_rule"] = {}
+                p["_is_system"] = bool(p["_rule"].get("system_tag"))
+                p["_is_locked"] = bool(p["_rule"].get("locked"))
+                p["_subscription_name"] = p["_rule"].get("subscription_name") or ""
+
+            edit_policy_id = request.args.get("edit_policy_id", type=int)
+            if edit_policy_id:
+                ep = db.query_one("SELECT * FROM stream_policies WHERE id = ?", (edit_policy_id,))
+                if ep:
+                    ep = dict(ep)
+                    try:
+                        ep["_rule"] = json.loads(ep.get("rule_value_json") or "{}")
+                    except Exception:
+                        ep["_rule"] = {}
+                    edit_policy = ep
+
         return render_template(
             "subscriptions/subscriptions.html",
             tab=tab,
@@ -196,6 +247,8 @@ def register(app):
             applications_total_pages=applications_total_pages,
             applications_total_users=applications_total_users,
             applications_q=applications_search,
+            policies=policies,
+            edit_policy=edit_policy,
         )
 
 
@@ -222,6 +275,26 @@ def register(app):
 
         name = (request.form.get("name") or "").strip()
         notes = (request.form.get("notes") or "").strip()
+
+        duration_days_raw = (request.form.get("duration_days") or "").strip()
+        subscription_value_raw = (request.form.get("subscription_value") or "").strip()
+
+        try:
+            duration_days = int(duration_days_raw) if duration_days_raw else 30
+        except Exception:
+            duration_days = 30
+
+        try:
+            subscription_value = float(subscription_value_raw) if subscription_value_raw else 0
+        except Exception:
+            subscription_value = 0
+
+        if duration_days < 1:
+            duration_days = 1
+
+        if subscription_value < 0:
+            subscription_value = 0
+
         policies_json = (request.form.get("policies_json") or "[]").strip()
         policies = _parse_json_list(policies_json)
 
@@ -262,8 +335,18 @@ def register(app):
                 return redirect(url_for("subscriptions", tab="templates"))
 
             db.execute(
-                "UPDATE subscription_templates SET name=?, notes=?, policies_json=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                (name, notes, json.dumps(clean), template_id),
+                """
+                UPDATE subscription_templates
+                SET
+                  name=?,
+                  notes=?,
+                  duration_days=?,
+                  subscription_value=?,
+                  policies_json=?,
+                  updated_at=CURRENT_TIMESTAMP
+                WHERE id=?
+                """,
+                (name, notes, duration_days, subscription_value, json.dumps(clean), template_id),
             )
             add_log(db, "subscriptions", f"Template updated: {name} (id={template_id})")
             flash("subscription_template_saved", "success")
@@ -275,8 +358,16 @@ def register(app):
                 return redirect(url_for("subscriptions", tab="templates"))
 
             db.execute(
-                "INSERT INTO subscription_templates(name, notes, policies_json) VALUES (?, ?, ?)",
-                (name, notes, json.dumps(clean)),
+                """
+                INSERT INTO subscription_templates(
+                  name,
+                  notes,
+                  duration_days,
+                  subscription_value,
+                  policies_json
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (name, notes, duration_days, subscription_value, json.dumps(clean)),
             )
             add_log(db, "subscriptions", f"Template created: {name}")
             flash("subscription_template_created", "success")
@@ -301,8 +392,22 @@ def register(app):
             i += 1
 
         db.execute(
-            "INSERT INTO subscription_templates(name, notes, policies_json) VALUES (?, ?, ?)",
-            (new_name, tpl.get("notes") or "", tpl.get("policies_json") or "[]"),
+            """
+            INSERT INTO subscription_templates(
+              name,
+              notes,
+              duration_days,
+              subscription_value,
+              policies_json
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                new_name,
+                tpl.get("notes") or "",
+                tpl.get("duration_days") or 30,
+                tpl.get("subscription_value") or 0,
+                tpl.get("policies_json") or "[]",
+            ),
         )
         add_log(db, "subscriptions", f"Template duplicated: {base_name} -> {new_name}")
         flash("subscription_template_duplicated", "success")

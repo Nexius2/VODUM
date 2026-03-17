@@ -1,0 +1,623 @@
+<div class="space-y-6">
+
+  <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h2 class="text-lg font-semibold mb-2">
+          {{ t("policies_title") }}
+        </h2>
+
+        <p class="text-slate-400 text-sm">
+          {{ t("policies_intro") }}
+          <span class="mx-1">•</span>
+          {{ t("policies_task_label") }}
+          <code class="text-slate-200">stream_enforcer</code>
+        </p>
+
+        <p class="text-slate-500 text-xs mt-2">
+          {{ t("policies_note_providers") }}
+        </p>
+      </div>
+
+      <div class="shrink-0">
+        <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-950 border border-slate-800 text-xs text-slate-300">
+          <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
+          {{ t("policies_scan_every_60s") }}
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <form method="post"
+        action="{{ url_for('stream_policy_create') }}"
+        class="bg-slate-900 border border-slate-800 rounded-xl p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+
+    <input type="hidden" name="policy_id" value="{{ edit_policy.id if edit_policy else '' }}">
+    <input type="hidden" name="redirect_endpoint" value="subscriptions">
+    <input type="hidden" name="redirect_tab" value="policies">
+
+    <div>
+      <label class="text-xs text-slate-400">
+        {{ t("policies_rule") }}
+      </label>
+
+      <select name="rule_type"
+              class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+        <option value="max_streams_per_user" {% if edit_policy and edit_policy.rule_type=="max_streams_per_user" %}selected{% endif %}>{{ t("policies_rule_max_streams_user") }}</option>
+        <option value="max_ips_per_user" {% if edit_policy and edit_policy.rule_type=="max_ips_per_user" %}selected{% endif %}>{{ t("policies_rule_max_ips_user") }}</option>
+        <option value="max_streams_per_ip" {% if edit_policy and edit_policy.rule_type=="max_streams_per_ip" %}selected{% endif %}>{{ t("policies_rule_max_streams_ip") }}</option>
+        <option value="max_transcodes_global" {% if edit_policy and edit_policy.rule_type=="max_transcodes_global" %}selected{% endif %}>{{ t("policies_rule_max_transcodes_server") }}</option>
+        <option value="ban_4k_transcode" {% if edit_policy and edit_policy.rule_type=="ban_4k_transcode" %}selected{% endif %}>{{ t("policies_rule_ban_4k_transcode") }}</option>
+        <option value="max_bitrate_kbps" {% if edit_policy and edit_policy.rule_type=="max_bitrate_kbps" %}selected{% endif %}>{{ t("policies_rule_max_bitrate") }}</option>
+        <option value="device_allowlist" {% if edit_policy and edit_policy.rule_type=="device_allowlist" %}selected{% endif %}>{{ t("policies_rule_device_allowlist") }}</option>
+      </select>
+    </div>
+
+    <div>
+      <label class="text-xs text-slate-400">
+        {{ t("policies_scope") }}
+      </label>
+
+      <select name="scope_type"
+              class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+        <option value="global" {% if edit_policy and edit_policy.scope_type=="global" %}selected{% endif %}>{{ t("policies_scope_global") }}</option>
+        <option value="server" {% if edit_policy and edit_policy.scope_type=="server" %}selected{% endif %}>{{ t("policies_scope_server") }}</option>
+        <option value="user" {% if edit_policy and edit_policy.scope_type=="user" %}selected{% endif %}>{{ t("policies_scope_user") }}</option>
+      </select>
+
+      <input name="scope_id"
+             value="{{ edit_policy.scope_id if edit_policy else '' }}"
+             placeholder="{{ t('policies_scope_id_placeholder') }}"
+             class="w-full mt-2 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
+      <p class="text-xs text-slate-500 mt-1">
+        {{ t("policies_scope_help") }}
+      </p>
+    </div>
+
+    <div>
+      <label class="text-xs text-slate-400">
+        {{ t("policies_provider") }}
+      </label>
+
+      <select name="provider"
+              class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+        <option value="" {% if edit_policy and not edit_policy.provider %}selected{% endif %}>{{ t("policies_provider_both") }}</option>
+        <option value="plex" {% if edit_policy and edit_policy.provider=="plex" %}selected{% endif %}>{{ t("policies_provider_plex") }}</option>
+        <option value="jellyfin" {% if edit_policy and edit_policy.provider=="jellyfin" %}selected{% endif %}>{{ t("policies_provider_jellyfin") }}</option>
+      </select>
+
+      <label class="text-xs text-slate-400 mt-3 block">
+        {{ t("policies_server_filter") }}
+        <span class="text-slate-500">({{ t("optional") }})</span>
+      </label>
+
+      <select name="server_id"
+              class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+        <option value="" {% if edit_policy and not edit_policy.server_id %}selected{% endif %}>{{ t("policies_all_servers") }}</option>
+        {% for s in servers %}
+          <option value="{{ s.id }}" {% if edit_policy and edit_policy.server_id==s.id %}selected{% endif %}>{{ s.name }} ({{ s.type }})</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        <label class="text-xs text-slate-400">
+          {{ t("policies_priority") }}
+        </label>
+        <input name="priority"
+               value="{{ edit_policy.priority if edit_policy else 100 }}"
+               class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
+        <p class="text-xs text-slate-500 mt-1">
+          {{ t("policies_priority_help") }}
+        </p>
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-400">
+          {{ t("policies_selector") }}
+        </label>
+
+        <select name="selector"
+                class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+          <option value="kill_newest" {% if edit_policy and edit_policy._rule.selector=="kill_newest" %}selected{% endif %}>{{ t("policies_selector_kill_newest") }}</option>
+          <option value="kill_oldest" {% if edit_policy and edit_policy._rule.selector=="kill_oldest" %}selected{% endif %}>{{ t("policies_selector_kill_oldest") }}</option>
+          <option value="kill_transcoding_first" {% if edit_policy and edit_policy._rule.selector=="kill_transcoding_first" %}selected{% endif %}>{{ t("policies_selector_kill_transcoding") }}</option>
+        </select>
+
+        <p class="text-xs text-slate-500 mt-1">
+          {{ t("policies_selector_help") }}
+        </p>
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-400">
+          {{ t("policies_enabled") }}
+        </label>
+
+        <select name="is_enabled"
+                class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+          <option value="1" {% if not edit_policy or edit_policy.is_enabled %}selected{% endif %}>{{ t("enabled") }}</option>
+          <option value="0" {% if edit_policy and not edit_policy.is_enabled %}selected{% endif %}>{{ t("disabled") }}</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        <label class="text-xs text-slate-400">
+          {{ t("policies_max_value") }}
+        </label>
+        <input name="max_value"
+               value="{{ edit_policy._rule.max if edit_policy and (edit_policy._rule.max is defined) else '' }}"
+               placeholder="{{ t('policies_max_value_placeholder') }}"
+               class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
+        <p class="text-xs text-slate-500 mt-1">
+          {{ t("policies_max_value_help") }}
+        </p>
+
+        <label class="mt-3 flex items-center gap-2 text-xs text-slate-300">
+          <input type="checkbox" name="allow_local_ip" value="1"
+                 {% if edit_policy and edit_policy._rule.allow_local_ip %}checked{% endif %}>
+          {{ t("policies_allow_local_ip") }}
+        </label>
+        <p class="text-xs text-slate-500 mt-1">
+          {{ t("policies_allow_local_ip_help") }}
+        </p>
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-400">
+          {{ t("policies_max_bitrate_kbps") }}
+        </label>
+        <input name="max_kbps"
+               value="{{ edit_policy._rule.max_kbps if edit_policy and (edit_policy._rule.max_kbps is defined) else '' }}"
+               placeholder="{{ t('policies_max_bitrate_placeholder') }}"
+               class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
+        <p class="text-xs text-slate-500 mt-1">
+          {{ t("policies_max_bitrate_help") }}
+        </p>
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-400">
+          {{ t("policies_allowed_devices") }}
+        </label>
+        <input name="allowed_devices"
+               value="{{ (edit_policy._rule.allowed|join(', ')) if edit_policy and (edit_policy._rule.allowed is defined) else '' }}"
+               placeholder="{{ t('policies_allowed_devices_placeholder') }}"
+               class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
+        <p class="text-xs text-slate-500 mt-1">
+          {{ t("policies_allowed_devices_help") }}
+        </p>
+      </div>
+    </div>
+
+    <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="text-xs text-slate-400">
+          {{ t("policies_warn_title") }}
+        </label>
+        <input name="warn_title"
+               value="{{ edit_policy._rule.warn_title if edit_policy and (edit_policy._rule.warn_title is defined) else t('policies_warn_title_default') }}"
+               class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-400">
+          {{ t("policies_warn_text") }}
+        </label>
+        <input name="warn_text"
+               value="{{ edit_policy._rule.warn_text if edit_policy and (edit_policy._rule.warn_text is defined) else t('policies_warn_text_default') }}"
+               class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
+      </div>
+    </div>
+
+    <div class="md:col-span-3 flex justify-end gap-2">
+      {% if edit_policy %}
+        <a href="{{ url_for('subscriptions', tab='policies') }}"
+           class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-950/40 text-slate-200 hover:bg-slate-950/70 font-semibold">
+          {{ t("cancel") }}
+        </a>
+      {% endif %}
+      <button class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg font-semibold">
+        {% if edit_policy %}{{ t("save") }}{% else %}{{ t("policies_create_button") }}{% endif %}
+      </button>
+    </div>
+  </form>
+
+
+
+  <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+    <div class="p-4 border-b border-slate-800 space-y-4">
+      <div class="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
+        <div>
+          <h3 class="font-semibold text-white">
+            {{ t("policies_existing_title") }}
+          </h3>
+          <p class="text-xs text-slate-500 mt-1">
+            Compact view with client-side filters and pagination.
+          </p>
+        </div>
+
+        <div class="flex flex-wrap items-end gap-3">
+          <div>
+            <label class="block text-xs text-slate-500 mb-1">{{ t("search") }}</label>
+            <input
+              id="policyFilterSearch"
+              type="text"
+              placeholder="{{ t('search') }}"
+              class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm min-w-[220px]"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs text-slate-500 mb-1">{{ t("status") }}</label>
+            <select id="policyFilterStatus"
+                    class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm">
+              <option value="">All</option>
+              <option value="enabled">{{ t("enabled") }}</option>
+              <option value="disabled">{{ t("disabled") }}</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs text-slate-500 mb-1">{{ t("scope") }}</label>
+            <select id="policyFilterScope"
+                    class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm">
+              <option value="">All</option>
+              <option value="global">Global</option>
+              <option value="server">{{ t("server") }}</option>
+              <option value="user">{{ t("user") }}</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs text-slate-500 mb-1">{{ t("provider") }}</label>
+            <select id="policyFilterProvider"
+                    class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm">
+              <option value="">All</option>
+              <option value="both">{{ t("policies_provider_both_short") }}</option>
+              <option value="plex">plex</option>
+              <option value="jellyfin">jellyfin</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs text-slate-500 mb-1">Origin</label>
+            <select id="policyFilterOrigin"
+                    class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm">
+              <option value="">All</option>
+              <option value="manual">Manual</option>
+              <option value="subscription">{{ t("subscription") }}</option>
+              <option value="system">{{ t("system") }}</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs text-slate-500 mb-1">Per page</label>
+            <select id="policyPageSize"
+                    class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm">
+              <option value="20" selected>20</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+          </div>
+
+          <button type="button"
+                  id="policyFilterReset"
+                  class="px-3 py-2 rounded-lg border border-slate-700 bg-slate-950/40 text-slate-200 hover:bg-slate-950/70 text-sm">
+            Reset
+          </button>
+        </div>
+      </div>
+
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-xs text-slate-400">
+        <div id="policyTableSummary">0 result</div>
+
+        <div class="flex items-center gap-2">
+          <button type="button"
+                  id="policyPrevPage"
+                  class="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-950/40 text-slate-200 hover:bg-slate-950/70">
+            {{ t("previous") }}
+          </button>
+
+          <span id="policyPageIndicator" class="text-slate-300">1 / 1</span>
+
+          <button type="button"
+                  id="policyNextPage"
+                  class="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-950/40 text-slate-200 hover:bg-slate-950/70">
+            {{ t("next") }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-950 text-slate-400">
+          <tr>
+            <th class="text-left p-3 w-[56px]">{{ t("status") }}</th>
+            <th class="text-left p-3">{{ t("rule") }}</th>
+            <th class="text-left p-3">{{ t("scope") }}</th>
+            <th class="text-left p-3">Origin</th>
+            <th class="text-left p-3">{{ t("provider") }}</th>
+            <th class="text-left p-3">{{ t("priority") }}</th>
+            <th class="text-left p-3">{{ t("value") }}</th>
+            <th class="text-left p-3 w-[140px]">{{ t("actions") }}</th>
+          </tr>
+        </thead>
+
+        <tbody id="policyTableBody">
+          {% for p in policies %}
+            {% set provider_label = p.provider if p.provider else 'both' %}
+            {% if p._is_system %}
+              {% set origin_label = 'system' %}
+            {% elif p._subscription_name %}
+              {% set origin_label = 'subscription' %}
+            {% else %}
+              {% set origin_label = 'manual' %}
+            {% endif %}
+
+            {% set target_label = '' %}
+            {% if p.scope_type == 'user' %}
+              {% set target_label = (p.scope_username if p.scope_username else ('#' ~ p.scope_id)) %}
+            {% elif p.scope_type == 'server' %}
+              {% set target_label = (p.server_name if p.server_name else (p.scope_id or '')) %}
+            {% else %}
+              {% set target_label = 'Global' %}
+            {% endif %}
+
+            <tr
+              class="border-t border-slate-800 policy-row"
+              data-search="{{ (p.rule_type ~ ' ' ~ p.scope_type ~ ' ' ~ (p.scope_username or '') ~ ' ' ~ (p.server_name or '') ~ ' ' ~ (p.provider or 'both') ~ ' ' ~ (p._subscription_name or '') ~ ' ' ~ (p.rule_value_json or ''))|lower }}"
+              data-status="{{ 'enabled' if p.is_enabled else 'disabled' }}"
+              data-scope="{{ p.scope_type }}"
+              data-provider="{{ provider_label|lower }}"
+              data-origin="{{ origin_label }}"
+            >
+              <td class="p-3 align-top">
+                {% if p.is_enabled %}
+                  <span class="inline-block w-3 h-3 rounded-full bg-emerald-400" title="{{ t('enabled') }}"></span>
+                {% else %}
+                  <span class="inline-block w-3 h-3 rounded-full bg-rose-400" title="{{ t('disabled') }}"></span>
+                {% endif %}
+              </td>
+
+              <td class="p-3 align-top">
+                <div class="font-medium text-slate-100">{{ p.rule_type }}</div>
+                <div class="mt-1 text-xs text-slate-500">#{{ p.id }}</div>
+              </td>
+
+              <td class="p-3 align-top">
+                <div class="text-slate-200">
+                  {{ p.scope_type }}
+                </div>
+                <div class="mt-1 text-xs text-slate-500">
+                  {{ target_label }}
+                </div>
+              </td>
+
+              <td class="p-3 align-top">
+                <div class="flex flex-wrap items-center gap-2">
+                  {% if origin_label == 'system' %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-950 border border-slate-700 text-[11px] text-slate-300">
+                      {{ t("system") }}
+                    </span>
+                  {% elif origin_label == 'subscription' %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-indigo-950/40 border border-indigo-800 text-[11px] text-indigo-200">
+                      {{ t("subscription") }}
+                    </span>
+                  {% else %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-950 border border-slate-700 text-[11px] text-slate-300">
+                      Manual
+                    </span>
+                  {% endif %}
+
+                  {% if p._is_locked %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-950/40 border border-amber-800 text-[11px] text-amber-300">
+                      Locked
+                    </span>
+                  {% endif %}
+                </div>
+
+                {% if p._subscription_name %}
+                  <div class="mt-1 text-xs text-slate-500">
+                    {{ p._subscription_name }}
+                  </div>
+                {% endif %}
+              </td>
+
+              <td class="p-3 align-top">
+                {% if p.provider %}
+                  <span class="text-slate-200">{{ p.provider }}</span>
+                {% else %}
+                  <span class="text-slate-200">{{ t("policies_provider_both_short") }}</span>
+                {% endif %}
+              </td>
+
+              <td class="p-3 align-top">
+                <span class="text-slate-200">{{ p.priority }}</span>
+              </td>
+
+              <td class="p-3 align-top">
+                <div class="space-y-1">
+                  {% if p._rule.max is defined %}
+                    <div class="text-slate-200 text-xs">max={{ p._rule.max }}</div>
+                  {% endif %}
+                  {% if p._rule.max_kbps is defined %}
+                    <div class="text-slate-200 text-xs">kbps={{ p._rule.max_kbps }}</div>
+                  {% endif %}
+                  {% if p._rule.selector is defined %}
+                    <div class="text-slate-400 text-xs">selector={{ p._rule.selector }}</div>
+                  {% endif %}
+                  {% if p._rule.allow_local_ip %}
+                    <div class="text-slate-400 text-xs">local_ip=yes</div>
+                  {% endif %}
+                  {% if p._rule.allowed is defined and p._rule.allowed %}
+                    <div class="text-slate-400 text-xs truncate max-w-[260px]">
+                      devices={{ p._rule.allowed|join(', ') }}
+                    </div>
+                  {% endif %}
+
+                  <details class="mt-2">
+                    <summary class="cursor-pointer text-xs text-slate-500 hover:text-slate-300">
+                      JSON
+                    </summary>
+                    <code class="mt-2 block whitespace-pre-wrap break-words text-[11px] text-slate-400 bg-slate-950 border border-slate-800 rounded-lg p-2">{{ p.rule_value_json }}</code>
+                  </details>
+                </div>
+              </td>
+
+              <td class="p-3 text-right align-top">
+                <div class="flex items-center justify-end gap-3">
+                  {% if p._is_system or p._is_locked %}
+                    <span class="text-slate-500 text-xs">{{ t("read_only") }}</span>
+                  {% else %}
+                    <a class="text-slate-300 hover:text-white"
+                       href="{{ url_for('subscriptions', tab='policies', edit_policy_id=p.id) }}">
+                      {{ t("edit") }}
+                    </a>
+
+                    <form method="post" action="{{ url_for('stream_policy_delete', policy_id=p.id) }}">
+                      <input type="hidden" name="redirect_endpoint" value="subscriptions">
+                      <input type="hidden" name="redirect_tab" value="policies">
+                      <button class="text-red-400 hover:text-red-300">{{ t("delete") }}</button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+
+          {% if not policies %}
+            <tr>
+              <td class="p-4 text-slate-400" colspan="8">
+                {{ t("policies_empty") }}
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const tableBody = document.getElementById('policyTableBody');
+      if (!tableBody) return;
+
+      const rows = Array.from(tableBody.querySelectorAll('.policy-row'));
+      const filterSearch = document.getElementById('policyFilterSearch');
+      const filterStatus = document.getElementById('policyFilterStatus');
+      const filterScope = document.getElementById('policyFilterScope');
+      const filterProvider = document.getElementById('policyFilterProvider');
+      const filterOrigin = document.getElementById('policyFilterOrigin');
+      const pageSizeEl = document.getElementById('policyPageSize');
+      const resetBtn = document.getElementById('policyFilterReset');
+      const prevBtn = document.getElementById('policyPrevPage');
+      const nextBtn = document.getElementById('policyNextPage');
+      const summaryEl = document.getElementById('policyTableSummary');
+      const pageIndicatorEl = document.getElementById('policyPageIndicator');
+
+      let currentPage = 1;
+
+      function normalize(v) {
+        return (v || '').toString().trim().toLowerCase();
+      }
+
+      function getFilteredRows() {
+        const search = normalize(filterSearch.value);
+        const status = normalize(filterStatus.value);
+        const scope = normalize(filterScope.value);
+        const provider = normalize(filterProvider.value);
+        const origin = normalize(filterOrigin.value);
+
+        return rows.filter((row) => {
+          if (search && !normalize(row.dataset.search).includes(search)) return false;
+          if (status && normalize(row.dataset.status) !== status) return false;
+          if (scope && normalize(row.dataset.scope) !== scope) return false;
+          if (provider && normalize(row.dataset.provider) !== provider) return false;
+          if (origin && normalize(row.dataset.origin) !== origin) return false;
+          return true;
+        });
+      }
+
+      function render() {
+        const filtered = getFilteredRows();
+        const pageSize = parseInt(pageSizeEl.value || '20', 10);
+        const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+
+        if (currentPage > totalPages) currentPage = totalPages;
+        if (currentPage < 1) currentPage = 1;
+
+        const start = (currentPage - 1) * pageSize;
+        const end = start + pageSize;
+
+        rows.forEach((row) => {
+          row.style.display = 'none';
+        });
+
+        filtered.slice(start, end).forEach((row) => {
+          row.style.display = '';
+        });
+
+        const shownFrom = filtered.length ? start + 1 : 0;
+        const shownTo = Math.min(end, filtered.length);
+
+        summaryEl.textContent = filtered.length
+          ? `Showing ${shownFrom}-${shownTo} of ${filtered.length}`
+          : '0 result';
+
+        pageIndicatorEl.textContent = `${currentPage} / ${totalPages}`;
+        prevBtn.disabled = currentPage <= 1;
+        nextBtn.disabled = currentPage >= totalPages;
+
+        prevBtn.classList.toggle('opacity-50', prevBtn.disabled);
+        prevBtn.classList.toggle('cursor-not-allowed', prevBtn.disabled);
+        nextBtn.classList.toggle('opacity-50', nextBtn.disabled);
+        nextBtn.classList.toggle('cursor-not-allowed', nextBtn.disabled);
+      }
+
+      [filterSearch, filterStatus, filterScope, filterProvider, filterOrigin].forEach((el) => {
+        el.addEventListener('input', () => {
+          currentPage = 1;
+          render();
+        });
+        el.addEventListener('change', () => {
+          currentPage = 1;
+          render();
+        });
+      });
+
+      pageSizeEl.addEventListener('change', () => {
+        currentPage = 1;
+        render();
+      });
+
+      resetBtn.addEventListener('click', () => {
+        filterSearch.value = '';
+        filterStatus.value = '';
+        filterScope.value = '';
+        filterProvider.value = '';
+        filterOrigin.value = '';
+        pageSizeEl.value = '20';
+        currentPage = 1;
+        render();
+      });
+
+      prevBtn.addEventListener('click', () => {
+        currentPage -= 1;
+        render();
+      });
+
+      nextBtn.addEventListener('click', () => {
+        currentPage += 1;
+        render();
+      });
+
+      render();
+    })();
+  </script>
+
+</div>

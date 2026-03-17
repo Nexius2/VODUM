@@ -128,6 +128,107 @@ def fetch_campaign_attachments(db, campaign_id: int) -> List[Dict]:
     )
     return [dict(r) for r in (rows or [])]
 
+def _safe_int(value):
+    try:
+        if value is None or value == "":
+            return None
+        return int(value)
+    except Exception:
+        return None
+
+
+def get_user_subscription_context(db, user_id: int) -> Dict:
+    row = db.query_one(
+        """
+        SELECT
+          u.subscription_template_id,
+          st.name AS subscription_name,
+          st.duration_days AS subscription_duration_days,
+          st.subscription_value AS subscription_value
+        FROM vodum_users u
+        LEFT JOIN subscription_templates st ON st.id = u.subscription_template_id
+        WHERE u.id = ?
+        """,
+        (user_id,),
+    )
+    return dict(row) if row else {
+        "subscription_template_id": None,
+        "subscription_name": "",
+        "subscription_duration_days": "",
+        "subscription_value": "",
+    }
+
+
+def _subscription_scope_rank(template_row: Dict, user_subscription_template_id: int | None) -> int:
+    scope = (template_row.get("subscription_scope") or "none").strip().lower()
+    tpl_subscription_id = _safe_int(template_row.get("subscription_template_id"))
+
+    if scope == "specific":
+        if user_subscription_template_id is None:
+            return -1
+        return 3 if tpl_subscription_id == user_subscription_template_id else -1
+
+    if scope == "all":
+        return 2
+
+    return 1  # none
+
+
+def _provider_rank(template_row: Dict, provider: str) -> int:
+    tpl_provider = (template_row.get("trigger_provider") or "all").strip().lower()
+    if tpl_provider == provider:
+        return 2
+    if tpl_provider == "all":
+        return 1
+    return -1
+
+
+def select_comm_template_for_user(
+    *,
+    db,
+    trigger_event: str,
+    provider: str,
+    user_id: int,
+) -> Dict | None:
+    sub_ctx = get_user_subscription_context(db, user_id)
+    user_subscription_template_id = _safe_int(sub_ctx.get("subscription_template_id"))
+
+    rows = db.query(
+        """
+        SELECT *
+        FROM comm_templates
+        WHERE enabled = 1
+          AND trigger_event = ?
+          AND trigger_provider IN ('all', ?)
+        ORDER BY id ASC
+        """,
+        (trigger_event, provider),
+    ) or []
+
+    candidates = []
+    for row in rows:
+        tpl = dict(row)
+        sub_rank = _subscription_scope_rank(tpl, user_subscription_template_id)
+        if sub_rank < 0:
+            continue
+
+        prov_rank = _provider_rank(tpl, provider)
+        if prov_rank < 0:
+            continue
+
+        tpl["_sub_rank"] = sub_rank
+        tpl["_prov_rank"] = prov_rank
+        candidates.append(tpl)
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda x: (-int(x["_sub_rank"]), -int(x["_prov_rank"]), int(x["id"])))
+    best = candidates[0]
+    best.pop("_sub_rank", None)
+    best.pop("_prov_rank", None)
+    return best
+
 def schedule_template_notification(
     *,
     db,

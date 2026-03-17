@@ -19,6 +19,11 @@
       {{ t("subscriptions_tab_applications") }}
     </a>
 
+    <a href="{{ url_for('subscriptions', tab='policies') }}"
+       class="pb-2 border-b-2 {{ 'border-primary text-primary' if tab=='policies' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
+      {{ t("subscriptions_tab_policies") }}
+    </a>
+
     <a href="{{ url_for('subscriptions', tab='gifts') }}"
        class="pb-2 border-b-2 {{ 'border-primary text-primary' if tab=='gifts' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
       {{ t("subscriptions_tab_gifts") }}
@@ -40,6 +45,9 @@
 
 {% elif tab == 'applications' %}
   {% include "subscriptions/_applications.html" %}
+
+{% elif tab == 'policies' %}
+  {% include "subscriptions/_policies.html" %}
 
 {% elif tab == 'settings' %}
   {% include "subscriptions/_settings.html" %}

@@ -983,6 +983,15 @@ def register(app):
         library_range = "30d"
         library_user = "all"
         hidden_libraries_count = 0
+
+        policy_dashboard = {}
+        policy_hits_30d = []
+        policy_rule_breakdown_30d = []
+        policy_provider_breakdown_30d = []
+        policy_scope_breakdown = []
+        policy_top_users_30d = []
+        policy_recent_enforcements = []
+        policy_tracked_state = {}
         
 
         if tab == "history":
@@ -1387,17 +1396,29 @@ ranked AS (
                 ORDER BY p.is_enabled DESC, p.priority ASC, p.id DESC
             """)
 
-
             policies = [dict(r) for r in policies]
-            # Parse rule JSON + detect system-managed policies
+
+            # Parse rule JSON + detect system-managed / locked policies
+            system_count = 0
+            locked_count = 0
+            subscription_managed_count = 0
+
             for p in policies:
                 try:
                     p["_rule"] = json.loads(p.get("rule_value_json") or "{}")
                 except Exception:
                     p["_rule"] = {}
+
                 p["_is_system"] = bool(p["_rule"].get("system_tag"))
                 p["_is_locked"] = bool(p["_rule"].get("locked"))
                 p["_subscription_name"] = p["_rule"].get("subscription_name") or ""
+
+                if p["_is_system"]:
+                    system_count += 1
+                if p["_is_locked"]:
+                    locked_count += 1
+                if p["_subscription_name"]:
+                    subscription_managed_count += 1
 
             edit_policy = None
             edit_policy_id = request.args.get("edit_policy_id", type=int)
@@ -1410,6 +1431,205 @@ ranked AS (
                     except Exception:
                         ep["_rule"] = {}
                     edit_policy = ep
+
+            base_policy_stats = db.query_one("""
+                SELECT
+                  COUNT(*) AS total,
+                  SUM(CASE WHEN is_enabled = 1 THEN 1 ELSE 0 END) AS enabled,
+                  SUM(CASE WHEN is_enabled = 0 THEN 1 ELSE 0 END) AS disabled,
+                  SUM(CASE WHEN scope_type = 'global' THEN 1 ELSE 0 END) AS scope_global,
+                  SUM(CASE WHEN scope_type = 'server' THEN 1 ELSE 0 END) AS scope_server,
+                  SUM(CASE WHEN scope_type = 'user' THEN 1 ELSE 0 END) AS scope_user,
+                  SUM(CASE WHEN provider = 'plex' THEN 1 ELSE 0 END) AS provider_plex,
+                  SUM(CASE WHEN provider = 'jellyfin' THEN 1 ELSE 0 END) AS provider_jellyfin,
+                  SUM(CASE WHEN provider IS NULL OR provider = '' THEN 1 ELSE 0 END) AS provider_both,
+                  COUNT(DISTINCT CASE WHEN scope_type = 'user' THEN scope_id END) AS targeted_users,
+                  COUNT(DISTINCT CASE WHEN server_id IS NOT NULL THEN server_id END) AS targeted_servers
+                FROM stream_policies
+            """) or {}
+
+            base_policy_stats = dict(base_policy_stats or {})
+
+            enforce_24h = db.query_one("""
+                SELECT
+                  COUNT(*) AS total_actions,
+                  SUM(CASE WHEN action = 'warn' THEN 1 ELSE 0 END) AS warn_count,
+                  SUM(CASE WHEN action = 'kill' THEN 1 ELSE 0 END) AS kill_count,
+                  COUNT(DISTINCT policy_id) AS affected_policies,
+                  COUNT(DISTINCT COALESCE(CAST(vodum_user_id AS TEXT), external_user_id)) AS affected_actors
+                FROM stream_enforcements
+                WHERE datetime(created_at) >= datetime('now', '-24 hours')
+            """) or {}
+
+            enforce_7d = db.query_one("""
+                SELECT
+                  COUNT(*) AS total_actions,
+                  SUM(CASE WHEN action = 'warn' THEN 1 ELSE 0 END) AS warn_count,
+                  SUM(CASE WHEN action = 'kill' THEN 1 ELSE 0 END) AS kill_count,
+                  COUNT(DISTINCT policy_id) AS affected_policies,
+                  COUNT(DISTINCT COALESCE(CAST(vodum_user_id AS TEXT), external_user_id)) AS affected_actors
+                FROM stream_enforcements
+                WHERE datetime(created_at) >= datetime('now', '-7 days')
+            """) or {}
+
+            enforce_24h = dict(enforce_24h or {})
+            enforce_7d = dict(enforce_7d or {})
+
+            policy_dashboard = {
+                "total": int(base_policy_stats.get("total") or 0),
+                "enabled": int(base_policy_stats.get("enabled") or 0),
+                "disabled": int(base_policy_stats.get("disabled") or 0),
+                "scope_global": int(base_policy_stats.get("scope_global") or 0),
+                "scope_server": int(base_policy_stats.get("scope_server") or 0),
+                "scope_user": int(base_policy_stats.get("scope_user") or 0),
+                "provider_plex": int(base_policy_stats.get("provider_plex") or 0),
+                "provider_jellyfin": int(base_policy_stats.get("provider_jellyfin") or 0),
+                "provider_both": int(base_policy_stats.get("provider_both") or 0),
+                "targeted_users": int(base_policy_stats.get("targeted_users") or 0),
+                "targeted_servers": int(base_policy_stats.get("targeted_servers") or 0),
+                "system_count": int(system_count or 0),
+                "locked_count": int(locked_count or 0),
+                "subscription_managed_count": int(subscription_managed_count or 0),
+                "actions_24h": int(enforce_24h.get("total_actions") or 0),
+                "warn_24h": int(enforce_24h.get("warn_count") or 0),
+                "kill_24h": int(enforce_24h.get("kill_count") or 0),
+                "affected_policies_24h": int(enforce_24h.get("affected_policies") or 0),
+                "affected_actors_24h": int(enforce_24h.get("affected_actors") or 0),
+                "actions_7d": int(enforce_7d.get("total_actions") or 0),
+                "warn_7d": int(enforce_7d.get("warn_count") or 0),
+                "kill_7d": int(enforce_7d.get("kill_count") or 0),
+            }
+
+            policy_scope_breakdown = db.query("""
+                SELECT
+                  scope_type AS label,
+                  COUNT(*) AS value
+                FROM stream_policies
+                GROUP BY scope_type
+                ORDER BY value DESC, label ASC
+            """) or []
+            policy_scope_breakdown = [dict(r) for r in policy_scope_breakdown]
+
+            policy_provider_breakdown_30d = db.query("""
+                SELECT
+                  CASE
+                    WHEN provider IS NULL OR provider = '' THEN 'both'
+                    ELSE provider
+                  END AS label,
+                  COUNT(*) AS value
+                FROM stream_enforcements
+                WHERE datetime(created_at) >= datetime('now', '-30 days')
+                GROUP BY
+                  CASE
+                    WHEN provider IS NULL OR provider = '' THEN 'both'
+                    ELSE provider
+                  END
+                ORDER BY value DESC, label ASC
+            """) or []
+            policy_provider_breakdown_30d = [dict(r) for r in policy_provider_breakdown_30d]
+
+            policy_rule_breakdown_30d = db.query("""
+                SELECT
+                  p.rule_type AS label,
+                  COUNT(*) AS total,
+                  SUM(CASE WHEN e.action = 'warn' THEN 1 ELSE 0 END) AS warn_count,
+                  SUM(CASE WHEN e.action = 'kill' THEN 1 ELSE 0 END) AS kill_count
+                FROM stream_enforcements e
+                JOIN stream_policies p
+                  ON p.id = e.policy_id
+                WHERE datetime(e.created_at) >= datetime('now', '-30 days')
+                GROUP BY p.rule_type
+                ORDER BY total DESC, p.rule_type ASC
+                LIMIT 10
+            """) or []
+            policy_rule_breakdown_30d = [dict(r) for r in policy_rule_breakdown_30d]
+
+            policy_top_users_30d = db.query("""
+                SELECT
+                  COALESCE(vu.username, e.external_user_id, '-') AS label,
+                  COUNT(*) AS total,
+                  SUM(CASE WHEN e.action = 'warn' THEN 1 ELSE 0 END) AS warn_count,
+                  SUM(CASE WHEN e.action = 'kill' THEN 1 ELSE 0 END) AS kill_count
+                FROM stream_enforcements e
+                LEFT JOIN vodum_users vu
+                  ON vu.id = e.vodum_user_id
+                WHERE datetime(e.created_at) >= datetime('now', '-30 days')
+                GROUP BY COALESCE(vu.username, e.external_user_id, '-')
+                ORDER BY total DESC, label ASC
+                LIMIT 10
+            """) or []
+            policy_top_users_30d = [dict(r) for r in policy_top_users_30d]
+
+            policy_recent_enforcements = db.query("""
+                SELECT
+                  e.created_at,
+                  e.action,
+                  e.reason,
+                  e.provider,
+                  p.rule_type,
+                  s.name AS server_name,
+                  COALESCE(vu.username, e.external_user_id, '-') AS user_label
+                FROM stream_enforcements e
+                LEFT JOIN stream_policies p
+                  ON p.id = e.policy_id
+                LEFT JOIN servers s
+                  ON s.id = e.server_id
+                LEFT JOIN vodum_users vu
+                  ON vu.id = e.vodum_user_id
+                ORDER BY e.created_at DESC
+                LIMIT 12
+            """) or []
+            policy_recent_enforcements = [dict(r) for r in policy_recent_enforcements]
+
+            policy_tracked_state = db.query_one("""
+                SELECT
+                  COUNT(*) AS tracked_1h,
+                  SUM(CASE
+                        WHEN warned_at IS NOT NULL
+                         AND datetime(warned_at) >= datetime('now', '-1 hour')
+                        THEN 1 ELSE 0 END) AS warned_1h,
+                  SUM(CASE
+                        WHEN killed_at IS NOT NULL
+                         AND datetime(killed_at) >= datetime('now', '-1 hour')
+                        THEN 1 ELSE 0 END) AS killed_1h
+                FROM stream_enforcement_state
+                WHERE datetime(last_seen_at) >= datetime('now', '-1 hour')
+            """) or {}
+            policy_tracked_state = dict(policy_tracked_state or {})
+
+            raw_hits_30d = db.query("""
+                SELECT
+                  date(created_at) AS day,
+                  SUM(CASE WHEN action = 'warn' THEN 1 ELSE 0 END) AS warn_count,
+                  SUM(CASE WHEN action = 'kill' THEN 1 ELSE 0 END) AS kill_count,
+                  COUNT(*) AS total
+                FROM stream_enforcements
+                WHERE datetime(created_at) >= datetime('now', '-30 days')
+                GROUP BY date(created_at)
+                ORDER BY day ASC
+            """) or []
+
+            raw_hits_map = {}
+            for r in raw_hits_30d:
+                rr = dict(r)
+                raw_hits_map[rr["day"]] = {
+                    "day": rr["day"],
+                    "warn_count": int(rr.get("warn_count") or 0),
+                    "kill_count": int(rr.get("kill_count") or 0),
+                    "total": int(rr.get("total") or 0),
+                }
+
+            from datetime import datetime as _dt, timedelta as _td
+            today = _dt.utcnow().date()
+            policy_hits_30d = []
+            for i in range(29, -1, -1):
+                d = (today - _td(days=i)).isoformat()
+                policy_hits_30d.append(raw_hits_map.get(d, {
+                    "day": d,
+                    "warn_count": 0,
+                    "kill_count": 0,
+                    "total": 0,
+                }))
 
 
 
@@ -2334,6 +2554,14 @@ ranked AS (
                 library_range=library_range,
                 library_user=library_user,
                 hidden_libraries_count=hidden_libraries_count,
+                policy_dashboard=policy_dashboard,
+                policy_hits_30d=policy_hits_30d,
+                policy_rule_breakdown_30d=policy_rule_breakdown_30d,
+                policy_provider_breakdown_30d=policy_provider_breakdown_30d,
+                policy_scope_breakdown=policy_scope_breakdown,
+                policy_top_users_30d=policy_top_users_30d,
+                policy_recent_enforcements=policy_recent_enforcements,
+                policy_tracked_state=policy_tracked_state,
             ))
             if sort_key and sort_dir:
                 resp.set_cookie(f"monitoring_{tab}_sort", str(sort_key), max_age=60*60*24*365)
@@ -2380,6 +2608,14 @@ ranked AS (
             library_range=library_range,
             library_user=library_user,
             hidden_libraries_count=hidden_libraries_count,
+            policy_dashboard=policy_dashboard,
+            policy_hits_30d=policy_hits_30d,
+            policy_rule_breakdown_30d=policy_rule_breakdown_30d,
+            policy_provider_breakdown_30d=policy_provider_breakdown_30d,
+            policy_scope_breakdown=policy_scope_breakdown,
+            policy_top_users_30d=policy_top_users_30d,
+            policy_recent_enforcements=policy_recent_enforcements,
+            policy_tracked_state=policy_tracked_state,
         ))
         
         if sort_key and sort_dir:

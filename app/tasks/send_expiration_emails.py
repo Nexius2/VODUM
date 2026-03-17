@@ -154,9 +154,23 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
 
         user = db.query_one(
             """
-            SELECT id, username, firstname, lastname, email, second_email, expiration_date, discord_user_id, notifications_order_override
-            FROM vodum_users
-            WHERE id = ?
+            SELECT
+              u.id,
+              u.username,
+              u.firstname,
+              u.lastname,
+              u.email,
+              u.second_email,
+              u.expiration_date,
+              u.discord_user_id,
+              u.notifications_order_override,
+              u.subscription_template_id,
+              st.name AS subscription_name,
+              st.duration_days AS subscription_duration_days,
+              st.subscription_value AS subscription_value
+            FROM vodum_users u
+            LEFT JOIN subscription_templates st ON st.id = u.subscription_template_id
+            WHERE u.id = ?
             """,
             (uid,),
         )
@@ -407,12 +421,17 @@ def _parse_date_iso(d: str | None) -> date | None:
         return None
 
 
-def _get_template_map(db):
-    rows = db.query("SELECT * FROM comm_templates WHERE key IN ('preavis','relance','fin')")
-    m = {}
-    for r in rows or []:
-        m[r["key"]] = dict(r)
-    return m
+def _get_expiration_templates(db):
+    rows = db.query(
+        """
+        SELECT *
+        FROM comm_templates
+        WHERE enabled = 1
+          AND trigger_event = 'expiration'
+        ORDER BY id ASC
+        """
+    )
+    return [dict(r) for r in (rows or [])]
 
 
 def _get_days_before(template_row: dict | None, fallback: int | None) -> int | None:
@@ -491,6 +510,95 @@ def _get_after(template_row: dict | None) -> int | None:
     except Exception:
         return None
 
+def _safe_int(value):
+    try:
+        if value is None or value == "":
+            return None
+        return int(value)
+    except Exception:
+        return None
+
+
+def _subscription_scope_rank(template_row: dict, user_subscription_template_id: int | None) -> int:
+    scope = (template_row.get("subscription_scope") or "none").strip().lower()
+    tpl_subscription_id = _safe_int(template_row.get("subscription_template_id"))
+
+    if scope == "specific":
+        if user_subscription_template_id is None:
+            return -1
+        return 3 if tpl_subscription_id == user_subscription_template_id else -1
+
+    if scope == "all":
+        return 2
+
+    return 1
+
+
+def _provider_rank(template_row: dict, provider: str) -> int:
+    tpl_provider = (template_row.get("trigger_provider") or "all").strip().lower()
+    if tpl_provider == provider:
+        return 2
+    if tpl_provider == "all":
+        return 1
+    return -1
+
+
+def _pick_expiration_template(days_left: int, templates: list[dict], provider: str, user_subscription_template_id: int | None) -> dict | None:
+    applicable = []
+
+    for tpl in templates:
+        sub_rank = _subscription_scope_rank(tpl, user_subscription_template_id)
+        if sub_rank < 0:
+            continue
+
+        prov_rank = _provider_rank(tpl, provider)
+        if prov_rank < 0:
+            continue
+
+        applicable.append({
+            **tpl,
+            "_sub_rank": sub_rank,
+            "_prov_rank": prov_rank,
+        })
+
+    if not applicable:
+        return None
+
+    before_values = []
+    after_values = []
+
+    for tpl in applicable:
+        before_v = _get_days_before(tpl, None)
+        after_v = _get_after(tpl)
+
+        if before_v is not None:
+            before_values.append(before_v)
+        if after_v is not None:
+            after_values.append(after_v)
+
+    matches = []
+
+    for tpl in applicable:
+        before_v = _get_days_before(tpl, None)
+        after_v = _get_after(tpl)
+
+        matched = False
+        if before_v is not None and _match_before_window(days_left, before_v, before_values):
+            matched = True
+        elif after_v is not None and _match_after_window(days_left, after_v, after_values):
+            matched = True
+
+        if matched:
+            matches.append(tpl)
+
+    if not matches:
+        return None
+
+    matches.sort(key=lambda x: (-int(x["_sub_rank"]), -int(x["_prov_rank"]), int(x["id"])))
+    best = matches[0]
+    best.pop("_sub_rank", None)
+    best.pop("_prov_rank", None)
+    return best
 
 def _match_before_window(days_left: int, current_value: int | None, all_values: list[int]) -> bool:
     if current_value is None or days_left < 0:
@@ -599,7 +707,7 @@ def run(task_id: int | None = None, db=None):
         _flush_comm_scheduled(db, settings, task_id)
 
         # Templates (unified)
-        templates = _get_template_map(db)
+        templates = _get_expiration_templates(db)
 
         # Backward-compat: legacy global delays can still be used as fallback
         try:
@@ -619,7 +727,17 @@ def run(task_id: int | None = None, db=None):
         # Users concerned
         users = db.query(
             """
-            SELECT id, username, firstname, lastname, email, second_email, expiration_date, discord_user_id, notifications_order_override
+            SELECT
+              u.id,
+              u.username,
+              u.firstname,
+              u.lastname,
+              u.email,
+              u.second_email,
+              u.expiration_date,
+              u.discord_user_id,
+              u.notifications_order_override,
+              u.subscription_template_id
             FROM vodum_users u
             WHERE u.expiration_date IS NOT NULL
               AND EXISTS (SELECT 1 FROM media_users mu WHERE mu.vodum_user_id = u.id)
@@ -642,20 +760,6 @@ def run(task_id: int | None = None, db=None):
             exp_iso = exp.isoformat()
             days_left = (exp - today).days
 
-            tpl_key = _pick_expiration_template_key(days_left, templates)
-
-            if not tpl_key:
-                continue
-
-            tpl = templates.get(tpl_key)
-            if not tpl or int(tpl.get("enabled") or 0) != 1:
-                continue
-
-            # In FIRST mode: one successful channel is enough
-            # In ALL mode  : all available channels must have succeeded
-            if _already_sent_for_current_mode(db, settings, u, tpl_key, exp_iso):
-                continue
-
             comm_ctx = _get_user_comm_context(db, uid)
             if not comm_ctx:
                 msg = f"User {uid} has no media/server context for expiration queueing"
@@ -666,10 +770,23 @@ def run(task_id: int | None = None, db=None):
 
             provider, server_id = comm_ctx
 
-            dedupe_key = f"expiration:{tpl_key}:user:{uid}:exp:{exp_iso}"
+            user_subscription_template_id = _safe_int(u.get("subscription_template_id"))
+            tpl = _pick_expiration_template(days_left, templates, provider, user_subscription_template_id)
+
+            if not tpl:
+                continue
+
+            template_marker = f"tpl:{int(tpl['id'])}"
+
+            # In FIRST mode: one successful channel is enough
+            # In ALL mode  : all available channels must have succeeded
+            if _already_sent_for_current_mode(db, settings, u, template_marker, exp_iso):
+                continue
+
+            dedupe_key = f"expiration:template:{int(tpl['id'])}:user:{uid}:exp:{exp_iso}"
             payload = {
                 "trigger_event": "expiration",
-                "template_key": tpl_key,
+                "template_key": template_marker,
                 "expiration_date": exp_iso,
                 "days_left": days_left,
             }
