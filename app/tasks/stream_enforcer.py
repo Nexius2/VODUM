@@ -108,6 +108,173 @@ def _is_local_ip(ip: str) -> bool:
     except Exception:
         return False
 
+def _is_ip_literal(value: str) -> bool:
+    value = (value or "").strip()
+    if not value:
+        return False
+    try:
+        ipaddress.ip_address(value)
+        return True
+    except Exception:
+        return False
+
+
+def _best_account_username(sess: dict) -> Optional[str]:
+    media_username = str(sess.get("media_username") or "").strip()
+    if media_username:
+        return media_username
+
+    ext = str(sess.get("external_user_id") or "").strip()
+    if ext and not _is_ip_literal(ext):
+        return ext
+
+    return None
+
+
+def _same_actor_reference(candidate: dict, target: dict) -> bool:
+    target_vuid = target.get("vodum_user_id")
+    cand_vuid = candidate.get("vodum_user_id")
+
+    if target_vuid is not None and cand_vuid is not None:
+        try:
+            return int(target_vuid) == int(cand_vuid)
+        except Exception:
+            pass
+
+    target_ext = str(target.get("external_user_id") or "").strip()
+    cand_ext = str(candidate.get("external_user_id") or "").strip()
+
+    if target_ext and cand_ext:
+        try:
+            return (
+                int(candidate.get("server_id") or 0) == int(target.get("server_id") or 0)
+                and cand_ext == target_ext
+            )
+        except Exception:
+            return cand_ext == target_ext
+
+    return False
+
+
+def _build_enforcement_snapshot(
+    target: dict,
+    violation_sessions: List[dict],
+    live_sessions: List[dict],
+    policy: Optional[dict] = None,
+    reason: Optional[str] = None,
+) -> Tuple[Optional[str], str, str]:
+    """
+    Retourne :
+      - account_username snapshot
+      - ips_json snapshot
+      - details_json snapshot complet
+    """
+    related = []
+    seen = set()
+
+    def _add_session(sess: dict):
+        key = (
+            int(sess.get("server_id") or 0),
+            str(sess.get("session_key") or ""),
+        )
+        if key in seen:
+            return
+        seen.add(key)
+        related.append(sess)
+
+    for sess in live_sessions or []:
+        if _same_actor_reference(sess, target):
+            _add_session(sess)
+
+    for sess in violation_sessions or []:
+        _add_session(sess)
+
+    if not related:
+        _add_session(target)
+
+    def _session_snapshot(sess: dict) -> dict:
+        raw_value = sess.get("raw_json")
+        raw_parsed = None
+        if raw_value:
+            try:
+                raw_parsed = json.loads(raw_value)
+            except Exception:
+                raw_parsed = raw_value
+
+        return {
+            "server_id": sess.get("server_id"),
+            "provider": sess.get("provider"),
+            "session_key": sess.get("session_key"),
+            "media_user_id": sess.get("media_user_id"),
+            "external_user_id": sess.get("external_user_id"),
+            "vodum_user_id": sess.get("vodum_user_id"),
+            "media_username": sess.get("media_username"),
+            "media_key": sess.get("media_key"),
+            "media_type": sess.get("media_type"),
+            "title": sess.get("title"),
+            "grandparent_title": sess.get("grandparent_title"),
+            "parent_title": sess.get("parent_title"),
+            "state": sess.get("state"),
+            "progress_ms": sess.get("progress_ms"),
+            "duration_ms": sess.get("duration_ms"),
+            "is_transcode": int(sess.get("is_transcode") or 0),
+            "bitrate": sess.get("bitrate"),
+            "device": sess.get("device"),
+            "client_name": sess.get("client_name"),
+            "client_product": sess.get("client_product"),
+            "ip": sess.get("ip"),
+            "started_at": sess.get("started_at"),
+            "last_seen_at": sess.get("last_seen_at"),
+            "raw_json": raw_parsed,
+        }
+
+    account_username = None
+    for sess in [target] + related:
+        account_username = _best_account_username(sess)
+        if account_username:
+            break
+
+    ips = []
+    for sess in related:
+        ip_value = str(sess.get("ip") or "").strip()
+        if not ip_value or ip_value.lower() == "unknown":
+            continue
+        if ip_value not in ips:
+            ips.append(ip_value)
+
+    related_sorted = sorted(
+        related,
+        key=lambda s: (
+            int(s.get("server_id") or 0),
+            str(s.get("started_at") or ""),
+            str(s.get("session_key") or ""),
+        )
+    )
+
+    details = {
+        "account_username": account_username,
+        "all_ips": ips,
+        "reason": reason,
+        "policy": {
+            "id": policy.get("id") if policy else None,
+            "scope_type": policy.get("scope_type") if policy else None,
+            "scope_id": policy.get("scope_id") if policy else None,
+            "provider": policy.get("provider") if policy else None,
+            "server_id": policy.get("server_id") if policy else None,
+            "priority": policy.get("priority") if policy else None,
+            "rule_type": policy.get("rule_type") if policy else None,
+            "rule_value": _loads_json(policy.get("rule_value_json")) if policy else None,
+        },
+        "target_session": _session_snapshot(target),
+        "all_sessions": [_session_snapshot(sess) for sess in related_sorted],
+        "session_count": len(related_sorted),
+    }
+
+    return (
+        account_username,
+        json.dumps(ips, ensure_ascii=False),
+        json.dumps(details, ensure_ascii=False),
+    )
 
 def _load_user_stream_overrides() -> Dict[int, int]:
     """Return {vodum_user_id: max_streams_override} where override is not NULL."""
@@ -162,9 +329,19 @@ def _load_live_sessions() -> List[dict]:
           ms.media_user_id,
           ms.external_user_id,
           mu.vodum_user_id,
+          mu.username AS media_username,
+          ms.media_key,
+          ms.media_type,
+          ms.title,
+          ms.grandparent_title,
+          ms.parent_title,
+          ms.state,
+          ms.progress_ms,
+          ms.duration_ms,
           ms.is_transcode,
           ms.bitrate,
           ms.device,
+          ms.client_name,
           ms.client_product,
           ms.ip,
           ms.started_at,
@@ -432,7 +609,7 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
                 "server_id": server_id,
                 "provider": provider,
                 "target_user": user_key,
-                "sessions": [target],   # important: mono-session
+                "sessions": user_sessions,
                 "reason": reason,
                 "selector": selector,
                 "warn_title": warn_title,
@@ -487,8 +664,8 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
                 "kind": "ip_streams",
                 "server_id": server_id,
                 "provider": provider,
-                "target_user": (None, ip_value),
-                "sessions": [target],   # mono-session => kill toujours sur le bon serveur
+                "target_user": _normalize_user_key(target),
+                "sessions": ip_sessions,
                 "reason": reason,
                 "selector": selector,
                 "warn_title": warn_title,
@@ -625,11 +802,24 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
 
 def _log_enforcement(policy_id: int, server_id: int, provider: str, session_key: str,
                      vodum_user_id: Optional[int], external_user_id: str,
-                     action: str, reason: str):
+                     action: str, reason: str,
+                     account_username: Optional[str] = None,
+                     ips_json: Optional[str] = None,
+                     details_json: Optional[str] = None):
     _db.execute("""
-        INSERT INTO stream_enforcements(policy_id, server_id, provider, session_key, vodum_user_id, external_user_id, action, reason)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (policy_id, server_id, provider, session_key, vodum_user_id, external_user_id, action, reason))
+        INSERT INTO stream_enforcements(
+            policy_id, server_id, provider, session_key,
+            vodum_user_id, external_user_id,
+            action, reason,
+            account_username, ips_json, details_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        policy_id, server_id, provider, session_key,
+        vodum_user_id, external_user_id,
+        action, reason,
+        account_username, ips_json, details_json
+    ))
 
 
 def _upsert_state(policy_id: int, server_id: int,
@@ -799,6 +989,14 @@ def run(task_id: int, db):
 
         reason = v.get("reason") or "policy violation"
 
+        warn_account_username, warn_ips_json, warn_details_json = _build_enforcement_snapshot(
+            target=target,
+            violation_sessions=sessions,
+            live_sessions=live_sessions,
+            policy=policy,
+            reason=reason,
+        )
+
         # Message utilisateur (celui que tu veux voir côté client)
         warn_title = v.get("warn_title", "Stream limit")
         warn_text  = v.get("warn_text", "Limit reached.")
@@ -819,7 +1017,14 @@ def run(task_id: int, db):
                     v.get("warn_text", "Limit reached.")
                 )
 
-            _log_enforcement(policy_id, server_id, provider_type, session_key, user_vodum_id, user_ext, "warn", reason)
+            _log_enforcement(
+                policy_id, server_id, provider_type, session_key,
+                user_vodum_id, user_ext,
+                "warn", reason,
+                account_username=warn_account_username,
+                ips_json=warn_ips_json,
+                details_json=warn_details_json,
+            )
             _upsert_state(policy_id, server_id, user_vodum_id, user_ext, warned=True, killed=False, reason=reason)
 
             logger.warning(
@@ -836,6 +1041,15 @@ def run(task_id: int, db):
         if not still_bad:
             logger.info(f"[TASK {task_id}] stream_enforcer: violation cleared after recheck (policy={policy_id} server={server_id})")
             continue
+
+        kill_live_sessions = _load_live_sessions()
+        kill_account_username, kill_ips_json, kill_details_json = _build_enforcement_snapshot(
+            target=target,
+            violation_sessions=sessions,
+            live_sessions=kill_live_sessions,
+            policy=policy,
+            reason=reason,
+        )
 
         try:
             # Jellyfin : affichage "pénible mais lisible" avant coupure
@@ -877,7 +1091,14 @@ def run(task_id: int, db):
             # Kill stream (Plex affichera kill_reason_for_client ; Jellyfin ignore reason, mais on a déjà envoyé un message)
             ok = _kill_session(server_row, session_key, reason=kill_reason_for_client)
 
-            _log_enforcement(policy_id, server_id, provider_type, session_key, user_vodum_id, user_ext, "kill", reason)
+            _log_enforcement(
+                policy_id, server_id, provider_type, session_key,
+                user_vodum_id, user_ext,
+                "kill", reason,
+                account_username=kill_account_username,
+                ips_json=kill_ips_json,
+                details_json=kill_details_json,
+            )
             _upsert_state(policy_id, server_id, user_vodum_id, user_ext, warned=False, killed=True, reason=reason)
 
             logger.warning(

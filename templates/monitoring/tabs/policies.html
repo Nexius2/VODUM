@@ -156,7 +156,12 @@
         </thead>
         <tbody>
           {% for row in policy_recent_enforcements %}
-            <tr class="border-t border-slate-800">
+            <tr
+              class="border-t border-slate-800 cursor-pointer hover:bg-slate-800/40 focus-within:bg-slate-800/40"
+              tabindex="0"
+              role="button"
+              data-enforcement='{{ row|tojson|forceescape }}'
+            >
               <td class="p-3 text-slate-300">{{ row.created_at }}</td>
               <td class="p-3 text-slate-200">{{ row.user_label }}</td>
               <td class="p-3 text-slate-300">{{ row.rule_type or '—' }}</td>
@@ -185,7 +190,176 @@
     </div>
   </div>
 
+  <div id="policyEnforcementModal" class="hidden fixed inset-0 z-50" aria-hidden="true">
+    <div class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
 
+    <div class="relative z-10 flex min-h-full items-center justify-center p-4">
+      <div class="w-full max-w-5xl rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
+        <div class="flex items-start justify-between gap-4 border-b border-slate-800 px-5 py-4">
+          <div>
+            <div class="text-base font-semibold text-white">Policy enforcement details</div>
+            <div id="policyEnforcementModalSubtitle" class="mt-1 text-xs text-slate-400">—</div>
+          </div>
+          <button
+            type="button"
+            id="policyEnforcementModalClose"
+            class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div class="max-h-[80vh] overflow-y-auto px-5 py-5 space-y-5">
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Enforcement ID</div>
+              <div id="pem_enforcement_id" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Date</div>
+              <div id="pem_created_at" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Action</div>
+              <div id="pem_action" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">User label</div>
+              <div id="pem_user_label" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Account username</div>
+              <div id="pem_account_username" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Vodum username</div>
+              <div id="pem_vodum_username" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Vodum user ID</div>
+              <div id="pem_vodum_user_id" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">External user ID</div>
+              <div id="pem_external_user_id" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4 md:col-span-2 xl:col-span-3">
+              <div class="text-xs uppercase tracking-wide text-slate-500">IPs involved</div>
+              <div id="pem_ips_involved" class="mt-2 flex flex-wrap gap-2">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Target IP</div>
+              <div id="pem_target_ip" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Target device</div>
+              <div id="pem_target_device" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Target client</div>
+              <div id="pem_target_client" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Target media</div>
+              <div id="pem_target_media" class="mt-2 text-sm text-slate-100 break-words">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Started at</div>
+              <div id="pem_target_started_at" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Last seen at</div>
+              <div id="pem_target_last_seen_at" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Bitrate</div>
+              <div id="pem_target_bitrate" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Transcode</div>
+              <div id="pem_target_transcode" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Sessions at cut</div>
+              <div id="pem_session_count" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4 md:col-span-2 xl:col-span-3">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Sessions snapshot</div>
+              <div id="pem_sessions_snapshot" class="mt-3 space-y-3">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4 md:col-span-2 xl:col-span-3">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Details JSON</div>
+              <pre id="pem_details_json" class="mt-2 text-xs text-slate-200 whitespace-pre-wrap break-words overflow-x-auto">—</pre>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Rule</div>
+              <div id="pem_rule_type" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Provider</div>
+              <div id="pem_provider" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Server</div>
+              <div id="pem_server_name" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Policy ID</div>
+              <div id="pem_policy_id" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Scope</div>
+              <div id="pem_scope" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Priority</div>
+              <div id="pem_policy_priority" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4 md:col-span-2 xl:col-span-3">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Reason</div>
+              <div id="pem_reason" class="mt-2 text-sm text-slate-100 break-words">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4 md:col-span-2 xl:col-span-3">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Session key</div>
+              <div id="pem_session_key" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4 md:col-span-2 xl:col-span-3">
+              <div class="text-xs uppercase tracking-wide text-slate-500">Rule value JSON</div>
+              <pre id="pem_rule_value_json" class="mt-2 text-xs text-slate-200 whitespace-pre-wrap break-words overflow-x-auto">—</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
 </div>
 
@@ -382,12 +556,256 @@
     }));
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", buildPoliciesCharts, { once: true });
-  } else {
-    buildPoliciesCharts();
+  function bindPolicyEnforcementRows() {
+    const modal = document.getElementById("policyEnforcementModal");
+    const modalClose = document.getElementById("policyEnforcementModalClose");
+    const modalSubtitle = document.getElementById("policyEnforcementModalSubtitle");
+
+    if (!modal || !modalClose) return;
+
+    function setText(id, value) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = (value === null || value === undefined || value === "") ? "—" : String(value);
+    }
+
+    function setHtml(id, html) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.innerHTML = html;
+    }
+
+    function parseJsonArray(value) {
+      if (value === null || value === undefined || value === "") return [];
+      if (Array.isArray(value)) return value;
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (_) {
+        return [];
+      }
+    }
+
+    function parseJsonObject(value) {
+      if (value === null || value === undefined || value === "") return null;
+      if (typeof value === "object") return value;
+      try {
+        const parsed = JSON.parse(value);
+        return parsed && typeof parsed === "object" ? parsed : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function formatBoolTranscode(value) {
+      return Number(value || 0) === 1 ? "Yes" : "No";
+    }
+
+    function buildTargetMediaLabel(target) {
+      if (!target) return "—";
+
+      const mediaType = target.media_type || "—";
+      const title = target.title || "";
+      const gp = target.grandparent_title || "";
+      const parent = target.parent_title || "";
+
+      const parts = [];
+      if (mediaType) parts.push(mediaType);
+      if (title) parts.push(title);
+      if (gp) parts.push(`show: ${gp}`);
+      if (parent) parts.push(`parent: ${parent}`);
+
+      return parts.length ? parts.join(" • ") : "—";
+    }
+
+    function renderSessionsSnapshot(id, details) {
+      const el = document.getElementById(id);
+      if (!el) return;
+
+      const sessions = Array.isArray(details?.all_sessions) ? details.all_sessions : [];
+      if (!sessions.length) {
+        el.innerHTML = '<div class="text-sm text-slate-400">—</div>';
+        return;
+      }
+
+      const html = sessions.map((sess, index) => {
+        const media = escapeHtml(buildTargetMediaLabel(sess));
+        const server = escapeHtml(sess.server_id ?? "—");
+        const provider = escapeHtml(sess.provider ?? "—");
+        const sessionKey = escapeHtml(sess.session_key ?? "—");
+        const ip = escapeHtml(sess.ip ?? "—");
+        const startedAt = escapeHtml(sess.started_at ?? "—");
+        const lastSeenAt = escapeHtml(sess.last_seen_at ?? "—");
+        const device = escapeHtml(sess.device ?? "—");
+        const clientName = escapeHtml(sess.client_name ?? "—");
+        const clientProduct = escapeHtml(sess.client_product ?? "—");
+        const bitrate = escapeHtml(sess.bitrate ?? "—");
+        const transcode = escapeHtml(formatBoolTranscode(sess.is_transcode));
+
+        return `
+          <div class="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+            <div class="flex items-center justify-between gap-3">
+              <div class="text-sm font-medium text-white">Session ${index + 1}</div>
+              <div class="text-xs text-slate-400">session_key: ${sessionKey}</div>
+            </div>
+            <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <div><div class="text-[11px] uppercase tracking-wide text-slate-500">Server / Provider</div><div class="mt-1 text-sm text-slate-100">${server} / ${provider}</div></div>
+              <div><div class="text-[11px] uppercase tracking-wide text-slate-500">IP</div><div class="mt-1 text-sm text-slate-100">${ip}</div></div>
+              <div><div class="text-[11px] uppercase tracking-wide text-slate-500">Device</div><div class="mt-1 text-sm text-slate-100">${device}</div></div>
+              <div><div class="text-[11px] uppercase tracking-wide text-slate-500">Client</div><div class="mt-1 text-sm text-slate-100">${clientName} / ${clientProduct}</div></div>
+              <div><div class="text-[11px] uppercase tracking-wide text-slate-500">Started at</div><div class="mt-1 text-sm text-slate-100">${startedAt}</div></div>
+              <div><div class="text-[11px] uppercase tracking-wide text-slate-500">Last seen at</div><div class="mt-1 text-sm text-slate-100">${lastSeenAt}</div></div>
+              <div><div class="text-[11px] uppercase tracking-wide text-slate-500">Bitrate</div><div class="mt-1 text-sm text-slate-100">${bitrate}</div></div>
+              <div><div class="text-[11px] uppercase tracking-wide text-slate-500">Transcode</div><div class="mt-1 text-sm text-slate-100">${transcode}</div></div>
+              <div class="md:col-span-2 xl:col-span-3"><div class="text-[11px] uppercase tracking-wide text-slate-500">Media</div><div class="mt-1 text-sm text-slate-100 break-words">${media}</div></div>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      el.innerHTML = html;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function renderIpBadges(id, value) {
+      const ips = parseJsonArray(value);
+      if (!ips.length) {
+        setHtml(id, '<span class="text-sm text-slate-400">—</span>');
+        return;
+      }
+
+      const html = ips.map((ip) => `
+        <span class="inline-flex items-center rounded-full border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs text-slate-200">
+          ${escapeHtml(ip)}
+        </span>
+      `).join("");
+
+      setHtml(id, html);
+    }
+
+    function formatRuleValueJson(value) {
+      if (value === null || value === undefined || value === "") return "—";
+      if (typeof value !== "string") {
+        try {
+          return JSON.stringify(value, null, 2);
+        } catch (_) {
+          return String(value);
+        }
+      }
+
+      try {
+        return JSON.stringify(JSON.parse(value), null, 2);
+      } catch (_) {
+        return value;
+      }
+    }
+
+    function openModal(data) {
+      const details = parseJsonObject(data.details_json);
+      const target = details?.target_session || null;
+
+      setText("pem_enforcement_id", data.enforcement_id);
+      setText("pem_created_at", data.created_at);
+      setText("pem_action", data.action);
+      setText("pem_user_label", data.user_label);
+      setText("pem_account_username", data.account_username);
+      setText("pem_vodum_username", data.vodum_username);
+      setText("pem_vodum_user_id", data.vodum_user_id);
+      setText("pem_external_user_id", data.external_user_id);
+      renderIpBadges("pem_ips_involved", data.ips_json);
+
+      setText("pem_target_ip", target?.ip);
+      setText("pem_target_device", target?.device);
+      setText("pem_target_client", [target?.client_name, target?.client_product].filter(Boolean).join(" / "));
+      setText("pem_target_media", buildTargetMediaLabel(target));
+      setText("pem_target_started_at", target?.started_at);
+      setText("pem_target_last_seen_at", target?.last_seen_at);
+      setText("pem_target_bitrate", target?.bitrate);
+      setText("pem_target_transcode", formatBoolTranscode(target?.is_transcode));
+      setText("pem_session_count", details?.session_count);
+
+      renderSessionsSnapshot("pem_sessions_snapshot", details);
+      setText("pem_details_json", formatRuleValueJson(data.details_json));
+
+      setText("pem_rule_type", data.rule_type);
+      setText("pem_provider", data.provider);
+      setText("pem_server_name", data.server_name);
+      setText("pem_policy_id", data.policy_id);
+      setText("pem_scope", `${data.scope_type || "—"} / ${data.scope_id ?? "—"}`);
+      setText("pem_policy_priority", data.policy_priority);
+      setText("pem_reason", data.reason);
+      setText("pem_session_key", data.session_key);
+      setText("pem_rule_value_json", formatRuleValueJson(data.rule_value_json));
+
+      modalSubtitle.textContent = `${data.rule_type || "—"} • ${data.server_name || "—"} • ${data.created_at || "—"}`;
+
+      modal.classList.remove("hidden");
+      modal.setAttribute("aria-hidden", "false");
+      document.body.classList.add("overflow-hidden");
+    }
+
+    function closeModal() {
+      modal.classList.add("hidden");
+      modal.setAttribute("aria-hidden", "true");
+      document.body.classList.remove("overflow-hidden");
+    }
+
+    root.querySelectorAll('tr[data-enforcement]').forEach((row) => {
+      if (row.dataset.boundPolicyModal === "1") return;
+      row.dataset.boundPolicyModal = "1";
+
+      row.addEventListener("click", () => {
+        try {
+          const payload = JSON.parse(row.getAttribute("data-enforcement"));
+          openModal(payload);
+        } catch (_) {}
+      });
+
+      row.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          try {
+            const payload = JSON.parse(row.getAttribute("data-enforcement"));
+            openModal(payload);
+          } catch (_) {}
+        }
+      });
+    });
+
+    modalClose.addEventListener("click", closeModal);
+
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal || (e.target.classList && e.target.classList.contains("bg-black/70"))) {
+        closeModal();
+      }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !modal.classList.contains("hidden")) {
+        closeModal();
+      }
+    });
   }
 
-  document.addEventListener("htmx:load", buildPoliciesCharts);
+  function initPoliciesTab() {
+    buildPoliciesCharts();
+    bindPolicyEnforcementRows();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initPoliciesTab, { once: true });
+  } else {
+    initPoliciesTab();
+  }
+
+  document.addEventListener("htmx:load", initPoliciesTab);
 })();
 </script>

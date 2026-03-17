@@ -87,14 +87,70 @@ def register(app):
 
         return backup_path
 
+    def _validate_sqlite_backup(candidate_path: Path) -> None:
+        """
+        Vérifie qu'un fichier est une vraie base SQLite exploitable pour VODUM.
+
+        Conditions :
+        - fichier existant et non vide
+        - ouverture SQLite OK
+        - PRAGMA integrity_check = ok
+        - tables minimales présentes
+        """
+        if not candidate_path.exists():
+            raise FileNotFoundError(str(candidate_path))
+
+        if candidate_path.stat().st_size == 0:
+            raise ValueError("Backup file is empty")
+
+        conn = None
+        try:
+            conn = sqlite3.connect(f"file:{candidate_path}?mode=ro", uri=True)
+            conn.row_factory = sqlite3.Row
+
+            row = conn.execute("PRAGMA integrity_check;").fetchone()
+            integrity = row[0] if row else None
+            if integrity != "ok":
+                raise ValueError(f"SQLite integrity_check failed: {integrity}")
+
+            tables = {
+                r[0]
+                for r in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()
+            }
+
+            required_tables = {
+                "settings",
+                "tasks",
+                "vodum_users",
+                "servers",
+            }
+
+            missing = sorted(required_tables - tables)
+            if missing:
+                raise ValueError(
+                    "Backup is not a valid VODUM database. Missing tables: "
+                    + ", ".join(missing)
+                )
+
+        except sqlite3.DatabaseError as e:
+            raise ValueError(f"Invalid SQLite database: {e}") from e
+        finally:
+            if conn is not None:
+                conn.close()
+
     def safe_restore(backup_path: Path):
         """
         Restore the SQLite database from a backup file safely.
 
+        - Validate candidate backup BEFORE replacing current DB
         - Close current DB (and reset singleton via DBManager.close())
+        - Create a pre-restore safety copy
         - Replace DB atomically
-        - Remove WAL/SHM (important with SQLite)
+        - Remove WAL/SHM
         - Re-open a fresh connection to set maintenance_mode=1 and disable tasks
+        - If anything fails after replace, rollback automatically
         - Exit the process to let Docker restart the container
         """
         log = get_logger("backup")
@@ -105,18 +161,32 @@ def register(app):
         if not backup_path.exists():
             raise FileNotFoundError(str(backup_path))
 
+        # 0) Validate uploaded/selected backup BEFORE touching current DB
+        _validate_sqlite_backup(backup_path)
+
         # 1) Close current request DB connection (if any) and remove it from Flask.g
         try:
             db = g.pop("db", None)
             if db is not None:
                 try:
-                    db.close()  # must reset singleton in DBManager.close()
+                    db.close()
                 except Exception:
                     pass
         except Exception:
             pass
 
-        # 2) Remove SQLite WAL/SHM (avoid inconsistent state after swap)
+        # 2) Build safety backup of current DB before replacement
+        pre_restore_path = db_path.with_suffix(db_path.suffix + ".pre_restore")
+        if pre_restore_path.exists():
+            try:
+                pre_restore_path.unlink()
+            except Exception:
+                pass
+
+        if db_path.exists():
+            shutil.copy2(str(db_path), str(pre_restore_path))
+
+        # 3) Remove SQLite WAL/SHM from current DB (avoid stale side files)
         for suffix in ("-wal", "-shm"):
             p = db_path.with_name(db_path.name + suffix)
             if p.exists():
@@ -125,7 +195,7 @@ def register(app):
                 except Exception:
                     pass
 
-        # 3) Atomic replace (copy to temp then os.replace)
+        # 4) Atomic replace (copy candidate to temp then replace)
         tmp_path = db_path.with_suffix(db_path.suffix + ".restore_tmp")
         if tmp_path.exists():
             try:
@@ -134,11 +204,24 @@ def register(app):
                 pass
 
         shutil.copy2(str(backup_path), str(tmp_path))
+
+        # Extra validation on temp file before final swap
+        _validate_sqlite_backup(tmp_path)
+
         os.replace(str(tmp_path), str(db_path))
 
-        # 4) Open a FRESH connection on the restored DB and force maintenance + disable tasks
+        # 5) Remove possible WAL/SHM from restored DB too
+        for suffix in ("-wal", "-shm"):
+            p = db_path.with_name(db_path.name + suffix)
+            if p.exists():
+                try:
+                    p.unlink()
+                except Exception:
+                    pass
+
+        # 6) Open restored DB and force maintenance + disable tasks
         try:
-            restored_db = DBManager(str(db_path))  # new singleton instance created now
+            restored_db = DBManager(str(db_path))
 
             restored_db.execute(
                 """
@@ -148,7 +231,6 @@ def register(app):
                 """
             )
 
-            # Mémorise l'état précédent UNE seule fois, puis désactive tout
             restored_db.execute(
                 """
                 UPDATE tasks
@@ -164,13 +246,37 @@ def register(app):
             )
 
             try:
-                restored_db.close()  # resets singleton again (safe)
+                restored_db.close()
             except Exception:
                 pass
-        except Exception:
-            log.exception("Post-restore maintenance/tasks update failed")
 
-        # 5) Restart container (give time to return response)
+        except Exception as e:
+            log.exception("Post-restore validation/update failed, restoring previous DB")
+
+            # rollback auto
+            try:
+                if pre_restore_path.exists():
+                    if db_path.exists():
+                        try:
+                            db_path.unlink()
+                        except Exception:
+                            pass
+                    shutil.copy2(str(pre_restore_path), str(db_path))
+            except Exception:
+                log.exception("Automatic rollback after failed restore also failed")
+
+            raise RuntimeError(
+                f"Restore failed after swap, previous database restored automatically: {e}"
+            ) from e
+
+        finally:
+            if tmp_path.exists():
+                try:
+                    tmp_path.unlink()
+                except Exception:
+                    pass
+
+        # 7) Restart container (give time to return response)
         def _delayed_exit():
             time.sleep(1.5)
             os._exit(0)
