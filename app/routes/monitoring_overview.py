@@ -1546,15 +1546,28 @@ ranked AS (
 
             policy_top_users_30d = db.query("""
                 SELECT
-                  COALESCE(vu.username, e.external_user_id, '-') AS label,
+                  label,
                   COUNT(*) AS total,
-                  SUM(CASE WHEN e.action = 'warn' THEN 1 ELSE 0 END) AS warn_count,
-                  SUM(CASE WHEN e.action = 'kill' THEN 1 ELSE 0 END) AS kill_count
-                FROM stream_enforcements e
-                LEFT JOIN vodum_users vu
-                  ON vu.id = e.vodum_user_id
-                WHERE datetime(e.created_at) >= datetime('now', '-30 days')
-                GROUP BY COALESCE(vu.username, e.external_user_id, '-')
+                  SUM(CASE WHEN action = 'warn' THEN 1 ELSE 0 END) AS warn_count,
+                  SUM(CASE WHEN action = 'kill' THEN 1 ELSE 0 END) AS kill_count
+                FROM (
+                  SELECT
+                    CASE
+                      WHEN vu.username IS NOT NULL AND TRIM(vu.username) <> '' THEN vu.username
+                      WHEN e.external_user_id IS NOT NULL
+                           AND TRIM(e.external_user_id) <> ''
+                           AND TRIM(e.external_user_id) NOT GLOB '[0-9]*.[0-9]*.[0-9]*.[0-9]*'
+                      THEN e.external_user_id
+                      ELSE NULL
+                    END AS label,
+                    e.action
+                  FROM stream_enforcements e
+                  LEFT JOIN vodum_users vu
+                    ON vu.id = e.vodum_user_id
+                  WHERE datetime(e.created_at) >= datetime('now', '-30 days')
+                ) q
+                WHERE label IS NOT NULL
+                GROUP BY label
                 ORDER BY total DESC, label ASC
                 LIMIT 10
             """) or []
@@ -1568,7 +1581,14 @@ ranked AS (
                   e.provider,
                   p.rule_type,
                   s.name AS server_name,
-                  COALESCE(vu.username, e.external_user_id, '-') AS user_label
+                  CASE
+                    WHEN vu.username IS NOT NULL AND TRIM(vu.username) <> '' THEN vu.username
+                    WHEN e.external_user_id IS NOT NULL
+                         AND TRIM(e.external_user_id) <> ''
+                         AND TRIM(e.external_user_id) NOT GLOB '[0-9]*.[0-9]*.[0-9]*.[0-9]*'
+                    THEN e.external_user_id
+                    ELSE '—'
+                  END AS user_label
                 FROM stream_enforcements e
                 LEFT JOIN stream_policies p
                   ON p.id = e.policy_id

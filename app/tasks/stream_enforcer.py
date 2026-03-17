@@ -362,13 +362,15 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
             provider = target["provider"]
             reason = f"max_streams_per_user: {len(counted_sessions)} > {eff_max}"
 
+            target_user = _normalize_user_key(target)
+
             violations.append({
                 "policy": policy,
-                "kind": "user_streams",
+                "kind": "ip_streams",
                 "server_id": server_id,
                 "provider": provider,
-                "target_user": user_key,
-                "sessions": [target],   # important: mono-session
+                "target_user": target_user,
+                "sessions": [target],   # mono-session => kill toujours sur le bon serveur
                 "reason": reason,
                 "selector": selector,
                 "warn_title": warn_title,
