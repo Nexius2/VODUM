@@ -19,7 +19,13 @@ from core.providers.jellyfin_users import (
     jellyfin_set_policy_folders,
     jellyfin_reset_password_required,
 )
-from communications_engine import send_to_user, fetch_template_attachments, record_history, schedule_template_notification
+from communications_engine import (
+    send_to_user,
+    fetch_template_attachments,
+    record_history,
+    schedule_template_notification,
+    select_comm_template_for_user,
+)
 from core.providers.plex_users import plex_invite_and_share
 
 log = get_logger("users_create")
@@ -924,19 +930,12 @@ def api_users_create():
                     welcome_gate_key = f"plex_token:{(server.get('token') or '')}"
 
                 if welcome_gate_key not in sent_welcome_keys:
-                    ct_row = db.query_one(
-                        """
-                        SELECT *
-                        FROM comm_templates
-                        WHERE enabled = 1
-                          AND trigger_event = 'user_creation'
-                          AND trigger_provider IN ('all', ?)
-                        ORDER BY id ASC
-                        LIMIT 1
-                        """,
-                        (provider,),
+                    ct = select_comm_template_for_user(
+                        db=db,
+                        trigger_event="user_creation",
+                        provider=provider,
+                        user_id=int(vodum_user_id),
                     )
-                    ct = dict(ct_row) if ct_row else None
 
                     if ct:
                         try:

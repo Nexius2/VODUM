@@ -38,20 +38,42 @@
         <h3 class="text-xs uppercase tracking-wide text-slate-400">{{ t("subscription_templates_editor") }}</h3>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div class="text-sm">
-          <label class="block text-xs text-slate-400 mb-1">{{ t("name") }}</label>
-          <input type="text" name="name" id="tpl_name" required
-                 class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2">
-        </div>
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+		  <div class="text-sm">
+			<label class="block text-xs text-slate-400 mb-1">{{ t("name") }}</label>
+			<input type="text" name="name" id="tpl_name" required
+				   class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2">
+		  </div>
 
-        <div class="text-sm">
-          <label class="block text-xs text-slate-400 mb-1">{{ t("notes") }}</label>
-          <input type="text" name="notes" id="tpl_notes"
-                 class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2">
-        </div>
-      </div>
-    </div>
+		  <div class="text-sm">
+			<label class="block text-xs text-slate-400 mb-1">{{ t("notes") }}</label>
+			<input type="text" name="notes" id="tpl_notes"
+				   class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2">
+		  </div>
+
+		  <div class="text-sm">
+			<label class="block text-xs text-slate-400 mb-1">{{ t("duration_days") }}</label>
+			<input type="text"
+				   name="duration_days"
+				   id="tpl_duration_days"
+				   inputmode="numeric"
+				   pattern="[0-9]*"
+				   value="30"
+				   class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2"
+				   placeholder="30">
+		  </div>
+
+		  <div class="text-sm">
+			<label class="block text-xs text-slate-400 mb-1">{{ t("subscription_value") }}</label>
+			<input type="text"
+				   name="subscription_value"
+				   id="tpl_subscription_value"
+				   value=""
+				   class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2"
+				   placeholder="e.g. 70">
+		  </div>
+		</div>
+	  </div>
 
     <!-- POLICIES -->
     <div class="mt-4">
@@ -231,6 +253,8 @@
     document.getElementById("template_id").value = "";
     document.getElementById("tpl_name").value = "";
     document.getElementById("tpl_notes").value = "";
+    document.getElementById("tpl_duration_days").value = "30";
+    document.getElementById("tpl_subscription_value").value = "0";
     TEMPLATE_POLICIES = [];
     EDIT_INDEX = null;
     syncPoliciesJson();
@@ -436,6 +460,8 @@
     document.getElementById("template_id").value = tpl.id;
     document.getElementById("tpl_name").value = tpl.name || "";
     document.getElementById("tpl_notes").value = tpl.notes || "";
+    document.getElementById("tpl_duration_days").value = tpl.duration_days || 30;
+    document.getElementById("tpl_subscription_value").value = tpl.subscription_value || 0;
 
     TEMPLATE_POLICIES = [];
     try {

@@ -874,9 +874,13 @@ CREATE TABLE IF NOT EXISTS comm_templates (
   name TEXT NOT NULL,
   enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
 
-  -- NEW: trigger system
+  -- trigger system
   trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','referral_reward')),
   trigger_provider TEXT NOT NULL DEFAULT 'all' CHECK(trigger_provider IN ('all','plex','jellyfin')),
+
+  -- subscription targeting
+  subscription_scope TEXT NOT NULL DEFAULT 'none' CHECK(subscription_scope IN ('none','all','specific')),
+  subscription_template_id INTEGER DEFAULT NULL,
 
   -- expiration flow
   days_before INTEGER DEFAULT NULL,
@@ -887,7 +891,9 @@ CREATE TABLE IF NOT EXISTS comm_templates (
   subject TEXT NOT NULL,
   body TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY(subscription_template_id) REFERENCES subscription_templates(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS comm_scheduled (

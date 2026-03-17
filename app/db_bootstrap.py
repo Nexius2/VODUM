@@ -430,12 +430,18 @@ def run_migrations():
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL UNIQUE,
           notes TEXT,
+          duration_days INTEGER DEFAULT 30,
+          subscription_value REAL DEFAULT 0,
           policies_json TEXT NOT NULL DEFAULT '[]',
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         """)
         conn.commit()
+
+    ensure_column(cursor, "subscription_templates", "duration_days", "INTEGER DEFAULT 30")
+    ensure_column(cursor, "subscription_templates", "subscription_value", "REAL DEFAULT 0")
+    conn.commit()
 
     # Ensure at least one default template (EN), deletable/modifiable
     try:
@@ -447,10 +453,12 @@ def run_migrations():
     if cnt == 0:
         print("🛠 Creating default subscription template: Default")
         cursor.execute(
-            "INSERT INTO subscription_templates(name, notes, policies_json) VALUES (?, ?, ?)",
+            "INSERT INTO subscription_templates(name, notes, duration_days, subscription_value, policies_json) VALUES (?, ?, ?, ?, ?)",
             (
                 "Default",
                 "Base template with no restrictions. Edit or delete if you want.",
+                30,
+                0,
                 "[]",
             ),
         )
@@ -676,7 +684,13 @@ def run_migrations():
             subject TEXT NOT NULL,
             body TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','referral_reward')),
+            trigger_provider TEXT NOT NULL DEFAULT 'all' CHECK(trigger_provider IN ('all','plex','jellyfin')),
+            days_after INTEGER DEFAULT NULL,
+            subscription_scope TEXT NOT NULL DEFAULT 'none' CHECK(subscription_scope IN ('none','all','specific')),
+            subscription_template_id INTEGER DEFAULT NULL,
+            FOREIGN KEY(subscription_template_id) REFERENCES subscription_templates(id) ON DELETE SET NULL
         );
         """)
         conn.commit()
@@ -695,6 +709,13 @@ def run_migrations():
         "TEXT NOT NULL DEFAULT 'all' CHECK(trigger_provider IN ('all','plex','jellyfin'))",
     )
     ensure_column(cursor, "comm_templates", "days_after", "INTEGER DEFAULT NULL")
+    ensure_column(
+        cursor,
+        "comm_templates",
+        "subscription_scope",
+        "TEXT NOT NULL DEFAULT 'none' CHECK(subscription_scope IN ('none','all','specific'))",
+    )
+    ensure_column(cursor, "comm_templates", "subscription_template_id", "INTEGER DEFAULT NULL")
     conn.commit()
 
     def comm_templates_has_referral_reward_trigger():
@@ -722,18 +743,24 @@ def run_migrations():
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','referral_reward')),
             trigger_provider TEXT NOT NULL DEFAULT 'all' CHECK(trigger_provider IN ('all','plex','jellyfin')),
-            days_after INTEGER DEFAULT NULL
+            days_after INTEGER DEFAULT NULL,
+            subscription_scope TEXT NOT NULL DEFAULT 'none' CHECK(subscription_scope IN ('none','all','specific')),
+            subscription_template_id INTEGER DEFAULT NULL,
+            FOREIGN KEY(subscription_template_id) REFERENCES subscription_templates(id) ON DELETE SET NULL
         );
         """)
 
         cursor.execute("""
         INSERT INTO comm_templates (
             id, key, name, enabled, days_before, subject, body,
-            created_at, updated_at, trigger_event, trigger_provider, days_after
+            created_at, updated_at, trigger_event, trigger_provider, days_after,
+            subscription_scope, subscription_template_id
         )
         SELECT
             id, key, name, enabled, days_before, subject, body,
-            created_at, updated_at, trigger_event, trigger_provider, days_after
+            created_at, updated_at, trigger_event, trigger_provider, days_after,
+            COALESCE(subscription_scope, 'none'),
+            subscription_template_id
         FROM comm_templates_old
         """)
 

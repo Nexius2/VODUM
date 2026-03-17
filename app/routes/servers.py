@@ -894,7 +894,7 @@ def register(app):
         vodum_user_ids = sorted({
             int(u["vodum_user_id"])
             for u in users
-            if u.get("vodum_user_id") is not None
+            if u["vodum_user_id"] is not None
         })
 
         for vodum_user_id in vodum_user_ids:

@@ -69,6 +69,8 @@ def register(app):
         # ✅ IMPORTANT :
         # Un même user existe 1 fois par serveur dans media_users.
         # On doit donc agréger tous les media_users.id qui ont le même vodum_user_id + external_user_id + type.
+        linked_rows = []
+
         if u.get("vodum_user_id"):
             linked_rows = db.query(
                 """
@@ -81,6 +83,7 @@ def register(app):
             )
             linked_ids = [r["id"] for r in linked_rows] or [user_id]
         else:
+            linked_rows = [{"id": user_id, "server_id": u.get("server_id")}]
             linked_ids = [user_id]
 
 
@@ -388,6 +391,18 @@ def register(app):
             profile["last_30d"] = _period_stats("-30 days")
             profile["all_time"] = _period_stats(None)
 
+            # --------------------------
+            # Policy hits / peak streams
+            # TEMP SAFE FALLBACK
+            # --------------------------
+            profile["policy_hits"] = {
+                "total": 0,
+                "kills": 0,
+                "warns": 0,
+                "last_hit_at": None,
+            }
+            profile["peak_streams"] = 0
+
             # Top players (comme les tuiles Tautulli)
             top_players = db.query(
                 f"""
@@ -691,6 +706,15 @@ def register(app):
             events=events,
         )
 
+    def _policy_redirect_response():
+        redirect_endpoint = (request.form.get("redirect_endpoint") or request.args.get("redirect_endpoint") or "").strip()
+        redirect_tab = (request.form.get("redirect_tab") or request.args.get("redirect_tab") or "policies").strip()
+
+        if redirect_endpoint == "subscriptions":
+            return redirect(url_for("subscriptions", tab=redirect_tab))
+
+        return redirect(url_for("monitoring_page", tab="policies"))
+
     @app.post("/monitoring/policies/create")
     def stream_policy_create():
         db = get_db()
@@ -708,7 +732,7 @@ def register(app):
                     rj = {}
                 if rj.get("system_tag") or rj.get("locked"):
                     flash("Policy is read-only.", "error")
-                    return redirect(url_for("monitoring_page", tab="policies"))
+                    return _policy_redirect_response()
 
         rule_type = request.form.get("rule_type", "").strip()
         scope_type = request.form.get("scope_type", "global").strip()
@@ -799,7 +823,7 @@ def register(app):
             """)
 
 
-        return redirect(url_for("monitoring_page", tab="policies"))
+        return _policy_redirect_response()
 
 
     @app.post("/monitoring/policies/<int:policy_id>/delete")
@@ -814,11 +838,11 @@ def register(app):
                 rj = {}
             if rj.get("system_tag") or rj.get("locked"):
                 flash("Policy is read-only and cannot be deleted manually.", "error")
-                return redirect(url_for("monitoring_page", tab="policies"))
+                return _policy_redirect_response()
 
         db.execute("DELETE FROM stream_policies WHERE id=?", (policy_id,))
         flash("Policy deleted", "success")
-        return redirect(url_for("monitoring_page", tab="policies"))
+        return _policy_redirect_response()
 
 
     @app.get("/monitoring/policies/<int:policy_id>/edit")

@@ -76,34 +76,77 @@
 {% set s7  = profile.last_7d %}
 {% set s30 = profile.last_30d %}
 {% set sa  = profile.all_time %}
+{% set policy_hits = profile.get('policy_hits', {}) %}
+{% set peak_streams = profile.get('peak_streams', 0) %}
 
 {# ===== TOP ROW: stats left + insights right ===== #}
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
 
-  {# LEFT: 2x2 stats grid (comme ton mockup) #}
-  <div class="grid grid-cols-2 gap-4 lg:col-span-1">
+  {# LEFT: summary + compact metrics #}
+  <div class="space-y-4 lg:col-span-1">
+
+    {# Grande bulle résumé #}
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-      <div class="text-xs text-slate-400">Last 24 hours</div>
-      <div class="mt-2 text-2xl font-semibold">{{ s24.plays }}</div>
-      <div class="text-xs text-slate-500">plays · {{ s24.watch_time }}</div>
+      <div class="text-xs uppercase tracking-wide text-slate-400 mb-4">
+        User activity 
+		<span class="text-xs text-slate-500 font-normal lowercase">Number of plays and total watch time over different periods</span>
+      </div>
+
+
+
+      <div class="grid grid-cols-2 xl:grid-cols-4 gap-3">
+        <div class="rounded-xl border border-slate-800/80 bg-slate-950/40 px-3 py-3">
+          <div class="text-[11px] tracking-wide text-slate-500">24h plays:</div>
+          <div class="mt-2 text-2xl font-semibold text-white">{{ s24.plays }}</div>
+          <div class="mt-1 text-xs text-slate-500">watch time:<br>{{ s24.watch_time }}</div>
+        </div>
+
+        <div class="rounded-xl border border-slate-800/80 bg-slate-950/40 px-3 py-3">
+          <div class="text-[11px] tracking-wide text-slate-500">7d plays:</div>
+          <div class="mt-2 text-2xl font-semibold text-white">{{ s7.plays }}</div>
+          <div class="mt-1 text-xs text-slate-500">watch time:<br>{{ s7.watch_time }}</div>
+        </div>
+
+        <div class="rounded-xl border border-slate-800/80 bg-slate-950/40 px-3 py-3">
+          <div class="text-[11px] tracking-wide text-slate-500">30d plays:</div>
+          <div class="mt-2 text-2xl font-semibold text-white">{{ s30.plays }}</div>
+          <div class="mt-1 text-xs text-slate-500">watch time:<br>{{ s30.watch_time }}</div>
+        </div>
+
+        <div class="rounded-xl border border-slate-800/80 bg-slate-950/40 px-3 py-3">
+          <div class="text-[11px] tracking-wide text-slate-500">All time plays:</div>
+          <div class="mt-2 text-2xl font-semibold text-white">{{ sa.plays }}</div>
+          <div class="mt-1 text-xs text-slate-500">watch time:<br>{{ sa.watch_time }}</div>
+        </div>
+      </div>
     </div>
 
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-      <div class="text-xs text-slate-400">Last 7 days</div>
-      <div class="mt-2 text-2xl font-semibold">{{ s7.plays }}</div>
-      <div class="text-xs text-slate-500">plays · {{ s7.watch_time }}</div>
-    </div>
+    {# Ligne des 2 petites bulles #}
+    <div class="grid grid-cols-2 gap-4">
 
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-      <div class="text-xs text-slate-400">Last 30 days</div>
-      <div class="mt-2 text-2xl font-semibold">{{ s30.plays }}</div>
-      <div class="text-xs text-slate-500">plays · {{ s30.watch_time }}</div>
-    </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+        <div class="text-xs uppercase tracking-wide text-slate-400">Policy cuts</div>
+        <div class="mt-2 text-3xl font-semibold text-rose-300">
+          {{ policy_hits.get('kills', 0) }}
+        </div>
+        <div class="mt-1 text-xs text-slate-500">
+          warns: {{ policy_hits.get('warns', 0) }}
+        </div>
+        <div class="mt-2 text-[11px] text-slate-600 truncate">
+          last: {{ policy_hits.get('last_hit_at', '-') }}
+        </div>
+      </div>
 
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-      <div class="text-xs text-slate-400">All time</div>
-      <div class="mt-2 text-2xl font-semibold">{{ sa.plays }}</div>
-      <div class="text-xs text-slate-500">plays · {{ sa.watch_time }}</div>
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+        <div class="text-xs uppercase tracking-wide text-slate-400">Max simultaneous</div>
+        <div class="mt-2 text-3xl font-semibold text-emerald-300">
+          {{ peak_streams or 0 }}
+        </div>
+        <div class="mt-1 text-xs text-slate-500">
+          peak concurrent streams
+        </div>
+      </div>
+
     </div>
   </div>
 

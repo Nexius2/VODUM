@@ -5,6 +5,7 @@ from datetime import datetime, date
 ALLOWED_VARS = {
     # legacy
     "username",
+    "firstusername",
     "email",
     "expiration_date",
     "days_left",
@@ -16,6 +17,11 @@ ALLOWED_VARS = {
     "server_url",
     "login_username",
     "temporary_password",
+
+    # subscription context
+    "subscription_name",
+    "subscription_value",
+    "subscription_duration_days",
 }
 
 
@@ -37,18 +43,26 @@ def build_user_context(user: dict):
         except Exception:
             days_left = ""
 
+    username = user.get("username", "") or ""
+    firstname = user.get("firstname", "") or ""
+
     return {
-        "username": user.get("firstname") or user.get("username", "") or "",
+        "username": username,
+        "firstusername": firstname or username,
         "email": user.get("email", "") or "",
         "expiration_date": str(expiration) if expiration else "",
         "days_left": days_left,
 
-        "firstname": user.get("firstname", "") or "",
+        "firstname": firstname,
         "lastname": user.get("lastname", "") or "",
         "server_name": user.get("server_name", "") or "",
         "server_url": user.get("server_url", "") or "",
-        "login_username": user.get("login_username", "") or (user.get("username", "") or ""),
+        "login_username": user.get("login_username", "") or username,
         "temporary_password": user.get("temporary_password", "") or "",
+
+        "subscription_name": user.get("subscription_name", "") or "",
+        "subscription_value": user.get("subscription_value", "") or "",
+        "subscription_duration_days": user.get("subscription_duration_days", "") or "",
     }
 
 

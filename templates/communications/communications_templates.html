@@ -53,27 +53,43 @@
         <input type="text" name="name" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs" value="{{ loaded_template.name if loaded_template else '' }}" required>
       </div>
 
-		<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-		  <div class="text-xs">
-			<label class="block mb-1">{{ t('comm_trigger_event') }}</label>
-			{% set ev = (loaded_template.trigger_event if loaded_template and loaded_template.trigger_event else 'expiration') %}
-			<select name="trigger_event" id="trigger_event" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
-			  <option value="expiration" {% if ev == 'expiration' %}selected{% endif %}>{{ t('comm_trigger_expiration') }}</option>
-			  <option value="user_creation" {% if ev == 'user_creation' %}selected{% endif %}>{{ t('comm_trigger_user_creation') }}</option>
-			  <option value="referral_reward" {% if ev == 'referral_reward' %}selected{% endif %}>{{ t('comm_trigger_referral_reward') }}</option>
-			</select>
-		  </div>
+			<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+			  <div class="text-xs">
+				<label class="block mb-1">{{ t('comm_trigger_event') }}</label>
+				{% set ev = (loaded_template.trigger_event if loaded_template and loaded_template.trigger_event else 'expiration') %}
+				<select name="trigger_event" id="trigger_event" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+				  <option value="expiration" {% if ev == 'expiration' %}selected{% endif %}>{{ t('comm_trigger_expiration') }}</option>
+				  <option value="user_creation" {% if ev == 'user_creation' %}selected{% endif %}>{{ t('comm_trigger_user_creation') }}</option>
+				  <option value="referral_reward" {% if ev == 'referral_reward' %}selected{% endif %}>{{ t('comm_trigger_referral_reward') }}</option>
+				</select>
+			  </div>
 
-		  <div class="text-xs">
-			<label class="block mb-1">{{ t('comm_trigger_provider') }}</label>
-			{% set pv = (loaded_template.trigger_provider if loaded_template and loaded_template.trigger_provider else 'all') %}
-			<select name="trigger_provider" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
-			  <option value="all" {% if pv == 'all' %}selected{% endif %}>{{ t('comm_provider_all') }}</option>
-			  <option value="plex" {% if pv == 'plex' %}selected{% endif %}>Plex</option>
-			  <option value="jellyfin" {% if pv == 'jellyfin' %}selected{% endif %}>Jellyfin</option>
-			</select>
-		  </div>
-		</div>
+			  <div class="text-xs">
+				<label class="block mb-1">{{ t('comm_trigger_provider') }}</label>
+				{% set pv = (loaded_template.trigger_provider if loaded_template and loaded_template.trigger_provider else 'all') %}
+				<select name="trigger_provider" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+				  <option value="all" {% if pv == 'all' %}selected{% endif %}>{{ t('comm_provider_all') }}</option>
+				  <option value="plex" {% if pv == 'plex' %}selected{% endif %}>Plex</option>
+				  <option value="jellyfin" {% if pv == 'jellyfin' %}selected{% endif %}>Jellyfin</option>
+				</select>
+			  </div>
+
+			  <div class="text-xs">
+				<label class="block mb-1">{{ t('comm_subscription_target') }}</label>
+				{% set sub_scope = (loaded_template.subscription_scope if loaded_template and loaded_template.subscription_scope else 'none') %}
+				{% set sub_id = (loaded_template.subscription_template_id if loaded_template and loaded_template.subscription_template_id is not none else None) %}
+				<select name="subscription_scope_value" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+				  <option value="none" {% if sub_scope == 'none' %}selected{% endif %}>{{ t('comm_subscription_none') }}</option>
+				  <option value="all" {% if sub_scope == 'all' %}selected{% endif %}>{{ t('comm_subscription_all') }}</option>
+				  {% for sub in subscription_templates %}
+					<option value="subscription:{{ sub.id }}"
+					        {% if sub_scope == 'specific' and sub_id == sub.id %}selected{% endif %}>
+					  {{ sub.name }}
+					</option>
+				  {% endfor %}
+				</select>
+			  </div>
+			</div>
 
 		{#
 		  UI rule:
@@ -137,11 +153,13 @@
       <div class="text-xs">
         <label class="block mb-1">{{ t('body') }}</label>
         <textarea name="body" rows="14" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-2 text-xs resize-none" required>{{ loaded_template.body if loaded_template else '' }}</textarea>
-        <p class="text-[11px] text-slate-500 mt-2">
-          {{ t('comm_vars_help') }}
-          <code>{username}</code>, <code>{email}</code>, <code>{expiration_date}</code>
-        </p>
-      </div>
+        <div class="mt-2">
+          <button type="button"
+                  id="commVarsHelpBtn"
+                  class="text-[11px] text-slate-400 hover:text-emerald-300 transition-colors underline underline-offset-2">
+            {{ t('comm_vars_help') }}
+          </button>
+        </div>      </div>
 
       <div class="text-xs">
         <label class="block mb-1">{{ t('attachments') }}</label>
@@ -155,6 +173,78 @@
             {% endfor %}
           </div>
         {% endif %}
+      </div>
+
+      <div id="commVarsHelpModal" class="hidden fixed inset-0 z-50" aria-hidden="true">
+        <div class="absolute inset-0 bg-black/70"></div>
+
+        <div class="relative mx-auto mt-16 w-[92%] max-w-4xl">
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+            <div class="p-5">
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <div class="text-sm font-semibold text-slate-100">{{ t("comm_vars_modal_title") }}</div>
+                  <div class="text-xs text-slate-400 mt-1">{{ t("comm_vars_modal_subtitle") }}</div>
+                </div>
+
+                <!-- <button type="button"
+                        id="commVarsHelpCloseTop"
+                        class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200">
+                  {{ t("close") }}
+                </button> -->
+              </div>
+
+              <div class="mt-5 grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+                <!-- General -->
+                <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-4">
+                  <div class="text-sm font-semibold text-slate-100 mb-3">{{ t("comm_vars_group_general") }}</div>
+                  <div class="space-y-2 text-xs">
+                    <div><code>{username}</code><div class="text-slate-400 mt-1">{{ t("comm_var_username_desc") }}</div></div>
+                    <div><code>{firstusername}</code><div class="text-slate-400 mt-1">{{ t("comm_var_firstusername_desc") }}</div></div>
+                    <div><code>{email}</code><div class="text-slate-400 mt-1">{{ t("comm_var_email_desc") }}</div></div>
+                    <div><code>{expiration_date}</code><div class="text-slate-400 mt-1">{{ t("comm_var_expiration_date_desc") }}</div></div>
+                    <div><code>{days_left}</code><div class="text-slate-400 mt-1">{{ t("comm_var_days_left_desc") }}</div></div>
+                    <div><code>{firstname}</code><div class="text-slate-400 mt-1">{{ t("comm_var_firstname_desc") }}</div></div>
+                    <div><code>{lastname}</code><div class="text-slate-400 mt-1">{{ t("comm_var_lastname_desc") }}</div></div>
+                  </div>
+                </div>
+
+                <!-- Server / welcome -->
+                <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-4">
+                  <div class="text-sm font-semibold text-slate-100 mb-3">{{ t("comm_vars_group_server") }}</div>
+                  <div class="space-y-2 text-xs">
+                    <div><code>{server_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_server_name_desc") }}</div></div>
+                    <div><code>{server_url}</code><div class="text-slate-400 mt-1">{{ t("comm_var_server_url_desc") }}</div></div>
+                    <div><code>{login_username}</code><div class="text-slate-400 mt-1">{{ t("comm_var_login_username_desc") }}</div></div>
+                    <div><code>{temporary_password}</code><div class="text-slate-400 mt-1">{{ t("comm_var_temporary_password_desc") }}</div></div>
+                  </div>
+                </div>
+
+                <!-- Subscription -->
+                <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-4">
+                  <div class="text-sm font-semibold text-slate-100 mb-3">{{ t("comm_vars_group_subscription") }}</div>
+                  <div class="space-y-2 text-xs">
+                    <div><code>{subscription_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_subscription_name_desc") }}</div></div>
+                    <div><code>{subscription_value}</code><div class="text-slate-400 mt-1">{{ t("comm_var_subscription_value_desc") }}</div></div>
+                    <div><code>{subscription_duration_days}</code><div class="text-slate-400 mt-1">{{ t("comm_var_subscription_duration_days_desc") }}</div></div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <div class="border-t border-slate-800"></div>
+
+            <div class="p-4 flex items-center justify-end gap-2">
+              <button type="button"
+                      id="commVarsHelpCloseBottom"
+                      class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-200">
+                {{ t("close") }}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="flex flex-wrap gap-2">
@@ -175,16 +265,16 @@
     <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
       <table class="w-full text-xs">
         <thead class="bg-slate-950/60 text-slate-400 text-left">
-          <tr>
-            
-            <th class="px-4 py-2">{{ t('name') }}</th>
-            <th class="px-4 py-2">{{ t('enabled') }}</th>
-			<th class="px-4 py-2">{{ t('comm_trigger_event') }}</th>
-			<th class="px-4 py-2">{{ t('comm_trigger_provider') }}</th>
-			<th class="px-4 py-2">{{ t('comm_delay') }}</th>
-            <th class="px-4 py-2">{{ t('subject') }}</th>
-            <th class="px-4 py-2"></th>
-          </tr>
+	          <tr>
+	            <th class="px-4 py-2">{{ t('name') }}</th>
+	            <th class="px-4 py-2">{{ t('enabled') }}</th>
+				<th class="px-4 py-2">{{ t('comm_trigger_event') }}</th>
+				<th class="px-4 py-2">{{ t('comm_trigger_provider') }}</th>
+				<th class="px-4 py-2">{{ t('comm_subscription_target') }}</th>
+				<th class="px-4 py-2">{{ t('comm_delay') }}</th>
+	            <th class="px-4 py-2">{{ t('subject') }}</th>
+	            <th class="px-4 py-2"></th>
+	          </tr>
         </thead>
         <tbody>
         {% for tpl in templates %}
@@ -202,22 +292,32 @@
 			  {% endif %}
 			</td>
 
-			<td class="px-4 py-2">
-			  {% if tpl.trigger_provider == 'plex' %}Plex
-			  {% elif tpl.trigger_provider == 'jellyfin' %}Jellyfin
-			  {% else %}{{ t('comm_provider_all') }}
-			  {% endif %}
-			</td>
+				<td class="px-4 py-2">
+				  {% if tpl.trigger_provider == 'plex' %}Plex
+				  {% elif tpl.trigger_provider == 'jellyfin' %}Jellyfin
+				  {% else %}{{ t('comm_provider_all') }}
+				  {% endif %}
+				</td>
 
-			<td class="px-4 py-2">
-			  {% if tpl.days_before is not none %}
-				{{ t('comm_delay_before_short') }} {{ tpl.days_before }}
-			  {% elif tpl.days_after is not none %}
-				{{ t('comm_delay_after_short') }} {{ tpl.days_after }}
-			  {% else %}
-				-
-			  {% endif %}
-			</td>
+				<td class="px-4 py-2">
+				  {% if tpl.subscription_scope == 'specific' and tpl.subscription_template_name %}
+					{{ tpl.subscription_template_name }}
+				  {% elif tpl.subscription_scope == 'all' %}
+					{{ t('comm_subscription_all') }}
+				  {% else %}
+					{{ t('comm_subscription_none') }}
+				  {% endif %}
+				</td>
+
+				<td class="px-4 py-2">
+				  {% if tpl.days_before is not none %}
+					{{ t('comm_delay_before_short') }} {{ tpl.days_before }}
+				  {% elif tpl.days_after is not none %}
+					{{ t('comm_delay_after_short') }} {{ tpl.days_after }}
+				  {% else %}
+					-
+				  {% endif %}
+				</td>
             <td class="px-4 py-2">{{ tpl.subject }}</td>
             <td class="px-4 py-2 text-right">
               <a href="{{ url_for('communications_templates_page', load=tpl.id) }}" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700">{{ t('open') }}</a>
@@ -317,6 +417,39 @@ daysOffset && daysOffset.addEventListener('input', syncHiddenDelayValues);
 dirSelect && dirSelect.addEventListener('change', syncHiddenDelayValues);
 
 refreshDelayUI();
+
+const commVarsHelpBtn = document.getElementById('commVarsHelpBtn');
+const commVarsHelpModal = document.getElementById('commVarsHelpModal');
+const commVarsHelpCloseTop = document.getElementById('commVarsHelpCloseTop');
+const commVarsHelpCloseBottom = document.getElementById('commVarsHelpCloseBottom');
+
+function openCommVarsHelpModal() {
+  if (!commVarsHelpModal) return;
+  commVarsHelpModal.classList.remove('hidden');
+  commVarsHelpModal.setAttribute('aria-hidden', 'false');
+}
+
+function closeCommVarsHelpModal() {
+  if (!commVarsHelpModal) return;
+  commVarsHelpModal.classList.add('hidden');
+  commVarsHelpModal.setAttribute('aria-hidden', 'true');
+}
+
+commVarsHelpBtn && commVarsHelpBtn.addEventListener('click', openCommVarsHelpModal);
+commVarsHelpCloseTop && commVarsHelpCloseTop.addEventListener('click', closeCommVarsHelpModal);
+commVarsHelpCloseBottom && commVarsHelpCloseBottom.addEventListener('click', closeCommVarsHelpModal);
+
+commVarsHelpModal && commVarsHelpModal.addEventListener('click', (e) => {
+  if (e.target === commVarsHelpModal || e.target.classList.contains('absolute')) {
+    closeCommVarsHelpModal();
+  }
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeCommVarsHelpModal();
+  }
+});
 });
 </script>
 

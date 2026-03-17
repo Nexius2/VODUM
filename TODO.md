@@ -171,34 +171,14 @@ Verify compatibility with:
 
 ## Core Stability Improvements
 
-Several internal fixes were implemented to improve the reliability and maintainability of VODUM.
+- [X] Display the number of simultaneous streams per user in user stats
+- [X] In user detail (General), when changing the date, the form becomes blank and unreadable
+- [X] Add `subscription_value` and `subscription_duration_days` to subscription templates
+- [X] In Communications / Templates, add an additional selector to link subscriptions
+- [X] Add subscription variables to email templates
 
-- Improved **database manager (`DBManager`)** to avoid potential issues with SQLite connection reuse and to make the database access layer more robust.
-- Clarified how Flask requests access the database by cleaning up the **DB helper layer**.
-- Improved the **database restore recovery logic** to ensure tasks and maintenance mode return to a consistent state after a restoration.
-- Enhanced the **i18n language system** so the interface automatically detects the user's browser language when no language is stored in session.
-- Replaced several silent `except:` / `pass` blocks with proper logging to improve debugging without breaking runtime stability.
-
-These changes do not alter user-facing features but make the system **more predictable and easier to debug**.
-
-
-## Feature & Improvements
+- [X] `{username}` currently resolves to `firstname` if available in communication templates.  
+      Update it to return the actual username, and introduce a new variable (`{firstusername}`) that falls back to username when firstname is not available.
 
 
 
-- [X] In Monitoring > Libraries, display a “Top Played” section for each library, similar to Plex. In the header, use the backdrop of the top title behind the library name, and below it show the most played media with poster, play count, and user count.
-
-- [X] Add option: do not send expiration email if the account was never used.
-
-- [X] Check monitoring, it looks like not everything is being recorded. (Tautulli has many more entries.)
-
-- [X] It is not possible to change a user’s subscription individually. Also add the ability to change it from the user profile.
-- [X] In Subscriptions / Applications, the override is visible even though it is disabled in the user profile.
-
-- [X] Make sure that every email (or notification) that should be sent is actually sent, even if the app is offline, and that it is processed when the app starts again.
-- [X] Make sure sponsorship/referral (or any other scheduled task) still runs properly if the app is turned off on the scheduled day.
-- [X] Modern campaigns in `comm_campaigns`
-- [X] Guarantee “all channels” behavior in `all` mode
-
-- [X] Slowness when navigating through menus
-- [X] Check that `bootstrap` and `tables.sql` are identical

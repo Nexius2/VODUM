@@ -1,350 +1,182 @@
 <div class="space-y-6">
 
-  <!-- Header -->
-  <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
-    <div class="flex items-start justify-between gap-4">
-      <div>
-        <h2 class="text-lg font-semibold mb-2">
-          {{ t("policies_title") }}
-        </h2>
-
-        <p class="text-slate-400 text-sm">
-          {{ t("policies_intro") }}
-          <span class="mx-1">•</span>
-          {{ t("policies_task_label") }}
-          <code class="text-slate-200">stream_enforcer</code>
-        </p>
-
-        <p class="text-slate-500 text-xs mt-2">
-          {{ t("policies_note_providers") }}
-        </p>
+  <!-- Monitoring dashboard -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_total") }}</div>
+      <div class="mt-2 text-3xl font-bold text-white">{{ policy_dashboard.total or 0 }}</div>
+      <div class="mt-2 text-xs text-slate-400">
+        {{ t("monitoring_policies_enabled") }}: <span class="text-emerald-400">{{ policy_dashboard.enabled or 0 }}</span>
+        <span class="mx-2 text-slate-600">•</span>
+        {{ t("monitoring_policies_disabled") }}: <span class="text-rose-400">{{ policy_dashboard.disabled or 0 }}</span>
       </div>
+    </div>
 
-      <div class="shrink-0">
-        <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-950 border border-slate-800 text-xs text-slate-300">
-          <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
-          {{ t("policies_scan_every_60s") }}
-        </span>
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_actions_24h") }}</div>
+      <div class="mt-2 text-3xl font-bold text-white">{{ policy_dashboard.actions_24h or 0 }}</div>
+      <div class="mt-2 text-xs text-slate-400">
+        Warn: <span class="text-amber-400">{{ policy_dashboard.warn_24h or 0 }}</span>
+        <span class="mx-2 text-slate-600">•</span>
+        Kill: <span class="text-rose-400">{{ policy_dashboard.kill_24h or 0 }}</span>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_impacted_24h") }}</div>
+      <div class="mt-2 text-3xl font-bold text-white">{{ policy_dashboard.affected_actors_24h or 0 }}</div>
+      <div class="mt-2 text-xs text-slate-400">
+        {{ t("monitoring_policies_affected_rules") }}:
+        <span class="text-slate-200">{{ policy_dashboard.affected_policies_24h or 0 }}</span>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_tracked_1h") }}</div>
+      <div class="mt-2 text-3xl font-bold text-white">{{ policy_tracked_state.tracked_1h or 0 }}</div>
+      <div class="mt-2 text-xs text-slate-400">
+        Warned: <span class="text-amber-400">{{ policy_tracked_state.warned_1h or 0 }}</span>
+        <span class="mx-2 text-slate-600">•</span>
+        Killed: <span class="text-rose-400">{{ policy_tracked_state.killed_1h or 0 }}</span>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_targeted_users") }}</div>
+      <div class="mt-2 text-3xl font-bold text-white">{{ policy_dashboard.targeted_users or 0 }}</div>
+      <div class="mt-2 text-xs text-slate-400">
+        {{ t("monitoring_policies_targeted_servers") }}:
+        <span class="text-slate-200">{{ policy_dashboard.targeted_servers or 0 }}</span>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_scope_user") }}</div>
+      <div class="mt-2 text-3xl font-bold text-white">{{ policy_dashboard.scope_user or 0 }}</div>
+      <div class="mt-2 text-xs text-slate-400">
+        Global: <span class="text-slate-200">{{ policy_dashboard.scope_global or 0 }}</span>
+        <span class="mx-2 text-slate-600">•</span>
+        Server: <span class="text-slate-200">{{ policy_dashboard.scope_server or 0 }}</span>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_system_managed") }}</div>
+      <div class="mt-2 text-3xl font-bold text-white">{{ policy_dashboard.system_count or 0 }}</div>
+      <div class="mt-2 text-xs text-slate-400">
+        Locked: <span class="text-slate-200">{{ policy_dashboard.locked_count or 0 }}</span>
+        <span class="mx-2 text-slate-600">•</span>
+        Subscription: <span class="text-slate-200">{{ policy_dashboard.subscription_managed_count or 0 }}</span>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_actions_7d") }}</div>
+      <div class="mt-2 text-3xl font-bold text-white">{{ policy_dashboard.actions_7d or 0 }}</div>
+      <div class="mt-2 text-xs text-slate-400">
+        Warn: <span class="text-amber-400">{{ policy_dashboard.warn_7d or 0 }}</span>
+        <span class="mx-2 text-slate-600">•</span>
+        Kill: <span class="text-rose-400">{{ policy_dashboard.kill_7d or 0 }}</span>
       </div>
     </div>
   </div>
 
-  <!-- Create policy -->
-  <form method="post"
-        action="{{ url_for('stream_policy_create') }}"
-        class="bg-slate-900 border border-slate-800 rounded-xl p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-
-    <input type="hidden" name="policy_id" value="{{ edit_policy.id if edit_policy else '' }}">
-
-    <!-- Rule -->
-    <div>
-      <label class="text-xs text-slate-400">
-        {{ t("policies_rule") }}
-      </label>
-
-      <select name="rule_type"
-              class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-        <option value="max_streams_per_user" {% if edit_policy and edit_policy.rule_type=="max_streams_per_user" %}selected{% endif %}>{{ t("policies_rule_max_streams_user") }}</option>
-		<option value="max_ips_per_user" {% if edit_policy and edit_policy.rule_type=="max_ips_per_user" %}selected{% endif %}>{{ t("policies_rule_max_ips_user") }}</option>
-		<option value="max_streams_per_ip" {% if edit_policy and edit_policy.rule_type=="max_streams_per_ip" %}selected{% endif %}>{{ t("policies_rule_max_streams_ip") }}</option>
-        <option value="max_transcodes_global" {% if edit_policy and edit_policy.rule_type=="max_transcodes_global" %}selected{% endif %}>{{ t("policies_rule_max_transcodes_server") }}</option>
-        <option value="ban_4k_transcode" {% if edit_policy and edit_policy.rule_type=="ban_4k_transcode" %}selected{% endif %}>{{ t("policies_rule_ban_4k_transcode") }}</option>
-        <option value="max_bitrate_kbps" {% if edit_policy and edit_policy.rule_type=="max_bitrate_kbps" %}selected{% endif %}>{{ t("policies_rule_max_bitrate") }}</option>
-        <option value="device_allowlist" {% if edit_policy and edit_policy.rule_type=="device_allowlist" %}selected{% endif %}>{{ t("policies_rule_device_allowlist") }}</option>
-      </select>
-    </div>
-
-    <!-- Scope -->
-    <div>
-      <label class="text-xs text-slate-400">
-        {{ t("policies_scope") }}
-      </label>
-
-      <select name="scope_type"
-              class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-        <option value="global" {% if edit_policy and edit_policy.scope_type=="global" %}selected{% endif %}>{{ t("policies_scope_global") }}</option>
-        <option value="server" {% if edit_policy and edit_policy.scope_type=="server" %}selected{% endif %}>{{ t("policies_scope_server") }}</option>
-        <option value="user" {% if edit_policy and edit_policy.scope_type=="user" %}selected{% endif %}>{{ t("policies_scope_user") }}</option>
-      </select>
-
-      <input name="scope_id"
-             value="{{ edit_policy.scope_id if edit_policy else '' }}"
-             placeholder="{{ t('policies_scope_id_placeholder') }}"
-             class="w-full mt-2 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
-      <p class="text-xs text-slate-500 mt-1">
-        {{ t("policies_scope_help") }}
-      </p>
-    </div>
-
-    <!-- Provider + server filter -->
-    <div>
-      <label class="text-xs text-slate-400">
-        {{ t("policies_provider") }}
-      </label>
-
-      <select name="provider"
-              class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-        <option value="" {% if edit_policy and not edit_policy.provider %}selected{% endif %}>{{ t("policies_provider_both") }}</option>
-        <option value="plex" {% if edit_policy and edit_policy.provider=="plex" %}selected{% endif %}>{{ t("policies_provider_plex") }}</option>
-        <option value="jellyfin" {% if edit_policy and edit_policy.provider=="jellyfin" %}selected{% endif %}>{{ t("policies_provider_jellyfin") }}</option>
-      </select>
-
-      <label class="text-xs text-slate-400 mt-3 block">
-        {{ t("policies_server_filter") }}
-        <span class="text-slate-500">({{ t("optional") }})</span>
-      </label>
-
-      <select name="server_id"
-              class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-        <option value="" {% if edit_policy and not edit_policy.server_id %}selected{% endif %}>{{ t("policies_all_servers") }}</option>
-        {% for s in servers %}
-          <option value="{{ s.id }}" {% if edit_policy and edit_policy.server_id==s.id %}selected{% endif %}>{{ s.name }} ({{ s.type }})</option>
-        {% endfor %}
-      </select>
-    </div>
-
-    <!-- Priority / Selector / Enabled -->
-    <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div>
-        <label class="text-xs text-slate-400">
-          {{ t("policies_priority") }}
-        </label>
-        <input name="priority"
-               value="{{ edit_policy.priority if edit_policy else 100 }}"
-               class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
-        <p class="text-xs text-slate-500 mt-1">
-          {{ t("policies_priority_help") }}
-        </p>
+  <!-- Charts -->
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold text-white">{{ t("monitoring_policies_hits_30d") }}</h3>
+        <span class="text-xs text-slate-500">warn / kill</span>
       </div>
-
-      <div>
-        <label class="text-xs text-slate-400">
-          {{ t("policies_selector") }}
-        </label>
-
-        <select name="selector"
-                class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-          <option value="kill_newest" {% if edit_policy and edit_policy._rule.selector=="kill_newest" %}selected{% endif %}>{{ t("policies_selector_kill_newest") }}</option>
-          <option value="kill_oldest" {% if edit_policy and edit_policy._rule.selector=="kill_oldest" %}selected{% endif %}>{{ t("policies_selector_kill_oldest") }}</option>
-          <option value="kill_transcoding_first" {% if edit_policy and edit_policy._rule.selector=="kill_transcoding_first" %}selected{% endif %}>{{ t("policies_selector_kill_transcoding") }}</option>
-        </select>
-
-        <p class="text-xs text-slate-500 mt-1">
-          {{ t("policies_selector_help") }}
-        </p>
-      </div>
-
-      <div>
-        <label class="text-xs text-slate-400">
-          {{ t("policies_enabled") }}
-        </label>
-
-        <select name="is_enabled"
-                class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-          <option value="1" {% if not edit_policy or edit_policy.is_enabled %}selected{% endif %}>{{ t("enabled") }}</option>
-          <option value="0" {% if edit_policy and not edit_policy.is_enabled %}selected{% endif %}>{{ t("disabled") }}</option>
-        </select>
+      <div class="chart-container chart-container-md">
+        <canvas id="chartPolicyHits30d"></canvas>
       </div>
     </div>
 
-    <!-- Rule values -->
-    <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div>
-        <label class="text-xs text-slate-400">
-          {{ t("policies_max_value") }}
-        </label>
-        <input name="max_value"
-               value="{{ edit_policy._rule.max if edit_policy and (edit_policy._rule.max is defined) else '' }}"
-               placeholder="{{ t('policies_max_value_placeholder') }}"
-               class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
-        <p class="text-xs text-slate-500 mt-1">
-          {{ t("policies_max_value_help") }}
-        </p>
-
-        <label class="mt-3 flex items-center gap-2 text-xs text-slate-300">
-          <input type="checkbox" name="allow_local_ip" value="1"
-                 {% if edit_policy and edit_policy._rule.allow_local_ip %}checked{% endif %}>
-          {{ t("policies_allow_local_ip") }}
-        </label>
-        <p class="text-xs text-slate-500 mt-1">
-          {{ t("policies_allow_local_ip_help") }}
-        </p>
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold text-white">{{ t("monitoring_policies_rules_30d") }}</h3>
+        <span class="text-xs text-slate-500">{{ t("top") }} 10</span>
       </div>
-
-      <div>
-        <label class="text-xs text-slate-400">
-          {{ t("policies_max_bitrate_kbps") }}
-        </label>
-        <input name="max_kbps"
-               value="{{ edit_policy._rule.max_kbps if edit_policy and (edit_policy._rule.max_kbps is defined) else '' }}"
-               placeholder="{{ t('policies_max_bitrate_placeholder') }}"
-               class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
-        <p class="text-xs text-slate-500 mt-1">
-          {{ t("policies_max_bitrate_help") }}
-        </p>
-      </div>
-
-      <div>
-        <label class="text-xs text-slate-400">
-          {{ t("policies_allowed_devices") }}
-        </label>
-        <input name="allowed_devices"
-               value="{{ (edit_policy._rule.allowed|join(', ')) if edit_policy and (edit_policy._rule.allowed is defined) else '' }}"
-               placeholder="{{ t('policies_allowed_devices_placeholder') }}"
-               class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
-        <p class="text-xs text-slate-500 mt-1">
-          {{ t("policies_allowed_devices_help") }}
-        </p>
+      <div class="chart-container chart-container-md">
+        <canvas id="chartPolicyRules30d"></canvas>
       </div>
     </div>
 
-    <!-- Warn message -->
-    <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div>
-        <label class="text-xs text-slate-400">
-          {{ t("policies_warn_title") }}
-        </label>
-        <input name="warn_title"
-               value="{{ edit_policy._rule.warn_title if edit_policy and (edit_policy._rule.warn_title is defined) else t('policies_warn_title_default') }}"
-               class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold text-white">{{ t("monitoring_policies_scopes") }}</h3>
+        <span class="text-xs text-slate-500">{{ t("current") }}</span>
       </div>
-
-      <div>
-        <label class="text-xs text-slate-400">
-          {{ t("policies_warn_text") }}
-        </label>
-        <input name="warn_text"
-               value="{{ edit_policy._rule.warn_text if edit_policy and (edit_policy._rule.warn_text is defined) else t('policies_warn_text_default') }}"
-               class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2" />
+      <div class="chart-container chart-container-sm">
+        <canvas id="chartPolicyScopes"></canvas>
       </div>
     </div>
 
-    <div class="md:col-span-3 flex justify-end gap-2">
-      {% if edit_policy %}
-        <a href="{{ url_for('monitoring_page', tab='policies') }}"
-           class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-950/40 text-slate-200 hover:bg-slate-950/70 font-semibold">
-          {{ t("cancel") }}
-        </a>
-      {% endif %}
-      <button class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg font-semibold">
-        {% if edit_policy %}{{ t("save") }}{% else %}{{ t("policies_create_button") }}{% endif %}
-      </button>
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold text-white">{{ t("monitoring_policies_providers_30d") }}</h3>
+        <span class="text-xs text-slate-500">{{ t("actions") }}</span>
+      </div>
+      <div class="chart-container chart-container-sm">
+        <canvas id="chartPolicyProviders30d"></canvas>
+      </div>
     </div>
-  </form>
 
-  <!-- List policies -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 xl:col-span-2">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold text-white">{{ t("monitoring_policies_top_users_30d") }}</h3>
+        <span class="text-xs text-slate-500">{{ t("top") }} 10</span>
+      </div>
+      <div class="chart-container chart-container-md">
+        <canvas id="chartPolicyTopUsers30d"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent enforcements -->
   <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
     <div class="p-4 border-b border-slate-800 flex items-center justify-between">
-      <h3 class="font-semibold">
-        {{ t("policies_existing_title") }}
-      </h3>
+      <h3 class="font-semibold text-white">{{ t("monitoring_policies_recent_enforcements") }}</h3>
+      <span class="text-xs text-slate-500">{{ t("last") }} 12</span>
     </div>
 
     <div class="overflow-x-auto">
       <table class="min-w-full text-sm">
         <thead class="bg-slate-950 text-slate-400">
           <tr>
-            <th class="text-left p-3">{{ t("id") }}</th>
-            <th class="text-left p-3">{{ t("enabled") }}</th>
-            <th class="text-left p-3">{{ t("priority") }}</th>
-            <th class="text-left p-3">{{ t("scope") }}</th>
-			<th class="text-left p-3">{{ t("user_id") }}</th>
-            <th class="text-left p-3">{{ t("provider") }}</th>
+            <th class="text-left p-3">{{ t("date") }}</th>
+            <th class="text-left p-3">{{ t("user") }}</th>
             <th class="text-left p-3">{{ t("rule") }}</th>
-            <th class="text-left p-3">{{ t("value") }}</th>
-            <th class="text-left p-3"></th>
+            <th class="text-left p-3">{{ t("provider") }}</th>
+            <th class="text-left p-3">{{ t("server") }}</th>
+            <th class="text-left p-3">{{ t("action") }}</th>
+            <th class="text-left p-3">{{ t("reason") }}</th>
           </tr>
         </thead>
-
         <tbody>
-          {% for p in policies %}
+          {% for row in policy_recent_enforcements %}
             <tr class="border-t border-slate-800">
-              <td class="p-3 text-slate-200">{{ p.id }}</td>
-
+              <td class="p-3 text-slate-300">{{ row.created_at }}</td>
+              <td class="p-3 text-slate-200">{{ row.user_label }}</td>
+              <td class="p-3 text-slate-300">{{ row.rule_type or '—' }}</td>
+              <td class="p-3 text-slate-400">{{ row.provider or '—' }}</td>
+              <td class="p-3 text-slate-400">{{ row.server_name or '—' }}</td>
               <td class="p-3">
-                {% if p.is_enabled %}
-                  <span class="inline-flex items-center gap-1 text-emerald-400">
-                    <span>●</span>{{ t("enabled") }}
-                  </span>
+                {% if row.action == 'kill' %}
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-rose-950/40 border border-rose-800 text-[11px] text-rose-300">kill</span>
                 {% else %}
-                  <span class="text-slate-500">—</span>
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-950/40 border border-amber-800 text-[11px] text-amber-300">warn</span>
                 {% endif %}
               </td>
-
-              <td class="p-3">{{ p.priority }}</td>
-
-				<!-- Scope -->
-				<td class="p-3">
-				  <div class="flex flex-wrap items-center gap-2">
-					<span class="text-slate-300">{{ p.scope_type }}</span>
-
-					{% if p.scope_type == "user" %}
-					  <span class="text-slate-500">
-						{{ p.scope_username if p.scope_username else "" }}
-					  </span>
-					{% else %}
-					  <span class="text-slate-500">
-						{{ p.scope_id or "" }}
-					  </span>
-					{% endif %}
-
-					{% if p._is_system or p._is_locked %}
-					  <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-950 border border-slate-700 text-[11px] text-slate-300">
-						{{ t("system") }}
-					  </span>
-					{% endif %}
-
-					{% if p._is_locked and p._subscription_name %}
-					  <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-indigo-950/40 border border-indigo-800 text-[11px] text-indigo-200">
-						{{ t("subscription") }}: {{ p._subscription_name }}
-					  </span>
-					{% endif %}
-				  </div>
-				</td>
-
-				<!-- User ID (dédié) -->
-				<td class="p-3 text-slate-500">
-				  {% if p.scope_type == "user" %}
-					#{{ p.scope_id }}
-				  {% else %}
-					<span class="text-slate-600">—</span>
-				  {% endif %}
-				</td>
-
-
-              <td class="p-3">
-                {% if p.provider %}
-                  {{ p.provider }}
-                {% else %}
-                  {{ t("policies_provider_both_short") }}
-                {% endif %}
-              </td>
-
-              <td class="p-3">{{ p.rule_type }}</td>
-
-              <td class="p-3 text-slate-400">
-                <code class="whitespace-pre-wrap break-words">{{ p.rule_value_json }}</code>
-              </td>
-
-              <td class="p-3 text-right">
-                <div class="flex items-center justify-end gap-3">
-                  {% if p._is_system or p._is_locked %}
-                    <span class="text-slate-500 text-xs">{{ t("read_only") }}</span>
-                  {% else %}
-                    <a class="text-slate-300 hover:text-white" href="{{ url_for('stream_policy_edit', policy_id=p.id) }}">{{ t("edit") }}</a>
-                    <form method="post" action="{{ url_for('stream_policy_delete', policy_id=p.id) }}">
-                      <button class="text-red-400 hover:text-red-300">{{ t("delete") }}</button>
-                    </form>
-                  {% endif %}
-                </div>
-              </td>
+              <td class="p-3 text-slate-400">{{ row.reason or '—' }}</td>
             </tr>
           {% endfor %}
 
-          {% if not policies %}
+          {% if not policy_recent_enforcements %}
             <tr>
-              <td class="p-4 text-slate-400" colspan="9">
-                {{ t("policies_empty") }}
+              <td class="p-4 text-slate-400" colspan="7">
+                {{ t("monitoring_policies_no_enforcements") }}
               </td>
             </tr>
           {% endif %}
@@ -353,4 +185,209 @@
     </div>
   </div>
 
+
+
 </div>
+
+<style>
+  .chart-container { position: relative; width: 100%; }
+  .chart-container-md { height: 280px; min-height: 280px; }
+  .chart-container-sm { height: 220px; min-height: 220px; }
+</style>
+
+<script>
+(function () {
+  const root = document;
+
+  const hits30d = {{ policy_hits_30d|tojson }};
+  const rule30d = {{ policy_rule_breakdown_30d|tojson }};
+  const provider30d = {{ policy_provider_breakdown_30d|tojson }};
+  const scopeNow = {{ policy_scope_breakdown|tojson }};
+  const topUsers30d = {{ policy_top_users_30d|tojson }};
+
+  function getOrCreate(el, factory) {
+    if (!el) return null;
+    if (el._chartInstance) return el._chartInstance;
+    el._chartInstance = factory();
+    return el._chartInstance;
+  }
+
+  function destroyIfNeeded(el) {
+    if (el && el._chartInstance) {
+      try { el._chartInstance.destroy(); } catch (_) {}
+      el._chartInstance = null;
+    }
+  }
+
+  function buildPoliciesCharts() {
+    if (typeof Chart === "undefined") return;
+
+    const elHits = root.getElementById("chartPolicyHits30d");
+    const elRules = root.getElementById("chartPolicyRules30d");
+    const elScopes = root.getElementById("chartPolicyScopes");
+    const elProviders = root.getElementById("chartPolicyProviders30d");
+    const elTopUsers = root.getElementById("chartPolicyTopUsers30d");
+
+    if (!elHits || !elRules || !elScopes || !elProviders || !elTopUsers) return;
+
+    const commonGrid = { color: "rgba(148,163,184,0.10)" };
+    const commonTicks = { color: "#94A3B8" };
+
+    destroyIfNeeded(elHits);
+    destroyIfNeeded(elRules);
+    destroyIfNeeded(elScopes);
+    destroyIfNeeded(elProviders);
+    destroyIfNeeded(elTopUsers);
+
+    getOrCreate(elHits, () => new Chart(elHits.getContext("2d"), {
+      type: "line",
+      data: {
+        labels: hits30d.map(x => x.day),
+        datasets: [
+          {
+            label: "Warn",
+            data: hits30d.map(x => x.warn_count || 0),
+            borderColor: "#F59E0B",
+            backgroundColor: "rgba(245,158,11,0.15)",
+            tension: 0.35,
+            fill: true
+          },
+          {
+            label: "Kill",
+            data: hits30d.map(x => x.kill_count || 0),
+            borderColor: "#F43F5E",
+            backgroundColor: "rgba(244,63,94,0.12)",
+            tension: 0.35,
+            fill: true
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { labels: { color: "#CBD5E1" } }
+        },
+        scales: {
+          x: { ticks: commonTicks, grid: commonGrid },
+          y: { ticks: commonTicks, grid: commonGrid, beginAtZero: true }
+        }
+      }
+    }));
+
+    getOrCreate(elRules, () => new Chart(elRules.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels: rule30d.map(x => x.label),
+        datasets: [
+          {
+            label: "Total",
+            data: rule30d.map(x => x.total || 0),
+            backgroundColor: "rgba(99,102,241,0.70)",
+            borderColor: "#6366F1",
+            borderWidth: 1,
+            borderRadius: 8
+          }
+        ]
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: "#CBD5E1" } }
+        },
+        scales: {
+          x: { ticks: commonTicks, grid: commonGrid, beginAtZero: true },
+          y: { ticks: commonTicks, grid: { display: false } }
+        }
+      }
+    }));
+
+    getOrCreate(elScopes, () => new Chart(elScopes.getContext("2d"), {
+      type: "doughnut",
+      data: {
+        labels: scopeNow.map(x => x.label),
+        datasets: [{
+          data: scopeNow.map(x => x.value || 0),
+          backgroundColor: ["#6366F1", "#14B8A6", "#F59E0B"],
+          borderColor: "#0F172A",
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "bottom", labels: { color: "#CBD5E1" } }
+        }
+      }
+    }));
+
+    getOrCreate(elProviders, () => new Chart(elProviders.getContext("2d"), {
+      type: "doughnut",
+      data: {
+        labels: provider30d.map(x => x.label),
+        datasets: [{
+          data: provider30d.map(x => x.value || 0),
+          backgroundColor: ["#8B5CF6", "#06B6D4", "#10B981"],
+          borderColor: "#0F172A",
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "bottom", labels: { color: "#CBD5E1" } }
+        }
+      }
+    }));
+
+    getOrCreate(elTopUsers, () => new Chart(elTopUsers.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels: topUsers30d.map(x => x.label),
+        datasets: [
+          {
+            label: "Warn",
+            data: topUsers30d.map(x => x.warn_count || 0),
+            backgroundColor: "rgba(245,158,11,0.70)",
+            borderColor: "#F59E0B",
+            borderWidth: 1,
+            borderRadius: 8
+          },
+          {
+            label: "Kill",
+            data: topUsers30d.map(x => x.kill_count || 0),
+            backgroundColor: "rgba(244,63,94,0.70)",
+            borderColor: "#F43F5E",
+            borderWidth: 1,
+            borderRadius: 8
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: "#CBD5E1" } }
+        },
+        scales: {
+          x: { ticks: commonTicks, grid: { display: false } },
+          y: { ticks: commonTicks, grid: commonGrid, beginAtZero: true }
+        }
+      }
+    }));
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", buildPoliciesCharts, { once: true });
+  } else {
+    buildPoliciesCharts();
+  }
+
+  document.addEventListener("htmx:load", buildPoliciesCharts);
+})();
+</script>
