@@ -1553,6 +1553,8 @@ ranked AS (
                 FROM (
                   SELECT
                     CASE
+                      WHEN e.account_username IS NOT NULL AND TRIM(e.account_username) <> '' THEN e.account_username
+                      WHEN mu_acc.username IS NOT NULL AND TRIM(mu_acc.username) <> '' THEN mu_acc.username
                       WHEN vu.username IS NOT NULL AND TRIM(vu.username) <> '' THEN vu.username
                       WHEN e.external_user_id IS NOT NULL
                            AND TRIM(e.external_user_id) <> ''
@@ -1564,6 +1566,13 @@ ranked AS (
                   FROM stream_enforcements e
                   LEFT JOIN vodum_users vu
                     ON vu.id = e.vodum_user_id
+                  LEFT JOIN (
+                    SELECT server_id, external_user_id, MAX(username) AS username
+                    FROM media_users
+                    GROUP BY server_id, external_user_id
+                  ) mu_acc
+                    ON mu_acc.server_id = e.server_id
+                   AND mu_acc.external_user_id = e.external_user_id
                   WHERE datetime(e.created_at) >= datetime('now', '-30 days')
                 ) q
                 WHERE label IS NOT NULL
@@ -1575,13 +1584,33 @@ ranked AS (
 
             policy_recent_enforcements = db.query("""
                 SELECT
+                  e.id AS enforcement_id,
                   e.created_at,
                   e.action,
                   e.reason,
                   e.provider,
+                  e.session_key,
+                  e.policy_id,
+                  e.server_id,
+                  e.vodum_user_id,
+                  e.external_user_id,
+                  e.account_username,
+                  e.ips_json,
+                  e.details_json,
+
                   p.rule_type,
+                  p.scope_type,
+                  p.scope_id,
+                  p.priority AS policy_priority,
+                  p.is_enabled AS policy_enabled,
+                  p.rule_value_json,
+
                   s.name AS server_name,
+                  vu.username AS vodum_username,
+
                   CASE
+                    WHEN e.account_username IS NOT NULL AND TRIM(e.account_username) <> '' THEN e.account_username
+                    WHEN mu_acc.username IS NOT NULL AND TRIM(mu_acc.username) <> '' THEN mu_acc.username
                     WHEN vu.username IS NOT NULL AND TRIM(vu.username) <> '' THEN vu.username
                     WHEN e.external_user_id IS NOT NULL
                          AND TRIM(e.external_user_id) <> ''
@@ -1596,6 +1625,13 @@ ranked AS (
                   ON s.id = e.server_id
                 LEFT JOIN vodum_users vu
                   ON vu.id = e.vodum_user_id
+                LEFT JOIN (
+                  SELECT server_id, external_user_id, MAX(username) AS username
+                  FROM media_users
+                  GROUP BY server_id, external_user_id
+                ) mu_acc
+                  ON mu_acc.server_id = e.server_id
+                 AND mu_acc.external_user_id = e.external_user_id
                 ORDER BY e.created_at DESC
                 LIMIT 12
             """) or []

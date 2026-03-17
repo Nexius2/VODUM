@@ -800,6 +800,8 @@ CREATE TABLE IF NOT EXISTS stream_enforcements (
   external_user_id TEXT,
   action TEXT NOT NULL CHECK (action IN ('warn','kill')),
   reason TEXT,
+  account_username TEXT,
+  ips_json TEXT,
 
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 

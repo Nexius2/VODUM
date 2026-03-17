@@ -136,6 +136,9 @@ def run_migrations():
           external_user_id TEXT,
           action TEXT NOT NULL CHECK (action IN ('warn','kill')),
           reason TEXT,
+          account_username TEXT,
+          ips_json TEXT,
+          details_json TEXT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY(policy_id) REFERENCES stream_policies(id) ON DELETE CASCADE,
           FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE
@@ -143,6 +146,11 @@ def run_migrations():
         """)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_stream_enforcements_time ON stream_enforcements(created_at);")
         conn.commit()
+
+    # ✅ IMPORTANT : migrations même si la table existe déjà
+    ensure_column(cursor, "stream_enforcements", "account_username", "TEXT")
+    ensure_column(cursor, "stream_enforcements", "ips_json", "TEXT")
+    ensure_column(cursor, "stream_enforcements", "details_json", "TEXT")
 
     # -------------------------------------------------
     # 0.3 Tautulli import jobs
