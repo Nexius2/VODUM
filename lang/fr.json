@@ -395,7 +395,7 @@
   "manual_backup": "Sauvegarde manuelle",
   "manual_backup_desc": "Crée immédiatement une sauvegarde.",
   "max_streams_override": "Override streams max",
-  "max_streams_override_help": "Si défini, ce nombre passe au-dessus des policies max_streams_per_user pour cet utilisateur. 0 est autorisé.",
+  "max_streams_override_help": "Si défini avec une valeur supérieure à 0, ce nombre passe au-dessus des policies max_streams_per_user pour cet utilisateur. Vide ou 0 = pas d’override, la policy s’applique.",
   "max_streams_override_placeholder": "Laisser vide pour appliquer les policies",
   "merge.master.expiration": "Expiration",
   "merge.master.label": "Utilisateur maître (conservé) ",

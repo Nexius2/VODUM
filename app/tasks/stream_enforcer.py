@@ -277,15 +277,22 @@ def _build_enforcement_snapshot(
     )
 
 def _load_user_stream_overrides() -> Dict[int, int]:
-    """Return {vodum_user_id: max_streams_override} where override is not NULL."""
+    """Return {vodum_user_id: max_streams_override} for positive overrides only."""
     out: Dict[int, int] = {}
     try:
         rows = _db.query(
-            "SELECT id, max_streams_override FROM vodum_users WHERE max_streams_override IS NOT NULL"
+            """
+            SELECT id, max_streams_override
+            FROM vodum_users
+            WHERE max_streams_override IS NOT NULL
+              AND max_streams_override > 0
+            """
         )
         for r in rows:
             try:
-                out[int(r["id"])] = int(r["max_streams_override"])
+                override_value = int(r["max_streams_override"])
+                if override_value > 0:
+                    out[int(r["id"])] = override_value
             except Exception:
                 continue
     except Exception:
@@ -294,8 +301,8 @@ def _load_user_stream_overrides() -> Dict[int, int]:
 
 def _is_vip_override(vodum_user_id: Optional[int]) -> bool:
     """
-    VIP override = user has max_streams_override set and > 0
-    (0 is allowed but means 'block' and should NOT bypass other policies)
+    VIP override = user has max_streams_override set and > 0.
+    0 / NULL mean "no override", so policies apply normally.
     """
     if vodum_user_id is None:
         return False
