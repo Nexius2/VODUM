@@ -830,20 +830,38 @@ def register(app):
     def stream_policy_delete(policy_id: int):
         db = get_db()
 
-        existing = db.query_one("SELECT rule_value_json FROM stream_policies WHERE id = ?", (policy_id,))
-        if existing:
-            try:
-                rj = json.loads(existing["rule_value_json"] or "{}")
-            except Exception:
-                rj = {}
-            if rj.get("system_tag") or rj.get("locked"):
-                flash("Policy is read-only and cannot be deleted manually.", "error")
-                return _policy_redirect_response()
-
         db.execute("DELETE FROM stream_policies WHERE id=?", (policy_id,))
         flash("Policy deleted", "success")
         return _policy_redirect_response()
 
+    @app.post("/monitoring/policies/bulk-delete")
+    def stream_policy_bulk_delete():
+        db = get_db()
+
+        policy_ids = request.form.getlist("policy_ids")
+        cleaned_ids = []
+
+        for value in policy_ids:
+            try:
+                cleaned_ids.append(int(value))
+            except Exception:
+                continue
+
+        cleaned_ids = sorted(set(cleaned_ids))
+
+        if not cleaned_ids:
+            flash("No policy selected.", "error")
+            return _policy_redirect_response()
+
+        placeholders = ",".join(["?"] * len(cleaned_ids))
+        db.execute(
+            f"DELETE FROM stream_policies WHERE id IN ({placeholders})",
+            tuple(cleaned_ids),
+        )
+
+        deleted_count = len(cleaned_ids)
+        flash(f"{deleted_count} polic{'y' if deleted_count == 1 else 'ies'} deleted.", "success")
+        return _policy_redirect_response()
 
     @app.get("/monitoring/policies/<int:policy_id>/edit")
     def stream_policy_edit(policy_id: int):

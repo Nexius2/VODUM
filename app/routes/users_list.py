@@ -107,19 +107,39 @@ def register(app):
 
         # --------------------------------------------------
         # Users tab preferences memory
-        # - keep sort/order/status in session
+        # - keep sort/order/status in persistent cookies
         # - do NOT keep search text
         # --------------------------------------------------
         if tab == "users":
-            session_sort = (session.get("users_list_sort") or "username").strip()
-            session_order = (session.get("users_list_order") or "asc").strip().lower()
-            session_statuses = session.get("users_list_statuses") or []
+            cookie_sort = (request.cookies.get("users_list_sort") or "expiration_date").strip()
+            cookie_order = (request.cookies.get("users_list_order") or "asc").strip().lower()
+
+            default_statuses = ["active", "trial", "paused", "pending"]
+
+            cookie_statuses_raw = request.cookies.get("users_list_statuses")
+            if cookie_statuses_raw:
+                try:
+                    cookie_statuses = json.loads(cookie_statuses_raw)
+                    if not isinstance(cookie_statuses, list):
+                        cookie_statuses = default_statuses[:]
+                except Exception:
+                    cookie_statuses = default_statuses[:]
+            else:
+                cookie_statuses = default_statuses[:]
 
             arg_statuses = request.args.getlist("status")
-            selected_statuses = arg_statuses if "status" in request.args else session_statuses
+            selected_statuses = arg_statuses if "status" in request.args else cookie_statuses   
 
-            sort = (request.args.get("sort") or session_sort or "username").strip()
-            order = (request.args.get("order") or session_order or "asc").strip().lower()
+            sort = (request.args.get("sort") or cookie_sort or "username").strip()
+            order = (request.args.get("order") or cookie_order or "asc").strip().lower()
+
+            if order not in ("asc", "desc"):
+                order = "asc"
+
+        else:
+            selected_statuses = request.args.getlist("status")
+            sort = (request.args.get("sort") or "username").strip()
+            order = (request.args.get("order") or "asc").strip().lower()
 
             if order not in ("asc", "desc"):
                 order = "asc"
@@ -353,7 +373,7 @@ def register(app):
         settings = db.query_one("SELECT * FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
 
-        return render_template(
+        resp = make_response(render_template(
             "users/users.html",
             tab=tab,
             users=users,
@@ -371,7 +391,14 @@ def register(app):
             subscription_templates=subscription_templates,
             settings=settings,
             active_page="users",
-        )
+        ))
+
+        if tab == "users":
+            resp.set_cookie("users_list_sort", str(sort), max_age=60 * 60 * 24 * 365)
+            resp.set_cookie("users_list_order", str(order), max_age=60 * 60 * 24 * 365)
+            resp.set_cookie("users_list_statuses", json.dumps(selected_statuses), max_age=60 * 60 * 24 * 365)
+
+        return resp
         
     ##################################
 
