@@ -128,26 +128,13 @@ def register(app):
                 cookie_statuses = default_statuses[:]
 
             arg_statuses = request.args.getlist("status")
-            selected_statuses = arg_statuses if "status" in request.args else cookie_statuses   
+            selected_statuses = arg_statuses if "status" in request.args else cookie_statuses
 
             sort = (request.args.get("sort") or cookie_sort or "username").strip()
             order = (request.args.get("order") or cookie_order or "asc").strip().lower()
 
             if order not in ("asc", "desc"):
                 order = "asc"
-
-        else:
-            selected_statuses = request.args.getlist("status")
-            sort = (request.args.get("sort") or "username").strip()
-            order = (request.args.get("order") or "asc").strip().lower()
-
-            if order not in ("asc", "desc"):
-                order = "asc"
-
-            session["users_list_sort"] = sort
-            session["users_list_order"] = order
-            session["users_list_statuses"] = selected_statuses
-
         else:
             selected_statuses = request.args.getlist("status")
             sort = (request.args.get("sort") or "username").strip()
