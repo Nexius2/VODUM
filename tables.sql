@@ -802,6 +802,7 @@ CREATE TABLE IF NOT EXISTS stream_enforcements (
   reason TEXT,
   account_username TEXT,
   ips_json TEXT,
+  details_json TEXT,
 
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 

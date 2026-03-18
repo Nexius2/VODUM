@@ -1,4 +1,6 @@
 <div class="space-y-6">
+{% set current_redirect_endpoint = request.endpoint %}
+{% set current_redirect_tab = request.args.get('tab', '') %}
 
   <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
     <div class="flex items-start justify-between gap-4">
@@ -33,8 +35,8 @@
         class="bg-slate-900 border border-slate-800 rounded-xl p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
 
     <input type="hidden" name="policy_id" value="{{ edit_policy.id if edit_policy else '' }}">
-    <input type="hidden" name="redirect_endpoint" value="subscriptions">
-    <input type="hidden" name="redirect_tab" value="policies">
+    <input type="hidden" name="redirect_endpoint" value="{{ current_redirect_endpoint }}">
+    <input type="hidden" name="redirect_tab" value="{{ current_redirect_tab }}">
 
     <div>
       <label class="text-xs text-slate-400">
@@ -215,7 +217,7 @@
 
     <div class="md:col-span-3 flex justify-end gap-2">
       {% if edit_policy %}
-        <a href="{{ url_for('subscriptions', tab='policies') }}"
+        <a href="{{ url_for(current_redirect_endpoint, tab=current_redirect_tab) if current_redirect_tab else url_for(current_redirect_endpoint) }}"
            class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-950/40 text-slate-200 hover:bg-slate-950/70 font-semibold">
           {{ t("cancel") }}
         </a>
@@ -312,24 +314,23 @@
         </div>
       </div>
 
-      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-xs text-slate-400">
-        <div id="policyTableSummary">0 result</div>
-
-        <div class="flex items-center gap-2">
-          <button type="button"
-                  id="policyPrevPage"
-                  class="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-950/40 text-slate-200 hover:bg-slate-950/70">
-            {{ t("previous") }}
-          </button>
-
-          <span id="policyPageIndicator" class="text-slate-300">1 / 1</span>
+      <div class="flex items-center justify-between gap-3">
+        <form method="post"
+              action="{{ url_for('stream_policy_bulk_delete') }}"
+              id="policyBulkDeleteForm"
+              class="flex items-center gap-3">
+          <input type="hidden" name="redirect_endpoint" value="{{ current_redirect_endpoint }}">
+          <input type="hidden" name="redirect_tab" value="{{ current_redirect_tab }}">
+          <div id="policyBulkDeleteInputs"></div>
 
           <button type="button"
-                  id="policyNextPage"
-                  class="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-950/40 text-slate-200 hover:bg-slate-950/70">
-            {{ t("next") }}
+                  id="policyBulkDeleteBtn"
+                  class="px-3 py-2 rounded-lg border border-red-800 bg-red-950/40 text-red-300 hover:bg-red-950/70 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                  disabled>
+            {{ t("delete") }}
+            <span id="policyBulkDeleteCount" class="ml-1">(0)</span>
           </button>
-        </div>
+        </form>
       </div>
     </div>
 
@@ -337,6 +338,12 @@
       <table class="min-w-full text-sm">
         <thead class="bg-slate-950 text-slate-400">
           <tr>
+            <th class="text-left p-3 w-[44px]">
+              <input id="policySelectAll"
+                     type="checkbox"
+                     class="h-4 w-4 rounded border-slate-500 bg-slate-950 text-rose-500 focus:ring-rose-500 cursor-pointer"
+                     title="Select all visible policies">
+            </th>
             <th class="text-left p-3 w-[56px]">{{ t("status") }}</th>
             <th class="text-left p-3">{{ t("rule") }}</th>
             <th class="text-left p-3">{{ t("scope") }}</th>
@@ -370,12 +377,19 @@
 
             <tr
               class="border-t border-slate-800 policy-row"
+              data-policy-id="{{ p.id }}"
               data-search="{{ (p.rule_type ~ ' ' ~ p.scope_type ~ ' ' ~ (p.scope_username or '') ~ ' ' ~ (p.server_name or '') ~ ' ' ~ (p.provider or 'both') ~ ' ' ~ (p._subscription_name or '') ~ ' ' ~ (p.rule_value_json or ''))|lower }}"
               data-status="{{ 'enabled' if p.is_enabled else 'disabled' }}"
               data-scope="{{ p.scope_type }}"
               data-provider="{{ provider_label|lower }}"
               data-origin="{{ origin_label }}"
+              data-deletable="1"
             >
+              <td class="p-3 align-top">
+                <input type="checkbox"
+                       class="policy-row-checkbox h-4 w-4 rounded border-slate-500 bg-slate-950 text-rose-500 focus:ring-rose-500 cursor-pointer"
+                       value="{{ p.id }}">
+              </td>
               <td class="p-3 align-top">
                 {% if p.is_enabled %}
                   <span class="inline-block w-3 h-3 rounded-full bg-emerald-400" title="{{ t('enabled') }}"></span>
@@ -471,20 +485,16 @@
 
               <td class="p-3 text-right align-top">
                 <div class="flex items-center justify-end gap-3">
-                  {% if p._is_system or p._is_locked %}
-                    <span class="text-slate-500 text-xs">{{ t("read_only") }}</span>
-                  {% else %}
-                    <a class="text-slate-300 hover:text-white"
-                       href="{{ url_for('subscriptions', tab='policies', edit_policy_id=p.id) }}">
-                      {{ t("edit") }}
-                    </a>
+                  <a class="text-slate-300 hover:text-white"
+                     href="{{ url_for('subscriptions', tab='policies', edit_policy_id=p.id) }}">
+                    {{ t("edit") }}
+                  </a>
 
                     <form method="post" action="{{ url_for('stream_policy_delete', policy_id=p.id) }}">
-                      <input type="hidden" name="redirect_endpoint" value="subscriptions">
-                      <input type="hidden" name="redirect_tab" value="policies">
+                      <input type="hidden" name="redirect_endpoint" value="{{ current_redirect_endpoint }}">
+                      <input type="hidden" name="redirect_tab" value="{{ current_redirect_tab }}">
                       <button class="text-red-400 hover:text-red-300">{{ t("delete") }}</button>
                     </form>
-                  {% endif %}
                 </div>
               </td>
             </tr>
@@ -492,13 +502,74 @@
 
           {% if not policies %}
             <tr>
-              <td class="p-4 text-slate-400" colspan="8">
+              <td class="p-4 text-slate-400" colspan="9">
                 {{ t("policies_empty") }}
               </td>
             </tr>
           {% endif %}
         </tbody>
       </table>
+    </div>
+
+    <div class="border-t border-slate-800 px-5 py-4">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-xs text-slate-400">
+        <div id="policyTableSummary">0 result</div>
+
+        <div class="flex items-center gap-2">
+          <button type="button"
+                  id="policyPrevPage"
+                  class="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-950/40 text-slate-200 hover:bg-slate-950/70">
+            {{ t("previous") }}
+          </button>
+
+          <span id="policyPageIndicator" class="text-slate-300">1 / 1</span>
+
+          <button type="button"
+                  id="policyNextPage"
+                  class="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-950/40 text-slate-200 hover:bg-slate-950/70">
+            {{ t("next") }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="policyBulkDeleteModal"
+       class="hidden fixed inset-0 z-50">
+    <div id="policyBulkDeleteModalBackdrop"
+         class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+
+    <div class="relative z-10 flex min-h-full items-center justify-center p-4">
+      <div class="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-800">
+          <h3 class="text-base font-semibold text-white">Delete selected policies</h3>
+          <p class="mt-1 text-sm text-slate-400">
+            This action will permanently delete
+            <span id="policyBulkDeleteModalCount" class="text-slate-200 font-medium">0</span>
+            selected polic<span id="policyBulkDeleteModalPlural">ies</span>.
+          </p>
+        </div>
+
+        <div class="px-5 py-4">
+          <p class="text-sm text-slate-300">
+            Are you sure you want to continue?
+          </p>
+        </div>
+
+        <div class="px-5 py-4 border-t border-slate-800 flex items-center justify-end gap-3">
+          <button type="button"
+                  id="policyBulkDeleteModalCancel"
+                  class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-950/40 text-slate-200 hover:bg-slate-950/70">
+            {{ t("cancel") }}
+          </button>
+
+          <button type="button"
+                  id="policyBulkDeleteModalConfirm"
+                  class="px-4 py-2 rounded-lg border border-red-800 bg-red-950/40 text-red-300 hover:bg-red-950/70 font-medium">
+            {{ t("delete") }}
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -519,6 +590,83 @@
       const nextBtn = document.getElementById('policyNextPage');
       const summaryEl = document.getElementById('policyTableSummary');
       const pageIndicatorEl = document.getElementById('policyPageIndicator');
+
+      const selectAllEl = document.getElementById('policySelectAll');
+      const bulkDeleteBtn = document.getElementById('policyBulkDeleteBtn');
+      const bulkDeleteCountEl = document.getElementById('policyBulkDeleteCount');
+      const bulkDeleteInputs = document.getElementById('policyBulkDeleteInputs');
+      const bulkDeleteForm = document.getElementById('policyBulkDeleteForm');
+
+      const bulkDeleteModal = document.getElementById('policyBulkDeleteModal');
+      const bulkDeleteModalBackdrop = document.getElementById('policyBulkDeleteModalBackdrop');
+      const bulkDeleteModalCancel = document.getElementById('policyBulkDeleteModalCancel');
+      const bulkDeleteModalConfirm = document.getElementById('policyBulkDeleteModalConfirm');
+      const bulkDeleteModalCount = document.getElementById('policyBulkDeleteModalCount');
+      const bulkDeleteModalPlural = document.getElementById('policyBulkDeleteModalPlural');
+
+      function getVisibleRows() {
+        return rows.filter((row) => row.style.display !== 'none');
+      }
+
+      function getVisibleSelectableCheckboxes() {
+        return getVisibleRows()
+          .filter((row) => row.dataset.deletable === '1')
+          .map((row) => row.querySelector('.policy-row-checkbox'))
+          .filter(Boolean);
+      }
+
+      function getAllSelectedCheckboxes() {
+        return rows
+          .map((row) => row.querySelector('.policy-row-checkbox'))
+          .filter((cb) => cb && cb.checked);
+      }
+
+      function syncBulkDeleteState() {
+        const selected = getAllSelectedCheckboxes();
+        const visibleSelectable = getVisibleSelectableCheckboxes();
+        const visibleSelected = visibleSelectable.filter((cb) => cb.checked);
+
+        bulkDeleteInputs.innerHTML = '';
+        selected.forEach((cb) => {
+          const input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = 'policy_ids';
+          input.value = cb.value;
+          bulkDeleteInputs.appendChild(input);
+        });
+
+        bulkDeleteCountEl.textContent = `(${selected.length})`;
+
+        bulkDeleteBtn.disabled = selected.length === 0;
+
+        if (selectAllEl) {
+          if (!visibleSelectable.length) {
+            selectAllEl.checked = false;
+            selectAllEl.indeterminate = false;
+            selectAllEl.disabled = true;
+          } else {
+            selectAllEl.disabled = false;
+            selectAllEl.checked = visibleSelected.length === visibleSelectable.length;
+            selectAllEl.indeterminate = visibleSelected.length > 0 && visibleSelected.length < visibleSelectable.length;
+          }
+        }
+      }
+
+      function openBulkDeleteModal() {
+        const selectedCount = getAllSelectedCheckboxes().length;
+        if (!selectedCount) return;
+
+        bulkDeleteModalCount.textContent = String(selectedCount);
+        bulkDeleteModalPlural.textContent = selectedCount > 1 ? 'ies' : 'y';
+
+        bulkDeleteModal.classList.remove('hidden');
+        document.body.classList.add('overflow-hidden');
+      }
+
+      function closeBulkDeleteModal() {
+        bulkDeleteModal.classList.add('hidden');
+        document.body.classList.remove('overflow-hidden');
+      }
 
       let currentPage = 1;
 
@@ -577,6 +725,8 @@
         prevBtn.classList.toggle('cursor-not-allowed', prevBtn.disabled);
         nextBtn.classList.toggle('opacity-50', nextBtn.disabled);
         nextBtn.classList.toggle('cursor-not-allowed', nextBtn.disabled);
+
+        syncBulkDeleteState();
       }
 
       [filterSearch, filterStatus, filterScope, filterProvider, filterOrigin].forEach((el) => {
@@ -603,6 +753,12 @@
         filterOrigin.value = '';
         pageSizeEl.value = '20';
         currentPage = 1;
+		
+        rows.forEach((row) => {
+          const cb = row.querySelector('.policy-row-checkbox');
+          if (cb) cb.checked = false;
+        });
+		
         render();
       });
 
@@ -614,6 +770,56 @@
       nextBtn.addEventListener('click', () => {
         currentPage += 1;
         render();
+      });
+
+      rows.forEach((row) => {
+        const checkbox = row.querySelector('.policy-row-checkbox');
+        if (!checkbox) return;
+
+        checkbox.addEventListener('change', () => {
+          syncBulkDeleteState();
+        });
+      });
+
+      if (selectAllEl) {
+        selectAllEl.addEventListener('change', () => {
+          const shouldCheck = !!selectAllEl.checked;
+          getVisibleSelectableCheckboxes().forEach((cb) => {
+            cb.checked = shouldCheck;
+          });
+          syncBulkDeleteState();
+        });
+      }
+
+      if (bulkDeleteBtn) {
+        bulkDeleteBtn.addEventListener('click', () => {
+          if (bulkDeleteBtn.disabled) return;
+          openBulkDeleteModal();
+        });
+      }
+
+      if (bulkDeleteModalCancel) {
+        bulkDeleteModalCancel.addEventListener('click', closeBulkDeleteModal);
+      }
+
+      if (bulkDeleteModalBackdrop) {
+        bulkDeleteModalBackdrop.addEventListener('click', closeBulkDeleteModal);
+      }
+
+      if (bulkDeleteModalConfirm && bulkDeleteForm) {
+        bulkDeleteModalConfirm.addEventListener('click', () => {
+          if (!getAllSelectedCheckboxes().length) {
+            closeBulkDeleteModal();
+            return;
+          }
+          bulkDeleteForm.submit();
+        });
+      }
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && bulkDeleteModal && !bulkDeleteModal.classList.contains('hidden')) {
+          closeBulkDeleteModal();
+        }
       });
 
       render();
