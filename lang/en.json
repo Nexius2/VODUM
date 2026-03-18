@@ -395,7 +395,7 @@
   "manual_backup": "Manual backup",
   "manual_backup_desc": "Immediately creates a SQLite database backup.",
   "max_streams_override": "Max streams override",
-  "max_streams_override_help": "If set, this number supersedes max_streams_per_user policies for this user. 0 is allowed.",
+  "max_streams_override_help": "If set to a value greater than 0, this number supersedes max_streams_per_user policies for this user. Empty or 0 = no override, policy applies.",
   "max_streams_override_placeholder": "Leave empty to use policies",
   "merge.master.expiration": "Expiration",
   "merge.master.label": "Master user (kept)",

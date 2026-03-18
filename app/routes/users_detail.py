@@ -327,14 +327,16 @@ def register(app):
             )
             current_referral = dict(current_referral) if current_referral else None
 
-            # Optional per-user stream override (NULL if empty; 0 allowed)
+            # Optional per-user stream override
+            # Empty or 0 => NULL (no override, policy applies)
             raw_override = form.get("max_streams_override")
             max_streams_override = None
             if raw_override is not None:
                 raw_override = raw_override.strip()
                 if raw_override != "":
                     try:
-                        max_streams_override = int(raw_override)
+                        parsed_override = int(raw_override)
+                        max_streams_override = parsed_override if parsed_override > 0 else None
                     except Exception:
                         max_streams_override = None
 
