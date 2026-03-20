@@ -53,7 +53,7 @@
         <input type="text" name="name" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs" value="{{ loaded_template.name if loaded_template else '' }}" required>
       </div>
 
-			<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+			<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
 			  <div class="text-xs">
 				<label class="block mb-1">{{ t('comm_trigger_event') }}</label>
 				{% set ev = (loaded_template.trigger_event if loaded_template and loaded_template.trigger_event else 'expiration') %}
@@ -61,6 +61,7 @@
 				  <option value="expiration" {% if ev == 'expiration' %}selected{% endif %}>{{ t('comm_trigger_expiration') }}</option>
 				  <option value="user_creation" {% if ev == 'user_creation' %}selected{% endif %}>{{ t('comm_trigger_user_creation') }}</option>
 				  <option value="referral_reward" {% if ev == 'referral_reward' %}selected{% endif %}>{{ t('comm_trigger_referral_reward') }}</option>
+				  <option value="expiration_change" {% if ev == 'expiration_change' %}selected{% endif %}>{{ t('comm_trigger_expiration_change') }}</option>
 				</select>
 			  </div>
 
@@ -89,6 +90,17 @@
 				  {% endfor %}
 				</select>
 			  </div>
+			  
+			<div class="text-xs hidden" id="expiration_change_direction_block">
+			  <label class="block mb-1">{{ t('comm_expiration_change_direction') }}</label>
+			  {% set exp_change_dir = (loaded_template.expiration_change_direction if loaded_template and loaded_template.expiration_change_direction else 'all') %}
+			  <select name="expiration_change_direction" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+				<option value="all" {% if exp_change_dir == 'all' %}selected{% endif %}>{{ t('comm_expiration_change_all') }}</option>
+				<option value="increase" {% if exp_change_dir == 'increase' %}selected{% endif %}>{{ t('comm_expiration_change_increase') }}</option>
+				<option value="decrease" {% if exp_change_dir == 'decrease' %}selected{% endif %}>{{ t('comm_expiration_change_decrease') }}</option>
+			  </select>
+			</div>
+			  
 			</div>
 
 		{#
@@ -228,6 +240,11 @@
                     <div><code>{subscription_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_subscription_name_desc") }}</div></div>
                     <div><code>{subscription_value}</code><div class="text-slate-400 mt-1">{{ t("comm_var_subscription_value_desc") }}</div></div>
                     <div><code>{subscription_duration_days}</code><div class="text-slate-400 mt-1">{{ t("comm_var_subscription_duration_days_desc") }}</div></div>
+					<div><code>{old_expiration_date}</code><div class="text-slate-400 mt-1">{{ t("comm_var_old_expiration_date_desc") }}</div></div>
+					<div><code>{new_expiration_date}</code><div class="text-slate-400 mt-1">{{ t("comm_var_new_expiration_date_desc") }}</div></div>
+					<div><code>{expiration_change_days}</code><div class="text-slate-400 mt-1">{{ t("comm_var_expiration_change_days_desc") }}</div></div>
+					<div><code>{expiration_change_signed_days}</code><div class="text-slate-400 mt-1">{{ t("comm_var_expiration_change_signed_days_desc") }}</div></div>
+					<div><code>{expiration_change_direction}</code><div class="text-slate-400 mt-1">{{ t("comm_var_expiration_change_direction_desc") }}</div></div>
                   </div>
                 </div>
 
@@ -283,13 +300,15 @@
             <td class="px-4 py-2">{{ tpl.name }}</td>
             <td class="px-4 py-2">{% if tpl.enabled %}<span class="text-emerald-300">{{ t('yes') }}</span>{% else %}<span class="text-slate-400">{{ t('no') }}</span>{% endif %}</td>
 			<td class="px-4 py-2">
-			  {% if tpl.trigger_event == 'user_creation' %}
-				{{ t('comm_trigger_user_creation') }}
-			  {% elif tpl.trigger_event == 'referral_reward' %}
-				{{ t('comm_trigger_referral_reward') }}
-			  {% else %}
-				{{ t('comm_trigger_expiration') }}
-			  {% endif %}
+				{% if tpl.trigger_event == 'user_creation' %}
+				  {{ t('comm_trigger_user_creation') }}
+				{% elif tpl.trigger_event == 'referral_reward' %}
+				  {{ t('comm_trigger_referral_reward') }}
+				{% elif tpl.trigger_event == 'expiration_change' %}
+				  {{ t('comm_trigger_expiration_change') }}
+				{% else %}
+				  {{ t('comm_trigger_expiration') }}
+				{% endif %}
 			</td>
 
 				<td class="px-4 py-2">
@@ -347,6 +366,7 @@ const triggerSel = document.getElementById('trigger_event');
 
 const blockExpiration = document.getElementById('delay_block_expiration');
 const blockUserCreation = document.getElementById('delay_block_user_creation');
+const blockExpirationChangeDirection = document.getElementById('expiration_change_direction_block');
 
 const daysOffset = document.getElementById('days_offset');
 const dirSelect = document.getElementById('delay_direction_select');
@@ -385,18 +405,36 @@ function refreshDelayUI() {
   if (ev === 'user_creation') {
     blockExpiration && blockExpiration.classList.add('hidden');
     blockUserCreation && blockUserCreation.classList.remove('hidden');
+    blockExpirationChangeDirection && blockExpirationChangeDirection.classList.add('hidden');
 
     setBlockDisabled(blockExpiration, true);
     setBlockDisabled(blockUserCreation, false);
+    setBlockDisabled(blockExpirationChangeDirection, true);
     return;
   }
 
   if (ev === 'referral_reward') {
     blockExpiration && blockExpiration.classList.add('hidden');
     blockUserCreation && blockUserCreation.classList.add('hidden');
+    blockExpirationChangeDirection && blockExpirationChangeDirection.classList.add('hidden');
 
     setBlockDisabled(blockExpiration, true);
     setBlockDisabled(blockUserCreation, true);
+    setBlockDisabled(blockExpirationChangeDirection, true);
+
+    if (hiddenBefore) hiddenBefore.value = '';
+    if (hiddenAfter) hiddenAfter.value = '0';
+    return;
+  }
+
+  if (ev === 'expiration_change') {
+    blockExpiration && blockExpiration.classList.add('hidden');
+    blockUserCreation && blockUserCreation.classList.add('hidden');
+    blockExpirationChangeDirection && blockExpirationChangeDirection.classList.remove('hidden');
+
+    setBlockDisabled(blockExpiration, true);
+    setBlockDisabled(blockUserCreation, true);
+    setBlockDisabled(blockExpirationChangeDirection, false);
 
     if (hiddenBefore) hiddenBefore.value = '';
     if (hiddenAfter) hiddenAfter.value = '0';
@@ -405,9 +443,11 @@ function refreshDelayUI() {
 
   blockUserCreation && blockUserCreation.classList.add('hidden');
   blockExpiration && blockExpiration.classList.remove('hidden');
+  blockExpirationChangeDirection && blockExpirationChangeDirection.classList.add('hidden');
 
   setBlockDisabled(blockUserCreation, true);
   setBlockDisabled(blockExpiration, false);
+  setBlockDisabled(blockExpirationChangeDirection, true);
 
   syncHiddenDelayValues();
 }

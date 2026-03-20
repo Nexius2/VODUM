@@ -182,6 +182,16 @@ def _provider_rank(template_row: Dict, provider: str) -> int:
         return 1
     return -1
 
+def _expiration_change_direction_rank(template_row: Dict, change_direction: str | None) -> int:
+    if not change_direction:
+        return 1
+
+    tpl_dir = (template_row.get("expiration_change_direction") or "all").strip().lower()
+    if tpl_dir == change_direction:
+        return 2
+    if tpl_dir == "all":
+        return 1
+    return -1
 
 def select_comm_template_for_user(
     *,
@@ -189,6 +199,7 @@ def select_comm_template_for_user(
     trigger_event: str,
     provider: str,
     user_id: int,
+    expiration_change_direction: str | None = None,
 ) -> Dict | None:
     sub_ctx = get_user_subscription_context(db, user_id)
     user_subscription_template_id = _safe_int(sub_ctx.get("subscription_template_id"))
@@ -208,6 +219,7 @@ def select_comm_template_for_user(
     candidates = []
     for row in rows:
         tpl = dict(row)
+
         sub_rank = _subscription_scope_rank(tpl, user_subscription_template_id)
         if sub_rank < 0:
             continue
@@ -216,17 +228,33 @@ def select_comm_template_for_user(
         if prov_rank < 0:
             continue
 
+        dir_rank = 0
+        if trigger_event == "expiration_change":
+            dir_rank = _expiration_change_direction_rank(tpl, expiration_change_direction)
+            if dir_rank < 0:
+                continue
+
         tpl["_sub_rank"] = sub_rank
         tpl["_prov_rank"] = prov_rank
+        tpl["_dir_rank"] = dir_rank
         candidates.append(tpl)
 
     if not candidates:
         return None
 
-    candidates.sort(key=lambda x: (-int(x["_sub_rank"]), -int(x["_prov_rank"]), int(x["id"])))
+    candidates.sort(
+        key=lambda x: (
+            -int(x["_sub_rank"]),
+            -int(x["_prov_rank"]),
+            -int(x.get("_dir_rank", 0)),
+            int(x["id"]),
+        )
+    )
+
     best = candidates[0]
     best.pop("_sub_rank", None)
     best.pop("_prov_rank", None)
+    best.pop("_dir_rank", None)
     return best
 
 def schedule_template_notification(

@@ -1148,5 +1148,15 @@
 
 "comm_var_subscription_name_desc": "Name of the user's subscription template.",
 "comm_var_subscription_value_desc": "Value stored on the user's subscription template.",
-"comm_var_subscription_duration_days_desc": "Duration in days stored on the user's subscription template."
+"comm_var_subscription_duration_days_desc": "Duration in days stored on the user's subscription template.",
+"comm_trigger_expiration_change": "Expiration date change",
+"comm_expiration_change_direction": "Change type",
+"comm_expiration_change_all": "Added or removed",
+"comm_expiration_change_increase": "Days added",
+"comm_expiration_change_decrease": "Days removed",
+"comm_var_old_expiration_date_desc": "Previous expiration date before the change.",
+"comm_var_new_expiration_date_desc": "New expiration date after the change.",
+"comm_var_expiration_change_days_desc": "Absolute number of days added or removed.",
+"comm_var_expiration_change_signed_days_desc": "Signed day difference (positive or negative).",
+"comm_var_expiration_change_direction_desc": "Change direction: increase or decrease."
 }

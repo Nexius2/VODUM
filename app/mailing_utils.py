@@ -22,6 +22,13 @@ ALLOWED_VARS = {
     "subscription_name",
     "subscription_value",
     "subscription_duration_days",
+    
+    # expiration dates
+    "old_expiration_date",
+    "new_expiration_date",
+    "expiration_change_days",
+    "expiration_change_signed_days",
+    "expiration_change_direction",
 }
 
 
@@ -63,6 +70,12 @@ def build_user_context(user: dict):
         "subscription_name": user.get("subscription_name", "") or "",
         "subscription_value": user.get("subscription_value", "") or "",
         "subscription_duration_days": user.get("subscription_duration_days", "") or "",
+        
+        "old_expiration_date": user.get("old_expiration_date", "") or "",
+        "new_expiration_date": user.get("new_expiration_date", "") or "",
+        "expiration_change_days": user.get("expiration_change_days", "") or "",
+        "expiration_change_signed_days": user.get("expiration_change_signed_days", "") or "",
+        "expiration_change_direction": user.get("expiration_change_direction", "") or "",
     }
 
 

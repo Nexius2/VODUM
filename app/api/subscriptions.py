@@ -6,6 +6,7 @@ import json
 from db_manager import DBManager
 from logging_utils import get_logger
 from tasks.update_user_status import compute_status
+from communications_engine import select_comm_template_for_user, schedule_template_notification
 
 log = get_logger("api.subscriptions")
 
@@ -139,6 +140,85 @@ def update_user_expiration(user_id, new_expiration_date, reason="manual"):
     # Nouveau cycle détecté
     if new_exp > old_exp:
         log.info(f"[USER #{user_id}] Renewal detected ({old_exp} -> {new_exp}) | keeping email history")
+
+    # --------------------------------------------------
+    # Notification: expiration date changed
+    # Covers:
+    # - manual change from user_detail
+    # - referral reward
+    # - gifts
+    # --------------------------------------------------
+    if new_exp != old_exp:
+        delta_days = (new_exp - old_exp).days
+
+        if delta_days != 0:
+            change_direction = "increase" if delta_days > 0 else "decrease"
+
+            comm_ctx = db.query_one(
+                """
+                SELECT s.provider AS provider, mu.server_id AS server_id
+                FROM media_users mu
+                JOIN servers s ON s.id = mu.server_id
+                WHERE mu.vodum_user_id = ?
+                ORDER BY
+                    CASE s.provider WHEN 'plex' THEN 0 ELSE 1 END,
+                    mu.id ASC
+                LIMIT 1
+                """,
+                (user_id,),
+            )
+
+            if comm_ctx:
+                comm_ctx = dict(comm_ctx)
+                provider = (comm_ctx.get("provider") or "").strip().lower()
+                server_id = comm_ctx.get("server_id")
+
+                if provider in ("plex", "jellyfin"):
+                    tpl = select_comm_template_for_user(
+                        db=db,
+                        trigger_event="expiration_change",
+                        provider=provider,
+                        user_id=int(user_id),
+                        expiration_change_direction=change_direction,
+                    )
+
+                    if tpl:
+                        old_exp_iso = old_exp.isoformat()
+                        new_exp_iso = new_exp.isoformat()
+
+                        payload = {
+                            "event": "expiration_change",
+                            "trigger_event": "expiration_change",
+                            "reason": reason,
+                            "old_expiration_date": old_exp_iso,
+                            "new_expiration_date": new_exp_iso,
+                            "expiration_date": new_exp_iso,
+                            "expiration_change_days": abs(delta_days),
+                            "expiration_change_signed_days": delta_days,
+                            "expiration_change_direction": change_direction,
+                        }
+
+                        dedupe_key = (
+                            f"expiration_change:template:{int(tpl['id'])}:"
+                            f"user:{int(user_id)}:old:{old_exp_iso}:new:{new_exp_iso}"
+                        )
+
+                        schedule_template_notification(
+                            db=db,
+                            template_id=int(tpl["id"]),
+                            user_id=int(user_id),
+                            provider=provider,
+                            server_id=server_id,
+                            send_at_modifier=None,
+                            payload=payload,
+                            dedupe_key=dedupe_key,
+                            max_attempts=10,
+                        )
+
+                        log.info(
+                            f"[USER #{user_id}] expiration_change notification queued "
+                            f"| {old_exp_iso} -> {new_exp_iso} | delta={delta_days} | reason={reason}"
+                        )
 
     return True, "Expiration updated"
 

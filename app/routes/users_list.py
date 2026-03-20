@@ -653,6 +653,90 @@ def merge_vodum_users(db, master_id: int, other_id: int) -> None:
         (master_id, other_id),
     )
 
+    # 3ter) Dédupliquer les media_users après merge
+    # Cas typique :
+    # - le master et le other avaient déjà chacun une ligne media_users
+    #   pour le même serveur / même compte Plex-Jellyfin
+    # - après UPDATE vodum_user_id, on se retrouve avec 2 lignes identiques
+    duplicate_groups = db.query(
+        """
+        SELECT
+            server_id,
+            type,
+            COALESCE(NULLIF(TRIM(external_user_id), ''), '__NO_EXTERNAL__') AS ext_key,
+            LOWER(TRIM(COALESCE(username, ''))) AS user_key,
+            COUNT(*) AS cnt
+        FROM media_users
+        WHERE vodum_user_id = ?
+        GROUP BY
+            server_id,
+            type,
+            COALESCE(NULLIF(TRIM(external_user_id), ''), '__NO_EXTERNAL__'),
+            LOWER(TRIM(COALESCE(username, '')))
+        HAVING COUNT(*) > 1
+        """,
+        (master_id,),
+    )
+
+    for grp in duplicate_groups:
+        dup_rows = db.query(
+            """
+            SELECT id, details_json, raw_json
+            FROM media_users
+            WHERE vodum_user_id = ?
+              AND server_id = ?
+              AND type = ?
+              AND COALESCE(NULLIF(TRIM(external_user_id), ''), '__NO_EXTERNAL__') = ?
+              AND LOWER(TRIM(COALESCE(username, ''))) = ?
+            ORDER BY
+                CASE
+                    WHEN COALESCE(NULLIF(TRIM(details_json), ''), '') <> '' THEN 0
+                    ELSE 1
+                END,
+                CASE
+                    WHEN COALESCE(NULLIF(TRIM(raw_json), ''), '') <> '' THEN 0
+                    ELSE 1
+                END,
+                id ASC
+            """,
+            (
+                master_id,
+                grp["server_id"],
+                grp["type"],
+                grp["ext_key"],
+                grp["user_key"],
+            ),
+        )
+
+        if len(dup_rows) <= 1:
+            continue
+
+        keep_id = int(dup_rows[0]["id"])
+        duplicate_ids = [int(r["id"]) for r in dup_rows[1:]]
+
+        if not duplicate_ids:
+            continue
+
+        placeholders = ",".join("?" * len(duplicate_ids))
+
+        # Rebrancher toutes les bibliothèques sur la ligne conservée
+        db.execute(
+            f"""
+            INSERT OR IGNORE INTO media_user_libraries(media_user_id, library_id)
+            SELECT ?, library_id
+            FROM media_user_libraries
+            WHERE media_user_id IN ({placeholders})
+            """,
+            (keep_id, *duplicate_ids),
+        )
+
+        # Supprimer les doublons media_users
+        # media_user_libraries sera nettoyé par ON DELETE CASCADE
+        db.execute(
+            f"DELETE FROM media_users WHERE id IN ({placeholders})",
+            tuple(duplicate_ids),
+        )
+
     # 4) Merge champs (master prioritaire, other complète)
     merged = {}
 

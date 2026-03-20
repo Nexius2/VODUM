@@ -1140,7 +1140,17 @@
 
 "comm_var_subscription_name_desc": "Nom du template d'abonnement de l'utilisateur.",
 "comm_var_subscription_value_desc": "Valeur enregistrée sur le template d'abonnement de l'utilisateur.",
-"comm_var_subscription_duration_days_desc": "Durée en jours enregistrée sur le template d'abonnement de l'utilisateur."
+"comm_var_subscription_duration_days_desc": "Durée en jours enregistrée sur le template d'abonnement de l'utilisateur.",
+"comm_trigger_expiration_change": "Changement de date d'expiration",
+"comm_expiration_change_direction": "Type de changement",
+"comm_expiration_change_all": "Ajout ou retrait",
+"comm_expiration_change_increase": "Jours ajoutés",
+"comm_expiration_change_decrease": "Jours retirés",
+"comm_var_old_expiration_date_desc": "Ancienne date d'expiration avant modification.",
+"comm_var_new_expiration_date_desc": "Nouvelle date d'expiration après modification.",
+"comm_var_expiration_change_days_desc": "Nombre absolu de jours ajoutés ou retirés.",
+"comm_var_expiration_change_signed_days_desc": "Différence signée en jours (positive ou négative).",
+"comm_var_expiration_change_direction_desc": "Type de variation : increase ou decrease."
 
   
 }
