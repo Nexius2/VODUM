@@ -856,21 +856,60 @@ def api_users_create():
                 if not selected_lib_ids:
                     continue
 
-                cur2 = db.execute(
-                    """
-                    INSERT INTO media_users(server_id, vodum_user_id, external_user_id, username, email, type, details_json)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        sid2,
-                        vodum_user_id,
-                        external_user_id,
-                        server_username or username,
-                        email or None,
-                        "plex",
-                        json.dumps(details_json) if details_json else None,
-                    ),
-                )
+                existing_mu = None
+                if external_user_id:
+                    existing_mu = db.query_one(
+                        """
+                        SELECT id
+                        FROM media_users
+                        WHERE server_id = ?
+                          AND type = 'plex'
+                          AND external_user_id = ?
+                        LIMIT 1
+                        """,
+                        (sid2, str(external_user_id)),
+                    )
+
+                if existing_mu:
+                    db.execute(
+                        """
+                        UPDATE media_users
+                        SET vodum_user_id = ?,
+                            username = ?,
+                            email = ?,
+                            details_json = ?
+                        WHERE id = ?
+                        """,
+                        (
+                            vodum_user_id,
+                            server_username or username,
+                            email or None,
+                            json.dumps(details_json) if details_json else None,
+                            existing_mu["id"],
+                        ),
+                    )
+                    media_user_id = existing_mu["id"]
+                else:
+                    cur2 = db.execute(
+                        """
+                        INSERT INTO media_users(server_id, vodum_user_id, external_user_id, username, email, type, details_json)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            sid2,
+                            vodum_user_id,
+                            external_user_id,
+                            server_username or username,
+                            email or None,
+                            "plex",
+                            json.dumps(details_json) if details_json else None,
+                        ),
+                    )
+                    media_user_id = cur2.lastrowid
+                    try:
+                        cur2.close()
+                    except Exception:
+                        pass
                 media_user_id = cur2.lastrowid
                 try:
                     cur2.close()

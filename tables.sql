@@ -99,6 +99,11 @@ CREATE TABLE IF NOT EXISTS media_users (
     FOREIGN KEY(vodum_user_id) REFERENCES vodum_users(id)
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS uq_media_users_provider_server_external
+ON media_users(server_id, type, external_user_id)
+WHERE external_user_id IS NOT NULL
+  AND TRIM(external_user_id) <> '';
+
 CREATE INDEX IF NOT EXISTS idx_media_users_server
 ON media_users(server_id);
 
@@ -878,8 +883,9 @@ CREATE TABLE IF NOT EXISTS comm_templates (
   enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
 
   -- trigger system
-  trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','referral_reward')),
+  trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','referral_reward','expiration_change')),
   trigger_provider TEXT NOT NULL DEFAULT 'all' CHECK(trigger_provider IN ('all','plex','jellyfin')),
+  expiration_change_direction TEXT NOT NULL DEFAULT 'all' CHECK(expiration_change_direction IN ('all','increase','decrease')),
 
   -- subscription targeting
   subscription_scope TEXT NOT NULL DEFAULT 'none' CHECK(subscription_scope IN ('none','all','specific')),
@@ -888,7 +894,7 @@ CREATE TABLE IF NOT EXISTS comm_templates (
   -- expiration flow
   days_before INTEGER DEFAULT NULL,
 
-  -- user creation flow
+  -- user creation / immediate event flow
   days_after INTEGER DEFAULT NULL,
 
   subject TEXT NOT NULL,

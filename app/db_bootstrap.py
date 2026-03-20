@@ -693,8 +693,9 @@ def run_migrations():
             body TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','referral_reward')),
+            trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','referral_reward','expiration_change')),
             trigger_provider TEXT NOT NULL DEFAULT 'all' CHECK(trigger_provider IN ('all','plex','jellyfin')),
+            expiration_change_direction TEXT NOT NULL DEFAULT 'all' CHECK(expiration_change_direction IN ('all','increase','decrease')),
             days_after INTEGER DEFAULT NULL,
             subscription_scope TEXT NOT NULL DEFAULT 'none' CHECK(subscription_scope IN ('none','all','specific')),
             subscription_template_id INTEGER DEFAULT NULL,
@@ -703,18 +704,23 @@ def run_migrations():
         """)
         conn.commit()
 
-    # ✅ IMPORTANT: these columns MUST be ensured even if the table already exists
     ensure_column(
         cursor,
         "comm_templates",
         "trigger_event",
-        "TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','referral_reward'))",
+        "TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','referral_reward','expiration_change'))",
     )
     ensure_column(
         cursor,
         "comm_templates",
         "trigger_provider",
         "TEXT NOT NULL DEFAULT 'all' CHECK(trigger_provider IN ('all','plex','jellyfin'))",
+    )
+    ensure_column(
+        cursor,
+        "comm_templates",
+        "expiration_change_direction",
+        "TEXT NOT NULL DEFAULT 'all' CHECK(expiration_change_direction IN ('all','increase','decrease'))",
     )
     ensure_column(cursor, "comm_templates", "days_after", "INTEGER DEFAULT NULL")
     ensure_column(
@@ -726,16 +732,20 @@ def run_migrations():
     ensure_column(cursor, "comm_templates", "subscription_template_id", "INTEGER DEFAULT NULL")
     conn.commit()
 
-    def comm_templates_has_referral_reward_trigger():
+    def comm_templates_schema_needs_upgrade():
         cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='comm_templates'")
         row = cursor.fetchone()
         if not row or not row[0]:
-            return False
-        sql = row[0].lower()
-        return "'referral_reward'" in sql
+            return True
+        sql = (row[0] or "").lower()
+        if "'expiration_change'" not in sql:
+            return True
+        if "expiration_change_direction" not in sql:
+            return True
+        return False
 
-    if table_exists(cursor, "comm_templates") and not comm_templates_has_referral_reward_trigger():
-        print("🛠 Upgrading comm_templates.trigger_event CHECK (add referral_reward)")
+    if table_exists(cursor, "comm_templates") and comm_templates_schema_needs_upgrade():
+        print("🛠 Upgrading comm_templates schema (add expiration_change trigger + direction)")
         cursor.execute("ALTER TABLE comm_templates RENAME TO comm_templates_old")
 
         cursor.execute("""
@@ -749,8 +759,9 @@ def run_migrations():
             body TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','referral_reward')),
+            trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','referral_reward','expiration_change')),
             trigger_provider TEXT NOT NULL DEFAULT 'all' CHECK(trigger_provider IN ('all','plex','jellyfin')),
+            expiration_change_direction TEXT NOT NULL DEFAULT 'all' CHECK(expiration_change_direction IN ('all','increase','decrease')),
             days_after INTEGER DEFAULT NULL,
             subscription_scope TEXT NOT NULL DEFAULT 'none' CHECK(subscription_scope IN ('none','all','specific')),
             subscription_template_id INTEGER DEFAULT NULL,
@@ -761,12 +772,15 @@ def run_migrations():
         cursor.execute("""
         INSERT INTO comm_templates (
             id, key, name, enabled, days_before, subject, body,
-            created_at, updated_at, trigger_event, trigger_provider, days_after,
+            created_at, updated_at, trigger_event, trigger_provider,
+            expiration_change_direction, days_after,
             subscription_scope, subscription_template_id
         )
         SELECT
             id, key, name, enabled, days_before, subject, body,
-            created_at, updated_at, trigger_event, trigger_provider, days_after,
+            created_at, updated_at, trigger_event, trigger_provider,
+            'all',
+            days_after,
             COALESCE(subscription_scope, 'none'),
             subscription_template_id
         FROM comm_templates_old
@@ -774,7 +788,7 @@ def run_migrations():
 
         cursor.execute("DROP TABLE comm_templates_old")
         conn.commit()
-        print("✔ comm_templates.trigger_event constraint upgraded.")
+        print("✔ comm_templates schema upgraded.")
 
     # -------------------------------------------------
     # Communications scheduled queue (NEW)
@@ -1530,6 +1544,12 @@ def run_migrations():
     # -------------------------------------------------
     # 2.6 Server deletion performance indexes
     # -------------------------------------------------
+    cursor.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_media_users_provider_server_external
+        ON media_users(server_id, type, external_user_id)
+        WHERE external_user_id IS NOT NULL
+          AND TRIM(external_user_id) <> ''
+    """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_users_server ON media_users(server_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_users_vodum_user ON media_users(vodum_user_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_libraries_server ON libraries(server_id)")

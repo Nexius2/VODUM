@@ -432,12 +432,19 @@ def register(app):
                     n += 1
 
             trigger_event = (request.form.get("trigger_event") or "expiration").strip().lower()
-            if trigger_event not in ("expiration", "user_creation", "referral_reward"):
+            if trigger_event not in ("expiration", "user_creation", "referral_reward", "expiration_change"):
                 trigger_event = "expiration"
 
             trigger_provider = (request.form.get("trigger_provider") or "all").strip().lower()
             if trigger_provider not in ("all", "plex", "jellyfin"):
                 trigger_provider = "all"
+
+            expiration_change_direction = (request.form.get("expiration_change_direction") or "all").strip().lower()
+            if expiration_change_direction not in ("all", "increase", "decrease"):
+                expiration_change_direction = "all"
+
+            if trigger_event != "expiration_change":
+                expiration_change_direction = "all"
 
             days_after_raw = (request.form.get("days_after") or "").strip()
             days_after = None
@@ -475,7 +482,7 @@ def register(app):
                 if days_after is None:
                     days_after = 0
                 delay_direction = "after"
-            elif trigger_event == "referral_reward":
+            elif trigger_event in ("referral_reward", "expiration_change"):
                 days_before = None
                 days_after = 0
                 delay_direction = "after"
@@ -503,17 +510,17 @@ def register(app):
                 """
                 INSERT INTO comm_templates(
                     key, name, enabled,
-                    trigger_event, trigger_provider,
+                    trigger_event, trigger_provider, expiration_change_direction,
                     subscription_scope, subscription_template_id,
                     days_before, days_after,
                     subject, body,
                     created_at, updated_at
                 )
-                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """,
                 (
                     key, name, enabled,
-                    trigger_event, trigger_provider,
+                    trigger_event, trigger_provider, expiration_change_direction,
                     subscription_scope, subscription_template_id,
                     days_before, days_after,
                     subject, body,
@@ -541,12 +548,19 @@ def register(app):
             enabled = 1 if request.form.get("enabled") == "1" else 0
 
             trigger_event = (request.form.get("trigger_event") or "expiration").strip().lower()
-            if trigger_event not in ("expiration", "user_creation", "referral_reward"):
+            if trigger_event not in ("expiration", "user_creation", "referral_reward", "expiration_change"):
                 trigger_event = "expiration"
 
             trigger_provider = (request.form.get("trigger_provider") or "all").strip().lower()
             if trigger_provider not in ("all", "plex", "jellyfin"):
                 trigger_provider = "all"
+
+            expiration_change_direction = (request.form.get("expiration_change_direction") or "all").strip().lower()
+            if expiration_change_direction not in ("all", "increase", "decrease"):
+                expiration_change_direction = "all"
+
+            if trigger_event != "expiration_change":
+                expiration_change_direction = "all"
 
             subscription_scope_raw = (request.form.get("subscription_scope_value") or "none").strip()
             subscription_scope = "none"
@@ -636,7 +650,7 @@ def register(app):
                 if days_after is None:
                     days_after = 0
                 delay_direction = "after"
-            elif trigger_event == "referral_reward":
+            elif trigger_event in ("referral_reward", "expiration_change"):
                 days_before = None
                 days_after = 0
                 delay_direction = "after"
@@ -663,6 +677,7 @@ def register(app):
                   enabled=?,
                   trigger_event=?,
                   trigger_provider=?,
+                  expiration_change_direction=?,
                   subscription_scope=?,
                   subscription_template_id=?,
                   days_before=?,
@@ -674,6 +689,7 @@ def register(app):
                 """,
                 (
                     name, enabled, trigger_event, trigger_provider,
+                    expiration_change_direction,
                     subscription_scope, subscription_template_id,
                     days_before, days_after,
                     subject, body,

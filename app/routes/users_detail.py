@@ -788,6 +788,23 @@ def register(app):
             FROM media_users mu
             JOIN servers s ON s.id = mu.server_id
             WHERE mu.vodum_user_id = ?
+              AND mu.id = (
+                    SELECT mu2.id
+                    FROM media_users mu2
+                    WHERE mu2.vodum_user_id = mu.vodum_user_id
+                      AND mu2.server_id = mu.server_id
+                    ORDER BY
+                        CASE
+                            WHEN COALESCE(NULLIF(TRIM(mu2.details_json), ''), '') <> '' THEN 0
+                            ELSE 1
+                        END,
+                        CASE
+                            WHEN COALESCE(NULLIF(TRIM(mu2.raw_json), ''), '') <> '' THEN 0
+                            ELSE 1
+                        END,
+                        mu2.id ASC
+                    LIMIT 1
+              )
             ORDER BY s.type, s.name
             """,
             (user_id,),
@@ -837,18 +854,18 @@ def register(app):
                 l.*,
                 s.name AS server_name,
                 CASE
-                    WHEN mul.media_user_id IS NOT NULL THEN 1
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM media_user_libraries mul
+                        JOIN media_users mu ON mu.id = mul.media_user_id
+                        WHERE mul.library_id = l.id
+                          AND mu.vodum_user_id = ?
+                          AND mu.server_id = l.server_id
+                    ) THEN 1
                     ELSE 0
                 END AS has_access
             FROM libraries l
             JOIN servers s ON s.id = l.server_id
-            LEFT JOIN media_user_libraries mul
-                   ON mul.library_id = l.id
-                  AND mul.media_user_id IN (
-                        SELECT id
-                        FROM media_users
-                        WHERE vodum_user_id = ?
-                   )
             ORDER BY s.name, l.name
             """,
             (user_id,),
