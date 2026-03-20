@@ -29,6 +29,7 @@ ALLOWED_VARS = {
     "expiration_change_days",
     "expiration_change_signed_days",
     "expiration_change_direction",
+    "expiration_change_reason",
 }
 
 
@@ -76,6 +77,7 @@ def build_user_context(user: dict):
         "expiration_change_days": user.get("expiration_change_days", "") or "",
         "expiration_change_signed_days": user.get("expiration_change_signed_days", "") or "",
         "expiration_change_direction": user.get("expiration_change_direction", "") or "",
+        "expiration_change_reason": user.get("expiration_change_reason", "") or "",
     }
 
 
