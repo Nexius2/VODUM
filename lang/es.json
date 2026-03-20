@@ -1158,6 +1158,7 @@
 "comm_var_new_expiration_date_desc": "New expiration date after the change.",
 "comm_var_expiration_change_days_desc": "Absolute number of days added or removed.",
 "comm_var_expiration_change_signed_days_desc": "Signed day difference (positive or negative).",
-"comm_var_expiration_change_direction_desc": "Change direction: increase or decrease."
+"comm_var_expiration_change_direction_desc": "Change direction: increase or decrease.",
+"comm_var_expiration_change_reason_desc": "Reason for the expiration date change (gift, referral, manual update...)."
 
 }

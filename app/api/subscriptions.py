@@ -186,10 +186,21 @@ def update_user_expiration(user_id, new_expiration_date, reason="manual"):
                         old_exp_iso = old_exp.isoformat()
                         new_exp_iso = new_exp.isoformat()
 
+                        reason_map = {
+                            "manual": "Modification manuelle",
+                            "manual_update": "Modification manuelle",
+                            "gift": "Cadeau",
+                            "referral_reward": "Récompense de parrainage",
+                            "referral": "Récompense de parrainage",
+                        }
+
+                        reason_label = reason_map.get(reason, reason or "")
+
                         payload = {
                             "event": "expiration_change",
                             "trigger_event": "expiration_change",
                             "reason": reason,
+                            "expiration_change_reason": reason_label,
                             "old_expiration_date": old_exp_iso,
                             "new_expiration_date": new_exp_iso,
                             "expiration_date": new_exp_iso,

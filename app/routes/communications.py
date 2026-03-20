@@ -446,6 +446,33 @@ def register(app):
             if trigger_event != "expiration_change":
                 expiration_change_direction = "all"
 
+            subscription_scope_raw = (request.form.get("subscription_scope_value") or "none").strip()
+            subscription_scope = "none"
+            subscription_template_id = None
+
+            if subscription_scope_raw == "all":
+                subscription_scope = "all"
+            elif subscription_scope_raw.startswith("subscription:"):
+                sub_id_raw = subscription_scope_raw.split(":", 1)[1].strip()
+                try:
+                    subscription_template_id = int(sub_id_raw)
+                except Exception:
+                    subscription_template_id = None
+
+                if subscription_template_id:
+                    sub_exists = db.query_one(
+                        "SELECT id FROM subscription_templates WHERE id = ?",
+                        (subscription_template_id,),
+                    )
+                    if sub_exists:
+                        subscription_scope = "specific"
+                    else:
+                        subscription_scope = "none"
+                        subscription_template_id = None
+                else:
+                    subscription_scope = "none"
+                    subscription_template_id = None
+
             days_after_raw = (request.form.get("days_after") or "").strip()
             days_after = None
             if days_after_raw != "":
@@ -588,31 +615,7 @@ def register(app):
                     subscription_scope = "none"
                     subscription_template_id = None
 
-            subscription_scope_raw = (request.form.get("subscription_scope_value") or "none").strip()
-            subscription_scope = "none"
-            subscription_template_id = None
 
-            if subscription_scope_raw == "all":
-                subscription_scope = "all"
-            elif subscription_scope_raw.startswith("subscription:"):
-                sub_id_raw = subscription_scope_raw.split(":", 1)[1].strip()
-                try:
-                    subscription_template_id = int(sub_id_raw)
-                except Exception:
-                    subscription_template_id = None
-                if subscription_template_id:
-                    sub_exists = db.query_one(
-                        "SELECT id FROM subscription_templates WHERE id = ?",
-                        (subscription_template_id,),
-                    )
-                    if sub_exists:
-                        subscription_scope = "specific"
-                    else:
-                        subscription_scope = "none"
-                        subscription_template_id = None
-                else:
-                    subscription_scope = "none"
-                    subscription_template_id = None
 
             days_after_raw = (request.form.get("days_after") or "").strip()
             days_after = None

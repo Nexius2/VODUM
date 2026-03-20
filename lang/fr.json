@@ -1150,7 +1150,9 @@
 "comm_var_new_expiration_date_desc": "Nouvelle date d'expiration après modification.",
 "comm_var_expiration_change_days_desc": "Nombre absolu de jours ajoutés ou retirés.",
 "comm_var_expiration_change_signed_days_desc": "Différence signée en jours (positive ou négative).",
-"comm_var_expiration_change_direction_desc": "Type de variation : increase ou decrease."
+"comm_var_expiration_change_direction_desc": "Type de variation : increase ou decrease.",
+"comm_var_expiration_change_reason_desc": "Cause du changement de date d'expiration (cadeau, parrainage, modification manuelle...).",
+"comm_var_expiration_change_reason_desc": "Reason for the expiration date change (gift, referral, manual update...)."
 
   
 }
