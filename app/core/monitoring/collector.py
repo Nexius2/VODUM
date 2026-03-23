@@ -513,70 +513,15 @@ def collect_sessions_for_server(
                             e,
                         )
                         raise
+
+                # 3) Sinon, insertion.
+                # Si une ligne existe déjà pour (server_id, session_key),
+                # on ne réinsère pas : on met simplement à jour la ligne existante.
+                if updated == 0:
                     try:
                         cur = db.execute(
                             """
-                            UPDATE media_session_history
-                            SET
-                              stopped_at = ?,
-                              watch_ms = CASE
-                                WHEN ? > watch_ms THEN ?
-                                ELSE watch_ms
-                              END,
-                              duration_ms = CASE
-                                WHEN ? > duration_ms THEN ?
-                                ELSE duration_ms
-                              END,
-                              peak_bitrate = COALESCE(peak_bitrate, ?),
-                              was_transcode = MAX(was_transcode, ?),
-                              raw_json = COALESCE(?, raw_json),
-                              ip = COALESCE(?, ip),
-                              device = COALESCE(?, device),
-                              client_product = COALESCE(?, client_product),
-                              library_section_id = COALESCE(?, library_section_id),
-                              session_key = COALESCE(session_key, ?)
-                            WHERE server_id = ?
-                              AND media_user_id = ?
-                              AND started_at = ?
-                              AND media_key = ?
-                              AND client_name = ?
-                            """,
-                            (
-                                stopped_at,
-                                watch_ms, watch_ms,
-                                duration_ms, duration_ms,
-                                peak_bitrate,
-                                was_transcode,
-                                raw_json,
-                                ip,
-                                device,
-                                client_product,
-                                library_section_id,
-                                session_key,
-                                server_id,
-                                media_user_id,
-                                started_at,
-                                media_key,
-                                client_name,
-                            ),
-                        )
-                        updated = int(getattr(cur, "rowcount", 0) or 0)
-                    except Exception as e:
-                        _log_history_write_error(
-                            server_id,
-                            provider_name,
-                            "update_by_tautulli_dedup",
-                            live,
-                            e,
-                        )
-                        raise
-
-                # 3) Sinon, vraie insertion
-                if updated == 0:
-                    try:
-                        db.execute(
-                            """
-                            INSERT INTO media_session_history (
+                            INSERT OR IGNORE INTO media_session_history (
                               server_id, provider,
                               session_key, media_key, external_user_id, media_user_id,
                               media_type, title, grandparent_title, parent_title,
@@ -599,6 +544,68 @@ def collect_sessions_for_server(
                                 raw_json, library_section_id,
                             ),
                         )
+
+                        inserted = int(getattr(cur, "rowcount", 0) or 0)
+
+                        if inserted == 0 and session_key:
+                            db.execute(
+                                """
+                                UPDATE media_session_history
+                                SET
+                                  provider = COALESCE(provider, ?),
+                                  media_key = COALESCE(media_key, ?),
+                                  external_user_id = COALESCE(external_user_id, ?),
+                                  media_user_id = COALESCE(media_user_id, ?),
+                                  media_type = COALESCE(media_type, ?),
+                                  title = COALESCE(title, ?),
+                                  grandparent_title = COALESCE(grandparent_title, ?),
+                                  parent_title = COALESCE(parent_title, ?),
+                                  started_at = COALESCE(started_at, ?),
+                                  stopped_at = ?,
+                                  duration_ms = CASE
+                                    WHEN ? > COALESCE(duration_ms, 0) THEN ?
+                                    ELSE duration_ms
+                                  END,
+                                  watch_ms = CASE
+                                    WHEN ? > COALESCE(watch_ms, 0) THEN ?
+                                    ELSE watch_ms
+                                  END,
+                                  peak_bitrate = COALESCE(peak_bitrate, ?),
+                                  was_transcode = MAX(COALESCE(was_transcode, 0), ?),
+                                  client_name = COALESCE(client_name, ?),
+                                  client_product = COALESCE(client_product, ?),
+                                  device = COALESCE(device, ?),
+                                  ip = COALESCE(ip, ?),
+                                  raw_json = COALESCE(?, raw_json),
+                                  library_section_id = COALESCE(library_section_id, ?)
+                                WHERE server_id = ?
+                                  AND session_key = ?
+                                """,
+                                (
+                                    provider_name,
+                                    media_key,
+                                    external_user_id,
+                                    media_user_id,
+                                    media_type,
+                                    title,
+                                    grandparent_title,
+                                    parent_title,
+                                    started_at,
+                                    stopped_at,
+                                    duration_ms, duration_ms,
+                                    watch_ms, watch_ms,
+                                    peak_bitrate,
+                                    was_transcode,
+                                    client_name,
+                                    client_product,
+                                    device,
+                                    ip,
+                                    raw_json,
+                                    library_section_id,
+                                    server_id,
+                                    session_key,
+                                ),
+                            )
                     except Exception as e:
                         _log_history_write_error(
                             server_id,
