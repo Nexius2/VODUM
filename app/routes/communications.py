@@ -228,10 +228,18 @@ def register(app):
         # Delete
         if request.method == "POST" and request.form.get("action") == "delete":
             cid = request.form.get("campaign_id", type=int)
+
             if not cid:
                 flash(t("comm_not_found"), "error")
                 return redirect(url_for("communications_campaigns_page"))
+
+            existing = db.query_one("SELECT id FROM comm_campaigns WHERE id = ?", (cid,))
+            if not existing:
+                flash(t("comm_not_found"), "error")
+                return redirect(url_for("communications_campaigns_page"))
+
             db.execute("DELETE FROM comm_campaigns WHERE id = ?", (cid,))
+
             add_log("info", "communications", "Campaign deleted", {"id": cid})
             flash(t("comm_campaign_deleted"), "success")
             return redirect(url_for("communications_campaigns_page"))

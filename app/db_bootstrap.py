@@ -423,6 +423,8 @@ def run_migrations():
     ensure_column(cursor, "vodum_users", "renewal_method", "TEXT DEFAULT NULL")
     ensure_column(cursor, "vodum_users", "renewal_date", "TEXT DEFAULT NULL")
     ensure_column(cursor, "vodum_users", "referrer_user_id", "INTEGER DEFAULT NULL")
+    ensure_column(cursor, "vodum_users", "last_status", "TEXT DEFAULT NULL")
+    ensure_column(cursor, "vodum_users", "status_changed_at", "TIMESTAMP DEFAULT NULL")
 
     # Subscription template assignment
     ensure_column(cursor, "vodum_users", "subscription_template_id", "INTEGER DEFAULT NULL")

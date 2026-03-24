@@ -107,7 +107,7 @@ def register(app):
                 ),
             )
 
-            add_log(db, "subscriptions", "Subscription settings updated")
+            add_log("info", "subscriptions", "Subscription settings updated")
             flash("settings_saved", "success")
             return redirect(url_for("subscriptions", tab="settings"))
 
@@ -348,7 +348,7 @@ def register(app):
                 """,
                 (name, notes, duration_days, subscription_value, json.dumps(clean), template_id),
             )
-            add_log(db, "subscriptions", f"Template updated: {name} (id={template_id})")
+            add_log("info", "subscriptions", f"Template updated: {name} (id={template_id})")
             flash("subscription_template_saved", "success")
         else:
             # Create
@@ -369,7 +369,7 @@ def register(app):
                 """,
                 (name, notes, duration_days, subscription_value, json.dumps(clean)),
             )
-            add_log(db, "subscriptions", f"Template created: {name}")
+            add_log("info", "subscriptions", f"Template created: {name}")
             flash("subscription_template_created", "success")
 
         return redirect(url_for("subscriptions", tab="templates"))
@@ -409,7 +409,7 @@ def register(app):
                 tpl.get("policies_json") or "[]",
             ),
         )
-        add_log(db, "subscriptions", f"Template duplicated: {base_name} -> {new_name}")
+        add_log("info", "subscriptions", f"Template duplicated: {base_name} -> {new_name}")
         flash("subscription_template_duplicated", "success")
         return redirect(url_for("subscriptions", tab="templates"))
 
@@ -427,7 +427,7 @@ def register(app):
         # Unassign users (keep snapshot policies as-is)
         db.execute("UPDATE vodum_users SET subscription_template_id=NULL WHERE subscription_template_id=?", (template_id,))
         db.execute("DELETE FROM subscription_templates WHERE id=?", (template_id,))
-        add_log(db, "subscriptions", f"Template deleted: {name} (id={template_id})")
+        add_log("info", "subscriptions", f"Template deleted: {name} (id={template_id})")
         flash("subscription_template_deleted", "success")
         return redirect(url_for("subscriptions", tab="templates"))
 
@@ -536,7 +536,7 @@ def register(app):
                 return redirect(url_for("subscriptions", tab="applications"))
 
             _clear_template_snapshot(db, user_id)
-            add_log(db, "subscriptions", f"Subscription removed for user #{user_id}")
+            add_log("info", "subscriptions", f"Subscription removed for user #{user_id}")
             flash("subscription_apply_success", "success")
             return redirect(url_for("subscriptions", tab="applications"))
 
@@ -550,7 +550,7 @@ def register(app):
             flash("subscription_template_not_found", "error")
             return redirect(url_for("subscriptions", tab="applications"))
 
-        add_log(db, "subscriptions", f"Template applied to user #{user_id}: {tname} (template_id={template_id})")
+        add_log("info", "subscriptions", f"Template applied to user #{user_id}: {tname} (template_id={template_id})")
         flash("subscription_apply_success", "success")
         return redirect(url_for("subscriptions", tab="applications"))
 
@@ -599,7 +599,7 @@ def register(app):
                     applied += 1
 
                 add_log(
-                    db,
+                    "info",
                     "subscriptions",
                     f"Subscription removed in bulk for server #{server_id} ({applied} users)"
                 )
@@ -614,7 +614,7 @@ def register(app):
                 applied += 1
 
             add_log(
-                db,
+                "info",
                 "subscriptions",
                 f"Template bulk-applied to server #{server_id}: {tname} (template_id={template_id}) to {applied} users"
             )
