@@ -33,6 +33,12 @@
     <form method="post" enctype="multipart/form-data" class="space-y-4">
       <input type="hidden" name="action" id="campaign_action" value="{% if loaded_campaign %}save{% else %}create{% endif %}">
       <input type="hidden" name="campaign_id" value="{{ loaded_campaign.id if loaded_campaign else '' }}">
+
+		{% if not loaded_campaign %}
+		<script>
+		document.querySelector('[onclick="openDeleteModal()"]')?.setAttribute('disabled', true);
+		</script>
+		{% endif %}
       <input type="hidden" name="is_test" id="is_test" value="{{ 1 if loaded_campaign and loaded_campaign.is_test else 0 }}">
 
       <div class="text-xs">
@@ -89,9 +95,11 @@
             {{ t('send') }}
           </button>
 
-          <button type="submit" name="action" value="delete" class="px-3 py-1.5 rounded-lg bg-rose-700/50 hover:bg-rose-700 text-xs font-medium" onclick="return confirm('{{ t('confirm_delete') }}')">
-            {{ t('delete') }}
-          </button>
+			<button type="button"
+			  class="px-3 py-1.5 rounded-lg bg-rose-700/50 hover:bg-rose-700 text-xs font-medium"
+			  onclick="openDeleteModal()">
+			  {{ t('delete') }}
+			</button>
 
           <a href="{{ url_for('communications_campaigns_page') }}" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium">
             {{ t('new') }}
@@ -163,6 +171,47 @@ document.addEventListener('DOMContentLoaded', () => {
     sw.addEventListener('change', () => hidden.value = sw.checked ? '1' : '0');
   }
 });
+</script>
+
+<!-- Delete Modal -->
+<div id="deleteModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50">
+  <div class="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-sm shadow-xl">
+    <h3 class="text-sm font-semibold mb-6">
+      {{ t('confirm_delete') }}
+    </h3>
+
+    <div class="flex justify-end gap-2">
+      <button type="button"
+        onclick="closeDeleteModal()"
+        class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-xs font-medium">
+        {{ t('cancel') }}
+      </button>
+
+      <button type="button"
+        onclick="confirmDelete()"
+        class="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-xs font-medium">
+        {{ t('delete') }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+function openDeleteModal() {
+  document.getElementById('deleteModal').classList.remove('hidden');
+  document.getElementById('deleteModal').classList.add('flex');
+}
+
+function closeDeleteModal() {
+  document.getElementById('deleteModal').classList.add('hidden');
+  document.getElementById('deleteModal').classList.remove('flex');
+}
+
+function confirmDelete() {
+  const form = document.querySelector('form');
+  document.getElementById('campaign_action').value = 'delete';
+  form.submit();
+}
 </script>
 
 {% endblock %}

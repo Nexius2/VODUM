@@ -380,11 +380,15 @@ def register(app):
                 try:
                     if requested_subscription_template_id is None:
                         _clear_template_snapshot(db, user_id)
-                        add_log(db, "subscriptions", f"Subscription removed from user #{user_id} via user_detail")
+                        add_log(
+                            "info",
+                            "subscriptions",
+                            f"Subscription removed from user #{user_id} via user_detail",
+                        )
                     else:
                         applied_name = _apply_template_snapshot(db, user_id, requested_subscription_template_id)
                         add_log(
-                            db,
+                            "info",
                             "subscriptions",
                             f"Template applied from user_detail to user #{user_id}: {applied_name} (template_id={requested_subscription_template_id})"
                         )
@@ -531,6 +535,7 @@ def register(app):
                     user_id,
                     expiration_date,
                     reason="ui_manual",
+                    db=db,
                 )
 
             # ------------------------------------------------------------------
