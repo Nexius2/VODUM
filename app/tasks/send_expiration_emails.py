@@ -709,6 +709,9 @@ def run(task_id: int | None = None, db=None):
         # Templates (unified)
         templates = _get_expiration_templates(db)
 
+        preavis_tpl = next((t for t in templates if (t.get("key") or "").strip().lower() == "preavis"), None)
+        relance_tpl = next((t for t in templates if (t.get("key") or "").strip().lower() == "relance"), None)
+
         # Backward-compat: legacy global delays can still be used as fallback
         try:
             legacy_preavis = int(settings.get("preavis_days") or 0)
@@ -719,8 +722,8 @@ def run(task_id: int | None = None, db=None):
         except Exception:
             legacy_relance = 0
 
-        preavis_days = _get_days_before(templates.get("preavis"), legacy_preavis) or None
-        relance_days = _get_days_before(templates.get("relance"), legacy_relance) or None
+        preavis_days = _get_days_before(preavis_tpl, legacy_preavis) or None
+        relance_days = _get_days_before(relance_tpl, legacy_relance) or None
 
         log.info(f"Unified delays → preavis={preavis_days} | relance={relance_days}")
 
