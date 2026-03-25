@@ -926,18 +926,63 @@ def register(app):
             except Exception:
                 return default
 
+        def _history_order_sql(alias="h"):
+            return f"""
+                COALESCE(
+                    CASE
+                        WHEN typeof({alias}.sent_at) = 'integer' THEN {alias}.sent_at
+                        WHEN typeof({alias}.sent_at) = 'text' AND {alias}.sent_at GLOB '[0-9]*' THEN CAST({alias}.sent_at AS INTEGER)
+                        ELSE CAST(strftime('%s', {alias}.sent_at) AS INTEGER)
+                    END,
+                    0
+                ) DESC,
+                {alias}.id DESC
+            """
+
+        def _build_history_label(row_dict):
+            meta = {}
+            try:
+                meta = json.loads(row_dict.get("meta_json") or "{}")
+                if not isinstance(meta, dict):
+                    meta = {}
+            except Exception:
+                meta = {}
+
+            kind = (row_dict.get("kind") or "").strip().lower()
+
+            if kind == "campaign":
+                return (row_dict.get("campaign_name") or "").strip() or "Campaign"
+
+            # template
+            return (
+                (row_dict.get("template_key") or "").strip()
+                or (row_dict.get("template_name") or "").strip()
+                or (meta.get("template_key") or "").strip()
+                or "Template"
+            )
+
         per_page = 10
 
         email_page = max(1, _safe_int(request.args.get("email_page"), 1))
         discord_page = max(1, _safe_int(request.args.get("discord_page"), 1))
 
         email_total = db.query_one(
-            "SELECT COUNT(*) AS c FROM sent_emails WHERE user_id = ?",
+            """
+            SELECT COUNT(*) AS c
+            FROM comm_history h
+            WHERE h.user_id = ?
+              AND h.channel_used = 'email'
+            """,
             (user_id,),
         )["c"] or 0
 
         discord_total = db.query_one(
-            "SELECT COUNT(*) AS c FROM sent_discord WHERE user_id = ?",
+            """
+            SELECT COUNT(*) AS c
+            FROM comm_history h
+            WHERE h.user_id = ?
+              AND h.channel_used = 'discord'
+            """,
             (user_id,),
         )["c"] or 0
 
@@ -950,30 +995,53 @@ def register(app):
         email_offset = (email_page - 1) * per_page
         discord_offset = (discord_page - 1) * per_page
 
-        sent_emails = db.query(
-            """
-            SELECT *
-            FROM sent_emails
-            WHERE user_id = ?
-            ORDER BY sent_at DESC
+        sent_emails_rows = db.query(
+            f"""
+            SELECT
+                h.*,
+                ct.key AS template_key,
+                ct.name AS template_name,
+                cc.name AS campaign_name
+            FROM comm_history h
+            LEFT JOIN comm_templates ct ON ct.id = h.template_id
+            LEFT JOIN comm_campaigns cc ON cc.id = h.campaign_id
+            WHERE h.user_id = ?
+              AND h.channel_used = 'email'
+            ORDER BY {_history_order_sql("h")}
             LIMIT ? OFFSET ?
             """,
             (user_id, per_page, email_offset),
-        )
+        ) or []
 
-        sent_discord = db.query(
-            """
+        sent_discord_rows = db.query(
+            f"""
             SELECT
-              template_type,
-              expiration_date,
-              datetime(sent_at, 'unixepoch', 'localtime') AS sent_at
-            FROM sent_discord
-            WHERE user_id = ?
-            ORDER BY sent_at DESC
+                h.*,
+                ct.key AS template_key,
+                ct.name AS template_name,
+                cc.name AS campaign_name
+            FROM comm_history h
+            LEFT JOIN comm_templates ct ON ct.id = h.template_id
+            LEFT JOIN comm_campaigns cc ON cc.id = h.campaign_id
+            WHERE h.user_id = ?
+              AND h.channel_used = 'discord'
+            ORDER BY {_history_order_sql("h")}
             LIMIT ? OFFSET ?
             """,
             (user_id, per_page, discord_offset),
-        )
+        ) or []
+
+        sent_emails = []
+        for row in sent_emails_rows:
+            item = dict(row)
+            item["label"] = _build_history_label(item)
+            sent_emails.append(item)
+
+        sent_discord = []
+        for row in sent_discord_rows:
+            item = dict(row)
+            item["label"] = _build_history_label(item)
+            sent_discord.append(item)
 
         referral = db.query_one(
             """

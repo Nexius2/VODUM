@@ -278,8 +278,103 @@ def schedule_template_notification(
         "+15 minutes"   -> now + 15 minutes
     - dedupe_key:
         if already present, INSERT OR IGNORE prevents duplicates
+
+    Important:
+    - if a row already exists with the same dedupe_key and is already sent:
+      do nothing
+    - if a row already exists with the same dedupe_key and is in final error
+      (attempt_count >= max_attempts), revive it so the notification can be
+      retried later after a config fix (SMTP, Discord token, etc.)
     """
     payload_json = json.dumps(payload or {}, ensure_ascii=False) if payload else None
+
+    existing = None
+    if dedupe_key:
+        existing = db.query_one(
+            """
+            SELECT id, status, attempt_count, max_attempts
+            FROM comm_scheduled
+            WHERE dedupe_key = ?
+            LIMIT 1
+            """,
+            (dedupe_key,),
+        )
+        existing = dict(existing) if existing else None
+
+    if existing:
+        status = (existing.get("status") or "").strip().lower()
+        attempt_count = int(existing.get("attempt_count") or 0)
+        existing_max_attempts = int(existing.get("max_attempts") or max_attempts)
+
+        # Already sent => keep as-is
+        if status == "sent":
+            return
+
+        # Only revive notifications that are stuck in final error.
+        # Do NOT reset pending / retrying rows, otherwise we would break backoff.
+        is_final_error = status == "error" and attempt_count >= existing_max_attempts
+
+        if is_final_error:
+            if send_at_modifier:
+                db.execute(
+                    """
+                    UPDATE comm_scheduled
+                    SET template_id=?,
+                        vodum_user_id=?,
+                        provider=?,
+                        server_id=?,
+                        send_at=datetime('now', ?),
+                        status='pending',
+                        last_error=NULL,
+                        attempt_count=0,
+                        max_attempts=?,
+                        next_attempt_at=NULL,
+                        last_attempt_at=NULL,
+                        payload_json=?,
+                        updated_at=CURRENT_TIMESTAMP
+                    WHERE id=?
+                    """,
+                    (
+                        int(template_id),
+                        int(user_id),
+                        provider,
+                        server_id,
+                        send_at_modifier,
+                        int(max_attempts),
+                        payload_json,
+                        int(existing["id"]),
+                    ),
+                )
+            else:
+                db.execute(
+                    """
+                    UPDATE comm_scheduled
+                    SET template_id=?,
+                        vodum_user_id=?,
+                        provider=?,
+                        server_id=?,
+                        send_at=CURRENT_TIMESTAMP,
+                        status='pending',
+                        last_error=NULL,
+                        attempt_count=0,
+                        max_attempts=?,
+                        next_attempt_at=NULL,
+                        last_attempt_at=NULL,
+                        payload_json=?,
+                        updated_at=CURRENT_TIMESTAMP
+                    WHERE id=?
+                    """,
+                    (
+                        int(template_id),
+                        int(user_id),
+                        provider,
+                        server_id,
+                        int(max_attempts),
+                        payload_json,
+                        int(existing["id"]),
+                    ),
+                )
+        return
 
     if send_at_modifier:
         db.execute(
@@ -359,13 +454,19 @@ def required_channels_for_user(db, settings: Dict, user: Dict) -> List[str]:
 
 def attempts_satisfy_mode(db, settings: Dict, user: Dict, attempts: List[SendAttempt] | None) -> bool:
     mode = _normalize_send_mode(settings)
-    sent_channels = {a.channel for a in (attempts or []) if getattr(a, "status", None) == "sent"}
+    attempts = attempts or []
+
+    sent_channels = {a.channel for a in attempts if getattr(a, "status", None) == "sent"}
+    skipped_only = bool(attempts) and all(getattr(a, "status", None) == "skipped" for a in attempts)
+
+    if skipped_only:
+        return True
 
     if mode == "all":
         required = required_channels_for_user(db, settings, user)
         return bool(required) and all(ch in sent_channels for ch in required)
 
-    return any(getattr(a, "status", None) == "sent" for a in (attempts or []))
+    return any(getattr(a, "status", None) == "sent" for a in attempts)
 
 
 def send_to_user(
@@ -382,7 +483,11 @@ def send_to_user(
 
     """Send according to unified rules (FIRST / ALL).
 
-    Returns the list of attempts (one per channel that was tried).
+    Returns the list of attempts.
+    status can be:
+    - sent
+    - failed
+    - skipped
     """
     s = _as_dict(settings)
     u = _as_dict(user)
@@ -407,7 +512,7 @@ def send_to_user(
 
             if not used:
                 log.info(f"Skipping communications for user {user_id} (account never used)")
-                return []
+                return [SendAttempt(channel="system", status="skipped", error="Skipped: account never used")]
 
     mode = _normalize_send_mode(s)
     avail = available_channels(db, s, u)
@@ -423,20 +528,19 @@ def send_to_user(
             if ch in ("email", "discord") and avail.get(ch):
                 if ch not in channels_to_try:
                     channels_to_try.append(ch)
-    elif mode == "all":
-        # deterministic: follow the effective order, but include any other supported channels at the end
-        for ch in order:
-            if avail.get(ch):
-                channels_to_try.append(ch)
-        for ch in ("email", "discord"):
-            if ch not in channels_to_try and avail.get(ch):
-                channels_to_try.append(ch)
     else:
-        # FIRST: first available in order
+        # In "first" mode, we must try channels IN ORDER until one succeeds.
+        # In "all" mode, we try all available channels.
         for ch in order:
-            if avail.get(ch):
-                channels_to_try = [ch]
-                break
+            if avail.get(ch) and ch not in channels_to_try:
+                channels_to_try.append(ch)
+
+        for ch in ("email", "discord"):
+            if avail.get(ch) and ch not in channels_to_try:
+                channels_to_try.append(ch)
+
+    if not channels_to_try:
+        return [SendAttempt(channel="system", status="failed", error="No channel available")]
 
     attempts: List[SendAttempt] = []
 
@@ -464,19 +568,30 @@ def send_to_user(
                     errors.append(f"{r}: {err}")
 
             if ok_any:
-                attempts.append(SendAttempt(channel="email", status="sent", error=None if not errors else "; ".join(errors)[:1000]))
+                attempts.append(
+                    SendAttempt(
+                        channel="email",
+                        status="sent",
+                        error=None if not errors else "; ".join(errors)[:1000],
+                    )
+                )
             else:
-                attempts.append(SendAttempt(channel="email", status="failed", error=("; ".join(errors) or "Email send failed")[:1000]))
+                attempts.append(
+                    SendAttempt(
+                        channel="email",
+                        status="failed",
+                        error=("; ".join(errors) or "Email send failed")[:1000],
+                    )
+                )
 
         elif ch == "discord":
             discord_user_id = (u.get("discord_user_id") or "").strip()
             token = (s2.get("discord_bot_token_effective") or s2.get("discord_bot_token") or "").strip()
+
             if not discord_user_id:
                 attempts.append(SendAttempt(channel="discord", status="failed", error="User has no discord_user_id"))
                 continue
 
-            # Attachments on Discord DM: not supported in current implementation.
-            # We still send the textual message and keep trace in meta_json.
             try:
                 send_discord_dm(token, discord_user_id, body)
                 attempts.append(SendAttempt(channel="discord", status="sent", error=None))
@@ -484,6 +599,10 @@ def send_to_user(
                 attempts.append(SendAttempt(channel="discord", status="failed", error=str(e)[:1000]))
             except Exception as e:
                 attempts.append(SendAttempt(channel="discord", status="failed", error=str(e)[:1000]))
+
+        # In FIRST mode, stop as soon as one channel succeeded.
+        if not forced_channels and mode == "first" and any(a.status == "sent" for a in attempts):
+            break
 
     return attempts
 

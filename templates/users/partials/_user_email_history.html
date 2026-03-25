@@ -6,17 +6,34 @@
       <table class="w-full text-xs">
         <thead class="bg-slate-950/60 text-slate-400">
           <tr>
-            <th class="px-3 py-2 text-left">{{ t("type") }}</th>
-            <th class="px-3 py-2 text-left">{{ t("snapshot") }}</th>
+            <th class="px-3 py-2 text-left">{{ t("kind") }}</th>
+            <th class="px-3 py-2 text-left">{{ t("status") }}</th>
             <th class="px-3 py-2 text-left">{{ t("date") }}</th>
+            <th class="px-3 py-2 text-left">{{ t("error") }}</th>
           </tr>
         </thead>
         <tbody>
           {% for m in sent_emails %}
             <tr class="border-t border-slate-800">
-              <td class="px-3 py-2">{{ t(m.template_type) }}</td>
-              <td class="px-3 py-2 text-slate-400">{{ m.expiration_date }}</td>
-              <td class="px-3 py-2 text-slate-300">{{ m.sent_at }}</td>
+              <td class="px-3 py-2">
+                {% if m.kind == 'campaign' %}
+                  <span class="px-2 py-1 rounded bg-slate-800 text-slate-200">{{ t("campaign") }}</span>
+                {% else %}
+                  <span class="px-2 py-1 rounded bg-slate-800 text-slate-200">{{ t("template") }}</span>
+                {% endif %}
+                <span class="ml-2 text-slate-300">{{ m.label }}</span>
+              </td>
+
+              <td class="px-3 py-2">
+                {% if m.status == 'sent' %}
+                  <span class="px-2 py-1 rounded-full bg-emerald-900/40 text-emerald-300">{{ t("sent") }}</span>
+                {% else %}
+                  <span class="px-2 py-1 rounded-full bg-rose-900/40 text-rose-300">{{ t("failed") }}</span>
+                {% endif %}
+              </td>
+
+              <td class="px-3 py-2 text-slate-300">{{ m.sent_at|tz }}</td>
+              <td class="px-3 py-2 text-slate-400">{{ m.error or "-" }}</td>
             </tr>
           {% endfor %}
         </tbody>

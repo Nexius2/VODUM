@@ -303,8 +303,11 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
                         )
 
         mode = _send_mode(settings)
+        skipped_only = bool(attempts) and all(a.status == "skipped" for a in attempts)
 
-        if mode == "all":
+        if skipped_only:
+            all_ok = True
+        elif mode == "all":
             all_ok = bool(required_channels) and all(ch in updated_channels_sent for ch in required_channels)
         else:
             all_ok = any(a.status == "sent" for a in attempts)
