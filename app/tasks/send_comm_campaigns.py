@@ -258,7 +258,11 @@ def run(task_id: int, db):
                     },
                 )
 
-            if mode == "all":
+            skipped_only = bool(attempts) and all(a.status == "skipped" for a in attempts)
+
+            if skipped_only:
+                target_ok = True
+            elif mode == "all":
                 target_ok = bool(required_channels) and all(ch in updated_channels_sent for ch in required_channels)
             else:
                 target_ok = any(a.status == "sent" for a in attempts)
