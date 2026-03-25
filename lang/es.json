@@ -1159,6 +1159,13 @@
 "comm_var_expiration_change_days_desc": "Absolute number of days added or removed.",
 "comm_var_expiration_change_signed_days_desc": "Signed day difference (positive or negative).",
 "comm_var_expiration_change_direction_desc": "Change direction: increase or decrease.",
-"comm_var_expiration_change_reason_desc": "Reason for the expiration date change (gift, referral, manual update...)."
+"comm_var_expiration_change_reason_desc": "Motivo del cambio de la fecha de expiración (regalo, recomendación, cambio manual...).",
+"comm_duplicate_disabled_subtitle": "La plantilla se guardó, pero se desactivó automáticamente.",
+"comm_duplicate_disabled_reason": "Motivo: duplicado con la plantilla activa",
+"comm_duplicate_disabled_help": "Solo se permite una plantilla activa para este mismo bloque lógico. Por eso la nueva plantilla se guardó desactivada para evitar conflictos.",
+"close": "Cerrar",
+"action": "Acción",
+"reason": "Motivo",
+"discord_history": "Historial de Discord"
 
 }

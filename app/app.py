@@ -7,7 +7,6 @@ from flask import Flask, g, request, session, abort
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import Config
-from tasks_engine import start_scheduler
 from logging_utils import get_logger
 from db_manager import DBManager
 from core.backup import BackupConfig
@@ -153,16 +152,26 @@ def fromjson_safe(value):
 
 
 def load_version():
-    info_path = "/app/INFO"
-    if not os.path.exists(info_path):
+    candidate_paths = [
+        "/app/INFO",
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "INFO")),
+        os.path.abspath(os.path.join(os.getcwd(), "INFO")),
+    ]
+
+    info_path = next((p for p in candidate_paths if os.path.exists(p)), None)
+    if not info_path:
         return "dev"
 
     version = "dev"
-    with open(info_path, encoding="utf-8", errors="ignore") as f:
-        for line in f:
-            if line.startswith("VERSION="):
-                version = line.split("=", 1)[1].strip()
-                break
+    try:
+        with open(info_path, encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                if line.startswith("VERSION="):
+                    version = line.split("=", 1)[1].strip()
+                    break
+    except Exception:
+        return "dev"
+
     return version
 
 
@@ -395,16 +404,3 @@ def create_app():
     _reset_maintenance_on_startup(app)
 
     return app
-
-
-app = create_app()
-
-# ✅ Evite double démarrage du scheduler en mode debug (reloader)
-if (not app.debug) or (os.environ.get("WERKZEUG_RUN_MAIN") == "true"):
-    with app.app_context():
-        start_scheduler()
-
-
-if __name__ == "__main__":
-    _log_ip_filter_status()
-    app.run(host="0.0.0.0", port=5000, use_reloader=False)

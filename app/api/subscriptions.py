@@ -157,7 +157,7 @@ def update_user_expiration(user_id, new_expiration_date, reason="manual", db=Non
             if delta_days != 0:
                 change_direction = "increase" if delta_days > 0 else "decrease"
 
-                comm_ctx = db.query_one(
+                comm_contexts = db.query(
                     """
                     SELECT
                         LOWER(COALESCE(s.type, '')) AS provider,
@@ -172,74 +172,114 @@ def update_user_expiration(user_id, new_expiration_date, reason="manual", db=Non
                             ELSE 2
                         END,
                         mu.id ASC
-                    LIMIT 1
                     """,
                     (user_id,),
-                )
+                ) or []
 
-                if comm_ctx:
+                normalized_contexts = []
+                seen_contexts = set()
+
+                for comm_ctx in comm_contexts:
                     comm_ctx = dict(comm_ctx)
                     provider = (comm_ctx.get("provider") or "").strip().lower()
                     server_id = comm_ctx.get("server_id")
 
-                    if provider in ("plex", "jellyfin"):
-                        tpl = select_comm_template_for_user(
-                            db=db,
-                            trigger_event="expiration_change",
-                            provider=provider,
-                            user_id=int(user_id),
-                            expiration_change_direction=change_direction,
-                        )
+                    if provider not in ("plex", "jellyfin"):
+                        continue
 
-                        if tpl:
-                            old_exp_iso = old_exp.isoformat()
-                            new_exp_iso = new_exp.isoformat()
+                    key = (provider, server_id)
+                    if key in seen_contexts:
+                        continue
+                    seen_contexts.add(key)
 
-                            reason_map = {
-                                "manual": "Modification manuelle",
-                                "manual_update": "Modification manuelle",
-                                "ui_manual": "Modification manuelle",
-                                "gift": "Cadeau",
-                                "referral_reward": "Récompense de parrainage",
-                                "referral": "Récompense de parrainage",
-                            }
+                    normalized_contexts.append({
+                        "provider": provider,
+                        "server_id": server_id,
+                    })
 
-                            reason_label = reason_map.get(reason, reason or "")
+                # Fallback important:
+                # même sans media_users, on tente quand même de trouver
+                # un template provider=all / plex / jellyfin
+                if not normalized_contexts:
+                    normalized_contexts = [
+                        {"provider": "plex", "server_id": None},
+                        {"provider": "jellyfin", "server_id": None},
+                    ]
 
-                            payload = {
-                                "event": "expiration_change",
-                                "trigger_event": "expiration_change",
-                                "reason": reason,
-                                "expiration_change_reason": reason_label,
-                                "old_expiration_date": old_exp_iso,
-                                "new_expiration_date": new_exp_iso,
-                                "expiration_date": new_exp_iso,
-                                "expiration_change_days": abs(delta_days),
-                                "expiration_change_signed_days": delta_days,
-                                "expiration_change_direction": change_direction,
-                            }
+                selected_tpl = None
+                selected_provider = None
+                selected_server_id = None
 
-                            dedupe_key = (
-                                f"expiration_change:template:{int(tpl['id'])}:"
-                                f"user:{int(user_id)}:old:{old_exp_iso}:new:{new_exp_iso}"
-                            )
+                for comm_ctx in normalized_contexts:
+                    provider = comm_ctx["provider"]
+                    server_id = comm_ctx.get("server_id")
 
-                            schedule_template_notification(
-                                db=db,
-                                template_id=int(tpl["id"]),
-                                user_id=int(user_id),
-                                provider=provider,
-                                server_id=server_id,
-                                send_at_modifier=None,
-                                payload=payload,
-                                dedupe_key=dedupe_key,
-                                max_attempts=10,
-                            )
+                    tpl = select_comm_template_for_user(
+                        db=db,
+                        trigger_event="expiration_change",
+                        provider=provider,
+                        user_id=int(user_id),
+                        expiration_change_direction=change_direction,
+                    )
 
-                            log.info(
-                                f"[USER #{user_id}] expiration_change notification queued "
-                                f"| {old_exp_iso} -> {new_exp_iso} | delta={delta_days} | reason={reason}"
-                            )
+                    if tpl:
+                        selected_tpl = tpl
+                        selected_provider = provider
+                        selected_server_id = server_id
+                        break
+
+                if selected_tpl and selected_provider in ("plex", "jellyfin"):
+                    old_exp_iso = old_exp.isoformat()
+                    new_exp_iso = new_exp.isoformat()
+
+                    reason_map = {
+                        "manual": "manual",
+                        "manual_update": "manual",
+                        "ui_manual": "manual",
+                        "gift": "gift",
+                        "referral_reward": "referral",
+                        "referral": "referral",
+                    }
+
+                    reason_label = reason_map.get(
+                        (reason or "").strip().lower(),
+                        (reason or "").strip().lower(),
+                    )
+
+                    payload = {
+                        "event": "expiration_change",
+                        "trigger_event": "expiration_change",
+                        "reason": reason,
+                        "expiration_change_reason": reason_label,
+                        "old_expiration_date": old_exp_iso,
+                        "new_expiration_date": new_exp_iso,
+                        "expiration_date": new_exp_iso,
+                        "expiration_change_days": abs(delta_days),
+                        "expiration_change_signed_days": delta_days,
+                        "expiration_change_direction": change_direction,
+                    }
+
+                    dedupe_key = (
+                        f"expiration_change:template:{int(selected_tpl['id'])}:"
+                        f"user:{int(user_id)}:old:{old_exp_iso}:new:{new_exp_iso}"
+                    )
+
+                    schedule_template_notification(
+                        db=db,
+                        template_id=int(selected_tpl["id"]),
+                        user_id=int(user_id),
+                        provider=selected_provider,
+                        server_id=selected_server_id,
+                        send_at_modifier=None,
+                        payload=payload,
+                        dedupe_key=dedupe_key,
+                        max_attempts=10,
+                    )
+
+                    log.info(
+                        f"[USER #{user_id}] expiration_change notification queued "
+                        f"| {old_exp_iso} -> {new_exp_iso} | delta={delta_days} | reason={reason}"
+                    )
         except Exception:
             log.error(
                 f"[USER #{user_id}] expiration_change notification failed "

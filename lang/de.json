@@ -1158,7 +1158,14 @@
 "comm_var_expiration_change_days_desc": "Absolute number of days added or removed.",
 "comm_var_expiration_change_signed_days_desc": "Signed day difference (positive or negative).",
 "comm_var_expiration_change_direction_desc": "Change direction: increase or decrease.",
-"comm_var_expiration_change_reason_desc": "Reason for the expiration date change (gift, referral, manual update...)."
+"comm_var_expiration_change_reason_desc": "Grund für die Änderung des Ablaufdatums (Geschenk, Empfehlung, manuelle Änderung...).",
+"comm_duplicate_disabled_subtitle": "Die Vorlage wurde gespeichert, aber automatisch deaktiviert.",
+"comm_duplicate_disabled_reason": "Grund: Duplikat mit der aktiven Vorlage",
+"comm_duplicate_disabled_help": "Für denselben logischen Slot ist nur eine aktive Vorlage erlaubt. Die neue Vorlage wurde daher deaktiviert gespeichert, um Konflikte zu vermeiden.",
+"close": "Schließen",
+"action": "Aktion",
+"reason": "Grund",
+"discord_history": "Discord-Verlauf"
 
  
 }

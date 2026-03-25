@@ -1152,7 +1152,14 @@
 "comm_var_expiration_change_days_desc": "Absolute number of days added or removed.",
 "comm_var_expiration_change_signed_days_desc": "Signed day difference (positive or negative).",
 "comm_var_expiration_change_direction_desc": "Change direction: increase or decrease.",
-"comm_var_expiration_change_reason_desc": "Reason for the expiration date change (gift, referral, manual update...)."
+"comm_var_expiration_change_reason_desc": "Reason for the expiration date change (gift, referral, manual update...).",
+"comm_duplicate_disabled_subtitle": "The template was saved, but it was automatically disabled.",
+"comm_duplicate_disabled_reason": "Reason: duplicate with active template",
+"comm_duplicate_disabled_help": "Only one active template is allowed for the same logical slot. The new template was therefore saved as disabled to avoid conflicts.",
+"close": "Close",
+"action": "Action",
+"reason": "Reason",
+"discord_history": "Discord history"
 
   
 }
