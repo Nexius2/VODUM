@@ -1,5 +1,5 @@
 <div id="discord-history" class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-  <h2 class="text-sm font-semibold mb-2">Discord history</h2>
+  <h2 class="text-sm font-semibold mb-2">{{ t("discord_history") if t("discord_history") != "discord_history" else "Discord history" }}</h2>
 
   {% if sent_discord %}
     <div class="border border-slate-800 rounded-xl overflow-hidden">

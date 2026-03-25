@@ -43,10 +43,17 @@ def _normalize_status(s: str | None) -> str:
 def _set_task_state(db, task_name: str, enabled: int, status: str) -> dict | None:
     """
     Met à jour la tâche si elle existe.
-    - Quand on disable: on remet status='disabled', on clear last_error/next_run/queued_count
-    - Quand on enable: on remet status='idle', on clear last_error
+
+    Règle importante :
+    - on peut désactiver proprement une tâche
+    - on peut réactiver une tâche si elle était disabled
+    - mais on NE DOIT PAS écraser un vrai status 'error' en 'idle'
+      juste parce que la config SMTP/Discord est prête
     """
-    row = db.query_one("SELECT id, enabled, status FROM tasks WHERE name = ?", (task_name,))
+    row = db.query_one(
+        "SELECT id, enabled, status FROM tasks WHERE name = ?",
+        (task_name,),
+    )
     if not row:
         return None
 
@@ -54,20 +61,19 @@ def _set_task_state(db, task_name: str, enabled: int, status: str) -> dict | Non
     old_status = _normalize_status(row["status"])
 
     enabled = 1 if enabled else 0
-    status = _normalize_status(status)
-
-    # Rien à faire si déjà cohérent
-    if old_enabled == enabled and old_status == status:
-        return {
-            "task": task_name,
-            "changed": False,
-            "old_enabled": old_enabled,
-            "new_enabled": enabled,
-            "old_status": old_status,
-            "new_status": status,
-        }
+    wanted_status = _normalize_status(status)
 
     if enabled == 0:
+        if old_enabled == 0 and old_status == "disabled":
+            return {
+                "task": task_name,
+                "changed": False,
+                "old_enabled": old_enabled,
+                "new_enabled": 0,
+                "old_status": old_status,
+                "new_status": "disabled",
+            }
+
         db.execute(
             """
             UPDATE tasks
@@ -81,30 +87,48 @@ def _set_task_state(db, task_name: str, enabled: int, status: str) -> dict | Non
             """,
             (0, "disabled", row["id"]),
         )
-        new_status = "disabled"
-        new_enabled = 0
-    else:
-        db.execute(
-            """
-            UPDATE tasks
-            SET enabled=?,
-                status=?,
-                last_error=NULL,
-                updated_at=CURRENT_TIMESTAMP
-            WHERE id=?
-            """,
-            (1, "idle", row["id"]),
-        )
-        new_status = "idle"
-        new_enabled = 1
+        return {
+            "task": task_name,
+            "changed": True,
+            "old_enabled": old_enabled,
+            "new_enabled": 0,
+            "old_status": old_status,
+            "new_status": "disabled",
+        }
 
+    # enabled == 1
+    # Si la tâche est déjà enabled et en error/running/queued/etc.,
+    # on ne touche à rien : check_mailing_status ne doit pas masquer
+    # un vrai problème d'exécution.
+    if old_enabled == 1 and old_status != "disabled":
+        return {
+            "task": task_name,
+            "changed": False,
+            "old_enabled": old_enabled,
+            "new_enabled": 1,
+            "old_status": old_status,
+            "new_status": old_status,
+        }
+
+    # Réactivation propre d'une tâche disabled
+    db.execute(
+        """
+        UPDATE tasks
+        SET enabled=?,
+            status=?,
+            last_error=NULL,
+            updated_at=CURRENT_TIMESTAMP
+        WHERE id=?
+        """,
+        (1, wanted_status or "idle", row["id"]),
+    )
     return {
         "task": task_name,
         "changed": True,
         "old_enabled": old_enabled,
-        "new_enabled": new_enabled,
+        "new_enabled": 1,
         "old_status": old_status,
-        "new_status": new_status,
+        "new_status": wanted_status or "idle",
     }
 
 
