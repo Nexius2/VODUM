@@ -927,19 +927,21 @@ def run_migrations():
         print("🛠 Creating table: comm_history")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS comm_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            kind TEXT NOT NULL CHECK(kind IN ('template','campaign')),
-            template_id INTEGER NULL,
-            campaign_id INTEGER NULL,
-            user_id INTEGER NULL,
-            channel_used TEXT NOT NULL CHECK(channel_used IN ('email','discord')),
-            status TEXT NOT NULL CHECK(status IN ('sent','failed')),
-            error TEXT NULL,
-            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            meta_json TEXT NULL,
-            FOREIGN KEY(template_id) REFERENCES comm_templates(id) ON DELETE SET NULL,
-            FOREIGN KEY(campaign_id) REFERENCES comm_campaigns(id) ON DELETE SET NULL,
-            FOREIGN KEY(user_id) REFERENCES vodum_users(id) ON DELETE SET NULL
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          kind TEXT NOT NULL CHECK(kind IN ('template','campaign')),
+          template_id INTEGER NULL,
+          campaign_id INTEGER NULL,
+          user_id INTEGER NULL,
+          -- Real delivery history only:
+          -- no technical/system rows, no "skipped" rows
+          channel_used TEXT NOT NULL CHECK(channel_used IN ('email','discord')),
+          status TEXT NOT NULL CHECK(status IN ('sent','failed')),
+          error TEXT NULL,
+          sent_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          meta_json TEXT NULL,
+          FOREIGN KEY(template_id) REFERENCES comm_templates(id) ON DELETE SET NULL,
+          FOREIGN KEY(campaign_id) REFERENCES comm_campaigns(id) ON DELETE SET NULL,
+          FOREIGN KEY(user_id) REFERENCES vodum_users(id) ON DELETE SET NULL
         );
         """)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_comm_history_sent_at ON comm_history(sent_at DESC);")

@@ -29,11 +29,7 @@ def _now_ts() -> str:
     return datetime.now().strftime("%Y%m%d-%H%M%S")
 
 
-def _safe_int(v, default: int = 0) -> int:
-    try:
-        return int(v)
-    except Exception:
-        return default
+
 
 
 def _as_dict(row_or_dict):
@@ -128,7 +124,7 @@ def fetch_campaign_attachments(db, campaign_id: int) -> List[Dict]:
     )
     return [dict(r) for r in (rows or [])]
 
-def _safe_int(value):
+def _safe_nullable_int(value):
     try:
         if value is None or value == "":
             return None
@@ -161,7 +157,7 @@ def get_user_subscription_context(db, user_id: int) -> Dict:
 
 def _subscription_scope_rank(template_row: Dict, user_subscription_template_id: int | None) -> int:
     scope = (template_row.get("subscription_scope") or "none").strip().lower()
-    tpl_subscription_id = _safe_int(template_row.get("subscription_template_id"))
+    tpl_subscription_id = _safe_nullable_int(template_row.get("subscription_template_id"))
 
     if scope == "specific":
         if user_subscription_template_id is None:
@@ -202,7 +198,7 @@ def select_comm_template_for_user(
     expiration_change_direction: str | None = None,
 ) -> Dict | None:
     sub_ctx = get_user_subscription_context(db, user_id)
-    user_subscription_template_id = _safe_int(sub_ctx.get("subscription_template_id"))
+    user_subscription_template_id = _safe_nullable_int(sub_ctx.get("subscription_template_id"))
 
     rows = db.query(
         """
@@ -618,6 +614,15 @@ def record_history(
     sent_at: Optional[str] = None,
     meta: Optional[Dict] = None,
 ) -> None:
+    channel = (attempt.channel or "").strip().lower()
+    status = (attempt.status or "").strip().lower()
+
+    # comm_history is only for real channel deliveries
+    if channel not in ("email", "discord"):
+        return
+    if status not in ("sent", "failed"):
+        return
+
     meta_json = json.dumps(meta or {}, ensure_ascii=False)
     db.execute(
         """
@@ -629,8 +634,8 @@ def record_history(
             template_id,
             campaign_id,
             user_id,
-            attempt.channel,
-            attempt.status,
+            channel,
+            status,
             attempt.error,
             sent_at,
             meta_json,

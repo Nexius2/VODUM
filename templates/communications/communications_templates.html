@@ -355,6 +355,49 @@
 
 </div>
 
+{% if duplicate_disabled %}
+<div id="duplicateDisabledModal" class="fixed inset-0 z-50" aria-hidden="false">
+  <div class="absolute inset-0 bg-black/70"></div>
+
+  <div class="relative mx-auto mt-16 w-[92%] max-w-xl">
+    <div class="bg-slate-900 border border-amber-700/40 rounded-2xl shadow-xl overflow-hidden">
+      <div class="p-5">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <div class="text-sm font-semibold text-amber-300">{{ t("warning") }}</div>
+            <div class="text-xs text-slate-400 mt-1">{{ t("comm_duplicate_disabled_subtitle") }}</div>
+          </div>
+
+          <button type="button"
+                  id="duplicateDisabledCloseTop"
+                  class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200">
+            {{ t("done") }}
+          </button>
+        </div>
+
+        <div class="mt-4 rounded-xl border border-amber-700/30 bg-amber-500/10 px-4 py-3 text-xs text-slate-200">
+          {{ t("comm_duplicate_disabled_reason") }} {{ duplicate_disabled_reason }}
+        </div>
+
+        <div class="mt-3 text-xs text-slate-400">
+          {{ t("comm_duplicate_disabled_help") }}
+        </div>
+      </div>
+
+      <div class="border-t border-slate-800"></div>
+
+      <div class="p-4 flex items-center justify-end gap-2">
+        <button type="button"
+                id="duplicateDisabledCloseBottom"
+                class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-200">
+          {{ t("done") }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const sw = document.getElementById('template_enabled_switch');
@@ -463,6 +506,9 @@ const commVarsHelpBtn = document.getElementById('commVarsHelpBtn');
 const commVarsHelpModal = document.getElementById('commVarsHelpModal');
 const commVarsHelpCloseTop = document.getElementById('commVarsHelpCloseTop');
 const commVarsHelpCloseBottom = document.getElementById('commVarsHelpCloseBottom');
+const duplicateDisabledModal = document.getElementById('duplicateDisabledModal');
+const duplicateDisabledCloseTop = document.getElementById('duplicateDisabledCloseTop');
+const duplicateDisabledCloseBottom = document.getElementById('duplicateDisabledCloseBottom');
 
 function openCommVarsHelpModal() {
   if (!commVarsHelpModal) return;
@@ -476,9 +522,17 @@ function closeCommVarsHelpModal() {
   commVarsHelpModal.setAttribute('aria-hidden', 'true');
 }
 
+function closeDuplicateDisabledModal() {
+  if (!duplicateDisabledModal) return;
+  duplicateDisabledModal.classList.add('hidden');
+  duplicateDisabledModal.setAttribute('aria-hidden', 'true');
+}
+
 commVarsHelpBtn && commVarsHelpBtn.addEventListener('click', openCommVarsHelpModal);
 commVarsHelpCloseTop && commVarsHelpCloseTop.addEventListener('click', closeCommVarsHelpModal);
 commVarsHelpCloseBottom && commVarsHelpCloseBottom.addEventListener('click', closeCommVarsHelpModal);
+duplicateDisabledCloseTop && duplicateDisabledCloseTop.addEventListener('click', closeDuplicateDisabledModal);
+duplicateDisabledCloseBottom && duplicateDisabledCloseBottom.addEventListener('click', closeDuplicateDisabledModal);
 
 commVarsHelpModal && commVarsHelpModal.addEventListener('click', (e) => {
   if (e.target === commVarsHelpModal || e.target.classList.contains('absolute')) {
@@ -486,9 +540,16 @@ commVarsHelpModal && commVarsHelpModal.addEventListener('click', (e) => {
   }
 });
 
+duplicateDisabledModal && duplicateDisabledModal.addEventListener('click', (e) => {
+  if (e.target === duplicateDisabledModal || e.target.classList.contains('absolute')) {
+    closeDuplicateDisabledModal();
+  }
+});
+
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closeCommVarsHelpModal();
+    closeDuplicateDisabledModal();
   }
 });
 });

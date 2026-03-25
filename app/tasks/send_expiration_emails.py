@@ -448,32 +448,93 @@ def _get_days_before(template_row: dict | None, fallback: int | None) -> int | N
     except Exception:
         return fallback
 
+def _stable_template_marker(template_row: dict | None) -> str | None:
+    if not template_row:
+        return None
 
-def _already_sent_email(db, user_id: int, template_key: str, exp_iso: str) -> bool:
+    key = (template_row.get("key") or "").strip().lower()
+    if key:
+        return key
+
+    try:
+        return f"tpl:{int(template_row['id'])}"
+    except Exception:
+        return None
+
+
+def _template_markers_for_lookup(template_row: dict | None) -> list[str]:
+    markers = []
+
+    stable = _stable_template_marker(template_row)
+    if stable:
+        markers.append(stable)
+
+    try:
+        tpl_id = int(template_row["id"])
+        legacy = f"tpl:{tpl_id}"
+        if legacy not in markers:
+            markers.append(legacy)
+    except Exception:
+        pass
+
+    return markers
+
+def _already_sent_email(db, user_id: int, template_keys: str | list[str], exp_iso: str) -> bool:
+    if isinstance(template_keys, str):
+        template_keys = [template_keys]
+
+    keys = [k for k in (template_keys or []) if k]
+    if not keys:
+        return False
+
+    placeholders = ",".join("?" for _ in keys)
     r = db.query_one(
-        "SELECT 1 FROM sent_emails WHERE user_id=? AND template_type=? AND expiration_date=?",
-        (user_id, template_key, exp_iso),
+        f"""
+        SELECT 1
+        FROM sent_emails
+        WHERE user_id = ?
+          AND expiration_date = ?
+          AND template_type IN ({placeholders})
+        LIMIT 1
+        """,
+        (user_id, exp_iso, *keys),
     )
     return bool(r)
 
 
-def _already_sent_discord(db, user_id: int, template_key: str, exp_iso: str) -> bool:
+def _already_sent_discord(db, user_id: int, template_keys: str | list[str], exp_iso: str) -> bool:
+    if isinstance(template_keys, str):
+        template_keys = [template_keys]
+
+    keys = [k for k in (template_keys or []) if k]
+    if not keys:
+        return False
+
+    placeholders = ",".join("?" for _ in keys)
     r = db.query_one(
-        "SELECT 1 FROM sent_discord WHERE user_id=? AND template_type=? AND expiration_date=?",
-        (user_id, template_key, exp_iso),
+        f"""
+        SELECT 1
+        FROM sent_discord
+        WHERE user_id = ?
+          AND expiration_date = ?
+          AND template_type IN ({placeholders})
+        LIMIT 1
+        """,
+        (user_id, exp_iso, *keys),
     )
     return bool(r)
 
-def _already_sent_any(db, user_id: int, template_key: str, exp_iso: str) -> bool:
-    return _already_sent_email(db, user_id, template_key, exp_iso) or _already_sent_discord(db, user_id, template_key, exp_iso)
+
+def _already_sent_any(db, user_id: int, template_keys: str | list[str], exp_iso: str) -> bool:
+    return _already_sent_email(db, user_id, template_keys, exp_iso) or _already_sent_discord(db, user_id, template_keys, exp_iso)
 
 
-def _already_sent_for_current_mode(db, settings: dict, user: dict, template_key: str, exp_iso: str) -> bool:
+def _already_sent_for_current_mode(db, settings: dict, user: dict, template_keys: str | list[str], exp_iso: str) -> bool:
     avail = available_channels(db, settings, user)
     mode = _send_mode(settings)
 
-    email_sent = _already_sent_email(db, int(user["id"]), template_key, exp_iso)
-    discord_sent = _already_sent_discord(db, int(user["id"]), template_key, exp_iso)
+    email_sent = _already_sent_email(db, int(user["id"]), template_keys, exp_iso)
+    discord_sent = _already_sent_discord(db, int(user["id"]), template_keys, exp_iso)
 
     if mode == "all":
         required = []
@@ -537,24 +598,41 @@ def _subscription_scope_rank(template_row: dict, user_subscription_template_id: 
     return 1
 
 
-def _provider_rank(template_row: dict, provider: str) -> int:
+def _provider_rank(template_row: dict, providers: list[str]) -> int:
     tpl_provider = (template_row.get("trigger_provider") or "all").strip().lower()
-    if tpl_provider == provider:
-        return 2
+    normalized = [p for p in (providers or []) if p in ("plex", "jellyfin")]
+
+    # Best case: exact provider match for one of the user's real media providers
+    if tpl_provider in normalized:
+        return 3
+
+    # Generic template
     if tpl_provider == "all":
+        return 2
+
+    # Fallback: allow a specific provider template even if the user has another
+    # provider (or none), so expiration mail can still be sent.
+    if tpl_provider in ("plex", "jellyfin"):
         return 1
+
     return -1
 
 
-def _pick_expiration_template(days_left: int, templates: list[dict], provider: str, user_subscription_template_id: int | None) -> dict | None:
+def _pick_expiration_template(
+    days_left: int,
+    templates: list[dict],
+    providers: list[str],
+    user_subscription_template_id: int | None,
+) -> tuple[dict, str, int | None] | None:
     applicable = []
+    normalized_providers = [p for p in (providers or []) if p in ("plex", "jellyfin")]
 
     for tpl in templates:
         sub_rank = _subscription_scope_rank(tpl, user_subscription_template_id)
         if sub_rank < 0:
             continue
 
-        prov_rank = _provider_rank(tpl, provider)
+        prov_rank = _provider_rank(tpl, normalized_providers)
         if prov_rank < 0:
             continue
 
@@ -586,7 +664,7 @@ def _pick_expiration_template(days_left: int, templates: list[dict], provider: s
         after_v = _get_after(tpl)
 
         matched = False
-        if before_v is not None and _match_before_window(days_left, before_v, before_values):
+        if before_v is not None and _match_before_window(days_left, before_v, before_values, after_values):
             matched = True
         elif after_v is not None and _match_after_window(days_left, after_v, after_values):
             matched = True
@@ -599,13 +677,57 @@ def _pick_expiration_template(days_left: int, templates: list[dict], provider: s
 
     matches.sort(key=lambda x: (-int(x["_sub_rank"]), -int(x["_prov_rank"]), int(x["id"])))
     best = matches[0]
+
+    tpl_provider = (best.get("trigger_provider") or "all").strip().lower()
+
+    # Queue context:
+    # - exact match => use that real provider
+    # - otherwise, if user has at least one provider, use the first real one
+    # - otherwise, use the template provider if specific
+    # - final technical fallback: plex (required by comm_scheduled schema)
+    queue_provider = None
+    queue_server_id = None
+
+    if tpl_provider in normalized_providers:
+        queue_provider = tpl_provider
+    elif normalized_providers:
+        queue_provider = normalized_providers[0]
+    elif tpl_provider in ("plex", "jellyfin"):
+        queue_provider = tpl_provider
+    else:
+        queue_provider = "plex"
+
     best.pop("_sub_rank", None)
     best.pop("_prov_rank", None)
-    return best
 
-def _match_before_window(days_left: int, current_value: int | None, all_values: list[int]) -> bool:
-    if current_value is None or days_left < 0:
+    return best, queue_provider, queue_server_id
+
+def _match_before_window(
+    days_left: int,
+    current_value: int | None,
+    all_values: list[int],
+    after_values: list[int] | None = None,
+) -> bool:
+    if current_value is None:
         return False
+
+    # Cas spécial J0 "before":
+    # si l'app était arrêtée, on autorise le rattrapage après expiration
+    # jusqu'au prochain palier "after" s'il existe.
+    if days_left < 0:
+        if current_value != 0:
+            return False
+
+        overdue_days = -days_left
+        future_after_values = sorted(
+            [v for v in (after_values or []) if v is not None and int(v) >= 0]
+        )
+        next_after = future_after_values[0] if future_after_values else None
+
+        if next_after is None:
+            return True
+
+        return overdue_days < next_after
 
     lower_values = sorted([v for v in all_values if v < current_value], reverse=True)
     lower_bound = lower_values[0] if lower_values else -1
@@ -641,11 +763,11 @@ def _pick_expiration_template_key(days_left: int, templates: dict) -> str | None
     before_values = [v for v in (preavis_before, relance_before, fin_before) if v is not None]
     after_values = [v for v in (preavis_after, relance_after, fin_after) if v is not None]
 
-    if _match_before_window(days_left, preavis_before, before_values):
+    if _match_before_window(days_left, preavis_before, before_values, after_values):
         return "preavis"
-    if _match_before_window(days_left, relance_before, before_values):
+    if _match_before_window(days_left, relance_before, before_values, after_values):
         return "relance"
-    if _match_before_window(days_left, fin_before, before_values):
+    if _match_before_window(days_left, fin_before, before_values, after_values):
         return "fin"
 
     if _match_after_window(days_left, preavis_after, after_values):
@@ -662,8 +784,8 @@ def _pick_expiration_template_key(days_left: int, templates: dict) -> str | None
     return None
 
 
-def _get_user_comm_context(db, user_id: int) -> tuple[str, int | None] | None:
-    row = db.query_one(
+def _get_user_comm_contexts(db, user_id: int) -> list[dict]:
+    rows = db.query(
         """
         SELECT
             LOWER(COALESCE(s.type, '')) AS provider,
@@ -678,18 +800,32 @@ def _get_user_comm_context(db, user_id: int) -> tuple[str, int | None] | None:
                 ELSE 2
             END,
             mu.id ASC
-        LIMIT 1
         """,
         (user_id,),
-    )
-    if not row:
-        return None
-    row = dict(row)
-    provider = (row.get("provider") or "").strip().lower()
-    server_id = row.get("server_id")
-    if provider not in ("plex", "jellyfin"):
-        return None
-    return provider, server_id
+    ) or []
+
+    contexts = []
+    seen = set()
+
+    for row in rows:
+        row = dict(row)
+        provider = (row.get("provider") or "").strip().lower()
+        server_id = row.get("server_id")
+
+        if provider not in ("plex", "jellyfin"):
+            continue
+
+        key = (provider, server_id)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        contexts.append({
+            "provider": provider,
+            "server_id": server_id,
+        })
+
+    return contexts
 
 def run(task_id: int | None = None, db=None):
     if db is None:
@@ -752,7 +888,6 @@ def run(task_id: int | None = None, db=None):
               u.subscription_template_id
             FROM vodum_users u
             WHERE u.expiration_date IS NOT NULL
-              AND EXISTS (SELECT 1 FROM media_users mu WHERE mu.vodum_user_id = u.id)
             """
         )
 
@@ -772,30 +907,37 @@ def run(task_id: int | None = None, db=None):
             exp_iso = exp.isoformat()
             days_left = (exp - today).days
 
-            comm_ctx = _get_user_comm_context(db, uid)
-            if not comm_ctx:
-                msg = f"User {uid} has no media/server context for expiration queueing"
-                log.warning(msg)
-                task_logs(task_id, "warning", msg)
-                sent_users_failed += 1
-                continue
-
-            provider, server_id = comm_ctx
+            comm_contexts = _get_user_comm_contexts(db, uid)
+            providers = [ctx["provider"] for ctx in comm_contexts]
 
             user_subscription_template_id = _safe_int(u.get("subscription_template_id"))
-            tpl = _pick_expiration_template(days_left, templates, provider, user_subscription_template_id)
+            picked = _pick_expiration_template(days_left, templates, providers, user_subscription_template_id)
 
-            if not tpl:
+            if not picked:
                 continue
 
-            template_marker = f"tpl:{int(tpl['id'])}"
+            tpl, provider, server_id = picked
+
+            # If the queued provider matches a real media server for this user,
+            # keep its real server_id. Otherwise leave server_id as None.
+            if server_id is None and comm_contexts:
+                for ctx in comm_contexts:
+                    if ctx["provider"] == provider:
+                        server_id = ctx.get("server_id")
+                        break
+
+            template_marker = _stable_template_marker(tpl)
+            lookup_markers = _template_markers_for_lookup(tpl)
+
+            if not template_marker:
+                continue
 
             # In FIRST mode: one successful channel is enough
             # In ALL mode  : all available channels must have succeeded
-            if _already_sent_for_current_mode(db, settings, u, template_marker, exp_iso):
+            if _already_sent_for_current_mode(db, settings, u, lookup_markers, exp_iso):
                 continue
 
-            dedupe_key = f"expiration:template:{int(tpl['id'])}:user:{uid}:exp:{exp_iso}"
+            dedupe_key = f"expiration:template:{template_marker}:user:{uid}:exp:{exp_iso}"
             payload = {
                 "trigger_event": "expiration",
                 "template_key": template_marker,

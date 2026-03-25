@@ -1,7 +1,7 @@
 # Unified Communications UI (Email + Discord)
 
 import json
-from flask import render_template, request, redirect, url_for, flash, jsonify
+from flask import render_template, request, redirect, url_for, flash, jsonify, session
 
 from core.i18n import get_translator
 from web.helpers import get_db, add_log, send_email_via_settings
@@ -80,6 +80,69 @@ def _enqueue_send_comm_campaigns(db) -> bool:
     except Exception:
         return False
 
+def _find_enabled_template_duplicate(
+    db,
+    *,
+    trigger_event: str,
+    trigger_provider: str,
+    subscription_scope: str,
+    subscription_template_id,
+    days_before,
+    days_after,
+    expiration_change_direction: str = "all",
+    exclude_id: int | None = None,
+):
+    """
+    Detect only true logical duplicates among ENABLED templates.
+
+    Allowed:
+    - same trigger/provider/subscription target with different delay slots
+      (ex: J-30 / J-7 / J-0 for expiration)
+    - all + plex/jellyfin fallback combinations
+    - disabled duplicates
+
+    Blocked:
+    - another ENABLED template with the exact same logical slot
+    """
+    normalized_sub_id = subscription_template_id if subscription_scope == "specific" else None
+    normalized_exp_dir = expiration_change_direction if trigger_event == "expiration_change" else "all"
+
+    sql = """
+        SELECT id, name
+        FROM comm_templates
+        WHERE enabled = 1
+          AND trigger_event = ?
+          AND trigger_provider = ?
+          AND COALESCE(subscription_scope, 'none') = ?
+          AND COALESCE(subscription_template_id, 0) = COALESCE(?, 0)
+          AND COALESCE(expiration_change_direction, 'all') = ?
+          AND (
+                (days_before IS NULL AND ? IS NULL)
+                OR days_before = ?
+              )
+          AND (
+                (days_after IS NULL AND ? IS NULL)
+                OR days_after = ?
+              )
+    """
+    params = [
+        trigger_event,
+        trigger_provider,
+        subscription_scope,
+        normalized_sub_id,
+        normalized_exp_dir,
+        days_before, days_before,
+        days_after, days_after,
+    ]
+
+    if exclude_id is not None:
+        sql += " AND id <> ?"
+        params.append(exclude_id)
+
+    sql += " LIMIT 1"
+
+    row = db.query_one(sql, tuple(params))
+    return dict(row) if row else None
 
 def _normalize_send_mode(settings: dict) -> str:
     mode = (settings or {}).get("notifications_send_mode")
@@ -421,6 +484,9 @@ def register(app):
         t = get_translator()
 
         load_id = request.args.get("load", type=int)
+        duplicate_disabled = request.args.get("duplicate_disabled", type=int) == 1
+        duplicate_disabled_reason = (session.pop("communications_duplicate_disabled_reason", "") or "").strip()
+
         loaded = None
         if load_id:
             loaded = db.query_one("SELECT * FROM comm_templates WHERE id = ?", (load_id,))
@@ -546,6 +612,24 @@ def register(app):
                 flash(t("comm_template_key_exists"), "error")
                 return redirect(url_for("communications_templates_page"))
 
+            duplicate = None
+            duplicate_reason = ""
+
+            if enabled:
+                duplicate = _find_enabled_template_duplicate(
+                    db,
+                    trigger_event=trigger_event,
+                    trigger_provider=trigger_provider,
+                    subscription_scope=subscription_scope,
+                    subscription_template_id=subscription_template_id,
+                    days_before=days_before,
+                    days_after=days_after,
+                    expiration_change_direction=expiration_change_direction,
+                )
+                if duplicate:
+                    enabled = 0
+                    duplicate_reason = f"#{duplicate['id']} - {duplicate['name']}"
+
             cur = db.execute(
                 """
                 INSERT INTO comm_templates(
@@ -576,8 +660,30 @@ def register(app):
                     (tid, att["filename"], att.get("mime_type"), att["path"]),
                 )
 
-            add_log("info", "communications", "Template created", {"id": tid, "key": key})
+            add_log(
+                "info",
+                "communications",
+                "Template created",
+                {
+                    "id": tid,
+                    "key": key,
+                    "auto_disabled_duplicate": bool(duplicate),
+                    "duplicate_template_id": duplicate.get("id") if duplicate else None,
+                },
+            )
+
             flash(t("comm_template_created"), "success")
+
+            if duplicate:
+                session["communications_duplicate_disabled_reason"] = duplicate_reason
+                return redirect(
+                    url_for(
+                        "communications_templates_page",
+                        load=tid,
+                        duplicate_disabled=1,
+                    )
+                )
+
             return redirect(url_for("communications_templates_page", load=tid))
 
         if request.method == "POST" and request.form.get("action") == "save":
@@ -685,6 +791,25 @@ def register(app):
                 flash(t("comm_not_found"), "error")
                 return redirect(url_for("communications_templates_page"))
 
+            duplicate = None
+            duplicate_reason = ""
+
+            if enabled:
+                duplicate = _find_enabled_template_duplicate(
+                    db,
+                    trigger_event=trigger_event,
+                    trigger_provider=trigger_provider,
+                    subscription_scope=subscription_scope,
+                    subscription_template_id=subscription_template_id,
+                    days_before=days_before,
+                    days_after=days_after,
+                    expiration_change_direction=expiration_change_direction,
+                    exclude_id=tid,
+                )
+                if duplicate:
+                    enabled = 0
+                    duplicate_reason = f"#{duplicate['id']} - {duplicate['name']}"
+
             db.execute(
                 """
                 UPDATE comm_templates
@@ -721,8 +846,29 @@ def register(app):
                     (tid, att["filename"], att.get("mime_type"), att["path"]),
                 )
 
-            add_log("info", "communications", "Template updated", {"id": tid})
+            add_log(
+                "info",
+                "communications",
+                "Template updated",
+                {
+                    "id": tid,
+                    "auto_disabled_duplicate": bool(duplicate),
+                    "duplicate_template_id": duplicate.get("id") if duplicate else None,
+                },
+            )
+
             flash(t("comm_template_saved"), "success")
+
+            if duplicate:
+                session["communications_duplicate_disabled_reason"] = duplicate_reason
+                return redirect(
+                    url_for(
+                        "communications_templates_page",
+                        load=tid,
+                        duplicate_disabled=1,
+                    )
+                )
+
             return redirect(url_for("communications_templates_page", load=tid))
 
         if request.method == "POST" and request.form.get("action") == "delete":
@@ -756,6 +902,8 @@ def register(app):
             loaded_template=loaded,
             subscription_templates=subscription_templates,
             current_subpage="templates",
+            duplicate_disabled=duplicate_disabled,
+            duplicate_disabled_reason=duplicate_disabled_reason,
         )
 
 

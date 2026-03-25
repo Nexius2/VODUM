@@ -1152,7 +1152,14 @@
 "comm_var_expiration_change_signed_days_desc": "Différence signée en jours (positive ou négative).",
 "comm_var_expiration_change_direction_desc": "Type de variation : increase ou decrease.",
 "comm_var_expiration_change_reason_desc": "Cause du changement de date d'expiration (cadeau, parrainage, modification manuelle...).",
-"comm_var_expiration_change_reason_desc": "Reason for the expiration date change (gift, referral, manual update...)."
+"comm_duplicate_disabled_subtitle": "Le template a bien été enregistré, mais il a été désactivé automatiquement.",
+"comm_duplicate_disabled_reason": "Raison : doublon avec le template actif",
+"comm_duplicate_disabled_help": "Un seul template actif est autorisé pour ce même slot logique. Le nouveau template a donc été enregistré en mode désactivé pour éviter les conflits.",
+
+"close": "Fermer",
+"action": "Action",
+"reason": "Raison",
+"discord_history": "Historique Discord"
 
   
 }
