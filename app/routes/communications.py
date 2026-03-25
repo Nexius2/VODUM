@@ -92,11 +92,17 @@ def _campaign_attempts_satisfy_mode(db, settings: dict, user: dict, attempts: li
     Campaign success rule:
     - FIRST: at least one successful channel
     - ALL  : all available channels for this user must succeed
+    - skipped_only: treated as OK to stay aligned with unified comm engine behavior
     """
     mode = _normalize_send_mode(settings)
     avail = available_channels(db, settings, user)
+    attempts = attempts or []
 
-    sent_channels = {a.channel for a in (attempts or []) if getattr(a, "status", None) == "sent"}
+    sent_channels = {a.channel for a in attempts if getattr(a, "status", None) == "sent"}
+    skipped_only = bool(attempts) and all(getattr(a, "status", None) == "skipped" for a in attempts)
+
+    if skipped_only:
+        return True
 
     if mode == "all":
         required = []
@@ -105,13 +111,12 @@ def _campaign_attempts_satisfy_mode(db, settings: dict, user: dict, attempts: li
         if avail.get("discord"):
             required.append("discord")
 
-        # No usable channel => failure
         if not required:
             return False
 
         return all(ch in sent_channels for ch in required)
 
-    return any(getattr(a, "status", None) == "sent" for a in (attempts or []))
+    return any(getattr(a, "status", None) == "sent" for a in attempts)
 
 def register(app):
 

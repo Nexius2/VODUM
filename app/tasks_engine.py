@@ -407,9 +407,6 @@ def run_task(task_id: int):
 
         result = result_box["value"]
 
-
-        # IMPORTANT: certaines tâches (ex: import_tautulli) retournent un dict "status"
-        # mais tasks_engine ne le log pas -> on a l'impression que "tout va bien" alors que rien ne s'est passé.
         if result is not None:
             try:
                 logger.info(f"Task '{name}' returned: {result}")
@@ -420,12 +417,23 @@ def run_task(task_id: int):
                     exc_info=True,
                 )
 
-
         duration = time.time() - start_time
         if duration > max_duration:
             raise TimeoutError(
                 f"Task {name} exceeded maximum duration ({int(duration)}s > {max_duration}s)"
             )
+
+        # Si la task retourne explicitement un status "error" sans lever d'exception,
+        # on la traite quand même comme une erreur réelle.
+        if isinstance(result, dict):
+            returned_status = str(result.get("status") or "").strip().lower()
+            if returned_status == "error":
+                returned_error = (
+                    result.get("message")
+                    or result.get("error")
+                    or f"Task {name} returned status=error"
+                )
+                raise RuntimeError(str(returned_error))
 
         # ---- SUCCÈS ----
         db.execute(

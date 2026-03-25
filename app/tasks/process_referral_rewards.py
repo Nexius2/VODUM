@@ -67,12 +67,18 @@ def _log_event(db, referral_id, event_type, actor="system", old_referrer_user_id
 def _get_user_comm_context(db, user_id: int):
     row = db.query_one(
         """
-        SELECT s.provider AS provider, mu.server_id AS server_id
+        SELECT
+            LOWER(COALESCE(s.type, '')) AS provider,
+            mu.server_id AS server_id
         FROM media_users mu
         JOIN servers s ON s.id = mu.server_id
         WHERE mu.vodum_user_id = ?
         ORDER BY
-            CASE s.provider WHEN 'plex' THEN 0 ELSE 1 END,
+            CASE LOWER(COALESCE(s.type, ''))
+                WHEN 'plex' THEN 0
+                WHEN 'jellyfin' THEN 1
+                ELSE 2
+            END,
             mu.id ASC
         LIMIT 1
         """,
