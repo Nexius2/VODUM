@@ -253,7 +253,7 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
             body=body,
             attachments=attachments,
             forced_channels=forced_channels,
-            bypass_skip_never_used_accounts=(trigger_event == "user_creation"),
+            bypass_skip_never_used_accounts=(trigger_event in ("user_creation", "expiration_change")),
         )
 
         updated_channels_sent = set(already_sent_channels)

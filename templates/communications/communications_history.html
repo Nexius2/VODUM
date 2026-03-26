@@ -10,58 +10,297 @@
 {% set current_subpage = 'history' %}
 {% include "communications/_communications_nav.html" %}
 
+{% set sort = sort or 'sent_at' %}
+{% set order = order or 'desc' %}
+
+{% macro sort_link(label, key) -%}
+  {% set is_active = (sort == key) %}
+  <a
+    href="{{ url_for('communications_history_page', sort=key, order=('asc' if is_active and order == 'desc' else 'desc'), page=1) }}"
+    class="inline-flex items-center gap-1 transition {{ 'text-emerald-400' if is_active else 'text-slate-400 hover:text-slate-200' }}"
+  >
+    <span>{{ label }}</span>
+
+    {% if is_active %}
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="w-3 h-3 opacity-40"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        {% if order == 'asc' %}
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+        {% else %}
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        {% endif %}
+      </svg>
+    {% endif %}
+  </a>
+{%- endmacro %}
+
 <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-  <table class="w-full text-xs">
-    <thead class="bg-slate-950/60 text-slate-400 text-left">
-      <tr>
-        <th class="px-4 py-2">{{ t('kind') }}</th>
-        <th class="px-4 py-2">{{ t('user') }}</th>
-        <th class="px-4 py-2">{{ t('channel_used') }}</th>
-        <th class="px-4 py-2">{{ t('status') }}</th>
-        <th class="px-4 py-2">{{ t('error') }}</th>
-        <th class="px-4 py-2">{{ t('sent_at') }}</th>
-        <th class="px-4 py-2">{{ t('details') }}</th>
-      </tr>
-    </thead>
-    <tbody>
-    {% for h in history %}
-      <tr class="border-t border-slate-800 hover:bg-slate-800/40">
-        <td class="px-4 py-2">
-          {% if h.kind == 'template' %}
-            <span class="px-2 py-1 rounded bg-slate-800 text-slate-200">{{ t('template') }}</span>
-            {% if h.template_key %}<span class="ml-2 text-slate-400"><code>{{ h.template_key }}</code></span>{% endif %}
-          {% else %}
-            <span class="px-2 py-1 rounded bg-slate-800 text-slate-200">{{ t('campaign') }}</span>
-            {% if h.campaign_name %}<span class="ml-2 text-slate-400">{{ h.campaign_name }}</span>{% endif %}
-          {% endif %}
-        </td>
-        <td class="px-4 py-2">{{ h.user_username or '-' }}</td>
-        <td class="px-4 py-2">{{ t(h.channel_used) }}</td>
-        <td class="px-4 py-2">
-          {% if h.status == 'sent' %}
-            <span class="px-2 py-1 rounded-full bg-emerald-900/40 text-emerald-300">{{ t('sent') }}</span>
-          {% else %}
-            <span class="px-2 py-1 rounded-full bg-rose-900/40 text-rose-300">{{ t('failed') }}</span>
-          {% endif %}
-        </td>
-        <td class="px-4 py-2 text-slate-400">{{ h.error or '-' }}</td>
-        <td class="px-4 py-2">{{ h.sent_at|tz }}</td>
-        <td class="px-4 py-2">
-          {% if h.meta and h.meta|length %}
-            <details class="text-[11px]">
-              <summary class="cursor-pointer text-slate-400 hover:text-slate-200">{{ t('view') }}</summary>
-              <pre class="mt-2 whitespace-pre-wrap text-slate-300">{{ h.meta_json }}</pre>
-            </details>
-          {% else %}
-            <span class="text-slate-500">-</span>
-          {% endif %}
-        </td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
+  <div class="overflow-x-auto">
+    <table class="w-full text-xs table-fixed">
+      <thead class="bg-slate-950/60 text-left">
+        <tr>
+          <th class="px-4 py-3 w-[220px]">
+            {{ sort_link(t('kind'), 'kind') }}
+          </th>
+          <th class="px-4 py-3 w-[190px]">
+            {{ sort_link(t('user'), 'user') }}
+          </th>
+          <th class="px-4 py-3 w-[150px]">
+            {{ sort_link(t('channel_used'), 'channel_used') }}
+          </th>
+          <th class="px-4 py-3 w-[140px]">
+            {{ sort_link(t('status'), 'status') }}
+          </th>
+          <th class="px-4 py-3">
+            {{ sort_link(t('error'), 'error') }}
+          </th>
+          <th class="px-4 py-3 w-[190px]">
+            {{ sort_link(t('sent_at'), 'sent_at') }}
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for h in history %}
+        {% set subject_value = h.template_subject if h.kind == 'template' else h.campaign_subject %}
+        {% set body_value = h.template_body if h.kind == 'template' else h.campaign_body %}
+        {% set modal_payload = {
+          "kind": h.kind or "",
+          "kind_label": (t('template') if h.kind == 'template' else t('campaign')),
+          "name": (h.template_key if h.kind == 'template' else h.campaign_name) or "",
+          "user": h.user_username or "",
+          "channel_used": t(h.channel_used) if h.channel_used else "-",
+          "status": t('sent') if h.status == 'sent' else t('failed'),
+          "error": h.error or "",
+          "sent_at": (h.sent_at|tz) if h.sent_at else "-",
+          "subject": subject_value or "",
+          "body": body_value or "",
+          "meta_json": h.meta_json or ""
+        } %}
+        <tr
+          class="border-t border-slate-800 cursor-pointer hover:bg-slate-800/40 focus-within:bg-slate-800/40"
+          tabindex="0"
+          role="button"
+          data-history='{{ modal_payload | tojson | forceescape }}'
+        >
+          <td class="px-4 py-3 align-top">
+            <div class="flex items-center gap-2 min-w-0">
+              {% if h.kind == 'template' %}
+                <span class="px-2 py-1 rounded bg-slate-800 text-slate-200 shrink-0">{{ t('template') }}</span>
+                {% if h.template_key %}
+                  <span class="text-slate-400 truncate"><code>{{ h.template_key }}</code></span>
+                {% endif %}
+              {% endif %}
+
+              {% if h.kind != 'template' %}
+                <span class="px-2 py-1 rounded bg-slate-800 text-slate-200 shrink-0">{{ t('campaign') }}</span>
+                {% if h.campaign_name %}
+                  <span class="text-slate-400 truncate">{{ h.campaign_name }}</span>
+                {% endif %}
+              {% endif %}
+            </div>
+          </td>
+
+          <td class="px-4 py-3 align-top">
+            <div class="truncate" title="{{ h.user_username or '-' }}">{{ h.user_username or '-' }}</div>
+          </td>
+
+          <td class="px-4 py-3 align-top">
+            {{ t(h.channel_used) }}
+          </td>
+
+          <td class="px-4 py-3 align-top">
+            {% if h.status == 'sent' %}
+              <span class="px-2 py-1 rounded-full bg-emerald-900/40 text-emerald-300">{{ t('sent') }}</span>
+            {% else %}
+              <span class="px-2 py-1 rounded-full bg-rose-900/40 text-rose-300">{{ t('failed') }}</span>
+            {% endif %}
+          </td>
+
+          <td class="px-4 py-3 align-top text-slate-400">
+            <div class="truncate" title="{{ h.error or '-' }}">{{ h.error or '-' }}</div>
+          </td>
+
+          <td class="px-4 py-3 align-top whitespace-nowrap">
+            {{ h.sent_at|tz }}
+          </td>
+        </tr>
+      {% else %}
+        <tr>
+          <td colspan="6" class="px-4 py-8 text-center text-slate-500">
+            No history found.
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 
+{% if total_pages > 1 %}
+<div class="flex items-center justify-between mt-4">
+  <div class="text-xs text-slate-500">
+    Page {{ page }} / {{ total_pages }} ({{ total_rows }} rows)
+  </div>
+
+  <div class="flex gap-2">
+    {% if page > 1 %}
+      <a
+        class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
+        href="{{ url_for('communications_history_page', page=1, sort=sort, order=order) }}"
+      >First</a>
+
+      <a
+        class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
+        href="{{ url_for('communications_history_page', page=page-1, sort=sort, order=order) }}"
+      >Prev</a>
+    {% endif %}
+
+    {% if page < total_pages %}
+      <a
+        class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
+        href="{{ url_for('communications_history_page', page=page+1, sort=sort, order=order) }}"
+      >Next</a>
+
+      <a
+        class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
+        href="{{ url_for('communications_history_page', page=total_pages, sort=sort, order=order) }}"
+      >Last</a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
 <p class="mt-3 text-[11px] text-slate-500">{{ t('comm_history_note') }}</p>
+
+<div
+  id="commHistoryModal"
+  class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 px-4"
+  onclick="closeCommHistoryModal(event)"
+>
+  <div
+    class="w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"
+    onclick="event.stopPropagation()"
+  >
+    <div class="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+      <div>
+        <div id="commHistoryModalTitle" class="text-lg font-semibold text-slate-100">History details</div>
+        <div id="commHistoryModalSubtitle" class="text-xs text-slate-400 mt-1"></div>
+      </div>
+      <button
+        type="button"
+        class="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-950 hover:bg-slate-800 text-slate-200"
+        onclick="closeCommHistoryModal()"
+      >
+        Close
+      </button>
+    </div>
+
+    <div class="p-5 overflow-y-auto max-h-[calc(90vh-72px)] space-y-5">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
+          <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">General</div>
+          <div class="space-y-2 text-sm">
+            <div><span class="text-slate-400">Type:</span> <span id="commHistoryModalKind" class="text-slate-100"></span></div>
+            <div><span class="text-slate-400">Name:</span> <span id="commHistoryModalName" class="text-slate-100"></span></div>
+            <div><span class="text-slate-400">User:</span> <span id="commHistoryModalUser" class="text-slate-100"></span></div>
+            <div><span class="text-slate-400">Channel:</span> <span id="commHistoryModalChannel" class="text-slate-100"></span></div>
+            <div><span class="text-slate-400">Status:</span> <span id="commHistoryModalStatus" class="text-slate-100"></span></div>
+            <div><span class="text-slate-400">Sent at:</span> <span id="commHistoryModalSentAt" class="text-slate-100"></span></div>
+          </div>
+        </div>
+
+        <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
+          <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Error</div>
+          <pre id="commHistoryModalError" class="whitespace-pre-wrap break-words text-sm text-slate-200 min-h-[80px]"></pre>
+        </div>
+      </div>
+
+      <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
+        <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Subject</div>
+        <pre id="commHistoryModalSubject" class="whitespace-pre-wrap break-words text-sm text-slate-100"></pre>
+      </div>
+
+      <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
+        <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Body</div>
+        <pre id="commHistoryModalBody" class="whitespace-pre-wrap break-words text-sm text-slate-100"></pre>
+      </div>
+
+      <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
+        <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Meta JSON</div>
+        <pre id="commHistoryModalMeta" class="whitespace-pre-wrap break-words text-xs text-slate-300"></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function openCommHistoryModal(raw) {
+  let data = {};
+  try {
+    data = JSON.parse(raw || "{}");
+  } catch (e) {
+    data = {};
+  }
+
+  document.getElementById("commHistoryModalTitle").textContent = "History details";
+  document.getElementById("commHistoryModalSubtitle").textContent =
+    ((data.kind_label || "Entry") + (data.name ? " · " + data.name : ""));
+
+  document.getElementById("commHistoryModalKind").textContent = data.kind_label || "-";
+  document.getElementById("commHistoryModalName").textContent = data.name || "-";
+  document.getElementById("commHistoryModalUser").textContent = data.user || "-";
+  document.getElementById("commHistoryModalChannel").textContent = data.channel_used || "-";
+  document.getElementById("commHistoryModalStatus").textContent = data.status || "-";
+  document.getElementById("commHistoryModalSentAt").textContent = data.sent_at || "-";
+  document.getElementById("commHistoryModalError").textContent = data.error || "-";
+  document.getElementById("commHistoryModalSubject").textContent = data.subject || "-";
+  document.getElementById("commHistoryModalBody").textContent = data.body || "-";
+  document.getElementById("commHistoryModalMeta").textContent = data.meta_json || "{}";
+
+  const modal = document.getElementById("commHistoryModal");
+  modal.classList.remove("hidden");
+  modal.classList.add("flex");
+  document.body.classList.add("overflow-hidden");
+}
+
+function closeCommHistoryModal(event) {
+  if (event && event.target && event.target.id !== "commHistoryModal") {
+    return;
+  }
+  const modal = document.getElementById("commHistoryModal");
+  modal.classList.add("hidden");
+  modal.classList.remove("flex");
+  document.body.classList.remove("overflow-hidden");
+}
+
+document.querySelectorAll('tr[data-history]').forEach(function (row) {
+  if (row.dataset.boundCommHistory === "1") {
+    return;
+  }
+  row.dataset.boundCommHistory = "1";
+
+  row.addEventListener("click", function () {
+    openCommHistoryModal(row.dataset.history);
+  });
+
+  row.addEventListener("keydown", function (event) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openCommHistoryModal(row.dataset.history);
+    }
+  });
+});
+
+document.addEventListener("keydown", function (event) {
+  if (event.key === "Escape") {
+    closeCommHistoryModal();
+  }
+});
+</script>
 
 {% endblock %}

@@ -6,6 +6,7 @@ import json
 from db_manager import DBManager
 from logging_utils import get_logger
 from tasks.update_user_status import compute_status
+from tasks_engine import run_task_by_name
 from communications_engine import select_comm_template_for_user, schedule_template_notification
 
 log = get_logger("api.subscriptions")
@@ -279,6 +280,23 @@ def update_user_expiration(user_id, new_expiration_date, reason="manual", db=Non
                     log.info(
                         f"[USER #{user_id}] expiration_change notification queued "
                         f"| {old_exp_iso} -> {new_exp_iso} | delta={delta_days} | reason={reason}"
+                    )
+
+                    queued_now = run_task_by_name("send_expiration_emails")
+                    if queued_now:
+                        log.info(
+                            f"[USER #{user_id}] send_expiration_emails enqueued immediately "
+                            f"after expiration change"
+                        )
+                    else:
+                        log.warning(
+                            f"[USER #{user_id}] expiration_change queued but send_expiration_emails "
+                            f"could not be enqueued immediately (task disabled or cron disabled)"
+                        )
+                else:
+                    log.info(
+                        f"[USER #{user_id}] No enabled expiration_change template matched "
+                        f"(direction={change_direction})"
                     )
         except Exception:
             log.error(

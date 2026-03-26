@@ -291,15 +291,24 @@
 				<th class="px-4 py-2">{{ t('comm_subscription_target') }}</th>
 				<th class="px-4 py-2">{{ t('comm_delay') }}</th>
 	            <th class="px-4 py-2">{{ t('subject') }}</th>
-	            <th class="px-4 py-2"></th>
 	          </tr>
         </thead>
         <tbody>
         {% for tpl in templates %}
-          <tr class="border-t border-slate-800 hover:bg-slate-800/40">
-            
+          <tr
+            class="border-t border-slate-800 cursor-pointer hover:bg-slate-800/40 focus-within:bg-slate-800/40"
+            tabindex="0"
+            role="button"
+            data-href="{{ url_for('communications_templates_page', load=tpl.id) }}"
+          >
             <td class="px-4 py-2">{{ tpl.name }}</td>
-            <td class="px-4 py-2">{% if tpl.enabled %}<span class="text-emerald-300">{{ t('yes') }}</span>{% else %}<span class="text-slate-400">{{ t('no') }}</span>{% endif %}</td>
+            <td class="px-4 py-2">
+              {% if tpl.enabled %}
+                <span class="text-emerald-300">{{ t('yes') }}</span>
+              {% else %}
+                <span class="text-slate-400">{{ t('no') }}</span>
+              {% endif %}
+            </td>
 			<td class="px-4 py-2">
 				{% if tpl.trigger_event == 'user_creation' %}
 				  {{ t('comm_trigger_user_creation') }}
@@ -312,36 +321,33 @@
 				{% endif %}
 			</td>
 
-				<td class="px-4 py-2">
-				  {% if tpl.trigger_provider == 'plex' %}Plex
-				  {% elif tpl.trigger_provider == 'jellyfin' %}Jellyfin
-				  {% else %}{{ t('comm_provider_all') }}
-				  {% endif %}
-				</td>
+			<td class="px-4 py-2">
+			  {% if tpl.trigger_provider == 'plex' %}Plex
+			  {% elif tpl.trigger_provider == 'jellyfin' %}Jellyfin
+			  {% else %}{{ t('comm_provider_all') }}
+			  {% endif %}
+			</td>
 
-				<td class="px-4 py-2">
-				  {% if tpl.subscription_scope == 'specific' and tpl.subscription_template_name %}
-					{{ tpl.subscription_template_name }}
-				  {% elif tpl.subscription_scope == 'all' %}
-					{{ t('comm_subscription_all') }}
-				  {% else %}
-					{{ t('comm_subscription_none') }}
-				  {% endif %}
-				</td>
+			<td class="px-4 py-2">
+			  {% if tpl.subscription_scope == 'specific' and tpl.subscription_template_name %}
+				{{ tpl.subscription_template_name }}
+			  {% elif tpl.subscription_scope == 'all' %}
+				{{ t('comm_subscription_all') }}
+			  {% else %}
+				{{ t('comm_subscription_none') }}
+			  {% endif %}
+			</td>
 
-				<td class="px-4 py-2">
-				  {% if tpl.days_before is not none %}
-					{{ t('comm_delay_before_short') }} {{ tpl.days_before }}
-				  {% elif tpl.days_after is not none %}
-					{{ t('comm_delay_after_short') }} {{ tpl.days_after }}
-				  {% else %}
-					-
-				  {% endif %}
-				</td>
+			<td class="px-4 py-2">
+			  {% if tpl.days_before is not none %}
+				{{ t('comm_delay_before_short') }} {{ tpl.days_before }}
+			  {% elif tpl.days_after is not none %}
+				{{ t('comm_delay_after_short') }} {{ tpl.days_after }}
+			  {% else %}
+				-
+			  {% endif %}
+			</td>
             <td class="px-4 py-2">{{ tpl.subject }}</td>
-            <td class="px-4 py-2 text-right">
-              <a href="{{ url_for('communications_templates_page', load=tpl.id) }}" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700">{{ t('open') }}</a>
-            </td>
           </tr>
         {% endfor %}
         </tbody>
@@ -544,6 +550,25 @@ duplicateDisabledModal && duplicateDisabledModal.addEventListener('click', (e) =
   if (e.target === duplicateDisabledModal || e.target.classList.contains('absolute')) {
     closeDuplicateDisabledModal();
   }
+});
+
+document.querySelectorAll('tr[data-href]').forEach((row) => {
+  if (row.dataset.boundRowClick === '1') {
+    return;
+  }
+
+  row.dataset.boundRowClick = '1';
+
+  row.addEventListener('click', () => {
+    window.location.href = row.dataset.href;
+  });
+
+  row.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      window.location.href = row.dataset.href;
+    }
+  });
 });
 
 document.addEventListener('keydown', (e) => {
