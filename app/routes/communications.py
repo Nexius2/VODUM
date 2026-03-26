@@ -914,31 +914,73 @@ def register(app):
     def communications_history_page():
         db = get_db()
 
+        page = max(_as_int(request.args.get("page"), 1), 1)
+        per_page = 20
+
+        sort = (request.args.get("sort") or "sent_at").strip().lower()
+        order = (request.args.get("order") or "desc").strip().lower()
+
+        if order not in ("asc", "desc"):
+            order = "desc"
+
+        sent_at_sort_expr = """
+            COALESCE(
+                CASE
+                    WHEN typeof(h.sent_at) = 'integer' THEN h.sent_at
+                    WHEN typeof(h.sent_at) = 'text' AND h.sent_at GLOB '[0-9]*' THEN CAST(h.sent_at AS INTEGER)
+                    ELSE CAST(strftime('%s', h.sent_at) AS INTEGER)
+                END,
+                0
+            )
+        """
+
+        sort_map = {
+            "kind": "LOWER(COALESCE(h.kind, ''))",
+            "user": "LOWER(COALESCE(u.username, ''))",
+            "channel_used": "LOWER(COALESCE(h.channel_used, ''))",
+            "status": "LOWER(COALESCE(h.status, ''))",
+            "error": "LOWER(COALESCE(h.error, ''))",
+            "sent_at": sent_at_sort_expr,
+        }
+
+        if sort not in sort_map:
+            sort = "sent_at"
+
+        order_sql = "ASC" if order == "asc" else "DESC"
+        order_by_sql = f"{sort_map[sort]} {order_sql}, h.id DESC"
+
+        total_row = db.query_one("SELECT COUNT(*) AS total FROM comm_history")
+        total_rows = int(total_row["total"]) if total_row and total_row["total"] is not None else 0
+        total_pages = max((total_rows + per_page - 1) // per_page, 1)
+
+        if page > total_pages:
+            page = total_pages
+
+        offset = (page - 1) * per_page
+
         rows = db.query(
-            """
-            SELECT h.*, u.username AS user_username,
-                   t.key AS template_key,
-                   c.name AS campaign_name
+            f"""
+            SELECT
+                h.*,
+                u.username AS user_username,
+                t.key AS template_key,
+                t.subject AS template_subject,
+                t.body AS template_body,
+                c.name AS campaign_name,
+                c.subject AS campaign_subject,
+                c.body AS campaign_body
             FROM comm_history h
             LEFT JOIN vodum_users u ON u.id = h.user_id
             LEFT JOIN comm_templates t ON t.id = h.template_id
             LEFT JOIN comm_campaigns c ON c.id = h.campaign_id
-            ORDER BY
-              COALESCE(
-                CASE
-                  WHEN typeof(h.sent_at) = 'integer' THEN h.sent_at
-                  WHEN typeof(h.sent_at) = 'text' AND h.sent_at GLOB '[0-9]*' THEN CAST(h.sent_at AS INTEGER)
-                  ELSE CAST(strftime('%s', h.sent_at) AS INTEGER)
-                END,
-                0
-              ) DESC,
-              h.id DESC
-            LIMIT 500
-            """
+            ORDER BY {order_by_sql}
+            LIMIT ? OFFSET ?
+            """,
+            (per_page, offset),
         )
+
         history = [dict(r) for r in (rows or [])]
 
-        # best effort parse meta_json for UI
         for h in history:
             try:
                 h["meta"] = json.loads(h.get("meta_json") or "{}")
@@ -949,6 +991,12 @@ def register(app):
             "communications/communications_history.html",
             history=history,
             current_subpage="history",
+            page=page,
+            per_page=per_page,
+            total_rows=total_rows,
+            total_pages=total_pages,
+            sort=sort,
+            order=order,
         )
 
 
