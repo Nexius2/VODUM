@@ -379,13 +379,14 @@ def api_referrer_candidates():
 def api_users_create():
     db = get_db()
     payload = request.get_json(silent=True) or {}
+    log.info(f"[CREATE USER] payload received: keys={list(payload.keys())}")
 
     email = (payload.get("email") or "").strip()
     second_email = (payload.get("second_email") or "").strip()
     username = (payload.get("username") or "").strip() or (email.split("@", 1)[0] if email else "")
     firstname = (payload.get("firstname") or "").strip()
     lastname = (payload.get("lastname") or "").strip()
-    vodum_username = None
+    vodum_username = username or None
 
     # --- Dates: support aliases + parsing tolerant ---
     raw_exp = payload.get("expiration_date") or payload.get("expirationDate") or payload.get("expiration") or ""
@@ -531,6 +532,7 @@ def api_users_create():
         log.error(f"Create Vodum user failed: {e}", exc_info=True)
         return jsonify({"ok": False, "error": f"Failed to create Vodum user: {e}"}), 500
     vodum_user_id = cur.lastrowid
+    log.info(f"[CREATE USER] vodum_user created id={vodum_user_id} email={email} username={vodum_username}")
     try:
         cur.close()
     except Exception:
@@ -614,6 +616,7 @@ def api_users_create():
     smtp_ok = is_smtp_ready(settings)
 
     for block in server_blocks:
+        log.info(f"[CREATE USER] processing block: {block}")
         server_id = int(block.get("server_id"))
         server = servers_by_id[server_id]
         provider = (server.get("type") or "").lower()
@@ -715,6 +718,10 @@ def api_users_create():
                 if primary_server is not None:
                     selected_primary = libs_by_server.get(primary_sid, [])
                     if selected_primary:
+                        log.info(
+                            f"[PLEX INVITE] server={primary_server.get('name')} "
+                            f"email={email} libs={[x['name'] for x in selected_primary]}"
+                        )
                         invite_state = plex_invite_and_share(
                             primary_server,
                             email=email,
@@ -726,6 +733,8 @@ def api_users_create():
                             filter_television=filter_tv,
                             filter_music=filter_music,
                         )
+                        log.info(f"[PLEX INVITE RESULT] {invite_state}")
+
 
                         if not external_user_id and invite_state.get("external_user_id"):
                             external_user_id = invite_state.get("external_user_id")
@@ -744,6 +753,10 @@ def api_users_create():
                         if not selected_for_this_server:
                             continue
 
+                        log.info(
+                            f"[PLEX INVITE LINKED] server={s.get('name')} "
+                            f"email={email} libs={[x['name'] for x in selected_for_this_server]}"
+                        )
                         st2 = plex_invite_and_share(
                             s,
                             email=email,
@@ -755,6 +768,7 @@ def api_users_create():
                             filter_television=filter_tv,
                             filter_music=filter_music,
                         )
+                        log.info(f"[PLEX INVITE LINKED RESULT] {st2}")
 
                         if not external_user_id and st2.get("external_user_id"):
                             external_user_id = st2.get("external_user_id")
@@ -774,7 +788,10 @@ def api_users_create():
 
         except Exception as e:
             provider_errors.append(f"server_id={server_id} ({server.get('name')}): {e}")
-            log.error(f"Create provider user failed: vodum_user_id={vodum_user_id} server_id={server_id}: {e}", exc_info=True)
+            log.error(
+                f"[ERROR CREATE USER] vodum_user_id={vodum_user_id} server_id={server_id} provider={provider} error={e}",
+                exc_info=True
+            )
             continue
 
         # ... le reste de ta fonction inchangé ...
