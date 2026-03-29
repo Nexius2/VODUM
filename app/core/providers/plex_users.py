@@ -6,9 +6,21 @@ log = get_logger("plex_users")
 
 
 def _pick_base_url(server_row: Dict[str, Any]) -> str:
-    base = ((server_row.get("url") or "") or (server_row.get("local_url") or "")).strip().rstrip("/")
+    def _clean(value: Any) -> str:
+        v = str(value or "").strip()
+        if v.lower() in ("", "none", "null"):
+            return ""
+        return v.rstrip("/")
+
+    base = (
+        _clean(server_row.get("url"))
+        or _clean(server_row.get("local_url"))
+        or _clean(server_row.get("public_url"))
+    )
+
     if not base:
-        raise RuntimeError("Plex: missing server URL (url/local_url)")
+        raise RuntimeError("Plex: missing server URL (url/local_url/public_url)")
+
     return base
 
 

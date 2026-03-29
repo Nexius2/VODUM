@@ -761,7 +761,12 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function pickUrl(s){
-    return (s.public_url || s.url || s.local_url || '').trim();
+    const clean = (v) => {
+      v = String(v || '').trim();
+      if (!v || v.toLowerCase() === 'none' || v.toLowerCase() === 'null') return '';
+      return v;
+    };
+    return clean(s.public_url) || clean(s.url) || clean(s.local_url) || '';
   }
 
   function feedback(msg, kind='info'){
