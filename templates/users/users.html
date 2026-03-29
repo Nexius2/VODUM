@@ -1143,9 +1143,19 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
+      const csrf =
+        document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ||
+        document.querySelector('input[name="_csrf_token"]')?.value ||
+        window.csrfToken ||
+        '';
+
       const r = await fetch(api.create, {
         method: 'POST',
-        headers: {'Content-Type':'application/json', 'Accept':'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-CSRF-Token': csrf
+        },
         body: JSON.stringify(payload)
       });
 

@@ -1,5 +1,6 @@
 import json
 import re
+import traceback
 from datetime import datetime, timedelta
 from email.message import EmailMessage
 from typing import Any, Dict, List, Optional
@@ -380,6 +381,7 @@ def api_users_create():
     db = get_db()
     payload = request.get_json(silent=True) or {}
     log.info(f"[CREATE USER] payload received: keys={list(payload.keys())}")
+    print(f"[CREATE USER STDOUT] payload received: keys={list(payload.keys())}", flush=True)
 
     email = (payload.get("email") or "").strip()
     second_email = (payload.get("second_email") or "").strip()
@@ -533,6 +535,7 @@ def api_users_create():
         return jsonify({"ok": False, "error": f"Failed to create Vodum user: {e}"}), 500
     vodum_user_id = cur.lastrowid
     log.info(f"[CREATE USER] vodum_user created id={vodum_user_id} email={email} username={vodum_username}")
+    print(f"[CREATE USER STDOUT] vodum_user created id={vodum_user_id} email={email} username={vodum_username}", flush=True)
     try:
         cur.close()
     except Exception:
@@ -617,6 +620,7 @@ def api_users_create():
 
     for block in server_blocks:
         log.info(f"[CREATE USER] processing block: {block}")
+        print(f"[CREATE USER STDOUT] processing block: {block}", flush=True)
         server_id = int(block.get("server_id"))
         server = servers_by_id[server_id]
         provider = (server.get("type") or "").lower()
@@ -722,6 +726,11 @@ def api_users_create():
                             f"[PLEX INVITE] server={primary_server.get('name')} "
                             f"email={email} libs={[x['name'] for x in selected_primary]}"
                         )
+                        print(
+                            f"[PLEX INVITE STDOUT] server={primary_server.get('name')} "
+                            f"email={email} libs={[x['name'] for x in selected_primary]}",
+                            flush=True
+                        )
                         invite_state = plex_invite_and_share(
                             primary_server,
                             email=email,
@@ -734,6 +743,7 @@ def api_users_create():
                             filter_music=filter_music,
                         )
                         log.info(f"[PLEX INVITE RESULT] {invite_state}")
+                        print(f"[PLEX INVITE RESULT STDOUT] {invite_state}", flush=True)
 
 
                         if not external_user_id and invite_state.get("external_user_id"):
@@ -792,6 +802,12 @@ def api_users_create():
                 f"[ERROR CREATE USER] vodum_user_id={vodum_user_id} server_id={server_id} provider={provider} error={e}",
                 exc_info=True
             )
+            print(
+                f"[ERROR CREATE USER STDOUT] vodum_user_id={vodum_user_id} "
+                f"server_id={server_id} provider={provider} error={e}",
+                flush=True
+            )
+            traceback.print_exc()
             continue
 
         # ... le reste de ta fonction inchangé ...
