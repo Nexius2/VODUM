@@ -1,33 +1,51 @@
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 *.pyd
 
-# SQLite DB
-*.db
-*.sqlite
-*.sqlite3
-
-# Environment
-.env
+# Virtual env
 venv/
-.venv/
-.env.local
+.env
+.env.*
 
 # Logs
 *.log
+logs/
 
-# OS
-.DS_Store
-Thumbs.db
+# Database
+*.db
+*.sqlite3
 
 # IDE
 .vscode/
 .idea/
 
-# Docker
-docker-data/
+# OS
+.DS_Store
+Thumbs.db
+
+# Cache / temp
+.cache/
+.tmp/
+*.tmp
+
+# Build
+dist/
+build/
+
+# Coverage
+.coverage
+htmlcov/
+
+# Secrets / config
+config.json
+settings.json
+instance/
+
+# Optional Docker
+*.pid
+*.seed
 
 # Files
 create-container-test.sh

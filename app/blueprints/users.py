@@ -836,123 +836,154 @@ def api_users_create():
             })
 
         elif provider == "plex":
-            tok = (server.get("token") or "")
-            if tok:
-                group_rows = db.query(
-                    "SELECT * FROM servers WHERE type='plex' AND token=? ORDER BY name ASC",
-                    (tok,),
-                )
-                group_servers = [dict(r) for r in group_rows] or [server]
-            else:
-                group_servers = [server]
-
-            libs_by_server = {}
-            for l in libs:
-                libs_by_server.setdefault(int(l["server_id"]), []).append(int(l["id"]))
-
-            for s in group_servers:
-                sid2 = int(s["id"])
-                selected_lib_ids = libs_by_server.get(sid2, [])
-                if not selected_lib_ids:
-                    continue
-
-                existing_mu = None
-                if external_user_id:
-                    existing_mu = db.query_one(
-                        """
-                        SELECT id
-                        FROM media_users
-                        WHERE server_id = ?
-                          AND type = 'plex'
-                          AND external_user_id = ?
-                        LIMIT 1
-                        """,
-                        (sid2, str(external_user_id)),
+            try:
+                tok = (server.get("token") or "")
+                if tok:
+                    group_rows = db.query(
+                        "SELECT * FROM servers WHERE type='plex' AND token=? ORDER BY name ASC",
+                        (tok,),
                     )
-
-                if existing_mu:
-                    db.execute(
-                        """
-                        UPDATE media_users
-                        SET vodum_user_id = ?,
-                            username = ?,
-                            email = ?,
-                            details_json = ?
-                        WHERE id = ?
-                        """,
-                        (
-                            vodum_user_id,
-                            server_username or username,
-                            email or None,
-                            json.dumps(details_json) if details_json else None,
-                            existing_mu["id"],
-                        ),
-                    )
-                    media_user_id = existing_mu["id"]
+                    group_servers = [dict(r) for r in group_rows] or [server]
                 else:
-                    cur2 = db.execute(
-                        """
-                        INSERT INTO media_users(server_id, vodum_user_id, external_user_id, username, email, type, details_json)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            sid2,
-                            vodum_user_id,
-                            external_user_id,
-                            server_username or username,
-                            email or None,
-                            "plex",
-                            json.dumps(details_json) if details_json else None,
-                        ),
-                    )
-                    media_user_id = cur2.lastrowid
-                    try:
-                        cur2.close()
-                    except Exception:
-                        pass
-                media_user_id = cur2.lastrowid
-                try:
-                    cur2.close()
-                except Exception:
-                    pass
+                    group_servers = [server]
 
-                if external_user_id:
-                    db.execute(
-                        """
-                        INSERT OR IGNORE INTO user_identities(vodum_user_id, type, server_id, external_user_id)
-                        VALUES (?, 'plex', NULL, ?)
-                        """,
-                        (vodum_user_id, external_user_id),
-                    )
+                libs_by_server = {}
+                for l in libs:
+                    libs_by_server.setdefault(int(l["server_id"]), []).append(int(l["id"]))
 
-                db.executemany(
-                    """
-                    INSERT OR IGNORE INTO media_user_libraries(media_user_id, library_id)
-                    VALUES (?, ?)
-                    """,
-                    [(media_user_id, lid) for lid in selected_lib_ids],
-                )
+                for s in group_servers:
+                    sid2 = int(s["id"])
+                    selected_lib_ids = libs_by_server.get(sid2, [])
+                    if not selected_lib_ids:
+                        continue
 
-                enqueue_jobs = bool(block.get("enqueue_plex_jobs")) or bool(
-                    (details_json.get("plex_invite_state") or {}).get("is_pending")
-                )
+                    existing_mu = None
 
-                if enqueue_jobs:
-                    for lid in selected_lib_ids:
-                        db.execute(
+                    if external_user_id:
+                        existing_mu = db.query_one(
                             """
-                            INSERT INTO media_jobs(provider, action, vodum_user_id, server_id, library_id, payload_json)
-                            VALUES ('plex','grant', ?, ?, ?, ?)
+                            SELECT id
+                            FROM media_users
+                            WHERE server_id = ?
+                              AND type = 'plex'
+                              AND external_user_id = ?
+                            LIMIT 1
                             """,
-                            (vodum_user_id, sid2, lid, json.dumps({"source": "create_user"})),
+                            (sid2, str(external_user_id)),
                         )
 
-                created_accounts.append({
-                    "server_id": sid2,
-                    "provider": "plex",
-                    "external_user_id": external_user_id,
-                    "username": server_username or username,
-                })
+                    if not existing_mu and email:
+                        existing_mu = db.query_one(
+                            """
+                            SELECT id
+                            FROM media_users
+                            WHERE server_id = ?
+                              AND type = 'plex'
+                              AND lower(email) = lower(?)
+                            LIMIT 1
+                            """,
+                            (sid2, email),
+                        )
+
+                    if not existing_mu and (server_username or username):
+                        existing_mu = db.query_one(
+                            """
+                            SELECT id
+                            FROM media_users
+                            WHERE server_id = ?
+                              AND type = 'plex'
+                              AND lower(username) = lower(?)
+                            LIMIT 1
+                            """,
+                            (sid2, server_username or username),
+                        )
+
+                    if existing_mu:
+                        db.execute(
+                            """
+                            UPDATE media_users
+                            SET vodum_user_id = ?,
+                                username = ?,
+                                email = ?,
+                                details_json = ?
+                            WHERE id = ?
+                            """,
+                            (
+                                vodum_user_id,
+                                server_username or username,
+                                email or None,
+                                json.dumps(details_json) if details_json else None,
+                                existing_mu["id"],
+                            ),
+                        )
+                        media_user_id = existing_mu["id"]
+                    else:
+                        cur2 = db.execute(
+                            """
+                            INSERT INTO media_users(server_id, vodum_user_id, external_user_id, username, email, type, details_json)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                sid2,
+                                vodum_user_id,
+                                external_user_id,
+                                server_username or username,
+                                email or None,
+                                "plex",
+                                json.dumps(details_json) if details_json else None,
+                            ),
+                        )
+                        media_user_id = cur2.lastrowid
+                        try:
+                            cur2.close()
+                        except Exception:
+                            pass
+
+                    if external_user_id:
+                        db.execute(
+                            """
+                            INSERT OR IGNORE INTO user_identities(vodum_user_id, type, server_id, external_user_id)
+                            VALUES (?, 'plex', NULL, ?)
+                            """,
+                            (vodum_user_id, external_user_id),
+                        )
+
+                    db.executemany(
+                        """
+                        INSERT OR IGNORE INTO media_user_libraries(media_user_id, library_id)
+                        VALUES (?, ?)
+                        """,
+                        [(media_user_id, lid) for lid in selected_lib_ids],
+                    )
+
+                    enqueue_jobs = bool(block.get("enqueue_plex_jobs")) or bool(
+                        (details_json.get("plex_invite_state") or {}).get("is_pending")
+                    )
+
+                    if enqueue_jobs:
+                        for lid in selected_lib_ids:
+                            db.execute(
+                                """
+                                INSERT INTO media_jobs(provider, action, vodum_user_id, server_id, library_id, payload_json)
+                                VALUES ('plex','grant', ?, ?, ?, ?)
+                                """,
+                                (vodum_user_id, sid2, lid, json.dumps({"source": "create_user"})),
+                            )
+
+                    created_accounts.append({
+                        "server_id": sid2,
+                        "provider": "plex",
+                        "external_user_id": external_user_id,
+                        "username": server_username or username,
+                    })
+
+            except Exception as e:
+                provider_errors.append(f"server_id={server_id} ({server.get('name')}) persistence: {e}")
+                log.error(
+                    f"Plex persistence failed: vodum_user_id={vodum_user_id} server_id={server_id}: {e}",
+                    exc_info=True,
+                )
+                continue
 
         # ------------------------------------------------------------
         # USER CREATION NOTIFICATION (EMAIL ONLY, 1 TEMPLATE MAX)
