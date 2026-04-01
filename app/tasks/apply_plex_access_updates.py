@@ -7,6 +7,12 @@ from plexapi.exceptions import BadRequest
 
 logger = get_logger("apply_plex_access_updates")
 
+class PendingPlexInvite(RuntimeError):
+    """
+    User invité sur Plex mais pas encore accepté.
+    Ce n'est pas une erreur dure : le job doit être reporté.
+    """
+    pass
 
 def _redact_headers(headers: dict):
     """Masque les infos sensibles avant log."""
@@ -84,11 +90,38 @@ def row_get(row, key, default=None):
     except Exception:
         return default
 
+def _details_json_as_dict(user_row):
+    raw = row_get(user_row, "details_json")
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def is_pending_invite_media_user(user_row) -> bool:
+    accepted_at = str(row_get(user_row, "accepted_at") or "").strip()
+    if accepted_at:
+        return False
+
+    details = _details_json_as_dict(user_row)
+    invite_state = details.get("plex_invite_state") or {}
+    if isinstance(invite_state, dict) and bool(invite_state.get("is_pending")):
+        return True
+
+    ext_id = str(row_get(user_row, "external_user_id") or "").strip()
+    email = str(row_get(user_row, "email") or "").strip()
+    username = str(row_get(user_row, "username") or "").strip()
+
+    return (not accepted_at) and (not ext_id) and bool(email or username)
+
 def resolve_plex_user(account, media_user_row):
     """
     Résout un MyPlexUser de façon robuste.
     Ordre de recherche :
-    1. external_user_id (le plus fiable)
+    1. external_user_id
     2. email
     3. username
     4. title
@@ -146,6 +179,11 @@ def resolve_plex_user(account, media_user_row):
             return account.user(db_email)
         except Exception:
             pass
+
+    if is_pending_invite_media_user(media_user_row):
+        raise PendingPlexInvite(
+            f"Plex invite still pending acceptance for username={db_username!r}, email={db_email!r}"
+        )
 
     available = [
         {
@@ -692,6 +730,9 @@ def apply_grant_job(db, job):
             f"plex_username='{getattr(plex_user, 'username', None)}' "
             f"plex_email='{getattr(plex_user, 'email', None)}'"
         )
+    except PendingPlexInvite as e:
+        logger.info(str(e))
+        raise
     except Exception:
         logger.exception(
             f"Unable to retrieve MyPlexUser for username={user['username']} "
@@ -808,6 +849,9 @@ def apply_sync_job(db, job):
             f"plex_username='{getattr(plex_user, 'username', None)}' "
             f"plex_email='{getattr(plex_user, 'email', None)}'"
         )
+    except PendingPlexInvite as e:
+        logger.info(str(e))
+        raise
     except Exception:
         logger.exception(
             f"Unable to retrieve MyPlexUser for username={user['username']} "
@@ -910,6 +954,9 @@ def apply_revoke_job(db, job):
     try:
         plex_user = resolve_plex_user(account, user)
         sync_media_user_identity_from_plex(db, user, plex_user)
+    except PendingPlexInvite as e:
+        logger.info(str(e))
+        raise
     except Exception:
         logger.exception(
             f"Unable to retrieve MyPlexUser for username={user['username']} "
@@ -954,7 +1001,6 @@ def run(task_id: int, db):
         job_id = job["id"]
 
         try:
-            # 1) Marquer le job comme "pris en charge"
             db.execute(
                 """
                 UPDATE media_jobs
@@ -966,7 +1012,6 @@ def run(task_id: int, db):
                 (job_id,)
             )
 
-            # 2) Exécuter l'action
             if job["action"] == "grant":
                 apply_grant_job(db, job)
             elif job["action"] == "sync":
@@ -976,7 +1021,6 @@ def run(task_id: int, db):
             else:
                 raise ValueError(f"Unknown action '{job['action']}'")
 
-            # 3) Succès
             db.execute(
                 """
                 UPDATE media_jobs
@@ -987,7 +1031,6 @@ def run(task_id: int, db):
                 (job_id,)
             )
 
-            # 4) Suppression uniquement si succès
             db.execute(
                 "DELETE FROM media_jobs WHERE id = ? AND success = 1",
                 (job_id,)
@@ -995,10 +1038,25 @@ def run(task_id: int, db):
 
             logger.info(f"Job {job_id} OK (success=1) -> deleted")
 
+        except PendingPlexInvite as e:
+            msg = str(e)
+            logger.info(f"Job {job_id} deferred (pending invite): {msg}")
+
+            db.execute(
+                """
+                UPDATE media_jobs
+                SET success = 0,
+                    processed = 0,
+                    executed_at = datetime('now'),
+                    last_error = ?
+                WHERE id = ?
+                """,
+                (msg[:1000], job_id)
+            )
+
         except Exception as e:
             logger.exception(f"Error while processing job {job_id}: {e}")
 
-            # Job conservé pour debug/retry + remis en pending
             db.execute(
                 """
                 UPDATE media_jobs

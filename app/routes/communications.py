@@ -16,8 +16,8 @@ from communications_engine import (
     record_history,
     attempts_satisfy_mode,
     available_channels,
+    queue_campaign_delivery,
 )
-from tasks_engine import enqueue_task
 
 
 def _as_int(v, default=None):
@@ -46,39 +46,7 @@ def _sanitize_notifications_order(raw: str) -> str:
     return ",".join(parts)
 
 
-def _enqueue_send_comm_campaigns(db) -> bool:
-    row = db.query_one(
-        """
-        SELECT id, enabled
-        FROM tasks
-        WHERE name = 'send_comm_campaigns'
-        LIMIT 1
-        """
-    )
-    if not row:
-        return False
 
-    if not int(row["enabled"] or 0):
-        return False
-
-    try:
-        before = db.query_one(
-            "SELECT queued_count FROM tasks WHERE id = ?",
-            (int(row["id"]),),
-        )
-        before_q = int(before["queued_count"] or 0) if before else 0
-
-        enqueue_task(int(row["id"]))
-
-        after = db.query_one(
-            "SELECT queued_count FROM tasks WHERE id = ?",
-            (int(row["id"]),),
-        )
-        after_q = int(after["queued_count"] or 0) if after else 0
-
-        return after_q > before_q
-    except Exception:
-        return False
 
 def _find_enabled_template_duplicate(
     db,
@@ -230,7 +198,7 @@ def register(app):
             cur = db.execute(
                 """
                 INSERT INTO comm_campaigns(name, subject, body, server_id, status, is_test, created_at, updated_at)
-                VALUES(?, ?, ?, ?, 'pending', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES(?, ?, ?, ?, 'draft', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """,
                 (name, subject, body, server_id, is_test),
             )
@@ -394,49 +362,11 @@ def register(app):
                 )
                 return redirect(url_for("communications_campaigns_page", load=cid))
 
-            target_users = [dict(u) for u in (users or [])]
-            if not target_users:
-                db.execute(
-                    "UPDATE comm_campaigns SET status='error', sent_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                    (cid,),
-                )
-                flash(t("comm_campaign_send_failed"), "error")
-                return redirect(url_for("communications_campaigns_page", load=cid))
-
-            # If campaign is not already sending, rebuild queue from scratch
-            if (campaign.get("status") or "").strip().lower() != "sending":
-                db.execute("DELETE FROM comm_campaign_targets WHERE campaign_id = ?", (cid,))
-
-            queued = 0
-            for u in target_users:
-                user_id = int(u["id"])
-                dedupe_key = f"campaign:{cid}:user:{user_id}"
-                cur = db.execute(
-                    """
-                    INSERT OR IGNORE INTO comm_campaign_targets(
-                        campaign_id, user_id, status,
-                        attempt_count, max_attempts, next_attempt_at, last_attempt_at,
-                        last_error, channels_sent, dedupe_key,
-                        created_at, updated_at
-                    )
-                    VALUES(
-                        ?, ?, 'pending',
-                        0, 10, NULL, NULL,
-                        NULL, NULL, ?,
-                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                    )
-                    """,
-                    (cid, user_id, dedupe_key),
-                )
-                if getattr(cur, "rowcount", 0):
-                    queued += 1
-
-            db.execute(
-                "UPDATE comm_campaigns SET status='sending', sent_at=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                (cid,),
+            queue_result = queue_campaign_delivery(
+                db,
+                cid,
+                rebuild_queue=((campaign.get("status") or "").strip().lower() != "sending"),
             )
-
-            task_enqueued = _enqueue_send_comm_campaigns(db)
 
             add_log(
                 "info",
@@ -444,21 +374,25 @@ def register(app):
                 "Campaign queued",
                 {
                     "campaign_id": cid,
-                    "queued_targets": queued,
-                    "task_enqueued": task_enqueued,
+                    "queued_targets": queue_result.get("targets_inserted", 0),
+                    "targets_total": queue_result.get("targets_total", 0),
+                    "task_enqueued": queue_result.get("task_enqueued", False),
+                    "reason": queue_result.get("reason"),
                     "attachments": [a.get("filename") for a in (attachments or [])],
                 },
             )
 
-            if not task_enqueued:
-                db.execute(
-                    "UPDATE comm_campaigns SET status='error', updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                    (cid,),
-                )
+            if not queue_result.get("ok"):
                 flash(t("comm_campaign_send_failed"), "error")
                 return redirect(url_for("communications_campaigns_page", load=cid))
 
-            flash(t("comm_campaign_queued_summary").format(ok=len(target_users), failed=0), "success")
+            flash(
+                t("comm_campaign_queued_summary").format(
+                    ok=queue_result.get("targets_total", 0),
+                    failed=0,
+                ),
+                "success",
+            )
             return redirect(url_for("communications_campaigns_page", load=cid))
 
         campaigns = db.query(
@@ -511,7 +445,7 @@ def register(app):
                     n += 1
 
             trigger_event = (request.form.get("trigger_event") or "expiration").strip().lower()
-            if trigger_event not in ("expiration", "user_creation", "referral_reward", "expiration_change"):
+            if trigger_event not in ("expiration", "user_creation", "pending_invite_reminder", "referral_reward", "expiration_change"):
                 trigger_event = "expiration"
 
             trigger_provider = (request.form.get("trigger_provider") or "all").strip().lower()
@@ -583,7 +517,7 @@ def register(app):
             if isinstance(days_after, int) and days_after < 0:
                 days_after = 0
 
-            if trigger_event == "user_creation":
+            if trigger_event in ("user_creation", "pending_invite_reminder"):
                 days_before = None
                 if days_after is None:
                     days_after = 0
@@ -694,7 +628,7 @@ def register(app):
             enabled = 1 if request.form.get("enabled") == "1" else 0
 
             trigger_event = (request.form.get("trigger_event") or "expiration").strip().lower()
-            if trigger_event not in ("expiration", "user_creation", "referral_reward", "expiration_change"):
+            if trigger_event not in ("expiration", "user_creation", "pending_invite_reminder", "referral_reward", "expiration_change"):
                 trigger_event = "expiration"
 
             trigger_provider = (request.form.get("trigger_provider") or "all").strip().lower()
@@ -767,7 +701,7 @@ def register(app):
             if isinstance(days_after, int) and days_after < 0:
                 days_after = 0
 
-            if trigger_event == "user_creation":
+            if trigger_event in ("user_creation", "pending_invite_reminder"):
                 days_before = None
                 if days_after is None:
                     days_after = 0

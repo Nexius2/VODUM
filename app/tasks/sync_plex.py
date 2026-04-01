@@ -31,6 +31,44 @@ class TimeoutSession(requests.Session):
 
 log = get_logger("sync_plex")
 
+def _row_value(row, key, default=None):
+    try:
+        return row[key]
+    except Exception:
+        return default
+
+
+def _json_dict_or_empty(raw):
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _is_pending_plex_invite_media_user(row) -> bool:
+    """
+    True si le media_user Plex correspond à une invitation encore non acceptée.
+    """
+    accepted_at = str(_row_value(row, "accepted_at") or "").strip()
+    if accepted_at:
+        return False
+
+    details = _json_dict_or_empty(_row_value(row, "details_json"))
+    invite_state = details.get("plex_invite_state") or {}
+    if isinstance(invite_state, dict) and bool(invite_state.get("is_pending")):
+        return True
+
+    external_user_id = str(_row_value(row, "external_user_id") or "").strip()
+    email = str(_row_value(row, "email") or "").strip()
+    username = str(_row_value(row, "username") or "").strip()
+
+    # Fallback robuste :
+    # user créé côté Vodum, mais pas encore réellement accepté/résolu côté Plex
+    return (not accepted_at) and (not external_user_id) and bool(email or username)
+
 def ensure_expiration_date_on_first_access(db, vodum_user_id):
     """
     Initialise expiration_date UNIQUEMENT si :
@@ -383,7 +421,11 @@ def sync_plex_user_library_access(db, plex, server):
             vu.email,
             mu.id AS media_user_id,
             mu.vodum_user_id AS vodum_user_id,
-            mu.role AS role
+            mu.role AS role,
+            mu.username AS username,
+            mu.external_user_id AS external_user_id,
+            mu.accepted_at AS accepted_at,
+            mu.details_json AS details_json
         FROM media_users mu
         JOIN vodum_users vu ON vu.id = mu.vodum_user_id
         WHERE mu.server_id = ?
@@ -392,7 +434,6 @@ def sync_plex_user_library_access(db, plex, server):
         (server_id,),
     )
 
-
     if not users:
         log.info(f"[SYNC ACCESS] No user linked to server={server_name} (id={server_id})")
         return
@@ -400,6 +441,7 @@ def sync_plex_user_library_access(db, plex, server):
     processed_users = 0
     updated_users = 0
     skipped_no_email = 0
+    preserved_pending = 0
 
     # 3️⃣ Resync accès pour chaque user
     for u in users:
@@ -407,10 +449,21 @@ def sync_plex_user_library_access(db, plex, server):
         media_user_id = u["media_user_id"]
         vodum_user_id = u["vodum_user_id"]
         role = (u["role"] or "").strip().lower()
+        username = _row_value(u, "username", "")
 
         processed_users += 1
 
-        # Nettoyer les anciens accès pour CE serveur (toujours)
+        # ✅ Cas spécial : invitation Plex pas encore acceptée
+        # On NE TOUCHE PAS aux media_user_libraries déjà prévues en DB.
+        if role != "owner" and _is_pending_plex_invite_media_user(u):
+            preserved_pending += 1
+            log.info(
+                f"[SYNC ACCESS] Pending Plex invite preserved for user={username!r} "
+                f"(media_user_id={media_user_id}, server={server_name})"
+            )
+            continue
+
+        # Nettoyer les anciens accès pour CE serveur
         db.execute(
             """
             DELETE FROM media_user_libraries
@@ -422,10 +475,9 @@ def sync_plex_user_library_access(db, plex, server):
             (media_user_id, server_id),
         )
 
-
         has_access = False
 
-        # ✅ Cas spécial OWNER : on force toutes les libraries du serveur en ON
+        # ✅ OWNER : toutes les libraries du serveur
         if role == "owner":
             for lib_id in lib_map.values():
                 db.execute(
@@ -438,7 +490,7 @@ def sync_plex_user_library_access(db, plex, server):
             has_access = True
 
         else:
-            # Sinon, logique normale basée sur l'API Plex (nécessite un email)
+            # logique normale basée sur l'API Plex
             if not email:
                 skipped_no_email += 1
                 continue
@@ -461,7 +513,7 @@ def sync_plex_user_library_access(db, plex, server):
 
                 has_access = True
 
-        # ✅ ici on passe bien vodum_user_id (pas media_user_id)
+        # ✅ uniquement si accès réel trouvé
         if has_access:
             ensure_expiration_date_on_first_access(db, vodum_user_id)
 
@@ -469,7 +521,8 @@ def sync_plex_user_library_access(db, plex, server):
 
     log.info(
         f"[SYNC ACCESS] Access updated for server {server_name} "
-        f"(users en base={len(users)}, traités={processed_users}, maj={updated_users}, sans_email={skipped_no_email})"
+        f"(users en base={len(users)}, traités={processed_users}, maj={updated_users}, "
+        f"sans_email={skipped_no_email}, pending_preserved={preserved_pending})"
     )
 
 

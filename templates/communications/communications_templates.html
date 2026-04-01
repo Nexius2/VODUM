@@ -60,6 +60,7 @@
 				<select name="trigger_event" id="trigger_event" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
 				  <option value="expiration" {% if ev == 'expiration' %}selected{% endif %}>{{ t('comm_trigger_expiration') }}</option>
 				  <option value="user_creation" {% if ev == 'user_creation' %}selected{% endif %}>{{ t('comm_trigger_user_creation') }}</option>
+				  <option value="pending_invite_reminder" {% if ev == 'pending_invite_reminder' %}selected{% endif %}>{{ t('comm_trigger_pending_invite_reminder') }}</option>
 				  <option value="referral_reward" {% if ev == 'referral_reward' %}selected{% endif %}>{{ t('comm_trigger_referral_reward') }}</option>
 				  <option value="expiration_change" {% if ev == 'expiration_change' %}selected{% endif %}>{{ t('comm_trigger_expiration_change') }}</option>
 				</select>
@@ -145,7 +146,7 @@
 		  <div id="delay_block_user_creation" class="hidden flex flex-wrap items-center gap-2">
 			<input type="number" name="days_after" min="0"
 				   class="w-20 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs"
-				   value="{{ (loaded_template.days_after if loaded_template and loaded_template.days_after is not none else 0) if ev2 == 'user_creation' else 0 }}">
+				   value="{{ (loaded_template.days_after if loaded_template and loaded_template.days_after is not none else 0) if ev2 in ('user_creation', 'pending_invite_reminder') else 0 }}">
 			<span class="text-slate-400">{{ t('days') }}</span>
 			<span class="text-slate-400">{{ t('comm_delay_after') }}</span>
 			<span class="text-slate-400">{{ t('comm_user_creation_event') }}</span>
@@ -312,6 +313,8 @@
 			<td class="px-4 py-2">
 				{% if tpl.trigger_event == 'user_creation' %}
 				  {{ t('comm_trigger_user_creation') }}
+				{% elif tpl.trigger_event == 'pending_invite_reminder' %}
+				  {{ t('comm_trigger_pending_invite_reminder') }}
 				{% elif tpl.trigger_event == 'referral_reward' %}
 				  {{ t('comm_trigger_referral_reward') }}
 				{% elif tpl.trigger_event == 'expiration_change' %}
@@ -452,7 +455,7 @@ function syncHiddenDelayValues() {
 function refreshDelayUI() {
   const ev = triggerSel ? (triggerSel.value || 'expiration') : 'expiration';
 
-  if (ev === 'user_creation') {
+  if (ev === 'user_creation' || ev === 'pending_invite_reminder') {
     blockExpiration && blockExpiration.classList.add('hidden');
     blockUserCreation && blockUserCreation.classList.remove('hidden');
     blockExpirationChangeDirection && blockExpirationChangeDirection.classList.add('hidden');

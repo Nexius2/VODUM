@@ -695,7 +695,7 @@ def run_migrations():
             body TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','referral_reward','expiration_change')),
+            trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','pending_invite_reminder','referral_reward','expiration_change')),
             trigger_provider TEXT NOT NULL DEFAULT 'all' CHECK(trigger_provider IN ('all','plex','jellyfin')),
             expiration_change_direction TEXT NOT NULL DEFAULT 'all' CHECK(expiration_change_direction IN ('all','increase','decrease')),
             days_after INTEGER DEFAULT NULL,
@@ -710,7 +710,7 @@ def run_migrations():
         cursor,
         "comm_templates",
         "trigger_event",
-        "TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','referral_reward','expiration_change'))",
+        "TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','pending_invite_reminder','referral_reward','expiration_change'))",
     )
     ensure_column(
         cursor,
@@ -742,6 +742,8 @@ def run_migrations():
         sql = (row[0] or "").lower()
         if "'expiration_change'" not in sql:
             return True
+        if "'pending_invite_reminder'" not in sql:
+            return True
         if "expiration_change_direction" not in sql:
             return True
         return False
@@ -761,7 +763,7 @@ def run_migrations():
             body TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','referral_reward','expiration_change')),
+            trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','pending_invite_reminder','referral_reward','expiration_change')),
             trigger_provider TEXT NOT NULL DEFAULT 'all' CHECK(trigger_provider IN ('all','plex','jellyfin')),
             expiration_change_direction TEXT NOT NULL DEFAULT 'all' CHECK(expiration_change_direction IN ('all','increase','decrease')),
             days_after INTEGER DEFAULT NULL,
@@ -1714,6 +1716,14 @@ def run_migrations():
         """)
         print("➕ Task send_expiration_emails added.")
 
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "send_pending_invite_reminders",
+        "description": "task_description.send_pending_invite_reminders",
+        "schedule": "0 10 * * *",
+        "enabled": 1,
+        "status": "idle"
+    })
+
     # Ajouter les tâches Discord si absentes
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "send_expiration_discord",
@@ -1881,6 +1891,52 @@ def run_migrations():
         print("➕ Default comm_template inserted: user_creation_default (trigger=user_creation)")
 
     ensure_comm_user_creation_template()
+    conn.commit()
+
+    # -------------------------------------------------
+    # 3.2.b Seed default COMM template: pending invite reminder
+    # -------------------------------------------------
+    def ensure_comm_pending_invite_reminder_template():
+        key = "pending_invite_reminder_default"
+        cursor.execute("SELECT 1 FROM comm_templates WHERE key = ?", (key,))
+        if cursor.fetchone():
+            return
+
+        subject = "Reminder - please accept your Plex invitation"
+        body = (
+            "Hi {username},\n\n"
+            "Your Plex invitation is still waiting for acceptance.\n\n"
+            "To start using your account:\n"
+            "- Open Plex\n"
+            "- Sign in with {email}\n"
+            "- Accept the library share invitation if prompted\n\n"
+            "Your subscription expiration is currently set to: {expiration_date}\n\n"
+            "Regards,\n"
+            "VODUM Team\n"
+        )
+
+        cursor.execute(
+            """
+            INSERT INTO comm_templates(
+                key, name, enabled,
+                trigger_event, trigger_provider,
+                days_before, days_after,
+                subject, body,
+                created_at, updated_at
+            )
+            VALUES(
+                ?, ?, 1,
+                'pending_invite_reminder', 'plex',
+                NULL, 3,
+                ?, ?,
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            )
+            """,
+            (key, "Default - Pending invite reminder", subject, body),
+        )
+        print("➕ Default comm_template inserted: pending_invite_reminder_default")
+
+    ensure_comm_pending_invite_reminder_template()
     conn.commit()
 
     # -------------------------------------------------

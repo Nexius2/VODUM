@@ -885,7 +885,7 @@ CREATE TABLE IF NOT EXISTS comm_templates (
   enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
 
   -- trigger system
-  trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','referral_reward','expiration_change')),
+  trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','pending_invite_reminder','referral_reward','expiration_change')),
   trigger_provider TEXT NOT NULL DEFAULT 'all' CHECK(trigger_provider IN ('all','plex','jellyfin')),
   expiration_change_direction TEXT NOT NULL DEFAULT 'all' CHECK(expiration_change_direction IN ('all','increase','decrease')),
 
