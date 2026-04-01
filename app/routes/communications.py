@@ -215,7 +215,7 @@ def register(app):
 
             add_log("info", "communications", "Campaign created", {"id": cid, "name": name})
             flash(t("comm_campaign_created"), "success")
-            return redirect(url_for("communications_campaigns_page"))
+            return redirect(url_for("communications_campaigns_page", load=cid))
 
         # Save
         if request.method == "POST" and request.form.get("action") == "save":

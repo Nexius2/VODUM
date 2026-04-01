@@ -1161,7 +1161,8 @@
 "reason": "Raison",
 "discord_history": "Historique Discord",
 "comm_trigger_pending_invite_reminder": "Rappel d’invitation non acceptée",
-"task_description.send_pending_invite_reminders": "Met en file les rappels pour les invitations Plex non encore acceptées."
+"task_description.send_pending_invite_reminders": "Met en file les rappels pour les invitations Plex non encore acceptées.",
+"comm_campaign_create_then_send_hint": "Créez d’abord la campaign, puis envoyez-la depuis l’écran d’édition."
 
   
 }
