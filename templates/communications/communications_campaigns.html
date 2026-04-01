@@ -30,9 +30,9 @@
       </div>
     </div>
 
-    <form method="post" enctype="multipart/form-data" class="space-y-4">
-      <input type="hidden" name="action" id="campaign_action" value="{% if loaded_campaign %}save{% else %}create{% endif %}">
-      <input type="hidden" name="campaign_id" value="{{ loaded_campaign.id if loaded_campaign else '' }}">
+	<form method="post" enctype="multipart/form-data" class="space-y-4">
+	  <input type="hidden" name="form_mode" id="campaign_action" value="{% if loaded_campaign %}save{% else %}create{% endif %}">
+	  <input type="hidden" name="campaign_id" value="{{ loaded_campaign.id if loaded_campaign else '' }}">
 
 		{% if not loaded_campaign %}
 		<script>
@@ -86,9 +86,13 @@
       </div>
 
       <div class="flex flex-wrap gap-2">
-        <button type="submit" class="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-dark text-xs font-medium">
-          {% if loaded_campaign %}{{ t('save') }}{% else %}{{ t('create') }}{% endif %}
-        </button>
+		<button
+		  type="submit"
+		  name="action"
+		  value="{% if loaded_campaign %}save{% else %}create{% endif %}"
+		  class="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-dark text-xs font-medium">
+		  {% if loaded_campaign %}{{ t('save') }}{% else %}{{ t('create') }}{% endif %}
+		</button>
 
         {% if not loaded_campaign %}
           <span class="text-[11px] text-slate-500 self-center">
@@ -217,6 +221,15 @@ function closeDeleteModal() {
 function confirmDelete() {
   const form = document.querySelector('form');
   document.getElementById('campaign_action').value = 'delete';
+const form = document.querySelector('form');
+let hiddenAction = form.querySelector('input[name="action"][type="hidden"]');
+if (!hiddenAction) {
+  hiddenAction = document.createElement('input');
+  hiddenAction.type = 'hidden';
+  hiddenAction.name = 'action';
+  form.appendChild(hiddenAction);
+}
+hiddenAction.value = 'delete';
   form.submit();
 }
 </script>
