@@ -164,8 +164,9 @@ def register(app):
         db = get_db()
         t = get_translator()
 
-        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
-        settings = dict(settings) if settings else {}
+        action_values = request.form.getlist("action") if request.method == "POST" else []
+        form_mode = (request.form.get("form_mode") or "").strip()
+        action = (action_values[-1] if action_values else form_mode).strip().lower()
 
         servers = db.query("SELECT id, name FROM servers ORDER BY name")
 
@@ -178,7 +179,7 @@ def register(app):
                 loaded["attachments"] = fetch_campaign_attachments(db, int(loaded["id"]))
 
         # Create
-        if request.method == "POST" and request.form.get("action") == "create":
+        if request.method == "POST" and action == "create":
             name = (request.form.get("name") or "").strip()
             subject = (request.form.get("subject") or "").strip()
             body = (request.form.get("body") or "").strip()
@@ -218,7 +219,7 @@ def register(app):
             return redirect(url_for("communications_campaigns_page", load=cid))
 
         # Save
-        if request.method == "POST" and request.form.get("action") == "save":
+        if request.method == "POST" and action == "save":
             cid = request.form.get("campaign_id", type=int)
             name = (request.form.get("name") or "").strip()
             subject = (request.form.get("subject") or "").strip()
@@ -262,7 +263,7 @@ def register(app):
             return redirect(url_for("communications_campaigns_page", load=cid))
 
         # Delete
-        if request.method == "POST" and request.form.get("action") == "delete":
+        if request.method == "POST" and action == "delete":
             cid = request.form.get("campaign_id", type=int)
 
             if not cid:
@@ -281,7 +282,7 @@ def register(app):
             return redirect(url_for("communications_campaigns_page"))
 
         # Send
-        if request.method == "POST" and request.form.get("action") == "send":
+        if request.method == "POST" and action == "send":
             cid = request.form.get("campaign_id", type=int)
             campaign = db.query_one("SELECT * FROM comm_campaigns WHERE id = ?", (cid,))
             if not campaign:
