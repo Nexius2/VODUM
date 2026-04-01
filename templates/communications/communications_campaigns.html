@@ -90,6 +90,12 @@
           {% if loaded_campaign %}{{ t('save') }}{% else %}{{ t('create') }}{% endif %}
         </button>
 
+        {% if not loaded_campaign %}
+          <span class="text-[11px] text-slate-500 self-center">
+            {{ t('comm_campaign_create_then_send_hint') }}
+          </span>
+        {% endif %}
+
         {% if loaded_campaign %}
           <button type="submit" name="action" value="send" class="px-3 py-1.5 rounded-lg bg-emerald-700/60 hover:bg-emerald-700 text-xs font-medium">
             {{ t('send') }}

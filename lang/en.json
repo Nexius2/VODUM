@@ -1161,7 +1161,8 @@
 "reason": "Reason",
 "discord_history": "Discord history",
 "comm_trigger_pending_invite_reminder": "Pending invite reminder",
-"task_description.send_pending_invite_reminders": "Queues reminders for Plex invitations that have not been accepted yet."
+"task_description.send_pending_invite_reminders": "Queues reminders for Plex invitations that have not been accepted yet.",
+"comm_campaign_create_then_send_hint": "Create the campaign first, then send it from the edit screen."
 
   
 }
