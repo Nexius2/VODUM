@@ -1166,6 +1166,8 @@
 "close": "Cerrar",
 "action": "Acción",
 "reason": "Motivo",
-"discord_history": "Historial de Discord"
+"discord_history": "Historial de Discord",
+"comm_trigger_pending_invite_reminder": "Pending invite reminder",
+"task_description.send_pending_invite_reminders": "Queues reminders for Plex invitations that have not been accepted yet."
 
 }

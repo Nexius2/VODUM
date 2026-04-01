@@ -74,7 +74,7 @@ def _apply_campaign_status(db, campaign_ids: set[int]) -> None:
 
         if total_count == 0:
             db.execute(
-                "UPDATE comm_campaigns SET status='pending', sent_at=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                "UPDATE comm_campaigns SET status='draft', sent_at=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?",
                 (campaign_id,),
             )
             continue

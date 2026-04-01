@@ -11,6 +11,7 @@ from logging_utils import get_logger
 from notifications_utils import effective_notifications_order, is_email_ready
 from discord_utils import enrich_discord_settings, is_discord_ready, send_discord_dm, DiscordSendError
 from email_sender import send_email
+from tasks_engine import enqueue_task
 
 log = get_logger("communications_engine")
 
@@ -124,6 +125,213 @@ def fetch_campaign_attachments(db, campaign_id: int) -> List[Dict]:
     )
     return [dict(r) for r in (rows or [])]
 
+def get_campaign_target_users(db, campaign: Dict) -> List[Dict]:
+    """
+    Returns Vodum users targeted by a campaign.
+
+    Rules:
+    - only vodum users linked to at least one media user
+    - if campaign.server_id is set, restrict to users having at least one media_user on that server
+    """
+    campaign = _as_dict(campaign)
+    server_id = campaign.get("server_id")
+
+    if server_id:
+        rows = db.query(
+            """
+            SELECT u.id, u.username, u.email, u.second_email, u.discord_user_id, u.notifications_order_override
+            FROM vodum_users u
+            WHERE EXISTS (
+                SELECT 1
+                FROM media_users mu
+                WHERE mu.vodum_user_id = u.id
+                  AND mu.server_id = ?
+            )
+            ORDER BY u.id ASC
+            """,
+            (server_id,),
+        ) or []
+    else:
+        rows = db.query(
+            """
+            SELECT u.id, u.username, u.email, u.second_email, u.discord_user_id, u.notifications_order_override
+            FROM vodum_users u
+            WHERE EXISTS (
+                SELECT 1
+                FROM media_users mu
+                WHERE mu.vodum_user_id = u.id
+            )
+            ORDER BY u.id ASC
+            """
+        ) or []
+
+    return [dict(r) for r in rows]
+
+
+def enqueue_named_task(db, task_name: str) -> bool:
+    """
+    Queue a task by name if it exists and is enabled.
+    Returns True only if queued_count increased.
+    """
+    row = db.query_one(
+        """
+        SELECT id, enabled, queued_count
+        FROM tasks
+        WHERE name = ?
+        LIMIT 1
+        """,
+        (task_name,),
+    )
+    row = dict(row) if row else None
+    if not row:
+        return False
+
+    if not int(row.get("enabled") or 0):
+        return False
+
+    before_q = int(row.get("queued_count") or 0)
+
+    try:
+        enqueue_task(int(row["id"]))
+    except Exception:
+        log.error("Failed to enqueue task '%s'", task_name, exc_info=True)
+        return False
+
+    after = db.query_one(
+        "SELECT queued_count FROM tasks WHERE id = ?",
+        (int(row["id"]),),
+    )
+    after_q = int(after["queued_count"] or 0) if after else 0
+    return after_q > before_q
+
+
+def queue_campaign_delivery(db, campaign_id: int, *, rebuild_queue: bool = True) -> Dict:
+    """
+    Build/refresh comm_campaign_targets for a campaign and enqueue send_comm_campaigns.
+
+    Returns:
+    {
+        "ok": bool,
+        "campaign": dict|None,
+        "targets_total": int,
+        "targets_inserted": int,
+        "task_enqueued": bool,
+        "reason": str|None,
+    }
+    """
+    campaign = db.query_one("SELECT * FROM comm_campaigns WHERE id = ?", (campaign_id,))
+    campaign = dict(campaign) if campaign else None
+    if not campaign:
+        return {
+            "ok": False,
+            "campaign": None,
+            "targets_total": 0,
+            "targets_inserted": 0,
+            "task_enqueued": False,
+            "reason": "campaign_not_found",
+        }
+
+    if int(campaign.get("is_test") or 0) == 1:
+        return {
+            "ok": False,
+            "campaign": campaign,
+            "targets_total": 0,
+            "targets_inserted": 0,
+            "task_enqueued": False,
+            "reason": "test_campaign_not_queueable",
+        }
+
+    target_users = get_campaign_target_users(db, campaign)
+    if not target_users:
+        db.execute(
+            """
+            UPDATE comm_campaigns
+            SET status='error',
+                sent_at=NULL,
+                updated_at=CURRENT_TIMESTAMP
+            WHERE id=?
+            """,
+            (campaign_id,),
+        )
+        return {
+            "ok": False,
+            "campaign": campaign,
+            "targets_total": 0,
+            "targets_inserted": 0,
+            "task_enqueued": False,
+            "reason": "no_target_users",
+        }
+
+    if rebuild_queue:
+        db.execute("DELETE FROM comm_campaign_targets WHERE campaign_id = ?", (campaign_id,))
+
+    inserted = 0
+    for u in target_users:
+        user_id = int(u["id"])
+        dedupe_key = f"campaign:{campaign_id}:user:{user_id}"
+
+        cur = db.execute(
+            """
+            INSERT OR IGNORE INTO comm_campaign_targets(
+                campaign_id, user_id, status,
+                attempt_count, max_attempts, next_attempt_at, last_attempt_at,
+                last_error, channels_sent, dedupe_key,
+                created_at, updated_at
+            )
+            VALUES(
+                ?, ?, 'pending',
+                0, 10, NULL, NULL,
+                NULL, NULL, ?,
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            )
+            """,
+            (campaign_id, user_id, dedupe_key),
+        )
+
+        if getattr(cur, "rowcount", 0):
+            inserted += 1
+
+    db.execute(
+        """
+        UPDATE comm_campaigns
+        SET status='sending',
+            sent_at=NULL,
+            updated_at=CURRENT_TIMESTAMP
+        WHERE id=?
+        """,
+        (campaign_id,),
+    )
+
+    task_enqueued = enqueue_named_task(db, "send_comm_campaigns")
+
+    if not task_enqueued:
+        db.execute(
+            """
+            UPDATE comm_campaigns
+            SET status='error',
+                updated_at=CURRENT_TIMESTAMP
+            WHERE id=?
+            """,
+            (campaign_id,),
+        )
+        return {
+            "ok": False,
+            "campaign": campaign,
+            "targets_total": len(target_users),
+            "targets_inserted": inserted,
+            "task_enqueued": False,
+            "reason": "task_not_enqueued",
+        }
+
+    return {
+        "ok": True,
+        "campaign": campaign,
+        "targets_total": len(target_users),
+        "targets_inserted": inserted,
+        "task_enqueued": True,
+        "reason": None,
+    }
+
 def _safe_nullable_int(value):
     try:
         if value is None or value == "":
@@ -189,14 +397,25 @@ def _expiration_change_direction_rank(template_row: Dict, change_direction: str 
         return 1
     return -1
 
-def select_comm_template_for_user(
+def select_comm_templates_for_user(
     *,
     db,
     trigger_event: str,
     provider: str,
     user_id: int,
     expiration_change_direction: str | None = None,
-) -> Dict | None:
+) -> List[Dict]:
+    """
+    Return the best enabled template(s) for a user and event.
+
+    Important:
+    - for events with delay slots (expiration / user_creation / pending_invite_reminder),
+      we keep ONE best template per logical slot
+    - ranking priority:
+        specific subscription > all subscriptions > none
+        exact provider       > all provider
+        exact exp-change dir > all dir
+    """
     sub_ctx = get_user_subscription_context(db, user_id)
     user_subscription_template_id = _safe_nullable_int(sub_ctx.get("subscription_template_id"))
 
@@ -236,7 +455,35 @@ def select_comm_template_for_user(
         candidates.append(tpl)
 
     if not candidates:
-        return None
+        return []
+
+    def _slot_key(tpl: Dict):
+        if trigger_event == "expiration":
+            return (
+                "expiration",
+                tpl.get("days_before"),
+                tpl.get("days_after"),
+            )
+
+        if trigger_event in ("user_creation", "pending_invite_reminder", "referral_reward"):
+            return (
+                trigger_event,
+                tpl.get("days_after"),
+            )
+
+        if trigger_event == "expiration_change":
+            return (
+                "expiration_change",
+                tpl.get("expiration_change_direction") or "all",
+            )
+
+        return (
+            trigger_event,
+            tpl.get("days_before"),
+            tpl.get("days_after"),
+        )
+
+    best_by_slot: Dict[tuple, Dict] = {}
 
     candidates.sort(
         key=lambda x: (
@@ -247,11 +494,41 @@ def select_comm_template_for_user(
         )
     )
 
-    best = candidates[0]
-    best.pop("_sub_rank", None)
-    best.pop("_prov_rank", None)
-    best.pop("_dir_rank", None)
-    return best
+    for tpl in candidates:
+        slot = _slot_key(tpl)
+        if slot not in best_by_slot:
+            cleaned = dict(tpl)
+            cleaned.pop("_sub_rank", None)
+            cleaned.pop("_prov_rank", None)
+            cleaned.pop("_dir_rank", None)
+            best_by_slot[slot] = cleaned
+
+    out = list(best_by_slot.values())
+    out.sort(
+        key=lambda x: (
+            999999 if x.get("days_before") is None else int(x.get("days_before") or 0),
+            999999 if x.get("days_after") is None else int(x.get("days_after") or 0),
+            int(x["id"]),
+        )
+    )
+    return out
+
+def select_comm_template_for_user(
+    *,
+    db,
+    trigger_event: str,
+    provider: str,
+    user_id: int,
+    expiration_change_direction: str | None = None,
+) -> Dict | None:
+    templates = select_comm_templates_for_user(
+        db=db,
+        trigger_event=trigger_event,
+        provider=provider,
+        user_id=user_id,
+        expiration_change_direction=expiration_change_direction,
+    )
+    return templates[0] if templates else None
 
 def schedule_template_notification(
     *,

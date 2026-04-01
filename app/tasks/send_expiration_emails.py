@@ -33,6 +33,68 @@ from mailing_utils import build_user_context, render_mail
 
 log = get_logger("send_expiration_emails")
 
+def _row_value(row, key, default=None):
+    try:
+        return row[key]
+    except Exception:
+        return default
+
+
+def _json_dict_or_empty(raw):
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _user_has_pending_plex_invite(db, vodum_user_id: int) -> bool:
+    """
+    True si :
+    - le user a au moins un media_user Plex
+    - aucun media_user Plex n'est accepté
+    - au moins un media_user Plex est encore pending
+    """
+    rows = db.query(
+        """
+        SELECT accepted_at, external_user_id, details_json, email, username
+        FROM media_users
+        WHERE vodum_user_id = ?
+          AND type = 'plex'
+        """,
+        (vodum_user_id,),
+    ) or []
+
+    if not rows:
+        return False
+
+    any_accepted = False
+    any_pending = False
+
+    for row in rows:
+        accepted_at = str(_row_value(row, "accepted_at") or "").strip()
+        if accepted_at:
+            any_accepted = True
+            continue
+
+        details = _json_dict_or_empty(_row_value(row, "details_json"))
+        invite_state = details.get("plex_invite_state") or {}
+
+        if isinstance(invite_state, dict) and bool(invite_state.get("is_pending")):
+            any_pending = True
+            continue
+
+        external_user_id = str(_row_value(row, "external_user_id") or "").strip()
+        email = str(_row_value(row, "email") or "").strip()
+        username = str(_row_value(row, "username") or "").strip()
+
+        if not external_user_id and (email or username):
+            any_pending = True
+
+    return any_pending and not any_accepted
+
 def _parse_payload(payload_raw) -> dict:
     if not payload_raw:
         return {}
@@ -71,7 +133,7 @@ def _next_retry_modifier(next_attempt_number: int) -> str:
 
 
 def _required_channels_for_scheduled(db, settings: dict, user: dict, trigger_event: str) -> list[str]:
-    if trigger_event == "user_creation":
+    if trigger_event in ("user_creation", "pending_invite_reminder"):
         return ["email"]
 
     avail = available_channels(db, settings, user)
@@ -253,7 +315,7 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
             body=body,
             attachments=attachments,
             forced_channels=forced_channels,
-            bypass_skip_never_used_accounts=(trigger_event in ("user_creation", "expiration_change")),
+            bypass_skip_never_used_accounts=(trigger_event in ("user_creation", "expiration_change", "pending_invite_reminder")),
         )
 
         updated_channels_sent = set(already_sent_channels)
@@ -900,6 +962,13 @@ def run(task_id: int | None = None, db=None):
         for u in users or []:
             u = dict(u)
             uid = int(u["id"])
+
+            # Ne jamais envoyer de mails d'expiration tant que l'invitation Plex
+            # n'est pas réellement acceptée.
+            if _user_has_pending_plex_invite(db, uid):
+                log.info(f"[USER {uid}] pending Plex invite → expiration notifications skipped")
+                continue
+
             exp = _parse_date_iso(u.get("expiration_date"))
             if not exp:
                 continue
