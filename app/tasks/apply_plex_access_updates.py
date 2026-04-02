@@ -4,6 +4,7 @@ from plexapi.server import PlexServer
 from logging_utils import get_logger
 import xml.etree.ElementTree as ET
 from plexapi.exceptions import BadRequest
+from core.providers.plex_users import plex_invite_and_share
 
 logger = get_logger("apply_plex_access_updates")
 
@@ -120,22 +121,16 @@ def is_pending_invite_media_user(user_row) -> bool:
 def resolve_plex_user(account, media_user_row):
     """
     Résout un MyPlexUser de façon robuste.
-    Ordre de recherche :
-    1. external_user_id
-    2. email
-    3. username
+    Ordre réel :
+    1. external_user_id (colonne DB + details_json.plex_user.id)
+    2. email (colonne DB + details_json)
+    3. username (colonne DB + details_json)
     4. title
     5. fallback account.user(...)
     """
-    ext_id = str(row_get(media_user_row, "external_user_id") or "").strip()
-    db_email = str(row_get(media_user_row, "email") or "").strip().lower()
-    db_username = str(row_get(media_user_row, "username") or "").strip()
-
-    try:
-        plex_users = list(account.users())
-    except Exception:
-        logger.exception("Unable to list Plex users via account.users()")
-        plex_users = []
+    details = _details_json_as_dict(media_user_row)
+    plex_user_details = details.get("plex_user") or {}
+    plex_share_details = details.get("plex_share") or {}
 
     def norm(v):
         return str(v or "").strip()
@@ -143,40 +138,80 @@ def resolve_plex_user(account, media_user_row):
     def norm_lower(v):
         return norm(v).lower()
 
-    # 1) Match par external_user_id
-    if ext_id:
+    db_ext_id = norm(row_get(media_user_row, "external_user_id"))
+    db_email = norm_lower(row_get(media_user_row, "email"))
+    db_username = norm(row_get(media_user_row, "username"))
+
+    candidate_ids = []
+    candidate_emails = []
+    candidate_usernames = []
+
+    for v in [
+        db_ext_id,
+        plex_user_details.get("id"),
+    ]:
+        v = norm(v)
+        if v and v not in candidate_ids:
+            candidate_ids.append(v)
+
+    for v in [
+        db_email,
+        plex_user_details.get("email"),
+        plex_share_details.get("email"),
+    ]:
+        v = norm_lower(v)
+        if v and v not in candidate_emails:
+            candidate_emails.append(v)
+
+    for v in [
+        db_username,
+        plex_user_details.get("username"),
+        plex_share_details.get("username"),
+    ]:
+        v = norm(v)
+        if v and v not in candidate_usernames:
+            candidate_usernames.append(v)
+
+    try:
+        plex_users = list(account.users())
+    except Exception:
+        logger.exception("Unable to list Plex users via account.users()")
+        plex_users = []
+
+    # 1) Match par id
+    for wanted_id in candidate_ids:
         for pu in plex_users:
-            if norm(getattr(pu, "id", None)) == ext_id:
+            if norm(getattr(pu, "id", None)) == wanted_id:
                 return pu
 
     # 2) Match par email
-    if db_email:
+    for wanted_email in candidate_emails:
         for pu in plex_users:
-            if norm_lower(getattr(pu, "email", None)) == db_email:
+            if norm_lower(getattr(pu, "email", None)) == wanted_email:
                 return pu
 
     # 3) Match par username
-    if db_username:
+    for wanted_username in candidate_usernames:
         for pu in plex_users:
-            if norm(getattr(pu, "username", None)) == db_username:
+            if norm(getattr(pu, "username", None)) == wanted_username:
                 return pu
 
     # 4) Match par title
-    if db_username:
+    for wanted_username in candidate_usernames:
         for pu in plex_users:
-            if norm(getattr(pu, "title", None)) == db_username:
+            if norm(getattr(pu, "title", None)) == wanted_username:
                 return pu
 
-    # 5) fallback ancien comportement
-    if db_username:
+    # 5) fallback ancien comportement, mais sur toutes les valeurs possibles
+    for wanted_username in candidate_usernames:
         try:
-            return account.user(db_username)
+            return account.user(wanted_username)
         except Exception:
             pass
 
-    if db_email:
+    for wanted_email in candidate_emails:
         try:
-            return account.user(db_email)
+            return account.user(wanted_email)
         except Exception:
             pass
 
@@ -197,45 +232,178 @@ def resolve_plex_user(account, media_user_row):
 
     raise RuntimeError(
         "Unable to resolve Plex user from media_users row "
-        f"(external_user_id={ext_id!r}, username={db_username!r}, email={db_email!r}). "
+        f"(external_user_id={db_ext_id!r}, username={db_username!r}, email={db_email!r}). "
+        f"details_json.plex_user={plex_user_details!r}. "
+        f"details_json.plex_share={plex_share_details!r}. "
         f"Available Plex users sample={available[:10]}"
     )
 
 
 def sync_media_user_identity_from_plex(db, media_user_row, plex_user_obj):
     """
-    Auto-corrige media_users.username / email si Plex a changé.
+    Auto-corrige media_users quand Plex renvoie enfin une identité réelle.
+    Important :
+    - met à jour username / email
+    - met à jour external_user_id
+    - marque accepted_at si absent
+    - remet plex_invite_state en friend/non-pending
     """
     media_user_id = row_get(media_user_row, "id")
     if not media_user_id:
         return
 
-    new_username = (
-        str(getattr(plex_user_obj, "username", None) or getattr(plex_user_obj, "title", None) or "").strip()
-    )
+    new_username = str(
+        getattr(plex_user_obj, "username", None)
+        or getattr(plex_user_obj, "title", None)
+        or ""
+    ).strip()
+
     new_email = str(getattr(plex_user_obj, "email", None) or "").strip()
+    new_external_user_id = str(getattr(plex_user_obj, "id", None) or "").strip()
 
     old_username = str(row_get(media_user_row, "username") or "").strip()
     old_email = str(row_get(media_user_row, "email") or "").strip()
+    old_external_user_id = str(row_get(media_user_row, "external_user_id") or "").strip()
+    old_accepted_at = str(row_get(media_user_row, "accepted_at") or "").strip()
 
-    if new_username == old_username and new_email == old_email:
-        return
+    details = _details_json_as_dict(media_user_row)
+    details["plex_invite_state"] = {
+        "is_friend": True,
+        "is_pending": False,
+        "primary_server_id": row_get(media_user_row, "server_id"),
+    }
+
+    details["plex_user"] = {
+        **(details.get("plex_user") or {}),
+        "id": new_external_user_id or old_external_user_id or None,
+        "username": new_username or old_username or None,
+        "email": new_email or old_email or None,
+        "avatar": getattr(plex_user_obj, "thumb", None),
+        "accepted_at": old_accepted_at or "synced",
+    }
+
+    changed = (
+        (new_username and new_username != old_username)
+        or (new_email and new_email != old_email)
+        or (new_external_user_id and new_external_user_id != old_external_user_id)
+        or (not old_accepted_at)
+    )
 
     db.execute(
         """
         UPDATE media_users
         SET username = ?,
-            email = ?
+            email = ?,
+            external_user_id = ?,
+            accepted_at = CASE
+                WHEN accepted_at IS NULL OR TRIM(accepted_at) = '' THEN datetime('now')
+                ELSE accepted_at
+            END,
+            details_json = ?
         WHERE id = ?
         """,
-        (new_username or old_username, new_email or old_email, media_user_id),
+        (
+            new_username or old_username,
+            new_email or old_email,
+            new_external_user_id or old_external_user_id or None,
+            json.dumps(details),
+            media_user_id,
+        ),
     )
 
-    logger.info(
-        f"[PLEX USER DRIFT] media_user_id={media_user_id} "
-        f"username: {old_username!r} -> {new_username!r}, "
-        f"email: {old_email!r} -> {new_email!r}"
-    )
+    if changed:
+        logger.info(
+            f"[PLEX USER SYNC] media_user_id={media_user_id} "
+            f"username: {old_username!r} -> {new_username!r}, "
+            f"email: {old_email!r} -> {new_email!r}, "
+            f"external_user_id: {old_external_user_id!r} -> {new_external_user_id!r}, "
+            f"accepted_at was empty={not bool(old_accepted_at)}"
+        )
+
+def resolve_or_repair_plex_user(db, server_row, user_row, sections_for_repair):
+    """
+    Essaie de résoudre le user Plex.
+    Si ça échoue alors que l'user a un email, tente une auto-réparation
+    via plex_invite_and_share pour recaler l'état friend/pending côté Plex + DB.
+    """
+    plex = get_plex(server_row)
+    account = plex.myPlexAccount()
+    install_plex_http_logger(getattr(account, "_session", None), "PLEX_ACCOUNT")
+
+    try:
+        plex_user = resolve_plex_user(account, user_row)
+        sync_media_user_identity_from_plex(db, user_row, plex_user)
+        refreshed = db.query_one("SELECT * FROM media_users WHERE id = ?", (row_get(user_row, "id"),))
+        return plex, account, refreshed or user_row, plex_user
+    except PendingPlexInvite:
+        raise
+    except Exception as first_error:
+        email = str(row_get(user_row, "email") or "").strip()
+        if not email:
+            raise first_error
+
+        (
+            allowSync,
+            allowCameraUpload,
+            allowChannels,
+            filterMovies,
+            filterTelevision,
+            filterMusic,
+        ) = _get_plex_share_settings_from_user(user_row)
+
+        logger.warning(
+            f"[PLEX REPAIR] unresolved media_user_id={row_get(user_row, 'id')} "
+            f"username={row_get(user_row, 'username')!r} email={email!r} "
+            f"server={row_get(server_row, 'name')!r} sections={sections_for_repair!r}"
+        )
+
+        repair_state = plex_invite_and_share(
+            dict(server_row),
+            email=email,
+            libraries_names=list(sections_for_repair or []),
+            allow_sync=allowSync,
+            allow_camera_upload=allowCameraUpload,
+            allow_channels=allowChannels,
+            filter_movies=filterMovies,
+            filter_television=filterTelevision,
+            filter_music=filterMusic,
+        )
+
+        details = _details_json_as_dict(user_row)
+        details["plex_invite_state"] = {
+            "is_friend": bool(repair_state.get("is_friend")),
+            "is_pending": bool(repair_state.get("is_pending")),
+            "primary_server_id": row_get(user_row, "server_id"),
+        }
+
+        db.execute(
+            """
+            UPDATE media_users
+            SET external_user_id = COALESCE(?, external_user_id),
+                username = COALESCE(?, username),
+                details_json = ?
+            WHERE id = ?
+            """,
+            (
+                repair_state.get("external_user_id"),
+                repair_state.get("username"),
+                json.dumps(details),
+                row_get(user_row, "id"),
+            ),
+        )
+
+        refreshed = db.query_one("SELECT * FROM media_users WHERE id = ?", (row_get(user_row, "id"),))
+
+        if bool(repair_state.get("is_pending")):
+            raise PendingPlexInvite(
+                f"Plex invite still pending acceptance for username={row_get(refreshed or user_row, 'username')!r}, "
+                f"email={str(row_get(refreshed or user_row, 'email') or '').strip().lower()!r}"
+            )
+
+        plex_user = resolve_plex_user(account, refreshed or user_row)
+        sync_media_user_identity_from_plex(db, refreshed or user_row, plex_user)
+        refreshed2 = db.query_one("SELECT * FROM media_users WHERE id = ?", (row_get(user_row, "id"),))
+        return plex, account, refreshed2 or refreshed or user_row, plex_user
 
 def log_updatefriend_payload(action: str, server_row, user_row, plex_obj, plex_user_obj,
                             sections, allowSync, allowCameraUpload, allowChannels,
@@ -590,27 +758,44 @@ def cleanup_old_jobs(db):
 
 def resolve_media_user(db, vodum_user_id: int, server_id: int):
     """
-    Convertit un user canonique (vodum_user_id) en user 'media_users' lié au serveur.
+    Convertit un user canonique (vodum_user_id) en user media_users lié au serveur.
+    Si plusieurs lignes existent, on préfère :
+    1. role != owner
+    2. accepted_at non vide
+    3. external_user_id non vide
+    4. type != 'unfriend'
     """
     if vodum_user_id is None:
         raise RuntimeError("Invalid job: vodum_user_id is NULL")
 
-    user = db.query_one(
+    rows = db.query(
         """
         SELECT *
         FROM media_users
         WHERE vodum_user_id = ?
           AND server_id = ?
+        ORDER BY
+            CASE WHEN LOWER(COALESCE(role, '')) = 'owner' THEN 1 ELSE 0 END ASC,
+            CASE WHEN TRIM(COALESCE(accepted_at, '')) <> '' THEN 0 ELSE 1 END ASC,
+            CASE WHEN TRIM(COALESCE(external_user_id, '')) <> '' THEN 0 ELSE 1 END ASC,
+            CASE WHEN LOWER(COALESCE(type, '')) = 'unfriend' THEN 1 ELSE 0 END ASC,
+            id ASC
         """,
         (vodum_user_id, server_id),
     )
 
-    if not user:
+    if not rows:
         raise RuntimeError(
             f"No media_user found for vodum_user_id={vodum_user_id} on server_id={server_id}"
         )
 
-    return user
+    if len(rows) > 1:
+        logger.warning(
+            f"[MEDIA USER DUPLICATE] vodum_user_id={vodum_user_id} server_id={server_id} "
+            f"rows={[row_get(r, 'id') for r in rows]}"
+        )
+
+    return rows[0]
 
 
 def is_owner_media_user(user_row) -> bool:
@@ -714,13 +899,15 @@ def apply_grant_job(db, job):
 
     logger.info(f"Updating access: {user['username']} ← {library['name']} sur {server['name']}")
 
-    plex = get_plex(server)
-    account = plex.myPlexAccount()
-    install_plex_http_logger(getattr(account, "_session", None), "PLEX_ACCOUNT")
+    sections_for_repair = [library["name"]]
 
     try:
-        plex_user = resolve_plex_user(account, user)
-        sync_media_user_identity_from_plex(db, user, plex_user)
+        plex, account, user, plex_user = resolve_or_repair_plex_user(
+            db=db,
+            server_row=server,
+            user_row=user,
+            sections_for_repair=sections_for_repair,
+        )
         logger.info(
             "Plex debug user: "
             f"db_external_user_id='{row_get(user, 'external_user_id')}' "
@@ -735,7 +922,7 @@ def apply_grant_job(db, job):
         raise
     except Exception:
         logger.exception(
-            f"Unable to retrieve MyPlexUser for username={user['username']} "
+            f"Unable to retrieve/repair MyPlexUser for username={user['username']} "
             f"external_user_id={row_get(user, 'external_user_id')} "
             f"email={row_get(user, 'email')}"
         )
@@ -833,13 +1020,27 @@ def apply_sync_job(db, job):
         f"(server_id={server_id}, user_id={user_id})"
     )
 
-    plex = get_plex(server)
-    account = plex.myPlexAccount()
-    install_plex_http_logger(getattr(account, "_session", None), "PLEX_ACCOUNT")
+    rows = db.query(
+        """
+        SELECT l.name
+        FROM media_user_libraries mul
+        JOIN libraries l ON mul.library_id = l.id
+        WHERE mul.media_user_id = ?
+          AND l.server_id = ?
+        """,
+        (user_id, server_id),
+    )
+    sections = [row_get(r, "name") for r in rows]
+    sections = [s for s in sections if s]
+    logger.info(f"Sections DB (expected) ({len(sections)}): {sections}")
 
     try:
-        plex_user = resolve_plex_user(account, user)
-        sync_media_user_identity_from_plex(db, user, plex_user)
+        plex, account, user, plex_user = resolve_or_repair_plex_user(
+            db=db,
+            server_row=server,
+            user_row=user,
+            sections_for_repair=sections,
+        )
         logger.info(
             "Plex debug user: "
             f"db_external_user_id='{row_get(user, 'external_user_id')}' "
@@ -854,25 +1055,13 @@ def apply_sync_job(db, job):
         raise
     except Exception:
         logger.exception(
-            f"Unable to retrieve MyPlexUser for username={user['username']} "
+            f"Unable to retrieve/repair MyPlexUser for username={user['username']} "
             f"external_user_id={row_get(user, 'external_user_id')} "
             f"email={row_get(user, 'email')}"
         )
         raise
 
-    rows = db.query(
-        """
-        SELECT l.name
-        FROM media_user_libraries mul
-        JOIN libraries l ON mul.library_id = l.id
-        WHERE mul.media_user_id = ?
-          AND l.server_id = ?
-        """,
-        (user_id, server_id),
-    )
-    sections = [row_get(r, "name") for r in rows]
-    sections = [s for s in sections if s]
-    logger.info(f"Sections DB (expected) ({len(sections)}): {sections}")
+
 
     (
         allowSync,
@@ -947,19 +1136,19 @@ def apply_revoke_job(db, job):
     if not server:
         raise RuntimeError("Server not found (revoke)")
 
-    plex = get_plex(server)
-    account = plex.myPlexAccount()
-    install_plex_http_logger(getattr(account, "_session", None), "PLEX_ACCOUNT")
-
     try:
-        plex_user = resolve_plex_user(account, user)
-        sync_media_user_identity_from_plex(db, user, plex_user)
+        plex, account, user, plex_user = resolve_or_repair_plex_user(
+            db=db,
+            server_row=server,
+            user_row=user,
+            sections_for_repair=[],
+        )
     except PendingPlexInvite as e:
         logger.info(str(e))
         raise
     except Exception:
         logger.exception(
-            f"Unable to retrieve MyPlexUser for username={user['username']} "
+            f"Unable to retrieve/repair MyPlexUser for username={user['username']} "
             f"external_user_id={row_get(user, 'external_user_id')} "
             f"email={row_get(user, 'email')}"
         )

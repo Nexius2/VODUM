@@ -11,6 +11,7 @@ from logging_utils import get_logger
 from db_manager import DBManager
 from core.backup import BackupConfig
 from core.i18n import init_i18n
+from core.repair.plex_media_users_repair import run_repair_if_needed
 
 from api.subscriptions import subscriptions_api
 from blueprints.users import users_bp
@@ -402,5 +403,10 @@ def create_app():
     app.scheduler_db_provider = lambda: DBManager(app.config["DATABASE"])
 
     _reset_maintenance_on_startup(app)
+
+    # One-shot repair au démarrage
+    with app.app_context():
+        db = get_db()
+        run_repair_if_needed(db, app.logger)
 
     return app

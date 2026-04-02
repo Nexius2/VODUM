@@ -860,7 +860,12 @@ def register(app):
         users = db.query(
             """
             SELECT mu.id AS media_user_id,
-                   mu.vodum_user_id AS vodum_user_id
+                   mu.vodum_user_id AS vodum_user_id,
+                   mu.username,
+                   mu.email,
+                   mu.external_user_id,
+                   mu.accepted_at,
+                   mu.details_json
             FROM media_users mu
             JOIN vodum_users vu ON vu.id = mu.vodum_user_id
             WHERE mu.server_id = ?
@@ -886,6 +891,34 @@ def register(app):
                     """,
                     (u["media_user_id"], lib_id),
                 )
+
+        pending_count = 0
+        ready_count = 0
+
+        for u in users:
+            accepted_at = str(u["accepted_at"] or "").strip()
+            details_json = {}
+            try:
+                details_json = json.loads(u["details_json"]) if u["details_json"] else {}
+            except Exception:
+                details_json = {}
+
+            invite_state = (details_json.get("plex_invite_state") or {}) if isinstance(details_json, dict) else {}
+            is_pending = (
+                (not accepted_at)
+                and (
+                    bool(invite_state.get("is_pending"))
+                    or (
+                        not str(u["external_user_id"] or "").strip()
+                        and bool(str(u["email"] or "").strip() or str(u["username"] or "").strip())
+                    )
+                )
+            )
+
+            if is_pending:
+                pending_count += 1
+            else:
+                ready_count += 1
 
         # --------------------------------------------------
         # 3) Créer des jobs compatibles worker: media_jobs
@@ -944,7 +977,12 @@ def register(app):
             # pas bloquant si enqueue échoue, le scheduler le prendra
             pass
 
-        flash("grant_access_active_success", "success")
+        flash(
+            f"Libraries saved in DB for {len(users)} user(s). "
+            f"Ready for immediate Plex sync: {ready_count}. "
+            f"Pending Plex invites: {pending_count}.",
+            "success",
+        )
         return redirect(url_for("servers_list", server_id=server_id))
 
 
