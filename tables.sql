@@ -99,6 +99,10 @@ CREATE TABLE IF NOT EXISTS media_users (
     FOREIGN KEY(vodum_user_id) REFERENCES vodum_users(id)
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS uq_media_users_vodum_server
+ON media_users(vodum_user_id, server_id)
+WHERE vodum_user_id IS NOT NULL;
+
 CREATE UNIQUE INDEX IF NOT EXISTS uq_media_users_provider_server_external
 ON media_users(server_id, type, external_user_id)
 WHERE external_user_id IS NOT NULL
@@ -905,6 +909,14 @@ CREATE TABLE IF NOT EXISTS comm_templates (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
   FOREIGN KEY(subscription_template_id) REFERENCES subscription_templates(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS app_repairs (
+    key TEXT PRIMARY KEY,
+    status TEXT NOT NULL,
+    started_at TEXT,
+    finished_at TEXT,
+    details_json TEXT
 );
 
 CREATE TABLE IF NOT EXISTS comm_scheduled (

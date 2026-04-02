@@ -892,7 +892,20 @@ def api_users_create():
 
                     existing_mu = None
 
-                    if external_user_id:
+                    # 1) priorité absolue : même user Vodum + même serveur
+                    existing_mu = db.query_one(
+                        """
+                        SELECT id
+                        FROM media_users
+                        WHERE server_id = ?
+                          AND vodum_user_id = ?
+                        LIMIT 1
+                        """,
+                        (sid2, vodum_user_id),
+                    )
+
+                    # 2) sinon on tente via l'identité Plex native
+                    if not existing_mu and external_user_id:
                         existing_mu = db.query_one(
                             """
                             SELECT id
@@ -905,6 +918,7 @@ def api_users_create():
                             (sid2, str(external_user_id)),
                         )
 
+                    # 3) sinon par email
                     if not existing_mu and email:
                         existing_mu = db.query_one(
                             """
@@ -918,6 +932,7 @@ def api_users_create():
                             (sid2, email),
                         )
 
+                    # 4) sinon par username
                     if not existing_mu and (server_username or username):
                         existing_mu = db.query_one(
                             """
@@ -936,13 +951,16 @@ def api_users_create():
                             """
                             UPDATE media_users
                             SET vodum_user_id = ?,
+                                external_user_id = COALESCE(?, external_user_id),
                                 username = ?,
                                 email = ?,
+                                type = 'plex',
                                 details_json = ?
                             WHERE id = ?
                             """,
                             (
                                 vodum_user_id,
+                                external_user_id or None,
                                 server_username or username,
                                 email or None,
                                 json.dumps(details_json) if details_json else None,
