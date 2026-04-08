@@ -1,117 +1,41 @@
 # Auto-split from app.py (keep URLs/endpoints intact)
-import os
 import json
-import time
-import re
 import math
-import platform
-import ipaddress
-import uuid
-import threading
-import shutil
-import sqlite3
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Optional
 
-import requests
-from flask import (
-    render_template, g, request, redirect, url_for, flash, session,
-    Response, current_app, jsonify, make_response, abort,
-)
+from flask import render_template, request, redirect, url_for, flash
 
-from db_manager import DBManager
-from logging_utils import get_logger, read_last_logs, read_all_logs
-from tasks_engine import run_task, start_scheduler, run_task_sequence, run_task_by_name, enqueue_task
-from mailing_utils import build_user_context, render_mail
-from discord_utils import is_discord_ready, validate_discord_bot_token
-from core.i18n import get_translator, get_available_languages
-from core.backup import BackupConfig, ensure_backup_dir, create_backup_file, list_backups, restore_backup_file
-from werkzeug.security import generate_password_hash, check_password_hash
-
-from web.helpers import get_db, scheduler_db_provider, table_exists, add_log, send_email_via_settings, get_backup_cfg
-
-task_logger = get_logger("tasks_ui")
-auth_logger = get_logger("auth")
-security_logger = get_logger("security")
-settings_logger = get_logger("settings")
+from tasks_engine import auto_enable_stream_enforcer
+from web.helpers import get_db, add_log
 
 def register(app):
-    @app.route("/subscriptions", methods=["GET", "POST"])
+    @app.route("/subscriptions", methods=["GET"])
     def subscriptions():
         db = get_db()
-        tab = (request.args.get("tab") or request.form.get("tab") or "templates").strip().lower()
+        tab = (request.args.get("tab") or "templates").strip().lower()
         if tab not in ("templates", "applications", "policies", "gifts", "settings"):
             tab = "templates"
 
         settings = db.query_one("SELECT * FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
 
-        # --------------------------------------------------
-        # POST -> save subscription settings
-        # --------------------------------------------------
-        if request.method == "POST" and tab == "settings":
-            expiry_mode = (request.form.get("expiry_mode") or settings.get("expiry_mode") or "none").strip()
-            if expiry_mode not in ("none", "disable", "warn_then_disable"):
-                expiry_mode = "none"
-
-            try:
-                default_subscription_days = int(
-                    request.form.get("default_expiration_days", settings.get("default_subscription_days") or 90)
-                )
-            except Exception:
-                default_subscription_days = int(settings.get("default_subscription_days") or 90)
-
-            try:
-                delete_after_expiry_days = int(
-                    request.form.get("delete_after_expiry_days", settings.get("delete_after_expiry_days") or 60)
-                )
-            except Exception:
-                delete_after_expiry_days = int(settings.get("delete_after_expiry_days") or 60)
-
-            try:
-                warn_then_disable_days = int(
-                    request.form.get("warn_then_disable_days", settings.get("warn_then_disable_days") or 7)
-                )
-            except Exception:
-                warn_then_disable_days = int(settings.get("warn_then_disable_days") or 7)
-
-            if default_subscription_days < 1:
-                default_subscription_days = 1
-
-            if delete_after_expiry_days < 1:
-                delete_after_expiry_days = 1
-
-            if warn_then_disable_days < 1:
-                warn_then_disable_days = 1
-
-            if expiry_mode != "warn_then_disable":
-                warn_then_disable_days = int(settings.get("warn_then_disable_days") or 7)
-
-            db.execute(
-                """
-                UPDATE settings
-                SET default_subscription_days = ?,
-                    delete_after_expiry_days = ?,
-                    expiry_mode = ?,
-                    warn_then_disable_days = ?,
-                    disable_on_expiry = ?
-                WHERE id = 1
-                """,
-                (
-                    default_subscription_days,
-                    delete_after_expiry_days,
-                    expiry_mode,
-                    warn_then_disable_days,
-                    1 if expiry_mode == "disable" else 0,
-                ),
-            )
-
-            add_log("info", "subscriptions", "Subscription settings updated")
-            flash("settings_saved", "success")
-            return redirect(url_for("subscriptions", tab="settings"))
-
         servers = db.query("SELECT id, name, type FROM servers ORDER BY name") or []
+
+        gift_users = db.query("""
+            SELECT
+              vu.id,
+              vu.username,
+              vu.email,
+              vu.status
+            FROM vodum_users vu
+            WHERE vu.status IN ('active', 'pre_expired', 'reminder')
+              AND EXISTS (
+                SELECT 1
+                FROM media_users mu
+                WHERE mu.vodum_user_id = vu.id
+              )
+            ORDER BY LOWER(COALESCE(vu.username, '')) ASC, vu.id ASC
+        """) or []
+
         templates = db.query("""
             SELECT
               id,
@@ -241,6 +165,7 @@ def register(app):
             tab=tab,
             settings=settings,
             servers=servers,
+            gift_users=gift_users,
             templates=templates,
             users=users,
             applications_page=applications_page,
@@ -251,7 +176,72 @@ def register(app):
             edit_policy=edit_policy,
         )
 
+    @app.route("/subscriptions/settings", methods=["POST"])
+    def subscriptions_settings_save():
+        db = get_db()
 
+        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        settings = dict(settings) if settings else {}
+
+        expiry_mode = (request.form.get("expiry_mode") or settings.get("expiry_mode") or "none").strip()
+        if expiry_mode not in ("none", "disable", "warn_then_disable"):
+            expiry_mode = "none"
+
+        try:
+            default_subscription_days = int(
+                request.form.get("default_expiration_days", settings.get("default_subscription_days") or 90)
+            )
+        except Exception:
+            default_subscription_days = int(settings.get("default_subscription_days") or 90)
+
+        try:
+            delete_after_expiry_days = int(
+                request.form.get("delete_after_expiry_days", settings.get("delete_after_expiry_days") or 60)
+            )
+        except Exception:
+            delete_after_expiry_days = int(settings.get("delete_after_expiry_days") or 60)
+
+        try:
+            warn_then_disable_days = int(
+                request.form.get("warn_then_disable_days", settings.get("warn_then_disable_days") or 7)
+            )
+        except Exception:
+            warn_then_disable_days = int(settings.get("warn_then_disable_days") or 7)
+
+        if default_subscription_days < 1:
+            default_subscription_days = 1
+
+        if delete_after_expiry_days < 1:
+            delete_after_expiry_days = 1
+
+        if warn_then_disable_days < 1:
+            warn_then_disable_days = 1
+
+        if expiry_mode != "warn_then_disable":
+            warn_then_disable_days = int(settings.get("warn_then_disable_days") or 7)
+
+        db.execute(
+            """
+            UPDATE settings
+            SET default_subscription_days = ?,
+                delete_after_expiry_days = ?,
+                expiry_mode = ?,
+                warn_then_disable_days = ?,
+                disable_on_expiry = ?
+            WHERE id = 1
+            """,
+            (
+                default_subscription_days,
+                delete_after_expiry_days,
+                expiry_mode,
+                warn_then_disable_days,
+                1 if expiry_mode == "disable" else 0,
+            ),
+        )
+
+        add_log("info", "subscriptions", "Subscription settings updated")
+        flash("settings_saved", "success")
+        return redirect(url_for("subscriptions", tab="settings"))
 
 
     
@@ -499,15 +489,9 @@ def register(app):
 
         db.execute("UPDATE vodum_users SET subscription_template_id=? WHERE id=?", (template_id, vodum_user_id))
 
-        # ✅ Auto-enable stream_enforcer if at least one policy is enabled
+        # Auto-enable stream_enforcer if at least one policy is enabled
         if any_enabled:
-            db.execute("""
-                UPDATE tasks
-                SET enabled = 1,
-                    status = CASE WHEN status = 'disabled' THEN 'idle' ELSE status END,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE name = 'stream_enforcer'
-            """)
+            auto_enable_stream_enforcer()
 
         return tname
 

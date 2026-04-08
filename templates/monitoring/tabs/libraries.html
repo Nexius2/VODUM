@@ -45,6 +45,7 @@
           {{ th("Server", "server") }}
           {{ th("Library", "library") }}
           {{ th("Type", "type") }}
+          {{ th("Users", "users") }}
           {{ th("Items", "items") }}
           {{ th("Last stream", "last") }}
           {{ th("Plays", "plays") }}
@@ -59,6 +60,7 @@
                 <td class="py-3 pr-4">{{ r.server_name }}</td>
                 <td class="py-3 pr-4 font-semibold">{{ r.library_name }}</td>
                 <td class="py-3 pr-4">{{ r.media_type or "-" }}</td>
+                <td class="py-3 pr-4">{{ r.users_with_access or 0 }}</td>
                 <td class="py-3 pr-4">{{ r.item_count or "-" }}</td>
                 <td class="py-3 pr-4">{{ r.last_stream_at|tz if r.last_stream_at else "-" }}</td>
                 <td class="py-3 pr-4">{{ r.total_plays or 0 }}</td>
@@ -68,7 +70,7 @@
 
             {% if rows|length == 0 %}
               <tr>
-                <td colspan="7" class="py-6 text-slate-500">No data yet.</td>
+                <td colspan="8" class="py-6 text-slate-500">No data yet.</td>
               </tr>
             {% endif %}
           </tbody>
@@ -164,9 +166,9 @@
             <div class="relative h-36 border-b border-slate-800 overflow-hidden">
               {% set top_item = card["items"][0] if card["items"] else None %}
 
-              {% if top_item and top_item.poster_url %}
+              {% if top_item and (top_item.backdrop_url or top_item.poster_url) %}
                 <img
-                  src="{{ top_item.poster_url }}"
+                  src="{{ top_item.backdrop_url or top_item.poster_url }}"
                   alt="{{ top_item.display_title }}"
                   class="absolute inset-0 w-full h-full object-cover opacity-75"
                   loading="lazy"

@@ -4,7 +4,7 @@ import random
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
-
+from core.plex_rate_limit import wait_for_plex_slot
 import requests
 from flask import current_app, url_for
 
@@ -209,6 +209,7 @@ def _resolve_on_plex(server, media_type, imdb, tmdb):
         try:
             logger.info(f"[PLEX] Lookup on server={server.get('name')} url={url}")
 
+            wait_for_plex_slot(base)
             r = requests.get(url, params=params, timeout=20)
             r.raise_for_status()
 

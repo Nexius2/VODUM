@@ -1,174 +1,30 @@
 # Auto-split from app.py (keep URLs/endpoints intact)
 import os
 import json
-import time
-import re
-import math
-import platform
 import ipaddress
-import uuid
-import threading
-import shutil
-import sqlite3
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Optional
 
-import requests
 from flask import (
-    render_template, g, request, redirect, url_for, flash, session,
-    Response, current_app, jsonify, make_response, abort,
+    render_template, request, redirect, url_for, flash, session,
+    jsonify, abort,
 )
 
-from db_manager import DBManager
-from logging_utils import get_logger, read_last_logs, read_all_logs
-from tasks_engine import run_task, start_scheduler, run_task_sequence, run_task_by_name, enqueue_task
-from mailing_utils import build_user_context, render_mail
-from discord_utils import is_discord_ready, validate_discord_bot_token
-from core.i18n import get_translator, get_available_languages
-from core.backup import BackupConfig, ensure_backup_dir, create_backup_file, list_backups, restore_backup_file
-from werkzeug.security import generate_password_hash, check_password_hash
-
-from web.helpers import get_db, scheduler_db_provider, table_exists, add_log, send_email_via_settings, get_backup_cfg
+from logging_utils import get_logger
+from tasks_engine import (
+    enqueue_task,
+    set_task_enabled,
+    set_tasks_enabled_by_names,
+    mark_task_manual_run_requested,
+    mark_task_queue_failed,
+)
+from web.helpers import get_db, table_exists, add_log
 
 task_logger = get_logger("tasks_ui")
-auth_logger = get_logger("auth")
-security_logger = get_logger("security")
-settings_logger = get_logger("settings")
 
 def register(app):
-    @app.route("/tasks", methods=["GET", "POST"])
+    @app.route("/tasks", methods=["GET"])
     def tasks_page():
         db = get_db()
 
-        # ------------------------------------------------------------------
-        # POST : actions sur les tâches (toggle / run_now)
-        # ------------------------------------------------------------------
-        if request.method == "POST" and table_exists(db, "tasks"):
-            task_id = request.form.get("task_id", type=int)
-            action = request.form.get("action", type=str)
-
-            if not task_id:
-                flash("invalid_task", "error")
-                task_logger.error("POST /tasks → task_id manquant")
-                return redirect(url_for("tasks_page"))
-
-            # On récupère la tâche une fois pour valider l'existence / état
-            task = db.query_one("SELECT * FROM tasks WHERE id = ?", (task_id,))
-            if not task:
-                flash("invalid_task", "error")
-                task_logger.error(f"POST /tasks → task_id introuvable: {task_id}")
-                return redirect(url_for("tasks_page"))
-
-            # --------------------------------------------------------------
-            # 1) Toggle enable/disable
-            # --------------------------------------------------------------
-            if action == "toggle":
-                # 1) Toggle enabled (0 <-> 1)
-                db.execute(
-                    """
-                    UPDATE tasks
-                    SET enabled = CASE enabled WHEN 1 THEN 0 ELSE 1 END
-                    WHERE id = ?
-                    """,
-                    (task_id,),
-                )
-
-                # 2) Relire la valeur enabled après update
-                row = db.query_one("SELECT enabled FROM tasks WHERE id = ?", (task_id,))
-                enabled = int(row["enabled"]) if row else 0
-
-                # 3) Synchroniser le status + reset champs utiles
-                if enabled == 1:
-                    # tâche activée -> prête à tourner
-                    db.execute(
-                        """
-                        UPDATE tasks
-                        SET status='idle',
-                            last_error=NULL,
-                            next_run=NULL
-                        WHERE id=?
-                        """,
-                        (task_id,),
-                    )
-                    task_logger.info(f"Tâche {task_id} → ENABLED (status=idle)")
-                else:
-                    # tâche désactivée
-                    db.execute(
-                        """
-                        UPDATE tasks
-                        SET status='disabled'
-                        WHERE id=?
-                        """,
-                        (task_id,),
-                    )
-                    task_logger.info(f"Tâche {task_id} → DISABLED (status=disabled)")
-
-                flash("task_updated", "success")
-                return redirect(url_for("tasks_page"))
-
-            # --------------------------------------------------------------
-            # 2) run_now → enqueue + status queued (optionnel mais utile)
-            # --------------------------------------------------------------
-            elif action == "run_now":
-                # Re-lire enabled au cas où
-                row = db.query_one("SELECT enabled, status, name FROM tasks WHERE id = ?", (task_id,))
-                enabled = int(row["enabled"]) if row else 0
-                name = row["name"] if row and "name" in row else f"#{task_id}"
-
-                if enabled != 1:
-                    flash("task_disabled", "error")
-                    task_logger.warning(f"run_now refusé: tâche {task_id} ({name}) désactivée")
-                    return redirect(url_for("tasks_page"))
-
-                # Marquer queued (si tu veux une UI plus lisible)
-                # On ne force pas "queued" si déjà running, mais tu peux choisir.
-                if row and row.get("status") not in ("running",):
-                    db.execute(
-                        """
-                        UPDATE tasks
-                        SET status='queued',
-                            last_error=NULL
-                        WHERE id=?
-                        """,
-                        (task_id,),
-                    )
-
-                try:
-                    from tasks_engine import enqueue_task
-                    enqueue_task(task_id)
-                    flash("task_queued", "success")
-                    task_logger.info(f"Tâche {task_id} ({name}) → run_now → enqueued")
-                except Exception as e:
-                    flash("task_queue_failed", "error")
-                    task_logger.error(f"run_now erreur pour tâche {task_id} ({name}): {e}", exc_info=True)
-                    # On garde une trace DB si possible
-                    try:
-                        db.execute(
-                            """
-                            UPDATE tasks
-                            SET status='error',
-                                last_error=?
-                            WHERE id=?
-                            """,
-                            (str(e), task_id),
-                        )
-                    except Exception:
-                        pass
-
-                return redirect(url_for("tasks_page"))
-
-            # --------------------------------------------------------------
-            # Action inconnue
-            # --------------------------------------------------------------
-            else:
-                task_logger.warning(f"Action inconnue sur /tasks : {action} (task_id={task_id})")
-                flash("unknown_action", "error")
-                return redirect(url_for("tasks_page"))
-
-        # ------------------------------------------------------------------
-        # GET : affichage liste des tâches
-        # ------------------------------------------------------------------
         tasks = []
         if table_exists(db, "tasks"):
             tasks = db.query(
@@ -186,6 +42,71 @@ def register(app):
             tasks=tasks,
             active_page="tasks",
         )
+
+    @app.route("/tasks/action", methods=["POST"])
+    def tasks_action():
+        db = get_db()
+
+        if not table_exists(db, "tasks"):
+            flash("invalid_task", "error")
+            task_logger.error("POST /tasks/action → table tasks absente")
+            return redirect(url_for("tasks_page"))
+
+        task_id = request.form.get("task_id", type=int)
+        action = (request.form.get("action") or "").strip()
+
+        if not task_id:
+            flash("invalid_task", "error")
+            task_logger.error("POST /tasks/action → task_id manquant")
+            return redirect(url_for("tasks_page"))
+
+        task = db.query_one("SELECT * FROM tasks WHERE id = ?", (task_id,))
+        if not task:
+            flash("invalid_task", "error")
+            task_logger.error(f"POST /tasks/action → task_id introuvable: {task_id}")
+            return redirect(url_for("tasks_page"))
+
+        if action == "toggle":
+            new_enabled = 0 if int(task["enabled"] or 0) == 1 else 1
+            set_task_enabled(task_id, new_enabled)
+
+            if new_enabled == 1:
+                task_logger.info(f"Tâche {task_id} → ENABLED (status=idle)")
+            else:
+                task_logger.info(f"Tâche {task_id} → DISABLED (status=disabled)")
+
+            flash("task_updated", "success")
+            return redirect(url_for("tasks_page"))
+
+        if action == "run_now":
+            row = db.query_one("SELECT enabled, status, name FROM tasks WHERE id = ?", (task_id,))
+            enabled = int(row["enabled"]) if row else 0
+            name = row["name"] if row and "name" in row else f"#{task_id}"
+
+            if enabled != 1:
+                flash("task_disabled", "error")
+                task_logger.warning(f"run_now refusé: tâche {task_id} ({name}) désactivée")
+                return redirect(url_for("tasks_page"))
+
+            mark_task_manual_run_requested(task_id)
+
+            try:
+                enqueue_task(task_id)
+                flash("task_queued", "success")
+                task_logger.info(f"Tâche {task_id} ({name}) → run_now → enqueued")
+            except Exception as e:
+                flash("task_queue_failed", "error")
+                task_logger.error(f"run_now erreur pour tâche {task_id} ({name}): {e}", exc_info=True)
+                try:
+                    mark_task_queue_failed(task_id, str(e))
+                except Exception:
+                    pass
+
+            return redirect(url_for("tasks_page"))
+
+        task_logger.warning(f"Action inconnue sur /tasks/action : {action} (task_id={task_id})")
+        flash("unknown_action", "error")
+        return redirect(url_for("tasks_page"))
 
 
 
@@ -220,20 +141,16 @@ def register(app):
         enabled = 1 if data.get("enabled") else 0
 
         try:
-            # 1️⃣ Mettre à jour le flag settings (WRITE)
+            # Mettre à jour le flag settings (WRITE)
             db.execute(
                 "UPDATE settings SET mailing_enabled = ? WHERE id = 1",
                 (enabled,),
             )
 
-            # 2️⃣ Activer / désactiver les tâches liées au mailing (WRITE)
-            db.execute(
-                """
-                UPDATE tasks
-                SET enabled = ?
-                WHERE name IN ('send_expiration_emails', 'send_mail_campaigns', 'send_comm_campaigns')
-                """,
-                (enabled,),
+            # Activer / désactiver les tâches liées au mailing (WRITE)
+            set_tasks_enabled_by_names(
+                ["send_expiration_emails", "send_mail_campaigns", "send_comm_campaigns"],
+                enabled,
             )
 
             add_log(
@@ -245,7 +162,7 @@ def register(app):
             return {"status": "ok", "enabled": enabled}
 
         except Exception as e:
-            # ⚠️ pas de rollback avec DBManager
+            # pas de rollback avec DBManager
             add_log(
                 "error",
                 "mailing",
@@ -256,28 +173,7 @@ def register(app):
 
 
 
-    @app.route("/tasks/run/<int:task_id>", methods=["POST"])
-    def task_run(task_id):
-        db = get_db()
 
-        row = db.query_one(
-            "SELECT status, enabled FROM tasks WHERE id = ?",
-            (task_id,),
-        )
-        if not row:
-            flash("task_not_found", "error")
-            return redirect("/tasks")
-
-        if not row["enabled"] or row["status"] == "disabled":
-            flash("task_disabled", "warning")
-            return redirect("/tasks")
-
-        # ✅ On empile une exécution, même si déjà queued/running
-        from tasks_engine import enqueue_task
-        enqueue_task(task_id)
-
-        flash("task_queued", "success")
-        return redirect("/tasks")
 
 
 

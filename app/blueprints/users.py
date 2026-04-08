@@ -28,6 +28,7 @@ from communications_engine import (
     select_comm_template_for_user,
 )
 from core.providers.plex_users import plex_invite_and_share
+from tasks_engine import auto_enable_stream_enforcer
 
 log = get_logger("users_create")
 
@@ -249,15 +250,7 @@ def _apply_subscription_template_snapshot(db: DBManager, vodum_user_id: int, tem
     )
 
     if any_enabled:
-        db.execute(
-            """
-            UPDATE tasks
-            SET enabled = 1,
-                status = CASE WHEN status = 'disabled' THEN 'idle' ELSE status END,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE name = 'stream_enforcer'
-            """
-        )
+        auto_enable_stream_enforcer()
 
     return template_name
 

@@ -30,7 +30,7 @@
       </div>
     </div>
 
-    <form method="post" enctype="multipart/form-data" class="space-y-4">
+    <form method="post" action="{{ url_for('communications_templates_action') }}" enctype="multipart/form-data" class="space-y-4">
       <input type="hidden" name="action" value="{% if loaded_template %}save{% else %}create{% endif %}">
       <input type="hidden" name="template_id" value="{{ loaded_template.id if loaded_template else '' }}">
       <input type="hidden" name="enabled" id="template_enabled" value="{{ 1 if (loaded_template and loaded_template.enabled) or (not loaded_template) else 0 }}">

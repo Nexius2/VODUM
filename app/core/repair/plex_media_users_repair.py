@@ -42,7 +42,11 @@ def run_repair_if_needed(db, logger):
 
     if row and row["status"] == "done":
         logger.info("[REPAIR] plex_media_users_repair_v1 already done, skipping")
-        return
+        return {
+            "status": "skipped",
+            "repair_key": REPAIR_KEY,
+            "reason": "already_done",
+        }
 
     logger.warning("[REPAIR] START plex_media_users_repair_v1")
 
@@ -190,6 +194,12 @@ def run_repair_if_needed(db, logger):
         )
 
         logger.warning(f"[REPAIR] DONE plex_media_users_repair_v1 {stats}")
+
+        return {
+            "status": "done",
+            "repair_key": REPAIR_KEY,
+            "stats": stats,
+        }
 
     except Exception as e:
         db.execute(

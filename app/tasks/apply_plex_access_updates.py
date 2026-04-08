@@ -5,6 +5,9 @@ from logging_utils import get_logger
 import xml.etree.ElementTree as ET
 from plexapi.exceptions import BadRequest
 from core.providers.plex_users import plex_invite_and_share
+import re
+import requests
+from core.plex_rate_limit import install_plex_rate_limit
 
 logger = get_logger("apply_plex_access_updates")
 
@@ -322,9 +325,8 @@ def sync_media_user_identity_from_plex(db, media_user_row, plex_user_obj):
 
 def resolve_or_repair_plex_user(db, server_row, user_row, sections_for_repair):
     """
-    Essaie de résoudre le user Plex.
-    Si ça échoue alors que l'user a un email, tente une auto-réparation
-    via plex_invite_and_share pour recaler l'état friend/pending côté Plex + DB.
+    Résout un user Plex sans jamais lancer d'invitation/réinvitation automatique
+    pendant une simple tâche d'accès aux bibliothèques.
     """
     plex = get_plex(server_row)
     account = plex.myPlexAccount()
@@ -333,77 +335,24 @@ def resolve_or_repair_plex_user(db, server_row, user_row, sections_for_repair):
     try:
         plex_user = resolve_plex_user(account, user_row)
         sync_media_user_identity_from_plex(db, user_row, plex_user)
-        refreshed = db.query_one("SELECT * FROM media_users WHERE id = ?", (row_get(user_row, "id"),))
+        refreshed = db.query_one(
+            "SELECT * FROM media_users WHERE id = ?",
+            (row_get(user_row, "id"),),
+        )
         return plex, account, refreshed or user_row, plex_user
+
     except PendingPlexInvite:
         raise
-    except Exception as first_error:
-        email = str(row_get(user_row, "email") or "").strip()
-        if not email:
-            raise first_error
 
-        (
-            allowSync,
-            allowCameraUpload,
-            allowChannels,
-            filterMovies,
-            filterTelevision,
-            filterMusic,
-        ) = _get_plex_share_settings_from_user(user_row)
-
-        logger.warning(
-            f"[PLEX REPAIR] unresolved media_user_id={row_get(user_row, 'id')} "
-            f"username={row_get(user_row, 'username')!r} email={email!r} "
-            f"server={row_get(server_row, 'name')!r} sections={sections_for_repair!r}"
+    except Exception:
+        logger.exception(
+            "[PLEX RESOLVE] unable to resolve user without re-inviting "
+            f"media_user_id={row_get(user_row, 'id')!r} "
+            f"username={row_get(user_row, 'username')!r} "
+            f"email={row_get(user_row, 'email')!r} "
+            f"server={row_get(server_row, 'name')!r}"
         )
-
-        repair_state = plex_invite_and_share(
-            dict(server_row),
-            email=email,
-            libraries_names=list(sections_for_repair or []),
-            allow_sync=allowSync,
-            allow_camera_upload=allowCameraUpload,
-            allow_channels=allowChannels,
-            filter_movies=filterMovies,
-            filter_television=filterTelevision,
-            filter_music=filterMusic,
-        )
-
-        details = _details_json_as_dict(user_row)
-        details["plex_invite_state"] = {
-            "is_friend": bool(repair_state.get("is_friend")),
-            "is_pending": bool(repair_state.get("is_pending")),
-            "primary_server_id": row_get(user_row, "server_id"),
-        }
-
-        db.execute(
-            """
-            UPDATE media_users
-            SET external_user_id = COALESCE(?, external_user_id),
-                username = COALESCE(?, username),
-                details_json = ?
-            WHERE id = ?
-            """,
-            (
-                repair_state.get("external_user_id"),
-                repair_state.get("username"),
-                json.dumps(details),
-                row_get(user_row, "id"),
-            ),
-        )
-
-        refreshed = db.query_one("SELECT * FROM media_users WHERE id = ?", (row_get(user_row, "id"),))
-
-        if bool(repair_state.get("is_pending")):
-            raise PendingPlexInvite(
-                f"Plex invite still pending acceptance for username={row_get(refreshed or user_row, 'username')!r}, "
-                f"email={str(row_get(refreshed or user_row, 'email') or '').strip().lower()!r}"
-            )
-
-        plex_user = resolve_plex_user(account, refreshed or user_row)
-        sync_media_user_identity_from_plex(db, refreshed or user_row, plex_user)
-        refreshed2 = db.query_one("SELECT * FROM media_users WHERE id = ?", (row_get(user_row, "id"),))
-        return plex, account, refreshed2 or refreshed or user_row, plex_user
+        raise
 
 def log_updatefriend_payload(action: str, server_row, user_row, plex_obj, plex_user_obj,
                             sections, allowSync, allowCameraUpload, allowChannels,
@@ -463,7 +412,7 @@ def enable_task(db, name):
 
 
 def get_plex(server_row):
-    """Connexion PlexAPI sécurisée."""
+    """Connexion PlexAPI sécurisée avec rate limit 1 req/sec/server."""
     baseurl = (
         server_row["url"]
         or server_row["local_url"]
@@ -474,7 +423,10 @@ def get_plex(server_row):
     if not baseurl or not token:
         raise RuntimeError(f"Incomplete server configuration (URL/token) : {server_row['name']}")
 
-    return PlexServer(baseurl, token)
+    session = requests.Session()
+    install_plex_rate_limit(session, baseurl)
+
+    return PlexServer(baseurl, token, session=session)
 
 
 def get_all_plex_section_titles(plex):
@@ -566,36 +518,67 @@ def _get_shared_servers_for_machine(account, machine_id: str):
 
 def _find_shared_server_id_for_user_on_machine(account, machine_id: str, plex_user_obj):
     """
-    Find shared_server_id for a given plex user on a machine using plex.tv API (reliable).
-    Matches by userID (preferred), then username/email as fallback.
+    Retrouve le shared_server_id pour CE user sur CE serveur.
+    Match robuste:
+    - userID / invitedId
+    - username
+    - email
+    - title (au cas où username soit vide côté objet Plex)
+    Le tout en comparaison insensible à la casse.
     """
-    target_uid = str(getattr(plex_user_obj, "id", "") or "").strip()
-    target_username = str(getattr(plex_user_obj, "username", "") or "").strip()
-    target_email = str(getattr(plex_user_obj, "email", "") or "").strip().lower()
+    def norm(v):
+        return str(v or "").strip()
+
+    def norm_lower(v):
+        return norm(v).lower()
+
+    target_uid = norm(getattr(plex_user_obj, "id", None))
+    target_username = norm_lower(getattr(plex_user_obj, "username", None))
+    target_email = norm_lower(getattr(plex_user_obj, "email", None))
+    target_title = norm_lower(getattr(plex_user_obj, "title", None))
 
     shared = _get_shared_servers_for_machine(account, machine_id)
 
-    # Match by userID (plex user id)
     for ss in shared:
-        if target_uid:
-            if ss.get("userID") and str(ss.get("userID")).strip() == target_uid:
-                return ss.get("id")
-            # certains XML mettent invitedId
-            if ss.get("invitedId") and str(ss.get("invitedId")).strip() == target_uid:
-                return ss.get("id")
+        ss_id = ss.get("id")
+        ss_uid = norm(ss.get("userID"))
+        ss_invited = norm(ss.get("invitedId"))
+        ss_username = norm_lower(ss.get("username"))
+        ss_email = norm_lower(ss.get("email"))
 
-    # fallback username/email
-    for ss in shared:
-        if target_username and (ss.get("username") or "").strip() == target_username:
-            return ss.get("id")
-        if target_email and (ss.get("email") or "").strip().lower() == target_email:
-            return ss.get("id")
+        if target_uid and (ss_uid == target_uid or ss_invited == target_uid):
+            return ss_id
+
+        if target_username and ss_username == target_username:
+            return ss_id
+
+        if target_email and ss_email == target_email:
+            return ss_id
+
+        if target_title and ss_username == target_title:
+            return ss_id
 
     return None
 
+def _extract_already_shared_username(error_message: str) -> str | None:
+    """
+    Extrait le username depuis:
+    "You're already sharing this server with adrienferret. Please edit your existing share."
+    """
+    msg = str(error_message or "")
+    m = re.search(r"already sharing this server with\s+([^.<>]+)", msg, re.IGNORECASE)
+    if not m:
+        return None
+    return m.group(1).strip().lower() or None
 
 def _ensure_shared_server(account, machine_id: str, plex_user_obj, section_ids: list):
-    """Ensure the share exists; create it if missing. Returns shared_server_id."""
+    """
+    Garantit que le share existe.
+    - si trouvé => retourne son id
+    - sinon tente création
+    - si Plex répond "already sharing", on récupère l'id existant
+      par username / email / id sans jamais réinviter
+    """
     shared_id = _find_shared_server_id_for_user_on_machine(account, machine_id, plex_user_obj)
     if shared_id:
         return shared_id
@@ -621,15 +604,56 @@ def _ensure_shared_server(account, machine_id: str, plex_user_obj, section_ids: 
             headers={"Content-Type": "application/json"},
         )
     except BadRequest as e:
-        msg = str(e).lower()
-        if "already sharing this server" in msg:
-            # le share existe déjà → on récupère l'id et on le renvoie
+        msg = str(e)
+        if "already sharing this server" in msg.lower():
+            hinted_username = _extract_already_shared_username(msg)
+            shared = _get_shared_servers_for_machine(account, machine_id)
+
+            # 1) recherche par username explicitement retourné par Plex
+            if hinted_username:
+                for ss in shared:
+                    ss_username = str(ss.get("username") or "").strip().lower()
+                    ss_email = str(ss.get("email") or "").strip().lower()
+                    if ss_username == hinted_username or ss_email == hinted_username:
+                        if ss.get("id"):
+                            logger.warning(
+                                f"[PLEX SHARE RECOVER] existing share recovered from Plex error "
+                                f"username={hinted_username!r} shared_server_id={ss.get('id')}"
+                            )
+                            return ss.get("id")
+
+            # 2) nouvelle tentative avec le matching normal
             shared_id = _find_shared_server_id_for_user_on_machine(account, machine_id, plex_user_obj)
             if shared_id:
+                logger.warning(
+                    f"[PLEX SHARE RECOVER] existing share recovered after POST failure "
+                    f"shared_server_id={shared_id}"
+                )
                 return shared_id
+
+            # 3) on échoue proprement avec détails utiles
+            sample = [
+                {
+                    "id": ss.get("id"),
+                    "username": ss.get("username"),
+                    "email": ss.get("email"),
+                    "userID": ss.get("userID"),
+                    "invitedId": ss.get("invitedId"),
+                }
+                for ss in shared[:10]
+            ]
+            raise RuntimeError(
+                "Plex says the share already exists, but Vodum could not recover shared_server_id. "
+                f"machine_id={machine_id!r}, "
+                f"plex_user_id={getattr(plex_user_obj, 'id', None)!r}, "
+                f"plex_username={getattr(plex_user_obj, 'username', None)!r}, "
+                f"plex_email={getattr(plex_user_obj, 'email', None)!r}, "
+                f"hinted_username={hinted_username!r}, "
+                f"shared_sample={sample!r}"
+            )
+
         raise
 
-    # Parse response to get id
     xml_text = (
         resp.text
         if hasattr(resp, "text")
@@ -643,7 +667,6 @@ def _ensure_shared_server(account, machine_id: str, plex_user_obj, section_ids: 
     except Exception:
         pass
 
-    # Fallback: re-list
     shared_id = _find_shared_server_id_for_user_on_machine(account, machine_id, plex_user_obj)
     if not shared_id:
         raise RuntimeError("Share created but shared_server id still not found via plex.tv API")
@@ -755,16 +778,51 @@ def cleanup_old_jobs(db):
 
     logger.info(f"Jobs cleanup: {deleted} successful Plex job(s) deleted")
 
+def _job_payload_as_dict(job):
+    raw = row_get(job, "payload_json")
+    if not raw:
+        return {}
 
-def resolve_media_user(db, vodum_user_id: int, server_id: int):
+    try:
+        data = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return {}
+
+    return data if isinstance(data, dict) else {}
+
+def resolve_media_user(db, vodum_user_id: int, server_id: int, job=None):
     """
-    Convertit un user canonique (vodum_user_id) en user media_users lié au serveur.
-    Si plusieurs lignes existent, on préfère :
-    1. role != owner
-    2. accepted_at non vide
-    3. external_user_id non vide
-    4. type != 'unfriend'
+    Résout le media_user à utiliser pour un job Plex.
+
+    Priorité :
+    1. preferred_media_user_id / media_user_id transmis dans payload_json
+    2. fallback sur la meilleure ligne trouvée pour (vodum_user_id, server_id)
     """
+    payload = _job_payload_as_dict(job)
+    preferred_media_user_id = (
+        payload.get("preferred_media_user_id")
+        or payload.get("media_user_id")
+    )
+
+    if preferred_media_user_id is not None:
+        try:
+            preferred_media_user_id = int(preferred_media_user_id)
+        except Exception:
+            preferred_media_user_id = None
+
+    if preferred_media_user_id:
+        row = db.query_one(
+            """
+            SELECT *
+            FROM media_users
+            WHERE id = ?
+              AND server_id = ?
+            """,
+            (preferred_media_user_id, server_id),
+        )
+        if row:
+            return row
+
     if vodum_user_id is None:
         raise RuntimeError("Invalid job: vodum_user_id is NULL")
 
@@ -880,7 +938,7 @@ def apply_grant_job(db, job):
     lib_id = job["library_id"]
     vodum_user_id = job["vodum_user_id"]
 
-    user = resolve_media_user(db, vodum_user_id, server_id)
+    user = resolve_media_user(db, vodum_user_id, server_id, job=job)
     user_id = user["id"]
 
     if is_owner_media_user(user):
@@ -1004,7 +1062,7 @@ def apply_sync_job(db, job):
     server_id = job["server_id"]
     vodum_user_id = job["vodum_user_id"]
 
-    user = resolve_media_user(db, vodum_user_id, server_id)
+    user = resolve_media_user(db, vodum_user_id, server_id, job=job)
     user_id = user["id"]
 
     if is_owner_media_user(user):
@@ -1127,7 +1185,7 @@ def apply_revoke_job(db, job):
     server_id = job["server_id"]
     vodum_user_id = job["vodum_user_id"]
 
-    user = resolve_media_user(db, vodum_user_id, server_id)
+    user = resolve_media_user(db, vodum_user_id, server_id, job=job)
     if is_owner_media_user(user):
         logger.info(f"Skip REVOKE (owner) : username={user['username']} server_id={server_id}")
         return

@@ -12,7 +12,7 @@
 {% set _t_options = t("options") %}
 {% if _t_options == "options" %}{% set _t_options = "Options" %}{% endif %}
 
-<form method="post" id="user_main_form">
+<form method="post" action="{{ url_for('user_detail_save', user_id=user.id) }}" id="user_main_form">
   <div class="flex items-center justify-between mb-4">
     <div class="flex items-center gap-3">
       <div class="text-sm font-semibold text-slate-200">

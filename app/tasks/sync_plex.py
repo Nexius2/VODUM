@@ -10,6 +10,7 @@ import json
 from logging_utils import get_logger
 from tasks_engine import task_logs
 from plexapi.server import PlexServer  
+from core.plex_rate_limit import install_plex_rate_limit, wait_for_plex_slot
 
 class TimeoutSession(requests.Session):
     """Session requests qui force un timeout par défaut."""
@@ -553,6 +554,7 @@ def plex_get_libraries(server):
     }
 
     try:
+        wait_for_plex_slot(base_url)
         resp = requests.get(url, headers=headers, timeout=30)
         resp.raise_for_status()
     except Exception as e:
@@ -625,6 +627,7 @@ def sync_plex_libraries(db, server, libraries):
     found_section_ids = set()
 
     session = requests.Session()
+    install_plex_rate_limit(session, base_url)
 
     for lib in libraries:
         sid = str(lib.get("section_id") or "").strip()
@@ -1269,23 +1272,52 @@ def sync_users_from_api(db) -> None:
                 (server_id, plex_id),
             )
 
+            if not row_mu and vodum_user_id is not None:
+                row_mu = db.query_one(
+                    """
+                    SELECT id
+                    FROM media_users
+                    WHERE server_id = ?
+                      AND vodum_user_id = ?
+                    LIMIT 1
+                    """,
+                    (server_id, vodum_user_id),
+                )
+                if row_mu:
+                    log.warning(
+                        f"[SYNC USERS] Existing media_user found by (vodum_user_id, server_id) "
+                        f"instead of external_user_id → reuse row id={row_mu['id']} "
+                        f"(server_id={server_id}, vodum_user_id={vodum_user_id}, plex_id={plex_id})"
+                    )
+
             if row_mu:
                 db.execute(
                     """
                     UPDATE media_users
-                    SET vodum_user_id = ?,
-                        username       = ?,
-                        email          = ?,
-                        avatar         = ?,
-                        type           = 'plex',
-                        role           = ?,
-                        joined_at      = ?,
-                        accepted_at    = ?,
-                        details_json   = ?
+                    SET vodum_user_id   = ?,
+                        external_user_id = ?,
+                        username         = ?,
+                        email            = ?,
+                        avatar           = ?,
+                        type             = 'plex',
+                        role             = ?,
+                        joined_at        = ?,
+                        accepted_at      = ?,
+                        details_json     = ?
                     WHERE id = ?
                     """,
-                    (vodum_user_id, username, email, avatar, role_for_server,
-                     joined_at, accepted_at, details_json, row_mu["id"]),
+                    (
+                        vodum_user_id,
+                        plex_id,
+                        username,
+                        email,
+                        avatar,
+                        role_for_server,
+                        joined_at,
+                        accepted_at,
+                        details_json,
+                        row_mu["id"],
+                    ),
                 )
             else:
                 cur_mu = db.execute(
@@ -1297,9 +1329,18 @@ def sync_users_from_api(db) -> None:
                     )
                     VALUES (?, ?, ?, ?, ?, ?, 'plex', ?, ?, ?, ?)
                     """,
-                    (server_id, vodum_user_id, plex_id,
-                     username, email, avatar,
-                     role_for_server, joined_at, accepted_at, details_json),
+                    (
+                        server_id,
+                        vodum_user_id,
+                        plex_id,
+                        username,
+                        email,
+                        avatar,
+                        role_for_server,
+                        joined_at,
+                        accepted_at,
+                        details_json,
+                    ),
                 )
                 log.info(
                     f"[SYNC USERS] New media_user created id={cur_mu.lastrowid} "
@@ -1395,6 +1436,7 @@ def sync_all(task_id=None, db=None) -> None:
 
             # ⏱️ timeout forcé pour plexapi
             session = TimeoutSession(timeout=20)
+            install_plex_rate_limit(session, base_url)
 
             # petit ping très parlant (et timeout)
             try:

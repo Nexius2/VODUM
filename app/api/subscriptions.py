@@ -419,6 +419,7 @@ def api_gift_subscription():
     days_raw = data.get("days")
     reason = (data.get("reason") or "manual gift").strip()
     server_id = data.get("server_id")
+    vodum_user_id = data.get("vodum_user_id")
 
     if not target_type:
         return jsonify({"error": "target_type missing"}), 400
@@ -474,6 +475,36 @@ def api_gift_subscription():
             target_server_id = int(server_id)
         except (TypeError, ValueError):
             return jsonify({"error": "invalid server_id"}), 400
+
+    elif target_type == "user":
+        if not vodum_user_id:
+            return jsonify({"error": "vodum_user_id required"}), 400
+
+        try:
+            target_user_id = int(vodum_user_id)
+        except (TypeError, ValueError):
+            return jsonify({"error": "invalid vodum_user_id"}), 400
+
+        user = db.query_one(
+            """
+            SELECT u.id, u.expiration_date
+            FROM vodum_users u
+            WHERE u.id = ?
+              AND u.status IN ('active', 'pre_expired', 'reminder')
+              AND EXISTS (
+                SELECT 1
+                FROM media_users mu
+                WHERE mu.vodum_user_id = u.id
+              )
+            """,
+            (target_user_id,)
+        )
+
+        if not user:
+            return jsonify({"error": "user not found"}), 404
+
+        users = [user]
+        target_server_id = None
 
     else:
         return jsonify({"error": "invalid target_type"}), 400
@@ -554,9 +585,22 @@ def api_gift_history_detail(run_id):
     run = db.query_one(
         """
         SELECT
-            r.id, r.created_at, r.target_type, r.target_server_id,
+            r.id,
+            r.created_at,
+            r.target_type,
+            r.target_server_id,
             s.name AS server_name,
-            r.days_added, r.reason, r.users_updated
+            r.days_added,
+            r.reason,
+            r.users_updated,
+            (
+                SELECT vu.username
+                FROM subscription_gift_run_users ru
+                JOIN vodum_users vu ON vu.id = ru.vodum_user_id
+                WHERE ru.run_id = r.id
+                ORDER BY vu.username COLLATE NOCASE
+                LIMIT 1
+            ) AS target_username
         FROM subscription_gift_runs r
         LEFT JOIN servers s ON s.id = r.target_server_id
         WHERE r.id = ?
@@ -599,7 +643,15 @@ def api_gift_history():
             s.name AS server_name,
             r.days_added,
             r.reason,
-            r.users_updated
+            r.users_updated,
+            (
+                SELECT vu.username
+                FROM subscription_gift_run_users ru
+                JOIN vodum_users vu ON vu.id = ru.vodum_user_id
+                WHERE ru.run_id = r.id
+                ORDER BY vu.username COLLATE NOCASE
+                LIMIT 1
+            ) AS target_username
         FROM subscription_gift_runs r
         LEFT JOIN servers s ON s.id = r.target_server_id
         ORDER BY r.created_at DESC

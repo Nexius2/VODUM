@@ -5,7 +5,7 @@
     {{ t("target_users") }}
   </h2>
 
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
     <!-- ALL USERS -->
     <label class="cursor-pointer">
       <input type="radio"
@@ -13,7 +13,7 @@
              value="all"
              checked
              class="hidden"
-             onchange="toggleServerSelect(false)">
+             onchange="toggleGiftTarget('all')">
 
       <div id="card-all"
            class="p-4 rounded-xl border border-primary bg-primary/10">
@@ -28,12 +28,27 @@
              name="target_type"
              value="server"
              class="hidden"
-             onchange="toggleServerSelect(true)">
+             onchange="toggleGiftTarget('server')">
 
       <div id="card-server"
            class="p-4 rounded-xl border border-slate-800">
         <div class="font-medium mb-1">{{ t("users_from_server") }}</div>
         <div class="text-sm text-slate-400">{{ t("subscriptions_server_users_hint") }}</div>
+      </div>
+    </label>
+
+    <!-- SINGLE USER -->
+    <label class="cursor-pointer">
+      <input type="radio"
+             name="target_type"
+             value="user"
+             class="hidden"
+             onchange="toggleGiftTarget('user')">
+
+      <div id="card-user"
+           class="p-4 rounded-xl border border-slate-800">
+        <div class="font-medium mb-1">Single user</div>
+        <div class="text-sm text-slate-400">Gift the subscription to one user only</div>
       </div>
     </label>
   </div>
@@ -45,6 +60,19 @@
       <option value="">{{ t("select_server") }}</option>
       {% for server in servers %}
         <option value="{{ server.id }}">{{ server.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <!-- USER SELECT (hidden unless user mode) -->
+  <div id="user-select" class="mt-3 max-w-sm hidden">
+    <select name="vodum_user_id"
+            class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm w-full">
+      <option value="">Select user</option>
+      {% for user in gift_users %}
+        <option value="{{ user.id }}">
+          {{ user.username }}{% if user.email %} ({{ user.email }}){% endif %}
+        </option>
       {% endfor %}
     </select>
   </div>

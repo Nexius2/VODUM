@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 import requests
 import time
+import xml.etree.ElementTree as ET
 
 
 from core.monitoring.diff import compute_session_events
@@ -97,6 +98,245 @@ def _load_all_servers(db) -> List[Dict[str, Any]]:
     )
     return [AttrDict(dict(r)) for r in rows]
 
+
+
+def _normalize_pct(value) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        v = float(str(value).strip().replace(",", "."))
+    except Exception:
+        return None
+
+    if v < 0:
+        return None
+    if v > 100:
+        v = 100.0
+    return round(v, 1)
+
+
+def _extract_plex_resource_percentages(xml_text: str) -> Dict[str, Any]:
+    """
+    Parse le XML Plex /statistics/resources de façon souple.
+    On cherche la meilleure source possible pour CPU/RAM %.
+    """
+    root = ET.fromstring(xml_text)
+
+    cpu_keys = (
+        "processCpuUtilization",
+        "cpuUtilization",
+        "cpuPercent",
+        "cpu",
+        "hostCpuUtilization",
+    )
+    ram_keys = (
+        "processMemoryUtilization",
+        "memoryUtilization",
+        "memoryPercent",
+        "memory",
+        "hostMemoryUtilization",
+    )
+
+    best = None
+
+    for elem in root.iter():
+        attrs = getattr(elem, "attrib", {}) or {}
+
+        cpu = None
+        ram = None
+
+        for key in cpu_keys:
+            if attrs.get(key) not in (None, ""):
+                cpu = _normalize_pct(attrs.get(key))
+                if cpu is not None:
+                    break
+
+        for key in ram_keys:
+            if attrs.get(key) not in (None, ""):
+                ram = _normalize_pct(attrs.get(key))
+                if ram is not None:
+                    break
+
+        if cpu is None and ram is None:
+            continue
+
+        score = 0
+        tag = (getattr(elem, "tag", "") or "").lower()
+        title = (
+            attrs.get("title")
+            or attrs.get("name")
+            or attrs.get("process")
+            or ""
+        ).lower()
+
+        if "plex media server" in title:
+            score += 10
+        if tag == "process":
+            score += 5
+        if cpu is not None:
+            score += 2
+        if ram is not None:
+            score += 2
+
+        candidate = {
+            "cpu_pct": cpu,
+            "ram_pct": ram,
+            "score": score,
+        }
+
+        if best is None or candidate["score"] > best["score"]:
+            best = candidate
+
+    if not best:
+        # fallback basique : essayer cpu / memory brut
+        for elem in root.iter():
+            attrs = getattr(elem, "attrib", {}) or {}
+
+            cpu_raw = attrs.get("cpu")
+            mem_raw = attrs.get("memory")
+
+            try:
+                cpu = float(cpu_raw) if cpu_raw else None
+                ram = float(mem_raw) if mem_raw else None
+            except Exception:
+                cpu = None
+                ram = None
+
+            if cpu is not None or ram is not None:
+                return {
+                    "cpu_pct": None,  # on ne fake pas un %
+                    "ram_pct": None,
+                    "is_available": 1,
+                    "note": "raw_values_only",
+                }
+
+        return {
+            "cpu_pct": None,
+            "ram_pct": None,
+            "is_available": 0,
+            "note": "unavailable",
+        }
+
+    return {
+        "cpu_pct": best.get("cpu_pct"),
+        "ram_pct": best.get("ram_pct"),
+        "is_available": 1 if (best.get("cpu_pct") is not None or best.get("ram_pct") is not None) else 0,
+        "note": None,
+    }
+
+def _candidate_bases(server_row):
+    bases = []
+    invalid_literals = {"", "none", "null", "undefined"}
+
+    for key in ("url", "local_url", "public_url"):
+        raw = server_row.get(key)
+        if not raw:
+            continue
+
+        base = str(raw).strip().rstrip("/")
+        if base.lower() in invalid_literals:
+            continue
+
+        if not (base.startswith("http://") or base.startswith("https://")):
+            continue
+
+        if base not in bases:
+            bases.append(base)
+
+    return bases
+
+def _collect_plex_server_resources(srv: Dict[str, Any], timeout: int = 4) -> Dict[str, Any]:
+    token = (srv.get("token") or "").strip()
+    bases = _candidate_bases(srv)
+
+    if not token or not bases:
+        return {
+            "cpu_pct": None,
+            "ram_pct": None,
+            "is_available": 0,
+            "note": "missing_config",
+        }
+
+    last_error = None
+
+    for base in bases:
+        try:
+            r = requests.get(
+                f"{base}/statistics/resources",
+                params={
+                    "timespan": 6,
+                    "X-Plex-Token": token,
+                },
+                headers={"Accept": "application/xml"},
+                timeout=timeout,
+            )
+            r.raise_for_status()
+
+            xml_text = r.text
+            parsed = _extract_plex_resource_percentages(xml_text)
+            parsed["note"] = None if parsed.get("is_available") else "unavailable"
+            return parsed
+
+        except Exception as e:
+            last_error = e
+
+    logger.debug(
+        "Plex resource stats fetch failed for server_id=%s: %s",
+        srv.get("id"),
+        str(last_error) if last_error else "unknown",
+    )
+
+    return {
+        "cpu_pct": None,
+        "ram_pct": None,
+        "is_available": 0,
+        "note": "unreachable",
+    }
+
+
+def _collect_server_resource_stats(srv: Dict[str, Any], provider_name: str) -> Dict[str, Any]:
+    provider_name = (provider_name or "").lower().strip()
+
+    if provider_name == "plex":
+        return _collect_plex_server_resources(srv)
+
+    return {
+        "cpu_pct": None,
+        "ram_pct": None,
+        "is_available": 0,
+        "note": "unsupported",
+    }
+
+
+def _store_server_resource_stats(
+    db,
+    server_id: int,
+    provider_name: str,
+    stats: Dict[str, Any],
+) -> None:
+    db.execute(
+        """
+        INSERT INTO monitoring_server_resources (
+          server_id, provider, cpu_pct, ram_pct, is_available, note, fetched_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(server_id) DO UPDATE SET
+          provider = excluded.provider,
+          cpu_pct = excluded.cpu_pct,
+          ram_pct = excluded.ram_pct,
+          is_available = excluded.is_available,
+          note = excluded.note,
+          fetched_at = CURRENT_TIMESTAMP
+        """,
+        (
+            server_id,
+            provider_name,
+            stats.get("cpu_pct"),
+            stats.get("ram_pct"),
+            int(bool(stats.get("is_available"))),
+            stats.get("note"),
+        ),
+    )
 
 def _fetch_existing_sessions(db, server_id: int) -> Dict[str, Dict[str, Any]]:
     rows = db.query(
@@ -225,6 +465,16 @@ def collect_sessions_for_server(
 
         current = provider_impl.get_active_sessions()  # liste normalisée
         report["sessions_seen"] = len(current)
+
+        try:
+            resource_stats = _collect_server_resource_stats(srv, provider_name)
+            _store_server_resource_stats(db, server_id, provider_name, resource_stats)
+        except Exception as resource_exc:
+            logger.debug(
+                "server resource stats collection failed (server_id=%s): %s",
+                server_id,
+                str(resource_exc),
+            )
 
         cur_map = {str(s["session_key"]): s for s in current if s.get("session_key")}
 
@@ -515,11 +765,12 @@ def collect_sessions_for_server(
                         raise
 
                 # 3) Sinon, insertion.
-                # Si une ligne existe déjà pour (server_id, session_key),
-                # on ne réinsère pas : on met simplement à jour la ligne existante.
+                # IMPORTANT:
+                # Une nouvelle lecture doit créer une nouvelle ligne d'historique.
+                # On ne recycle plus une vieille ligne juste parce que session_key matche.
                 if updated == 0:
                     try:
-                        cur = db.execute(
+                        db.execute(
                             """
                             INSERT OR IGNORE INTO media_session_history (
                               server_id, provider,
@@ -544,68 +795,6 @@ def collect_sessions_for_server(
                                 raw_json, library_section_id,
                             ),
                         )
-
-                        inserted = int(getattr(cur, "rowcount", 0) or 0)
-
-                        if inserted == 0 and session_key:
-                            db.execute(
-                                """
-                                UPDATE media_session_history
-                                SET
-                                  provider = COALESCE(provider, ?),
-                                  media_key = COALESCE(media_key, ?),
-                                  external_user_id = COALESCE(external_user_id, ?),
-                                  media_user_id = COALESCE(media_user_id, ?),
-                                  media_type = COALESCE(media_type, ?),
-                                  title = COALESCE(title, ?),
-                                  grandparent_title = COALESCE(grandparent_title, ?),
-                                  parent_title = COALESCE(parent_title, ?),
-                                  started_at = COALESCE(started_at, ?),
-                                  stopped_at = ?,
-                                  duration_ms = CASE
-                                    WHEN ? > COALESCE(duration_ms, 0) THEN ?
-                                    ELSE duration_ms
-                                  END,
-                                  watch_ms = CASE
-                                    WHEN ? > COALESCE(watch_ms, 0) THEN ?
-                                    ELSE watch_ms
-                                  END,
-                                  peak_bitrate = COALESCE(peak_bitrate, ?),
-                                  was_transcode = MAX(COALESCE(was_transcode, 0), ?),
-                                  client_name = COALESCE(client_name, ?),
-                                  client_product = COALESCE(client_product, ?),
-                                  device = COALESCE(device, ?),
-                                  ip = COALESCE(ip, ?),
-                                  raw_json = COALESCE(?, raw_json),
-                                  library_section_id = COALESCE(library_section_id, ?)
-                                WHERE server_id = ?
-                                  AND session_key = ?
-                                """,
-                                (
-                                    provider_name,
-                                    media_key,
-                                    external_user_id,
-                                    media_user_id,
-                                    media_type,
-                                    title,
-                                    grandparent_title,
-                                    parent_title,
-                                    started_at,
-                                    stopped_at,
-                                    duration_ms, duration_ms,
-                                    watch_ms, watch_ms,
-                                    peak_bitrate,
-                                    was_transcode,
-                                    client_name,
-                                    client_product,
-                                    device,
-                                    ip,
-                                    raw_json,
-                                    library_section_id,
-                                    server_id,
-                                    session_key,
-                                ),
-                            )
                     except Exception as e:
                         _log_history_write_error(
                             server_id,
@@ -647,6 +836,21 @@ def collect_sessions_for_server(
             )
 
 
+
+        try:
+            _store_server_resource_stats(
+                db,
+                server_id,
+                provider_name,
+                {
+                    "cpu_pct": None,
+                    "ram_pct": None,
+                    "is_available": 0,
+                    "note": _classify_status_from_exception(e),
+                },
+            )
+        except Exception:
+            pass
 
         # Règle d’or: si on a une session récente, on reste UP
         if _has_recent_live_sessions(db, server_id, window_seconds=180):

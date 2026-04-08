@@ -5,7 +5,7 @@
     {{ t("manual_backup_desc") }}
   </p>
 
-  <form action="{{ url_for('backup_page') }}" method="post">
+  <form action="{{ url_for('backup_action') }}" method="post">
     <input type="hidden" name="action" value="create">
     <button class="px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-sm">
       {{ t("create_backup_btn") }}

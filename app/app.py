@@ -233,6 +233,70 @@ def _reset_maintenance_on_startup(app: Flask):
     except Exception:
         get_logger("boot").exception("Failed to reset maintenance mode on startup")
 
+def _run_startup_boot_fixes(app: Flask):
+    """
+    Séquence unique des correctifs de démarrage applicatifs.
+
+    Cette fonction intervient APRÈS :
+    - l'initialisation DB faite par entrypoint.sh
+    - l'éventuelle migration structurelle
+    - le db_bootstrap idempotent
+    - la création complète de l'app Flask
+    - l'enregistrement des blueprints et routes
+
+    Ordre volontaire :
+    1. reset admin one-shot via fichier local
+    2. sortie maintenance si la DB restaurée avait laissé l'app bloquée
+    3. one-shot repair DB
+
+    Cette séquence ne doit contenir que des actions de démarrage
+    applicatives, lisibles, idempotentes ou one-shot contrôlés.
+    """
+    boot_logger = get_logger("boot")
+
+    boot_logger.info("[BOOT] startup boot fixes begin")
+
+    # 1) reset admin one-shot via fichier local
+    try:
+        startup_admin_recover_if_requested(app)
+        boot_logger.info("[BOOT] startup_admin_recover_if_requested done")
+    except Exception:
+        boot_logger.exception("[BOOT] startup_admin_recover_if_requested failed")
+        raise
+
+    # 2) sortie maintenance si besoin
+    try:
+        _reset_maintenance_on_startup(app)
+        boot_logger.info("[BOOT] _reset_maintenance_on_startup done")
+    except Exception:
+        boot_logger.exception("[BOOT] _reset_maintenance_on_startup failed")
+        raise
+
+    # 3) one-shot repair DB
+    try:
+        with app.app_context():
+            db = get_db()
+            repair_result = run_repair_if_needed(db, app.logger)
+
+        if repair_result and repair_result.get("status") == "done":
+            boot_logger.warning(
+                "[BOOT] one-shot repair executed | key=%s | stats=%s",
+                repair_result.get("repair_key"),
+                repair_result.get("stats"),
+            )
+        elif repair_result and repair_result.get("status") == "skipped":
+            boot_logger.info(
+                "[BOOT] one-shot repair skipped | key=%s | reason=%s",
+                repair_result.get("repair_key"),
+                repair_result.get("reason"),
+            )
+        else:
+            boot_logger.info("[BOOT] one-shot repair finished with no explicit result")
+    except Exception:
+        boot_logger.exception("[BOOT] one-shot repair failed")
+        raise
+
+    boot_logger.info("[BOOT] startup boot fixes end")
 
 def _resolve_asset_dir(start_dir: str, target: str) -> str:
     """
@@ -338,9 +402,6 @@ def create_app():
     # Ne pas écraser la valeur déjà calculée depuis env / DB
     app.config.setdefault("TRUST_PROXY_ENABLED", False)
 
-    # RESET au démarrage (avant routes / scheduler)
-    startup_admin_recover_if_requested(app)
-
     # Backup dir
     app.config.setdefault("BACKUP_DIR", os.environ.get("VODUM_BACKUP_DIR", "/appdata/backups"))
 
@@ -360,53 +421,15 @@ def create_app():
     app.register_blueprint(subscriptions_api)
     app.register_blueprint(users_bp)
 
-    # Routes (split from former gigantic app.py)
-    from routes.dashboard import register as register_dashboard
-    from routes.monitoring_overview import register as register_monitoring_overview
-    from routes.monitoring_user import register as register_monitoring_user
-    from routes.monitoring_api import register as register_monitoring_api
-    from routes.tasks_api import register as register_tasks_api
-    from routes.users_list import register as register_users_list
-    from routes.users_detail import register as register_users_detail
-    from routes.users_actions import register as register_users_actions
-    from routes.servers import register as register_servers
-    from routes.subscriptions_page import register as register_subscriptions_page
-    from routes.tasks import register as register_tasks
-    from routes.communications import register as register_communications
-    from routes.backup import register as register_backup
-    from routes.auth import register as register_auth
-    from routes.settings import register as register_settings
-    from routes.logs import register as register_logs
-    from routes.about import register as register_about
-
-    register_dashboard(app)
-    register_monitoring_overview(app)
-    register_monitoring_user(app)
-    register_monitoring_api(app)
-    register_tasks_api(app)
-    register_users_list(app)
-    register_users_detail(app)
-    register_users_actions(app)
-    register_servers(app)
-    register_subscriptions_page(app)
-    register_tasks(app)
-    register_communications(app)
-    register_backup(app)
-    register_auth(app)
-    register_settings(app)
-    register_logs(app)
-    register_about(app)
+    # Routes
+    from routes import register_routes
+    register_routes(app)
 
     # Expose helpers pour d’éventuels scripts internes
     app.get_db = get_db
     app.table_exists = table_exists
     app.scheduler_db_provider = lambda: DBManager(app.config["DATABASE"])
 
-    _reset_maintenance_on_startup(app)
-
-    # One-shot repair au démarrage
-    with app.app_context():
-        db = get_db()
-        run_repair_if_needed(db, app.logger)
+    _run_startup_boot_fixes(app)
 
     return app

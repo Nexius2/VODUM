@@ -90,7 +90,9 @@
 						</button>
 
 					{% else %}
-						<form action="/tasks/run/{{ task.id }}" method="post">
+						<form action="{{ url_for('tasks_action') }}" method="post">
+							<input type="hidden" name="task_id" value="{{ task.id }}">
+							<input type="hidden" name="action" value="run_now">
 							<button class="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white">
 								{{ t("run_now") }}
 							</button>
@@ -198,13 +200,15 @@ function renderAction(task) {
     `;
   }
 
-  return `
-    <form action="/tasks/run/${task.id}" method="post">
-      <button class="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white">
-        ${I18N.run_now}
-      </button>
-    </form>
-  `;
+	return `
+	  <form action="/tasks/action" method="post">
+		<input type="hidden" name="task_id" value="${task.id}">
+		<input type="hidden" name="action" value="run_now">
+		<button class="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white">
+		  ${I18N.run_now}
+		</button>
+	  </form>
+	`;
 }
 
 

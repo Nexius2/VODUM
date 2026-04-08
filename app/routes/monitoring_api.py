@@ -1,40 +1,15 @@
 # Auto-split from app.py (keep URLs/endpoints intact)
-import os
 import json
-import time
-import re
-import math
-import platform
 import ipaddress
-import uuid
-import threading
-import shutil
-import sqlite3
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Optional
 
 import requests
-from flask import (
-    render_template, g, request, redirect, url_for, flash, session,
-    Response, current_app, jsonify, make_response, abort,
-)
+from flask import request, Response, current_app, jsonify, abort
 
-from db_manager import DBManager
-from logging_utils import get_logger, read_last_logs, read_all_logs
-from tasks_engine import run_task, start_scheduler, run_task_sequence, run_task_by_name, enqueue_task
-from mailing_utils import build_user_context, render_mail
-from discord_utils import is_discord_ready, validate_discord_bot_token
-from core.i18n import get_translator, get_available_languages
-from core.backup import BackupConfig, ensure_backup_dir, create_backup_file, list_backups, restore_backup_file
-from werkzeug.security import generate_password_hash, check_password_hash
-
-from web.helpers import get_db, scheduler_db_provider, table_exists, add_log, send_email_via_settings, get_backup_cfg
+from logging_utils import get_logger
+from core.plex_rate_limit import wait_for_plex_slot
+from web.helpers import get_db
 
 task_logger = get_logger("tasks_ui")
-auth_logger = get_logger("auth")
-security_logger = get_logger("security")
-settings_logger = get_logger("settings")
 
 
 
@@ -44,7 +19,33 @@ def json_rows(rows):
         mimetype='application/json',
     )
 
+
+def _is_safe_relative_media_path(path: str) -> bool:
+    if not path:
+        return False
+
+    path = str(path).strip()
+
+    if not path.startswith("/"):
+        return False
+
+    # on refuse toute URL absolue / schéma externe
+    if "://" in path or path.startswith("//"):
+        return False
+
+    # on refuse les chemins douteux
+    if ".." in path or "\\" in path:
+        return False
+
+    return True
+
+
 def register(app):
+    # -----------------------------------------------------------------
+    # Route explicitement autorisée à proxyfier un média distant
+    # pour le monitoring (poster / art uniquement).
+    # Toute autre route monitoring doit lire la DB uniquement.
+    # -----------------------------------------------------------------
     @app.route("/api/monitoring/poster/<int:server_id>")
     def api_monitoring_poster(server_id: int):
         db = get_db()
@@ -85,18 +86,16 @@ def register(app):
 
         # ---------------- PLEX ----------------
         if stype == "plex":
-            path = request.args.get("path")
-            if not path:
+            path = (request.args.get("path") or "").strip()
+            if not _is_safe_relative_media_path(path):
                 abort(400)
-
-            if not path.startswith("/"):
-                path = "/" + path
 
             params = {"X-Plex-Token": token}
 
             last_err = None
             for base in bases:
                 try:
+                    wait_for_plex_slot(base)
                     r = _try_get(base + path, params=params)
                     ct = r.headers.get("Content-Type") or "image/jpeg"
                     return Response(

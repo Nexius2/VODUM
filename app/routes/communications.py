@@ -14,7 +14,6 @@ from communications_engine import (
     fetch_campaign_attachments,
     send_to_user,
     record_history,
-    attempts_satisfy_mode,
     available_channels,
     queue_campaign_delivery,
 )
@@ -159,7 +158,11 @@ def register(app):
     # ------------------------------------------------------------------
     # Campaigns
     # ------------------------------------------------------------------
-    @app.route("/communications/campaigns", methods=["GET", "POST"])
+    @app.route("/communications/campaigns/action", methods=["POST"])
+    def communications_campaigns_action():
+        return communications_campaigns_page()
+
+    @app.route("/communications/campaigns", methods=["GET"])
     def communications_campaigns_page():
         db = get_db()
         t = get_translator()
@@ -413,7 +416,11 @@ def register(app):
     # ------------------------------------------------------------------
     # Templates
     # ------------------------------------------------------------------
-    @app.route("/communications/templates", methods=["GET", "POST"])
+    @app.route("/communications/templates/action", methods=["POST"])
+    def communications_templates_action():
+        return communications_templates_page()
+
+    @app.route("/communications/templates", methods=["GET"])
     def communications_templates_page():
         db = get_db()
         t = get_translator()
@@ -938,7 +945,11 @@ def register(app):
     # ------------------------------------------------------------------
     # Configuration
     # ------------------------------------------------------------------
-    @app.route("/communications/configuration", methods=["GET", "POST"])
+    @app.route("/communications/configuration/action", methods=["POST"])
+    def communications_configuration_action():
+        return communications_configuration_page()
+
+    @app.route("/communications/configuration", methods=["GET"])
     def communications_configuration_page():
         db = get_db()
         t = get_translator()
