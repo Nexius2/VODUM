@@ -1,86 +1,15 @@
 # Auto-split from app.py (keep URLs/endpoints intact)
-import os
 import json
-import time
-import re
-import math
-import platform
-import ipaddress
-import uuid
-import threading
-import shutil
-import sqlite3
-from datetime import datetime, timezone
-from pathlib import Path
 from typing import Optional
 
-import requests
-import xml.etree.ElementTree as ET
 from flask import (
-    render_template, g, request, redirect, url_for, flash, session,
-    Response, current_app, jsonify, make_response, abort,
+    render_template, request, url_for, make_response,
 )
 
-from db_manager import DBManager
-from logging_utils import get_logger, read_last_logs, read_all_logs
-from tasks_engine import run_task, start_scheduler, run_task_sequence, run_task_by_name, enqueue_task
-from mailing_utils import build_user_context, render_mail
-from discord_utils import is_discord_ready, validate_discord_bot_token
-from core.i18n import get_translator, get_available_languages
-from core.backup import BackupConfig, ensure_backup_dir, create_backup_file, list_backups, restore_backup_file
-from werkzeug.security import generate_password_hash, check_password_hash
-
-from web.helpers import get_db, scheduler_db_provider, table_exists, add_log, send_email_via_settings, get_backup_cfg
-
-task_logger = get_logger("tasks_ui")
-auth_logger = get_logger("auth")
-security_logger = get_logger("security")
-settings_logger = get_logger("settings")
+from logging_utils import get_logger
+from web.helpers import get_db
 
 monitoring_logger = get_logger("monitoring_overview")
-
-_SERVER_RESOURCE_CACHE = {}
-_SERVER_RESOURCE_CACHE_TTL = 10  # secondes
-
-
-def _normalize_pct(value):
-    try:
-        value = float(value)
-    except Exception:
-        return None
-
-    if math.isnan(value) or math.isinf(value):
-        return None
-
-    if value < 0:
-        value = 0.0
-    if value > 100:
-        value = 100.0
-
-    return round(value, 1)
-
-
-def _candidate_bases(server_row):
-    bases = []
-    invalid_literals = {"", "none", "null", "undefined"}
-
-    for key in ("url", "local_url", "public_url"):
-        raw = server_row.get(key)
-        if not raw:
-            continue
-
-        base = str(raw).strip().rstrip("/")
-        if base.lower() in invalid_literals:
-            continue
-
-        if not (base.startswith("http://") or base.startswith("https://")):
-            continue
-
-        if base not in bases:
-            bases.append(base)
-
-    return bases
-
 
 def _empty_server_resource_stats(note=None):
     return {
@@ -91,88 +20,49 @@ def _empty_server_resource_stats(note=None):
     }
 
 
-def _fetch_plex_resource_stats(server_row, timeout=4):
-    token = (server_row.get("token") or "").strip()
-    if not token:
-        return _empty_server_resource_stats()
-
-    for base in _candidate_bases(server_row):
+def _load_server_resource_stats(db, server_ids, max_age_seconds=600):
+    normalized_ids = []
+    for sid in (server_ids or []):
         try:
-            r = requests.get(
-                f"{base}/statistics/resources",
-                params={
-                    "timespan": 6,
-                    "X-Plex-Token": token,
-                },
-                headers={"Accept": "application/xml"},
-                timeout=timeout,
-            )
-            r.raise_for_status()
-
-            root = ET.fromstring(r.text)
-
-            samples = []
-            for node in root.iter():
-                tag = str(node.tag).lower()
-                if tag.endswith("statisticsresource") or tag.endswith("statisticsresources"):
-                    samples.append(node)
-
-            if not samples:
-                continue
-
-            latest = samples[-1]
-
-            cpu_pct = _normalize_pct(latest.attrib.get("processCpuUtilization"))
-            ram_pct = _normalize_pct(latest.attrib.get("processMemoryUtilization"))
-
-            return {
-                "server_cpu_pct": cpu_pct,
-                "server_ram_pct": ram_pct,
-                "server_resource_available": (cpu_pct is not None or ram_pct is not None),
-                "server_resource_note": None,
-            }
-
+            sid = int(sid or 0)
         except Exception:
-            continue
+            sid = 0
+        if sid > 0:
+            normalized_ids.append(sid)
 
-    return _empty_server_resource_stats()
+    if not normalized_ids:
+        return {}
 
+    placeholders = ",".join(["?"] * len(normalized_ids))
+    params = tuple(normalized_ids) + (f"-{int(max_age_seconds)} seconds",)
 
-def _fetch_jellyfin_resource_stats(server_row, timeout=4):
-    """
-    Support UI propre pour Jellyfin, sans inventer de métriques.
-    Avec les données actuellement disponibles dans VODUM (URL + token),
-    on ne dispose pas ici d'un endpoint fiable équivalent à Plex pour
-    récupérer directement le % CPU / RAM du process serveur.
-    """
-    return _empty_server_resource_stats(note="unavailable")
+    rows = db.query(
+        f"""
+        SELECT
+          server_id,
+          cpu_pct,
+          ram_pct,
+          is_available,
+          note,
+          fetched_at
+        FROM monitoring_server_resources
+        WHERE server_id IN ({placeholders})
+          AND datetime(fetched_at) >= datetime('now', ?)
+        """,
+        params,
+    )
 
+    out = {}
+    for row in rows or []:
+        row = dict(row)
+        out[int(row["server_id"])] = {
+            "server_cpu_pct": row.get("cpu_pct"),
+            "server_ram_pct": row.get("ram_pct"),
+            "server_resource_available": bool(row.get("is_available")),
+            "server_resource_note": row.get("note"),
+        }
 
-def _fetch_server_resource_stats(server_row, timeout=4):
-    try:
-        server_id = int(server_row.get("id") or 0)
-    except Exception:
-        server_id = 0
-
-    now_ts = time.time()
-    cached = _SERVER_RESOURCE_CACHE.get(server_id)
-    if cached and (now_ts - cached["ts"] < _SERVER_RESOURCE_CACHE_TTL):
-        return dict(cached["value"])
-
-    provider = (server_row.get("type") or "").strip().lower()
-
-    if provider == "plex":
-        value = _fetch_plex_resource_stats(server_row, timeout=timeout)
-    elif provider == "jellyfin":
-        value = _fetch_jellyfin_resource_stats(server_row, timeout=timeout)
-    else:
-        value = _empty_server_resource_stats()
-
-    _SERVER_RESOURCE_CACHE[server_id] = {
-        "ts": now_ts,
-        "value": dict(value),
-    }
-    return dict(value)
+    return out
 
 
 def _apply_server_resource_stats(rows, resource_by_server, server_id_key="server_id"):
@@ -182,7 +72,7 @@ def _apply_server_resource_stats(rows, resource_by_server, server_id_key="server
         except Exception:
             server_id = 0
 
-        resource = resource_by_server.get(server_id) or _empty_server_resource_stats()
+        resource = resource_by_server.get(server_id) or _empty_server_resource_stats(note="unavailable")
 
         row["server_cpu_pct"] = resource.get("server_cpu_pct")
         row["server_ram_pct"] = resource.get("server_ram_pct")
@@ -191,176 +81,97 @@ def _apply_server_resource_stats(rows, resource_by_server, server_id_key="server
 
 def _build_history_poster_url(row):
     row = dict(row or {})
-    try:
-        server_id = int(row.get("server_id") or 0)
-    except Exception:
-        server_id = 0
 
+    server_id = int(row.get("server_id") or 0)
     if server_id <= 0:
         return None
 
-    provider = (row.get("provider") or "").strip().lower()
+    provider = (row.get("provider") or "").lower()
     raw = row.get("raw_json")
-    media_type = (row.get("media_type") or "").strip().lower()
-    media_group_key = (row.get("media_group_key") or "").strip().lower()
 
-    is_series = (
-        media_group_key.startswith("series:")
-        or media_type in ("serie", "series", "show", "episode", "tv", "season")
+    if provider != "plex":
+        return None
+
+    try:
+        data = json.loads(raw) if raw else {}
+    except Exception:
+        data = {}
+
+    attrs = data.get("VideoOrTrack") or {}
+
+    media_type = (row.get("media_type") or "").lower()
+
+    is_series = media_type in (
+        "serie", "series", "show", "episode", "season", "tv"
     )
 
-    data = {}
-    if raw:
-        try:
-            data = json.loads(raw)
-        except Exception:
-            data = {}
+    # 🔥 REGLE UNIQUE
+    if is_series:
+        rating_key = (
+            attrs.get("grandparentRatingKey")
+            or attrs.get("parentRatingKey")
+        )
+    else:
+        rating_key = (
+            attrs.get("ratingKey")
+            or row.get("media_key")
+        )
 
-    if provider == "plex":
-        attrs = (data.get("VideoOrTrack") or {})
+    if not rating_key:
+        return None
 
-        if is_series:
-            poster_path = (
-                attrs.get("grandparentThumb")
-                or attrs.get("parentThumb")
-                or attrs.get("thumb")
-            )
-        else:
-            poster_path = (
-                attrs.get("thumb")
-                or attrs.get("parentThumb")
-                or attrs.get("grandparentThumb")
-            )
-
-        # Fallback import Tautulli
-        if not poster_path:
-            if is_series:
-                grandparent_rating_key = str(attrs.get("grandparentRatingKey") or "").strip()
-                parent_rating_key = str(attrs.get("parentRatingKey") or "").strip()
-                media_key = str(row.get("media_key") or "").strip()
-
-                if grandparent_rating_key:
-                    poster_path = f"/library/metadata/{grandparent_rating_key}/thumb"
-                elif parent_rating_key:
-                    poster_path = f"/library/metadata/{parent_rating_key}/thumb"
-                elif media_key:
-                    poster_path = f"/library/metadata/{media_key}/thumb"
-            else:
-                media_key = str(row.get("media_key") or "").strip()
-                if media_key:
-                    poster_path = f"/library/metadata/{media_key}/thumb"
-
-        if poster_path:
-            return url_for(
-                "api_monitoring_poster",
-                server_id=server_id,
-                path=poster_path,
-            )
-
-    elif provider == "jellyfin":
-        now = (data.get("NowPlayingItem") or data.get("Item") or {})
-
-        if is_series:
-            poster_item_id = now.get("SeriesId") or now.get("Id") or row.get("media_key")
-        else:
-            poster_item_id = now.get("Id") or now.get("SeriesId") or row.get("media_key")
-
-        if poster_item_id:
-            return url_for(
-                "api_monitoring_poster",
-                server_id=server_id,
-                item_id=str(poster_item_id),
-            )
-
-    return None
+    return url_for(
+        "api_monitoring_poster",
+        server_id=server_id,
+        path=f"/library/metadata/{rating_key}/thumb",
+    )
 
 def _build_history_backdrop_url(row):
     row = dict(row or {})
-    try:
-        server_id = int(row.get("server_id") or 0)
-    except Exception:
-        server_id = 0
 
+    server_id = int(row.get("server_id") or 0)
     if server_id <= 0:
         return None
 
-    provider = (row.get("provider") or "").strip().lower()
+    provider = (row.get("provider") or "").lower()
     raw = row.get("raw_json")
-    media_type = (row.get("media_type") or "").strip().lower()
-    media_group_key = (row.get("media_group_key") or "").strip().lower()
 
-    is_series = (
-        media_group_key.startswith("series:")
-        or media_type in ("serie", "series", "show", "episode", "tv", "season")
+    if provider != "plex":
+        return None
+
+    try:
+        data = json.loads(raw) if raw else {}
+    except Exception:
+        data = {}
+
+    attrs = data.get("VideoOrTrack") or {}
+
+    media_type = (row.get("media_type") or "").lower()
+
+    is_series = media_type in (
+        "serie", "series", "show", "episode", "season", "tv"
     )
 
-    data = {}
-    if raw:
-        try:
-            data = json.loads(raw)
-        except Exception:
-            data = {}
+    # 🔥 REGLE UNIQUE
+    if is_series:
+        rating_key = (
+            attrs.get("grandparentRatingKey")
+            or attrs.get("parentRatingKey")
+        )
+    else:
+        rating_key = (
+            attrs.get("ratingKey")
+            or row.get("media_key")
+        )
 
-    if provider == "plex":
-        attrs = (data.get("VideoOrTrack") or {})
+    if not rating_key:
+        return None
 
-        if is_series:
-            backdrop_path = (
-                attrs.get("grandparentArt")
-                or attrs.get("art")
-                or attrs.get("parentArt")
-            )
-        else:
-            backdrop_path = (
-                attrs.get("art")
-                or attrs.get("thumb")
-                or attrs.get("parentArt")
-            )
-
-        if not backdrop_path:
-            if is_series:
-                grandparent_rating_key = str(attrs.get("grandparentRatingKey") or "").strip()
-                parent_rating_key = str(attrs.get("parentRatingKey") or "").strip()
-                media_key = str(row.get("media_key") or "").strip()
-
-                if grandparent_rating_key:
-                    backdrop_path = f"/library/metadata/{grandparent_rating_key}/art"
-                elif parent_rating_key:
-                    backdrop_path = f"/library/metadata/{parent_rating_key}/art"
-                elif media_key:
-                    backdrop_path = f"/library/metadata/{media_key}/art"
-            else:
-                media_key = str(row.get("media_key") or "").strip()
-                if media_key:
-                    backdrop_path = f"/library/metadata/{media_key}/art"
-
-        if backdrop_path:
-            return url_for(
-                "api_monitoring_poster",
-                server_id=server_id,
-                path=backdrop_path,
-            )
-
-    elif provider == "jellyfin":
-        now = (data.get("NowPlayingItem") or data.get("Item") or {})
-
-        if is_series:
-            backdrop_item_id = now.get("SeriesId") or now.get("Id") or row.get("media_key")
-        else:
-            backdrop_item_id = now.get("Id") or now.get("SeriesId") or row.get("media_key")
-
-        if backdrop_item_id:
-            return url_for(
-                "api_monitoring_poster",
-                server_id=server_id,
-                item_id=str(backdrop_item_id),
-                image_type="Backdrop",
-                image_index="0",
-                w="900",
-                q="80",
-            )
-
-    return None
+    return url_for(
+        "api_monitoring_poster",
+        server_id=server_id,
+        path=f"/library/metadata/{rating_key}/art",
+    )
 
 def register(app):
     @app.route("/monitoring")
@@ -389,12 +200,11 @@ def register(app):
 
         server_resource_stats = {}
         if tab in ("overview", "now_playing", "servers"):
-            for srv in servers:
-                try:
-                    sid = int(srv.get("id") or 0)
-                except Exception:
-                    sid = 0
-                server_resource_stats[sid] = _fetch_server_resource_stats(srv)
+            server_resource_stats = _load_server_resource_stats(
+                db,
+                [srv.get("id") for srv in servers],
+                max_age_seconds=600,
+            )
 
         server_stats = db.query_one(
             """
@@ -468,27 +278,7 @@ def register(app):
 
             _apply_server_resource_stats(live_servers, server_resource_stats)
 
-            # Snapshot affiché, seulement quand on est sur une vue live
-            try:
-                live_now = int(sessions_stats.get("live_sessions") or 0)
-                transcodes_now = int(sessions_stats.get("transcodes") or 0)
 
-                db.execute(
-                    """
-                    INSERT INTO monitoring_snapshots (ts, live_sessions, transcodes)
-                    SELECT CURRENT_TIMESTAMP, ?, ?
-                    WHERE NOT EXISTS (
-                      SELECT 1
-                      FROM monitoring_snapshots
-                      WHERE ts >= datetime('now', '-30 seconds')
-                    )
-                    """,
-                    (live_now, transcodes_now),
-                )
-
-                db.execute("DELETE FROM monitoring_snapshots WHERE ts < datetime('now','-30 days')")
-            except Exception as e:
-                monitoring_logger.warning(f"Could not write monitoring snapshot (overview): {e}")
 
             sessions = db.query(
                 """
@@ -765,6 +555,7 @@ def register(app):
                 """
                 WITH base AS (
                   SELECT
+                    h.id AS hist_id,
                     h.server_id,
                     s.type AS provider,
                     h.started_at,
@@ -795,20 +586,29 @@ def register(app):
                   WHERE h.stopped_at >= datetime('now', '-30 days')
                     AND TRIM(COALESCE(h.grandparent_title, '')) <> ''
                 ),
+                plays_ranked AS (
+                  SELECT
+                    b.*,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY b.play_key
+                      ORDER BY b.stopped_at DESC, b.hist_id DESC
+                    ) AS rn
+                  FROM base b
+                ),
                 plays AS (
                   SELECT
-                    play_key,
-                    MAX(server_id) AS server_id,
-                    MAX(provider) AS provider,
-                    MAX(series_title) AS series_title,
-                    MAX(media_key) AS media_key,
-                    MAX(media_type) AS media_type,
-                    MAX(raw_json) AS raw_json,
-                    MAX(viewer_id) AS viewer_id,
-                    MAX(watch_ms_capped) AS watch_ms,
-                    MAX(stopped_at) AS stopped_at
-                  FROM base
-                  GROUP BY play_key
+                    hist_id,
+                    server_id,
+                    provider,
+                    series_title,
+                    media_key,
+                    media_type,
+                    raw_json,
+                    viewer_id,
+                    watch_ms_capped AS watch_ms,
+                    stopped_at
+                  FROM plays_ranked
+                  WHERE rn = 1
                 ),
                 agg AS (
                   SELECT
@@ -829,7 +629,7 @@ def register(app):
                     raw_json,
                     ROW_NUMBER() OVER (
                       PARTITION BY series_title
-                      ORDER BY stopped_at DESC
+                      ORDER BY stopped_at DESC, hist_id DESC
                     ) AS rn
                   FROM plays
                 )
@@ -857,6 +657,7 @@ def register(app):
                 """
                 WITH base AS (
                   SELECT
+                    h.id AS hist_id,
                     h.server_id,
                     s.type AS provider,
                     h.started_at,
@@ -887,20 +688,29 @@ def register(app):
                   WHERE h.stopped_at >= datetime('now', '-30 days')
                     AND TRIM(COALESCE(h.grandparent_title, '')) = ''
                 ),
+                plays_ranked AS (
+                  SELECT
+                    b.*,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY b.play_key
+                      ORDER BY b.stopped_at DESC, b.hist_id DESC
+                    ) AS rn
+                  FROM base b
+                ),
                 plays AS (
                   SELECT
-                    play_key,
-                    MAX(server_id) AS server_id,
-                    MAX(provider) AS provider,
-                    MAX(movie_title) AS movie_title,
-                    MAX(media_key) AS media_key,
-                    MAX(media_type) AS media_type,
-                    MAX(raw_json) AS raw_json,
-                    MAX(viewer_id) AS viewer_id,
-                    MAX(watch_ms_capped) AS watch_ms,
-                    MAX(stopped_at) AS stopped_at
-                  FROM base
-                  GROUP BY play_key
+                    hist_id,
+                    server_id,
+                    provider,
+                    movie_title,
+                    media_key,
+                    media_type,
+                    raw_json,
+                    viewer_id,
+                    watch_ms_capped AS watch_ms,
+                    stopped_at
+                  FROM plays_ranked
+                  WHERE rn = 1
                 ),
                 agg AS (
                   SELECT
@@ -921,7 +731,7 @@ def register(app):
                     raw_json,
                     ROW_NUMBER() OVER (
                       PARTITION BY movie_title
-                      ORDER BY stopped_at DESC
+                      ORDER BY stopped_at DESC, hist_id DESC
                     ) AS rn
                   FROM plays
                 )
@@ -1726,6 +1536,7 @@ ranked AS (
                 "server": "s.name",
                 "library": "l.name",
                 "type": "l.type",
+                "users": "users_with_access",
                 "items": "l.item_count",
                 "last": "last_stream_at",
                 "plays": "total_plays",
@@ -1808,6 +1619,13 @@ ranked AS (
                   s.name AS server_name,
                   s.type AS provider,
                   l.type AS media_type,
+                  (
+                    SELECT COUNT(DISTINCT mul.media_user_id)
+                    FROM media_user_libraries mul
+                    JOIN media_users mu_acc ON mu_acc.id = mul.media_user_id
+                    WHERE mul.library_id = l.id
+                      AND LOWER(COALESCE(mu_acc.role, '')) != 'owner'
+                  ) AS users_with_access,
                   l.item_count AS item_count,
                   ls.last_stream_at,
                   ls.total_plays,
@@ -1954,22 +1772,32 @@ ranked AS (
                   WHERE {where_hist_sql}
                     AND COALESCE(NULLIF(TRIM(h.library_section_id), ''), '') <> ''
                 ),
+                plays_ranked AS (
+                  SELECT
+                    h.*,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY h.play_key
+                      ORDER BY h.stopped_at DESC, h.hist_id DESC
+                    ) AS rn
+                  FROM hist h
+                ),
                 plays AS (
                   SELECT
-                    play_key,
-                    MAX(library_id) AS library_id,
-                    MAX(library_name) AS library_name,
-                    MAX(media_type) AS media_type,
-                    MAX(server_id) AS server_id,
-                    MAX(server_name) AS server_name,
-                    MAX(provider) AS provider,
-                    MAX(vodum_user_id) AS vodum_user_id,
-                    MAX(media_key) AS media_key,
-                    MAX(display_title) AS display_title,
-                    MAX(media_group_key) AS media_group_key,
-                    MAX(stopped_at) AS stopped_at
-                  FROM hist
-                  GROUP BY play_key
+                    hist_id,
+                    library_id,
+                    library_name,
+                    media_type,
+                    server_id,
+                    server_name,
+                    provider,
+                    vodum_user_id,
+                    media_key,
+                    raw_json,
+                    stopped_at,
+                    display_title,
+                    media_group_key
+                  FROM plays_ranked
+                  WHERE rn = 1
                 ),
                 media_agg AS (
                   SELECT
@@ -1980,8 +1808,6 @@ ranked AS (
                     server_name,
                     provider,
                     media_group_key,
-                    MAX(display_title) AS display_title,
-                    MAX(media_key) AS media_key,
                     COUNT(*) AS plays,
                     COUNT(DISTINCT vodum_user_id) AS user_count,
                     MAX(stopped_at) AS last_play_at
@@ -1999,20 +1825,33 @@ ranked AS (
                   SELECT
                     library_id,
                     media_group_key,
+                    display_title,
+                    media_key,
                     raw_json,
                     ROW_NUMBER() OVER (
                       PARTITION BY library_id, media_group_key
                       ORDER BY stopped_at DESC, hist_id DESC
                     ) AS rn
-                  FROM hist
+                  FROM plays
                 ),
                 ranked AS (
                   SELECT
-                    m.*,
+                    m.library_id,
+                    m.library_name,
+                    m.media_type,
+                    m.server_id,
+                    m.server_name,
+                    m.provider,
+                    m.media_group_key,
+                    COALESCE(ls.display_title, 'Unknown') AS display_title,
+                    ls.media_key AS media_key,
+                    m.plays,
+                    m.user_count,
+                    m.last_play_at,
                     ls.raw_json,
                     ROW_NUMBER() OVER (
                       PARTITION BY m.library_id
-                      ORDER BY m.plays DESC, m.user_count DESC, m.last_play_at DESC, m.display_title ASC
+                      ORDER BY m.plays DESC, m.user_count DESC, m.last_play_at DESC, COALESCE(ls.display_title, 'Unknown') ASC
                     ) AS row_in_library
                   FROM media_agg m
                   LEFT JOIN latest_snapshots ls
@@ -2061,6 +1900,7 @@ ranked AS (
 
                 item = dict(r)
                 item["poster_url"] = _build_history_poster_url(item)
+                item["backdrop_url"] = _build_history_backdrop_url(item)
 
                 card["items"].append(item)
                 card["total_plays"] += int(item.get("plays") or 0)
@@ -2068,12 +1908,6 @@ ranked AS (
             library_top_cards = list(cards_by_library.values())
 
             for card in library_top_cards:
-                users_seen = set()
-                for item in card["items"]:
-                    try:
-                        users_seen.add(int(item.get("user_count") or 0))
-                    except Exception:
-                        pass
                 card["total_users"] = sum(int(x.get("user_count") or 0) for x in card["items"])
 
             library_top_cards.sort(

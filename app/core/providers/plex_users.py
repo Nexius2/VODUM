@@ -1,5 +1,6 @@
 from typing import Any, Dict, List
-
+import requests
+from core.plex_rate_limit import install_plex_rate_limit
 from logging_utils import get_logger
 
 log = get_logger("plex_users")
@@ -71,7 +72,10 @@ def plex_invite_and_share(
     base = _pick_base_url(server_row)
     token = _token(server_row)
 
-    plex = PlexServer(base, token)
+    session = requests.Session()
+    install_plex_rate_limit(session, base)
+
+    plex = PlexServer(base, token, session=session)
     account = plex.myPlexAccount()
 
     sections = [str(x).strip() for x in (libraries_names or []) if str(x).strip()]

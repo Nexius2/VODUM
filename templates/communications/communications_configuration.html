@@ -16,7 +16,7 @@
   {{ t('comm_config_intro') }}
 </p> -->
 
-<form id="comm_config_form" method="post">
+<form id="comm_config_form" method="post" action="{{ url_for('communications_configuration_action') }}">
   <input type="hidden" name="action" value="save_all">
 
 	<div class="flex items-center justify-end mb-3">
@@ -297,11 +297,11 @@
 </form>
 
 <!-- Test forms (outside main save form so they don't overwrite settings) -->
-<form id="test_email_form" method="post" class="hidden">
+<form id="test_email_form" method="post" action="{{ url_for('communications_configuration_action') }}" class="hidden">
   <input type="hidden" name="action" value="test_email">
 </form>
 
-<form id="test_discord_form" method="post" class="hidden">
+<form id="test_discord_form" method="post" action="{{ url_for('communications_configuration_action') }}" class="hidden">
   <input type="hidden" name="action" value="test_discord">
   <input type="hidden" name="discord_bot_token" id="test_discord_token" value="">
 </form>
@@ -341,7 +341,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const formData = new FormData(configForm);
 
     try {
-      const res = await fetch(window.location.pathname, {
+      const res = await fetch("{{ url_for('communications_configuration_action') }}", {
         method: "POST",
         headers: { "X-Requested-With": "XMLHttpRequest" },
         body: formData,

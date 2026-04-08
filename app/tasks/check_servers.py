@@ -16,7 +16,7 @@ from datetime import datetime
 from plexapi.server import PlexServer
 from tasks_engine import task_logs
 from logging_utils import get_logger
-
+from core.plex_rate_limit import install_plex_rate_limit
 
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -82,6 +82,7 @@ def plex_get_info(base_url, token):
         log.debug(f"[PLEX] connecting base_url={base_url} token_present={bool(token)}")
         session = requests.Session()
         session.verify = False
+        install_plex_rate_limit(session, base_url)
         plex = PlexServer(base_url, token, session=session)
         log.debug(
             f"[PLEX] connected friendlyName={plex.friendlyName} "

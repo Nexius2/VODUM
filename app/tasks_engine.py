@@ -12,7 +12,31 @@ from logging_utils import get_logger
 # DB / LOGGER
 # -------------------------------------------------------------------
 DB_PATH = os.environ.get("DATABASE_PATH", "/appdata/database.db")
-db = DBManager(DB_PATH)
+
+
+class _LazyDB:
+    """
+    Évite de figer une connexion SQLite au chargement du module.
+    La vraie instance DBManager n'est créée qu'au premier usage.
+    """
+
+    def __init__(self, db_path):
+        self.db_path = db_path
+        self._instance = None
+        self._lock = threading.Lock()
+
+    def _get_instance(self):
+        if self._instance is None:
+            with self._lock:
+                if self._instance is None:
+                    self._instance = DBManager(self.db_path)
+        return self._instance
+
+    def __getattr__(self, name):
+        return getattr(self._get_instance(), name)
+
+
+db = _LazyDB(DB_PATH)
 
 logger = get_logger("tasks_engine")
 
@@ -38,6 +62,27 @@ sequence_thread_running = False
 
 queue_lock = threading.Lock()
 worker_running = False
+scheduler_start_lock = threading.Lock()
+scheduler_started = False
+
+
+def _start_task_worker_locked():
+    """
+    Démarre le worker de tâches.
+    Cette fonction suppose que queue_lock est déjà pris.
+    """
+    global worker_running
+
+    if worker_running:
+        return False
+
+    worker_running = True
+    threading.Thread(
+        target=_task_worker,
+        name="vodum-task-worker",
+        daemon=True
+    ).start()
+    return True
 
 # -------------------------------------------------------------------
 # TASK LIMITS
@@ -55,13 +100,107 @@ TASK_MAX_DURATION = {
 
 DEFAULT_TASK_MAX_DURATION = 30 * 60
 
+def _retry_modifier_for_attempt(next_attempt_number: int) -> str:
+    """
+    Backoff simple et standard pour les tâches scheduler :
+    1 -> +1 minute
+    2 -> +5 minutes
+    3 -> +15 minutes
+    4+ -> +30 minutes
+    """
+    if next_attempt_number <= 1:
+        return "+1 minute"
+    if next_attempt_number == 2:
+        return "+5 minutes"
+    if next_attempt_number == 3:
+        return "+15 minutes"
+    return "+30 minutes"
 
+
+def _mark_task_retry_or_error(task_id: int, task_name: str, error_message: str):
+    """
+    Persiste l'état d'erreur d'une tâche.
+    Si des retries restent disponibles, programme un retry via next_retry_at.
+    Sinon laisse la tâche en erreur simple.
+    """
+    try:
+        row = db.query_one(
+            """
+            SELECT retry_count, max_retries
+            FROM tasks
+            WHERE id = ?
+            """,
+            (task_id,)
+        )
+
+        retry_count = int(row["retry_count"] or 0) if row else 0
+        max_retries = int(row["max_retries"] or 0) if row else 0
+
+        next_attempt = retry_count + 1
+        can_retry = next_attempt <= max_retries
+
+        if can_retry:
+            modifier = _retry_modifier_for_attempt(next_attempt)
+            db.execute(
+                """
+                UPDATE tasks
+                SET
+                    status = CASE WHEN queued_count > 0 THEN 'queued' ELSE 'error' END,
+                    last_run = datetime('now'),
+                    last_error = ?,
+                    retry_count = ?,
+                    next_retry_at = datetime('now', ?),
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (str(error_message), next_attempt, modifier, task_id)
+            )
+
+            logger.warning(
+                f"Task '{task_name}' failed -> retry scheduled "
+                f"(attempt {next_attempt}/{max_retries})"
+            )
+            task_logs(
+                task_id,
+                "warning",
+                f"Task '{task_name}' failed -> retry scheduled ({next_attempt}/{max_retries})",
+                details={"error": str(error_message), "next_retry_in": modifier},
+            )
+        else:
+            db.execute(
+                """
+                UPDATE tasks
+                SET
+                    status = CASE WHEN queued_count > 0 THEN 'queued' ELSE 'error' END,
+                    last_run = datetime('now'),
+                    last_error = ?,
+                    next_retry_at = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (str(error_message), task_id)
+            )
+
+            logger.error(
+                f"Task '{task_name}' failed with no retry left "
+                f"(attempts exhausted: {retry_count}/{max_retries})"
+            )
+            task_logs(
+                task_id,
+                "error",
+                f"Task '{task_name}' failed with no retry left",
+                details={"error": str(error_message), "retry_count": retry_count, "max_retries": max_retries},
+            )
+
+    except Exception as persist_exc:
+        logger.error(
+            f"Unable to persist retry/error state for task '{task_name}' (id={task_id}): {persist_exc}",
+            exc_info=True,
+        )
 
 # -------------------------------------------------------------------
 # Compatibilité avec app.py (ne rien changer)
 # -------------------------------------------------------------------
-
-
 
 
 
@@ -76,7 +215,6 @@ def run_task_by_name(task_name: str):
         (task_name,)
     )
 
-
     if not row:
         logger.error(f"Unknown task: {task_name}")
         return False
@@ -85,12 +223,332 @@ def run_task_by_name(task_name: str):
         logger.warning(f"disabled task: {task_name}")
         return False
 
-   
-
     task_id = row["id"]
-
     enqueue_task(task_id)
+    return True
 
+
+def enable_and_run_task_by_name(task_name: str):
+    """
+    Active une tâche si besoin, normalise son statut si elle était disabled,
+    puis l'ajoute proprement à la file via run_task_by_name().
+    """
+    row = db.query_one(
+        "SELECT id, status, enabled FROM tasks WHERE name = ?",
+        (task_name,)
+    )
+
+    if not row:
+        logger.error(f"Unknown task: {task_name}")
+        return False
+
+    if not row["enabled"] or (row["status"] or "") == "disabled":
+        db.execute(
+            """
+            UPDATE tasks
+            SET enabled = 1,
+                status = CASE
+                    WHEN status = 'disabled' THEN 'idle'
+                    WHEN status IS NULL OR TRIM(status) = '' THEN 'idle'
+                    ELSE status
+                END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (row["id"],),
+        )
+
+    return run_task_by_name(task_name)
+
+def set_task_enabled(task_id: int, enabled: int):
+    """
+    Active ou désactive une tâche par ID avec un état cohérent.
+    """
+    enabled = 1 if int(enabled) == 1 else 0
+
+    if enabled == 1:
+        db.execute(
+            """
+            UPDATE tasks
+            SET enabled = 1,
+                status = 'idle',
+                last_error = NULL,
+                next_run = NULL,
+                retry_count = 0,
+                next_retry_at = NULL,
+                last_attempt_at = NULL,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (task_id,),
+        )
+    else:
+        db.execute(
+            """
+            UPDATE tasks
+            SET enabled = 0,
+                status = 'disabled',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (task_id,),
+        )
+
+    return True
+
+
+def set_tasks_enabled_by_names(task_names, enabled: int):
+    """
+    Active ou désactive plusieurs tâches par nom avec un état cohérent.
+    """
+    if not task_names:
+        return False
+
+    enabled = 1 if int(enabled) == 1 else 0
+    placeholders = ",".join("?" for _ in task_names)
+
+    db.execute(
+        f"""
+        UPDATE tasks
+        SET enabled = ?,
+            status = CASE WHEN ? = 1 THEN 'idle' ELSE 'disabled' END,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE name IN ({placeholders})
+        """,
+        (enabled, enabled, *task_names),
+    )
+
+    return True
+
+def set_task_enabled_for_auto_mode(task_id: int, enabled: int):
+    """
+    Active/désactive une tâche dans le cadre d'un auto-enable périodique.
+
+    Important :
+    - en ENABLE : on ne reset PAS next_run / retry_count / next_retry_at / last_attempt_at
+    - on ne casse PAS running / queued / error
+    - en DISABLE : on n'écrase PAS une tâche déjà running/queued
+    """
+    enabled = 1 if int(enabled) == 1 else 0
+
+    if enabled == 1:
+        db.execute(
+            """
+            UPDATE tasks
+            SET enabled = 1,
+                status = CASE
+                    WHEN status = 'disabled' THEN 'idle'
+                    WHEN status IS NULL OR TRIM(status) = '' THEN 'idle'
+                    ELSE status
+                END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (task_id,),
+        )
+    else:
+        db.execute(
+            """
+            UPDATE tasks
+            SET enabled = 0,
+                status = CASE
+                    WHEN status IN ('running', 'queued') THEN status
+                    ELSE 'disabled'
+                END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (task_id,),
+        )
+
+    return True
+
+
+def set_tasks_enabled_by_names_for_auto_mode(task_names, enabled: int):
+    """
+    Variante multi-tâches du mode auto-enable.
+    Préserve l'état utile lors d'une activation périodique.
+    """
+    if not task_names:
+        return False
+
+    enabled = 1 if int(enabled) == 1 else 0
+    placeholders = ",".join("?" for _ in task_names)
+
+    if enabled == 1:
+        db.execute(
+            f"""
+            UPDATE tasks
+            SET enabled = 1,
+                status = CASE
+                    WHEN status = 'disabled' THEN 'idle'
+                    WHEN status IS NULL OR TRIM(status) = '' THEN 'idle'
+                    ELSE status
+                END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE name IN ({placeholders})
+            """,
+            tuple(task_names),
+        )
+    else:
+        db.execute(
+            f"""
+            UPDATE tasks
+            SET enabled = 0,
+                status = CASE
+                    WHEN status IN ('running', 'queued') THEN status
+                    ELSE 'disabled'
+                END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE name IN ({placeholders})
+            """,
+            tuple(task_names),
+        )
+
+    return True
+
+def ensure_tasks_enabled(task_names):
+    """
+    Active plusieurs tâches sans écraser un état déjà valide.
+
+    Règle :
+    - disabled / vide / NULL -> idle
+    - idle / queued / running / error -> conservé
+    """
+    if not task_names:
+        return False
+
+    placeholders = ",".join("?" for _ in task_names)
+
+    db.execute(
+        f"""
+        UPDATE tasks
+        SET enabled = 1,
+            status = CASE
+                WHEN status = 'disabled' THEN 'idle'
+                WHEN status IS NULL OR TRIM(status) = '' THEN 'idle'
+                ELSE status
+            END,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE name IN ({placeholders})
+        """,
+        tuple(task_names),
+    )
+
+    return True
+
+def apply_cron_master_switch(enabled: int):
+    """
+    Applique le switch global settings.enable_cron_jobs.
+
+    - OFF : mémorise enabled -> enabled_prev (une seule fois), puis désactive tout
+    - ON  : restaure enabled depuis enabled_prev si présent, puis vide enabled_prev
+    """
+    enabled = 1 if int(enabled) == 1 else 0
+
+    if enabled == 0:
+        db.execute(
+            """
+            UPDATE tasks
+            SET
+                enabled_prev = CASE
+                    WHEN enabled_prev IS NULL THEN enabled
+                    ELSE enabled_prev
+                END,
+                enabled = 0,
+                status = 'disabled',
+                updated_at = CURRENT_TIMESTAMP
+            """
+        )
+    else:
+        db.execute(
+            """
+            UPDATE tasks
+            SET
+                enabled = CASE
+                    WHEN enabled_prev IS NULL THEN enabled
+                    ELSE enabled_prev
+                END,
+                status = CASE
+                    WHEN (CASE WHEN enabled_prev IS NULL THEN enabled ELSE enabled_prev END) = 1 THEN 'idle'
+                    ELSE 'disabled'
+                END,
+                enabled_prev = NULL,
+                updated_at = CURRENT_TIMESTAMP
+            """
+        )
+
+    return True
+
+
+def sync_expiry_tasks_from_settings(expiry_mode: str, cron_enabled: int):
+    """
+    Synchronise les tâches liées aux expirations depuis les settings.
+
+    - expiry_mode = 'disable'            -> disable_expired_users = ON
+    - expiry_mode = 'warn_then_disable'  -> expired_subscription_manager = ON
+    - sinon                              -> les deux OFF
+
+    Si cron est OFF, on ne réactive pas les tâches :
+    on stocke uniquement l'état désiré dans enabled_prev.
+    """
+    expiry_mode = (expiry_mode or "none").strip()
+    cron_enabled = 1 if int(cron_enabled) == 1 else 0
+
+    disable_task_enabled = 1 if expiry_mode == "disable" else 0
+    warn_task_enabled = 1 if expiry_mode == "warn_then_disable" else 0
+
+    if cron_enabled == 1:
+        row_disable = db.query_one(
+            "SELECT id FROM tasks WHERE name = 'disable_expired_users'"
+        )
+        if row_disable:
+            set_task_enabled(int(row_disable["id"]), disable_task_enabled)
+
+        row_warn = db.query_one(
+            "SELECT id FROM tasks WHERE name = 'expired_subscription_manager'"
+        )
+        if row_warn:
+            set_task_enabled(int(row_warn["id"]), warn_task_enabled)
+    else:
+        db.execute(
+            "UPDATE tasks SET enabled_prev = ? WHERE name = 'disable_expired_users'",
+            (disable_task_enabled,),
+        )
+        db.execute(
+            "UPDATE tasks SET enabled_prev = ? WHERE name = 'expired_subscription_manager'",
+            (warn_task_enabled,),
+        )
+
+    return True
+
+def prepare_restored_database(restored_db):
+    """
+    Prépare une base fraîchement restaurée :
+    - force le maintenance_mode
+    - désactive toutes les tâches en mémorisant l'état précédent
+    """
+    restored_db.execute(
+        """
+        UPDATE settings
+        SET maintenance_mode = 1
+        WHERE id = 1
+        """
+    )
+
+    restored_db.execute(
+        """
+        UPDATE tasks
+        SET
+            enabled_prev = CASE
+                WHEN enabled_prev IS NULL THEN enabled
+                ELSE enabled_prev
+            END,
+            enabled = 0,
+            status = 'disabled',
+            updated_at = CURRENT_TIMESTAMP
+        """
+    )
 
     return True
 
@@ -175,10 +633,48 @@ def task_logs(task_id, status, message, details=None):
 
 
 
+def mark_task_manual_run_requested(task_id: int):
+    """
+    Prépare l'état d'une tâche avant un run manuel depuis l'UI.
+    """
+    db.execute(
+        """
+        UPDATE tasks
+        SET status = CASE
+                WHEN status = 'running' THEN status
+                ELSE 'queued'
+            END,
+            last_error = NULL,
+            next_retry_at = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        (task_id,),
+    )
+    return True
+
+
+def mark_task_queue_failed(task_id: int, error_message: str):
+    """
+    Persiste un échec de mise en file depuis l'UI.
+    """
+    db.execute(
+        """
+        UPDATE tasks
+        SET status = 'error',
+            last_error = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        (str(error_message), task_id),
+    )
+    return True
+
+
 def enqueue_task(task_id: int):
     if not _cron_jobs_enabled():
         logger.info(f"Cron disabled (global); ignoring enqueue for task_id={task_id}")
-        return
+        return False
 
     row = db.query_one(
         "SELECT enabled FROM tasks WHERE id = ?",
@@ -186,8 +682,7 @@ def enqueue_task(task_id: int):
     )
     if not row or not row["enabled"]:
         logger.info(f"Task {task_id} ignored (disabled)")
-        return
-
+        return False
 
     global worker_running
 
@@ -206,15 +701,11 @@ def enqueue_task(task_id: int):
         (task_id,)
     )
 
-    # 🔑 Démarrage du worker SI nécessaire
+    # Démarrage du worker SI nécessaire
     with queue_lock:
-        if not worker_running:
-            worker_running = True
-            threading.Thread(
-                target=_task_worker,
-                name="vodum-task-worker",
-                daemon=True
-            ).start()
+        _start_task_worker_locked()
+
+    return True
 
 def _kick_worker_if_needed():
     """
@@ -237,14 +728,8 @@ def _kick_worker_if_needed():
         return
 
     with queue_lock:
-        if not worker_running:
-            worker_running = True
+        if _start_task_worker_locked():
             logger.warning(f"[WORKER] Kick worker: {pending} queued task(s) detected in DB")
-            threading.Thread(
-                target=_task_worker,
-                name="vodum-task-worker",
-                daemon=True
-            ).start()
 
 
 def _task_worker():
@@ -292,8 +777,13 @@ def _task_worker():
             time.sleep(0.2)
 
     finally:
-        # 🔐 GARANTIE : le worker se libère toujours
-        worker_running = False
+        # GARANTIE : le worker se libère toujours
+        with queue_lock:
+            worker_running = False
+
+        # Si une tâche a été ajoutée juste avant l'arrêt du worker,
+        # on relance immédiatement un worker pour ne rien laisser bloqué.
+        _kick_worker_if_needed()
 
 
 
@@ -302,278 +792,290 @@ def _task_worker():
 # -------------------------------------------------------------------
 # Exécution d'une tâche
 # -------------------------------------------------------------------
-def run_task(task_id: int):
+def _load_task_run_callable(task_name: str):
+    module_name = f"tasks.{task_name}"
+
+    try:
+        module = importlib.import_module(module_name)
+        if not hasattr(module, "run"):
+            raise AttributeError(f"Le module {module_name} n'expose pas run()")
+        return module.run
+    except Exception as e:
+        raise RuntimeError(f"Unable to load {module_name}: {e}") from e
+
+
+def _execute_task_run_callable(run_func, task_id: int, task_name: str, max_duration: int):
+    result_box = {"value": None, "exc": None}
+
+    def _runner():
+        try:
+            result_box["value"] = run_func(task_id, db)
+        except Exception as e:
+            result_box["exc"] = e
+
+    t = threading.Thread(
+        target=_runner,
+        name=f"vodum-task-{task_name}-{task_id}",
+        daemon=True
+    )
+    t.start()
+    t.join(timeout=max_duration)
+
+    if t.is_alive():
+        raise TimeoutError(f"Task {task_name} exceeded maximum duration ({max_duration}s)")
+
+    if result_box["exc"] is not None:
+        raise result_box["exc"]
+
+    return result_box["value"]
+
+
+def _handle_task_success(task_id: int, task_name: str, schedule):
+    """
+    Persiste le succès d'une tâche, applique les post-traitements éventuels,
+    puis recalcule le prochain run si la tâche est planifiée.
+    """
+    db.execute(
+        """
+        UPDATE tasks
+        SET
+            status = CASE WHEN queued_count > 0 THEN 'queued' ELSE 'idle' END,
+            last_run = datetime('now'),
+            last_error = NULL,
+            retry_count = 0,
+            next_retry_at = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        (task_id,)
+    )
+
+    logger.info(f"Task '{task_name}' completed successfully.")
+    task_logs(task_id, "success", f"Task '{task_name}' completed successfully")
+
+    if task_name == "check_servers":
+        logger.info("Auto re-evaluating sync tasks after check_servers")
+        task_logs(task_id, "info", "Sync tasks auto re-evaluation")
+
+        try:
+            auto_enable_sync_tasks()
+        except Exception as e:
+            logger.error(f"Sync re-evaluation failed: {e}", exc_info=True)
+            task_logs(task_id, "warning", f"Sync re-evaluation failed: {e}")
+
+        try:
+            auto_enable_monitoring_tasks()
+        except Exception as e:
+            logger.error(f"Enable monitoring failed: {e}", exc_info=True)
+            task_logs(task_id, "warning", f"Sync monitoring failed: {e}")
+
+    if schedule:
+        try:
+            itr = croniter(schedule, datetime.now())
+            next_exec = itr.get_next(datetime)
+
+            db.execute(
+                "UPDATE tasks SET next_run=? WHERE id=?",
+                (next_exec, task_id)
+            )
+
+            logger.info(f"Next run '{task_name}' → {next_exec}")
+            task_logs(task_id, "info", f"Next run '{task_name}' → {next_exec}")
+        except Exception as e:
+            logger.error(f"Cron error after execution: {e}")
+            task_logs(task_id, "warning", f"Cron error after execution: {e}")
+
+
+
+
+
+def _mark_task_running(task_id: int):
+    """
+    Passe une tâche en running et consomme 1 élément de queue.
+    """
+    db.execute(
+        """
+        UPDATE tasks
+        SET
+            status = 'running',
+            last_error = NULL,
+            last_attempt_at = datetime('now'),
+            next_retry_at = NULL,
+            queued_count = CASE
+                WHEN queued_count > 0 THEN queued_count - 1
+                ELSE 0
+            END,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        (task_id,)
+    )
+    return True
+
+
+def _finalize_task_running_failsafe(task_id: int):
+    """
+    Corrige une tâche restée bloquée en RUNNING si aucun autre état
+    n'a été persisté explicitement.
+    """
     row = db.query_one(
-        "SELECT id, name, schedule, status FROM tasks WHERE id = ?",
+        "SELECT status FROM tasks WHERE id = ?",
+        (task_id,)
+    )
+
+    if row and row["status"] == "running":
+        db.execute(
+            """
+            UPDATE tasks
+            SET
+                status = 'idle',
+                last_error = COALESCE(
+                    last_error,
+                    'Failsafe: task exited without explicit status update'
+                ),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (task_id,)
+        )
+
+        logger.warning(
+            f"[FAILSAFE] Task {task_id} fixed (left in RUNNING state)"
+        )
+
+    return True
+
+def _load_task_execution_context(task_id: int):
+    """
+    Charge le contexte minimal nécessaire à l'exécution d'une tâche.
+    Retourne None si la tâche n'existe plus.
+    """
+    row = db.query_one(
+        """
+        SELECT id, name, schedule, status, retry_count, max_retries, next_retry_at
+        FROM tasks
+        WHERE id = ?
+        """,
         (task_id,)
     )
 
     if not row:
         logger.error(f"TASK {task_id} missing.")
         task_logs(task_id, "error", "task missing in DB")
-        return
+        return None
 
     name = row["name"]
     schedule = row["schedule"]
-    module_name = f"tasks.{name}"
+    max_duration = TASK_MAX_DURATION.get(name, DEFAULT_TASK_MAX_DURATION)
+
+    return {
+        "row": row,
+        "name": name,
+        "schedule": schedule,
+        "max_duration": max_duration,
+    }
+
+
+def _process_task_result(task_id: int, task_name: str, result, start_time: float, max_duration: int):
+    """
+    Post-traite le résultat d'une tâche :
+    - log éventuel du payload retourné
+    - contrôle du timeout réel
+    - transforme un retour {'status': 'error'} en vraie erreur
+    """
+    if result is not None:
+        try:
+            logger.info(f"Task '{task_name}' returned: {result}")
+            task_logs(task_id, "info", f"Task '{task_name}' returned", details=result)
+        except Exception as log_exc:
+            logger.warning(
+                f"Unable to log task return payload for '{task_name}' (id={task_id}): {log_exc}",
+                exc_info=True,
+            )
+
+    duration = time.time() - start_time
+    if duration > max_duration:
+        raise TimeoutError(
+            f"Task {task_name} exceeded maximum duration ({int(duration)}s > {max_duration}s)"
+        )
+
+    if isinstance(result, dict):
+        returned_status = str(result.get("status") or "").strip().lower()
+        if returned_status == "error":
+            returned_error = (
+                result.get("message")
+                or result.get("error")
+                or f"Task {task_name} returned status=error"
+            )
+            raise RuntimeError(str(returned_error))
+
+    return result
+
+def run_task(task_id: int):
+    ctx = _load_task_execution_context(task_id)
+    if not ctx:
+        return
+
+    name = ctx["name"]
+    schedule = ctx["schedule"]
+    max_duration = ctx["max_duration"]
 
     logger.info(f"Starting task '{name}' (id={task_id})")
     task_logs(task_id, "start", f"Starting task '{name}'")
 
-    task_success = False
     start_time = time.time()
-    max_duration = TASK_MAX_DURATION.get(name, DEFAULT_TASK_MAX_DURATION)
 
     # -------------------------------------------------
     # Passage en RUNNING (et consomme 1 élément de queue)
     # -------------------------------------------------
     try:
-        db.execute(
-            """
-            UPDATE tasks
-            SET
-                status = 'running',
-                last_error = NULL,
-                queued_count = CASE
-                    WHEN queued_count > 0 THEN queued_count - 1
-                    ELSE 0
-                END,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """,
-            (task_id,)
-        )
+        _mark_task_running(task_id)
     except Exception as e:
         logger.error(f"Erreur passage en running : {e}")
         task_logs(task_id, "error", f"Erreur passage en running: {e}")
         return
 
-
     # -------------------------------------------------
     # Import dynamique
     # -------------------------------------------------
     try:
-        module = importlib.import_module(module_name)
-        if not hasattr(module, "run"):
-            raise AttributeError(f"Le module {module_name} n'expose pas run()")
-        run_func = module.run
+        run_func = _load_task_run_callable(name)
     except Exception as e:
-        msg = f"Unable to load {module_name}: {e}"
+        msg = str(e)
         logger.error(msg)
         task_logs(task_id, "error", msg)
+        _mark_task_retry_or_error(task_id, name, str(e))
+        return
 
-        try:
-            db.execute(
-                "UPDATE tasks SET status='error', last_error=? WHERE id=?",
-                (str(e), task_id)
-            )
-        except Exception as db_exc:
-            logger.error(
-                f"Unable to persist import/load error for task {task_id}: {db_exc}",
-                exc_info=True,
-            )
-
-        return  # STOP NET
-        
     # -------------------------------------------------
     # Exécution réelle
     # -------------------------------------------------
     try:
         logger.debug(f"Calling run() for task '{name}'")
 
-        # 🔒 APPEL UNIFORME — règle officielle
-        # 🔒 APPEL UNIFORME — avec timeout RÉEL (évite qu’une task bloque tout le worker)
-        result_box = {"value": None, "exc": None}
-
-        def _runner():
-            try:
-                result_box["value"] = run_func(task_id, db)
-            except Exception as e:
-                result_box["exc"] = e
-
-        t = threading.Thread(
-            target=_runner,
-            name=f"vodum-task-{name}-{task_id}",
-            daemon=True
-        )
-        t.start()
-        t.join(timeout=max_duration)
-
-        if t.is_alive():
-            raise TimeoutError(f"Task {name} exceeded maximum duration ({max_duration}s)")
-
-        if result_box["exc"] is not None:
-            raise result_box["exc"]
-
-        result = result_box["value"]
-
-        if result is not None:
-            try:
-                logger.info(f"Task '{name}' returned: {result}")
-                task_logs(task_id, "info", f"Task '{name}' returned", details=result)
-            except Exception as log_exc:
-                logger.warning(
-                    f"Unable to log task return payload for '{name}' (id={task_id}): {log_exc}",
-                    exc_info=True,
-                )
-
-        duration = time.time() - start_time
-        if duration > max_duration:
-            raise TimeoutError(
-                f"Task {name} exceeded maximum duration ({int(duration)}s > {max_duration}s)"
-            )
-
-        # Si la task retourne explicitement un status "error" sans lever d'exception,
-        # on la traite quand même comme une erreur réelle.
-        if isinstance(result, dict):
-            returned_status = str(result.get("status") or "").strip().lower()
-            if returned_status == "error":
-                returned_error = (
-                    result.get("message")
-                    or result.get("error")
-                    or f"Task {name} returned status=error"
-                )
-                raise RuntimeError(str(returned_error))
+        result = _execute_task_run_callable(run_func, task_id, name, max_duration)
+        _process_task_result(task_id, name, result, start_time, max_duration)
 
         # ---- SUCCÈS ----
-        db.execute(
-            """
-            UPDATE tasks
-            SET
-                status = CASE WHEN queued_count > 0 THEN 'queued' ELSE 'idle' END,
-                last_run = datetime('now'),
-                last_error = NULL,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """,
-            (task_id,)
-        )
-
-        logger.info(f"Task '{name}' completed successfully.")
-        task_logs(task_id, "success", f"Task '{name}' completed successfully")
-
-        # -------------------------------------------------
-        # Post-traitement check_servers
-        # -------------------------------------------------
-        if name == "check_servers":
-            logger.info("Auto re-evaluating sync tasks after check_servers")
-            task_logs(task_id, "info", "Sync tasks auto re-evaluation")
-
-            try:
-                auto_enable_sync_tasks()
-            except Exception as e:
-                logger.error(f"Sync re-evaluation failed: {e}", exc_info=True)
-                task_logs(task_id, "warning", f"Sync re-evaluation failed: {e}")
-            try:
-                auto_enable_monitoring_tasks()
-            except Exception as e:
-                logger.error(f"Enable monitoring failed: {e}", exc_info=True)
-                task_logs(task_id, "warning", f"Sync monitoring failed: {e}")
-            
-          
-
-        # -------------------------------------------------
-        # Calcul du prochain run (sécurisé)
-        # -------------------------------------------------
-        if schedule:
-            try:
-                itr = croniter(schedule, datetime.now())
-                next_exec = itr.get_next(datetime)
-
-                db.execute(
-                    "UPDATE tasks SET next_run=? WHERE id=?",
-                    (next_exec, task_id)
-                )
-
-                logger.info(f"Next run '{name}' → {next_exec}")
-                task_logs(task_id, "info", f"Next run '{name}' → {next_exec}")
-            except Exception as e:
-                logger.error(f"Cron error after execution: {e}")
-                task_logs(task_id, "warning", f"Cron error after execution: {e}")
+        _handle_task_success(task_id, name, schedule)
 
     except Exception as e:
         msg = f"Error while running {name}: {e}"
         logger.error(msg, exc_info=True)
         task_logs(task_id, "error", msg)
-
-        try:
-            db.execute(
-                """
-                UPDATE tasks
-                SET
-                    status = CASE WHEN queued_count > 0 THEN 'queued' ELSE 'error' END,
-                    last_run = datetime('now'),
-                    last_error = ?,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
-                (str(e), task_id)
-            )
-            # même en erreur, on calcule un next_run pour éviter les loops
-            if schedule:
-                try:
-                    itr = croniter(schedule, datetime.now())
-                    next_exec = itr.get_next(datetime)
-                    db.execute("UPDATE tasks SET next_run=? WHERE id=?", (next_exec, task_id))
-                except Exception as next_run_exc:
-                    logger.warning(
-                        f"Unable to update next_run after error for task '{name}' (id={task_id}): {next_run_exc}",
-                        exc_info=True,
-                    )
-
-        except Exception as persist_exc:
-            logger.error(
-                f"Unable to persist error state for task '{name}' (id={task_id}): {persist_exc}",
-                exc_info=True,
-            )
-
-
-
+        _mark_task_retry_or_error(task_id, name, str(e))
 
     finally:
         # -------------------------------------------------
         # FAILSAFE FINAL STRICT
         # -------------------------------------------------
         try:
-            row = db.query_one(
-                "SELECT status FROM tasks WHERE id = ?",
-                (task_id,)
-            )
-
-            if row and row["status"] == "running":
-                db.execute(
-                    """
-                    UPDATE tasks
-                    SET
-                        status = 'idle',
-                        last_error = COALESCE(
-                            last_error,
-                            'Failsafe: task exited without explicit status update'
-                        ),
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                    """,
-                    (task_id,)
-                )
-
-                logger.warning(
-                    f"[FAILSAFE] Task {task_id} fixed (left in RUNNING state)"
-                )
-
+            _finalize_task_running_failsafe(task_id)
         except Exception as e:
             logger.error(
                 f"[FAILSAFE] Unable to fix task {task_id}: {e}"
             )
             task_logs(task_id, "warning", f"Failsafe final failed: {e}")
-
-
-
-
-
-
-
-
-
 
 def wait_for_task_completion(task_name, last_run_before=None, poll_interval=2, timeout=1800):
     """
@@ -623,7 +1125,7 @@ def run_task_sequence(task_names):
 
     logger.info(f"[QUEUE] Sequence added: {task_names}")
 
-    with queue_lock:
+    with sequence_lock:
         sequence_queue.append(task_names)
 
         # Si aucun worker ne tourne, on le démarre
@@ -632,6 +1134,22 @@ def run_task_sequence(task_names):
             logger.info("[QUEUE] starting Sequence worker")
             threading.Thread(target=_sequence_worker, daemon=True).start()
 
+def enqueue_server_discovery_sequence(server_type: str):
+    """
+    Planifie la séquence de découverte/sync après création d'un serveur.
+    """
+    server_type = (server_type or "").strip().lower()
+
+    if server_type == "plex":
+        run_task_sequence(["check_servers", "sync_plex"])
+        return True
+
+    if server_type == "jellyfin":
+        run_task_sequence(["check_servers", "sync_jellyfin"])
+        return True
+
+    run_task_sequence(["check_servers"])
+    return True
 
 def _sequence_worker():
     """
@@ -643,7 +1161,7 @@ def _sequence_worker():
     logger.info("[QUEUE] Sequence worker started")
 
     while True:
-        with queue_lock:
+        with sequence_lock:
             if not sequence_queue:
                 logger.info("[QUEUE] empty queue → worker stopping")
                 sequence_thread_running = False
@@ -670,29 +1188,30 @@ def _run_task_sequence_internal(task_names):
     """
     logger.info(f"Sequence start : {task_names}")
 
-    # ✅ Lock BLOQUANT (au lieu de drop la séquence)
-    with sequence_lock:
-        for name in task_names:
-            logger.info(f"[SEQ] starting task : {name}")
+    for name in task_names:
+        logger.info(f"[SEQ] starting task : {name}")
 
-            row = db.query_one(
-                "SELECT id FROM tasks WHERE name=?",
-                (name,)
-            )
-            if not row:
-                logger.error(f"[SEQ] Task unknown: {name}")
-                continue
+        row = db.query_one(
+            "SELECT id FROM tasks WHERE name=?",
+            (name,)
+        )
+        if not row:
+            logger.error(f"[SEQ] Task unknown: {name}")
+            continue
 
-            task_id = row["id"]
+        task_id = row["id"]
 
-            # Capture last_run avant enqueue (permet de détecter 1 exécution)
-            before = db.query_one("SELECT last_run FROM tasks WHERE id=?", (task_id,))
-            last_run_before = before["last_run"] if before else None
+        # Capture last_run avant enqueue (permet de détecter 1 exécution)
+        before = db.query_one("SELECT last_run FROM tasks WHERE id=?", (task_id,))
+        last_run_before = before["last_run"] if before else None
 
-            enqueue_task(task_id)
+        enqueued = enqueue_task(task_id)
+        if not enqueued:
+            logger.warning(f"[SEQ] Task not enqueued, skipping wait: {name}")
+            continue
 
-            # Attend une exécution réelle (même si la tâche reste 'queued' après)
-            wait_for_task_completion(name, last_run_before=last_run_before, timeout=1800)
+        # Attend une exécution réelle (même si la tâche reste 'queued' après)
+        wait_for_task_completion(name, last_run_before=last_run_before, timeout=1800)
 
     logger.info(f"Sequence ended : {task_names}")
     return True
@@ -713,15 +1232,9 @@ def auto_enable_monitoring_tasks():
 
     should_enable = 1 if up_count > 0 else 0
 
-    db.execute(
-        """
-        UPDATE tasks
-        SET enabled = ?,
-            status  = CASE WHEN ? = 1 THEN 'idle' ELSE 'disabled' END,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE name IN ('monitor_collect_sessions', 'monitor_enqueue_refresh', 'media_jobs_worker')
-        """,
-        (should_enable, should_enable),
+    set_tasks_enabled_by_names_for_auto_mode(
+        ["monitor_collect_sessions", "monitor_enqueue_refresh", "media_jobs_worker"],
+        should_enable,
     )
 
 
@@ -735,10 +1248,14 @@ def auto_enable_sync_tasks():
         """
     )["cnt"]
 
-    db.execute(
-        "UPDATE tasks SET enabled = ? WHERE name = 'sync_plex'",
-        (1 if plex_count > 0 else 0,)
+    row_sync_plex = db.query_one(
+        "SELECT id FROM tasks WHERE name = 'sync_plex'"
     )
+    if row_sync_plex:
+        set_task_enabled_for_auto_mode(
+            int(row_sync_plex["id"]),
+            1 if plex_count > 0 else 0
+        )
 
     jellyfin_count = db.query_one(
         """
@@ -749,16 +1266,20 @@ def auto_enable_sync_tasks():
         """
     )["cnt"]
 
-    db.execute(
-        "UPDATE tasks SET enabled = ? WHERE name = 'sync_jellyfin'",
-        (1 if jellyfin_count > 0 else 0,)
+    row_sync_jellyfin = db.query_one(
+        "SELECT id FROM tasks WHERE name = 'sync_jellyfin'"
     )
+    if row_sync_jellyfin:
+        set_task_enabled_for_auto_mode(
+            int(row_sync_jellyfin["id"]),
+            1 if jellyfin_count > 0 else 0
+        )
 
 
 def auto_enable_plex_jobs_worker():
     """
     Active/désactive apply_plex_access_updates automatiquement :
-    - ON si au moins 1 serveur Plex UP OU si des media_jobs non traités existent
+    - ON si au moins 1 serveur Plex UP OU si des media_jobs Plex non traités existent
     - OFF sinon
     """
     plex_up = db.query_one(
@@ -770,25 +1291,23 @@ def auto_enable_plex_jobs_worker():
         """
     )["cnt"]
 
-    pending_jobs = db.query_one(
+    pending_plex_jobs = db.query_one(
         """
         SELECT COUNT(*) AS cnt
-        FROM media_jobs
-        WHERE processed = 0
+        FROM media_jobs mj
+        JOIN servers s ON s.id = mj.server_id
+        WHERE mj.processed = 0
+          AND s.type = 'plex'
         """
     )["cnt"]
 
-    should_enable = 1 if (plex_up > 0 or pending_jobs > 0) else 0
+    should_enable = 1 if (plex_up > 0 or pending_plex_jobs > 0) else 0
 
-    db.execute(
-        """
-        UPDATE tasks
-        SET enabled = ?,
-            status  = CASE WHEN ? = 1 THEN 'idle' ELSE 'disabled' END
-        WHERE name = 'apply_plex_access_updates'
-        """,
-        (should_enable, should_enable),
+    row_task = db.query_one(
+        "SELECT id FROM tasks WHERE name = 'apply_plex_access_updates'"
     )
+    if row_task:
+        set_task_enabled_for_auto_mode(int(row_task["id"]), should_enable)
 
 def auto_enable_jellyfin_jobs_worker():
     """
@@ -819,15 +1338,11 @@ def auto_enable_jellyfin_jobs_worker():
 
     should_enable = 1 if (jellyfin_up > 0 or pending_jellyfin_jobs > 0) else 0
 
-    db.execute(
-        """
-        UPDATE tasks
-        SET enabled = ?,
-            status  = CASE WHEN ? = 1 THEN 'idle' ELSE 'disabled' END
-        WHERE name = 'apply_jellyfin_access_updates'
-        """,
-        (should_enable, should_enable),
+    row_task = db.query_one(
+        "SELECT id FROM tasks WHERE name = 'apply_jellyfin_access_updates'"
     )
+    if row_task:
+        set_task_enabled_for_auto_mode(int(row_task["id"]), should_enable)
 
 def auto_enable_stream_enforcer():
     """
@@ -842,24 +1357,69 @@ def auto_enable_stream_enforcer():
         """)["cnt"]
 
         if enabled_policies > 0:
-            db.execute("""
-                UPDATE tasks
-                SET enabled = 1,
-                    status = CASE WHEN status = 'disabled' THEN 'idle' ELSE status END,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE name = 'stream_enforcer'
-            """)
+            row_task = db.query_one(
+                "SELECT id FROM tasks WHERE name = 'stream_enforcer'"
+            )
+            if row_task:
+                set_task_enabled_for_auto_mode(int(row_task["id"]), 1)
     except Exception as e:
         logger.warning(f"auto_enable_stream_enforcer failed: {e}", exc_info=True)
 
+def run_auto_enable_pass():
+    """
+    Lance tout le passage d'auto-enable/auto-disable des tâches dépendantes.
+    Centralisé ici pour éviter d'avoir la même logique recopiée
+    dans start_scheduler() et dans scheduler_loop().
+    """
+    try:
+        auto_enable_sync_tasks()
+    except Exception as e:
+        logger.warning(
+            f"Erreur auto-enable sync tasks: {e}",
+            exc_info=True
+        )
 
-# -------------------------------------------------------------------
-# Scheduler cron
-# -------------------------------------------------------------------
-def scheduler_loop():
-    logger.info("VODUM scheduler started…")
+    try:
+        auto_enable_monitoring_tasks()
+    except Exception as e:
+        logger.warning(
+            f"Erreur auto-enable monitoring tasks: {e}",
+            exc_info=True
+        )
 
-    # ✅ RECOVERY AU BOOT : évite les tasks bloquées après crash/restart
+    try:
+        auto_enable_stream_enforcer()
+    except Exception as e:
+        logger.warning(
+            f"Erreur auto-enable stream_enforcer: {e}",
+            exc_info=True
+        )
+
+    try:
+        auto_enable_plex_jobs_worker()
+    except Exception as e:
+        logger.warning(
+            f"Erreur auto-enable apply_plex_access_updates: {e}",
+            exc_info=True
+        )
+
+    try:
+        auto_enable_jellyfin_jobs_worker()
+    except Exception as e:
+        logger.warning(
+            f"Erreur auto-enable apply_jellyfin_access_updates: {e}",
+            exc_info=True
+        )
+
+def _recover_scheduler_state_at_boot():
+    """
+    Répare l'état des tâches au démarrage du scheduler.
+    Évite de laisser des tâches coincées après crash/restart.
+
+    Important :
+    - on répare les états instables `running` / `queued`
+    - on conserve `error` tel quel pour ne pas casser la logique de retry
+    """
     try:
         db.execute(
             """
@@ -870,14 +1430,213 @@ def scheduler_loop():
                 ELSE 'idle'
             END,
             updated_at = CURRENT_TIMESTAMP
-            WHERE status IN ('running', 'queued', 'idle', 'error')
+            WHERE status IN ('running', 'queued', 'idle')
             """
         )
         logger.info("Recovery tasks: reset running/queued states OK")
         _kick_worker_if_needed()
-
     except Exception as e:
         logger.warning(f"Recovery tasks failed: {e}", exc_info=True)
+
+def _run_scheduler_tick(now):
+    """
+    Exécute un tick complet du scheduler cron :
+    - auto-enable / auto-disable des tâches dépendantes
+    - chargement des tâches actives
+    - calcul des prochains runs
+    - enqueue des tâches dues
+
+    Retourne True si le tick s'est déroulé normalement,
+    False si on doit simplement attendre le tick suivant.
+    """
+    # -------------------------------------------------
+    # 0) Auto-enable / disable des tâches dépendantes
+    # -------------------------------------------------
+    run_auto_enable_pass()
+
+    # -------------------------------------------------
+    # 1) Charger les tâches actives
+    # -------------------------------------------------
+    try:
+        rows = db.query(
+            """
+            SELECT
+                id, name, schedule, enabled, last_run, next_run, status,
+                retry_count, max_retries, next_retry_at
+            FROM tasks
+            WHERE enabled = 1
+            """
+        )
+    except Exception as e:
+        logger.error(f"Scheduler error (load tasks): {e}", exc_info=True)
+        return False
+
+    # -------------------------------------------------
+    # 2) Planification (CRON → enqueue)
+    # -------------------------------------------------
+    for row in rows:
+        task_id = row["id"]
+        name = row["name"]
+        schedule = row["schedule"]
+        last_run = row["last_run"]
+        status = row["status"]
+        retry_count = int(row["retry_count"] or 0)
+        max_retries = int(row["max_retries"] or 0)
+        next_retry_at_raw = row["next_retry_at"]
+
+        next_retry_at = None
+        if next_retry_at_raw:
+            try:
+                next_retry_at = datetime.fromisoformat(str(next_retry_at_raw))
+            except Exception:
+                next_retry_at = None
+
+        if status == "error" and next_retry_at and retry_count < max_retries:
+            if next_retry_at <= now:
+                logger.info(f"Retry due for task: {name}")
+
+                enqueued = enqueue_task(task_id)
+                if enqueued:
+                    try:
+                        db.execute(
+                            "UPDATE tasks SET next_retry_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                            (task_id,)
+                        )
+                    except Exception as retry_reset_exc:
+                        logger.warning(
+                            f"Unable to clear next_retry_at after retry enqueue for '{name}' (id={task_id}): {retry_reset_exc}",
+                            exc_info=True,
+                        )
+                else:
+                    logger.warning(
+                        f"Retry due but enqueue refused for task '{name}' (id={task_id}); keeping next_retry_at"
+                    )
+
+            continue
+
+        if not schedule:
+            continue
+
+        # Anti-spam: si déjà en file ou en cours, on n'enfile pas plus
+        queued_count = None
+        try:
+            qc = db.query_one("SELECT queued_count FROM tasks WHERE id = ?", (task_id,))
+            queued_count = int(qc["queued_count"]) if qc else 0
+        except Exception:
+            queued_count = 0
+
+        if status in ("running", "queued") or (queued_count and queued_count > 0):
+            continue
+
+        # ---------------------------
+        # Calcul du prochain run
+        # ---------------------------
+        next_run = row["next_run"]
+        next_exec = None
+
+        if next_run:
+            try:
+                next_exec = datetime.fromisoformat(str(next_run))
+            except Exception:
+                next_exec = None
+
+        if next_exec is None:
+            try:
+                base = datetime.fromisoformat(last_run) if last_run else now
+            except Exception:
+                base = now
+
+            next_exec = croniter(schedule, base).get_next(datetime)
+
+            try:
+                db.execute(
+                    "UPDATE tasks SET next_run = ? WHERE id = ?",
+                    (next_exec, task_id)
+                )
+            except Exception as e:
+                if "locked" in str(e).lower():
+                    logger.warning(
+                        f"DB locked during count next_run for '{name}'"
+                    )
+                    continue
+                raise
+
+        # Première exécution forcée (UNE SEULE FOIS)
+        if last_run is None:
+            # si déjà planifiée dans le futur, on ne spam pas
+            if next_exec and next_exec > now:
+                continue
+
+            logger.info(f"First forced execution (one-shot): {name}")
+
+            enqueued = enqueue_task(task_id)
+            if not enqueued:
+                logger.warning(
+                    f"Bootstrap execution enqueue refused for '{name}' (id={task_id}); keeping state unchanged"
+                )
+                continue
+
+            try:
+                next_future = croniter(schedule, now).get_next(datetime)
+                db.execute(
+                    "UPDATE tasks SET next_run = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (next_future, task_id),
+                )
+            except Exception as bootstrap_next_exc:
+                logger.warning(
+                    f"Unable to set bootstrap next_run for '{name}' (id={task_id}): {bootstrap_next_exc}",
+                    exc_info=True,
+                )
+
+            # IMPORTANT: on marque un last_run "bootstrap" seulement si l'enqueue a réussi
+            try:
+                db.execute(
+                    "UPDATE tasks SET last_run = datetime('now'), updated_at = CURRENT_TIMESTAMP WHERE id = ? AND last_run IS NULL",
+                    (task_id,),
+                )
+            except Exception as bootstrap_last_run_exc:
+                logger.warning(
+                    f"Unable to mark bootstrap last_run for '{name}' (id={task_id}): {bootstrap_last_run_exc}",
+                    exc_info=True,
+                )
+
+            continue
+
+        # Exécution planifiée (rattrapage 1x, sans catch-up)
+        if next_exec <= now:
+            logger.info(f"Scheduled task due (late): {name}")
+
+            enqueued = enqueue_task(task_id)
+            if not enqueued:
+                logger.warning(
+                    f"Scheduled execution enqueue refused for '{name}' (id={task_id}); keeping next_run unchanged"
+                )
+                continue
+
+            # IMPORTANT: on décale next_run dans le futur seulement si l'enqueue a réussi
+            try:
+                next_future = croniter(schedule, now).get_next(datetime)
+                db.execute(
+                    "UPDATE tasks SET next_run = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (next_future, task_id),
+                )
+            except Exception as e:
+                # si DB locked, on évite de spammer: la tâche reste queueée de toute façon
+                if "locked" in str(e).lower():
+                    logger.warning(f"DB locked while updating next_run for '{name}' after enqueue")
+                    continue
+                raise
+
+    return True
+
+# -------------------------------------------------------------------
+# Scheduler cron
+# -------------------------------------------------------------------
+def scheduler_loop():
+    logger.info("VODUM scheduler started…")
+
+    # RECOVERY AU BOOT : évite les tasks bloquées après crash/restart
+    _recover_scheduler_state_at_boot()
 
     while True:
         if not _cron_jobs_enabled():
@@ -888,169 +1647,8 @@ def scheduler_loop():
         now = datetime.now()
         _kick_worker_if_needed()
 
-
         try:
-            # -------------------------------------------------
-            # 0) Auto-enable / disable des tâches dépendantes
-            # -------------------------------------------------
-            auto_enable_stream_enforcer()
-
-            try:
-                auto_enable_plex_jobs_worker()
-            except Exception as e:
-                logger.warning(
-                    f"Erreur auto-enable apply_plex_access_updates: {e}",
-                    exc_info=True
-                )
-
-            try:
-                auto_enable_jellyfin_jobs_worker()
-            except Exception as e:
-                logger.warning(
-                    f"Erreur auto-enable apply_jellyfin_access_updates: {e}",
-                    exc_info=True
-                )
-
-
-            except Exception as e:
-                logger.warning(
-                    f"Erreur auto-enable apply_jellyfin_access_updates: {e}",
-                    exc_info=True
-                )
-
-
-            # -------------------------------------------------
-            # 1) Charger les tâches actives
-            # -------------------------------------------------
-            try:
-                rows = db.query(
-                    """
-                    SELECT id, name, schedule, enabled, last_run, next_run, status
-                    FROM tasks
-                    WHERE enabled = 1
-                    """
-                )
-            except Exception as e:
-                logger.error(f"Scheduler error (load tasks): {e}", exc_info=True)
-                time.sleep(30)
-                continue
-
-            # -------------------------------------------------
-            # 2) Planification (CRON → enqueue)
-            # -------------------------------------------------
-            for row in rows:
-                task_id  = row["id"]
-                name     = row["name"]
-                schedule = row["schedule"]
-                last_run = row["last_run"]
-                status   = row["status"]
-
-                if not schedule:
-                    continue
-
-                # Anti-spam: si déjà en file ou en cours, on n'enfile pas plus
-                queued_count = None
-                try:
-                    qc = db.query_one("SELECT queued_count FROM tasks WHERE id=?", (task_id,))
-                    queued_count = int(qc["queued_count"]) if qc else 0
-                except Exception:
-                    queued_count = 0
-
-                if status in ("running", "queued") or (queued_count and queued_count > 0):
-                    continue
-
-
-                # ---------------------------
-                # Calcul du prochain run
-                # ---------------------------
-                next_run = row["next_run"]
-                next_exec = None
-
-                if next_run:
-                    try:
-                        next_exec = datetime.fromisoformat(str(next_run))
-                    except Exception:
-                        next_exec = None
-
-                if next_exec is None:
-                    try:
-                        base = datetime.fromisoformat(last_run) if last_run else now
-                    except Exception:
-                        base = now
-
-                    next_exec = croniter(schedule, base).get_next(datetime)
-
-                    try:
-                        db.execute(
-                            "UPDATE tasks SET next_run=? WHERE id=?",
-                            (next_exec, task_id)
-                        )
-                    except Exception as e:
-                        if "locked" in str(e).lower():
-                            logger.warning(
-                                f"DB locked during count next_run for '{name}'"
-                            )
-                            continue
-                        raise
-
-                # 🔑 Première exécution forcée (UNE SEULE FOIS)
-                if last_run is None:
-                    # si déjà planifiée dans le futur, on ne spam pas
-                    if next_exec and next_exec > now:
-                        continue
-
-                    logger.info(f"First forced execution (one-shot): {name}")
-                    try:
-                        next_future = croniter(schedule, now).get_next(datetime)
-                        db.execute(
-                            "UPDATE tasks SET next_run=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                            (next_future, task_id),
-                        )
-                    except Exception as bootstrap_next_exc:
-                        logger.warning(
-                            f"Unable to set bootstrap next_run for '{name}' (id={task_id}): {bootstrap_next_exc}",
-                            exc_info=True,
-                        )
-
-                    enqueue_task(task_id)
-
-                    # IMPORTANT: on marque un last_run "bootstrap" pour éviter le spam à chaque tick
-                    try:
-                        db.execute(
-                            "UPDATE tasks SET last_run=datetime('now'), updated_at=CURRENT_TIMESTAMP WHERE id=? AND last_run IS NULL",
-                            (task_id,),
-                        )
-                    except Exception as bootstrap_last_run_exc:
-                        logger.warning(
-                            f"Unable to mark bootstrap last_run for '{name}' (id={task_id}): {bootstrap_last_run_exc}",
-                            exc_info=True,
-                        )
-
-                    continue
-
-
-                # 🔑 Exécution planifiée (rattrapage 1x, sans catch-up)
-                if next_exec <= now:
-                    logger.info(f"Scheduled task due (late): {name}")
-
-                    # IMPORTANT: on décale tout de suite next_run dans le futur
-                    # => évite d'enfiler en boucle tant que le worker n'a pas tourné
-                    try:
-                        next_future = croniter(schedule, now).get_next(datetime)
-                        db.execute(
-                            "UPDATE tasks SET next_run=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                            (next_future, task_id),
-                        )
-                    except Exception as e:
-                        # si DB locked, on évite de spammer: on n'enfile pas
-                        if "locked" in str(e).lower():
-                            logger.warning(f"DB locked while updating next_run for '{name}', skipping enqueue this tick")
-                            continue
-                        raise
-
-                    enqueue_task(task_id)
-
-
+            _run_scheduler_tick(now)
         except Exception as e:
             logger.error(f"Error scheduler (global): {e}", exc_info=True)
 
@@ -1066,9 +1664,20 @@ def start_scheduler():
     """
     Démarre :
     - le watchdog (récupération des tâches bloquées)
-    - l'auto-enable des tâches de sync au démarrage
+    - l'auto-enable des tâches dépendantes au démarrage
     - le scheduler principal
+
+    Cette fonction est idempotente :
+    si elle est appelée plusieurs fois, un seul scheduler/watchdog est lancé.
     """
+    global scheduler_started
+
+    with scheduler_start_lock:
+        if scheduler_started:
+            logger.info("start_scheduler() ignored: scheduler already started")
+            return
+
+        scheduler_started = True
 
     logger.info("starting VODUM scheduler")
 
@@ -1085,25 +1694,20 @@ def start_scheduler():
     logger.info("Watchdog started")
 
     # -------------------------------------------------
-    # 2) Auto-enable / disable des tâches de sync au boot
+    # 2) Auto-enable / disable des tâches dépendantes au boot
     # -------------------------------------------------
     try:
         if _cron_jobs_enabled():
-            auto_enable_sync_tasks()
-            auto_enable_monitoring_tasks()
-            auto_enable_plex_jobs_worker()
-            auto_enable_jellyfin_jobs_worker()
-            logger.info("Sync task auto-enable run at startup")
+            run_auto_enable_pass()
+            logger.info("Task auto-enable pass run at startup")
         else:
             logger.info("Cron disabled (global); skipping auto-enable at startup")
 
     except Exception as e:
         logger.error(
-            f"sync tasks auto-enable at startup failed: {e}",
+            f"task auto-enable pass at startup failed: {e}",
             exc_info=True
         )
-
-
 
     # -------------------------------------------------
     # 3) Démarrage du SCHEDULER principal
@@ -1116,6 +1720,3 @@ def start_scheduler():
     scheduler_thread.start()
 
     logger.info("Scheduler started")
-
-
-

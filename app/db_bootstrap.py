@@ -205,8 +205,35 @@ def run_migrations():
           transcodes INTEGER NOT NULL DEFAULT 0
         );
         """)
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_monitoring_snapshots_ts ON monitoring_snapshots(ts);")
         conn.commit()
+
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_monitoring_snapshots_ts ON monitoring_snapshots(ts);")
+    conn.commit()
+
+    # -------------------------------------------------
+    # 0.5 Monitoring server resources table (NEW)
+    # -------------------------------------------------
+    if not table_exists(cursor, "monitoring_server_resources"):
+        print("🛠 Creating table: monitoring_server_resources")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS monitoring_server_resources (
+          server_id INTEGER PRIMARY KEY,
+          provider TEXT,
+          cpu_pct REAL,
+          ram_pct REAL,
+          is_available INTEGER NOT NULL DEFAULT 0,
+          note TEXT,
+          fetched_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE
+        );
+        """)
+        conn.commit()
+
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_monitoring_server_resources_fetched_at
+        ON monitoring_server_resources(fetched_at);
+    """)
+    conn.commit()
 
 
     # -------------------------------------------------
@@ -492,6 +519,10 @@ def run_migrations():
         "next_run": "TIMESTAMP",
         "last_error": "TEXT",
         "queued_count": "INTEGER NOT NULL DEFAULT 0",
+        "retry_count": "INTEGER NOT NULL DEFAULT 0",
+        "max_retries": "INTEGER NOT NULL DEFAULT 3",
+        "last_attempt_at": "TIMESTAMP",
+        "next_retry_at": "TIMESTAMP",
         "updated_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
     }
 
@@ -1380,28 +1411,7 @@ def run_migrations():
             ON media_session_history (server_id, media_user_id, started_at, media_key, client_name)
         """)
 
-    # -------------------------------------------------
-    # UNIQUE session key dedup (1 playback = 1 session_key)
-    # -------------------------------------------------
-    # 1) Nettoyage : si ta DB contient déjà des doublons (server_id, session_key),
-    # on garde la plus ancienne ligne (MIN(id)) et on supprime les autres.
-    cursor.execute("""
-        DELETE FROM media_session_history
-        WHERE TRIM(COALESCE(session_key,'')) <> ''
-          AND id NOT IN (
-            SELECT MIN(id)
-            FROM media_session_history
-            WHERE TRIM(COALESCE(session_key,'')) <> ''
-            GROUP BY server_id, session_key
-          )
-    """)
 
-    # 2) Index unique : permet au ON CONFLICT(server_id, session_key) de fonctionner
-    cursor.execute("""
-        CREATE UNIQUE INDEX IF NOT EXISTS uq_media_session_history_session
-        ON media_session_history (server_id, session_key)
-        WHERE TRIM(COALESCE(session_key,'')) <> ''
-    """)
 
     conn.commit()
     print("✔ Monitoring history table verified (media_session_history).")

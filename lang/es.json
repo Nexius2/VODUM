@@ -1169,6 +1169,11 @@
 "discord_history": "Historial de Discord",
 "comm_trigger_pending_invite_reminder": "Pending invite reminder",
 "task_description.send_pending_invite_reminders": "Queues reminders for Plex invitations that have not been accepted yet.",
-"comm_campaign_create_then_send_hint": "Create the campaign first, then send it from the edit screen."
+"comm_campaign_create_then_send_hint": "Create the campaign first, then send it from the edit screen.",
+"remove_access_all_users": "Eliminar acceso para todos los usuarios de",
+"bulk_remove_modal_title": "Eliminar acceso a las bibliotecas seleccionadas",
+"bulk_remove_modal_subtitle": "Esta acción se aplicará a todos los usuarios de este servidor, excepto al propietario.",
+"bulk_remove_modal_warning": "Atención: esta acción actualiza primero la base de datos y luego lanza la sincronización de Plex.",
+"selected_libraries": "Bibliotecas seleccionadas"
 
 }

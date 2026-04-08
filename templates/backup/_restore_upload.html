@@ -5,7 +5,7 @@
     {{ t("restore_backup_desc") }}
   </p>
 
-  <form action="{{ url_for('backup_page') }}" method="post" enctype="multipart/form-data" class="space-y-3">
+  <form action="{{ url_for('backup_action') }}" method="post" enctype="multipart/form-data" class="space-y-3">
     <input type="hidden" name="action" value="restore">
     <input type="file" name="backup_file"
            class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs w-full">

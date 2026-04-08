@@ -19,23 +19,41 @@ const I18N = {
    UI HELPERS
    ========================= */
 
-function toggleServerSelect(show) {
-  document.getElementById("server-select")
-          .classList.toggle("hidden", !show);
+function toggleGiftTarget(mode) {
+  const serverSelect = document.getElementById("server-select");
+  const userSelect = document.getElementById("user-select");
+
+  if (serverSelect) {
+    serverSelect.classList.toggle("hidden", mode !== "server");
+  }
+
+  if (userSelect) {
+    userSelect.classList.toggle("hidden", mode !== "user");
+  }
 
   const all = document.getElementById("card-all");
   const srv = document.getElementById("card-server");
+  const usr = document.getElementById("card-user");
 
-  all.classList.remove("border-primary","bg-primary/10");
-  all.classList.add("border-slate-800");
+  [all, srv, usr].forEach((card) => {
+    if (!card) return;
+    card.classList.remove("border-primary", "bg-primary/10");
+    card.classList.add("border-slate-800");
+  });
 
-  srv.classList.remove("border-primary","bg-primary/10");
-  srv.classList.add("border-slate-800");
+  if (mode === "all" && all) {
+    all.classList.remove("border-slate-800");
+    all.classList.add("border-primary", "bg-primary/10");
+  }
 
-  if (!show) {
-    all.classList.add("border-primary","bg-primary/10");
-  } else {
-    srv.classList.add("border-primary","bg-primary/10");
+  if (mode === "server" && srv) {
+    srv.classList.remove("border-slate-800");
+    srv.classList.add("border-primary", "bg-primary/10");
+  }
+
+  if (mode === "user" && usr) {
+    usr.classList.remove("border-slate-800");
+    usr.classList.add("border-primary", "bg-primary/10");
   }
 }
 
@@ -121,10 +139,13 @@ function openGiftRunModal(run) {
   const modal = document.getElementById("gift-modal");
   if (!modal) return;
 
-  const scope =
-    run.target_type === "all"
-      ? I18N.gift_history_scope_all
-      : `${I18N.gift_history_scope_server}${run.server_name ? ": " + run.server_name : ""}`;
+  let scope = I18N.gift_history_scope_all;
+
+  if (run.target_type === "server") {
+    scope = `${I18N.gift_history_scope_server}${run.server_name ? ": " + run.server_name : ""}`;
+  } else if (run.target_type === "user") {
+    scope = `User${run.target_username ? ": " + run.target_username : ""}`;
+  }
 
   const setText = (id, value) => {
     const el = document.getElementById(id);
@@ -190,10 +211,13 @@ function renderGiftHistory(items) {
   box.className = "text-sm text-slate-200 max-h-[520px] overflow-auto rounded-xl border border-slate-800 divide-y divide-slate-800";
 
   box.innerHTML = items.map((run, idx) => {
-    const scope =
-      run.target_type === "all"
-        ? I18N.gift_history_scope_all
-        : `${I18N.gift_history_scope_server}${run.server_name ? ": " + escapeHtml(run.server_name) : ""}`;
+    let scope = I18N.gift_history_scope_all;
+
+    if (run.target_type === "server") {
+      scope = `${I18N.gift_history_scope_server}${run.server_name ? ": " + escapeHtml(run.server_name) : ""}`;
+    } else if (run.target_type === "user") {
+      scope = `User${run.target_username ? ": " + escapeHtml(run.target_username) : ""}`;
+    }
 
     const duration = `+${run.days_added} ${I18N.gift_history_days}`;
     const comment = run.reason ? escapeHtml(run.reason) : "—";
@@ -279,6 +303,7 @@ document.addEventListener("visibilitychange", () => {
   if (!document.hidden) loadGiftHistory();
 });
 
+toggleGiftTarget("all");
 startGiftHistoryLive();
 
 </script>

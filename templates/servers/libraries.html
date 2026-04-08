@@ -11,99 +11,270 @@
 {% include "servers/servers_nav.html" with context %}
 
 <form method="post" action="{{ url_for('bulk_grant_libraries') }}" id="lib-form">
-
-<div class="flex justify-between items-center mb-3">
+  <div class="flex justify-between items-center mb-3">
     <h2 class="text-sm font-semibold">{{ t("all_libraries") }}</h2>
+    <div id="bulk-buttons" class="flex flex-wrap gap-2"></div>
+  </div>
 
-    <!-- Zone des boutons dynamiques -->
-    <div id="bulk-buttons" class="flex gap-2"></div>
-</div>
-
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-  <table class="w-full text-xs">
-    <thead class="bg-slate-950/60 text-slate-400">
-      <tr>
-        <th class="px-3 py-2">
-          <input type="checkbox" id="check-all">
-        </th>
-        <th class="px-3 py-2 text-left">{{ t("server") }}</th>
-        <th class="px-3 py-2 text-left">{{ t("name") }}</th>
-        <th class="px-3 py-2 text-left">{{ t("type") }}</th>
-        <th class="px-3 py-2 text-left">{{ t("id") }}</th>
-        <th class="px-3 py-2 text-left">{{ t("users") }}</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for lib in libraries %}
-      <tr class="border-t border-slate-800">
-        <td class="px-3 py-2">
-          <input type="checkbox"
-                 class="lib-check"
-                 data-server="{{ lib.server_id }}"
-				 data-server-name="{{ lib.server_name }}"
-                 value="{{ lib.id }}"
-                 name="library_ids">
-        </td>
-        <td class="px-3 py-2 font-semibold">{{ lib.server_name }}</td>
-        <td class="px-3 py-2">{{ lib.name }}</td>
-        <td class="px-3 py-2 text-slate-400">{{ t(lib.type) }}</td>
-        <td class="px-3 py-2 font-mono text-[11px]">{{ lib.section_id }}</td>
-        <td class="px-3 py-2">{{ lib.users_count }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+    <table class="w-full text-xs">
+      <thead class="bg-slate-950/60 text-slate-400">
+        <tr>
+          <th class="px-3 py-2">
+            <input type="checkbox" id="check-all">
+          </th>
+          <th class="px-3 py-2 text-left">{{ t("server") }}</th>
+          <th class="px-3 py-2 text-left">{{ t("name") }}</th>
+          <th class="px-3 py-2 text-left">{{ t("type") }}</th>
+          <th class="px-3 py-2 text-left">{{ t("id") }}</th>
+          <th class="px-3 py-2 text-left">{{ t("users") }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for lib in libraries %}
+        <tr class="border-t border-slate-800">
+          <td class="px-3 py-2">
+            <input type="checkbox"
+                   class="lib-check"
+                   data-server="{{ lib.server_id }}"
+                   data-server-name="{{ lib.server_name }}"
+                   data-library-name="{{ lib.name }}"
+                   value="{{ lib.id }}"
+                   name="library_ids">
+          </td>
+          <td class="px-3 py-2 font-semibold">{{ lib.server_name }}</td>
+          <td class="px-3 py-2">{{ lib.name }}</td>
+          <td class="px-3 py-2 text-slate-400">{{ t(lib.type) }}</td>
+          <td class="px-3 py-2 font-mono text-[11px]">{{ lib.section_id }}</td>
+          <td class="px-3 py-2">{{ lib.users_count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </form>
 
+<!-- Bulk remove confirm modal -->
+<div id="bulk-remove-modal"
+     class="fixed inset-0 z-50 hidden"
+     aria-hidden="true">
+  <div class="absolute inset-0 bg-black/70"></div>
+
+  <div class="relative z-10 flex min-h-full items-center justify-center p-4">
+    <div class="w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-950 shadow-2xl">
+      <div class="px-6 py-5 border-b border-slate-800">
+        <div class="text-base font-semibold text-white" id="bulk-remove-modal-title">
+          {{ t("bulk_remove_modal_title") }}
+        </div>
+        <div class="text-sm text-slate-400 mt-1" id="bulk-remove-modal-subtitle">
+          {{ t("bulk_remove_modal_subtitle") }}
+        </div>
+      </div>
+
+      <div class="px-6 py-5 space-y-4">
+        <div class="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          {{ t("bulk_remove_modal_warning") }}
+        </div>
+
+        <div class="grid gap-3 sm:grid-cols-2 text-sm">
+          <div class="rounded-xl border border-slate-800 bg-slate-900 px-4 py-3">
+            <div class="text-slate-400 text-xs mb-1">{{ t("server") }}</div>
+            <div class="text-white font-medium" id="bulk-remove-server">—</div>
+          </div>
+
+          <div class="rounded-xl border border-slate-800 bg-slate-900 px-4 py-3">
+            <div class="text-slate-400 text-xs mb-1">{{ t("selected_libraries") }}</div>
+            <div class="text-white font-medium" id="bulk-remove-count">0</div>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-slate-800 bg-slate-900 px-4 py-3">
+          <div class="text-slate-400 text-xs mb-2">{{ t("libraries") }}</div>
+          <div id="bulk-remove-list" class="flex flex-wrap gap-2"></div>
+        </div>
+      </div>
+
+      <div class="px-6 py-4 border-t border-slate-800 flex justify-end gap-2">
+        <button type="button"
+                id="bulk-remove-cancel"
+                class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800">
+          {{ t("cancel") }}
+        </button>
+        <button type="button"
+                id="bulk-remove-confirm"
+                class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium">
+          {{ t("confirm") }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
+const form = document.getElementById('lib-form');
 const checkAll = document.getElementById('check-all');
-const checks = document.querySelectorAll('.lib-check');
+const checks = Array.from(document.querySelectorAll('.lib-check'));
 const buttonZone = document.getElementById('bulk-buttons');
 
+const removeModal = document.getElementById('bulk-remove-modal');
+const removeModalCancel = document.getElementById('bulk-remove-cancel');
+const removeModalConfirm = document.getElementById('bulk-remove-confirm');
+const removeModalServer = document.getElementById('bulk-remove-server');
+const removeModalCount = document.getElementById('bulk-remove-count');
+const removeModalList = document.getElementById('bulk-remove-list');
+
+let pendingRemoveAction = null;
+
 checkAll.addEventListener('change', () => {
-  checks.forEach(c => c.checked = checkAll.checked);
+  checks.forEach(c => {
+    c.checked = checkAll.checked;
+  });
   refreshButtons();
 });
 
 checks.forEach(c => c.addEventListener('change', refreshButtons));
 
-function refreshButtons() {
-  buttonZone.innerHTML = "";
-
+function selectedByServer() {
   const byServer = {};
 
   checks.forEach(c => {
-    if (c.checked) {
-      const sid = c.dataset.server;
-      const sname = c.dataset.serverName;
+    if (!c.checked) return;
 
-      if (!byServer[sid]) {
-        byServer[sid] = {
-          name: sname,
-          libs: []
-        };
-      }
-      byServer[sid].libs.push(c.value);
+    const sid = c.dataset.server;
+    const sname = c.dataset.serverName;
+    const lname = c.dataset.libraryName;
+
+    if (!byServer[sid]) {
+      byServer[sid] = {
+        name: sname,
+        libs: []
+      };
     }
+
+    byServer[sid].libs.push({
+      id: c.value,
+      name: lname
+    });
   });
 
+  return byServer;
+}
+
+function createButton({ text, value, action, className, onClick = null }) {
+  const btn = document.createElement('button');
+  btn.type = 'submit';
+  btn.name = 'server_id';
+  btn.value = value;
+  btn.formAction = action;
+  btn.className = className;
+  btn.textContent = text;
+
+  if (onClick) {
+    btn.addEventListener('click', onClick);
+  }
+
+  return btn;
+}
+
+function openRemoveModal(serverId, serverName, libs) {
+  pendingRemoveAction = { serverId, libs };
+
+  removeModalServer.textContent = serverName;
+  removeModalCount.textContent = String(libs.length);
+  removeModalList.innerHTML = '';
+
+  libs.forEach(lib => {
+    const badge = document.createElement('span');
+    badge.className = 'inline-flex items-center rounded-full border border-slate-700 bg-slate-800 px-3 py-1 text-xs text-slate-200';
+    badge.textContent = lib.name;
+    removeModalList.appendChild(badge);
+  });
+
+  removeModal.classList.remove('hidden');
+  removeModal.setAttribute('aria-hidden', 'false');
+}
+
+function closeRemoveModal() {
+  pendingRemoveAction = null;
+  removeModal.classList.add('hidden');
+  removeModal.setAttribute('aria-hidden', 'true');
+}
+
+function refreshButtons() {
+  buttonZone.innerHTML = '';
+
+  const byServer = selectedByServer();
+
   Object.keys(byServer).forEach(serverId => {
-    const btn = document.createElement('button');
-    btn.type = "submit";
-    btn.name = "server_id";
-    btn.value = serverId;
-    btn.className = "px-3 py-1 rounded-lg bg-primary hover:bg-primary-dark text-white text-xs";
+    const serverName = byServer[serverId].name;
+    const libs = byServer[serverId].libs;
 
-    btn.textContent =
-      "{{ t('grant_active_users') }} " + byServer[serverId].name;
+    const grantBtn = createButton({
+      text: "{{ t('grant_active_users') }} " + serverName,
+      value: serverId,
+      action: "{{ url_for('bulk_grant_libraries') }}",
+      className: "px-3 py-1 rounded-lg bg-primary hover:bg-primary-dark text-white text-xs"
+    });
 
-    buttonZone.appendChild(btn);
+    const removeBtn = createButton({
+      text: "{{ t('remove_access_all_users') }} " + serverName,
+      value: serverId,
+      action: "{{ url_for('bulk_remove_libraries') }}",
+      className: "px-3 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs",
+      onClick: function (e) {
+        e.preventDefault();
+        openRemoveModal(serverId, serverName, libs);
+      }
+    });
+
+    buttonZone.appendChild(grantBtn);
+    buttonZone.appendChild(removeBtn);
   });
 }
 
-</script>
+removeModalCancel.addEventListener('click', closeRemoveModal);
 
+removeModal.addEventListener('click', (e) => {
+  if (e.target === removeModal || (e.target.classList && e.target.classList.contains('bg-black/70'))) {
+    closeRemoveModal();
+  }
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !removeModal.classList.contains('hidden')) {
+    closeRemoveModal();
+  }
+});
+
+removeModalConfirm.addEventListener('click', () => {
+  if (!pendingRemoveAction) return;
+
+  const serverId = pendingRemoveAction.serverId;
+  const libs = pendingRemoveAction.libs;
+
+  checks.forEach(c => {
+    if (c.dataset.server === serverId) {
+      c.checked = libs.some(lib => lib.id === c.value);
+    } else {
+      c.checked = false;
+    }
+  });
+
+  checkAll.checked = checks.length > 0 && checks.every(c => c.checked);
+
+  closeRemoveModal();
+
+  const hiddenServerInput = document.createElement('input');
+  hiddenServerInput.type = 'hidden';
+  hiddenServerInput.name = 'server_id';
+  hiddenServerInput.value = serverId;
+
+  form.appendChild(hiddenServerInput);
+  form.action = "{{ url_for('bulk_remove_libraries') }}";
+  form.submit();
+});
+
+refreshButtons();
+</script>
 
 {% endblock %}

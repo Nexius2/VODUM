@@ -1,42 +1,16 @@
 # Auto-split from app.py (keep URLs/endpoints intact)
-import os
 import json
-import time
-import re
-import math
-import platform
-import ipaddress
-import uuid
-import threading
-import shutil
-import sqlite3
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Optional
 
-import requests
-from flask import (
-    render_template, g, request, redirect, url_for, flash, session,
-    Response, current_app, jsonify, make_response, abort,
-)
+from flask import request, redirect, url_for, flash
 
-from db_manager import DBManager
-from logging_utils import get_logger, read_last_logs, read_all_logs
-from tasks_engine import run_task, start_scheduler, run_task_sequence, run_task_by_name, enqueue_task
-from mailing_utils import build_user_context, render_mail
-from discord_utils import is_discord_ready, validate_discord_bot_token
-from core.i18n import get_translator, get_available_languages
-from core.backup import BackupConfig, ensure_backup_dir, create_backup_file, list_backups, restore_backup_file
-from werkzeug.security import generate_password_hash, check_password_hash
+from logging_utils import get_logger
+from tasks_engine import enable_and_run_task_by_name
 
-from web.helpers import get_db, scheduler_db_provider, table_exists, add_log, send_email_via_settings, get_backup_cfg
+from web.helpers import get_db
 from .users_list import merge_vodum_users
 
 
 task_logger = get_logger("tasks_ui")
-auth_logger = get_logger("auth")
-security_logger = get_logger("security")
-settings_logger = get_logger("settings")
 
 def register(app):
     @app.route("/users/<int:user_id>/plex/share/filter", methods=["POST"])
@@ -332,18 +306,8 @@ def register(app):
 
 
             # Activer + queue la tâche apply_plex_access_updates
-            db.execute(
-                """
-                UPDATE tasks
-                SET enabled = 1, status = 'queued'
-                WHERE name = 'apply_plex_access_updates'
-                """
-            )
-
             try:
-                row = db.query_one("SELECT id FROM tasks WHERE name='apply_plex_access_updates'")
-                if row:
-                    enqueue_task(row["id"])
+                enable_and_run_task_by_name("apply_plex_access_updates")
             except Exception:
                 # pas bloquant si enqueue échoue, le scheduler le prendra plus tard
                 pass
@@ -394,18 +358,8 @@ def register(app):
             )
 
             # Activer + queue la tâche Jellyfin
-            db.execute(
-                """
-                UPDATE tasks
-                SET enabled = 1, status = 'queued'
-                WHERE name = 'apply_jellyfin_access_updates'
-                """
-            )
-
             try:
-                row = db.query_one("SELECT id FROM tasks WHERE name='apply_jellyfin_access_updates'")
-                if row:
-                    enqueue_task(row["id"])
+                enable_and_run_task_by_name("apply_jellyfin_access_updates")
             except Exception:
                 pass
 

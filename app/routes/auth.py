@@ -1,41 +1,18 @@
 # Auto-split from app.py (keep URLs/endpoints intact)
-import os
-import json
-import time
-import re
 import math
-import platform
-import ipaddress
-import uuid
-import threading
-import shutil
-import sqlite3
+import os
 from datetime import datetime, timezone, timedelta
-from pathlib import Path
 from typing import Optional
 
-import requests
-from flask import (
-    render_template, g, request, redirect, url_for, flash, session,
-    Response, current_app, jsonify, make_response, abort,
-)
+from flask import render_template, request, redirect, url_for, flash, session
 
-from db_manager import DBManager
-from logging_utils import get_logger, read_last_logs, read_all_logs
-from tasks_engine import run_task, start_scheduler, run_task_sequence, run_task_by_name, enqueue_task
-from mailing_utils import build_user_context, render_mail
-from discord_utils import is_discord_ready, validate_discord_bot_token
-from core.i18n import get_translator, get_available_languages
-from core.backup import BackupConfig, ensure_backup_dir, create_backup_file, list_backups, restore_backup_file
+from logging_utils import get_logger
 from werkzeug.security import generate_password_hash, check_password_hash
 from app import RESET_MAGIC, RESET_FILE
 
-from web.helpers import get_db, scheduler_db_provider, table_exists, add_log, send_email_via_settings, get_backup_cfg
+from web.helpers import get_db
 
-task_logger = get_logger("tasks_ui")
 auth_logger = get_logger("auth")
-security_logger = get_logger("security")
-settings_logger = get_logger("settings")
 
 
 AUTH_BRUTEFORCE_MAX_ATTEMPTS = max(1, int(os.environ.get("VODUM_AUTH_MAX_ATTEMPTS", "5")))
@@ -327,7 +304,7 @@ def register(app):
             reset_cmd=reset_cmd,
         )
 
-    @app.route("/logout")
+    @app.post("/logout")
     def logout():
         session.clear()
         auth_logger.info("AUTH logout ip=%s ua=%s", _client_ip(), request.user_agent.string)

@@ -12,7 +12,7 @@
 {% endblock %}
 
 {% block content %}
-<form method="POST" id="settings-form" class="grid grid-cols-1 xl:grid-cols-2 gap-8">
+<form method="POST" action="{{ url_for('settings_save') }}" id="settings-form" class="grid grid-cols-1 xl:grid-cols-2 gap-8">
 
   {% include "settings/partials/_settings_general.html" %}
   {% include "settings/partials/_settings_system.html" %}

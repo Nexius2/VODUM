@@ -449,6 +449,10 @@ CREATE TABLE IF NOT EXISTS tasks (
     next_run TIMESTAMP,
     last_error TEXT,
 	queued_count INTEGER NOT NULL DEFAULT 0,
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    max_retries INTEGER NOT NULL DEFAULT 3,
+    last_attempt_at TIMESTAMP,
+    next_retry_at TIMESTAMP,
 
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -1076,3 +1080,22 @@ CREATE TABLE IF NOT EXISTS monitoring_snapshots (
 
 CREATE INDEX IF NOT EXISTS idx_monitoring_snapshots_ts
 ON monitoring_snapshots(ts);
+
+
+
+-- ----------------------------
+-- Monitoring server resources (latest CPU/RAM per server)
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS monitoring_server_resources (
+  server_id INTEGER PRIMARY KEY,
+  provider TEXT,
+  cpu_pct REAL,
+  ram_pct REAL,
+  is_available INTEGER NOT NULL DEFAULT 0,
+  note TEXT,
+  fetched_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_monitoring_server_resources_fetched_at
+ON monitoring_server_resources(fetched_at);

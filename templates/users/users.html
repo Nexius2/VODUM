@@ -491,8 +491,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 {% elif tab == "referral_settings" %}
 
-<form method="post" class="space-y-6">
-  <input type="hidden" name="action" value="save_referral_settings">
+<form method="post" action="{{ url_for('users_referral_settings_save') }}" class="space-y-6">
 
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
     <div class="text-sm font-semibold text-slate-200 mb-1">

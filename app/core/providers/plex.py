@@ -3,7 +3,7 @@ import json
 import requests
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Optional
-
+from core.plex_rate_limit import wait_for_plex_slot
 from core.providers.base import BaseProvider
 
 
@@ -56,6 +56,7 @@ class PlexProvider(BaseProvider):
         for base in bases:
             url = f"{base}{path}"
             try:
+                wait_for_plex_slot(base)
                 r = requests.get(url, params={"X-Plex-Token": token}, timeout=self.timeout)
                 # on veut une VRAIE réponse du serveur
                 r.raise_for_status()
@@ -89,6 +90,7 @@ class PlexProvider(BaseProvider):
                 if params:
                     p.update(params)
 
+                wait_for_plex_slot(base)
                 r = requests.request(method, url, params=p, timeout=self.timeout)
                 r.raise_for_status()
                 return True

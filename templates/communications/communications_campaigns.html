@@ -30,7 +30,7 @@
       </div>
     </div>
 
-	<form method="post" enctype="multipart/form-data" class="space-y-4">
+	<form method="post" action="{{ url_for('communications_campaigns_action') }}" enctype="multipart/form-data" class="space-y-4">
 	  <input type="hidden" name="form_mode" id="campaign_action" value="{% if loaded_campaign %}save{% else %}create{% endif %}">
 	  <input type="hidden" name="campaign_id" value="{{ loaded_campaign.id if loaded_campaign else '' }}">
 
