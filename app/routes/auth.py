@@ -183,7 +183,7 @@ def _login_locked_response(email: str, client_ip: str, remaining_seconds: int):
 
 
 def register(app):
-    @app.route("/setup-admin", methods=["GET", "POST"])
+    @app.route("/setup-admin", methods=["GET"])
     def setup_admin():
         db = get_db()
         s = db.query_one("SELECT admin_email, admin_password_hash FROM settings WHERE id = 1")
@@ -193,59 +193,68 @@ def register(app):
         if (s.get("admin_password_hash") or "").strip():
             return redirect(url_for("login"))
 
-        if request.method == "POST":
-            # Récupération + normalisation (ne plante jamais)
-            email_input = (request.form.get("email") or "").strip().lower()
-            password = (request.form.get("password") or "")
-
-            # ✅ Stricte: email obligatoire.
-            # Si l'utilisateur laisse vide MAIS qu'un email existe déjà en DB, on le reprend.
-            email = email_input or (s.get("admin_email") or "").strip().lower()
-
-            # ✅ Validation stricte (pas seulement "@")
-            # - non vide
-            # - contient exactement un "@"
-            # - pas d'espaces
-            # - a un domaine avec un "."
-            if (
-                not email
-                or " " in email
-                or email.count("@") != 1
-                or "." not in email.split("@", 1)[1]
-            ):
-                flash("Un email admin valide est obligatoire.", "error")
-                return redirect(url_for("setup_admin"))
-
-            # ✅ Mot de passe strict
-            if len(password) < 8:
-                flash("Mot de passe trop court (8 caractères minimum).", "error")
-                return redirect(url_for("setup_admin"))
-
-            pwd_hash = generate_password_hash(password)
-
-            db.execute(
-                "UPDATE settings SET admin_email = ?, admin_password_hash = ?, auth_enabled = 1 WHERE id = 1",
-                (email, pwd_hash),
-            )
-
-            session.clear()
-            session["vodum_logged_in"] = True
-            session["vodum_admin_email"] = email
-            session.permanent = True
-
-            # ensuite seulement, si aucun serveur -> page serveurs
-            row = db.query_one("SELECT COUNT(*) AS cnt FROM servers")
-            if row and int(row["cnt"] or 0) == 0:
-                return redirect(url_for("servers_list"))
-
-            return redirect(url_for("dashboard"))
-
         return render_template(
             "auth/setup_admin.html",
             admin_email=(s.get("admin_email") or "")
         )
 
-    @app.route("/login", methods=["GET", "POST"])
+    @app.route("/setup-admin/save", methods=["POST"])
+    def setup_admin_save():
+        db = get_db()
+        s = db.query_one("SELECT admin_email, admin_password_hash FROM settings WHERE id = 1")
+        s = dict(s) if s else {"admin_email": "", "admin_password_hash": None}
+
+        # déjà configuré => go login/home
+        if (s.get("admin_password_hash") or "").strip():
+            return redirect(url_for("login"))
+
+        # Récupération + normalisation (ne plante jamais)
+        email_input = (request.form.get("email") or "").strip().lower()
+        password = (request.form.get("password") or "")
+
+        # Stricte: email obligatoire.
+        # Si l'utilisateur laisse vide MAIS qu'un email existe déjà en DB, on le reprend.
+        email = email_input or (s.get("admin_email") or "").strip().lower()
+
+        # Validation stricte (pas seulement "@")
+        # - non vide
+        # - contient exactement un "@"
+        # - pas d'espaces
+        # - a un domaine avec un "."
+        if (
+            not email
+            or " " in email
+            or email.count("@") != 1
+            or "." not in email.split("@", 1)[1]
+        ):
+            flash("Un email admin valide est obligatoire.", "error")
+            return redirect(url_for("setup_admin"))
+
+        # Mot de passe strict
+        if len(password) < 8:
+            flash("Mot de passe trop court (8 caractères minimum).", "error")
+            return redirect(url_for("setup_admin"))
+
+        pwd_hash = generate_password_hash(password)
+
+        db.execute(
+            "UPDATE settings SET admin_email = ?, admin_password_hash = ?, auth_enabled = 1 WHERE id = 1",
+            (email, pwd_hash),
+        )
+
+        session.clear()
+        session["vodum_logged_in"] = True
+        session["vodum_admin_email"] = email
+        session.permanent = True
+
+        # ensuite seulement, si aucun serveur -> page serveurs
+        row = db.query_one("SELECT COUNT(*) AS cnt FROM servers")
+        if row and int(row["cnt"] or 0) == 0:
+            return redirect(url_for("servers_list"))
+
+        return redirect(url_for("dashboard"))
+
+    @app.route("/login", methods=["GET"])
     def login():
         db = get_db()
         s = db.query_one("SELECT admin_email, admin_password_hash FROM settings WHERE id = 1")
@@ -253,44 +262,6 @@ def register(app):
 
         if not (s.get("admin_password_hash") or "").strip():
             return redirect(url_for("setup_admin"))
-
-        if request.method == "POST":
-            now = _utcnow()
-            email = (request.form.get("email") or "").strip().lower()
-            password = request.form.get("password") or ""
-            client_ip = _client_ip()
-
-            locked_ip, remaining_ip = _is_login_locked(db, "ip", client_ip, now)
-            if locked_ip:
-                return _login_locked_response(email, client_ip, remaining_ip)
-
-            if email:
-                locked_email, remaining_email = _is_login_locked(db, "email", email, now)
-                if locked_email:
-                    return _login_locked_response(email, client_ip, remaining_email)
-
-            expected_email = (s.get("admin_email") or "").strip().lower()
-            if not email or email != expected_email:
-                _login_failed(db, email, client_ip, "bad_email")
-                flash("Email ou mot de passe incorrect.", "error")
-                return redirect(url_for("login"))
-
-            if not check_password_hash(s["admin_password_hash"], password):
-                _login_failed(db, email, client_ip, "bad_password")
-                flash("Email ou mot de passe incorrect.", "error")
-                return redirect(url_for("login"))
-
-            _reset_failed_login(db, "ip", client_ip)
-            _reset_failed_login(db, "email", email)
-
-            session.clear()
-            session["vodum_logged_in"] = True
-            session["vodum_admin_email"] = email
-            session.permanent = True
-
-            next_url = request.args.get("next") or url_for("dashboard")
-            auth_logger.info("AUTH login ok email=%s ip=%s ua=%s", email, client_ip, request.user_agent.string)
-            return redirect(next_url)
 
         reset_host_example = os.environ.get(
             "VODUM_RESET_FILE_EXAMPLE",
@@ -303,6 +274,52 @@ def register(app):
             reset_available=os.path.exists(RESET_FILE),
             reset_cmd=reset_cmd,
         )
+
+    @app.route("/login/submit", methods=["POST"])
+    def login_submit():
+        db = get_db()
+        s = db.query_one("SELECT admin_email, admin_password_hash FROM settings WHERE id = 1")
+        s = dict(s) if s else {"admin_email": "", "admin_password_hash": None}
+
+        if not (s.get("admin_password_hash") or "").strip():
+            return redirect(url_for("setup_admin"))
+
+        now = _utcnow()
+        email = (request.form.get("email") or "").strip().lower()
+        password = request.form.get("password") or ""
+        client_ip = _client_ip()
+
+        locked_ip, remaining_ip = _is_login_locked(db, "ip", client_ip, now)
+        if locked_ip:
+            return _login_locked_response(email, client_ip, remaining_ip)
+
+        if email:
+            locked_email, remaining_email = _is_login_locked(db, "email", email, now)
+            if locked_email:
+                return _login_locked_response(email, client_ip, remaining_email)
+
+        expected_email = (s.get("admin_email") or "").strip().lower()
+        if not email or email != expected_email:
+            _login_failed(db, email, client_ip, "bad_email")
+            flash("Email ou mot de passe incorrect.", "error")
+            return redirect(url_for("login"))
+
+        if not check_password_hash(s["admin_password_hash"], password):
+            _login_failed(db, email, client_ip, "bad_password")
+            flash("Email ou mot de passe incorrect.", "error")
+            return redirect(url_for("login"))
+
+        _reset_failed_login(db, "ip", client_ip)
+        _reset_failed_login(db, "email", email)
+
+        session.clear()
+        session["vodum_logged_in"] = True
+        session["vodum_admin_email"] = email
+        session.permanent = True
+
+        next_url = request.args.get("next") or url_for("dashboard")
+        auth_logger.info("AUTH login ok email=%s ip=%s ua=%s", email, client_ip, request.user_agent.string)
+        return redirect(next_url)
 
     @app.post("/logout")
     def logout():

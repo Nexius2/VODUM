@@ -1174,5 +1174,18 @@
 "bulk_remove_modal_title": "Rimuovi l’accesso alle librerie selezionate",
 "bulk_remove_modal_subtitle": "Questa azione verrà applicata a tutti gli utenti di questo server, tranne il proprietario.",
 "bulk_remove_modal_warning": "Attenzione: questa azione aggiorna prima il database e poi avvia la sincronizzazione Plex.",
-"selected_libraries": "Librerie selezionate"
+"selected_libraries": "Librerie selezionate",
+  "delete_user": "Delete user",
+  "user_deleted": "User deleted successfully",
+  "delete_user_failed": "Failed to delete user",
+  
+  "delete_user_title": "Delete this user?",
+  "delete_user_confirm_cta": "Yes, delete locally",
+  "delete_user_check_loading": "Checking linked platforms...",
+  "delete_user_check_error": "Unable to verify linked platforms. Local deletion is still possible, but the user may come back after the next sync.",
+  "delete_user_summary_no_links": "No active Plex/Jellyfin link was found for this user in the currently configured servers.",
+  "delete_user_summary_links_found": "This user is still linked to one or more platform accounts.",
+  "delete_user_summary_recreated": "Warning: this user still seems to exist on an active platform, or the verification could not fully confirm removal. If you only delete the user from Vodum, they may return after the next sync.",
+  "delete_user_summary_not_recreated": "No active platform account was found during verification. Local deletion is unlikely to come back on the next sync.",
+  "please_wait": "Please wait..."
 }

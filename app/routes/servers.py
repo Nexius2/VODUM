@@ -19,6 +19,61 @@ SERVER_DELETE_IN_PROGRESS = set()
 
 DELETE_BATCH_SIZE = 1000
 
+def _get_preferred_plex_media_user_id(db, vodum_user_id: int, server_id: int):
+    row = db.query_one(
+        """
+        SELECT id
+        FROM media_users
+        WHERE vodum_user_id = ?
+          AND server_id = ?
+          AND type = 'plex'
+        ORDER BY
+            CASE WHEN LOWER(COALESCE(role, '')) = 'owner' THEN 1 ELSE 0 END ASC,
+            CASE WHEN TRIM(COALESCE(accepted_at, '')) <> '' THEN 0 ELSE 1 END ASC,
+            CASE WHEN TRIM(COALESCE(external_user_id, '')) <> '' THEN 0 ELSE 1 END ASC,
+            CASE WHEN LOWER(COALESCE(type, '')) = 'unfriend' THEN 1 ELSE 0 END ASC,
+            id ASC
+        LIMIT 1
+        """,
+        (vodum_user_id, server_id),
+    )
+    return int(row["id"]) if row and row["id"] is not None else None
+
+
+def _insert_plex_media_job(
+    db,
+    *,
+    action: str,
+    vodum_user_id: int,
+    server_id: int,
+    dedupe_key: str,
+    payload: dict | None = None,
+):
+    cur = db.execute(
+        """
+        INSERT OR IGNORE INTO media_jobs(
+            provider, action,
+            vodum_user_id, server_id, library_id,
+            payload_json,
+            processed, success, attempts,
+            dedupe_key
+        )
+        VALUES(
+            'plex', ?, ?, ?, NULL,
+            ?,
+            0, 0, 0,
+            ?
+        )
+        """,
+        (
+            action,
+            vodum_user_id,
+            server_id,
+            json.dumps(payload or {}, ensure_ascii=False),
+            dedupe_key,
+        ),
+    )
+    return getattr(cur, "rowcount", 0) > 0
 
 def _delete_in_chunks(conn, sql, params=(), batch_size=DELETE_BATCH_SIZE):
     total = 0
@@ -323,29 +378,28 @@ def register(app):
         created = 0
         for r in vodum_users:
             vodum_user_id = int(r["vodum_user_id"])
-            dedupe_key = f"plex:sync:server={server_id}:vodum_user={vodum_user_id}"
+            preferred_media_user_id = _get_preferred_plex_media_user_id(db, vodum_user_id, server_id)
 
-            cur = db.execute(
-                """
-                INSERT OR IGNORE INTO media_jobs(
-                    provider, action,
-                    vodum_user_id, server_id, library_id,
-                    payload_json,
-                    processed, success, attempts,
-                    dedupe_key
-                )
-                VALUES (
-                    'plex', 'sync',
-                    ?, ?, NULL,
-                    NULL,
-                    0, 0, 0,
-                    ?
-                )
-                """,
-                (vodum_user_id, server_id, dedupe_key),
+            dedupe_key = (
+                f"plex:sync:server={server_id}:"
+                f"media_user={preferred_media_user_id or 'none'}:server_sync"
             )
 
-            if getattr(cur, "rowcount", 0) > 0:
+            payload = {
+                "reason": "server_sync",
+                "preferred_media_user_id": preferred_media_user_id,
+            }
+
+            inserted = _insert_plex_media_job(
+                db,
+                action="sync",
+                vodum_user_id=vodum_user_id,
+                server_id=server_id,
+                dedupe_key=dedupe_key,
+                payload=payload,
+            )
+
+            if inserted:
                 created += 1
 
         # --------------------------------------------------
@@ -884,24 +938,8 @@ def register(app):
         })
 
         for vodum_user_id in vodum_user_ids:
-            preferred_media_user = db.query_one(
-                """
-                SELECT id
-                FROM media_users
-                WHERE vodum_user_id = ?
-                  AND server_id = ?
-                ORDER BY
-                    CASE WHEN LOWER(COALESCE(role, '')) = 'owner' THEN 1 ELSE 0 END ASC,
-                    CASE WHEN TRIM(COALESCE(accepted_at, '')) <> '' THEN 0 ELSE 1 END ASC,
-                    CASE WHEN TRIM(COALESCE(external_user_id, '')) <> '' THEN 0 ELSE 1 END ASC,
-                    CASE WHEN LOWER(COALESCE(type, '')) = 'unfriend' THEN 1 ELSE 0 END ASC,
-                    id ASC
-                LIMIT 1
-                """,
-                (vodum_user_id, server_id),
-            )
+            preferred_media_user_id = _get_preferred_plex_media_user_id(db, vodum_user_id, server_id)
 
-            preferred_media_user_id = int(preferred_media_user["id"]) if preferred_media_user else None
             dedupe_key = (
                 f"plex:sync:server={server_id}:"
                 f"media_user={preferred_media_user_id or 'none'}:bulk_grant"
@@ -913,24 +951,13 @@ def register(app):
                 "preferred_media_user_id": preferred_media_user_id,
             }
 
-            db.execute(
-                """
-                INSERT OR IGNORE INTO media_jobs(
-                    provider, action,
-                    vodum_user_id, server_id, library_id,
-                    payload_json,
-                    processed, success, attempts,
-                    dedupe_key
-                )
-                VALUES(
-                    'plex', 'sync',
-                    ?, ?, NULL,
-                    ?,
-                    0, 0, 0,
-                    ?
-                )
-                """,
-                (vodum_user_id, server_id, json.dumps(payload), dedupe_key),
+            _insert_plex_media_job(
+                db,
+                action="sync",
+                vodum_user_id=vodum_user_id,
+                server_id=server_id,
+                dedupe_key=dedupe_key,
+                payload=payload,
             )
 
         # --------------------------------------------------
@@ -1067,27 +1094,9 @@ def register(app):
         })
 
         for vodum_user_id in vodum_user_ids:
-            media_user = db.query_one(
-                """
-                SELECT id
-                FROM media_users
-                WHERE server_id = ?
-                  AND vodum_user_id = ?
-                  AND type = 'plex'
-                ORDER BY
-                    CASE WHEN LOWER(COALESCE(role, '')) = 'owner' THEN 1 ELSE 0 END ASC,
-                    CASE WHEN TRIM(COALESCE(accepted_at, '')) <> '' THEN 0 ELSE 1 END ASC,
-                    CASE WHEN TRIM(COALESCE(external_user_id, '')) <> '' THEN 0 ELSE 1 END ASC,
-                    CASE WHEN LOWER(COALESCE(type, '')) = 'unfriend' THEN 1 ELSE 0 END ASC,
-                    id ASC
-                LIMIT 1
-                """,
-                (server_id, vodum_user_id),
-            )
-            if not media_user:
+            preferred_media_user_id = _get_preferred_plex_media_user_id(db, vodum_user_id, server_id)
+            if not preferred_media_user_id:
                 continue
-
-            preferred_media_user_id = int(media_user["id"])
 
             remaining = db.query_one(
                 """
@@ -1118,23 +1127,13 @@ def register(app):
                 "preferred_media_user_id": preferred_media_user_id,
             }
 
-            db.execute(
-                """
-                INSERT OR IGNORE INTO media_jobs(
-                    provider, action,
-                    vodum_user_id, server_id, library_id,
-                    payload_json,
-                    processed, success, attempts,
-                    dedupe_key
-                )
-                VALUES(
-                    'plex', ?, ?, ?, NULL,
-                    ?,
-                    0, 0, 0,
-                    ?
-                )
-                """,
-                (action, vodum_user_id, server_id, json.dumps(payload), dedupe_key),
+            _insert_plex_media_job(
+                db,
+                action=action,
+                vodum_user_id=vodum_user_id,
+                server_id=server_id,
+                dedupe_key=dedupe_key,
+                payload=payload,
             )
 
         # --------------------------------------------------

@@ -46,72 +46,82 @@
 {% if sessions and sessions|length > 0 %}
     <div class="space-y-2">
         {% for s in sessions %}
-            <div class="flex items-start gap-3 rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2">
-
-                {% if s.poster_url %}
+            <div class="relative overflow-hidden rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2">
+                {% if s.backdrop_url %}
                     <img
-                        src="{{ s.poster_url }}"
-                        alt="{{ s.title or s.grandparent_title or 'Poster' }}"
-                        class="w-10 h-14 rounded-lg object-cover border border-slate-700/70 shrink-0"
-                    />
+                        src="{{ s.backdrop_url }}"
+                        alt=""
+                        class="absolute inset-0 h-full w-full object-cover opacity-20 pointer-events-none"
+                        loading="lazy"
+                    >
+                    <div class="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-950/80 to-slate-950/95"></div>
                 {% endif %}
 
-                <div class="min-w-0 flex-1">
-                    <div class="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 min-w-0">
+                <div class="relative z-10 flex items-start gap-3">
+                    {% if s.poster_url %}
+                        <img
+                            src="{{ s.poster_url }}"
+                            alt="{{ s.title or s.grandparent_title or 'Poster' }}"
+                            class="w-10 h-14 rounded-lg object-cover border border-slate-700/70 shrink-0"
+                        />
+                    {% endif %}
 
-                        <div class="min-w-0">
-                            <div class="flex flex-wrap gap-2">
-                                {% set p = (s.provider or '')|lower %}
-                                <span class="text-[10px] px-2 py-0.5 rounded-full border
-                                    {% if 'plex' in p %}
-                                        border-orange-500 text-orange-300 bg-orange-500/10
-                                    {% elif 'jellyfin' in p %}
-                                        border-blue-500 text-blue-300 bg-blue-500/10
+                    <div class="min-w-0 flex-1">
+                        <div class="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 min-w-0">
+
+                            <div class="min-w-0">
+                                <div class="flex flex-wrap gap-2">
+                                    {% set p = (s.provider or '')|lower %}
+                                    <span class="text-[10px] px-2 py-0.5 rounded-full border
+                                        {% if 'plex' in p %}
+                                            border-orange-500 text-orange-300 bg-orange-500/10
+                                        {% elif 'jellyfin' in p %}
+                                            border-blue-500 text-blue-300 bg-blue-500/10
+                                        {% else %}
+                                            border-slate-700 text-slate-200 bg-slate-900/30
+                                        {% endif %}">
+                                        {{ s.provider }}
+                                    </span>
+
+                                    {% if s.is_transcode %}
+                                        <span class="text-[10px] px-2 py-0.5 rounded-full border border-orange-500 text-orange-300">Transcoding</span>
                                     {% else %}
-                                        border-slate-700 text-slate-200 bg-slate-900/30
-                                    {% endif %}">
-                                    {{ s.provider }}
-                                </span>
+                                        <span class="text-[10px] px-2 py-0.5 rounded-full border border-emerald-600 text-emerald-300">Direct Play</span>
+                                    {% endif %}
 
-                                {% if s.is_transcode %}
-                                    <span class="text-[10px] px-2 py-0.5 rounded-full border border-orange-500 text-orange-300">Transcoding</span>
-                                {% else %}
-                                    <span class="text-[10px] px-2 py-0.5 rounded-full border border-emerald-600 text-emerald-300">Direct Play</span>
-                                {% endif %}
-
-                                <span class="text-[10px] px-2 py-0.5 rounded-full border border-slate-700 text-slate-200">
-                                    {{ s.server_name }}
-                                </span>
+                                    <span class="text-[10px] px-2 py-0.5 rounded-full border border-slate-700 text-slate-200">
+                                        {{ s.server_name }}
+                                    </span>
+                                </div>
                             </div>
-                        </div>
 
-                        <div class="text-[10px] text-slate-500 whitespace-nowrap justify-self-end pt-0.5">
-                            {{ t("last_check") }} : {{ s.last_seen_at|tz }}
-                        </div>
+                            <div class="text-[10px] text-slate-500 whitespace-nowrap justify-self-end pt-0.5">
+                                {{ t("last_check") }} : {{ s.last_seen_at|tz }}
+                            </div>
 
-                        <div class="col-span-2 text-sm font-semibold truncate min-w-0">
-                            {% if (s.media_type or '')|lower in ['episode', 'tv', 'tv_episode'] or s.episode_code %}
-                                {{ s.grandparent_title or "-" }}
-                                {% if s.episode_code %}
-                                    <span class="text-slate-400"> · {{ s.episode_code }}</span>
+                            <div class="col-span-2 text-sm font-semibold truncate min-w-0">
+                                {% if (s.media_type or '')|lower in ['episode', 'tv', 'tv_episode'] or s.episode_code %}
+                                    {{ s.grandparent_title or "-" }}
+                                    {% if s.episode_code %}
+                                        <span class="text-slate-400"> · {{ s.episode_code }}</span>
+                                    {% endif %}
+                                    {% if s.title %}
+                                        <span class="text-slate-400"> ·</span> {{ s.title }}
+                                    {% endif %}
+                                {% else %}
+                                    {{ s.title or "-" }}
                                 {% endif %}
-                                {% if s.title %}
-                                    <span class="text-slate-400"> ·</span> {{ s.title }}
-                                {% endif %}
-                            {% else %}
-                                {{ s.title or "-" }}
-                            {% endif %}
-                        </div>
+                            </div>
 
-                        <div class="col-span-2 text-xs text-slate-400 truncate min-w-0">
-                            User: <span class="text-slate-200">{{ s.username or "-" }}</span>
-                            · State: <span class="text-slate-200">{{ s.state or "-" }}</span>
-                            · Client: <span class="text-slate-200">{{ s.client_name or "-" }}</span>
-                        </div>
+                            <div class="col-span-2 text-xs text-slate-400 truncate min-w-0">
+                                User: <span class="text-slate-200">{{ s.username or "-" }}</span>
+                                · State: <span class="text-slate-200">{{ s.state or "-" }}</span>
+                                · Client: <span class="text-slate-200">{{ s.client_name or "-" }}</span>
+                            </div>
 
+                        </div>
                     </div>
                 </div>
-
             </div>
         {% endfor %}
     </div>

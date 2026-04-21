@@ -166,15 +166,22 @@ def init_i18n(app, get_db: Callable[[], object]) -> None:
         settings = dict(row) if row else {}
 
         lang = _resolve_active_language(settings)
-        session["lang"] = lang
 
         return {
             "t": get_translator(settings),
             "settings": settings,
+            "active_lang": lang,
         }
 
-    @app.route("/set_language/<lang>")
-    def set_language(lang):
+    @app.route("/set_language", methods=["POST"])
+    def set_language():
+        lang = (request.form.get("lang") or "").strip()
+        next_url = (
+            request.form.get("next")
+            or request.referrer
+            or url_for("dashboard")
+        )
+
         available_langs = tuple(get_available_languages().keys())
 
         if lang in available_langs:
@@ -182,4 +189,4 @@ def init_i18n(app, get_db: Callable[[], object]) -> None:
         else:
             get_logger("i18n").warning(f"[i18n] Tentative de langue invalide: {lang}")
 
-        return redirect(request.referrer or url_for("dashboard"))
+        return redirect(next_url)

@@ -30,6 +30,11 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Set, Tuple
+from db_manager import DBManager
+import argparse
+from logging_utils import get_logger
+from email_sender import send_email
+from core.monitoring.artwork import extract_artwork_refs
 
 # -------------------------
 # CONFIG (override via env)
@@ -721,6 +726,7 @@ def import_tautulli_db(
           started_at, stopped_at,
           duration_ms, watch_ms,
           client_name, device, raw_json, ip, client_product,
+          poster_ref_json, backdrop_ref_json,
           library_section_id
         )
         VALUES (
@@ -730,6 +736,7 @@ def import_tautulli_db(
           ?, ?,
           ?, ?,
           ?, ?, ?, ?, ?,
+          ?, ?,
           ?
         )
         """
@@ -856,28 +863,40 @@ def import_tautulli_db(
 
             tautulli_reference_id = str(row["tautulli_reference_id"] or "").strip()
 
+            artwork_row = {
+                "provider": "plex",
+                "media_type": media_type,
+                "media_key": media_key,
+                "raw_json": raw_json,
+            }
+            artwork_refs = extract_artwork_refs(artwork_row)
+            poster_ref_json = artwork_refs.get("poster_ref_json")
+            backdrop_ref_json = artwork_refs.get("backdrop_ref_json")
+
             batch.append(
                 (
-                    int(vodum_server_id),
+                    server_id,
                     "plex",
-                    (f"tautulli:{tautulli_reference_id}" if tautulli_reference_id else None),
+                    session_key,
                     media_key,
                     external_user_id,
-                    int(media_user_id),
-                    str(media_type),
-                    str(title),
-                    str(grandparent_title),
-                    str(parent_title),
+                    media_user_id,
+                    media_type,
+                    title,
+                    grandparent_title,
+                    parent_title,
                     started_at,
                     stopped_at,
-                    int(duration_ms),
-                    int(watch_ms),
+                    duration_ms,
+                    watch_ms,
                     client_name,
                     device,
                     raw_json,
                     ip,
                     client_product,
-                    section_id,   # IMPORTANT: vrai section_id Plex, pas l'id interne de libraries
+                    poster_ref_json,
+                    backdrop_ref_json,
+                    section_id,
                 )
             )
 
@@ -904,8 +923,7 @@ def run(task_id, db):
     - persist stats_json + status file for UI (last job)
     - delete uploaded file after each job
     """
-    from logging_utils import get_logger
-    from email_sender import send_email
+
 
     logger = get_logger("task_import_tautulli")
 
@@ -1072,9 +1090,6 @@ def run(task_id, db):
 
 
 def main():
-    from db_manager import DBManager
-    import argparse
-    from logging_utils import get_logger
 
     logger = get_logger("task_import_tautulli_cli")
 

@@ -3,21 +3,23 @@
 {% if top_movies_30d and top_movies_30d|length > 0 %}
   <div class="space-y-3">
     {% for c in top_movies_30d[:4] %}
-      <div class="relative overflow-hidden rounded-xl border border-slate-800 min-h-[88px] bg-slate-950/70">
-        {% if c.backdrop_url %}
-          <div
-            class="absolute inset-0 bg-center bg-cover"
-            style="background-image: url('{{ c.backdrop_url }}');"
-          ></div>
-          <div class="absolute inset-0 bg-gradient-to-r from-slate-950/40 via-slate-950/10 to-slate-950/40"></div>
-          <div class="absolute inset-0 bg-gradient-to-b from-transparent via-slate-950/20 to-slate-950/75"></div>
-        {% else %}
-          <div class="absolute inset-0 bg-slate-800"></div>
-        {% endif %}
+      <div class="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/70">
+        <div class="flex items-center justify-between gap-4 px-4 py-3">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-12 h-16 rounded-lg overflow-hidden bg-slate-800 shrink-0">
+              {% if c.poster_url %}
+                <img
+                  src="{{ c.poster_url }}"
+                  alt="{{ c.title or '-' }}"
+                  class="w-full h-full object-cover"
+                  loading="lazy"
+                >
+              {% endif %}
+            </div>
 
-        <div class="relative z-10 flex items-center justify-between gap-4 px-4 py-3">
-          <div class="text-sm min-w-0">
-            <div class="font-semibold truncate text-white">{{ c.title or "-" }}</div>
+            <div class="text-sm min-w-0">
+              <div class="font-semibold truncate text-white">{{ c.title or "-" }}</div>
+            </div>
           </div>
 
           <div class="text-xs text-slate-300 text-right shrink-0">

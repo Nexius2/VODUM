@@ -49,6 +49,84 @@ def _required_channels(db, settings: dict, user: dict) -> list[str]:
     return channels
 
 
+def _send_test_campaign(db, settings: dict, campaign: dict) -> bool:
+    admin_email = (settings.get("admin_email") or "").strip()
+    campaign_id = int(campaign["id"])
+
+    if not admin_email:
+        db.execute(
+            """
+            UPDATE comm_campaigns
+            SET status='error',
+                sent_at=CURRENT_TIMESTAMP,
+                updated_at=CURRENT_TIMESTAMP
+            WHERE id=?
+            """,
+            (campaign_id,),
+        )
+        return False
+
+    attachments = fetch_campaign_attachments(db, campaign_id)
+
+    fake_user = {
+        "id": None,
+        "username": "admin",
+        "email": admin_email,
+        "second_email": None,
+        "discord_user_id": None,
+        "notifications_order_override": None,
+    }
+
+    attempts = send_to_user(
+        db=db,
+        settings=settings,
+        user=fake_user,
+        subject=campaign.get("subject") or "",
+        body=campaign.get("body") or "",
+        attachments=attachments,
+    )
+
+    for att in attempts:
+        record_history(
+            db=db,
+            kind="campaign",
+            template_id=None,
+            campaign_id=campaign_id,
+            user_id=None,
+            attempt=att,
+            meta={
+                "is_test": True,
+                "campaign_id": campaign_id,
+                "campaign_name": campaign.get("name"),
+            },
+        )
+
+    mode = _send_mode(settings)
+    required_channels = _required_channels(db, settings, fake_user)
+
+    if mode == "all":
+        sent_channels = {
+            (att.get("channel") or "").strip()
+            for att in attempts
+            if att.get("ok")
+        }
+        ok = all(ch in sent_channels for ch in required_channels) if required_channels else True
+    else:
+        ok = any(att.get("ok") for att in attempts)
+
+    db.execute(
+        """
+        UPDATE comm_campaigns
+        SET status=?,
+            sent_at=CURRENT_TIMESTAMP,
+            updated_at=CURRENT_TIMESTAMP
+        WHERE id=?
+        """,
+        ("finished" if ok else "error", campaign_id),
+    )
+    return ok
+
+
 def _apply_campaign_status(db, campaign_ids: set[int]) -> None:
     for campaign_id in campaign_ids:
         row = db.query_one(
@@ -107,6 +185,18 @@ def run(task_id: int, db):
         settings = db.query_one("SELECT * FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
 
+        test_campaign_rows = db.query(
+            """
+            SELECT id, name, subject, body, server_id, status, is_test
+            FROM comm_campaigns
+            WHERE is_test = 1
+              AND status = 'pending'
+            ORDER BY id ASC
+            LIMIT 20
+            """
+        )
+        test_campaigns = [dict(r) for r in (test_campaign_rows or [])]
+
         rows = db.query(
             """
             SELECT
@@ -144,7 +234,8 @@ def run(task_id: int, db):
             """
         )
         due = [dict(r) for r in (rows or [])]
-        if not due:
+
+        if not test_campaigns and not due:
             task_logs(task_id, "info", "No queued communication campaigns")
             return {"status": "idle", "processed": 0}
 
@@ -152,6 +243,27 @@ def run(task_id: int, db):
         success = 0
         failed = 0
         touched_campaign_ids: set[int] = set()
+
+        for campaign in test_campaigns:
+            processed += 1
+            campaign_id = int(campaign["id"])
+            touched_campaign_ids.add(campaign_id)
+
+            db.execute(
+                """
+                UPDATE comm_campaigns
+                SET status='sending',
+                    updated_at=CURRENT_TIMESTAMP
+                WHERE id=?
+                """,
+                (campaign_id,),
+            )
+
+            ok = _send_test_campaign(db, settings, campaign)
+            if ok:
+                success += 1
+            else:
+                failed += 1
 
         for row in due:
             processed += 1

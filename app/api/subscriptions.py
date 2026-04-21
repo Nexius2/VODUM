@@ -6,7 +6,7 @@ import json
 from db_manager import DBManager
 from logging_utils import get_logger
 from tasks.update_user_status import compute_status
-from tasks_engine import run_task_by_name
+from tasks_engine import enable_and_run_task_by_name
 from communications_engine import select_comm_template_for_user, schedule_template_notification
 
 log = get_logger("api.subscriptions")
@@ -46,6 +46,147 @@ def _remove_expired_subscription_policy_for_user(db, user_id: int) -> int:
 
     return removed
 
+def _cleanup_pending_plex_jobs_for_user(db, user_id: int) -> int:
+    """
+    Supprime les anciens jobs Plex encore en file / en cours
+    avant de recréer un vrai sync complet après réactivation.
+    """
+    row = db.query_one(
+        """
+        SELECT COUNT(*) AS c
+        FROM media_jobs
+        WHERE vodum_user_id = ?
+          AND provider = 'plex'
+          AND action IN ('grant', 'revoke', 'sync')
+          AND status IN ('queued', 'running')
+        """,
+        (user_id,),
+    )
+
+    removed = int(row["c"] or 0) if row else 0
+
+    if removed:
+        db.execute(
+            """
+            DELETE FROM media_jobs
+            WHERE vodum_user_id = ?
+              AND provider = 'plex'
+              AND action IN ('grant', 'revoke', 'sync')
+              AND status IN ('queued', 'running')
+            """,
+            (user_id,),
+        )
+
+    log.info(f"[JOB CLEANUP] removed {removed} jobs for user_id={user_id}")
+    return removed
+
+
+def _queue_full_plex_sync_after_reactivation(db, user_id: int, old_status, new_status, reason="reactivation") -> int:
+    """
+    Crée un vrai job Plex 'sync' par serveur Plex lié à l'utilisateur,
+    avec preferred_media_user_id pour forcer le bon media_user.
+    """
+    rows = db.query(
+        """
+        SELECT
+            mu.server_id,
+            mu.id AS preferred_media_user_id
+        FROM media_users mu
+        JOIN servers s ON s.id = mu.server_id
+        WHERE mu.vodum_user_id = ?
+          AND s.type = 'plex'
+          AND mu.type = 'plex'
+        ORDER BY
+            mu.server_id ASC,
+            CASE WHEN LOWER(COALESCE(mu.role, '')) = 'owner' THEN 1 ELSE 0 END ASC,
+            CASE WHEN TRIM(COALESCE(mu.accepted_at, '')) <> '' THEN 0 ELSE 1 END ASC,
+            CASE WHEN TRIM(COALESCE(mu.external_user_id, '')) <> '' THEN 0 ELSE 1 END ASC,
+            CASE WHEN LOWER(COALESCE(mu.type, '')) = 'unfriend' THEN 1 ELSE 0 END ASC,
+            mu.id ASC
+        """,
+        (user_id,),
+    ) or []
+
+    queued = 0
+    seen_servers = set()
+
+    for row in rows:
+        server_id = int(row["server_id"])
+        if server_id in seen_servers:
+            continue
+        seen_servers.add(server_id)
+
+        preferred_media_user_id = (
+            int(row["preferred_media_user_id"])
+            if row["preferred_media_user_id"] is not None
+            else None
+        )
+
+        dedupe_key = (
+            f"plex:sync:server={server_id}:"
+            f"media_user={preferred_media_user_id or 'none'}:reactivation"
+        )
+
+        already_active = db.query_one(
+            """
+            SELECT 1
+            FROM media_jobs
+            WHERE dedupe_key = ?
+              AND status IN ('queued', 'running')
+            LIMIT 1
+            """,
+            (dedupe_key,),
+        )
+
+        payload = {
+            "reason": reason,
+            "reactivated_from_expired": True,
+            "old_status": old_status,
+            "new_status": new_status,
+            "preferred_media_user_id": preferred_media_user_id,
+        }
+
+        db.execute(
+            """
+            INSERT OR IGNORE INTO media_jobs(
+                provider, action,
+                vodum_user_id, server_id, library_id,
+                payload_json,
+                dedupe_key
+            )
+            VALUES(
+                'plex', 'sync',
+                ?, ?, NULL,
+                ?,
+                ?
+            )
+            """,
+            (
+                user_id,
+                server_id,
+                json.dumps(payload, ensure_ascii=False),
+                dedupe_key,
+            ),
+        )
+
+        if not already_active:
+            queued += 1
+            log.info(
+                f"[MEDIA JOB CREATED] provider=plex action=sync "
+                f"user_id={user_id} server_id={server_id} "
+                f"preferred_media_user_id={preferred_media_user_id}"
+            )
+
+    if queued:
+        try:
+            enable_and_run_task_by_name("apply_plex_access_updates")
+        except Exception:
+            log.warning(
+                f"[REACTIVATION] Failed to queue apply_plex_access_updates for user_id={user_id}",
+                exc_info=True
+            )
+
+    return queued
 
 def update_user_expiration(user_id, new_expiration_date, reason="manual", db=None):
     """
@@ -129,6 +270,30 @@ def update_user_expiration(user_id, new_expiration_date, reason="manual", db=Non
         log.info(
             f"[USER #{user_id}] Expiration updated ({row['expiration_date']} -> {new_expiration_date}) "
             f"| status unchanged ({old_status}) | reason={reason}"
+        )
+
+    effective_status = new_status if new_status is not None else old_status
+    was_expired = (old_status or "").strip().lower() == "expired"
+    is_reactivated = (
+        was_expired
+        and (
+            (effective_status or "").strip().lower() != "expired"
+            or new_exp >= date.today()
+        )
+    )
+
+    if is_reactivated:
+        _cleanup_pending_plex_jobs_for_user(db, int(user_id))
+        queued_sync_jobs = _queue_full_plex_sync_after_reactivation(
+            db,
+            int(user_id),
+            old_status=old_status,
+            new_status=effective_status,
+            reason=reason,
+        )
+        log.info(
+            f"[REACTIVATION] user_id={user_id} old_status={old_status} "
+            f"new_status={effective_status} queued_sync_jobs={queued_sync_jobs}"
         )
 
     # Si on renouvelle (date future), on supprime la policy système "expired_subscription"
@@ -282,7 +447,7 @@ def update_user_expiration(user_id, new_expiration_date, reason="manual", db=Non
                         f"| {old_exp_iso} -> {new_exp_iso} | delta={delta_days} | reason={reason}"
                     )
 
-                    queued_now = run_task_by_name("send_expiration_emails")
+                    queued_now = enable_and_run_task_by_name("send_expiration_emails")
                     if queued_now:
                         log.info(
                             f"[USER #{user_id}] send_expiration_emails enqueued immediately "
@@ -291,7 +456,7 @@ def update_user_expiration(user_id, new_expiration_date, reason="manual", db=Non
                     else:
                         log.warning(
                             f"[USER #{user_id}] expiration_change queued but send_expiration_emails "
-                            f"could not be enqueued immediately (task disabled or cron disabled)"
+                            f"could not be enqueued immediately"
                         )
                 else:
                     log.info(

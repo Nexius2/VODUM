@@ -5,7 +5,11 @@ from typing import Optional
 from flask import (
     render_template, request, url_for, make_response,
 )
-
+from core.monitoring.artwork import (
+    build_history_poster_url,
+    build_history_backdrop_url,
+    enrich_live_session_artwork,
+)
 from logging_utils import get_logger
 from web.helpers import get_db
 
@@ -79,99 +83,36 @@ def _apply_server_resource_stats(rows, resource_by_server, server_id_key="server
         row["server_resource_available"] = bool(resource.get("server_resource_available"))
         row["server_resource_note"] = resource.get("server_resource_note")
 
-def _build_history_poster_url(row):
+
+
+def _build_history_poster_url(row, db=None):
+    return build_history_poster_url(row, db)
+
+
+def _build_history_backdrop_url(row, db=None):
+    return build_history_backdrop_url(row, db)
+
+
+def _build_overview_movie_poster_url(row, db=None):
     row = dict(row or {})
 
-    server_id = int(row.get("server_id") or 0)
-    if server_id <= 0:
-        return None
-
-    provider = (row.get("provider") or "").lower()
-    raw = row.get("raw_json")
-
-    if provider != "plex":
-        return None
+    provider = (row.get("provider") or "").strip().lower()
 
     try:
-        data = json.loads(raw) if raw else {}
+        server_id = int(row.get("server_id") or 0)
     except Exception:
-        data = {}
+        server_id = 0
 
-    attrs = data.get("VideoOrTrack") or {}
+    media_key = str(row.get("media_key") or "").strip()
 
-    media_type = (row.get("media_type") or "").lower()
-
-    is_series = media_type in (
-        "serie", "series", "show", "episode", "season", "tv"
-    )
-
-    # 🔥 REGLE UNIQUE
-    if is_series:
-        rating_key = (
-            attrs.get("grandparentRatingKey")
-            or attrs.get("parentRatingKey")
-        )
-    else:
-        rating_key = (
-            attrs.get("ratingKey")
-            or row.get("media_key")
+    if provider == "plex" and server_id > 0 and media_key:
+        return url_for(
+            "api_monitoring_poster",
+            server_id=server_id,
+            path=f"/library/metadata/{media_key}/thumb",
         )
 
-    if not rating_key:
-        return None
-
-    return url_for(
-        "api_monitoring_poster",
-        server_id=server_id,
-        path=f"/library/metadata/{rating_key}/thumb",
-    )
-
-def _build_history_backdrop_url(row):
-    row = dict(row or {})
-
-    server_id = int(row.get("server_id") or 0)
-    if server_id <= 0:
-        return None
-
-    provider = (row.get("provider") or "").lower()
-    raw = row.get("raw_json")
-
-    if provider != "plex":
-        return None
-
-    try:
-        data = json.loads(raw) if raw else {}
-    except Exception:
-        data = {}
-
-    attrs = data.get("VideoOrTrack") or {}
-
-    media_type = (row.get("media_type") or "").lower()
-
-    is_series = media_type in (
-        "serie", "series", "show", "episode", "season", "tv"
-    )
-
-    # 🔥 REGLE UNIQUE
-    if is_series:
-        rating_key = (
-            attrs.get("grandparentRatingKey")
-            or attrs.get("parentRatingKey")
-        )
-    else:
-        rating_key = (
-            attrs.get("ratingKey")
-            or row.get("media_key")
-        )
-
-    if not rating_key:
-        return None
-
-    return url_for(
-        "api_monitoring_poster",
-        server_id=server_id,
-        path=f"/library/metadata/{rating_key}/art",
-    )
+    return build_history_poster_url(row, db)
 
 def register(app):
     @app.route("/monitoring")
@@ -303,6 +244,8 @@ def register(app):
                   ms.last_seen_at,
 
                   ms.raw_json,
+                  ms.poster_ref_json,
+                  ms.backdrop_ref_json,
                   ms.media_key
                 FROM media_sessions ms
                 JOIN servers s ON s.id = ms.server_id
@@ -367,69 +310,8 @@ def register(app):
                     s["progress_text"] = None
                     s["remaining_text"] = None
 
-                s["season_number"] = None
-                s["episode_number"] = None
-                s["episode_code"] = None
-                s["poster_url"] = None
-
-                raw = s.get("raw_json")
-                if not raw:
-                    continue
-
-                try:
-                    data = json.loads(raw)
-                except Exception:
-                    data = {}
-
-                provider = (s.get("provider") or "").lower()
-
-                if provider == "plex":
-                    attrs = (data.get("VideoOrTrack") or {})
-
-                    season = _safe_int(attrs.get("parentIndex"))
-                    episode = _safe_int(attrs.get("index"))
-
-                    s["season_number"] = season
-                    s["episode_number"] = episode
-
-                    if season is not None and episode is not None:
-                        s["episode_code"] = f"S{season:02d}E{episode:02d}"
-                    elif season is not None:
-                        s["episode_code"] = f"S{season}"
-
-                    poster_path = (
-                        attrs.get("grandparentThumb")
-                        or attrs.get("parentThumb")
-                        or attrs.get("thumb")
-                    )
-                    if poster_path:
-                        s["poster_url"] = url_for(
-                            "api_monitoring_poster",
-                            server_id=s["server_id"],
-                            path=poster_path,
-                        )
-
-                elif provider == "jellyfin":
-                    now = (data.get("NowPlayingItem") or {})
-
-                    season = _safe_int(now.get("ParentIndexNumber"))
-                    episode = _safe_int(now.get("IndexNumber"))
-
-                    s["season_number"] = season
-                    s["episode_number"] = episode
-
-                    if season is not None and episode is not None:
-                        s["episode_code"] = f"S{season:02d}E{episode:02d}"
-                    elif season is not None:
-                        s["episode_code"] = f"S{season}"
-
-                    poster_item_id = now.get("SeriesId") or now.get("Id") or s.get("media_key")
-                    if poster_item_id:
-                        s["poster_url"] = url_for(
-                            "api_monitoring_poster",
-                            server_id=s["server_id"],
-                            item_id=str(poster_item_id),
-                        )
+                enriched = enrich_live_session_artwork(s, db)
+                s.update(enriched)
 
         # --------------------------
         # Latest events for overview + activity
@@ -560,10 +442,24 @@ def register(app):
                     s.type AS provider,
                     h.started_at,
                     h.stopped_at,
-                    TRIM(h.grandparent_title) AS series_title,
+                    CASE
+                      WHEN COALESCE(NULLIF(TRIM(json_extract(h.raw_json, '$.VideoOrTrack.grandparentTitle')), ''), '') <> ''
+                        THEN TRIM(json_extract(h.raw_json, '$.VideoOrTrack.grandparentTitle'))
+                      ELSE TRIM(h.grandparent_title)
+                    END AS series_title,
                     h.media_key,
                     h.media_type,
                     h.raw_json,
+                    h.poster_ref_json,
+                    h.backdrop_ref_json,
+                    CASE
+                      WHEN TRIM(COALESCE(h.grandparent_title, '')) <> ''
+                           AND COALESCE(NULLIF(TRIM(json_extract(h.raw_json, '$.VideoOrTrack.grandparentRatingKey')), ''), '') <> ''
+                        THEN 2
+                      WHEN COALESCE(NULLIF(TRIM(h.poster_ref_json), ''), '') <> ''
+                        THEN 1
+                      ELSE 0
+                    END AS artwork_rank,
                     COALESCE(
                       CAST(mu.vodum_user_id AS TEXT),
                       'media:' || CAST(mu.id AS TEXT)
@@ -604,6 +500,9 @@ def register(app):
                     media_key,
                     media_type,
                     raw_json,
+                    poster_ref_json,
+                    backdrop_ref_json,
+                    artwork_rank,
                     viewer_id,
                     watch_ms_capped AS watch_ms,
                     stopped_at
@@ -621,15 +520,19 @@ def register(app):
                 ),
                 latest AS (
                   SELECT
+                    hist_id,
                     series_title AS title,
                     server_id,
                     provider,
                     media_key,
                     media_type,
                     raw_json,
+                    poster_ref_json,
+                    backdrop_ref_json,
+                    artwork_rank,
                     ROW_NUMBER() OVER (
                       PARTITION BY series_title
-                      ORDER BY stopped_at DESC, hist_id DESC
+                      ORDER BY artwork_rank DESC, stopped_at DESC, hist_id DESC
                     ) AS rn
                   FROM plays
                 )
@@ -638,11 +541,14 @@ def register(app):
                   a.viewers,
                   a.plays,
                   a.watch_ms,
+                  l.hist_id AS hist_id,
                   l.server_id,
                   l.provider,
                   l.media_key,
                   l.media_type,
                   l.raw_json,
+                  l.poster_ref_json,
+                  l.backdrop_ref_json,
                   ('series:' || LOWER(TRIM(a.title))) AS media_group_key
                 FROM agg a
                 LEFT JOIN latest l
@@ -665,11 +571,11 @@ def register(app):
                     TRIM(COALESCE(NULLIF(h.title, ''), '-')) AS movie_title,
                     h.media_key,
                     h.media_type,
-                    h.raw_json,
                     COALESCE(
                       CAST(mu.vodum_user_id AS TEXT),
                       'media:' || CAST(mu.id AS TEXT)
                     ) AS viewer_id,
+                    ('server:' || CAST(h.server_id AS TEXT) || '|movie:' || TRIM(h.media_key)) AS media_group_key,
                     MIN(
                       COALESCE(h.watch_ms, 0),
                       CASE
@@ -679,7 +585,7 @@ def register(app):
                     ) AS watch_ms_capped,
                     (CAST(h.server_id AS TEXT) || '|' ||
                      COALESCE(CAST(mu.vodum_user_id AS TEXT), 'media:' || CAST(mu.id AS TEXT)) || '|' ||
-                     COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
+                     TRIM(h.media_key) || '|' ||
                      strftime('%Y-%m-%d %H:%M', h.started_at)
                     ) AS play_key
                   FROM media_session_history h
@@ -687,6 +593,7 @@ def register(app):
                   LEFT JOIN servers s ON s.id = h.server_id
                   WHERE h.stopped_at >= datetime('now', '-30 days')
                     AND TRIM(COALESCE(h.grandparent_title, '')) = ''
+                    AND COALESCE(NULLIF(TRIM(h.media_key), ''), '') <> ''
                 ),
                 plays_ranked AS (
                   SELECT
@@ -703,9 +610,9 @@ def register(app):
                     server_id,
                     provider,
                     movie_title,
+                    media_group_key,
                     media_key,
                     media_type,
-                    raw_json,
                     viewer_id,
                     watch_ms_capped AS watch_ms,
                     stopped_at
@@ -714,41 +621,45 @@ def register(app):
                 ),
                 agg AS (
                   SELECT
-                    movie_title AS title,
+                    media_group_key,
                     COUNT(DISTINCT viewer_id) AS viewers,
                     COUNT(*) AS plays,
                     COALESCE(SUM(watch_ms), 0) AS watch_ms
                   FROM plays
-                  GROUP BY movie_title
+                  GROUP BY media_group_key
                 ),
                 latest AS (
                   SELECT
+                    hist_id,
+                    media_group_key,
                     movie_title AS title,
                     server_id,
                     provider,
                     media_key,
                     media_type,
-                    raw_json,
                     ROW_NUMBER() OVER (
-                      PARTITION BY movie_title
+                      PARTITION BY media_group_key
                       ORDER BY stopped_at DESC, hist_id DESC
                     ) AS rn
                   FROM plays
                 )
                 SELECT
-                  a.title,
+                  COALESCE(l.title, '-') AS title,
                   a.viewers,
                   a.plays,
                   a.watch_ms,
+                  l.hist_id AS hist_id,
                   l.server_id,
                   l.provider,
                   l.media_key,
                   l.media_type,
-                  l.raw_json,
-                  ('movie:' || LOWER(TRIM(a.title))) AS media_group_key
+                  NULL AS raw_json,
+                  NULL AS poster_ref_json,
+                  NULL AS backdrop_ref_json,
+                  a.media_group_key
                 FROM agg a
                 LEFT JOIN latest l
-                  ON l.title = a.title
+                  ON l.media_group_key = a.media_group_key
                  AND l.rn = 1
                 ORDER BY a.viewers DESC, a.watch_ms DESC
                 LIMIT 10
@@ -757,11 +668,13 @@ def register(app):
 
             top_content_30d = [dict(r) for r in (top_content_30d or [])]
             for item in top_content_30d:
-                item["backdrop_url"] = _build_history_backdrop_url(item)
+                item["poster_url"] = _build_history_poster_url(item, db)
+                item["backdrop_url"] = item["poster_url"]
 
             top_movies_30d = [dict(r) for r in (top_movies_30d or [])]
             for item in top_movies_30d:
-                item["backdrop_url"] = _build_history_backdrop_url(item)
+                item["poster_url"] = _build_overview_movie_poster_url(item, db)
+                item["backdrop_url"] = item["poster_url"]
 
             concurrent_7d = db.query_one(
                 """
@@ -1730,6 +1643,21 @@ ranked AS (
                     h.media_user_id,
                     h.media_key,
                     h.raw_json,
+                    h.poster_ref_json,
+                    h.backdrop_ref_json,
+                    CASE
+                      WHEN LOWER(TRIM(COALESCE(h.media_type, ''))) IN ('serie', 'series', 'show', 'episode', 'tv', 'season')
+                           AND TRIM(COALESCE(h.grandparent_title, '')) <> ''
+                           AND COALESCE(NULLIF(TRIM(json_extract(h.raw_json, '$.VideoOrTrack.grandparentRatingKey')), ''), '') <> ''
+                        THEN 2
+                      WHEN LOWER(TRIM(COALESCE(h.media_type, ''))) NOT IN ('serie', 'series', 'show', 'episode', 'tv', 'season')
+                           AND COALESCE(NULLIF(TRIM(h.media_key), ''), '') <> ''
+                           AND COALESCE(NULLIF(TRIM(json_extract(h.raw_json, '$.VideoOrTrack.ratingKey')), ''), '') = TRIM(h.media_key)
+                        THEN 2
+                      WHEN COALESCE(NULLIF(TRIM(h.poster_ref_json), ''), '') <> ''
+                        THEN 1
+                      ELSE 0
+                    END AS artwork_rank,
                     h.stopped_at,
                     h.started_at,
                     CAST(h.library_section_id AS TEXT) AS history_library_section_id,
@@ -1737,18 +1665,25 @@ ranked AS (
 
                     CASE
                       WHEN LOWER(TRIM(COALESCE(h.media_type, ''))) IN ('serie', 'series', 'show', 'episode', 'tv', 'season')
-                           AND TRIM(COALESCE(h.grandparent_title, '')) <> ''
-                        THEN TRIM(h.grandparent_title)
+                           AND COALESCE(NULLIF(TRIM(json_extract(h.raw_json, '$.VideoOrTrack.grandparentTitle')), ''), '') <> ''
+                        THEN TRIM(json_extract(h.raw_json, '$.VideoOrTrack.grandparentTitle'))
+                      WHEN LOWER(TRIM(COALESCE(h.media_type, ''))) NOT IN ('serie', 'series', 'show', 'episode', 'tv', 'season')
+                           AND COALESCE(NULLIF(TRIM(h.media_key), ''), '') <> ''
+                           AND COALESCE(NULLIF(TRIM(json_extract(h.raw_json, '$.VideoOrTrack.ratingKey')), ''), '') = TRIM(h.media_key)
+                           AND COALESCE(NULLIF(TRIM(json_extract(h.raw_json, '$.VideoOrTrack.title')), ''), '') <> ''
+                        THEN TRIM(json_extract(h.raw_json, '$.VideoOrTrack.title'))
+                      WHEN LOWER(TRIM(COALESCE(h.media_type, ''))) IN ('serie', 'series', 'show', 'episode', 'tv', 'season')
+                        THEN TRIM(COALESCE(h.grandparent_title, 'Unknown'))
                       ELSE TRIM(COALESCE(h.title, 'Unknown'))
                     END AS display_title,
 
                     CASE
                       WHEN LOWER(TRIM(COALESCE(h.media_type, ''))) IN ('serie', 'series', 'show', 'episode', 'tv', 'season')
                            AND TRIM(COALESCE(h.grandparent_title, '')) <> ''
-                        THEN 'series:' || LOWER(TRIM(h.grandparent_title))
+                        THEN 'server:' || CAST(h.server_id AS TEXT) || '|series:' || LOWER(TRIM(h.grandparent_title))
                       WHEN NULLIF(TRIM(h.media_key), '') IS NOT NULL
-                        THEN 'media:' || TRIM(h.media_key)
-                      ELSE 'title:' || LOWER(TRIM(COALESCE(h.title, 'Unknown')))
+                        THEN 'server:' || CAST(h.server_id AS TEXT) || '|media:' || TRIM(h.media_key)
+                      ELSE 'server:' || CAST(h.server_id AS TEXT) || '|title:' || LOWER(TRIM(COALESCE(h.title, 'Unknown')))
                     END AS media_group_key,
 
                     (
@@ -1793,6 +1728,9 @@ ranked AS (
                     vodum_user_id,
                     media_key,
                     raw_json,
+                    poster_ref_json,
+                    backdrop_ref_json,
+                    artwork_rank,
                     stopped_at,
                     display_title,
                     media_group_key
@@ -1823,14 +1761,18 @@ ranked AS (
                 ),
                 latest_snapshots AS (
                   SELECT
+                    hist_id,
                     library_id,
                     media_group_key,
                     display_title,
                     media_key,
                     raw_json,
+                    poster_ref_json,
+                    backdrop_ref_json,
+                    artwork_rank,
                     ROW_NUMBER() OVER (
                       PARTITION BY library_id, media_group_key
-                      ORDER BY stopped_at DESC, hist_id DESC
+                      ORDER BY artwork_rank DESC, stopped_at DESC, hist_id DESC
                     ) AS rn
                   FROM plays
                 ),
@@ -1844,11 +1786,14 @@ ranked AS (
                     m.provider,
                     m.media_group_key,
                     COALESCE(ls.display_title, 'Unknown') AS display_title,
+                    ls.hist_id AS hist_id,
                     ls.media_key AS media_key,
                     m.plays,
                     m.user_count,
                     m.last_play_at,
                     ls.raw_json,
+                    ls.poster_ref_json,
+                    ls.backdrop_ref_json,
                     ROW_NUMBER() OVER (
                       PARTITION BY m.library_id
                       ORDER BY m.plays DESC, m.user_count DESC, m.last_play_at DESC, COALESCE(ls.display_title, 'Unknown') ASC
@@ -1868,11 +1813,14 @@ ranked AS (
                   provider,
                   media_group_key,
                   display_title,
+                  hist_id,
                   media_key,
                   plays,
                   user_count,
                   last_play_at,
                   raw_json,
+                  poster_ref_json,
+                  backdrop_ref_json,
                   row_in_library
                 FROM ranked
                 WHERE row_in_library <= 6
@@ -1899,8 +1847,8 @@ ranked AS (
                     cards_by_library[r["library_id"]] = card
 
                 item = dict(r)
-                item["poster_url"] = _build_history_poster_url(item)
-                item["backdrop_url"] = _build_history_backdrop_url(item)
+                item["poster_url"] = _build_history_poster_url(item, db)
+                item["backdrop_url"] = _build_history_backdrop_url(item, db) or item["poster_url"]
 
                 card["items"].append(item)
                 card["total_plays"] += int(item.get("plays") or 0)

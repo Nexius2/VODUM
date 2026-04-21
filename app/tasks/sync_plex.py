@@ -316,8 +316,10 @@ def plex_get_user_access(db, plex, server_name, media_user_id: int):
     Retourne les bibliothèques réellement partagées
     avec un utilisateur Plex (media_users).
 
-    - nécessite media_users.type = 'plex'
-    - utilise le champ media_users.email
+    Retour :
+    - list[dict] => accès récupéré correctement
+    - []         => accès récupéré correctement mais aucune bibliothèque
+    - None       => erreur Plex/API, donc on ne doit rien supprimer en base
     """
 
     media_user = db.query_one(
@@ -331,25 +333,24 @@ def plex_get_user_access(db, plex, server_name, media_user_id: int):
 
     if not media_user:
         log.error(f"[ACCESS] media_user {media_user_id} Not found")
-        return []
+        return None
 
     if media_user["type"] != "plex":
         log.error(f"[ACCESS] media_user {media_user_id} Is not a Plex account")
-        return []
+        return None
 
     user_email = media_user["email"]
 
     if not user_email:
         log.error(f"[ACCESS] media_user {media_user_id} Does not have a Plex email")
-        return []
-
-    account = plex.myPlexAccount()
+        return None
 
     try:
+        account = plex.myPlexAccount()
         user_acct = account.user(user_email)
     except Exception as e:
         log.error(f"[ACCESS] Unable to retrieve Plex information for {user_email}: {e}")
-        return []
+        return None
 
     out = []
 
@@ -368,6 +369,7 @@ def plex_get_user_access(db, plex, server_name, media_user_id: int):
             log.error(
                 f"[ACCESS] Error while iterating over user sections {user_email}: {e}"
             )
+            return None
 
     return out
 
@@ -393,7 +395,52 @@ def _plex_section_total_items(session, base_url: str, token: str, section_id: st
     except Exception:
         return None
 
+def _get_media_user_library_ids_for_server(db, media_user_id: int, server_id: int) -> set[int]:
+    rows = db.query(
+        """
+        SELECT mul.library_id
+        FROM media_user_libraries mul
+        JOIN libraries l ON l.id = mul.library_id
+        WHERE mul.media_user_id = ?
+          AND l.server_id = ?
+        """,
+        (media_user_id, server_id),
+    ) or []
 
+    return {int(r["library_id"]) for r in rows if r["library_id"] is not None}
+
+
+def _apply_media_user_library_diff_for_server(
+    db,
+    media_user_id: int,
+    server_id: int,
+    desired_library_ids: set[int],
+):
+    current_library_ids = _get_media_user_library_ids_for_server(db, media_user_id, server_id)
+
+    to_add = sorted(desired_library_ids - current_library_ids)
+    to_remove = sorted(current_library_ids - desired_library_ids)
+
+    for lib_id in to_add:
+        db.execute(
+            """
+            INSERT OR IGNORE INTO media_user_libraries(media_user_id, library_id)
+            VALUES (?, ?)
+            """,
+            (media_user_id, lib_id),
+        )
+
+    for lib_id in to_remove:
+        db.execute(
+            """
+            DELETE FROM media_user_libraries
+            WHERE media_user_id = ?
+              AND library_id = ?
+            """,
+            (media_user_id, lib_id),
+        )
+
+    return current_library_ids, to_add, to_remove
 
 def sync_plex_user_library_access(db, plex, server):
     server_id = server["id"]
@@ -443,6 +490,7 @@ def sync_plex_user_library_access(db, plex, server):
     updated_users = 0
     skipped_no_email = 0
     preserved_pending = 0
+    skipped_pending_jobs = 0
 
     # 3️⃣ Resync accès pour chaque user
     for u in users:
@@ -464,31 +512,38 @@ def sync_plex_user_library_access(db, plex, server):
             )
             continue
 
-        # Nettoyer les anciens accès pour CE serveur
-        db.execute(
+        # ✅ Cas spécial : job Plex encore en attente / en cours
+        # On SKIP complètement cet utilisateur pour éviter qu'un DELETE brutal
+        # efface un état qui doit encore être appliqué par apply_plex_access_updates.
+        pending_job = db.query_one(
             """
-            DELETE FROM media_user_libraries
-            WHERE media_user_id = ?
-              AND library_id IN (
-                  SELECT id FROM libraries WHERE server_id = ?
-              )
+            SELECT 1
+            FROM media_jobs
+            WHERE vodum_user_id = ?
+              AND server_id = ?
+              AND provider = 'plex'
+              AND status IN ('pending', 'queued', 'processing')
+              AND action IN ('grant', 'revoke', 'sync')
+            LIMIT 1
             """,
-            (media_user_id, server_id),
+            (vodum_user_id, server_id),
         )
 
+        if pending_job:
+            skipped_pending_jobs += 1
+            log.info(
+                f"[SYNC SKIPPED] pending media job detected "
+                f"(vodum_user_id={vodum_user_id}, media_user_id={media_user_id}, server_id={server_id})"
+            )
+            continue
+
+        desired_library_ids = set()
         has_access = False
 
         # ✅ OWNER : toutes les libraries du serveur
         if role == "owner":
-            for lib_id in lib_map.values():
-                db.execute(
-                    """
-                    INSERT OR IGNORE INTO media_user_libraries(media_user_id, library_id)
-                    VALUES (?, ?)
-                    """,
-                    (media_user_id, lib_id),
-                )
-            has_access = True
+            desired_library_ids = {int(lib_id) for lib_id in lib_map.values()}
+            has_access = bool(desired_library_ids)
 
         else:
             # logique normale basée sur l'API Plex
@@ -498,21 +553,37 @@ def sync_plex_user_library_access(db, plex, server):
 
             access = plex_get_user_access(db, plex, server_name, media_user_id)
 
+            # ⚠️ Si Plex répond mal / erreur API, on ne supprime rien
+            if access is None:
+                log.warning(
+                    f"[SYNC SKIPPED] access fetch failed for "
+                    f"vodum_user_id={vodum_user_id} media_user_id={media_user_id} server_id={server_id}"
+                )
+                continue
+
             for lib in access:
                 sec_id = str(lib.get("key") or "")
                 lib_id = lib_map.get(sec_id)
                 if not lib_id:
                     continue
+                desired_library_ids.add(int(lib_id))
 
-                db.execute(
-                    """
-                    INSERT OR IGNORE INTO media_user_libraries(media_user_id, library_id)
-                    VALUES (?, ?)
-                    """,
-                    (media_user_id, lib_id),
-                )
+            has_access = bool(desired_library_ids)
 
-                has_access = True
+        before_ids, added_ids, removed_ids = _apply_media_user_library_diff_for_server(
+            db,
+            media_user_id=media_user_id,
+            server_id=server_id,
+            desired_library_ids=desired_library_ids,
+        )
+
+        if added_ids or removed_ids:
+            log.info(
+                f"[SYNC OVERWRITE] vodum_user_id={vodum_user_id} media_user_id={media_user_id} "
+                f"server_id={server_id} before={sorted(before_ids)} "
+                f"after={sorted(desired_library_ids)} "
+                f"added={added_ids} removed={removed_ids}"
+            )
 
         # ✅ uniquement si accès réel trouvé
         if has_access:
@@ -523,7 +594,8 @@ def sync_plex_user_library_access(db, plex, server):
     log.info(
         f"[SYNC ACCESS] Access updated for server {server_name} "
         f"(users en base={len(users)}, traités={processed_users}, maj={updated_users}, "
-        f"sans_email={skipped_no_email}, pending_preserved={preserved_pending})"
+        f"sans_email={skipped_no_email}, pending_preserved={preserved_pending}, "
+        f"sync_skipped_pending_jobs={skipped_pending_jobs})"
     )
 
 

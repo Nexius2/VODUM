@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="{{ (session.get('lang') or 'fr') }}">
+<html lang="{{ active_lang or 'fr' }}">
 <head>
   <meta charset="utf-8">
   <title>{{ t("auth.title_setup_admin") }}</title>
@@ -24,7 +24,7 @@
         {% endif %}
       {% endwith %}
 
-      <form method="POST" class="space-y-4">
+      <form method="POST" action="{{ url_for('setup_admin_save') }}" class="space-y-4">
         <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
         <div>
           <label class="block text-sm mb-1 text-slate-300">{{ t("auth.admin_email") }}</label>
