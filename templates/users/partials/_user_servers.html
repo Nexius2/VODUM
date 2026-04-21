@@ -1,5 +1,15 @@
 <!-- ====================== SERVERS + LIBRARIES (UNCHANGED) ====================== -->
 <!-- Empty state -->
+<div class="mb-6 flex items-center justify-end">
+  <form method="post"
+        action="{{ url_for('force_resync_access', user_id=user.id) }}"
+        onsubmit="return confirm('Force a full Plex access resync for this user?');">
+    <button type="submit"
+            class="px-4 py-2 rounded-lg border border-emerald-700 text-emerald-300 hover:bg-emerald-900/20 text-sm">
+      Force resync access
+    </button>
+  </form>
+</div>
 {% if servers|length == 0 %}
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-6">
     <div class="flex items-center justify-between gap-4">

@@ -1,5 +1,5 @@
 # Auto-split from app.py (keep URLs/endpoints intact)
-import json
+from core.monitoring.artwork import enrich_live_session_artwork
 
 from flask import render_template, redirect, url_for
 
@@ -212,6 +212,8 @@ def register(app):
               ms.last_seen_at,
 
               ms.raw_json,
+              ms.poster_ref_json,
+              ms.backdrop_ref_json,
               ms.media_key
             FROM media_sessions ms
             JOIN servers s ON s.id = ms.server_id
@@ -223,83 +225,8 @@ def register(app):
             (live_window_sql,),
         )
 
-        # --- Enrich Now Playing: SxxExx + poster (same as monitoring_overview.py)
-        def _safe_int(v):
-            try:
-                if v is None:
-                    return None
-                return int(v)
-            except Exception:
-                return None
-
         sessions = [dict(r) for r in sessions]
-
-        for s in sessions:
-            s["season_number"] = None
-            s["episode_number"] = None
-            s["episode_code"] = None
-            s["poster_url"] = None
-
-            raw = s.get("raw_json")
-            if not raw:
-                continue
-
-            try:
-                data = json.loads(raw)
-            except Exception:
-                data = {}
-
-            provider = (s.get("provider") or "").lower()
-
-            # ---------- PLEX ----------
-            if provider == "plex":
-                attrs = (data.get("VideoOrTrack") or {})
-
-                season = _safe_int(attrs.get("parentIndex"))
-                episode = _safe_int(attrs.get("index"))
-
-                s["season_number"] = season
-                s["episode_number"] = episode
-
-                if season is not None and episode is not None:
-                    s["episode_code"] = f"S{season:02d}E{episode:02d}"
-                elif season is not None:
-                    s["episode_code"] = f"S{season}"
-
-                poster_path = (
-                    attrs.get("grandparentThumb")
-                    or attrs.get("parentThumb")
-                    or attrs.get("thumb")
-                )
-                if poster_path:
-                    s["poster_url"] = url_for(
-                        "api_monitoring_poster",
-                        server_id=s["server_id"],
-                        path=poster_path,
-                    )
-
-            # ---------- JELLYFIN ----------
-            elif provider == "jellyfin":
-                now = (data.get("NowPlayingItem") or {})
-
-                season = _safe_int(now.get("ParentIndexNumber"))
-                episode = _safe_int(now.get("IndexNumber"))
-
-                s["season_number"] = season
-                s["episode_number"] = episode
-
-                if season is not None and episode is not None:
-                    s["episode_code"] = f"S{season:02d}E{episode:02d}"
-                elif season is not None:
-                    s["episode_code"] = f"S{season}"
-
-                poster_item_id = now.get("SeriesId") or now.get("Id") or s.get("media_key")
-                if poster_item_id:
-                    s["poster_url"] = url_for(
-                        "api_monitoring_poster",
-                        server_id=s["server_id"],
-                        item_id=str(poster_item_id),
-                    )
+        sessions = [enrich_live_session_artwork(s, db) for s in sessions]
 
         idle_card = None
         if total_live <= 0:
@@ -366,6 +293,8 @@ def register(app):
               ms.last_seen_at,
 
               ms.raw_json,
+              ms.poster_ref_json,
+              ms.backdrop_ref_json,
               ms.media_key
             FROM media_sessions ms
             JOIN servers s ON s.id = ms.server_id
@@ -377,80 +306,8 @@ def register(app):
             (live_window_sql,),
         )
 
-        def _safe_int(v):
-            try:
-                if v is None:
-                    return None
-                return int(v)
-            except Exception:
-                return None
-
         sessions = [dict(r) for r in sessions]
-
-        for s in sessions:
-            s["season_number"] = None
-            s["episode_number"] = None
-            s["episode_code"] = None
-            s["poster_url"] = None
-
-            raw = s.get("raw_json")
-            if not raw:
-                continue
-
-            try:
-                data = json.loads(raw)
-            except Exception:
-                data = {}
-
-            provider = (s.get("provider") or "").lower()
-
-            if provider == "plex":
-                attrs = (data.get("VideoOrTrack") or {})
-
-                season = _safe_int(attrs.get("parentIndex"))
-                episode = _safe_int(attrs.get("index"))
-
-                s["season_number"] = season
-                s["episode_number"] = episode
-
-                if season is not None and episode is not None:
-                    s["episode_code"] = f"S{season:02d}E{episode:02d}"
-                elif season is not None:
-                    s["episode_code"] = f"S{season}"
-
-                poster_path = (
-                    attrs.get("grandparentThumb")
-                    or attrs.get("parentThumb")
-                    or attrs.get("thumb")
-                )
-                if poster_path:
-                    s["poster_url"] = url_for(
-                        "api_monitoring_poster",
-                        server_id=s["server_id"],
-                        path=poster_path,
-                    )
-
-            elif provider == "jellyfin":
-                now = (data.get("NowPlayingItem") or {})
-
-                season = _safe_int(now.get("ParentIndexNumber"))
-                episode = _safe_int(now.get("IndexNumber"))
-
-                s["season_number"] = season
-                s["episode_number"] = episode
-
-                if season is not None and episode is not None:
-                    s["episode_code"] = f"S{season:02d}E{episode:02d}"
-                elif season is not None:
-                    s["episode_code"] = f"S{season}"
-
-                poster_item_id = now.get("SeriesId") or now.get("Id") or s.get("media_key")
-                if poster_item_id:
-                    s["poster_url"] = url_for(
-                        "api_monitoring_poster",
-                        server_id=s["server_id"],
-                        item_id=str(poster_item_id),
-                    )
+        sessions = [enrich_live_session_artwork(s, db) for s in sessions]
 
         idle_card = None
         if total_live <= 0:

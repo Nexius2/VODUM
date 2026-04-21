@@ -1,7 +1,7 @@
 # Unified Communications UI (Email + Discord)
 
 import json
-from flask import render_template, request, redirect, url_for, flash, jsonify, session
+from flask import render_template, request, redirect, url_for, flash, jsonify
 
 from core.i18n import get_translator
 from web.helpers import get_db, add_log, send_email_via_settings
@@ -12,11 +12,10 @@ from communications_engine import (
     store_uploads,
     fetch_template_attachments,
     fetch_campaign_attachments,
-    send_to_user,
-    record_history,
     available_channels,
     queue_campaign_delivery,
 )
+from tasks_engine import enable_and_run_task_by_name
 
 
 def _as_int(v, default=None):
@@ -160,29 +159,15 @@ def register(app):
     # ------------------------------------------------------------------
     @app.route("/communications/campaigns/action", methods=["POST"])
     def communications_campaigns_action():
-        return communications_campaigns_page()
-
-    @app.route("/communications/campaigns", methods=["GET"])
-    def communications_campaigns_page():
         db = get_db()
         t = get_translator()
 
-        action_values = request.form.getlist("action") if request.method == "POST" else []
+        action_values = request.form.getlist("action")
         form_mode = (request.form.get("form_mode") or "").strip()
         action = (action_values[-1] if action_values else form_mode).strip().lower()
 
-        servers = db.query("SELECT id, name FROM servers ORDER BY name")
-
-        load_id = request.args.get("load", type=int)
-        loaded = None
-        if load_id:
-            loaded = db.query_one("SELECT * FROM comm_campaigns WHERE id = ?", (load_id,))
-            loaded = dict(loaded) if loaded else None
-            if loaded:
-                loaded["attachments"] = fetch_campaign_attachments(db, int(loaded["id"]))
-
         # Create
-        if request.method == "POST" and action == "create":
+        if action == "create":
             name = (request.form.get("name") or "").strip()
             subject = (request.form.get("subject") or "").strip()
             body = (request.form.get("body") or "").strip()
@@ -206,9 +191,8 @@ def register(app):
                 """,
                 (name, subject, body, server_id, is_test),
             )
-            cid = getattr(cur, 'lastrowid', None)
+            cid = getattr(cur, "lastrowid", None)
 
-            # attachments
             files = request.files.getlist("attachments")
             saved = store_uploads("campaign", int(cid), files)
             for att in saved:
@@ -222,7 +206,7 @@ def register(app):
             return redirect(url_for("communications_campaigns_page", load=cid))
 
         # Save
-        if request.method == "POST" and action == "save":
+        if action == "save":
             cid = request.form.get("campaign_id", type=int)
             name = (request.form.get("name") or "").strip()
             subject = (request.form.get("subject") or "").strip()
@@ -266,7 +250,7 @@ def register(app):
             return redirect(url_for("communications_campaigns_page", load=cid))
 
         # Delete
-        if request.method == "POST" and action == "delete":
+        if action == "delete":
             cid = request.form.get("campaign_id", type=int)
 
             if not cid:
@@ -285,7 +269,7 @@ def register(app):
             return redirect(url_for("communications_campaigns_page"))
 
         # Send
-        if request.method == "POST" and action == "send":
+        if action == "send":
             cid = request.form.get("campaign_id", type=int)
             campaign = db.query_one("SELECT * FROM comm_campaigns WHERE id = ?", (cid,))
             if not campaign:
@@ -295,7 +279,6 @@ def register(app):
 
             attachments = fetch_campaign_attachments(db, cid)
 
-            # Users target: only users linked to at least one media user (same logic as reminders)
             users = db.query(
                 """
                 SELECT id, username, email, second_email, discord_user_id, notifications_order_override
@@ -304,7 +287,6 @@ def register(app):
                 """
             )
 
-            # If campaign has a server_id, restrict to users with at least one media_user on that server
             server_id = campaign.get("server_id")
             if server_id:
                 users = db.query(
@@ -319,51 +301,34 @@ def register(app):
                     (server_id,),
                 )
 
-            # TEST mode stays immediate
             if int(campaign.get("is_test") or 0) == 1:
+                settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+                settings = dict(settings) if settings else {}
+
                 admin_email = (settings.get("admin_email") or "").strip()
                 if not admin_email:
                     db.execute("UPDATE comm_campaigns SET status='error', updated_at=CURRENT_TIMESTAMP WHERE id=?", (cid,))
                     flash(t("comm_admin_email_missing"), "error")
                     return redirect(url_for("communications_campaigns_page", load=cid))
 
-                fake_user = {
-                    "id": None,
-                    "username": "admin",
-                    "email": admin_email,
-                    "second_email": None,
-                    "discord_user_id": None,
-                    "notifications_order_override": None,
-                }
-
-                attempts = send_to_user(
-                    db=db,
-                    settings=settings,
-                    user=fake_user,
-                    subject=campaign.get("subject") or "",
-                    body=campaign.get("body") or "",
-                    attachments=attachments,
-                )
-                for att in attempts:
-                    record_history(
-                        db=db,
-                        kind="campaign",
-                        template_id=None,
-                        campaign_id=cid,
-                        user_id=None,
-                        attempt=att,
-                        meta={"is_test": True, "campaign_id": cid, "campaign_name": campaign.get("name")},
-                    )
-
-                test_ok = _campaign_attempts_satisfy_mode(db, settings, fake_user, attempts)
                 db.execute(
-                    "UPDATE comm_campaigns SET status=?, sent_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                    ("finished" if test_ok else "error", cid),
+                    """
+                    UPDATE comm_campaigns
+                    SET status='pending',
+                        sent_at=NULL,
+                        updated_at=CURRENT_TIMESTAMP
+                    WHERE id=?
+                    """,
+                    (cid,),
                 )
-                flash(
-                    t("comm_campaign_test_sent") if test_ok else t("comm_campaign_send_failed"),
-                    "success" if test_ok else "error"
-                )
+
+                try:
+                    enable_and_run_task_by_name("send_comm_campaigns")
+                except Exception:
+                    flash(t("comm_campaign_send_failed"), "error")
+                    return redirect(url_for("communications_campaigns_page", load=cid))
+
+                flash("Test campaign queued.", "success")
                 return redirect(url_for("communications_campaigns_page", load=cid))
 
             queue_result = queue_campaign_delivery(
@@ -399,6 +364,23 @@ def register(app):
             )
             return redirect(url_for("communications_campaigns_page", load=cid))
 
+        flash(t("comm_not_found"), "error")
+        return redirect(url_for("communications_campaigns_page"))
+
+    @app.route("/communications/campaigns", methods=["GET"])
+    def communications_campaigns_page():
+        db = get_db()
+
+        servers = db.query("SELECT id, name FROM servers ORDER BY name")
+
+        load_id = request.args.get("load", type=int)
+        loaded = None
+        if load_id:
+            loaded = db.query_one("SELECT * FROM comm_campaigns WHERE id = ?", (load_id,))
+            loaded = dict(loaded) if loaded else None
+            if loaded:
+                loaded["attachments"] = fetch_campaign_attachments(db, int(loaded["id"]))
+
         campaigns = db.query(
             "SELECT * FROM comm_campaigns ORDER BY created_at DESC, id DESC LIMIT 200"
         )
@@ -418,31 +400,18 @@ def register(app):
     # ------------------------------------------------------------------
     @app.route("/communications/templates/action", methods=["POST"])
     def communications_templates_action():
-        return communications_templates_page()
-
-    @app.route("/communications/templates", methods=["GET"])
-    def communications_templates_page():
         db = get_db()
         t = get_translator()
 
-        load_id = request.args.get("load", type=int)
-        duplicate_disabled = request.args.get("duplicate_disabled", type=int) == 1
-        duplicate_disabled_reason = (session.pop("communications_duplicate_disabled_reason", "") or "").strip()
+        action = (request.form.get("action") or "").strip().lower()
 
-        loaded = None
-        if load_id:
-            loaded = db.query_one("SELECT * FROM comm_templates WHERE id = ?", (load_id,))
-            loaded = dict(loaded) if loaded else None
-            if loaded:
-                loaded["attachments"] = fetch_template_attachments(db, int(loaded["id"]))
-
-        if request.method == "POST" and request.form.get("action") == "create":
+        # Create
+        if action == "create":
             name = (request.form.get("name") or "").strip()
             subject = (request.form.get("subject") or "").strip()
             body = (request.form.get("body") or "").strip()
             enabled = 1 if request.form.get("enabled") == "1" else 0
 
-            # Key is optional (UI hides it). We generate a stable one from the name.
             key = _sanitize_key(request.form.get("key") or "")
             if not key:
                 base = _sanitize_key(name) or "template"
@@ -510,16 +479,10 @@ def register(app):
                 except Exception:
                     days_before = None
 
-            # -----------------------------
-            # Delay rules
-            # - user_creation  => ONLY days_after (cannot be "before")
-            # - expiration     => [X] days (before/after) the event
-            # -----------------------------
             delay_direction = (request.form.get("delay_direction") or "").strip().lower()
             if delay_direction not in ("before", "after"):
                 delay_direction = "before"
 
-            # Normalize negatives
             if isinstance(days_before, int) and days_before < 0:
                 days_before = 0
             if isinstance(days_after, int) and days_after < 0:
@@ -535,7 +498,6 @@ def register(app):
                 days_after = 0
                 delay_direction = "after"
             else:
-                # expiration: keep ONLY one value (before OR after)
                 if delay_direction == "after":
                     offset = days_after if days_after is not None else (days_before if days_before is not None else 0)
                     days_after = offset
@@ -592,7 +554,7 @@ def register(app):
                     subject, body,
                 ),
             )
-            tid = getattr(cur, 'lastrowid', None)
+            tid = getattr(cur, "lastrowid", None)
 
             files = request.files.getlist("attachments")
             saved = store_uploads("template", int(tid), files)
@@ -617,23 +579,39 @@ def register(app):
             flash(t("comm_template_created"), "success")
 
             if duplicate:
-                session["communications_duplicate_disabled_reason"] = duplicate_reason
                 return redirect(
                     url_for(
                         "communications_templates_page",
                         load=tid,
                         duplicate_disabled=1,
+                        duplicate_disabled_reason=duplicate_reason,
                     )
                 )
 
             return redirect(url_for("communications_templates_page", load=tid))
 
-        if request.method == "POST" and request.form.get("action") == "save":
+        # Save
+        if action == "save":
             tid = request.form.get("template_id", type=int)
+            if not tid:
+                flash(t("comm_not_found"), "error")
+                return redirect(url_for("communications_templates_page"))
+
+            existing = db.query_one("SELECT * FROM comm_templates WHERE id = ?", (tid,))
+            if not existing:
+                flash(t("comm_not_found"), "error")
+                return redirect(url_for("communications_templates_page"))
+
+            existing = dict(existing)
+
             name = (request.form.get("name") or "").strip()
             subject = (request.form.get("subject") or "").strip()
             body = (request.form.get("body") or "").strip()
             enabled = 1 if request.form.get("enabled") == "1" else 0
+
+            key = _sanitize_key(request.form.get("key") or existing.get("key") or "")
+            if not key:
+                key = existing.get("key") or ""
 
             trigger_event = (request.form.get("trigger_event") or "expiration").strip().lower()
             if trigger_event not in ("expiration", "user_creation", "pending_invite_reminder", "referral_reward", "expiration_change"):
@@ -662,6 +640,7 @@ def register(app):
                     subscription_template_id = int(sub_id_raw)
                 except Exception:
                     subscription_template_id = None
+
                 if subscription_template_id:
                     sub_exists = db.query_one(
                         "SELECT id FROM subscription_templates WHERE id = ?",
@@ -675,8 +654,6 @@ def register(app):
                 else:
                     subscription_scope = "none"
                     subscription_template_id = None
-
-
 
             days_after_raw = (request.form.get("days_after") or "").strip()
             days_after = None
@@ -694,16 +671,10 @@ def register(app):
                 except Exception:
                     days_before = None
 
-            # -----------------------------
-            # Delay rules
-            # - user_creation  => ONLY days_after (cannot be "before")
-            # - expiration     => [X] days (before/after) the event
-            # -----------------------------
             delay_direction = (request.form.get("delay_direction") or "").strip().lower()
             if delay_direction not in ("before", "after"):
                 delay_direction = "before"
 
-            # Normalize negatives
             if isinstance(days_before, int) and days_before < 0:
                 days_before = 0
             if isinstance(days_after, int) and days_after < 0:
@@ -719,7 +690,6 @@ def register(app):
                 days_after = 0
                 delay_direction = "after"
             else:
-                # expiration: keep ONLY one value (before OR after)
                 if delay_direction == "after":
                     offset = days_after if days_after is not None else (days_before if days_before is not None else 0)
                     days_after = offset
@@ -729,9 +699,17 @@ def register(app):
                     days_before = offset
                     days_after = None
 
-            if not tid:
-                flash(t("comm_not_found"), "error")
-                return redirect(url_for("communications_templates_page"))
+            if not key or not name or not subject or not body:
+                flash(t("comm_missing_fields"), "error")
+                return redirect(url_for("communications_templates_page", load=tid))
+
+            exists = db.query_one(
+                "SELECT 1 FROM comm_templates WHERE key = ? AND id <> ?",
+                (key, tid),
+            )
+            if exists:
+                flash(t("comm_template_key_exists"), "error")
+                return redirect(url_for("communications_templates_page", load=tid))
 
             duplicate = None
             duplicate_reason = ""
@@ -755,24 +733,17 @@ def register(app):
             db.execute(
                 """
                 UPDATE comm_templates
-                SET
-                  name=?,
-                  enabled=?,
-                  trigger_event=?,
-                  trigger_provider=?,
-                  expiration_change_direction=?,
-                  subscription_scope=?,
-                  subscription_template_id=?,
-                  days_before=?,
-                  days_after=?,
-                  subject=?,
-                  body=?,
-                  updated_at=CURRENT_TIMESTAMP
+                SET key=?, name=?, enabled=?,
+                    trigger_event=?, trigger_provider=?, expiration_change_direction=?,
+                    subscription_scope=?, subscription_template_id=?,
+                    days_before=?, days_after=?,
+                    subject=?, body=?,
+                    updated_at=CURRENT_TIMESTAMP
                 WHERE id=?
                 """,
                 (
-                    name, enabled, trigger_event, trigger_provider,
-                    expiration_change_direction,
+                    key, name, enabled,
+                    trigger_event, trigger_provider, expiration_change_direction,
                     subscription_scope, subscription_template_id,
                     days_before, days_after,
                     subject, body,
@@ -802,18 +773,19 @@ def register(app):
             flash(t("comm_template_saved"), "success")
 
             if duplicate:
-                session["communications_duplicate_disabled_reason"] = duplicate_reason
                 return redirect(
                     url_for(
                         "communications_templates_page",
                         load=tid,
                         duplicate_disabled=1,
+                        duplicate_disabled_reason=duplicate_reason,
                     )
                 )
 
             return redirect(url_for("communications_templates_page", load=tid))
 
-        if request.method == "POST" and request.form.get("action") == "delete":
+        # Delete
+        if action == "delete":
             tid = request.form.get("template_id", type=int)
             if not tid:
                 flash(t("comm_not_found"), "error")
@@ -822,6 +794,25 @@ def register(app):
             add_log("info", "communications", "Template deleted", {"id": tid})
             flash(t("comm_template_deleted"), "success")
             return redirect(url_for("communications_templates_page"))
+
+        flash(t("comm_not_found"), "error")
+        return redirect(url_for("communications_templates_page"))
+
+
+    @app.route("/communications/templates", methods=["GET"])
+    def communications_templates_page():
+        db = get_db()
+
+        load_id = request.args.get("load", type=int)
+        duplicate_disabled = request.args.get("duplicate_disabled", type=int) == 1
+        duplicate_disabled_reason = (request.args.get("duplicate_disabled_reason") or "").strip()
+
+        loaded = None
+        if load_id:
+            loaded = db.query_one("SELECT * FROM comm_templates WHERE id = ?", (load_id,))
+            loaded = dict(loaded) if loaded else None
+            if loaded:
+                loaded["attachments"] = fetch_template_attachments(db, int(loaded["id"]))
 
         templates = db.query("""
             SELECT
@@ -947,177 +938,155 @@ def register(app):
     # ------------------------------------------------------------------
     @app.route("/communications/configuration/action", methods=["POST"])
     def communications_configuration_action():
-        return communications_configuration_page()
-
-    @app.route("/communications/configuration", methods=["GET"])
-    def communications_configuration_page():
         db = get_db()
         t = get_translator()
 
         settings = db.query_one("SELECT * FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
 
-        if request.method == "POST":
-            action = (request.form.get("action") or "").strip()
+        action = (request.form.get("action") or "").strip()
 
-            # Auto-save (used by the unified config form)
-            if action == "save_all":
-                # Email
-                mailing_enabled = 1 if request.form.get("mailing_enabled") == "1" else 0
-                skip_never_used_accounts = 1 if request.form.get("skip_never_used_accounts") == "1" else 0
-                mail_from = (request.form.get("mail_from") or "").strip() or None
-                smtp_host = (request.form.get("smtp_host") or "").strip() or None
-                smtp_port = _as_int(request.form.get("smtp_port"), None)
-                smtp_tls = 1 if request.form.get("smtp_tls") == "1" else 0
-                smtp_user = (request.form.get("smtp_user") or "").strip() or None
+        # Auto-save (used by the unified config form)
+        if action == "save_all":
+            # Email
+            mailing_enabled = 1 if request.form.get("mailing_enabled") == "1" else 0
+            skip_never_used_accounts = 1 if request.form.get("skip_never_used_accounts") == "1" else 0
+            mail_from = (request.form.get("mail_from") or "").strip() or None
+            smtp_host = (request.form.get("smtp_host") or "").strip() or None
+            smtp_port = _as_int(request.form.get("smtp_port"), None)
+            smtp_tls = 1 if request.form.get("smtp_tls") == "1" else 0
+            smtp_user = (request.form.get("smtp_user") or "").strip() or None
 
-                # Safety: do not wipe secrets on auto-save if input is empty
-                smtp_pass_raw = request.form.get("smtp_pass")
-                smtp_pass = (smtp_pass_raw or "")
-                if smtp_pass_raw is not None and smtp_pass_raw.strip() == "":
-                    smtp_pass = settings.get("smtp_pass") or ""
+            # Safety: do not wipe secrets on auto-save if input is empty
+            smtp_pass_raw = request.form.get("smtp_pass")
+            smtp_pass = (smtp_pass_raw or "")
+            if smtp_pass_raw is not None and smtp_pass_raw.strip() == "":
+                smtp_pass = settings.get("smtp_pass") or ""
 
-                # Discord
-                discord_enabled = 1 if request.form.get("discord_enabled") == "1" else 0
-                discord_bot_token_raw = request.form.get("discord_bot_token")
-                discord_bot_token = (discord_bot_token_raw or "").strip() or None
-                if discord_bot_token_raw is not None and discord_bot_token_raw.strip() == "":
-                    discord_bot_token = settings.get("discord_bot_token") or None
+            # Discord
+            discord_enabled = 1 if request.form.get("discord_enabled") == "1" else 0
+            discord_bot_token_raw = request.form.get("discord_bot_token")
+            discord_bot_token = (discord_bot_token_raw or "").strip() or None
+            if discord_bot_token_raw is not None and discord_bot_token_raw.strip() == "":
+                discord_bot_token = settings.get("discord_bot_token") or None
 
-                # General
-                send_mode = (request.form.get("notifications_send_mode") or settings.get("notifications_send_mode") or "first").strip().lower()
-                if send_mode not in ("first", "all"):
-                    send_mode = "first"
+            # General
+            send_mode = (request.form.get("notifications_send_mode") or settings.get("notifications_send_mode") or "first").strip().lower()
+            if send_mode not in ("first", "all"):
+                send_mode = "first"
 
-                notifications_order = _sanitize_notifications_order(
-                    request.form.get("notifications_order") or settings.get("notifications_order") or "email"
-                )
-                user_can_override = 1 if request.form.get("user_notifications_can_override") == "1" else 0
+            notifications_order = _sanitize_notifications_order(
+                request.form.get("notifications_order") or settings.get("notifications_order") or "email"
+            )
+            user_can_override = 1 if request.form.get("user_notifications_can_override") == "1" else 0
 
+            db.execute(
+                """
+                UPDATE settings SET
+                  mailing_enabled=?,
+                  skip_never_used_accounts=?,
+                  mail_from=?,
+                  smtp_host=?,
+                  smtp_port=?,
+                  smtp_tls=?,
+                  smtp_user=?,
+                  smtp_pass=?,
+                  discord_enabled=?,
+                  discord_bot_token=?,
+                  notifications_send_mode=?,
+                  notifications_order=?,
+                  user_notifications_can_override=?
+                WHERE id=1
+                """,
+                (
+                    mailing_enabled,
+                    skip_never_used_accounts,
+                    mail_from,
+                    smtp_host,
+                    smtp_port,
+                    smtp_tls,
+                    smtp_user,
+                    smtp_pass,
+                    discord_enabled,
+                    discord_bot_token,
+                    send_mode,
+                    notifications_order,
+                    user_can_override,
+                ),
+            )
+
+            add_log("info", "communications", "Communication settings updated")
+            flash(t("comm_config_saved"), "success")
+            return redirect(url_for("communications_configuration_page"))
+
+        # Queue retry of failed scheduled communications
+        if action == "retry_scheduled_errors":
+            try:
                 db.execute(
                     """
-                    UPDATE settings SET
-                      mailing_enabled=?,
-                      skip_never_used_accounts=?,
-                      mail_from=?,
-                      smtp_host=?,
-                      smtp_port=?,
-                      smtp_tls=?,
-                      smtp_user=?,
-                      smtp_pass=?,
-                      discord_enabled=?,
-                      discord_bot_token=?,
-                      notifications_send_mode=?,
-                      notifications_order=?,
-                      user_notifications_can_override=?
-                    WHERE id=1
-                    """,
-                    (
-                        mailing_enabled,
-                        skip_never_used_accounts,
-                        mail_from,
-                        smtp_host,
-                        smtp_port,
-                        smtp_tls,
-                        smtp_user,
-                        smtp_pass,
-                        discord_enabled,
-                        discord_bot_token,
-                        send_mode,
-                        notifications_order,
-                        user_can_override,
-                    ),
-                )
-
-                # If it's an auto-save (fetch/HTMX), respond without redirect.
-                if request.headers.get("HX-Request") or request.headers.get("X-Requested-With") == "XMLHttpRequest":
-                    return jsonify({"ok": True})
-
-                flash(t("comm_config_saved"), "success")
-                return redirect(url_for("communications_configuration_page"))
-
-            if action == "save_email":
-                new_values = {
-                    "mailing_enabled": 1 if request.form.get("mailing_enabled") == "1" else 0,
-                    "mail_from": (request.form.get("mail_from") or "").strip() or None,
-                    "smtp_host": (request.form.get("smtp_host") or "").strip() or None,
-                    "smtp_port": _as_int(request.form.get("smtp_port"), None),
-                    "smtp_tls": 1 if request.form.get("smtp_tls") == "1" else 0,
-                    "smtp_user": (request.form.get("smtp_user") or "").strip() or None,
-                    "smtp_pass": (request.form.get("smtp_pass") or ""),
-                }
-
-                db.execute(
+                    UPDATE comm_scheduled
+                    SET status = 'pending',
+                        last_error = NULL,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE status = 'error'
                     """
-                    UPDATE settings SET
-                      mailing_enabled=:mailing_enabled,
-                      mail_from=:mail_from,
-                      smtp_host=:smtp_host,
-                      smtp_port=:smtp_port,
-                      smtp_tls=:smtp_tls,
-                      smtp_user=:smtp_user,
-                      smtp_pass=:smtp_pass
-                    WHERE id=1
-                    """,
-                    new_values,
                 )
-                flash(t("comm_config_saved"), "success")
-                return redirect(url_for("communications_configuration_page"))
-
-            if action == "test_email":
-                admin_email = (settings.get("admin_email") or "").strip()
-                if not admin_email:
-                    flash(t("comm_admin_email_missing"), "error")
-                    return redirect(url_for("communications_configuration_page"))
                 try:
-                    send_email_via_settings(admin_email, t("comm_test_email_subject"), t("comm_test_email_body"))
-                    flash(t("comm_test_ok"), "success")
-                except Exception as e:
-                    flash(t("comm_test_failed").format(error=str(e)), "error")
-                return redirect(url_for("communications_configuration_page"))
+                    enable_and_run_task_by_name("send_expiration_emails")
+                except Exception:
+                    pass
 
-            if action == "save_discord":
-                discord_enabled = 1 if request.form.get("discord_enabled") == "1" else 0
-                token = (request.form.get("discord_bot_token") or "").strip() or None
+                add_log("info", "communications", "Scheduled communication errors requeued")
+                flash(t("comm_retry_scheduled_success"), "success")
+            except Exception as e:
+                flash(f"{t('comm_retry_scheduled_error')}: {e}", "error")
 
-                db.execute(
-                    "UPDATE settings SET discord_enabled=?, discord_bot_token=? WHERE id=1",
-                    (discord_enabled, token),
-                )
-                flash(t("comm_config_saved"), "success")
-                return redirect(url_for("communications_configuration_page"))
+            return redirect(url_for("communications_configuration_page"))
 
-            if action == "test_discord":
-                token = (request.form.get("discord_bot_token") or settings.get("discord_bot_token") or "").strip()
-                ok, detail = validate_discord_bot_token(token)
-                if ok:
-                    flash(t("comm_discord_token_ok").format(bot=detail), "success")
-                else:
-                    flash(t("comm_discord_token_bad").format(error=detail), "error")
-                return redirect(url_for("communications_configuration_page"))
+        flash(t("comm_not_found"), "error")
+        return redirect(url_for("communications_configuration_page"))
 
-            if action == "save_general":
-                send_mode = (request.form.get("notifications_send_mode") or settings.get("notifications_send_mode") or "first").strip().lower()
-                if send_mode not in ("first", "all"):
-                    send_mode = "first"
 
-                notifications_order = _sanitize_notifications_order(request.form.get("notifications_order") or settings.get("notifications_order") or "email")
-                can_override = 1 if request.form.get("user_notifications_can_override") == "1" else 0
+    @app.route("/communications/configuration", methods=["GET"])
+    def communications_configuration_page():
+        db = get_db()
 
-                db.execute(
-                    "UPDATE settings SET notifications_send_mode=?, notifications_order=?, user_notifications_can_override=? WHERE id=1",
-                    (send_mode, notifications_order, can_override),
-                )
-
-                flash(t("comm_config_saved"), "success")
-                return redirect(url_for("communications_configuration_page"))
-
-        # reload
         settings = db.query_one("SELECT * FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
+
+        recent_scheduled = db.query(
+            """
+            SELECT *
+            FROM comm_scheduled
+            ORDER BY created_at DESC, id DESC
+            LIMIT 50
+            """
+        ) or []
+        recent_scheduled = [dict(r) for r in recent_scheduled]
+
+        recent_history = db.query(
+            """
+            SELECT
+                h.*,
+                u.username AS user_username
+            FROM comm_history h
+            LEFT JOIN vodum_users u ON u.id = h.user_id
+            ORDER BY h.id DESC
+            LIMIT 50
+            """
+        ) or []
+        recent_history = [dict(r) for r in recent_history]
+
+        for row in recent_history:
+            try:
+                row["meta"] = json.loads(row.get("meta_json") or "{}")
+            except Exception:
+                row["meta"] = {}
 
         return render_template(
             "communications/communications_configuration.html",
             settings=settings,
+            recent_scheduled=recent_scheduled,
+            recent_history=recent_history,
             current_subpage="configuration",
         )

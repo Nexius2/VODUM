@@ -1506,11 +1506,31 @@ def run_migrations():
         conn.commit()
         print("✔ media_sessions.library_section_id added")
 
+    if table_exists(cursor, "media_sessions") and not column_exists(cursor, "media_sessions", "poster_ref_json"):
+        cursor.execute("ALTER TABLE media_sessions ADD COLUMN poster_ref_json TEXT")
+        conn.commit()
+        print("✔ media_sessions.poster_ref_json added")
+
+    if table_exists(cursor, "media_sessions") and not column_exists(cursor, "media_sessions", "backdrop_ref_json"):
+        cursor.execute("ALTER TABLE media_sessions ADD COLUMN backdrop_ref_json TEXT")
+        conn.commit()
+        print("✔ media_sessions.backdrop_ref_json added")
+
     # media_session_history.library_section_id
     if table_exists(cursor, "media_session_history") and not column_exists(cursor, "media_session_history", "library_section_id"):
         cursor.execute("ALTER TABLE media_session_history ADD COLUMN library_section_id TEXT")
         conn.commit()
         print("✔ media_session_history.library_section_id added")
+
+    if table_exists(cursor, "media_session_history") and not column_exists(cursor, "media_session_history", "poster_ref_json"):
+        cursor.execute("ALTER TABLE media_session_history ADD COLUMN poster_ref_json TEXT")
+        conn.commit()
+        print("✔ media_session_history.poster_ref_json added")
+
+    if table_exists(cursor, "media_session_history") and not column_exists(cursor, "media_session_history", "backdrop_ref_json"):
+        cursor.execute("ALTER TABLE media_session_history ADD COLUMN backdrop_ref_json TEXT")
+        conn.commit()
+        print("✔ media_session_history.backdrop_ref_json added")
 
     # -------------------------------------------------
     # 2.5 Normalize monitoring media_type values (idempotent)
@@ -1619,6 +1639,15 @@ def run_migrations():
         "name": "auto_backup",
         "description": "task_description.auto_backup",
         "schedule": "0 3 */3 * *",   # tous les 3 jours
+        "enabled": 1,
+        "status": "idle"
+    })
+
+    # Restore backup (ON-DEMAND)
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "restore_backup",
+        "description": "task_description.restore_backup",
+        "schedule": None,
         "enabled": 1,
         "status": "idle"
     })

@@ -1,4 +1,149 @@
 # ✅ VODUM – TODO GLOBAL REWORK
+# URGENT:
+# 🚨 TODO URGENT — FIX ACCÈS PLEX
+
+## 🎯 Objectif
+
+Empêcher que les accès Plex soient supprimés après réactivation d’un utilisateur.
+
+---
+
+## 🔴 1. Empêcher sync_plex d’écraser les accès en cours
+
+- [x] Modifier `sync_plex_user_library_access()`
+
+- [x] Avant tout traitement destructif, vérifier les jobs Plex en attente :
+
+
+```
+SELECT 1 FROM media_jobs
+WHERE user_id = ?
+AND server_id = ?
+AND status IN ('pending','queued','processing')
+AND action IN ('grant','revoke','sync')
+```
+
+- [ ] Si résultat trouvé :
+  - SKIP complètement ce user
+  - NE PAS supprimer les accès en DB
+
+- [ ] Ajouter log :
+```
+[SYNC SKIPPED] pending media job detected for user_id=X server_id=Y
+```
+
+---
+
+## 🔴 2. Nettoyer les jobs lors du renouvellement
+
+- [x] Dans `update_user_expiration()` :
+
+```
+DELETE FROM media_jobs
+WHERE user_id = ?
+AND status IN ('pending','queued')
+```
+
+- [x] Ajouter log :
+```
+[JOB CLEANUP] removed N jobs for user_id=X
+```
+
+---
+
+## 🔴 3. Forcer un sync complet après réactivation
+
+- [x] Lorsqu’un user passe de expiré → actif :
+
+- [x] Créer un job :
+```
+action = 'sync'
+```
+
+- [x] Ne plus dépendre uniquement des `grant` partiels
+
+---
+
+## 🔴 4. Forcer le bon media_user
+
+- [x] Lors de création des jobs Plex :
+
+Ajouter dans `payload_json` :
+```
+preferred_media_user_id
+```
+
+- [x] Vérifier que `apply_plex_access_updates` l’utilise en priorité
+
+---
+
+## 🔴 5. Bloquer modification si user expiré
+
+- [x] Dans `toggle_library` :
+
+```
+if user.expired:
+    return error
+```
+
+---
+
+## 🔴 6. Corriger le DELETE brutal dans sync_plex
+
+- [x] Supprimer le `DELETE` brutal de `media_user_libraries`
+- [x] Remplacer par une comparaison DB vs Plex
+- [x] Supprimer uniquement les accès réellement absents côté Plex
+- [x] Ne rien supprimer si la récupération des accès Plex échoue
+
+---
+
+## 🔴 7. Nettoyer les doublons media_users
+
+- [x] Identifier doublons :
+  - même user_id + server_id
+
+- [x] Garder :
+  - entrée active / accepted
+
+- [x] Supprimer autres
+
+---
+
+## 🔴 8. Ajouter logs essentiels
+
+- [x] Ajouter logs :
+
+```
+[ACCESS REQUEST]
+[MEDIA JOB CREATED]
+[ACCESS APPLY]
+[SYNC SKIPPED]
+[SYNC OVERWRITE]
+[JOB CLEANUP]
+```
+
+---
+
+## 🔴 9. Ajouter action admin de réparation
+
+- [x] Ajouter bouton :
+  - "Force resync access"
+
+- [x] Action :
+  - supprimer jobs en attente
+  - recréer sync complet
+  - relancer worker
+
+---
+
+## ✅ Résultat attendu
+
+- [ ] Les accès remis ne sont plus supprimés après sync_plex
+- [ ] Aucun ancien job ne casse les droits
+- [ ] Plex reflète correctement la DB
+- [ ] Les réactivations sont fiables à 100%
+
+# todo normal
 
 ## 🧱 1. Architecture (PRIORITÉ MAX)
 
@@ -48,7 +193,7 @@
 ### 1.2 Règle d’architecture cible : GET = lecture, POST = action, Worker = exécution
 
 - [ ] Supprimer les routes GET qui modifient la base
-- [ ] Unifier les actions POST (suppression des doublons run task, toggle, etc.) *(en cours : activation + queue des tâches apply_* centralisées, auto-enable `stream_enforcer` sorti des routes/blueprints, enable/disable cohérent centralisé dans `tasks_engine`, master switch cron + tâches d’expiration sortis de `settings.py`, préparation post-restore sortie de `backup.py`, activations système `check_servers`/`update_user_status` centralisées, pilotage d’état `run_now` sorti de `tasks.py`, séquence post-création serveur centralisée, page `/tasks` séparée en GET lecture seule + POST dédié `/tasks/action`, page `/users` séparée en GET lecture seule + POST dédié `/users/referral-settings`, page `/subscriptions` séparée en GET lecture seule + POST dédié `/subscriptions/settings`, page `/settings` séparée en GET lecture seule + POST dédié `/settings/save`, page `/servers/<id>` séparée en GET lecture seule + POST dédié `/servers/<id>/save`, page `/users/<id>` séparée en GET lecture seule + POST dédié `/users/<id>/save`, page `/communications/campaigns` séparée en GET lecture seule + POST dédié `/communications/campaigns/action`, page `/communications/templates` séparée en GET lecture seule + POST dédié `/communications/templates/action`, page `/communications/configuration` séparée en GET lecture seule + POST dédié `/communications/configuration/action`, page `/backup` séparée en GET lecture seule + POST dédié `/backup/action`)*
+- [x] Unifier les actions POST (suppression des doublons run task, toggle, etc.) *(en cours : activation + queue des tâches apply_* centralisées, auto-enable `stream_enforcer` sorti des routes/blueprints, enable/disable cohérent centralisé dans `tasks_engine`, master switch cron + tâches d’expiration sortis de `settings.py`, préparation post-restore sortie de `backup.py`, activations système `check_servers`/`update_user_status` centralisées, pilotage d’état `run_now` sorti de `tasks.py`, séquence post-création serveur centralisée, page `/tasks` séparée en GET lecture seule + POST dédié `/tasks/action`, page `/users` séparée en GET lecture seule + POST dédié `/users/referral-settings`, page `/subscriptions` séparée en GET lecture seule + POST dédié `/subscriptions/settings`, page `/settings` séparée en GET lecture seule + POST dédié `/settings/save`, page `/servers/<id>` séparée en GET lecture seule + POST dédié `/servers/<id>/save`, page `/users/<id>` séparée en GET lecture seule + POST dédié `/users/<id>/save`, page `/communications/campaigns` séparée en GET lecture seule + POST dédié `/communications/campaigns/action`, page `/communications/templates` séparée en GET lecture seule + POST dédié `/communications/templates/action`, page `/communications/configuration` séparée en GET lecture seule + POST dédié `/communications/configuration/action`, page `/backup` séparée en GET lecture seule + POST dédié `/backup/action`)*
 - [ ] Supprimer les routes GET qui déclenchent des jobs
 - [ ] Réserver les routes GET à la lecture DB / rendu template / API read-only
 - [ ] Réserver les POST aux changements d’état
@@ -97,6 +242,8 @@
 - [x] `GET /backup` est maintenant réservé à l’affichage read-only de la page backup
 - [x] les actions backup/restauration/import passent maintenant par une route POST dédiée `/backup/action`
 - [x] les templates backup n’utilisent plus le POST direct sur `/backup`
+- [x] `GET /backup` est maintenant une vraie route de lecture seule
+- [x] `POST /backup/action` exécute les actions sans logique POST restante dans la route GET
 
 ##### Problème 1 — ancien GET historique désormais corrigé
 - `app/routes/servers.py`
@@ -139,6 +286,9 @@
 - [x] Faire lire `/monitoring` uniquement depuis la base
 - [x] Déplacer l’écriture des snapshots de monitoring dans une tâche dédiée ou dans le collector
 - [x] Définir clairement quelles routes API ont encore le droit de proxyfier des médias distants
+- [x] enregistrer les posters de now playing dans la db pour les resortir a chaque cahrgement de page et minimiser les requete a plex.
+- [x] enregistrer les background en meme temps en db, ca limite encore les requetes.
+- [ ]utiliser les poster et background en db pour les top dans monitoring / libraries et monitoring / overview
 
 #### Contrôle effectué
 Le gros point encore sale côté architecture, c’est ici :
@@ -261,6 +411,10 @@ Donc la bonne direction n’est pas de réinventer le système, mais de :
 - [x] `run.py` documente maintenant explicitement la chaîne réelle : entrypoint -> create_app -> boot fixes -> scheduler
 - [x] `_run_startup_boot_fixes(app)` décrit maintenant clairement son périmètre, son ordre et son rôle exact
 - [x] la séparation entre bootstrap infra/DB et boot fixes applicatifs est maintenant explicitée dans le code
+- [x] `GET /login` est maintenant réservé à l’affichage read-only du formulaire
+- [x] la connexion passe maintenant par une route POST dédiée `/login/submit`
+- [x] `GET /setup-admin` est maintenant réservé à l’affichage read-only du formulaire
+- [x] l’initialisation admin passe maintenant par une route POST dédiée `/setup-admin/save`
 
 ##### Déjà bon
 - `entrypoint.sh` :
@@ -425,6 +579,9 @@ Mais l’architecture n’est pas encore totalement respectée, car on a encore 
 ### DB & cohérence
 - [ ] Nettoyage automatique des états incohérents
 - [ ] Ajouter colonne “nombre d’utilisateurs par library”
+
+### app users
+- [x] delete user button.  will delete all vodum & media users merged
 
 ---
 

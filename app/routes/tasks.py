@@ -301,14 +301,12 @@ def register(app):
 
         configured = _is_auth_configured(s)
 
-        # ✅ IMPORTANT : on ne protège PAS /api (background)
-        #if request.path.startswith("/api/"):
-        #    return
+
 
         # pages auth accessibles
-        auth_pages = ("/login", "/logout", "/setup-admin")
+        auth_pages = ("/login", "/login/submit", "/logout", "/setup-admin", "/setup-admin/save")
         if request.path in auth_pages:
-            if request.path == "/login" and not configured:
+            if request.path in ("/login", "/login/submit") and not configured:
                 return redirect(url_for("setup_admin"))
             return
 

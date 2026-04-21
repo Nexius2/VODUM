@@ -10,6 +10,7 @@ import xml.etree.ElementTree as ET
 
 from core.monitoring.diff import compute_session_events
 from core.monitoring.mappers import resolve_media_user_id
+from core.monitoring.artwork import extract_artwork_refs
 from core.providers.registry import get_provider
 from logging_utils import get_logger
 
@@ -495,6 +496,10 @@ def collect_sessions_for_server(
 
             started_at = _iso_now() if "start" in events else None
 
+            artwork_refs = extract_artwork_refs(sess)
+            poster_ref_json = artwork_refs.get("poster_ref_json")
+            backdrop_ref_json = artwork_refs.get("backdrop_ref_json")
+
             db.execute(
                 """
                 INSERT INTO media_sessions (
@@ -504,9 +509,9 @@ def collect_sessions_for_server(
                   state, progress_ms, duration_ms,
                   is_transcode, bitrate, video_codec, audio_codec,
                   client_name, client_product, device, ip,
-                  started_at, last_seen_at, raw_json, library_section_id
+                  started_at, last_seen_at, raw_json, poster_ref_json, backdrop_ref_json, library_section_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(server_id, session_key) DO UPDATE SET
                   media_user_id=excluded.media_user_id,
                   external_user_id=excluded.external_user_id,
@@ -533,6 +538,8 @@ def collect_sessions_for_server(
                   started_at=COALESCE(media_sessions.started_at, excluded.started_at, excluded.last_seen_at),
                   last_seen_at=excluded.last_seen_at,
                   raw_json=excluded.raw_json,
+                  poster_ref_json=COALESCE(excluded.poster_ref_json, media_sessions.poster_ref_json),
+                  backdrop_ref_json=COALESCE(excluded.backdrop_ref_json, media_sessions.backdrop_ref_json),
                   library_section_id=COALESCE(excluded.library_section_id, media_sessions.library_section_id)
                 """,
                 (
@@ -545,7 +552,7 @@ def collect_sessions_for_server(
                     sess.get("video_codec"), sess.get("audio_codec"),
                     sess.get("client_name"), sess.get("client_product"),
                     sess.get("device"), sess.get("ip"),
-                    started_at, _iso_now(), sess.get("raw_json"),
+                    started_at, _iso_now(), sess.get("raw_json"), poster_ref_json, backdrop_ref_json,
                     sess.get("library_section_id"),
                 ),
             )
@@ -663,7 +670,13 @@ def collect_sessions_for_server(
                               END,
                               peak_bitrate = COALESCE(peak_bitrate, ?),
                               was_transcode = MAX(was_transcode, ?),
+                              media_type = COALESCE(?, media_type),
+                              title = COALESCE(?, title),
+                              grandparent_title = COALESCE(?, grandparent_title),
+                              parent_title = COALESCE(?, parent_title),
                               raw_json = COALESCE(?, raw_json),
+                              poster_ref_json = NULL,
+                              backdrop_ref_json = NULL,
                               ip = COALESCE(?, ip),
                               device = COALESCE(?, device),
                               client_product = COALESCE(?, client_product),
@@ -681,6 +694,10 @@ def collect_sessions_for_server(
                                 duration_ms, duration_ms,
                                 peak_bitrate,
                                 was_transcode,
+                                media_type,
+                                title,
+                                grandparent_title,
+                                parent_title,
                                 raw_json,
                                 ip,
                                 device,
@@ -728,7 +745,13 @@ def collect_sessions_for_server(
                               END,
                               peak_bitrate = COALESCE(peak_bitrate, ?),
                               was_transcode = MAX(was_transcode, ?),
+                              media_type = COALESCE(?, media_type),
+                              title = COALESCE(?, title),
+                              grandparent_title = COALESCE(?, grandparent_title),
+                              parent_title = COALESCE(?, parent_title),
                               raw_json = COALESCE(?, raw_json),
+                              poster_ref_json = NULL,
+                              backdrop_ref_json = NULL,
                               ip = COALESCE(?, ip),
                               device = COALESCE(?, device),
                               client_product = COALESCE(?, client_product),
@@ -743,6 +766,10 @@ def collect_sessions_for_server(
                                 duration_ms, duration_ms,
                                 peak_bitrate,
                                 was_transcode,
+                                media_type,
+                                title,
+                                grandparent_title,
+                                parent_title,
                                 raw_json,
                                 ip,
                                 device,
@@ -770,6 +797,10 @@ def collect_sessions_for_server(
                 # On ne recycle plus une vieille ligne juste parce que session_key matche.
                 if updated == 0:
                     try:
+                        artwork_refs = extract_artwork_refs(live)
+                        poster_ref_json = artwork_refs.get("poster_ref_json")
+                        backdrop_ref_json = artwork_refs.get("backdrop_ref_json")
+
                         db.execute(
                             """
                             INSERT OR IGNORE INTO media_session_history (
@@ -780,9 +811,9 @@ def collect_sessions_for_server(
                               duration_ms, watch_ms,
                               peak_bitrate, was_transcode,
                               client_name, client_product, device, ip,
-                              raw_json, library_section_id
+                              raw_json, poster_ref_json, backdrop_ref_json, library_section_id
                             )
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             """,
                             (
                                 server_id, provider_name,
@@ -792,7 +823,7 @@ def collect_sessions_for_server(
                                 duration_ms, watch_ms,
                                 peak_bitrate, was_transcode,
                                 client_name, client_product, device, ip,
-                                raw_json, library_section_id,
+                                raw_json, poster_ref_json, backdrop_ref_json, library_section_id,
                             ),
                         )
                     except Exception as e:

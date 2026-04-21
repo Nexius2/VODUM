@@ -614,6 +614,8 @@ CREATE TABLE IF NOT EXISTS media_sessions (
   last_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
   raw_json TEXT,
+  poster_ref_json TEXT,
+  backdrop_ref_json TEXT,
 
   library_section_id TEXT,
 
@@ -699,6 +701,8 @@ CREATE TABLE IF NOT EXISTS media_session_history (
   ip TEXT,
 
   raw_json TEXT,
+  poster_ref_json TEXT,
+  backdrop_ref_json TEXT,
 
   library_section_id TEXT,
 

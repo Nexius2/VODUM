@@ -92,20 +92,38 @@ def register(app):
 
             params = {"X-Plex-Token": token}
 
+            candidate_paths = []
+            if path:
+                candidate_paths.append(path)
+
+            # Fallback utile :
+            # si /art échoue, on tente le /thumb du même media
+            if path.endswith("/art"):
+                candidate_paths.append(path[:-4] + "/thumb")
+
+            # on évite les doublons
+            deduped_paths = []
+            seen_paths = set()
+            for p in candidate_paths:
+                if p and p not in seen_paths:
+                    deduped_paths.append(p)
+                    seen_paths.add(p)
+
             last_err = None
-            for base in bases:
-                try:
-                    wait_for_plex_slot(base)
-                    r = _try_get(base + path, params=params)
-                    ct = r.headers.get("Content-Type") or "image/jpeg"
-                    return Response(
-                        r.content,
-                        mimetype=ct,
-                        headers={"Cache-Control": "public, max-age=300"},
-                    )
-                except Exception as e:
-                    last_err = e
-                    continue
+            for candidate_path in deduped_paths:
+                for base in bases:
+                    try:
+                        wait_for_plex_slot(base)
+                        r = _try_get(base + candidate_path, params=params)
+                        ct = r.headers.get("Content-Type") or "image/jpeg"
+                        return Response(
+                            r.content,
+                            mimetype=ct,
+                            headers={"Cache-Control": "public, max-age=300"},
+                        )
+                    except Exception as e:
+                        last_err = e
+                        continue
 
             abort(502)
 

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fr">
+<html lang="{{ active_lang or 'fr' }}">
 <head>
   <meta charset="utf-8">
   <title>{{ t("auth.title_login") }}</title>
@@ -25,7 +25,7 @@
         {% endif %}
       {% endwith %}
 
-      <form method="POST" class="space-y-4">
+      <form method="POST" action="{{ url_for('login_submit') }}" class="space-y-4">
         <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
         <div>
           <label class="block text-sm mb-1 text-slate-300">{{ t("auth.admin_email") }}</label>
@@ -34,12 +34,27 @@
                  required>
         </div>
 
-        <div>
-          <label class="block text-sm mb-1 text-slate-300">{{ t("auth.password") }}</label>
-          <input type="password" name="password" autocomplete="current-password"
-                 class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm"
-                 required>
-        </div>
+		<div>
+		  <label class="block text-sm mb-1 text-slate-300">{{ t("auth.password") }}</label>
+		  <div class="relative">
+			<input
+			  type="password"
+			  id="password"
+			  name="password"
+			  autocomplete="current-password"
+			  class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 pr-10 text-sm"
+			  required
+			>
+			<button
+			  type="button"
+			  id="togglePassword"
+			  class="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-emerald-400"
+			  aria-label="Afficher ou masquer le mot de passe"
+			>
+			  👁
+			</button>
+		  </div>
+		</div>
 
         <button class="w-full px-4 py-2 bg-indigo-500 hover:bg-indigo-600 rounded text-white text-sm">
           {{ t("common.login") }}
@@ -128,34 +143,48 @@
     </div>
   </div>
 
-  <script>
-    const modal = document.getElementById("resetModal");
-    const openBtn = document.getElementById("openResetModal");
-    const closeBtn = document.getElementById("closeResetModal");
-    const closeBtn2 = document.getElementById("closeResetModal2");
+<script>
+  const modal = document.getElementById("resetModal");
+  const openBtn = document.getElementById("openResetModal");
+  const closeBtn = document.getElementById("closeResetModal");
+  const closeBtn2 = document.getElementById("closeResetModal2");
+  const togglePasswordBtn = document.getElementById("togglePassword");
+  const passwordInput = document.getElementById("password");
 
-    function openModal() {
-      modal.classList.remove("hidden");
-      modal.setAttribute("aria-hidden", "false");
+  function openModal() {
+    modal.classList.remove("hidden");
+    modal.setAttribute("aria-hidden", "false");
+  }
+
+  function closeModal() {
+    modal.classList.add("hidden");
+    modal.setAttribute("aria-hidden", "true");
+  }
+
+  function togglePasswordVisibility() {
+    if (!passwordInput) return;
+    passwordInput.type = passwordInput.type === "password" ? "text" : "password";
+  }
+
+  openBtn.addEventListener("click", openModal);
+  closeBtn.addEventListener("click", closeModal);
+  closeBtn2.addEventListener("click", closeModal);
+
+  if (togglePasswordBtn) {
+    togglePasswordBtn.addEventListener("click", togglePasswordVisibility);
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !modal.classList.contains("hidden")) {
+      closeModal();
     }
-    function closeModal() {
-      modal.classList.add("hidden");
-      modal.setAttribute("aria-hidden", "true");
+  });
+
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal || e.target.classList.contains("bg-black/70")) {
+      closeModal();
     }
-
-    openBtn.addEventListener("click", openModal);
-    closeBtn.addEventListener("click", closeModal);
-    closeBtn2.addEventListener("click", closeModal);
-
-    // close on ESC
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !modal.classList.contains("hidden")) closeModal();
-    });
-
-    // close if click backdrop
-    modal.addEventListener("click", (e) => {
-      if (e.target === modal || e.target.classList.contains("bg-black/70")) closeModal();
-    });
-  </script>
+  });
+</script>
 </body>
 </html>
