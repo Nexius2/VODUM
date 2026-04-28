@@ -182,9 +182,9 @@ def _disable_access_for_user(db, vodum_user_id: int) -> Tuple[int, int]:
         JOIN libraries l ON l.id = mul.library_id
         JOIN servers s_lib ON s_lib.id = l.server_id
         WHERE mu.vodum_user_id = ?
-          AND mu.type IN ('plex','jellyfin')
-          AND s_mu.type = mu.type
-          AND s_lib.type = mu.type
+          AND LOWER(TRIM(mu.type)) IN ('plex','jellyfin')
+          AND LOWER(TRIM(s_mu.type)) = LOWER(TRIM(mu.type))
+          AND LOWER(TRIM(s_lib.type)) = LOWER(TRIM(mu.type))
         """,
         (vodum_user_id,),
     )

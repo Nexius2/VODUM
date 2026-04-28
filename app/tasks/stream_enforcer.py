@@ -331,7 +331,7 @@ def _load_live_sessions() -> List[dict]:
     rows = _db.query(f"""
         SELECT
           ms.server_id,
-          s.type AS provider,
+          LOWER(TRIM(s.type)) AS provider,
           ms.session_key,
           ms.media_user_id,
           ms.external_user_id,
@@ -357,7 +357,7 @@ def _load_live_sessions() -> List[dict]:
         FROM media_sessions ms
         JOIN servers s ON s.id = ms.server_id
         LEFT JOIN media_users mu ON mu.id = ms.media_user_id
-        WHERE s.type IN ('plex','jellyfin')
+        WHERE LOWER(TRIM(s.type)) IN ('plex','jellyfin')
           AND datetime(ms.last_seen_at) >= datetime('now', ?)
         ORDER BY ms.server_id
     """, (_now_sql_window(),))

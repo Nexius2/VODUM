@@ -11,6 +11,7 @@ from flask import (
 from logging_utils import get_logger
 from tasks_engine import enqueue_server_discovery_sequence, enable_and_run_task_by_name, ensure_tasks_enabled
 from web.helpers import get_db
+from core.media_jobs import insert_plex_media_job
 
 server_delete_logger = get_logger("server_delete")
 
@@ -40,40 +41,7 @@ def _get_preferred_plex_media_user_id(db, vodum_user_id: int, server_id: int):
     return int(row["id"]) if row and row["id"] is not None else None
 
 
-def _insert_plex_media_job(
-    db,
-    *,
-    action: str,
-    vodum_user_id: int,
-    server_id: int,
-    dedupe_key: str,
-    payload: dict | None = None,
-):
-    cur = db.execute(
-        """
-        INSERT OR IGNORE INTO media_jobs(
-            provider, action,
-            vodum_user_id, server_id, library_id,
-            payload_json,
-            processed, success, attempts,
-            dedupe_key
-        )
-        VALUES(
-            'plex', ?, ?, ?, NULL,
-            ?,
-            0, 0, 0,
-            ?
-        )
-        """,
-        (
-            action,
-            vodum_user_id,
-            server_id,
-            json.dumps(payload or {}, ensure_ascii=False),
-            dedupe_key,
-        ),
-    )
-    return getattr(cur, "rowcount", 0) > 0
+
 
 def _delete_in_chunks(conn, sql, params=(), batch_size=DELETE_BATCH_SIZE):
     total = 0
@@ -390,7 +358,7 @@ def register(app):
                 "preferred_media_user_id": preferred_media_user_id,
             }
 
-            inserted = _insert_plex_media_job(
+            inserted = insert_plex_media_job(
                 db,
                 action="sync",
                 vodum_user_id=vodum_user_id,
@@ -951,7 +919,7 @@ def register(app):
                 "preferred_media_user_id": preferred_media_user_id,
             }
 
-            _insert_plex_media_job(
+            insert_plex_media_job(
                 db,
                 action="sync",
                 vodum_user_id=vodum_user_id,
@@ -1127,7 +1095,7 @@ def register(app):
                 "preferred_media_user_id": preferred_media_user_id,
             }
 
-            _insert_plex_media_job(
+            insert_plex_media_job(
                 db,
                 action=action,
                 vodum_user_id=vodum_user_id,

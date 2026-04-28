@@ -11,7 +11,8 @@ from tasks_engine import enable_and_run_task_by_name, auto_enable_stream_enforce
 
 from web.helpers import get_db, add_log
 from .users_list import get_merge_suggestions
-from .users_actions import _get_preferred_plex_media_user_id, _insert_plex_media_job
+from .users_actions import _get_preferred_plex_media_user_id
+from core.media_jobs import insert_plex_media_job
 from api.subscriptions import update_user_expiration
 from notifications_utils import parse_notifications_order
 
@@ -603,10 +604,10 @@ def register(app):
                     "preferred_media_user_id": preferred_media_user_id,
                 }
 
-                inserted = _insert_plex_media_job(
+                inserted = insert_plex_media_job(
                     db,
                     action="sync",
-                    user_id=user_id,
+                    vodum_user_id=user_id,
                     server_id=server_id,
                     library_id=None,
                     dedupe_key=dedupe_key,

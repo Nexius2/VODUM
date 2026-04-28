@@ -522,7 +522,7 @@ def sync_plex_user_library_access(db, plex, server):
             WHERE vodum_user_id = ?
               AND server_id = ?
               AND provider = 'plex'
-              AND status IN ('pending', 'queued', 'processing')
+              AND status IN ('queued', 'running')
               AND action IN ('grant', 'revoke', 'sync')
             LIMIT 1
             """,

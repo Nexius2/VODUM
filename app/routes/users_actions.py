@@ -11,6 +11,7 @@ from web.helpers import get_db
 from core.plex_rate_limit import install_plex_rate_limit
 from core.providers.jellyfin_users import jellyfin_list_users
 from .users_list import merge_vodum_users
+from core.media_jobs import insert_plex_media_job
 
 
 task_logger = get_logger("tasks_ui")
@@ -36,50 +37,17 @@ def _get_preferred_plex_media_user_id(db, user_id: int, server_id: int):
     return int(row["id"]) if row and row["id"] is not None else None
 
 
-def _insert_plex_media_job(
-    db,
-    *,
-    action: str,
-    user_id: int,
-    server_id: int,
-    library_id: int | None,
-    dedupe_key: str,
-    payload: dict | None = None,
-):
-    cur = db.execute(
-        """
-        INSERT OR IGNORE INTO media_jobs
-            (provider, action, vodum_user_id, server_id, library_id, payload_json, dedupe_key)
-        VALUES
-            ('plex', ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            action,
-            user_id,
-            server_id,
-            library_id,
-            json.dumps(payload or {}, ensure_ascii=False),
-            dedupe_key,
-        ),
-    )
-    return getattr(cur, "rowcount", 0) > 0
+
 
 def _force_queue_full_plex_sync_for_user(db, user_id: int, reason: str = "admin_force_resync"):
     """
-    Supprime les anciens jobs Plex actifs pour l'utilisateur,
-    puis recrée un job 'sync' complet par serveur Plex lié.
-    """
-    db.execute(
-        """
-        DELETE FROM media_jobs
-        WHERE vodum_user_id = ?
-          AND provider = 'plex'
-          AND action IN ('grant', 'revoke', 'sync')
-          AND status IN ('queued', 'running')
-        """,
-        (user_id,),
-    )
+    Recrée un job 'sync' complet par serveur Plex lié.
 
+    Important :
+    on passe par _insert_plex_media_job() pour annuler proprement
+    les anciens jobs actifs du même user/server, au lieu de supprimer
+    brutalement des jobs éventuellement en cours.
+    """
     rows = db.query(
         """
         SELECT
@@ -127,27 +95,24 @@ def _force_queue_full_plex_sync_for_user(db, user_id: int, reason: str = "admin_
             "preferred_media_user_id": preferred_media_user_id,
         }
 
-        db.execute(
-            """
-            INSERT OR IGNORE INTO media_jobs
-                (provider, action, vodum_user_id, server_id, library_id, payload_json, dedupe_key)
-            VALUES
-                ('plex', 'sync', ?, ?, NULL, ?, ?)
-            """,
-            (
-                user_id,
-                server_id,
-                json.dumps(payload, ensure_ascii=False),
-                dedupe_key,
-            ),
+        inserted = insert_plex_media_job(
+            db,
+            action="sync",
+            vodum_user_id=user_id,
+            server_id=server_id,
+            library_id=None,
+            dedupe_key=dedupe_key,
+            payload=payload,
         )
 
-        queued += 1
+        if inserted:
+            queued += 1
 
         task_logger.info(
             f"[MEDIA JOB CREATED] provider=plex action=sync "
             f"user_id={user_id} server_id={server_id} "
-            f"preferred_media_user_id={preferred_media_user_id} reason=admin_force"
+            f"preferred_media_user_id={preferred_media_user_id} "
+            f"inserted={inserted} reason=admin_force"
         )
 
     return queued
@@ -868,10 +833,10 @@ def register(app):
                 "preferred_media_user_id": preferred_media_user_id,
             }
 
-            inserted = _insert_plex_media_job(
+            inserted = insert_plex_media_job(
                 db,
                 action=action,
-                user_id=user_id,
+                vodum_user_id=user_id,
                 server_id=lib["server_id"],
                 library_id=job_library_id,
                 dedupe_key=dedupe_key,

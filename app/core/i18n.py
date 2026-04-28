@@ -11,6 +11,7 @@ from logging_utils import get_logger
 
 # Cache global pour éviter de relire les JSON à chaque requête
 _I18N_CACHE: Dict[str, Dict] = {}
+_AVAILABLE_LANGUAGES_CACHE: Optional[Dict[str, str]] = None
 
 
 # ======================
@@ -59,17 +60,24 @@ def load_language_dict(lang_code: str) -> dict:
 
 
 def get_available_languages():
+    global _AVAILABLE_LANGUAGES_CACHE
+
     logger = get_logger("i18n")
+
+    if _AVAILABLE_LANGUAGES_CACHE is not None:
+        return dict(_AVAILABLE_LANGUAGES_CACHE)
+
     lang_dir = current_app.config.get("LANG_DIR") or os.path.join(current_app.root_path, "lang")
-    languages = {}
+    languages: Dict[str, str] = {}
 
     if not os.path.isdir(lang_dir):
         logger.warning(f"[i18n] Dossier de langues introuvable: {lang_dir}")
-        return {"en": "English"}
+        _AVAILABLE_LANGUAGES_CACHE = {"en": "English"}
+        return dict(_AVAILABLE_LANGUAGES_CACHE)
 
     for filename in os.listdir(lang_dir):
         if filename.endswith(".json"):
-            code = filename[:-5]  # fr.json → fr
+            code = filename[:-5]
 
             try:
                 with open(os.path.join(lang_dir, filename), "r", encoding="utf-8") as f:
@@ -87,7 +95,8 @@ def get_available_languages():
     if not languages:
         languages["en"] = "English"
 
-    return languages
+    _AVAILABLE_LANGUAGES_CACHE = dict(languages)
+    return dict(_AVAILABLE_LANGUAGES_CACHE)
 
 
 def _resolve_active_language(settings: Optional[dict] = None) -> str:
