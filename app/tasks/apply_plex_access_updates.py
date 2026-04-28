@@ -1,5 +1,6 @@
 import time
 import json
+from datetime import datetime, timedelta
 from plexapi.server import PlexServer
 from logging_utils import get_logger
 import xml.etree.ElementTree as ET
@@ -1226,39 +1227,76 @@ def apply_revoke_job(db, job):
 def run(task_id: int, db):
     logger.info("=== APPLY PLEX ACCESS UPDATES : START ===")
 
+    db.execute(
+        """
+        UPDATE media_jobs
+        SET status = 'queued',
+            locked_by = NULL,
+            locked_until = NULL,
+            last_error = COALESCE(last_error, 'Recovered stale running Plex access job')
+        WHERE provider = 'plex'
+          AND action IN ('grant','revoke','sync')
+          AND status = 'running'
+          AND locked_until IS NOT NULL
+          AND locked_until <= CURRENT_TIMESTAMP
+        """
+    )
+
     jobs = db.query(
         """
         SELECT *
         FROM media_jobs
         WHERE provider = 'plex'
+          AND status = 'queued'
           AND processed = 0
           AND action IN ('grant','revoke','sync')
-        ORDER BY id ASC
+          AND (run_after IS NULL OR run_after <= CURRENT_TIMESTAMP)
+          AND (locked_until IS NULL OR locked_until <= CURRENT_TIMESTAMP)
+        ORDER BY priority ASC, id ASC
         LIMIT 50
         """
     )
 
     if not jobs:
         logger.info("No jobs to process.")
-        return
+        return {"processed": 0, "errors": 0}
 
     logger.info(f"{len(jobs)} job(s) to process...")
 
+    processed = 0
+    errors = 0
+
     for job in jobs:
         job_id = job["id"]
+        locked_until = (datetime.utcnow() + timedelta(minutes=10)).strftime("%Y-%m-%d %H:%M:%S")
+
+        claim = db.execute(
+            """
+            UPDATE media_jobs
+            SET status = 'running',
+                locked_by = ?,
+                locked_until = ?,
+                executed_at = datetime('now'),
+                attempts = COALESCE(attempts, 0) + 1,
+                last_error = NULL
+            WHERE id = ?
+              AND provider = 'plex'
+              AND status = 'queued'
+              AND processed = 0
+            """,
+            (f"apply_plex_access_updates:{task_id}", locked_until, job_id),
+        )
+
+        if getattr(claim, "rowcount", 0) == 0:
+            logger.info(f"Job {job_id} already claimed by another worker, skipped.")
+            continue
+
+        job = db.query_one("SELECT * FROM media_jobs WHERE id = ?", (job_id,))
+        if not job:
+            logger.warning(f"Job {job_id} disappeared after claim, skipped.")
+            continue
 
         try:
-            db.execute(
-                """
-                UPDATE media_jobs
-                SET processed = 1,
-                    processed_at = COALESCE(processed_at, datetime('now')),
-                    last_error = NULL
-                WHERE id = ?
-                """,
-                (job_id,)
-            )
-
             if job["action"] == "grant":
                 apply_grant_job(db, job)
             elif job["action"] == "sync":
@@ -1271,51 +1309,94 @@ def run(task_id: int, db):
             db.execute(
                 """
                 UPDATE media_jobs
-                SET success = 1,
-                    executed_at = datetime('now')
+                SET status = 'success',
+                    processed = 1,
+                    success = 1,
+                    processed_at = datetime('now'),
+                    executed_at = datetime('now'),
+                    locked_by = NULL,
+                    locked_until = NULL,
+                    last_error = NULL
                 WHERE id = ?
                 """,
-                (job_id,)
+                (job_id,),
             )
 
             db.execute(
-                "DELETE FROM media_jobs WHERE id = ? AND success = 1",
-                (job_id,)
+                "DELETE FROM media_jobs WHERE id = ? AND status = 'success' AND success = 1",
+                (job_id,),
             )
 
-            logger.info(f"Job {job_id} OK (success=1) -> deleted")
+            processed += 1
+            logger.info(f"Job {job_id} OK -> deleted")
 
         except PendingPlexInvite as e:
             msg = str(e)
-            logger.info(f"Job {job_id} deferred (pending invite): {msg}")
+            run_after = (datetime.utcnow() + timedelta(hours=6)).strftime("%Y-%m-%d %H:%M:%S")
+
+            logger.info(f"Job {job_id} deferred pending invite until {run_after}: {msg}")
 
             db.execute(
                 """
                 UPDATE media_jobs
-                SET success = 0,
+                SET status = 'queued',
                     processed = 0,
+                    success = 0,
+                    run_after = ?,
+                    locked_by = NULL,
+                    locked_until = NULL,
                     executed_at = datetime('now'),
                     last_error = ?
                 WHERE id = ?
                 """,
-                (msg[:1000], job_id)
+                (run_after, msg[:1000], job_id),
             )
 
         except Exception as e:
-            logger.exception(f"Error while processing job {job_id}: {e}")
+            errors += 1
+            attempts = int(job["attempts"] or 0)
+            max_attempts = int(job["max_attempts"] or 10)
+            msg = str(e)
 
-            db.execute(
-                """
-                UPDATE media_jobs
-                SET success = 0,
-                    processed = 0,
-                    executed_at = datetime('now'),
-                    attempts = COALESCE(attempts, 0) + 1,
-                    last_error = ?
-                WHERE id = ?
-                """,
-                (str(e)[:1000], job_id)
-            )
+            logger.exception(f"Error while processing job {job_id}: {msg}")
+
+            if attempts >= max_attempts:
+                db.execute(
+                    """
+                    UPDATE media_jobs
+                    SET status = 'error',
+                        processed = 1,
+                        success = 0,
+                        processed_at = datetime('now'),
+                        executed_at = datetime('now'),
+                        locked_by = NULL,
+                        locked_until = NULL,
+                        last_error = ?
+                    WHERE id = ?
+                    """,
+                    (msg[:1000], job_id),
+                )
+            else:
+                delay_minutes = min(120, max(5, attempts * 10))
+                run_after = (datetime.utcnow() + timedelta(minutes=delay_minutes)).strftime("%Y-%m-%d %H:%M:%S")
+
+                db.execute(
+                    """
+                    UPDATE media_jobs
+                    SET status = 'queued',
+                        processed = 0,
+                        success = 0,
+                        run_after = ?,
+                        locked_by = NULL,
+                        locked_until = NULL,
+                        executed_at = datetime('now'),
+                        last_error = ?
+                    WHERE id = ?
+                    """,
+                    (run_after, msg[:1000], job_id),
+                )
 
     cleanup_old_jobs(db)
     logger.info("=== APPLY PLEX ACCESS UPDATES : END ===")
+
+    return {"processed": processed, "errors": errors}

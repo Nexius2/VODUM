@@ -1167,22 +1167,21 @@
 "bulk_remove_modal_title": "Retirer l’accès aux bibliothèques sélectionnées",
 "bulk_remove_modal_subtitle": "Cette action sera appliquée à tous les utilisateurs du serveur, sauf le propriétaire.",
 "bulk_remove_modal_warning": "Attention : cette action modifie la base puis déclenche la synchronisation Plex.",
-"selected_libraries": "Bibliothèques sélectionnées",
-"sync_jobs_already_pending": "Des jobs de synchronisation existent déjà pour ce serveur.",
-  "delete_user": "Supprimer l’utilisateur",
-  "user_deleted": "Utilisateur supprimé avec succès",
-  "delete_user_failed": "Échec de la suppression de l’utilisateur",
-  
-  "delete_user_title": "Supprimer cet utilisateur ?",
-  "delete_user_confirm_cta": "Oui, supprimer localement",
-  "delete_user_check_loading": "Vérification des plateformes liées…",
-  "delete_user_check_error": "Impossible de vérifier les plateformes liées. La suppression locale reste possible, mais l’utilisateur pourrait revenir après la prochaine synchronisation.",
-  "delete_user_summary_no_links": "Aucun lien Plex/Jellyfin actif n’a été trouvé pour cet utilisateur sur les serveurs actuellement configurés.",
-  "delete_user_summary_links_found": "Cet utilisateur est encore lié à un ou plusieurs comptes de plateforme.",
-  "delete_user_summary_recreated": "Attention : cet utilisateur semble encore exister sur une plateforme active, ou la vérification n’a pas pu confirmer complètement sa suppression. Si tu le supprimes seulement dans Vodum, il peut revenir après la prochaine synchronisation.",
-  "delete_user_summary_not_recreated": "Aucun compte actif n’a été trouvé pendant la vérification. La suppression locale a peu de chances de revenir au prochain sync.",
-  "please_wait": "Veuillez patienter..."
-
+	"selected_libraries": "Bibliothèques sélectionnées",
+	"sync_jobs_already_pending": "Des jobs de synchronisation existent déjà pour ce serveur.",
+	  "delete_user": "Supprimer l’utilisateur",
+	  "user_deleted": "Utilisateur supprimé avec succès",
+	  "delete_user_failed": "Échec de la suppression de l’utilisateur",
+	  
+	  "delete_user_title": "Supprimer cet utilisateur ?",
+	  "delete_user_confirm_cta": "Oui, supprimer localement",
+	  "delete_user_check_loading": "Vérification des plateformes liées…",
+	  "delete_user_check_error": "Impossible de vérifier les plateformes liées. La suppression locale reste possible, mais l’utilisateur pourrait revenir après la prochaine synchronisation.",
+	  "delete_user_summary_no_links": "Aucun lien Plex/Jellyfin actif n’a été trouvé pour cet utilisateur sur les serveurs actuellement configurés.",
+	  "delete_user_summary_links_found": "Cet utilisateur est encore lié à un ou plusieurs comptes de plateforme.",
+	  "delete_user_summary_recreated": "Attention : cet utilisateur semble encore exister sur une plateforme active, ou la vérification n’a pas pu confirmer complètement sa suppression. Si tu le supprimes seulement dans Vodum, il peut revenir après la prochaine synchronisation.",
+	  "delete_user_summary_not_recreated": "Aucun compte actif n’a été trouvé pendant la vérification. La suppression locale a peu de chances de revenir au prochain sync.",
+	  "please_wait": "Veuillez patienter..."
   
 }
 

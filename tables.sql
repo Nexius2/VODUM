@@ -619,6 +619,8 @@ CREATE TABLE IF NOT EXISTS media_sessions (
 
   library_section_id TEXT,
 
+  missing_count INTEGER DEFAULT 0,
+
   UNIQUE(server_id, session_key),
 
   FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE,
@@ -725,8 +727,8 @@ CREATE INDEX IF NOT EXISTS idx_hist_server_stopped ON media_session_history(serv
 -- Dedup key for monitoring history + tautulli imports + collector upserts
 CREATE UNIQUE INDEX IF NOT EXISTS uq_media_session_history_tautulli_dedup
 ON media_session_history (server_id, media_user_id, started_at, media_key, client_name);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_media_session_history_session
-ON media_session_history (server_id, session_key)
+CREATE INDEX IF NOT EXISTS idx_media_session_history_session_lookup
+ON media_session_history (server_id, session_key, media_key, started_at)
 WHERE TRIM(COALESCE(session_key,'')) <> '';
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_media_jobs_dedupe_active

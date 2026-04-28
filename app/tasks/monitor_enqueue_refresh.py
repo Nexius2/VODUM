@@ -27,11 +27,12 @@ def run(task_id, db):
     servers = db.query("""
         SELECT id, type, last_checked, settings_json
         FROM servers
-        WHERE type IN ('plex','jellyfin')
+        WHERE LOWER(TRIM(type)) IN ('plex','jellyfin')
     """)
 
     now = _utcnow()
     enqueued = 0
+    skipped_existing = 0
     due = 0
 
     for s in servers:
@@ -61,8 +62,20 @@ def run(task_id, db):
         dedupe_key = f"monitor:refresh:server={server_id}"
         payload = json.dumps({"interval_sec": interval, "reason": "schedule"}, ensure_ascii=False)
 
-        cur = db.execute("""
-            INSERT OR IGNORE INTO media_jobs (
+        existing = db.query_one("""
+            SELECT id
+            FROM media_jobs
+            WHERE dedupe_key = ?
+              AND status IN ('queued', 'running')
+            LIMIT 1
+        """, (dedupe_key,))
+
+        if existing:
+            skipped_existing += 1
+            continue
+
+        db.execute("""
+            INSERT INTO media_jobs (
                 provider, action, server_id,
                 payload_json,
                 status, priority, run_after,
@@ -72,12 +85,11 @@ def run(task_id, db):
             VALUES (?, 'refresh', ?, ?, 'queued', 100, NULL, ?, CURRENT_TIMESTAMP)
         """, (provider, server_id, payload, dedupe_key))
 
-        # db.execute peut retourner un cursor sqlite3, selon ton db_manager
-        try:
-            if cur and getattr(cur, "rowcount", 0) == 1:
-                enqueued += 1
-        except Exception:
-            # si rowcount pas dispo, on ne casse pas la tâche
-            pass
+        enqueued += 1
 
-    return {"servers": len(servers), "due": due, "enqueued_attempted": enqueued}
+    return {
+        "servers": len(servers),
+        "due": due,
+        "enqueued": enqueued,
+        "skipped_existing": skipped_existing,
+    }

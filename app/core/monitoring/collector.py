@@ -23,7 +23,7 @@ _COLLECT_ERROR_THROTTLE_SECONDS = 300  # 5 minutes
 # Délai de grâce avant de considérer une session comme réellement stoppée.
 # Cela évite qu'un timeout Plex/Jellyfin fasse disparaître temporairement
 # toutes les lectures en cours.
-_SESSION_MISSING_GRACE_SECONDS = 60
+_SESSION_MISSING_GRACE_SECONDS = 120
 
 
 class AttrDict(dict):
@@ -80,7 +80,7 @@ def _load_single_server(db, server_id: int) -> Optional[Dict[str, Any]]:
         SELECT id, type, url, local_url, public_url, token, server_identifier, settings_json
         FROM servers
         WHERE id = ?
-          AND type IN ('plex','jellyfin')
+          AND LOWER(TRIM(type)) IN ('plex','jellyfin')
         LIMIT 1
         """,
         (server_id,),
@@ -93,7 +93,7 @@ def _load_all_servers(db) -> List[Dict[str, Any]]:
         """
         SELECT id, type, url, local_url, public_url, token, server_identifier, settings_json
         FROM servers
-        WHERE type IN ('plex','jellyfin')
+        WHERE LOWER(TRIM(type)) IN ('plex','jellyfin')
         ORDER BY id
         """
     )
@@ -431,7 +431,53 @@ def _classify_status_from_exception(e: Exception) -> str:
 
     return "unknown"
 
+def write_monitoring_snapshot(db) -> Dict[str, Any]:
+    """
+    Écrit un snapshot global du monitoring.
 
+    Important:
+    Le nouveau monitoring par queue appelle collect_sessions_for_server()
+    serveur par serveur, donc collect_sessions() n'est plus forcément utilisé.
+    Sans cette fonction appelée par le worker, monitoring_snapshots reste vide
+    ou obsolète.
+    """
+    live_window_seconds = 120
+    live_window_sql = f"-{live_window_seconds} seconds"
+
+    row = db.query_one(
+        """
+        SELECT
+          COUNT(*) AS live_sessions,
+          SUM(CASE WHEN is_transcode = 1 THEN 1 ELSE 0 END) AS transcodes
+        FROM media_sessions
+        WHERE datetime(last_seen_at) >= datetime('now', ?)
+        """,
+        (live_window_sql,),
+    )
+
+    if row:
+        live_sessions = int(row["live_sessions"] or 0)
+        transcodes = int(row["transcodes"] or 0)
+    else:
+        live_sessions = 0
+        transcodes = 0
+
+    db.execute(
+        """
+        INSERT INTO monitoring_snapshots (ts, live_sessions, transcodes)
+        VALUES (CURRENT_TIMESTAMP, ?, ?)
+        """,
+        (live_sessions, transcodes),
+    )
+
+    db.execute(
+        "DELETE FROM monitoring_snapshots WHERE ts < datetime('now','-30 days')"
+    )
+
+    return {
+        "live_sessions": live_sessions,
+        "transcodes": transcodes,
+    }
 
 def collect_sessions_for_server(
     db,
@@ -509,9 +555,10 @@ def collect_sessions_for_server(
                   state, progress_ms, duration_ms,
                   is_transcode, bitrate, video_codec, audio_codec,
                   client_name, client_product, device, ip,
-                  started_at, last_seen_at, raw_json, poster_ref_json, backdrop_ref_json, library_section_id
+                  started_at, last_seen_at, raw_json, poster_ref_json, backdrop_ref_json, library_section_id,
+                  missing_count
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
                 ON CONFLICT(server_id, session_key) DO UPDATE SET
                   media_user_id=excluded.media_user_id,
                   external_user_id=excluded.external_user_id,
@@ -537,6 +584,7 @@ def collect_sessions_for_server(
 
                   started_at=COALESCE(media_sessions.started_at, excluded.started_at, excluded.last_seen_at),
                   last_seen_at=excluded.last_seen_at,
+                  missing_count=0,
                   raw_json=excluded.raw_json,
                   poster_ref_json=COALESCE(excluded.poster_ref_json, media_sessions.poster_ref_json),
                   backdrop_ref_json=COALESCE(excluded.backdrop_ref_json, media_sessions.backdrop_ref_json),
@@ -579,6 +627,31 @@ def collect_sessions_for_server(
         # --- stop + history + delete (sessions disparues)
         for sk, prev in prev_map.items():
             if sk in cur_map:
+                # session toujours active → reset compteur
+                db.execute("""
+                    UPDATE media_sessions
+                    SET missing_count = 0
+                    WHERE server_id=? AND session_key=?
+                """, (server_id, sk))
+                continue
+
+            # session absente → incrémente compteur
+            db.execute("""
+                UPDATE media_sessions
+                SET missing_count = COALESCE(missing_count, 0) + 1
+                WHERE server_id=? AND session_key=?
+            """, (server_id, sk))
+
+            row = db.query_one("""
+                SELECT missing_count
+                FROM media_sessions
+                WHERE server_id=? AND session_key=?
+            """, (server_id, sk))
+
+            missing = int(row["missing_count"] or 0) if row else 0
+
+            # tolérance : 3 cycles avant suppression
+            if missing < 3:
                 continue
 
             live = db.query_one(
@@ -674,9 +747,12 @@ def collect_sessions_for_server(
                               title = COALESCE(?, title),
                               grandparent_title = COALESCE(?, grandparent_title),
                               parent_title = COALESCE(?, parent_title),
-                              raw_json = COALESCE(?, raw_json),
-                              poster_ref_json = NULL,
-                              backdrop_ref_json = NULL,
+                              raw_json = CASE
+                                WHEN ? IS NOT NULL AND LENGTH(TRIM(?)) > 10 THEN ?
+                                ELSE raw_json
+                              END,
+                              poster_ref_json = COALESCE(?, poster_ref_json),
+                              backdrop_ref_json = COALESCE(?, backdrop_ref_json),
                               ip = COALESCE(?, ip),
                               device = COALESCE(?, device),
                               client_product = COALESCE(?, client_product),
@@ -699,6 +775,10 @@ def collect_sessions_for_server(
                                 grandparent_title,
                                 parent_title,
                                 raw_json,
+                                raw_json,
+                                raw_json,
+                                poster_ref_json,
+                                backdrop_ref_json,
                                 ip,
                                 device,
                                 client_product,
@@ -722,12 +802,17 @@ def collect_sessions_for_server(
                         )
                         raise
 
-                # 2) Ensuite seulement, mise à jour par session_key
-                #    mais JAMAIS sur session_key seul : on exige aussi le même media_key
+                # 2) Fallback session_key sécurisé.
+                #
+                # Avant, on cherchait seulement par server_id + session_key + media_key.
+                # C'était encore trop large : Plex peut réutiliser un session_key.
+                #
+                # On exige aussi started_at pour ne jamais modifier une ancienne lecture.
                 if (
                     updated == 0
                     and session_key
                     and media_key
+                    and started_at
                 ):
                     try:
                         cur = db.execute(
@@ -749,9 +834,12 @@ def collect_sessions_for_server(
                               title = COALESCE(?, title),
                               grandparent_title = COALESCE(?, grandparent_title),
                               parent_title = COALESCE(?, parent_title),
-                              raw_json = COALESCE(?, raw_json),
-                              poster_ref_json = NULL,
-                              backdrop_ref_json = NULL,
+                              raw_json = CASE
+                                WHEN ? IS NOT NULL AND LENGTH(TRIM(?)) > 10 THEN ?
+                                ELSE raw_json
+                              END,
+                              poster_ref_json = COALESCE(?, poster_ref_json),
+                              backdrop_ref_json = COALESCE(?, backdrop_ref_json),
                               ip = COALESCE(?, ip),
                               device = COALESCE(?, device),
                               client_product = COALESCE(?, client_product),
@@ -759,6 +847,7 @@ def collect_sessions_for_server(
                             WHERE server_id = ?
                               AND session_key = ?
                               AND media_key = ?
+                              AND started_at = ?
                             """,
                             (
                                 stopped_at,
@@ -771,6 +860,10 @@ def collect_sessions_for_server(
                                 grandparent_title,
                                 parent_title,
                                 raw_json,
+                                raw_json,
+                                raw_json,
+                                poster_ref_json,
+                                backdrop_ref_json,
                                 ip,
                                 device,
                                 client_product,
@@ -778,6 +871,7 @@ def collect_sessions_for_server(
                                 server_id,
                                 session_key,
                                 media_key,
+                                started_at,
                             ),
                         )
                         updated = int(getattr(cur, "rowcount", 0) or 0)
@@ -785,7 +879,7 @@ def collect_sessions_for_server(
                         _log_history_write_error(
                             server_id,
                             provider_name,
-                            "update_by_session_key",
+                            "update_by_session_key_started_at",
                             live,
                             e,
                         )
@@ -883,21 +977,21 @@ def collect_sessions_for_server(
         except Exception:
             pass
 
-        # Règle d’or: si on a une session récente, on reste UP
         if _has_recent_live_sessions(db, server_id, window_seconds=180):
             db.execute(
                 "UPDATE servers SET last_checked=CURRENT_TIMESTAMP, status='up' WHERE id=?",
                 (server_id,),
             )
-            raise
+
+            report["warning"] = str(e)
+            report["stale_sessions_kept"] = 1
+            report["status"] = "up"
+
+            return report
 
         # Sinon, on classe intelligemment
         status = _classify_status_from_exception(e)
 
-        # IMPORTANT:
-        # - "down" => on assume réellement HS (réseau/timeout/etc)
-        # - "unknown" => souvent token/url/config -> on NE DOIT PAS écraser le statut global
-        #   sinon ça fait des serveurs "Unknown" alors qu'ils sont juste idle / collecte KO.
         if status == "unknown":
             db.execute(
                 "UPDATE servers SET last_checked=CURRENT_TIMESTAMP WHERE id=?",
@@ -936,40 +1030,7 @@ def collect_sessions(db) -> Dict[str, Any]:
     # Snapshot global (for peak streams = MAX(live_sessions) over time)
     # -------------------------------------------------
     try:
-        live_window_seconds = 120
-        live_window_sql = f"-{live_window_seconds} seconds"
-
-        row = db.query_one(
-            """
-            SELECT
-              COUNT(*) AS live_sessions,
-              SUM(CASE WHEN is_transcode = 1 THEN 1 ELSE 0 END) AS transcodes
-            FROM media_sessions
-            WHERE datetime(last_seen_at) >= datetime('now', ?)
-            """,
-            (live_window_sql,),
-        )
-
-        if row:
-            live_sessions = int(row["live_sessions"] or 0)
-            transcodes = int(row["transcodes"] or 0)
-        else:
-            live_sessions = 0
-            transcodes = 0
-
-        db.execute(
-            """
-            INSERT INTO monitoring_snapshots (ts, live_sessions, transcodes)
-            VALUES (CURRENT_TIMESTAMP, ?, ?)
-            """,
-            (live_sessions, transcodes),
-        )
-
-        # purge simple (garde 30 jours)
-        db.execute(
-            "DELETE FROM monitoring_snapshots WHERE ts < datetime('now','-30 days')"
-        )
-
+        write_monitoring_snapshot(db)
     except Exception as e:
         logger.warning(f"Could not write monitoring snapshot: {e}")
 

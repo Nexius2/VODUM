@@ -745,7 +745,16 @@ def _task_worker():
                     FROM tasks
                     WHERE queued_count > 0
                       AND enabled = 1
-                    ORDER BY updated_at ASC
+                      ORDER BY
+                          CASE name
+                              WHEN 'monitor_enqueue_refresh' THEN 1
+                              WHEN 'media_jobs_worker' THEN 2
+                              WHEN 'stream_enforcer' THEN 3
+                              WHEN 'monitor_collect_sessions' THEN 99
+                              ELSE 10
+                        END ASC,
+                        updated_at ASC,
+                        id ASC
                     LIMIT 1
                     """
                 )
@@ -1218,23 +1227,32 @@ def _run_task_sequence_internal(task_names):
 
 def auto_enable_monitoring_tasks():
     """
-    Active/désactive les tâches de monitoring automatiquement :
-    - ON si au moins 1 serveur (plex ou jellyfin) est UP
-    - OFF sinon
+    Active le pipeline monitoring si au moins un serveur Plex/Jellyfin est configuré.
+
+    Important:
+    On ne se base PAS sur status='up'.
+    Un serveur down/unknown doit continuer à être testé, sinon il peut rester bloqué
+    hors monitoring et ne jamais redevenir visible.
     """
-    up_count = db.query_one(
+    row = db.query_one(
         """
         SELECT COUNT(*) AS cnt
         FROM servers
-        WHERE LOWER(status) = 'up'
+        WHERE LOWER(TRIM(type)) IN ('plex', 'jellyfin')
         """
-    )["cnt"]
+    )
 
-    should_enable = 1 if up_count > 0 else 0
+    server_count = int(row["cnt"] or 0) if row else 0
+    should_enable = 1 if server_count > 0 else 0
 
     set_tasks_enabled_by_names_for_auto_mode(
-        ["monitor_collect_sessions", "monitor_enqueue_refresh", "media_jobs_worker"],
+        ["monitor_enqueue_refresh", "media_jobs_worker"],
         should_enable,
+    )
+
+    set_tasks_enabled_by_names_for_auto_mode(
+        ["monitor_collect_sessions"],
+        0,
     )
 
 
@@ -1243,8 +1261,8 @@ def auto_enable_sync_tasks():
         """
         SELECT COUNT(*) AS cnt
         FROM servers
-        WHERE type = 'plex'
-          AND LOWER(status) = 'up'
+        WHERE LOWER(TRIM(type)) = 'plex'
+          AND LOWER(TRIM(COALESCE(status, 'unknown'))) = 'up'
         """
     )["cnt"]
 
@@ -1261,8 +1279,8 @@ def auto_enable_sync_tasks():
         """
         SELECT COUNT(*) AS cnt
         FROM servers
-        WHERE type = 'jellyfin'
-          AND LOWER(status) = 'up'
+        WHERE LOWER(TRIM(type)) = 'jellyfin'
+          AND LOWER(TRIM(COALESCE(status, 'unknown'))) = 'up'
         """
     )["cnt"]
 
@@ -1286,8 +1304,8 @@ def auto_enable_plex_jobs_worker():
         """
         SELECT COUNT(*) AS cnt
         FROM servers
-        WHERE type = 'plex'
-          AND LOWER(status) = 'up'
+        WHERE LOWER(TRIM(type)) = 'plex'
+          AND LOWER(TRIM(COALESCE(status, 'unknown'))) = 'up'
         """
     )["cnt"]
 
@@ -1297,7 +1315,7 @@ def auto_enable_plex_jobs_worker():
         FROM media_jobs mj
         JOIN servers s ON s.id = mj.server_id
         WHERE mj.processed = 0
-          AND s.type = 'plex'
+          AND LOWER(TRIM(s.type)) = 'plex'
         """
     )["cnt"]
 
@@ -1320,8 +1338,8 @@ def auto_enable_jellyfin_jobs_worker():
         """
         SELECT COUNT(*) AS cnt
         FROM servers
-        WHERE type = 'jellyfin'
-          AND LOWER(status) = 'up'
+        WHERE LOWER(TRIM(type)) = 'jellyfin'
+          AND LOWER(TRIM(COALESCE(status, 'unknown'))) = 'up'
         """
     )["cnt"]
 
@@ -1332,7 +1350,7 @@ def auto_enable_jellyfin_jobs_worker():
         FROM media_jobs mj
         JOIN servers s ON s.id = mj.server_id
         WHERE mj.processed = 0
-          AND s.type = 'jellyfin'
+          AND LOWER(TRIM(s.type)) = 'jellyfin'
         """
     )["cnt"]
 

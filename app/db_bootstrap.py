@@ -1461,6 +1461,16 @@ def run_migrations():
             """
         )
 
+        cursor.execute("DROP INDEX IF EXISTS uq_media_session_history_session")
+
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_media_session_history_session_lookup
+            ON media_session_history (server_id, session_key, media_key, started_at)
+            WHERE TRIM(COALESCE(session_key,'')) <> ''
+            """
+        )
+
         cursor.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_media_users_vodum_user
@@ -1515,6 +1525,11 @@ def run_migrations():
         cursor.execute("ALTER TABLE media_sessions ADD COLUMN backdrop_ref_json TEXT")
         conn.commit()
         print("✔ media_sessions.backdrop_ref_json added")
+
+    if table_exists(cursor, "media_sessions") and not column_exists(cursor, "media_sessions", "missing_count"):
+        cursor.execute("ALTER TABLE media_sessions ADD COLUMN missing_count INTEGER DEFAULT 0")
+        conn.commit()
+        print("✔ media_sessions.missing_count added")
 
     # media_session_history.library_section_id
     if table_exists(cursor, "media_session_history") and not column_exists(cursor, "media_session_history", "library_section_id"):
@@ -2193,14 +2208,28 @@ def run_migrations():
         "status": "idle"
     })
 
-    # Tâche monitor_collect_sessions (Now Playing multi-serveurs)
+    # Tâche legacy monitor_collect_sessions
+    #
+    # Cette ancienne tâche collecte tous les serveurs en direct.
+    # Elle ne doit plus tourner avec le nouveau pipeline :
+    # monitor_enqueue_refresh -> media_jobs_worker -> collect_sessions_for_server.
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "monitor_collect_sessions",
         "description": "task_description.monitor_collect_sessions",
-        "schedule": "*/1 * * * *",   # toutes les minutes (safe pour débuter)
-        "enabled": 0,                # tu l’activeras via UI quand prêt
+        "schedule": None,
+        "enabled": 0,
         "status": "disabled"
     })
+
+    cursor.execute("""
+        UPDATE tasks
+        SET enabled = 0,
+            status = 'disabled',
+            schedule = NULL,
+            queued_count = 0,
+            next_run = NULL
+        WHERE name = 'monitor_collect_sessions'
+    """)
 
     # Tâche refresh_dashboard_quote_cache (quote du jour du dashboard)
     ensure_row(cursor, "tasks", "name = :name", {

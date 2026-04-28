@@ -82,20 +82,20 @@ def register(app):
         )
 
         for row in server_types:
-            stype = row["type"]
+            stype = (row["type"] or "").strip().lower()
 
             total = db.query_one(
-                "SELECT COUNT(*) AS cnt FROM servers WHERE type = ?",
+                "SELECT COUNT(*) AS cnt FROM servers WHERE LOWER(TRIM(type)) = ?",
                 (stype,),
             )["cnt"] or 0
 
             online = db.query_one(
-                "SELECT COUNT(*) AS cnt FROM servers WHERE type = ? AND status = 'up'",
+                "SELECT COUNT(*) AS cnt FROM servers WHERE LOWER(TRIM(type)) = ? AND LOWER(TRIM(COALESCE(status, 'unknown'))) = 'up'",
                 (stype,),
             )["cnt"] or 0
 
             offline = db.query_one(
-                "SELECT COUNT(*) AS cnt FROM servers WHERE type = ? AND status = 'down'",
+                "SELECT COUNT(*) AS cnt FROM servers WHERE LOWER(TRIM(type)) = ? AND LOWER(TRIM(COALESCE(status, 'unknown'))) = 'down'",
                 (stype,),
             )["cnt"] or 0
 

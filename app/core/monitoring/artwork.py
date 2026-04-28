@@ -2,7 +2,7 @@ import json
 
 from flask import url_for
 
-ARTWORK_CACHE_RESOLVER = "canonical_v8"
+ARTWORK_CACHE_RESOLVER = "canonical_v12"
 
 
 
@@ -70,10 +70,33 @@ def _get_plex_target_media_id(row):
             or row.get("media_key")
         )
 
-    return _normalize_media_id(
-        attrs.get("ratingKey")
-        or row.get("media_key")
-    )
+
+    row_media_key = _normalize_media_id(row.get("media_key"))
+    raw_rating_key = _normalize_media_id(attrs.get("ratingKey"))
+
+    if row_media_key:
+        return row_media_key
+
+    return raw_rating_key
+
+def _plex_raw_matches_row_target(row) -> bool:
+    row = dict(row or {})
+    raw = _load_json(row.get("raw_json"))
+    attrs = raw.get("VideoOrTrack") or {}
+    scope = _artwork_scope(row)
+
+    if scope == "series":
+        # Pour les séries, media_key peut être l'épisode alors que le poster cible
+        # est la série. On accepte donc le raw_json.
+        return True
+
+    row_media_key = _normalize_media_id(row.get("media_key"))
+    raw_rating_key = _normalize_media_id(attrs.get("ratingKey"))
+
+    if row_media_key and raw_rating_key and row_media_key != raw_rating_key:
+        return False
+
+    return True
 
 def _build_plex_image_url(server_id: int, path: str):
     if not server_id or not path:
@@ -136,53 +159,71 @@ def _is_valid_ref(ref: dict) -> bool:
     return False
 
 
-def _is_fresh_cached_ref(ref: dict, row) -> bool:
+def _is_fresh_cached_ref(ref: dict, row, image_kind: str) -> bool:
     if not _is_valid_ref(ref):
         return False
 
     row = dict(row or {})
     provider = (row.get("provider") or "").strip().lower()
     scope = _artwork_scope(row)
+    image_kind = (image_kind or "").strip().lower()
+
+    if image_kind not in ("poster", "backdrop"):
+        return False
+
+    ref_resolver = (ref.get("resolver") or "")
+    ref_provider = (ref.get("provider") or "").strip().lower()
+    ref_scope = (ref.get("scope") or "")
+    ref_image_kind = (ref.get("image_kind") or "").strip().lower()
+
+    if not (
+        ref_resolver == ARTWORK_CACHE_RESOLVER
+        and ref_provider == provider
+        and ref_scope == scope
+        and ref_image_kind == image_kind
+    ):
+        return False
 
     if provider == "plex":
         raw = _load_json(row.get("raw_json"))
         attrs = raw.get("VideoOrTrack") or {}
+
         target_id = _get_plex_target_media_id(row)
-
-        if scope == "series":
-            expected_poster_path = attrs.get("grandparentThumb") or attrs.get("thumb")
-            expected_backdrop_path = attrs.get("grandparentArt") or attrs.get("art")
-        else:
-            expected_poster_path = attrs.get("thumb")
-            expected_backdrop_path = attrs.get("art")
-
-        ref_resolver = (ref.get("resolver") or "")
-        ref_provider = (ref.get("provider") or "").strip().lower()
-        ref_scope = (ref.get("scope") or "")
         ref_target_id = _normalize_media_id(ref.get("target_id"))
         ref_path = (ref.get("path") or "").strip()
 
-        if not (
-            ref_resolver == ARTWORK_CACHE_RESOLVER
-            and ref_provider == "plex"
-            and ref_scope == scope
-            and ref_target_id == target_id
-        ):
+        if not target_id or not ref_target_id or not ref_path:
             return False
 
-        if expected_poster_path and ref_path == str(expected_poster_path).strip():
-            return True
+        if ref_target_id != target_id:
+            return False
 
-        if expected_backdrop_path and ref_path == str(expected_backdrop_path).strip():
-            return True
+        raw_matches = _plex_raw_matches_row_target(row)
 
-        return False
+        if scope == "series":
+            expected_path = (
+                attrs.get("grandparentArt")
+                if image_kind == "backdrop"
+                else attrs.get("grandparentThumb")
+            )
+            if not expected_path:
+                expected_path = attrs.get("art") if image_kind == "backdrop" else attrs.get("thumb")
+        else:
+            expected_path = None
+            if raw_matches:
+                expected_path = attrs.get("art") if image_kind == "backdrop" else attrs.get("thumb")
+
+        if not expected_path:
+            expected_path = (
+                f"/library/metadata/{target_id}/art"
+                if image_kind == "backdrop"
+                else f"/library/metadata/{target_id}/thumb"
+            )
+
+        return ref_path == str(expected_path).strip()
 
     if provider == "jellyfin":
-        return (
-            (ref.get("resolver") or "") == ARTWORK_CACHE_RESOLVER
-            and (ref.get("scope") or "") == scope
-        )
+        return True
 
     return False
 
@@ -199,19 +240,15 @@ def _extract_plex_canonical_refs_from_raw(row):
 
     poster_path = None
     backdrop_path = None
+    raw_matches = _plex_raw_matches_row_target(row)
 
     if scope == "series":
-        poster_path = (
-            attrs.get("grandparentThumb")
-            or attrs.get("thumb")
-        )
-        backdrop_path = (
-            attrs.get("grandparentArt")
-            or attrs.get("art")
-        )
+        poster_path = attrs.get("grandparentThumb") or attrs.get("thumb")
+        backdrop_path = attrs.get("grandparentArt") or attrs.get("art")
     else:
-        poster_path = attrs.get("thumb")
-        backdrop_path = attrs.get("art")
+        if raw_matches:
+            poster_path = attrs.get("thumb")
+            backdrop_path = attrs.get("art")
 
     if not poster_path:
         poster_path = f"/library/metadata/{target_id}/thumb"
@@ -224,12 +261,15 @@ def _extract_plex_canonical_refs_from_raw(row):
         scope,
         path=str(poster_path),
         target_id=str(target_id),
+        image_kind="poster",
     )
+
     backdrop_ref = _make_ref(
         "plex",
         scope,
         path=str(backdrop_path),
         target_id=str(target_id),
+        image_kind="backdrop",
     )
 
     return poster_ref, backdrop_ref
@@ -262,12 +302,14 @@ def _extract_jellyfin_canonical_refs(row):
             scope,
             item_id=str(item_id),
             image_type="Primary",
+            image_kind="poster",
         )
         backdrop_ref = _make_ref(
             "jellyfin",
             scope,
             item_id=str(item_id),
             image_type="Backdrop",
+            image_kind="backdrop",
         )
 
     return poster_ref, backdrop_ref
@@ -363,6 +405,7 @@ def _make_plex_ref_from_rating_key(scope, rating_key, image_kind, attrs=None):
         scope,
         path=str(path),
         target_id=str(target_id),
+        image_kind=image_kind,
     )
 
 
@@ -376,9 +419,21 @@ def _resolve_plex_refs_via_metadata(db, row):
     if not target_id:
         return (None, None)
 
+    safe_attrs = attrs
+
+    if scope != "series" and not _plex_raw_matches_row_target(row):
+        # Film uniquement:
+        # si raw_json.ratingKey ne correspond pas à row.media_key,
+        # on ne doit surtout pas réutiliser attrs.thumb / attrs.art.
+        #
+        # Sinon on crée un objet incohérent:
+        # - target_id du bon film
+        # - path du mauvais film
+        safe_attrs = {}
+
     return (
-        _make_plex_ref_from_rating_key(scope, target_id, "poster", attrs),
-        _make_plex_ref_from_rating_key(scope, target_id, "backdrop", attrs),
+        _make_plex_ref_from_rating_key(scope, target_id, "poster", safe_attrs),
+        _make_plex_ref_from_rating_key(scope, target_id, "backdrop", safe_attrs),
     )
 
 
@@ -401,8 +456,8 @@ def _resolve_row_artwork(row, db=None, table_name=None):
     cached_backdrop_ref = _load_ref_json(current_backdrop_json)
 
     if (
-        _is_fresh_cached_ref(cached_poster_ref, row)
-        and _is_fresh_cached_ref(cached_backdrop_ref, row)
+        _is_fresh_cached_ref(cached_poster_ref, row, "poster")
+        and _is_fresh_cached_ref(cached_backdrop_ref, row, "backdrop")
     ):
         row["_resolved_poster_ref"] = cached_poster_ref
         row["_resolved_backdrop_ref"] = cached_backdrop_ref

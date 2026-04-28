@@ -107,6 +107,7 @@
 
           <td class="py-2 pr-4">
             <div class="font-semibold">{{ s.live_sessions or 0 }}</div>
+            <div class="text-xs text-slate-500">direct: {{ s.live_direct_plays or 0 }}</div>
             <div class="text-xs text-slate-500">transcodes: {{ s.live_transcodes or 0 }}</div>
           </td>
 
@@ -175,47 +176,60 @@
 (() => {
   function waitForChart(maxMs = 8000) {
     const start = Date.now();
+
     return new Promise((resolve, reject) => {
       const tick = () => {
-        if (window.Chart) return resolve();
-        if (Date.now() - start > maxMs) return reject(new Error("Chart.js not loaded"));
+        if (window.Chart) {
+          resolve();
+          return;
+        }
+
+        if (Date.now() - start > maxMs) {
+          reject(new Error("Chart.js not loaded"));
+          return;
+        }
+
         setTimeout(tick, 50);
       };
+
       tick();
     });
   }
 
-  // Range redirect
   const picker = document.getElementById("serversRangePicker");
   if (picker) {
     picker.addEventListener("change", () => {
       const base = "{{ url_for('monitoring_page', tab='servers') }}";
-      // base contient déjà "?tab=servers" => on ajoute le param via "&"
       const sep = base.includes("?") ? "&" : "?";
       window.location.href = `${base}${sep}range=${encodeURIComponent(picker.value || "7d")}`;
     });
   }
 
-
-  async function render() {
+  async function renderServersCharts() {
     await waitForChart();
 
     const details = {{ (servers_details or [])|tojson }};
     const sessionsDay = {{ (servers_sessions_day or [])|tojson }};
     const mediaTypes = {{ (servers_media_types or [])|tojson }};
 
-    const serverNames = new Map(details.map(s => [String(s.server_id), s.name || ("Server " + s.server_id)]));
+    const serverNames = new Map(
+      details.map((s) => [
+        String(s.server_id),
+        s.name || `Server ${s.server_id}`
+      ])
+    );
 
-    // ---- Chart 1: sessions/day per server
-    const days = [...new Set(sessionsDay.map(r => r.day))].sort();
-    const serverIds = [...new Set(sessionsDay.map(r => String(r.server_id)))].sort();
+    const days = [...new Set(sessionsDay.map((r) => String(r.day || "")).filter(Boolean))].sort();
+    const serverIds = [...new Set(sessionsDay.map((r) => String(r.server_id || "")).filter(Boolean))].sort();
 
-    const mapDayServer = new Map();
-    sessionsDay.forEach(r => mapDayServer.set(`${r.day}|${r.server_id}`, Number(r.sessions||0)));
+    const sessionsByDayServer = new Map();
+    sessionsDay.forEach((r) => {
+      sessionsByDayServer.set(`${r.day}|${r.server_id}`, Number(r.sessions || 0));
+    });
 
-    const datasets1 = serverIds.map(sid => ({
-      label: serverNames.get(sid) || ("Server " + sid),
-      data: days.map(d => mapDayServer.get(`${d}|${sid}`) || 0),
+    const datasetsSessions = serverIds.map((serverId) => ({
+      label: serverNames.get(serverId) || `Server ${serverId}`,
+      data: days.map((day) => sessionsByDayServer.get(`${day}|${serverId}`) || 0),
       tension: 0.25,
       borderWidth: 2,
       pointRadius: 2,
@@ -223,43 +237,85 @@
       hitRadius: 10
     }));
 
-    const ctx1 = document.getElementById("chartServersSessionsDay")?.getContext("2d");
-    if (ctx1) {
-      new Chart(ctx1, {
+    const sessionsCtx = document.getElementById("chartServersSessionsDay")?.getContext("2d");
+    if (sessionsCtx) {
+      new Chart(sessionsCtx, {
         type: "line",
-        data: { labels: days, datasets: datasets1 },
+        data: {
+          labels: days,
+          datasets: datasetsSessions
+        },
         options: {
           responsive: true,
-          interaction: { mode: "nearest", intersect: true },
-          plugins: {
-            tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}` } }
+          interaction: {
+            mode: "nearest",
+            intersect: true
           },
-          scales: { y: { beginAtZero: true } }
+          plugins: {
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}`
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                precision: 0
+              }
+            }
+          }
         }
       });
     }
 
-    // ---- Chart 2: media types (global sum sessions)
-    const typeList = [...new Set(mediaTypes.map(r => String(r.media_type||"unknown")))].sort();
-    const typeSum = new Map(typeList.map(t => [t, 0]));
-    mediaTypes.forEach(r => typeSum.set(String(r.media_type||"unknown"), (typeSum.get(String(r.media_type||"unknown"))||0) + Number(r.sessions||0)));
+    const typeList = [...new Set(mediaTypes.map((r) => String(r.media_type || "unknown")))].sort();
+    const typeSum = new Map(typeList.map((type) => [type, 0]));
 
-    const ctx2 = document.getElementById("chartServersMediaTypes")?.getContext("2d");
-    if (ctx2) {
-      new Chart(ctx2, {
+    mediaTypes.forEach((r) => {
+      const type = String(r.media_type || "unknown");
+      typeSum.set(type, (typeSum.get(type) || 0) + Number(r.sessions || 0));
+    });
+
+    const mediaCtx = document.getElementById("chartServersMediaTypes")?.getContext("2d");
+    if (mediaCtx) {
+      new Chart(mediaCtx, {
         type: "bar",
-        data: { labels: typeList, datasets: [{ label: "Sessions", data: typeList.map(t => typeSum.get(t) || 0) }] },
+        data: {
+          labels: typeList,
+          datasets: [{
+            label: "Sessions",
+            data: typeList.map((type) => typeSum.get(type) || 0)
+          }]
+        },
         options: {
           responsive: true,
-          interaction: { mode: "nearest", intersect: true },
-          plugins: { tooltip: { callbacks: { label: (ctx) => `Sessions: ${ctx.parsed.y}` } } },
-          scales: { y: { beginAtZero: true } }
+          interaction: {
+            mode: "nearest",
+            intersect: true
+          },
+          plugins: {
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `Sessions: ${ctx.parsed.y}`
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                precision: 0
+              }
+            }
+          }
         }
       });
     }
   }
 
-  render().catch(console.error);
+  renderServersCharts().catch(console.error);
 })();
 </script>
 

@@ -51,10 +51,10 @@ def register(app):
         db = get_db()
         srv = db.query_one(
             """
-            SELECT id, type, url, local_url, public_url, token
+            SELECT id, LOWER(TRIM(type)) AS type, url, local_url, public_url, token
             FROM servers
             WHERE id = ?
-              AND type IN ('plex','jellyfin')
+              AND LOWER(TRIM(type)) IN ('plex','jellyfin')
             LIMIT 1
             """,
             (server_id,),
