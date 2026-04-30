@@ -25,6 +25,7 @@ import json
 
 from tasks_engine import task_logs
 from logging_utils import get_logger
+from core.media_jobs import insert_plex_media_job, insert_jellyfin_media_job
 
 log = get_logger("disable_expired_users")
 
@@ -242,50 +243,42 @@ def run(task_id: int, db):
 
             processed_media += 1
 
-            # Create a deduped job to apply on provider side
+            payload = {
+                "reason": "expired_subscription",
+                "vodum_user_id": vodum_user_id,
+                "media_user_id": media_user_id,
+            }
+
             if provider == "plex":
                 action = "revoke"
-            else:
-                # Jellyfin worker applies desired folders; any action triggers sync
-                action = "sync"
+                dedupe_key = f"plex:revoke:server={server_id}:vodum_user={vodum_user_id}"
 
-            dedupe_key = f"{provider}:{action}:server={server_id}:vodum_user={vodum_user_id}"
-
-            exists = db.query_one(
-                """
-                SELECT 1
-                FROM media_jobs
-                WHERE provider = ?
-                  AND action = ?
-                  AND server_id = ?
-                  AND vodum_user_id = ?
-                  AND library_id IS NULL
-                  AND processed = 0
-                LIMIT 1
-                """,
-                (provider, action, server_id, vodum_user_id),
-            )
-
-            if not exists:
-                db.execute(
-                    """
-                    INSERT OR IGNORE INTO media_jobs(
-                        provider, action,
-                        vodum_user_id, server_id, library_id,
-                        payload_json,
-                        processed, success, attempts,
-                        dedupe_key
-                    )
-                    VALUES (
-                        ?, ?,
-                        ?, ?, NULL,
-                        NULL,
-                        0, 0, 0,
-                        ?
-                    )
-                    """,
-                    (provider, action, vodum_user_id, server_id, dedupe_key),
+                inserted = insert_plex_media_job(
+                    db,
+                    action=action,
+                    vodum_user_id=vodum_user_id,
+                    server_id=server_id,
+                    library_id=None,
+                    dedupe_key=dedupe_key,
+                    payload=payload,
+                    cancel_reason="Canceled because expired subscription queued a newer Plex revoke job",
                 )
+            else:
+                action = "sync"
+                dedupe_key = f"jellyfin:sync:server={server_id}:vodum_user={vodum_user_id}"
+
+                inserted = insert_jellyfin_media_job(
+                    db,
+                    action=action,
+                    vodum_user_id=vodum_user_id,
+                    server_id=server_id,
+                    library_id=None,
+                    dedupe_key=dedupe_key,
+                    payload=payload,
+                    cancel_reason="Canceled because expired subscription queued a newer Jellyfin sync job",
+                )
+
+            if inserted:
                 created_jobs += 1
 
         msg = (

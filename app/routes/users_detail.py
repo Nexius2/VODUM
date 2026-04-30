@@ -503,6 +503,8 @@ def register(app):
                     (json.dumps(details2, ensure_ascii=False), mu_id2),
                 )
 
+        plex_options_changed = False
+
         plex_media = db.query(
             """
             SELECT mu.id, mu.details_json
@@ -531,6 +533,8 @@ def register(app):
             plex_share = details.get("plex_share", {})
             if not isinstance(plex_share, dict):
                 plex_share = {}
+
+            old_plex_share = dict(plex_share)
 
             vals = form.getlist(f"allow_sync_{mu_id}")
             task_logger.debug(f"FORM DEBUG mu_id={mu_id} allow_sync getlist={vals}")
@@ -562,19 +566,22 @@ def register(app):
 
             details["plex_share"] = plex_share
 
-            db.execute(
-                "UPDATE media_users SET details_json = ? WHERE id = ?",
-                (json.dumps(details, ensure_ascii=False), mu_id),
-            )
+            if old_plex_share != plex_share:
+                plex_options_changed = True
 
-            replicate_plex_flags_same_owner(
-                db,
-                vodum_user_id=user_id,
-                changed_mu_id=mu_id,
-                plex_share_new=plex_share,
-            )
+                db.execute(
+                    "UPDATE media_users SET details_json = ? WHERE id = ?",
+                    (json.dumps(details, ensure_ascii=False), mu_id),
+                )
 
-        if "plex" in allowed_types:
+                replicate_plex_flags_same_owner(
+                    db,
+                    vodum_user_id=user_id,
+                    changed_mu_id=mu_id,
+                    plex_share_new=plex_share,
+                )
+
+        if plex_options_changed and "plex" in allowed_types:
             plex_media_for_jobs = db.query(
                 """
                 SELECT mu.id, mu.server_id

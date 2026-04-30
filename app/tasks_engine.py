@@ -229,20 +229,24 @@ def run_task_by_name(task_name: str):
 
 
 def enable_and_run_task_by_name(task_name: str):
-    """
-    Active une tâche si besoin, normalise son statut si elle était disabled,
-    puis l'ajoute proprement à la file via run_task_by_name().
-    """
     row = db.query_one(
-        "SELECT id, status, enabled FROM tasks WHERE name = ?",
-        (task_name,)
+        """
+        SELECT id, enabled, status, queued_count
+        FROM tasks
+        WHERE name = ?
+        """,
+        (task_name,),
     )
 
     if not row:
         logger.error(f"Unknown task: {task_name}")
         return False
 
-    if not row["enabled"] or (row["status"] or "") == "disabled":
+    task_id = row["id"]
+    status = str(row["status"] or "").lower()
+    queued_count = int(row["queued_count"] or 0)
+
+    if not row["enabled"]:
         db.execute(
             """
             UPDATE tasks
@@ -255,10 +259,14 @@ def enable_and_run_task_by_name(task_name: str):
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
-            (row["id"],),
+            (task_id,),
         )
 
-    return run_task_by_name(task_name)
+    if status == "running" or queued_count > 0:
+        logger.info(f"Task '{task_name}' already running or queued; not enqueueing again")
+        return True
+
+    return enqueue_task(task_id)
 
 def set_task_enabled(task_id: int, enabled: int):
     """

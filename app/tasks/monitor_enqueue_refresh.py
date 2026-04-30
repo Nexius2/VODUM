@@ -22,10 +22,10 @@ def run(task_id, db):
     """
     Toutes les minutes:
     - regarde les serveurs plex/jellyfin
-    - si "dus" => enfile un job refresh (dedupe_key)
+    - si le dernier refresh monitoring est trop ancien => enfile un job refresh
     """
     servers = db.query("""
-        SELECT id, type, last_checked, settings_json
+        SELECT id, type, settings_json
         FROM servers
         WHERE LOWER(TRIM(type)) IN ('plex','jellyfin')
     """)
@@ -39,8 +39,6 @@ def run(task_id, db):
         server_id = int(s["id"])
         provider = (s["type"] or "").lower().strip()
 
-        last_checked = _parse_sqlite_ts(s["last_checked"])
-
         interval = DEFAULT_INTERVAL_SEC
         settings_json = s["settings_json"]
         if settings_json:
@@ -53,7 +51,17 @@ def run(task_id, db):
         if interval < MIN_INTERVAL_SEC:
             interval = MIN_INTERVAL_SEC
 
-        is_due = (last_checked is None) or ((now - last_checked).total_seconds() >= interval)
+        last_refresh_row = db.query_one("""
+            SELECT COALESCE(MAX(processed_at), MAX(created_at)) AS last_refresh
+            FROM media_jobs
+            WHERE action = 'refresh'
+              AND server_id = ?
+              AND status = 'success'
+        """, (server_id,))
+
+        last_refresh = _parse_sqlite_ts(last_refresh_row["last_refresh"]) if last_refresh_row else None
+
+        is_due = (last_refresh is None) or ((now - last_refresh).total_seconds() >= interval)
         if not is_due:
             continue
 

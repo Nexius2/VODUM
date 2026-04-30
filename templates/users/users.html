@@ -83,7 +83,23 @@
 
 {% if tab == "users" %}
 <!-- Filtres -->
-<form method="get" id="users_filter_form" class="flex flex-wrap items-center gap-3 mb-6">
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-6">
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+    <div>
+      <div class="text-sm font-semibold text-slate-100">{{ total_users }} {{ t("users") }}</div>
+      <div class="text-xs text-slate-500">
+        {{ t("search") }}, {{ t("status") }}, {{ t("expiration") }}, {{ t("servers") }}, {{ t("libraries") }}
+      </div>
+    </div>
+
+    <a href="{{ url_for('users_list', tab='users', page=1, sort='expiration_date', order='asc') }}"
+       class="text-xs px-3 py-2 rounded-lg border border-slate-800 bg-slate-950 hover:bg-slate-800 text-slate-300">
+      {{ t("reset") }}
+    </a>
+  </div>
+
+<form method="get" id="users_filter_form" class="flex flex-wrap items-center gap-3">
+  <input type="hidden" name="tab" value="users">
 
     <!-- Search -->
     <input type="text"
@@ -96,9 +112,9 @@
 	<details class="relative">
 	  <summary class="list-none cursor-pointer bg-slate-900 border border-slate-800 rounded-lg text-sm px-3 py-2 flex items-center gap-2">
 		<span>{{ t("status") }}</span>
-		<span class="text-xs text-slate-400">
-		  ({{ (selected_statuses|length) if selected_statuses else "all" }})
-		</span>
+			<span class="text-xs text-slate-400">
+			  {{ selected_statuses|length }}/8
+			</span>
 		<svg class="w-4 h-4 opacity-70" viewBox="0 0 24 24">
 		  <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
 		</svg>
@@ -145,7 +161,7 @@
         {{ t("reset") }}
     </a>-->
 </form>
-
+</div>
 
 
 <!-- TABLE USERS -->
@@ -349,9 +365,9 @@ document.addEventListener("DOMContentLoaded", () => {
   <details class="relative">
     <summary class="list-none cursor-pointer bg-slate-900 border border-slate-800 rounded-lg text-sm px-3 py-2 flex items-center gap-2">
       <span>{{ t("status") }}</span>
-      <span class="text-xs text-slate-400">
-        ({{ (selected_statuses|length) if selected_statuses else "all" }})
-      </span>
+		<span class="text-xs text-slate-400">
+		  {{ selected_statuses|length }}/8
+		</span>
       <svg class="w-4 h-4 opacity-70" viewBox="0 0 24 24">
         <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
       </svg>

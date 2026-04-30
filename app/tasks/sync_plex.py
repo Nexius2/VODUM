@@ -144,6 +144,81 @@ def choose_account_token(db) -> Optional[str]:
 
     return token
 
+def _pick_plex_base_url(server) -> str:
+    """
+    Choisit l'URL Plex utilisable pour les appels API.
+    Important : public_url doit aussi être accepté, sinon un serveur distant
+    peut être vu comme configuré mais retourner 0 libraries.
+    """
+    return (
+        (server.get("url") or "")
+        or (server.get("local_url") or "")
+        or (server.get("public_url") or "")
+    ).strip().rstrip("/")
+
+
+def _ensure_plex_server_identity(db, server) -> None:
+    """
+    Force la récupération du vrai machineIdentifier Plex avant sync_users_from_api().
+    Sans ça, un serveur fraîchement ajouté garde l'UUID temporaire VODUM,
+    et les users Plex récupérés via /api/users ne peuvent pas être reliés au bon serveur.
+    """
+    server_id = int(server["id"])
+    base_url = _pick_plex_base_url(server)
+    token = (server.get("token") or "").strip()
+
+    if not base_url or not token:
+        return
+
+    try:
+        wait_for_plex_slot(base_url)
+        resp = requests.get(
+            f"{base_url}/identity",
+            headers={
+                "X-Plex-Token": token,
+                "Accept": "application/xml",
+            },
+            timeout=20,
+        )
+        resp.raise_for_status()
+
+        root = ET.fromstring(resp.content)
+        machine_id = (
+            root.attrib.get("machineIdentifier")
+            or root.attrib.get("machineIdentifier".lower())
+            or ""
+        ).strip()
+
+        server_name = (
+            root.attrib.get("friendlyName")
+            or root.attrib.get("name")
+            or server.get("name")
+            or ""
+        ).strip()
+
+        if machine_id:
+            db.execute(
+                """
+                UPDATE servers
+                SET server_identifier = ?,
+                    name = CASE
+                        WHEN ? != '' THEN ?
+                        ELSE name
+                    END
+                WHERE id = ?
+                """,
+                (machine_id, server_name, server_name, server_id),
+            )
+
+            log.info(
+                f"[SYNC IDENTITY] server_id={server_id} machineIdentifier={machine_id} name={server_name!r}"
+            )
+
+    except Exception as e:
+        log.warning(
+            f"[SYNC IDENTITY] Unable to refresh Plex identity for server_id={server_id}: {e}"
+        )
+
 # ---------------------------------------------------------------------------
 # Récupération Owner Plex
 # ---------------------------------------------------------------------------
@@ -612,8 +687,8 @@ def plex_get_libraries(server):
         ...
     ]
     """
-    base_url = server["url"] or server["local_url"]
-    token = server["token"]
+    base_url = _pick_plex_base_url(server)
+    token = (server.get("token") or "").strip()
 
     if not base_url or not token:
         log.error(f"[SYNC LIBRARIES] Server {server['name']} without URL or token.")
@@ -1452,16 +1527,22 @@ def sync_all(task_id=None, db=None) -> None:
     log.info("=== [SYNC ALL] Starting Plex synchronization ===")
 
     #
-    # 1) Sync utilisateurs depuis Plex.tv (/api/users)
-    #
-    sync_users_from_api(db)
-
-    #
-    # 2) Récupération des serveurs Plex
+    # 1) Récupération des serveurs Plex
     #
     servers = db.query(
         "SELECT * FROM servers WHERE type='plex'"
     )
+
+    #
+    # 2) Rafraîchir les vrais machineIdentifier Plex AVANT sync_users_from_api()
+    #
+    for server in servers:
+        _ensure_plex_server_identity(db, dict(server))
+
+    #
+    # 3) Sync utilisateurs depuis Plex.tv (/api/users)
+    #
+    sync_users_from_api(db)
 
     if not servers:
         raise RuntimeError("No Plex server found in the database")
@@ -1493,8 +1574,8 @@ def sync_all(task_id=None, db=None) -> None:
             continue
 
         # --- Accès utilisateurs ---
-        base_url = server["url"] or server["local_url"]
-        token = server["token"]
+        base_url = _pick_plex_base_url(server)
+        token = (server.get("token") or "").strip()
 
         if not base_url or not token:
             log.warning(

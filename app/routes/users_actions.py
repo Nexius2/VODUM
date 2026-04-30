@@ -11,7 +11,7 @@ from web.helpers import get_db
 from core.plex_rate_limit import install_plex_rate_limit
 from core.providers.jellyfin_users import jellyfin_list_users
 from .users_list import merge_vodum_users
-from core.media_jobs import insert_plex_media_job
+from core.media_jobs import insert_plex_media_job, insert_jellyfin_media_job
 
 
 task_logger = get_logger("tasks_ui")
@@ -28,7 +28,7 @@ def _get_preferred_plex_media_user_id(db, user_id: int, server_id: int):
             CASE WHEN LOWER(COALESCE(role, '')) = 'owner' THEN 1 ELSE 0 END ASC,
             CASE WHEN TRIM(COALESCE(accepted_at, '')) <> '' THEN 0 ELSE 1 END ASC,
             CASE WHEN TRIM(COALESCE(external_user_id, '')) <> '' THEN 0 ELSE 1 END ASC,
-            CASE WHEN LOWER(COALESCE(type, '')) = 'unfriend' THEN 1 ELSE 0 END ASC,
+            CASE WHEN LOWER(COALESCE(role, '')) = 'unfriended' THEN 1 ELSE 0 END ASC,
             id ASC
         LIMIT 1
         """,
@@ -36,7 +36,44 @@ def _get_preferred_plex_media_user_id(db, user_id: int, server_id: int):
     )
     return int(row["id"]) if row and row["id"] is not None else None
 
+def _queue_plex_share_settings_sync(db, user_id: int, server_id: int, reason: str):
+    preferred_media_user_id = _get_preferred_plex_media_user_id(
+        db,
+        user_id,
+        server_id,
+    )
 
+    dedupe_key = f"plex:sync:server={server_id}:user={user_id}:share_settings"
+
+    payload = {
+        "reason": reason,
+        "preferred_media_user_id": preferred_media_user_id,
+    }
+
+    inserted = insert_plex_media_job(
+        db,
+        action="sync",
+        vodum_user_id=user_id,
+        server_id=server_id,
+        library_id=None,
+        dedupe_key=dedupe_key,
+        payload=payload,
+    )
+
+    if inserted:
+        task_logger.info(
+            f"[MEDIA JOB CREATED] provider=plex action=sync "
+            f"user_id={user_id} server_id={server_id} "
+            f"preferred_media_user_id={preferred_media_user_id} "
+            f"reason={reason}"
+        )
+
+    try:
+        enable_and_run_task_by_name("apply_plex_access_updates")
+    except Exception:
+        pass
+
+    return inserted
 
 
 def _force_queue_full_plex_sync_for_user(db, user_id: int, reason: str = "admin_force_resync"):
@@ -63,7 +100,7 @@ def _force_queue_full_plex_sync_for_user(db, user_id: int, reason: str = "admin_
             CASE WHEN LOWER(COALESCE(mu.role, '')) = 'owner' THEN 1 ELSE 0 END ASC,
             CASE WHEN TRIM(COALESCE(mu.accepted_at, '')) <> '' THEN 0 ELSE 1 END ASC,
             CASE WHEN TRIM(COALESCE(mu.external_user_id, '')) <> '' THEN 0 ELSE 1 END ASC,
-            CASE WHEN LOWER(COALESCE(mu.type, '')) = 'unfriend' THEN 1 ELSE 0 END ASC,
+            CASE WHEN LOWER(COALESCE(mu.role, '')) = 'unfriended' THEN 1 ELSE 0 END ASC,
             mu.id ASC
         """,
         (user_id,),
@@ -112,6 +149,54 @@ def _force_queue_full_plex_sync_for_user(db, user_id: int, reason: str = "admin_
             f"[MEDIA JOB CREATED] provider=plex action=sync "
             f"user_id={user_id} server_id={server_id} "
             f"preferred_media_user_id={preferred_media_user_id} "
+            f"inserted={inserted} reason=admin_force"
+        )
+
+    return queued
+
+def _force_queue_full_jellyfin_sync_for_user(db, user_id: int, reason: str = "admin_force_resync"):
+    rows = db.query(
+        """
+        SELECT DISTINCT
+            mu.server_id
+        FROM media_users mu
+        JOIN servers s ON s.id = mu.server_id
+        WHERE mu.vodum_user_id = ?
+          AND s.type = 'jellyfin'
+          AND mu.type = 'jellyfin'
+        ORDER BY mu.server_id ASC
+        """,
+        (user_id,),
+    ) or []
+
+    queued = 0
+
+    for row in rows:
+        server_id = int(row["server_id"])
+
+        dedupe_key = f"jellyfin:sync:server={server_id}:user={user_id}:admin_force"
+
+        payload = {
+            "reason": reason,
+            "forced_by_admin": True,
+        }
+
+        inserted = insert_jellyfin_media_job(
+            db,
+            action="sync",
+            vodum_user_id=user_id,
+            server_id=server_id,
+            library_id=None,
+            dedupe_key=dedupe_key,
+            payload=payload,
+        )
+
+        if inserted:
+            queued += 1
+
+        task_logger.info(
+            f"[MEDIA JOB CREATED] provider=jellyfin action=sync "
+            f"user_id={user_id} server_id={server_id} "
             f"inserted={inserted} reason=admin_force"
         )
 
@@ -543,7 +628,15 @@ def register(app):
             (json.dumps(details, ensure_ascii=False), int(mu["id"])),
         )
 
-        return redirect(url_for("user_detail", user_id=user_id))
+        _queue_plex_share_settings_sync(
+            db,
+            user_id=user_id,
+            server_id=server_id,
+            reason=f"plex_share_filter_{field}",
+        )
+
+        flash("user_saved", "success")
+        return redirect(url_for("user_detail", user_id=user_id, tab="access"))
 
 
 
@@ -604,9 +697,12 @@ def register(app):
             (json.dumps(details, ensure_ascii=False), int(mu["id"])),
         )
 
-        # Optionnel mais recommandé: réplication même owner + jobs
-        # -> tu peux réutiliser exactement ta logique existante
-        #    (celle de replicate_plex_flags_same_owner + création media_jobs + queue task)
+        _queue_plex_share_settings_sync(
+            db,
+            user_id=user_id,
+            server_id=server_id,
+            reason=f"plex_share_option_{field}",
+        )
 
         flash("user_saved", "success")
         return redirect(url_for("user_detail", user_id=user_id, tab="access"))
@@ -858,15 +954,8 @@ def register(app):
                 pass
 
         elif server["type"] == "jellyfin":
-            # --------------------------------------------------
-            # Jellyfin : on fait un job "SYNC" (source de vérité = DB)
-            # -> 1 seul job par user+server, réarmé à chaque toggle
-            # --------------------------------------------------
-
             action = "sync"
             job_library_id = None
-
-            # Dedupe par user+server (pas par lib)
             dedupe_key = f"jellyfin:sync:server={lib['server_id']}:user={user_id}"
 
             payload = {
@@ -876,37 +965,30 @@ def register(app):
                 "removed": removed,
             }
 
-            # IMPORTANT:
-            # - tables.sql: dedupe_key n'est pas UNIQUE => pas de ON CONFLICT possible
-            # - on réarme le job en supprimant l'existant (processed ou non), puis insert
-            db.execute(
-                "DELETE FROM media_jobs WHERE dedupe_key = ?",
-                (dedupe_key,),
+            inserted = insert_jellyfin_media_job(
+                db,
+                action=action,
+                vodum_user_id=user_id,
+                server_id=lib["server_id"],
+                library_id=job_library_id,
+                dedupe_key=dedupe_key,
+                payload=payload,
             )
 
-            # Laisse SQLite appliquer les DEFAULT (processed=0, success=0, attempts=0)
-            db.execute(
-                """
-                INSERT INTO media_jobs
-                    (provider, action, vodum_user_id, server_id, library_id, payload_json, dedupe_key)
-                VALUES
-                    ('jellyfin', ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    action,
-                    user_id,
-                    lib["server_id"],
-                    job_library_id,
-                    json.dumps(payload, ensure_ascii=False),
-                    dedupe_key,
-                ),
-            )
+            if inserted:
+                task_logger.info(
+                    f"[MEDIA JOB CREATED] provider=jellyfin action={action} "
+                    f"user_id={user_id} server_id={lib['server_id']} "
+                    f"library_id={job_library_id}"
+                )
 
-            # Activer + queue la tâche Jellyfin
             try:
                 enable_and_run_task_by_name("apply_jellyfin_access_updates")
             except Exception:
                 pass
+
+
+
 
 
 
@@ -926,37 +1008,55 @@ def register(app):
             flash("invalid_user", "error")
             return redirect(url_for("user_detail", user_id=user_id, tab="access"))
 
-        plex_count_row = db.query_one(
+        media_count_row = db.query_one(
             """
-            SELECT COUNT(DISTINCT mu.server_id) AS c
+            SELECT
+                COUNT(DISTINCT CASE WHEN mu.type = 'plex' AND s.type = 'plex' THEN mu.server_id END) AS plex_count,
+                COUNT(DISTINCT CASE WHEN mu.type = 'jellyfin' AND s.type = 'jellyfin' THEN mu.server_id END) AS jellyfin_count
             FROM media_users mu
             JOIN servers s ON s.id = mu.server_id
             WHERE mu.vodum_user_id = ?
-              AND mu.type = 'plex'
-              AND s.type = 'plex'
             """,
             (user_id,),
         )
-        plex_server_count = int(plex_count_row["c"] or 0) if plex_count_row else 0
 
-        if plex_server_count == 0:
+        plex_server_count = int(media_count_row["plex_count"] or 0) if media_count_row else 0
+        jellyfin_server_count = int(media_count_row["jellyfin_count"] or 0) if media_count_row else 0
+
+        if plex_server_count == 0 and jellyfin_server_count == 0:
             flash("no_media_accounts_for_user", "error")
             return redirect(url_for("user_detail", user_id=user_id, tab="access"))
 
-        queued = _force_queue_full_plex_sync_for_user(
+        queued_plex = _force_queue_full_plex_sync_for_user(
             db,
             user_id=user_id,
             reason="admin_force_resync",
         )
 
-        try:
-            enable_and_run_task_by_name("apply_plex_access_updates")
-        except Exception:
-            pass
+        queued_jellyfin = _force_queue_full_jellyfin_sync_for_user(
+            db,
+            user_id=user_id,
+            reason="admin_force_resync",
+        )
+
+        if queued_plex:
+            try:
+                enable_and_run_task_by_name("apply_plex_access_updates")
+            except Exception:
+                pass
+
+        if queued_jellyfin:
+            try:
+                enable_and_run_task_by_name("apply_jellyfin_access_updates")
+            except Exception:
+                pass
+
+        queued = queued_plex + queued_jellyfin
 
         task_logger.warning(
             f"[ACCESS REPAIR REQUEST] user_id={user_id} "
-            f"plex_servers={plex_server_count} queued_sync_jobs={queued}"
+            f"plex_servers={plex_server_count} jellyfin_servers={jellyfin_server_count} "
+            f"queued_sync_jobs={queued}"
         )
 
         flash("task_run_success", "success")

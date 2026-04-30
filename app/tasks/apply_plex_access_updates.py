@@ -837,7 +837,7 @@ def resolve_media_user(db, vodum_user_id: int, server_id: int, job=None):
             CASE WHEN LOWER(COALESCE(role, '')) = 'owner' THEN 1 ELSE 0 END ASC,
             CASE WHEN TRIM(COALESCE(accepted_at, '')) <> '' THEN 0 ELSE 1 END ASC,
             CASE WHEN TRIM(COALESCE(external_user_id, '')) <> '' THEN 0 ELSE 1 END ASC,
-            CASE WHEN LOWER(COALESCE(type, '')) = 'unfriend' THEN 1 ELSE 0 END ASC,
+            CASE WHEN LOWER(COALESCE(role, '')) = 'unfriended' THEN 1 ELSE 0 END ASC,
             id ASC
         """,
         (vodum_user_id, server_id),
