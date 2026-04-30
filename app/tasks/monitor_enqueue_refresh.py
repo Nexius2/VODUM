@@ -71,7 +71,7 @@ def run(task_id, db):
         payload = json.dumps({"interval_sec": interval, "reason": "schedule"}, ensure_ascii=False)
 
         existing = db.query_one("""
-            SELECT id
+            SELECT id, status, run_after, locked_until
             FROM media_jobs
             WHERE dedupe_key = ?
               AND status IN ('queued', 'running')
@@ -79,6 +79,47 @@ def run(task_id, db):
         """, (dedupe_key,))
 
         if existing:
+            status = (existing["status"] or "").strip().lower()
+
+            # Cas important :
+            # un ancien job monitoring peut être en queued mais repoussé par backoff.
+            # Pour du live monitoring, on ne veut pas bloquer le refresh pendant 30 min / 1h / 2h.
+            if status == "queued":
+                db.execute("""
+                    UPDATE media_jobs
+                    SET run_after = NULL,
+                        priority = 100,
+                        payload_json = ?,
+                        locked_by = NULL,
+                        locked_until = NULL,
+                        last_error = NULL
+                    WHERE id = ?
+                      AND status = 'queued'
+                """, (payload, existing["id"]))
+
+                enqueued += 1
+                continue
+
+            # Cas sécurité : job running bloqué avec lock expiré ou absent
+            if status == "running":
+                db.execute("""
+                    UPDATE media_jobs
+                    SET status = 'queued',
+                        run_after = NULL,
+                        locked_by = NULL,
+                        locked_until = NULL,
+                        last_error = 'Recovered stale monitoring job'
+                    WHERE id = ?
+                      AND status = 'running'
+                      AND (
+                            locked_until IS NULL
+                         OR locked_until <= CURRENT_TIMESTAMP
+                      )
+                """, (existing["id"],))
+
+                enqueued += 1
+                continue
+
             skipped_existing += 1
             continue
 

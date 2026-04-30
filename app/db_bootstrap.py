@@ -1718,8 +1718,8 @@ def run_migrations():
         "name": "monitor_enqueue_refresh",
         "description": "task_description.monitor_enqueue_refresh",
         "schedule": "*/1 * * * *",
-        "enabled": 0,
-        "status": "disabled"
+        "enabled": 1,
+        "status": "idle"
     })
 
     # Worker queue
@@ -1727,9 +1727,20 @@ def run_migrations():
         "name": "media_jobs_worker",
         "description": "task_description.media_jobs_worker",
         "schedule": "*/1 * * * *",
-        "enabled": 0,
-        "status": "disabled"
+        "enabled": 1,
+        "status": "idle"
     })
+
+    cursor.execute("""
+        UPDATE tasks
+        SET enabled = 1,
+            status = CASE
+                WHEN status = 'disabled' THEN 'idle'
+                ELSE status
+            END,
+            schedule = '*/1 * * * *'
+        WHERE name IN ('monitor_enqueue_refresh', 'media_jobs_worker')
+    """)
 
     # Tautulli import (ON-DEMAND)
     # - No cron schedule: it is launched manually when a Tautulli DB is uploaded.

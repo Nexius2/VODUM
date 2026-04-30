@@ -304,8 +304,20 @@ def _get_json(session: requests.Session, url: str, timeout: int = 20, token: str
 
 def _get_jellyfin_servers(db):
     return db.query(
-        "SELECT id, name, url, token FROM servers WHERE type = 'jellyfin'"
+        """
+        SELECT id, name, url, local_url, public_url, token
+        FROM servers
+        WHERE type = 'jellyfin'
+        """
     )
+
+
+def _pick_jellyfin_base_url(server) -> str:
+    return (
+        (server.get("url") or "")
+        or (server.get("local_url") or "")
+        or (server.get("public_url") or "")
+    ).strip().rstrip("/")
 
 
 
@@ -909,7 +921,7 @@ def run(task_id: int, db):
             srv = dict(srv)
             server_id = int(srv["id"])
             name = srv.get("name") or f"server_{server_id}"
-            url = (srv.get("url") or "").strip()
+            url = _pick_jellyfin_base_url(srv)
             token = (srv.get("token") or "").strip()
 
             if not url or not token:
