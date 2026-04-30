@@ -99,7 +99,9 @@ CREATE TABLE IF NOT EXISTS media_users (
     FOREIGN KEY(vodum_user_id) REFERENCES vodum_users(id)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_media_users_vodum_server
+DROP INDEX IF EXISTS uq_media_users_vodum_server;
+
+CREATE INDEX IF NOT EXISTS idx_media_users_vodum_server
 ON media_users(vodum_user_id, server_id)
 WHERE vodum_user_id IS NOT NULL;
 

@@ -1595,11 +1595,11 @@ def run_migrations():
     # -------------------------------------------------
     # 2.6 Server deletion performance indexes
     # -------------------------------------------------
+    cursor.execute("DROP INDEX IF EXISTS uq_media_users_vodum_server")
     cursor.execute("""
-        CREATE UNIQUE INDEX IF NOT EXISTS uq_media_users_provider_server_external
-        ON media_users(server_id, type, external_user_id)
-        WHERE external_user_id IS NOT NULL
-          AND TRIM(external_user_id) <> ''
+        CREATE INDEX IF NOT EXISTS idx_media_users_vodum_server
+        ON media_users(vodum_user_id, server_id)
+        WHERE vodum_user_id IS NOT NULL
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_users_server ON media_users(server_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_users_vodum_user ON media_users(vodum_user_id)")

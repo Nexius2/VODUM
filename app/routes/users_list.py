@@ -43,7 +43,16 @@ def register(app):
             cookie_sort = (request.cookies.get("users_list_sort") or "expiration_date").strip()
             cookie_order = (request.cookies.get("users_list_order") or "asc").strip().lower()
 
-            default_statuses = ["active", "trial", "paused", "pending"]
+            default_statuses = [
+                "active",
+                "pre_expired",
+                "reminder",
+                "expired",
+                "invited",
+                "unfriended",
+                "suspended",
+                "unknown",
+            ]
 
             cookie_statuses_raw = request.cookies.get("users_list_statuses")
             if cookie_statuses_raw:
@@ -576,6 +585,18 @@ def merge_vodum_users(db, master_id: int, other_id: int) -> None:
     # ⚠️ IMPORTANT :
     # DBManager.execute() commit déjà (autocommit). Donc PAS de BEGIN/COMMIT/ROLLBACK ici.
     # Sinon tu as exactement "cannot commit/rollback - no transaction is active".
+
+    # Ancien index trop strict :
+    # il empêchait un même utilisateur VODUM d'avoir plusieurs comptes
+    # Plex/Jellyfin sur le même serveur après un merge manuel.
+    db.execute("DROP INDEX IF EXISTS uq_media_users_vodum_server")
+    db.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_media_users_vodum_server
+        ON media_users(vodum_user_id, server_id)
+        WHERE vodum_user_id IS NOT NULL
+        """
+    )
 
     # 1) Déplacer media_users
     db.execute(

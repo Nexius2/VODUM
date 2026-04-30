@@ -8,6 +8,7 @@ from logging_utils import get_logger
 from tasks.update_user_status import compute_status
 from tasks_engine import enable_and_run_task_by_name
 from communications_engine import select_comm_template_for_user, schedule_template_notification
+from core.media_jobs import insert_plex_media_job
 
 log = get_logger("api.subscriptions")
 
@@ -48,8 +49,11 @@ def _remove_expired_subscription_policy_for_user(db, user_id: int) -> int:
 
 def _cleanup_pending_plex_jobs_for_user(db, user_id: int) -> int:
     """
-    Supprime les anciens jobs Plex encore en file / en cours
+    Annule les anciens jobs Plex encore en file / en cours
     avant de recréer un vrai sync complet après réactivation.
+
+    On ne DELETE pas : on garde une trace et on évite de supprimer
+    brutalement un job potentiellement déjà pris par un worker.
     """
     row = db.query_one(
         """
@@ -58,27 +62,43 @@ def _cleanup_pending_plex_jobs_for_user(db, user_id: int) -> int:
         WHERE vodum_user_id = ?
           AND provider = 'plex'
           AND action IN ('grant', 'revoke', 'sync')
-          AND status IN ('queued', 'running')
+          AND (
+                status IN ('queued', 'running')
+             OR processed = 0
+          )
         """,
         (user_id,),
     )
 
-    removed = int(row["c"] or 0) if row else 0
+    canceled = int(row["c"] or 0) if row else 0
 
-    if removed:
+    if canceled:
         db.execute(
             """
-            DELETE FROM media_jobs
+            UPDATE media_jobs
+            SET status = 'canceled',
+                processed = 1,
+                success = 0,
+                processed_at = CURRENT_TIMESTAMP,
+                locked_by = NULL,
+                locked_until = NULL,
+                last_error = ?
             WHERE vodum_user_id = ?
               AND provider = 'plex'
               AND action IN ('grant', 'revoke', 'sync')
-              AND status IN ('queued', 'running')
+              AND (
+                    status IN ('queued', 'running')
+                 OR processed = 0
+              )
             """,
-            (user_id,),
+            (
+                "Canceled because user subscription was reactivated and a full Plex sync was queued",
+                user_id,
+            ),
         )
 
-    log.info(f"[JOB CLEANUP] removed {removed} jobs for user_id={user_id}")
-    return removed
+    log.info(f"[JOB CLEANUP] canceled {canceled} Plex jobs for user_id={user_id}")
+    return canceled
 
 
 def _queue_full_plex_sync_after_reactivation(db, user_id: int, old_status, new_status, reason="reactivation") -> int:
@@ -101,7 +121,7 @@ def _queue_full_plex_sync_after_reactivation(db, user_id: int, old_status, new_s
             CASE WHEN LOWER(COALESCE(mu.role, '')) = 'owner' THEN 1 ELSE 0 END ASC,
             CASE WHEN TRIM(COALESCE(mu.accepted_at, '')) <> '' THEN 0 ELSE 1 END ASC,
             CASE WHEN TRIM(COALESCE(mu.external_user_id, '')) <> '' THEN 0 ELSE 1 END ASC,
-            CASE WHEN LOWER(COALESCE(mu.type, '')) = 'unfriend' THEN 1 ELSE 0 END ASC,
+            CASE WHEN LOWER(COALESCE(mu.role, '')) = 'unfriended' THEN 1 ELSE 0 END ASC,
             mu.id ASC
         """,
         (user_id,),
@@ -127,16 +147,7 @@ def _queue_full_plex_sync_after_reactivation(db, user_id: int, old_status, new_s
             f"media_user={preferred_media_user_id or 'none'}:reactivation"
         )
 
-        already_active = db.query_one(
-            """
-            SELECT 1
-            FROM media_jobs
-            WHERE dedupe_key = ?
-              AND status IN ('queued', 'running')
-            LIMIT 1
-            """,
-            (dedupe_key,),
-        )
+
 
         payload = {
             "reason": reason,
@@ -146,30 +157,18 @@ def _queue_full_plex_sync_after_reactivation(db, user_id: int, old_status, new_s
             "preferred_media_user_id": preferred_media_user_id,
         }
 
-        db.execute(
-            """
-            INSERT OR IGNORE INTO media_jobs(
-                provider, action,
-                vodum_user_id, server_id, library_id,
-                payload_json,
-                dedupe_key
-            )
-            VALUES(
-                'plex', 'sync',
-                ?, ?, NULL,
-                ?,
-                ?
-            )
-            """,
-            (
-                user_id,
-                server_id,
-                json.dumps(payload, ensure_ascii=False),
-                dedupe_key,
-            ),
+        inserted = insert_plex_media_job(
+            db,
+            action="sync",
+            vodum_user_id=user_id,
+            server_id=server_id,
+            library_id=None,
+            dedupe_key=dedupe_key,
+            payload=payload,
+            cancel_reason="Canceled because user subscription was reactivated and a newer Plex sync was queued",
         )
 
-        if not already_active:
+        if inserted:
             queued += 1
             log.info(
                 f"[MEDIA JOB CREATED] provider=plex action=sync "

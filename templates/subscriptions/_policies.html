@@ -383,12 +383,16 @@
               data-scope="{{ p.scope_type }}"
               data-provider="{{ provider_label|lower }}"
               data-origin="{{ origin_label }}"
-              data-deletable="1"
+              data-deletable="{{ '0' if p._is_system or p._is_locked else '1' }}"
             >
               <td class="p-3 align-top">
-                <input type="checkbox"
-                       class="policy-row-checkbox h-4 w-4 rounded border-slate-500 bg-slate-950 text-rose-500 focus:ring-rose-500 cursor-pointer"
-                       value="{{ p.id }}">
+                {% if p._is_system or p._is_locked %}
+                  <span class="text-xs text-slate-600">—</span>
+                {% else %}
+                  <input type="checkbox"
+                         class="policy-row-checkbox h-4 w-4 rounded border-slate-500 bg-slate-950 text-rose-500 focus:ring-rose-500 cursor-pointer"
+                         value="{{ p.id }}">
+                {% endif %}
               </td>
               <td class="p-3 align-top">
                 {% if p.is_enabled %}
@@ -490,11 +494,15 @@
                     {{ t("edit") }}
                   </a>
 
-                    <form method="post" action="{{ url_for('stream_policy_delete', policy_id=p.id) }}">
-                      <input type="hidden" name="redirect_endpoint" value="{{ current_redirect_endpoint }}">
-                      <input type="hidden" name="redirect_tab" value="{{ current_redirect_tab }}">
-                      <button class="text-red-400 hover:text-red-300">{{ t("delete") }}</button>
-                    </form>
+                    {% if p._is_system or p._is_locked %}
+                      <span class="text-xs text-slate-600">Read-only</span>
+                    {% else %}
+                      <form method="post" action="{{ url_for('stream_policy_delete', policy_id=p.id) }}">
+                        <input type="hidden" name="redirect_endpoint" value="{{ current_redirect_endpoint }}">
+                        <input type="hidden" name="redirect_tab" value="{{ current_redirect_tab }}">
+                        <button class="text-red-400 hover:text-red-300">{{ t("delete") }}</button>
+                      </form>
+                    {% endif %}
                 </div>
               </td>
             </tr>

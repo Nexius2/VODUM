@@ -9,14 +9,14 @@ def _pick_canonical_row(rows):
     Priorité :
     1. accepted_at rempli
     2. external_user_id rempli
-    3. type != 'unfriend'
+    3. role != 'unfriended'
     4. plus petit id
     """
     def sort_key(r):
         accepted = 0 if str(r["accepted_at"] or "").strip() else 1
         external = 0 if str(r["external_user_id"] or "").strip() else 1
-        unfriend = 1 if str(r["type"] or "").strip().lower() == "unfriend" else 0
-        return (accepted, external, unfriend, int(r["id"]))
+        unfriended = 1 if str(r["role"] or "").strip().lower() == "unfriended" else 0
+        return (accepted, external, unfriended, int(r["id"]))
 
     return sorted(rows, key=sort_key)[0]
 
@@ -172,10 +172,10 @@ def run_repair_if_needed(db, logger):
 
         stats["media_user_libraries_deduped"] = before_count
 
-        # Index anti-doublon définitif
+        db.execute("DROP INDEX IF EXISTS uq_media_users_vodum_server")
         db.execute(
             """
-            CREATE UNIQUE INDEX IF NOT EXISTS uq_media_users_vodum_server
+            CREATE INDEX IF NOT EXISTS idx_media_users_vodum_server
             ON media_users(vodum_user_id, server_id)
             WHERE vodum_user_id IS NOT NULL
             """

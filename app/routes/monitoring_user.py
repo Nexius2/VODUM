@@ -794,6 +794,24 @@ def register(app):
     def stream_policy_delete(policy_id: int):
         db = get_db()
 
+        existing = db.query_one(
+            "SELECT id, rule_value_json FROM stream_policies WHERE id = ?",
+            (policy_id,),
+        )
+
+        if not existing:
+            flash("Policy not found.", "error")
+            return _policy_redirect_response()
+
+        try:
+            rule = json.loads(existing["rule_value_json"] or "{}")
+        except Exception:
+            rule = {}
+
+        if rule.get("system_tag") or rule.get("locked"):
+            flash("Policy is read-only.", "error")
+            return _policy_redirect_response()
+
         db.execute("DELETE FROM stream_policies WHERE id=?", (policy_id,))
         flash("Policy deleted", "success")
         return _policy_redirect_response()
@@ -818,13 +836,48 @@ def register(app):
             return _policy_redirect_response()
 
         placeholders = ",".join(["?"] * len(cleaned_ids))
-        db.execute(
-            f"DELETE FROM stream_policies WHERE id IN ({placeholders})",
+
+        rows = db.query(
+            f"""
+            SELECT id, rule_value_json
+            FROM stream_policies
+            WHERE id IN ({placeholders})
+            """,
             tuple(cleaned_ids),
+        ) or []
+
+        deletable_ids = []
+        skipped_count = 0
+
+        for row in rows:
+            try:
+                rule = json.loads(row["rule_value_json"] or "{}")
+            except Exception:
+                rule = {}
+
+            if rule.get("system_tag") or rule.get("locked"):
+                skipped_count += 1
+                continue
+
+            deletable_ids.append(int(row["id"]))
+
+        if not deletable_ids:
+            flash("No deletable policy selected.", "error")
+            return _policy_redirect_response()
+
+        delete_placeholders = ",".join(["?"] * len(deletable_ids))
+        db.execute(
+            f"DELETE FROM stream_policies WHERE id IN ({delete_placeholders})",
+            tuple(deletable_ids),
         )
 
-        deleted_count = len(cleaned_ids)
-        flash(f"{deleted_count} polic{'y' if deleted_count == 1 else 'ies'} deleted.", "success")
+        deleted_count = len(deletable_ids)
+
+        if skipped_count:
+            flash(f"{deleted_count} deleted, {skipped_count} read-only skipped.", "success")
+        else:
+            flash(f"{deleted_count} polic{'y' if deleted_count == 1 else 'ies'} deleted.", "success")
+
         return _policy_redirect_response()
 
     @app.get("/monitoring/policies/<int:policy_id>/edit")
