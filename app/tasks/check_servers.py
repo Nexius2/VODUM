@@ -67,14 +67,19 @@ def jellyfin_get_status(base_url, token=None):
 
 
 
-def choose_server_base_url(server_row):
-    url = server_row["url"] or server_row["local_url"] or server_row["public_url"]
-    if not url:
-        return None
-    url = url.strip()
-    if not url.startswith(("http://", "https://")):
-        url = "http://" + url
-    return url
+def choose_server_base_urls(server_row):
+    urls = []
+
+    for key in ("url", "local_url", "public_url"):
+        url = (server_row.get(key) or "").strip().rstrip("/")
+        if not url:
+            continue
+        if not url.startswith(("http://", "https://")):
+            url = "http://" + url
+        if url not in urls:
+            urls.append(url)
+
+    return urls
 
 
 def plex_get_info(base_url, token):
@@ -132,7 +137,8 @@ def run(task_id: int, db):
 
             log.info(f"--- Server analysis #{sid} ({old_name}) ---")
 
-            base_url = choose_server_base_url(s)
+            base_urls = choose_server_base_urls(s)
+            base_url = base_urls[0] if base_urls else None
             log.debug(
                 f"[SERVER #{sid}] raw_urls="
                 f"url={s.get('url')} local={s.get('local_url')} public={s.get('public_url')}"
@@ -144,13 +150,7 @@ def run(task_id: int, db):
 
             if not base_url:
                 log.warning(f"Server #{sid} : No valid URL.")
-                
-                log.debug(
-                    f"[SERVER #{sid}] result status={status} old_name={old_name} new_name={new_name} "
-                    f"machine_id(old)={machine_id} meta={meta}"
-                )
 
-                
                 db.execute(
                     """
                     UPDATE servers
@@ -169,9 +169,12 @@ def run(task_id: int, db):
             # SERVEUR PLEX
             # -----------------------------
             if s["type"] == "plex" and s["token"]:
-                status, found_name, found_mid, meta = plex_get_info(
-                    base_url, s["token"]
-                )
+                meta = None
+                for candidate_url in base_urls:
+                    status, found_name, found_mid, meta = plex_get_info(candidate_url, s["token"])
+                    if status == "up":
+                        base_url = candidate_url
+                        break
 
                 if status == "up":
                     if found_name:
@@ -186,9 +189,12 @@ def run(task_id: int, db):
             # SERVEUR JELLYFIN
             # -----------------------------
             elif s["type"] == "jellyfin":
-                status, found_name, found_mid, meta = jellyfin_get_status(
-                    base_url, s["token"]
-                )
+                meta = None
+                for candidate_url in base_urls:
+                    status, found_name, found_mid, meta = jellyfin_get_status(candidate_url, s["token"])
+                    if status == "up":
+                        base_url = candidate_url
+                        break
 
                 if status == "up":
                     if found_name:

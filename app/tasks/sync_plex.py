@@ -1419,23 +1419,7 @@ def sync_users_from_api(db) -> None:
                 (server_id, plex_id),
             )
 
-            if not row_mu and vodum_user_id is not None:
-                row_mu = db.query_one(
-                    """
-                    SELECT id
-                    FROM media_users
-                    WHERE server_id = ?
-                      AND vodum_user_id = ?
-                    LIMIT 1
-                    """,
-                    (server_id, vodum_user_id),
-                )
-                if row_mu:
-                    log.warning(
-                        f"[SYNC USERS] Existing media_user found by (vodum_user_id, server_id) "
-                        f"instead of external_user_id → reuse row id={row_mu['id']} "
-                        f"(server_id={server_id}, vodum_user_id={vodum_user_id}, plex_id={plex_id})"
-                    )
+
 
             if row_mu:
                 db.execute(
