@@ -478,6 +478,7 @@ def run_migrations():
 
     ensure_column(cursor, "subscription_templates", "duration_days", "INTEGER DEFAULT 30")
     ensure_column(cursor, "subscription_templates", "subscription_value", "REAL DEFAULT 0")
+    ensure_column(cursor, "subscription_templates", "is_default", "INTEGER DEFAULT 0")
     conn.commit()
 
     # Ensure at least one default template (EN), deletable/modifiable
@@ -490,12 +491,13 @@ def run_migrations():
     if cnt == 0:
         print("🛠 Creating default subscription template: Default")
         cursor.execute(
-            "INSERT INTO subscription_templates(name, notes, duration_days, subscription_value, policies_json) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO subscription_templates(name, notes, duration_days, subscription_value, is_default, policies_json) VALUES (?, ?, ?, ?, ?, ?)",
             (
                 "Default",
                 "Base template with no restrictions. Edit or delete if you want.",
                 30,
                 0,
+                1,
                 "[]",
             ),
         )

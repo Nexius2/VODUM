@@ -318,7 +318,7 @@ def _is_valid_tautulli_db(db_path: str) -> bool:
         cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = {r[0] for r in cur.fetchall()}
         conn.close()
-        required = {"users", "session_history", "session_history_metadata", "recently_added"}
+        required = {"users", "session_history", "session_history_metadata", "library_sections"}
         return required.issubset(tables)
     except Exception:
         return False
@@ -710,7 +710,7 @@ def import_tautulli_db(
         LEFT JOIN users u
           ON u.user_id = sh.user_id
         LEFT JOIN session_history_metadata m
-          ON m.id = sh.id
+          ON m.id = sh.reference_id
 
         ORDER BY sh.started ASC
         """
@@ -862,6 +862,7 @@ def import_tautulli_db(
             client_product = (row["product"] or "").strip()
 
             tautulli_reference_id = str(row["tautulli_reference_id"] or "").strip()
+            session_key = tautulli_reference_id or None
 
             artwork_row = {
                 "provider": "plex",
@@ -875,7 +876,7 @@ def import_tautulli_db(
 
             batch.append(
                 (
-                    server_id,
+                    vodum_server_id,
                     "plex",
                     session_key,
                     media_key,

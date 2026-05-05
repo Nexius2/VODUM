@@ -197,8 +197,18 @@
 
             <div class="divide-y divide-slate-800">
               {% for item in card["items"] %}
-                <div class="flex items-start gap-3 p-3">
-                  <div class="w-12 h-16 rounded-lg overflow-hidden bg-slate-800 shrink-0">
+                <div class="relative overflow-hidden flex items-start gap-3 p-3">
+                  {% if item.backdrop_url %}
+                    <img
+                      src="{{ item.backdrop_url }}"
+                      alt=""
+                      class="absolute inset-0 h-full w-full object-cover opacity-20 pointer-events-none"
+                      loading="lazy"
+                    >
+                    <div class="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-950/80 to-slate-950/95"></div>
+                  {% endif %}
+
+                  <div class="relative z-10 w-12 h-16 rounded-lg overflow-hidden bg-slate-800 shrink-0">
                     {% if item.poster_url %}
                       <img
                         src="{{ item.poster_url }}"
@@ -209,7 +219,7 @@
                     {% endif %}
                   </div>
 
-                  <div class="min-w-0 flex-1">
+                  <div class="relative z-10 min-w-0 flex-1">
                     <div class="text-sm font-medium text-slate-100 truncate">
                       {{ item.display_title }}
                     </div>

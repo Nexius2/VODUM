@@ -80,7 +80,7 @@ def register(app):
             tables = {r[0] for r in cur.fetchall()}
             conn.close()
 
-            required = {"users", "session_history", "session_history_metadata"}
+            required = {"users", "session_history", "session_history_metadata", "library_sections"}
             missing = sorted(list(required - tables))
             if missing:
                 return False, f"Missing required tables: {', '.join(missing)} (found={len(tables)})"

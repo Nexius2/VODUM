@@ -4,8 +4,19 @@
   {% if sessions and sessions|length > 0 %}
     <div class="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(300px,1fr))]">
       {% for s in sessions %}
-        <div class="bg-slate-950/40 border border-slate-800 rounded-2xl p-4">
-          <div class="flex items-start justify-between gap-3 mb-3">
+        <div class="relative overflow-hidden bg-slate-950/40 border border-slate-800 rounded-2xl p-4">
+          {% if s.backdrop_url %}
+            <img
+              src="{{ s.backdrop_url }}"
+              alt=""
+              class="absolute inset-0 h-full w-full object-cover opacity-30 pointer-events-none"
+              loading="lazy"
+            >
+            <div class="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/70 to-slate-950/90"></div>
+          {% endif %}
+
+          <div class="relative z-10">
+            <div class="flex items-start justify-between gap-3 mb-3">
             <div class="flex flex-wrap gap-2">
               {# Provider badge (Plex/Jellyfin) #}
               {% set p = (s.provider or '')|lower %}
@@ -84,8 +95,9 @@
             </div>
           {% endif %}
 
-          <div class="text-xs text-slate-500 mt-2">
-            Last seen: {{ s.last_seen_at|tz }}
+            <div class="text-xs text-slate-500 mt-2">
+              Last seen: {{ s.last_seen_at|tz }}
+            </div>
           </div>
         </div>
       {% endfor %}
