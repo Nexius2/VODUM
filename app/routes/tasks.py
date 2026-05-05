@@ -19,6 +19,7 @@ from tasks_engine import (
 from web.helpers import get_db, table_exists, add_log
 
 task_logger = get_logger("tasks_ui")
+security_logger = get_logger("security")
 
 def register(app):
     @app.route("/tasks", methods=["GET"])
