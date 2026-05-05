@@ -428,7 +428,14 @@ def api_users_create():
 
     subscription_template_id_raw = payload.get("subscription_template_id")
     subscription_template_id = None
-    if subscription_template_id_raw not in (None, "", "null", "none"):
+
+    if subscription_template_id_raw in (None, "", "null", "none"):
+        tpl = db.query_one(
+            "SELECT id FROM subscription_templates WHERE is_default = 1 ORDER BY id ASC LIMIT 1"
+        )
+        if tpl:
+            subscription_template_id = int(tpl["id"])
+    else:
         if not str(subscription_template_id_raw).isdigit():
             return jsonify({"ok": False, "error": "Invalid subscription_template_id"}), 400
 

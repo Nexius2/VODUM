@@ -716,6 +716,10 @@ def collect_sessions_for_server(
                 raw_json = live.get("raw_json")
                 library_section_id = live.get("library_section_id")
 
+                artwork_refs = extract_artwork_refs(live)
+                poster_ref_json = artwork_refs.get("poster_ref_json")
+                backdrop_ref_json = artwork_refs.get("backdrop_ref_json")
+
                 updated = 0
 
                 # 1) D'abord, on tente une mise à jour sur la clé logique d'historique
@@ -891,10 +895,6 @@ def collect_sessions_for_server(
                 # On ne recycle plus une vieille ligne juste parce que session_key matche.
                 if updated == 0:
                     try:
-                        artwork_refs = extract_artwork_refs(live)
-                        poster_ref_json = artwork_refs.get("poster_ref_json")
-                        backdrop_ref_json = artwork_refs.get("backdrop_ref_json")
-
                         db.execute(
                             """
                             INSERT OR IGNORE INTO media_session_history (

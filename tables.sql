@@ -329,6 +329,9 @@ CREATE TABLE IF NOT EXISTS subscription_templates (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
     notes TEXT,
+    duration_days INTEGER DEFAULT 30,
+    subscription_value REAL DEFAULT 0,
+    is_default INTEGER DEFAULT 0,
     policies_json TEXT NOT NULL DEFAULT '[]',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

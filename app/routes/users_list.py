@@ -82,7 +82,7 @@ def register(app):
                 order = "asc"
 
         subscription_templates = db.query(
-            "SELECT id, name FROM subscription_templates ORDER BY name ASC"
+            "SELECT id, name, is_default FROM subscription_templates ORDER BY is_default DESC, name ASC"
         ) or []
 
         referral_settings = db.query_one(
@@ -153,7 +153,7 @@ def register(app):
             conditions = []
             params = []
 
-            if selected_statuses:
+            if selected_statuses and not search:
                 placeholders = ",".join(["?"] * len(selected_statuses))
                 conditions.append(f"u.status IN ({placeholders})")
                 params.extend(selected_statuses)

@@ -1,13 +1,19 @@
 # Auto-split from app.py (keep URLs/endpoints intact)
 from core.monitoring.artwork import enrich_live_session_artwork
 
-from flask import render_template, redirect, url_for
+from flask import render_template, redirect, url_for, make_response
 
 from logging_utils import read_last_logs
 from external.dashboard_quote_easter_egg import build_dashboard_quote_card
 
 from web.helpers import get_db, table_exists
 
+def _no_store_response(html):
+	response = make_response(html)
+	response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+	response.headers["Pragma"] = "no-cache"
+	response.headers["Expires"] = "0"
+	return response
 
 def register(app):
     @app.route("/")
@@ -236,7 +242,7 @@ def register(app):
         # --------------------------
         # PAGE RENDERING
         # --------------------------
-        return render_template(
+        return _no_store_response(render_template(
             "dashboard/dashboard.html",
             stats=stats,
             users_stats=users_stats,
@@ -247,7 +253,7 @@ def register(app):
             total_transcode=total_transcode,
             idle_card=idle_card,
             active_page="dashboard",
-        )
+        ))
 
     @app.route("/dashboard/_now_playing")
     def dashboard_now_playing_partial():
@@ -314,13 +320,13 @@ def register(app):
             idle_card = build_dashboard_quote_card()
 
 
-        return render_template(
+        return _no_store_response(render_template(
             "dashboard/partials/_now_playing.html",
             sessions=sessions,
             total_live=total_live,
             total_transcode=total_transcode,
             idle_card=idle_card,
-        )
+        ))
 
 
     # -----------------------------

@@ -43,11 +43,12 @@ def register(app):
               notes,
               duration_days,
               subscription_value,
+              is_default,
               policies_json,
               created_at,
               updated_at
             FROM subscription_templates
-            ORDER BY name
+            ORDER BY is_default DESC, name
         """) or []
         templates = [dict(t) for t in templates]
         for t in templates:
@@ -287,6 +288,7 @@ def register(app):
 
         policies_json = (request.form.get("policies_json") or "[]").strip()
         policies = _parse_json_list(policies_json)
+        is_default = 1 if request.form.get("is_default") == "1" else 0
 
         if not name:
             flash("subscription_template_name_required", "error")
@@ -332,11 +334,12 @@ def register(app):
                   notes=?,
                   duration_days=?,
                   subscription_value=?,
+                  is_default=?,
                   policies_json=?,
                   updated_at=CURRENT_TIMESTAMP
                 WHERE id=?
                 """,
-                (name, notes, duration_days, subscription_value, json.dumps(clean), template_id),
+                (name, notes, duration_days, subscription_value, is_default, json.dumps(clean), template_id),
             )
             add_log("info", "subscriptions", f"Template updated: {name} (id={template_id})")
             flash("subscription_template_saved", "success")
@@ -354,13 +357,25 @@ def register(app):
                   notes,
                   duration_days,
                   subscription_value,
+                  is_default,
                   policies_json
-                ) VALUES (?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (name, notes, duration_days, subscription_value, json.dumps(clean)),
+                (name, notes, duration_days, subscription_value, is_default, json.dumps(clean)),
             )
             add_log("info", "subscriptions", f"Template created: {name}")
             flash("subscription_template_created", "success")
+
+        if is_default:
+            saved = db.query_one("SELECT id FROM subscription_templates WHERE name = ?", (name,))
+            if saved:
+                db.execute(
+                    """
+                    UPDATE subscription_templates
+                    SET is_default = CASE WHEN id = ? THEN 1 ELSE 0 END
+                    """,
+                    (int(saved["id"]),),
+                )
 
         return redirect(url_for("subscriptions", tab="templates"))
 

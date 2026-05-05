@@ -660,7 +660,9 @@ document.addEventListener("DOMContentLoaded", () => {
           <select id="cu_subscription_template_id" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm">
             <option value="">-- none --</option>
             {% for tpl in subscription_templates %}
-              <option value="{{ tpl.id }}">{{ tpl.name }}</option>
+              <option value="{{ tpl.id }}" {% if tpl.is_default %}selected{% endif %}>
+                {{ tpl.name }}{% if tpl.is_default %} — Default{% endif %}
+              </option>
             {% endfor %}
           </select>
         </div>
@@ -748,7 +750,7 @@ document.addEventListener("DOMContentLoaded", () => {
 <script>
 (function(){
   const DEFAULT_SUBSCRIPTION_DAYS = {{ _default_subscription_days|int }};
-
+  const DEFAULT_SUBSCRIPTION_TEMPLATE_ID = "{{ (subscription_templates|selectattr('is_default')|list|first).id if (subscription_templates|selectattr('is_default')|list|first) else '' }}";
   const api = {
     servers: '/api/servers',
     libs: (serverId) => `/api/servers/${serverId}/libraries`,
@@ -817,7 +819,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('cu_firstname').value = '';
     document.getElementById('cu_lastname').value = '';
     document.getElementById('cu_notes').value = '';
-    document.getElementById('cu_subscription_template_id').value = '';
+    document.getElementById('cu_subscription_template_id').value = DEFAULT_SUBSCRIPTION_TEMPLATE_ID;
     clearReferrer();
     applyDefaultExpirationDate(true);
 
