@@ -43,7 +43,7 @@
 					{{ t("task_description." ~ task.name) or task.description or "-" }}
 				</td>
 
-                <td class="p-2">{{ task.schedule | cron_human }}</td>
+                <td class="p-2">{{ task.schedule | cron_human(t) }}</td>
 
                 {# ---------- STATUS ---------- #}
                 <td class="p-2">

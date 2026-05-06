@@ -12,7 +12,10 @@ def register(app):
         if not table_exists(db, "tasks"):
             return {"tasks": []}
 
-        t = get_translator()
+        settings = db.query_one("SELECT default_language FROM settings WHERE id = 1")
+        settings = dict(settings) if settings else {}
+
+        t = get_translator(settings)
 
         rows = db.query(
             """
@@ -42,7 +45,7 @@ def register(app):
             desc_label = t(f"task_description.{name}") or (desc or "-")
 
             schedule = r["schedule"] or ""
-            schedule_human = cron_human(schedule) if schedule else "-"
+            schedule_human = cron_human(schedule, t=t) if schedule else "-"
 
             last_run_human = tz_filter(r["last_run"]) if r["last_run"] else "-"
             next_run_human = tz_filter(r["next_run"]) if r["next_run"] else "-"

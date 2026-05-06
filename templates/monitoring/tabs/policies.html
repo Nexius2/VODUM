@@ -162,7 +162,7 @@
               role="button"
               data-enforcement='{{ row|tojson|forceescape }}'
             >
-              <td class="p-3 text-slate-300">{{ row.created_at }}</td>
+              <td class="p-3 text-slate-300">{{ row.created_at|browser_datetime if row.created_at else "—" }}</td>
               <td class="p-3 text-slate-200">{{ row.user_label }}</td>
               <td class="p-3 text-slate-300">{{ row.rule_type or '—' }}</td>
               <td class="p-3 text-slate-400">{{ row.provider or '—' }}</td>
@@ -634,8 +634,8 @@
         const provider = escapeHtml(sess.provider ?? "—");
         const sessionKey = escapeHtml(sess.session_key ?? "—");
         const ip = escapeHtml(sess.ip ?? "—");
-        const startedAt = escapeHtml(sess.started_at ?? "—");
-        const lastSeenAt = escapeHtml(sess.last_seen_at ?? "—");
+		const startedAt = escapeHtml(vodumFormatDateTime(sess.started_at ?? "—"));
+		const lastSeenAt = escapeHtml(vodumFormatDateTime(sess.last_seen_at ?? "—"));
         const device = escapeHtml(sess.device ?? "—");
         const clientName = escapeHtml(sess.client_name ?? "—");
         const clientProduct = escapeHtml(sess.client_product ?? "—");
@@ -713,7 +713,7 @@
       const target = details?.target_session || null;
 
       setText("pem_enforcement_id", data.enforcement_id);
-      setText("pem_created_at", data.created_at);
+      setText("pem_created_at", vodumFormatDateTime(data.created_at));
       setText("pem_action", data.action);
       setText("pem_user_label", data.user_label);
       setText("pem_account_username", data.account_username);
@@ -726,8 +726,8 @@
       setText("pem_target_device", target?.device);
       setText("pem_target_client", [target?.client_name, target?.client_product].filter(Boolean).join(" / "));
       setText("pem_target_media", buildTargetMediaLabel(target));
-      setText("pem_target_started_at", target?.started_at);
-      setText("pem_target_last_seen_at", target?.last_seen_at);
+	  setText("pem_target_started_at", vodumFormatDateTime(target?.started_at));
+      setText("pem_target_last_seen_at", vodumFormatDateTime(target?.last_seen_at));
       setText("pem_target_bitrate", target?.bitrate);
       setText("pem_target_transcode", formatBoolTranscode(target?.is_transcode));
       setText("pem_session_count", details?.session_count);
@@ -745,7 +745,7 @@
       setText("pem_session_key", data.session_key);
       setText("pem_rule_value_json", formatRuleValueJson(data.rule_value_json));
 
-      modalSubtitle.textContent = `${data.rule_type || "—"} • ${data.server_name || "—"} • ${data.created_at || "—"}`;
+      modalSubtitle.textContent = `${data.rule_type || "—"} • ${data.server_name || "—"} • ${vodumFormatDateTime(data.created_at)}`;
 
       modal.classList.remove("hidden");
       modal.setAttribute("aria-hidden", "false");

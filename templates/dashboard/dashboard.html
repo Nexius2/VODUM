@@ -121,7 +121,7 @@
                     {% endif %}
 
                     <div class="text-[10px] text-slate-500 mt-2">
-                        {{ t("last_check") }} : {{ single_server.last_checked or '—' }}
+                        {{ t("last_check") }} : {{ single_server.last_checked|browser_datetime if single_server.last_checked else '—' }}
                     </div>
                 </div>
             </div>
@@ -174,7 +174,7 @@
 
                 <div class="min-w-0 flex-1">
                     <div class="text-[11px] text-slate-400 truncate">
-                        {{ log.source }} · {{ log.created_at }}
+                        {{ log.source }} · {{ log.created_at|browser_datetime if log.created_at else '—' }}
                     </div>
                     <div class="text-[12px] text-slate-100 truncate">
                         {{ log.message }}
@@ -333,7 +333,7 @@
                         </span>
                     {% endif %}
                     <span class="text-[10px] text-slate-500 whitespace-nowrap">
-                        {{ t("last_check") }} : {{ s.last_checked or '—' }}
+                        {{ t("last_check") }} : {{ s.last_checked|browser_datetime if s.last_checked else '—' }}
                     </span>
                 </div>
 
@@ -365,7 +365,7 @@
 
                 <div class="min-w-0 flex-1">
                     <div class="text-[11px] text-slate-400 truncate">
-                        {{ log.source }} · {{ log.created_at }}
+                        {{ log.source }} · {{ log.created_at|browser_datetime if log.created_at else '—' }}
                     </div>
                     <div class="text-[12px] text-slate-100 truncate">
                         {{ log.message }}

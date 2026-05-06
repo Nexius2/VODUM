@@ -128,7 +128,7 @@
             Max: {{ (s.max_peak_bitrate or 0) }} kbps
           </td>
 
-          <td class="py-2 pr-4 text-xs text-slate-500">{{ s.last_checked or '-' }}</td>
+          <td class="py-2 pr-4 text-xs text-slate-500">{{ s.last_checked|browser_datetime if s.last_checked else '-' }}</td>
         </tr>
         {% endfor %}
       </tbody>

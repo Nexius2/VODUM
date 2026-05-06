@@ -153,7 +153,7 @@ function openGiftRunModal(run) {
   };
 
   setText("gift-modal-title", scope);
-  setText("gift-modal-subtitle", run.created_at || "");
+  setText("gift-modal-subtitle", vodumFormatDateTime(run.created_at || ""));
   setText("gift-modal-target", scope);
 
   setText("gift-modal-duration", `+${run.days_added} ${I18N.gift_history_days}`);
@@ -221,7 +221,7 @@ function renderGiftHistory(items) {
 
     const duration = `+${run.days_added} ${I18N.gift_history_days}`;
     const comment = run.reason ? escapeHtml(run.reason) : "—";
-    const created = run.created_at ? escapeHtml(run.created_at) : "";
+    const created = run.created_at ? escapeHtml(vodumFormatDateTime(run.created_at)) : "";
     const usersCount = `${run.users_updated || 0} users`;
 
     return `
