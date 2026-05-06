@@ -11,6 +11,7 @@
 * [x] Ajouter fallback sur cache poster expiré si Plex/Jellyfin ne répond pas
 * [x] Ajouter headers debug artwork cache : `HIT` / `MISS` / `STALE`
 * [x] Déclencher un job Plex quand les options/filtres de partage changent
+* [x] Corriger le crash `security_logger` non défini dans `app/routes/tasks.py`
 
 ---
 
@@ -28,6 +29,33 @@ Empêcher que les accès Plex soient supprimés après réactivation d’un util
 * [x] Aucun ancien job ne casse les droits
 * [~] Plex reflète correctement la DB — partiel : les changements d’options/filtres Plex créent maintenant un media_job `apply_plex_access_updates`
 * [ ] Les réactivations sont fiables à 100% — à valider sur un cycle complet invitation → expiration → réactivation → sync_plex
+
+---
+
+# 🚨 URGENT — RÉACTIVATION APRÈS EXPIRATION PLEX
+
+## 🎯 Objectif
+
+Éviter qu’un utilisateur expiré perde totalement la relation de partage Plex, car Plex ne permet plus toujours de le résoudre ensuite sans nouvelle invitation.
+
+---
+
+## 🔴 Problème constaté
+
+* [ ] Si Vodum retire toutes les bibliothèques Plex à l’expiration, Plex peut faire disparaître l’utilisateur de la liste des utilisateurs partagés
+* [ ] Après renouvellement, `apply_plex_access_updates` peut échouer avec `[PLEX RESOLVE] unable to resolve user without re-inviting`
+* [ ] La simple modification de la date de renouvellement ne suffit donc pas toujours à restaurer l’accès
+
+---
+
+## ✅ Solution attendue
+
+* [ ] Ajouter/clarifier un mode `soft-disable` Plex : ne jamais casser le partage Plex à l’expiration
+* [ ] En mode avertissement, conserver les bibliothèques et bloquer la lecture via policy `expired_subscription`
+* [ ] En mode suppression dure, afficher clairement que la réactivation peut nécessiter une nouvelle invitation Plex
+* [ ] Au renouvellement, supprimer automatiquement la policy `expired_subscription` puis déclencher la restauration des accès
+* [ ] Ajouter un test complet : actif → expiré → policy appliquée → renouvellement → policy supprimée → accès restauré sans ré-invitation
+* [ ] Ajouter un message UI/settings expliquant la différence entre expiration avec blocage lecture et expiration avec retrait d’accès Plex
 
 ---
 
@@ -120,6 +148,7 @@ Empêcher que les accès Plex soient supprimés après réactivation d’un util
 
 ## Plex access
 
+* [ ] Fiabiliser la réactivation après expiration sans nouvelle invitation Plex quand le mode soft-disable est utilisé
 * [ ] Corriger états incohérents (already invited / request sent)
 * [x] Conserver droits si utilisateur non accepté
 * [ ] Décaler expiration si compte non utilisé

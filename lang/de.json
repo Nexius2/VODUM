@@ -1177,7 +1177,6 @@
 	  "delete_user": "Delete user",
 	  "user_deleted": "User deleted successfully",
 	  "delete_user_failed": "Failed to delete user",
-	  ,
 	  "delete_user_title": "Delete this user?",
 	  "delete_user_confirm_cta": "Yes, delete locally",
 	  "delete_user_check_loading": "Checking linked platforms...",
@@ -1186,7 +1185,12 @@
 	  "delete_user_summary_links_found": "This user is still linked to one or more platform accounts.",
 	  "delete_user_summary_recreated": "Warning: this user still seems to exist on an active platform, or the verification could not fully confirm removal. If you only delete the user from Vodum, they may return after the next sync.",
 	  "delete_user_summary_not_recreated": "No active platform account was found during verification. Local deletion is unlikely to come back on the next sync.",
-	  "please_wait": "Please wait..."
+	  "please_wait": "Please wait...",
+"subscription_expiry_mode_warn_only_title": "Show subscription expired warning and block playback",
+"subscription_expiry_mode_warn_only_help": "Recommended for Plex. The user keeps library access, but VODUM stops playback with an expired subscription message. Reactivation is immediate and does not require re-inviting the user.",
+"subscription_expiry_mode_disable_warning": "Warning: on Plex, removing library access may remove the user from shared users. Reactivation may require re-inviting.",
+"recommended_for_plex": "Recommended for Plex",
+"comm_templates_defaults_restored": "Default communication templates restored."
 
  
 }

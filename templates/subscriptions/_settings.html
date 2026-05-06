@@ -90,8 +90,30 @@
             <span class="block text-xs text-slate-400 mt-1">
               {{ t("subscription_expiry_mode_disable_help") }}
             </span>
+			<span class="block text-xs text-amber-300 mt-2">
+			  {{ t("subscription_expiry_mode_disable_warning") }}
+			</span>
           </span>
         </label>
+
+		<label class="flex items-start gap-3 p-4 rounded-xl border border-emerald-700/40 bg-emerald-950/20">
+		  <input
+			type="radio"
+			name="expiry_mode"
+			value="warn_only"
+			{% if _mode == "warn_only" %}checked{% endif %}
+			class="mt-1 w-4 h-4 rounded-full border-slate-600 bg-slate-800"
+		  >
+		  <span>
+			<span class="block text-sm text-slate-200 font-semibold">
+			  {{ t("subscription_expiry_mode_warn_only_title") }}
+			  <span class="ml-2 text-xs text-emerald-300">{{ t("recommended_for_plex") }}</span>
+			</span>
+			<span class="block text-xs text-slate-400 mt-1">
+			  {{ t("subscription_expiry_mode_warn_only_help") }}
+			</span>
+		  </span>
+		</label>
 
         <label class="flex items-start gap-3 p-4 rounded-xl border border-slate-800 bg-slate-950/40">
           <input

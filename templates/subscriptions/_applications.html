@@ -23,7 +23,7 @@
 		  <label class="block text-xs text-slate-400 mb-1">{{ t("subscription_template") }}</label>
 		  <select name="template_id" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
 			<option value="">{{ t("subscription_none") }}</option>
-			{% for tpl in templates %}
+			{% for tpl in enabled_templates %}
 			  <option value="{{ tpl.id }}">{{ tpl.name }}</option>
 			{% endfor %}
 		  </select>
@@ -116,7 +116,7 @@
 					  <option value="" {% if u.subscription_template_id is none %}selected{% endif %}>
 						{{ t("subscription_none") }}
 					  </option>
-					  {% for tpl in templates %}
+					  {% for tpl in enabled_templates %}
 						<option value="{{ tpl.id }}" {% if u.subscription_template_id == tpl.id %}selected{% endif %}>{{ tpl.name }}</option>
 					  {% endfor %}
 					</select>

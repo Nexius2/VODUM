@@ -34,69 +34,57 @@
         </ul>
     </div>
 
-    <!-- CREDITS -->
-    <div class="bg-slate-900/40 p-6 rounded-xl shadow border border-slate-800">
-        <h2 class="text-xl font-semibold mb-3">{{ t("credits") }}</h2>
-        <p class="text-slate-300">{{ t("credits_text") }}</p>
+    <!-- SUPPORT -->
+    <div class="bg-slate-900/40 p-8 rounded-xl shadow border border-slate-800">
+        <h2 class="text-xl font-semibold mb-3">{{ t("support_title") }}</h2>
+
+        <p class="text-slate-300 mb-8">
+            {{ t("credits_text") }}
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+            <div class="bg-slate-950/40 border border-slate-800 rounded-xl p-6 text-center">
+                <h3 class="text-lg font-semibold mb-3">GitHub</h3>
+                <p class="text-slate-400 text-sm mb-5 min-h-[48px]">
+                    {{ t("support_text") }}
+                </p>
+
+                <a href="https://github.com/Nexius2/VODUM/issues"
+                   target="_blank"
+                   class="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-lg bg-primary hover:bg-primary-dark text-white text-sm font-medium transition">
+                    🐛 {{ t("open_an_issue") }}
+                </a>
+            </div>
+
+            <div class="bg-slate-950/40 border border-slate-800 rounded-xl p-6 text-center">
+                <h3 class="text-lg font-semibold mb-3">Discord</h3>
+                <p class="text-slate-400 text-sm mb-5 min-h-[48px]">
+                    {{ t("support_text") }}
+                </p>
+
+                <a href="https://discord.gg/5PU7TnegZt"
+                   target="_blank"
+                   class="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition">
+                    💬 Discord
+                </a>
+            </div>
+
+            <div class="bg-slate-950/40 border border-slate-800 rounded-xl p-6 text-center">
+                <h3 class="text-lg font-semibold mb-3">{{ t("credits") }}</h3>
+                <p class="text-slate-400 text-sm mb-5 min-h-[48px]">
+                    {{ t("support_thanks") }}
+                </p>
+
+                <a href="https://buymeacoffee.com/vodum"
+                   target="_blank"
+                   class="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-lg bg-yellow-500 hover:bg-yellow-600 text-black text-sm font-semibold transition">
+                    ☕ {{ t("pay_me_a_beer") }}
+                </a>
+            </div>
+
+        </div>
     </div>
-
-<!-- SUPPORT / THANKS -->
-<div class="bg-slate-900/40 p-8 rounded-xl shadow border border-slate-800">
-  <div class="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-8 items-center">
-
-    <!-- LEFT : SUPPORT -->
-    <div class="text-center">
-      <h2 class="text-xl font-semibold mb-3">
-        {{ t("support_title") }}
-      </h2>
-
-      <p class="text-slate-300 mb-6 max-w-sm mx-auto">
-        {{ t("support_text") }}
-      </p>
-
-		<div class="flex flex-col items-center gap-3">
-		  <a href="https://github.com/Nexius2/VODUM/issues"
-			 target="_blank"
-			 class="inline-flex items-center gap-2 px-6 py-3 rounded-lg
-					bg-primary hover:bg-primary-dark text-white text-sm font-medium transition">
-			🐛 {{ t("open_an_issue") }}
-		  </a>
-
-		  <a href="https://discord.gg/5PU7TnegZt"
-			 target="_blank"
-			 class="inline-flex items-center gap-2 px-6 py-3 rounded-lg
-					bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition">
-			💬 Discord
-		  </a>
-		</div>
-
-    </div>
-
-    <!-- SEPARATOR (desktop only) -->
-    <div class="hidden md:flex justify-center">
-      <div class="w-px h-24 bg-emerald-500/40 rounded"></div>
-    </div>
-
-    <!-- RIGHT : THANKS -->
-    <div class="text-center">
-      <h2 class="text-xl font-semibold mb-3">
-        {{ t("credits") }}
-      </h2>
-
-      <p class="text-slate-300 mb-6 max-w-sm mx-auto">
-        {{ t("support_thanks") }}
-      </p>
-
-      <a href="https://buymeacoffee.com/vodum"
-         target="_blank"
-         class="inline-flex items-center gap-2 px-6 py-3 rounded-lg
-                bg-yellow-500 hover:bg-yellow-600 text-black text-sm font-semibold transition">
-        ☕ {{ t("pay_me_a_beer") }}
-      </a>
-    </div>
-
-  </div>
-</div>
 
 
 

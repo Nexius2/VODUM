@@ -16,15 +16,22 @@
         {% for tpl in templates %}
           <div class="rounded-xl border border-slate-800 bg-slate-950 p-4">
             <div class="flex items-start justify-between gap-3">
-              <div>
+              <div class="min-w-0">
                 <div class="font-medium text-slate-200">{{ tpl.name }}</div>
-                {% if tpl.is_default %}
-                  <div class="inline-flex mt-2 px-2 py-0.5 rounded-full bg-emerald-900/40 text-emerald-300 text-[11px]">
-                    Default
-                  </div>
-                {% endif %}
 
-                <div class="text-xs text-slate-500 mt-1">
+                <div class="flex flex-wrap gap-2 mt-2">
+                  {% if tpl.is_default %}
+                    <span class="inline-flex px-2 py-0.5 rounded-full bg-emerald-900/40 text-emerald-300 text-[11px]">
+                      Default
+                    </span>
+                  {% endif %}
+
+                  <span class="inline-flex px-2 py-0.5 rounded-full text-[11px] {{ 'bg-emerald-900/40 text-emerald-300' if tpl.is_enabled else 'bg-slate-800 text-slate-400' }}">
+                    {{ t("enabled") if tpl.is_enabled else t("disabled") }}
+                  </span>
+                </div>
+
+                <div class="text-xs text-slate-500 mt-2">
                   {{ tpl.duration_days or 30 }} {{ t("days") }}{% if tpl.subscription_value is not none %} / {{ tpl.subscription_value }}{% endif %}
                 </div>
 
@@ -37,7 +44,9 @@
                 </div>
               </div>
 
-              <div class="flex items-center gap-2">
+              <div class="flex flex-wrap justify-end gap-2">
+
+
                 <button type="button"
                         class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs"
                         onclick='loadTemplateForEdit({{ tpl|tojson }})'>
@@ -51,20 +60,126 @@
                   </button>
                 </form>
 
-                <form method="post" action="{{ url_for('subscription_templates_delete', template_id=tpl.id) }}"
-                      onsubmit="return confirm('{{ t('subscription_template_delete_confirm') }}');">
+                <form method="post"
+                      action="{{ url_for('subscription_templates_delete', template_id=tpl.id) }}"
+                      class="js-template-delete-form"
+                      data-template-name="{{ tpl.name }}">
                   <button type="submit"
                           class="px-2 py-1 rounded bg-rose-800/40 hover:bg-rose-800/60 text-rose-200 text-xs">
                     {{ t("delete") }}
                   </button>
                 </form>
               </div>
-
             </div>
           </div>
         {% endfor %}
       </div>
     {% endif %}
 
+    <div class="mt-5 flex justify-end">
+      <form method="post" action="{{ url_for('subscription_templates_restore_defaults') }}">
+        <button type="submit"
+                class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs">
+          Restore default templates
+        </button>
+      </form>
+    </div>
+
   </div>
 </div>
+<div id="templateDeleteConfirmModal" class="hidden fixed inset-0 z-50" aria-hidden="true">
+  <div class="absolute inset-0 bg-black/70"></div>
+
+  <div class="relative mx-auto mt-24 w-[92%] max-w-lg">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+      <div class="p-5">
+        <div class="flex items-center gap-3">
+          <div class="h-9 w-9 rounded-full bg-rose-900/40 text-rose-300 flex items-center justify-center text-sm">
+            !
+          </div>
+          <div>
+            <div class="text-sm font-semibold text-slate-100">
+              {{ t("delete") }}
+            </div>
+            <div class="text-xs text-slate-400 mt-1" id="templateDeleteConfirmName">—</div>
+          </div>
+        </div>
+
+        <div class="text-sm text-slate-300 mt-4">
+          {{ t("subscription_template_delete_confirm") }}
+        </div>
+      </div>
+
+      <div class="border-t border-slate-800"></div>
+
+      <div class="p-4 flex items-center justify-end gap-2">
+        <button type="button" id="templateDeleteConfirmCancel"
+                class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-200">
+          {{ t("cancel") }}
+        </button>
+
+        <button type="button" id="templateDeleteConfirmOk"
+                class="px-4 py-2 rounded-lg bg-rose-800/60 hover:bg-rose-800 text-rose-100 text-sm">
+          {{ t("delete") }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const modal = document.getElementById("templateDeleteConfirmModal");
+    const nameBox = document.getElementById("templateDeleteConfirmName");
+    const btnCancel = document.getElementById("templateDeleteConfirmCancel");
+    const btnOk = document.getElementById("templateDeleteConfirmOk");
+    const forms = document.querySelectorAll(".js-template-delete-form");
+
+    if (!modal || !nameBox || !btnCancel || !btnOk || !forms.length) {
+      return;
+    }
+
+    let pendingForm = null;
+
+    function openModal(form) {
+      pendingForm = form;
+      nameBox.textContent = form.dataset.templateName || "—";
+      modal.classList.remove("hidden");
+      modal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeModal() {
+      pendingForm = null;
+      modal.classList.add("hidden");
+      modal.setAttribute("aria-hidden", "true");
+    }
+
+    forms.forEach((form) => {
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        openModal(form);
+      });
+    });
+
+    btnCancel.addEventListener("click", closeModal);
+
+    btnOk.addEventListener("click", () => {
+      if (!pendingForm) return;
+      const form = pendingForm;
+      pendingForm = null;
+      form.submit();
+    });
+
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal || (e.target.classList && e.target.classList.contains("bg-black/70"))) {
+        closeModal();
+      }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !modal.classList.contains("hidden")) {
+        closeModal();
+      }
+    });
+  });
+</script>

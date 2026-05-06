@@ -32,6 +32,7 @@
     <input type="hidden" name="template_id" id="template_id" value="">
     <input type="hidden" name="policies_json" id="policies_json" value="[]">
 
+
     <!-- TEMPLATE INFO -->
     <div class="bg-slate-950 border border-slate-800 rounded-xl p-4">
       <div class="flex items-center justify-between mb-3">
@@ -73,16 +74,29 @@
 				   placeholder="e.g. 70">
 		  </div>
 		  <div class="text-sm md:col-span-2">
-			<label class="flex items-center gap-2 text-xs text-slate-300">
-			  <input type="checkbox"
-					 name="is_default"
-					 id="tpl_is_default"
-					 value="1"
-					 class="rounded border-slate-700 bg-slate-900">
-			  Set as default
-			</label>
+			<div class="flex flex-wrap items-center gap-6">
+			  <label class="flex items-center gap-2 text-xs text-slate-300">
+				<input type="checkbox"
+					   name="is_default"
+					   id="tpl_is_default"
+					   value="1"
+					   class="rounded border-slate-700 bg-slate-900">
+				Set as default
+			  </label>
+
+			  <label class="flex items-center gap-2 text-xs text-slate-300">
+				<input type="checkbox"
+					   name="is_enabled"
+					   id="tpl_is_enabled"
+					   value="1"
+					   checked
+					   class="rounded border-slate-700 bg-slate-900">
+				Enabled
+			  </label>
+			</div>
+
 			<div class="text-xs text-slate-500 mt-1">
-			  This template will be automatically selected for every new user.
+			  This template will be automatically selected for every new user only if it is enabled.
 			</div>
 		  </div>
 		</div>
@@ -269,6 +283,7 @@
     document.getElementById("tpl_duration_days").value = "30";
     document.getElementById("tpl_subscription_value").value = "0";
     document.getElementById("tpl_is_default").checked = false;
+	document.getElementById("tpl_is_enabled").checked = true;
     TEMPLATE_POLICIES = [];
     EDIT_INDEX = null;
     syncPoliciesJson();
@@ -477,6 +492,7 @@
     document.getElementById("tpl_duration_days").value = tpl.duration_days || 30;
     document.getElementById("tpl_subscription_value").value = tpl.subscription_value || 0;
     document.getElementById("tpl_is_default").checked = String(tpl.is_default || "0") === "1";
+    document.getElementById("tpl_is_enabled").checked = String(tpl.is_enabled ?? 1) === "1";
 
     TEMPLATE_POLICIES = [];
     try {
