@@ -17,8 +17,9 @@ def _set_db(db):
     _db = db
 
 
-LIVE_WINDOW_SECONDS = 120     # live si last_seen < 120s
-RECHECK_DELAY_SECONDS = 30    # recheck après warn
+LIVE_WINDOW_SECONDS = 90      # sécurité DB: ignore les sessions trop anciennes
+LIVE_STABLE_SECONDS = 45      # une session doit être stable avant d'être comptée par l'enforcer
+RECHECK_DELAY_SECONDS = 45    # recheck après warn, laisse passer les transitions d'épisode
 JELLYFIN_KILL_MESSAGE_SPAM_COUNT = 5   # 5 messages
 JELLYFIN_KILL_MESSAGE_SPAM_SLEEP = 1.0 # 1 seconde entre chaque
 JELLYFIN_KILL_MESSAGE_TIMEOUT_MS = 50000  # durée d'affichage de chaque toast
@@ -359,8 +360,13 @@ def _load_live_sessions() -> List[dict]:
         LEFT JOIN media_users mu ON mu.id = ms.media_user_id
         WHERE LOWER(TRIM(s.type)) IN ('plex','jellyfin')
           AND datetime(ms.last_seen_at) >= datetime('now', ?)
+          AND COALESCE(ms.missing_count, 0) = 0
+          AND datetime(COALESCE(ms.started_at, ms.last_seen_at)) <= datetime('now', ?)
         ORDER BY ms.server_id
-    """, (_now_sql_window(),))
+    """, (
+        _now_sql_window(),
+        f"-{int(LIVE_STABLE_SECONDS)} seconds",
+    ))
     return [dict(r) for r in rows]
 
 

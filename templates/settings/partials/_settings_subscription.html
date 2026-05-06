@@ -36,7 +36,70 @@
 
       {% set _mode = settings.expiry_mode or "none" %}
 
-      <!-- Mode 0: None -->
+      <!-- Mode: Warn only / Plex safe -->
+      <label class="flex items-start gap-3 p-3 rounded-lg border border-emerald-700/40 bg-emerald-950/20">
+        <input
+          type="radio"
+          name="expiry_mode"
+          value="warn_only"
+          {% if _mode == "warn_only" %}checked{% endif %}
+          class="mt-1 w-4 h-4 rounded-full border-slate-600 bg-slate-800"
+        >
+        <span>
+          <span class="block text-sm text-slate-200 font-semibold">
+            {{ t("subscription_expiry_mode_warn_only_title") }}
+            <span class="ml-2 text-xs text-emerald-300">{{ t("recommended_for_plex") }}</span>
+          </span>
+          <span class="block text-xs text-slate-400 mt-1">
+            {{ t("subscription_expiry_mode_warn_only_help") }}
+          </span>
+        </span>
+      </label>
+
+      <!-- Mode: Warn then disable -->
+      <label class="flex items-start gap-3 p-3 rounded-lg border border-slate-800 bg-slate-950/40">
+        <input
+          type="radio"
+          name="expiry_mode"
+          value="warn_then_disable"
+          {% if _mode == "warn_then_disable" %}checked{% endif %}
+          class="mt-1 w-4 h-4 rounded-full border-slate-600 bg-slate-800"
+        >
+        <span class="w-full">
+          <span class="block text-sm text-slate-200 font-semibold">{{ t("subscription_expiry_mode_warn_title") }}</span>
+          <span class="block text-xs text-slate-400 mt-1">{{ t("subscription_expiry_mode_warn_help") }}</span>
+
+          <div class="mt-3">
+            <label class="block text-xs text-slate-400 mb-1">{{ t("warn_then_disable_days_label") }}</label>
+            <input
+              type="number"
+              name="warn_then_disable_days"
+              min="1"
+              value="{{ settings.warn_then_disable_days or 7 }}"
+              class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm"
+            >
+            <p class="text-xs text-slate-500 mt-1">{{ t("warn_then_disable_days_help") }}</p>
+          </div>
+        </span>
+      </label>
+
+      <!-- Mode: Hard disable -->
+      <label class="flex items-start gap-3 p-3 rounded-lg border border-slate-800 bg-slate-950/40">
+        <input
+          type="radio"
+          name="expiry_mode"
+          value="disable"
+          {% if _mode == "disable" %}checked{% endif %}
+          class="mt-1 w-4 h-4 rounded-full border-slate-600 bg-slate-800"
+        >
+        <span>
+          <span class="block text-sm text-slate-200 font-semibold">{{ t("subscription_expiry_mode_disable_title") }}</span>
+          <span class="block text-xs text-slate-400 mt-1">{{ t("subscription_expiry_mode_disable_help") }}</span>
+          <span class="block text-xs text-amber-300 mt-2">{{ t("subscription_expiry_mode_disable_warning") }}</span>
+        </span>
+      </label>
+
+      <!-- Mode: None -->
       <label class="flex items-start gap-3 p-3 rounded-lg border border-slate-800 bg-slate-950/40">
         <input
           type="radio"
@@ -50,50 +113,6 @@
           <span class="block text-xs text-slate-400 mt-1">{{ t("subscription_expiry_mode_none_help") }}</span>
         </span>
       </label>
-
-      <!-- Mode A: Disable on expiration -->
-      <label class="flex items-start gap-3 p-3 rounded-lg border border-slate-800 bg-slate-950/40">
-        <input
-          type="radio"
-          name="expiry_mode"
-          value="disable"
-          {% if _mode == "disable" %}checked{% endif %}
-          class="mt-1 w-4 h-4 rounded-full border-slate-600 bg-slate-800"
-        >
-        <span>
-          <span class="block text-sm text-slate-200 font-semibold">{{ t("subscription_expiry_mode_disable_title") }}</span>
-          <span class="block text-xs text-slate-400 mt-1">{{ t("subscription_expiry_mode_disable_help") }}</span>
-        </span>
-      </label>
-
-      <!-- Mode B: Warn then disable after X days -->
-      <label class="flex items-start gap-3 p-3 rounded-lg border border-slate-800 bg-slate-950/40">
-        <input
-          type="radio"
-          name="expiry_mode"
-          value="warn_then_disable"
-          {% if _mode == "warn_then_disable" %}checked{% endif %}
-          class="mt-1 w-4 h-4 rounded-full border-slate-600 bg-slate-800"
-        >
-        <span class="w-full">
-          <span class="block text-sm text-slate-200 font-semibold">{{ t("subscription_expiry_mode_warn_title") }}</span>
-          <span class="block text-xs text-slate-400 mt-1">{{ t("subscription_expiry_mode_warn_help") }}</span>
-
-          <!-- Disable after X days (grace period) -->
-          <div class="mt-3">
-            <label class="block text-xs text-slate-400 mb-1">{{ t("warn_then_disable_days_label") }}</label>
-            <input
-              type="number"
-              name="warn_then_disable_days"
-              min="1"
-              value="{{ settings.warn_then_disable_days or 1 }}"
-              class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm"
-            >
-            <p class="text-xs text-slate-500 mt-1">{{ t("warn_then_disable_days_help") }}</p>
-          </div>
-        </span>
-      </label>
-
     </div>
 
   </div>

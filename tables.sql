@@ -332,6 +332,7 @@ CREATE TABLE IF NOT EXISTS subscription_templates (
     duration_days INTEGER DEFAULT 30,
     subscription_value REAL DEFAULT 0,
     is_default INTEGER DEFAULT 0,
+	is_enabled INTEGER DEFAULT 1,
     policies_json TEXT NOT NULL DEFAULT '[]',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

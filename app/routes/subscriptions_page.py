@@ -7,6 +7,75 @@ from flask import render_template, request, redirect, url_for, flash
 from tasks_engine import auto_enable_stream_enforcer
 from web.helpers import get_db, add_log
 
+DEFAULT_SUBSCRIPTION_TEMPLATES = [
+    (
+        "base sub",
+        "2 streams / Same IP",
+        365,
+        70,
+        0,
+        0,
+        '[{"rule_type":"max_streams_per_user","provider":null,"server_id":null,"is_enabled":1,"priority":100,"rule":{"selector":"kill_newest","warn_title":"Streaming limit reached","warn_text":"You have reached the allowed number of simultaneous streams","max":2,"allow_local_ip":true}},{"rule_type":"max_streams_per_ip","provider":null,"server_id":null,"is_enabled":1,"priority":100,"rule":{"selector":"kill_newest","warn_title":"Streaming limit reached","warn_text":"You have reached the allowed number of simultaneous streams","max":2,"allow_local_ip":true}}]',
+    ),
+    (
+        "Family sub",
+        "4 streams",
+        365,
+        200,
+        0,
+        0,
+        '[{"rule_type":"max_streams_per_user","provider":null,"server_id":null,"is_enabled":1,"priority":100,"rule":{"selector":"kill_newest","warn_title":"Streaming limit reached","warn_text":"You have reached the allowed number of simultaneous streams","max":4,"allow_local_ip":true}}]',
+    ),
+    (
+        "Plus sub",
+        "3 streams / 2 IP",
+        365,
+        120,
+        0,
+        0,
+        '[{"rule_type":"max_streams_per_user","provider":null,"server_id":null,"is_enabled":1,"priority":100,"rule":{"selector":"kill_newest","warn_title":"Streaming limit reached","warn_text":"You have reached the allowed number of simultaneous streams","max":3,"allow_local_ip":true}},{"rule_type":"max_ips_per_user","provider":null,"server_id":null,"is_enabled":1,"priority":100,"rule":{"selector":"kill_newest","warn_title":"Streaming limit reached","warn_text":"You have reached the allowed number of simultaneous streams","max":2,"allow_local_ip":true}}]',
+    ),
+]
+
+
+def _restore_default_subscription_templates(db) -> int:
+    restored = 0
+
+    for name, notes, duration_days, subscription_value, is_default, is_enabled, policies_json in DEFAULT_SUBSCRIPTION_TEMPLATES:
+        existing = db.query_one(
+            "SELECT id FROM subscription_templates WHERE name = ?",
+            (name,),
+        )
+
+        if existing:
+            continue
+
+        db.execute(
+            """
+            INSERT INTO subscription_templates(
+              name,
+              notes,
+              duration_days,
+              subscription_value,
+              is_default,
+              is_enabled,
+              policies_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                name,
+                notes,
+                duration_days,
+                subscription_value,
+                is_default,
+                is_enabled,
+                policies_json,
+            ),
+        )
+        restored += 1
+
+    return restored
+
 def register(app):
     @app.route("/subscriptions", methods=["GET"])
     def subscriptions():
@@ -44,6 +113,7 @@ def register(app):
               duration_days,
               subscription_value,
               is_default,
+              is_enabled,
               policies_json,
               created_at,
               updated_at
@@ -56,6 +126,8 @@ def register(app):
                 t['policies_count'] = len(json.loads(t.get('policies_json') or '[]'))
             except Exception:
                 t['policies_count'] = 0
+
+        enabled_templates = [t for t in templates if int(t.get("is_enabled") or 0) == 1]
 
         # Users list for applications tab (paginated)
         applications_page = max(request.args.get("applications_page", 1, type=int), 1)
@@ -168,6 +240,7 @@ def register(app):
             servers=servers,
             gift_users=gift_users,
             templates=templates,
+            enabled_templates=enabled_templates,
             users=users,
             applications_page=applications_page,
             applications_total_pages=applications_total_pages,
@@ -185,7 +258,7 @@ def register(app):
         settings = dict(settings) if settings else {}
 
         expiry_mode = (request.form.get("expiry_mode") or settings.get("expiry_mode") or "none").strip()
-        if expiry_mode not in ("none", "disable", "warn_then_disable"):
+        if expiry_mode not in ("none", "warn_only", "warn_then_disable", "disable"):
             expiry_mode = "none"
 
         try:
@@ -218,7 +291,7 @@ def register(app):
         if warn_then_disable_days < 1:
             warn_then_disable_days = 1
 
-        if expiry_mode != "warn_then_disable":
+        if expiry_mode not in ("warn_then_disable", "warn_only"):
             warn_then_disable_days = int(settings.get("warn_then_disable_days") or 7)
 
         db.execute(
@@ -289,6 +362,7 @@ def register(app):
         policies_json = (request.form.get("policies_json") or "[]").strip()
         policies = _parse_json_list(policies_json)
         is_default = 1 if request.form.get("is_default") == "1" else 0
+        is_enabled = 1 if request.form.get("is_enabled") == "1" else 0
 
         if not name:
             flash("subscription_template_name_required", "error")
@@ -335,13 +409,35 @@ def register(app):
                   duration_days=?,
                   subscription_value=?,
                   is_default=?,
+                  is_enabled=?,
                   policies_json=?,
                   updated_at=CURRENT_TIMESTAMP
                 WHERE id=?
                 """,
-                (name, notes, duration_days, subscription_value, is_default, json.dumps(clean), template_id),
+                (name, notes, duration_days, subscription_value, is_default, is_enabled, json.dumps(clean), template_id),
             )
-            add_log("info", "subscriptions", f"Template updated: {name} (id={template_id})")
+            refreshed = 0
+            assigned_users = db.query(
+                "SELECT id FROM vodum_users WHERE subscription_template_id = ?",
+                (template_id,),
+            ) or []
+
+            for row in assigned_users:
+                try:
+                    _apply_template_snapshot(db, int(row["id"]), template_id)
+                    refreshed += 1
+                except Exception as e:
+                    add_log(
+                        "error",
+                        "subscriptions",
+                        f"Failed to refresh subscription policies for user #{row['id']} after template update #{template_id}: {e}",
+                    )
+
+            add_log(
+                "info",
+                "subscriptions",
+                f"Template updated: {name} (id={template_id}) - refreshed {refreshed} assigned user policy snapshot(s)"
+            )
             flash("subscription_template_saved", "success")
         else:
             # Create
@@ -358,10 +454,11 @@ def register(app):
                   duration_days,
                   subscription_value,
                   is_default,
+                  is_enabled,
                   policies_json
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (name, notes, duration_days, subscription_value, is_default, json.dumps(clean)),
+                (name, notes, duration_days, subscription_value, is_default, is_enabled, json.dumps(clean)),
             )
             add_log("info", "subscriptions", f"Template created: {name}")
             flash("subscription_template_created", "success")
@@ -403,19 +500,69 @@ def register(app):
               notes,
               duration_days,
               subscription_value,
+              is_default,
+              is_enabled,
               policies_json
-            ) VALUES (?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 new_name,
                 tpl.get("notes") or "",
                 tpl.get("duration_days") or 30,
                 tpl.get("subscription_value") or 0,
+                0,
+                int(tpl.get("is_enabled") or 0),
                 tpl.get("policies_json") or "[]",
             ),
         )
         add_log("info", "subscriptions", f"Template duplicated: {base_name} -> {new_name}")
         flash("subscription_template_duplicated", "success")
+        return redirect(url_for("subscriptions", tab="templates"))
+
+    @app.post("/subscriptions/templates/restore-defaults")
+    def subscription_templates_restore_defaults():
+        db = get_db()
+
+        restored = _restore_default_subscription_templates(db)
+
+        add_log("info", "subscriptions", f"Default subscription templates restored: {restored}")
+        flash("subscription_template_defaults_restored", "success")
+        return redirect(url_for("subscriptions", tab="templates"))
+
+    @app.post("/subscriptions/templates/<int:template_id>/toggle")
+    def subscription_templates_toggle(template_id: int):
+        db = get_db()
+
+        tpl = db.query_one(
+            "SELECT id, name, is_enabled, is_default FROM subscription_templates WHERE id = ?",
+            (template_id,),
+        )
+
+        if not tpl:
+            flash("subscription_template_not_found", "error")
+            return redirect(url_for("subscriptions", tab="templates"))
+
+        tpl = dict(tpl)
+        new_enabled = 0 if int(tpl.get("is_enabled") or 0) == 1 else 1
+
+        db.execute(
+            """
+            UPDATE subscription_templates
+            SET is_enabled = ?,
+                is_default = CASE WHEN ? = 0 THEN 0 ELSE is_default END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (new_enabled, new_enabled, template_id),
+        )
+
+        add_log(
+            "info",
+            "subscriptions",
+            f"Template {'enabled' if new_enabled else 'disabled'}: {tpl.get('name')} (id={template_id})"
+        )
+
+        flash("subscription_template_saved", "success")
         return redirect(url_for("subscriptions", tab="templates"))
 
     @app.post("/subscriptions/templates/<int:template_id>/delete")
@@ -486,6 +633,7 @@ def register(app):
             rule = dict(rule)
             rule["locked"] = True
             rule["subscription_name"] = tname
+            rule["subscription_template_id"] = template_id
 
             provider = (p.get("provider") or "").strip() or None
             server_id = int(p["server_id"]) if str(p.get("server_id","")).isdigit() else None

@@ -479,27 +479,88 @@ def run_migrations():
     ensure_column(cursor, "subscription_templates", "duration_days", "INTEGER DEFAULT 30")
     ensure_column(cursor, "subscription_templates", "subscription_value", "REAL DEFAULT 0")
     ensure_column(cursor, "subscription_templates", "is_default", "INTEGER DEFAULT 0")
+    ensure_column(cursor, "subscription_templates", "is_enabled", "INTEGER DEFAULT 1")
     conn.commit()
 
-    # Ensure at least one default template (EN), deletable/modifiable
-    try:
-        cursor.execute("SELECT COUNT(*) FROM subscription_templates")
-        cnt = int(cursor.fetchone()[0] or 0)
-    except Exception:
-        cnt = 0
+    # Seed marker: default subscription templates must be inserted only once.
+    # If the admin deletes them later, they must not come back automatically at next boot.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS subscription_template_seed_state (
+            seed_key TEXT PRIMARY KEY,
+            seeded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
 
-    if cnt == 0:
-        print("🛠 Creating default subscription template: Default")
+    bundled_templates = [
+        (
+            "base sub",
+            "2 streams / Same IP",
+            365,
+            70,
+            0,
+            0,
+            '[{"rule_type":"max_streams_per_user","provider":null,"server_id":null,"is_enabled":1,"priority":100,"rule":{"selector":"kill_newest","warn_title":"Streaming limit reached","warn_text":"You have reached the allowed number of simultaneous streams","max":2,"allow_local_ip":true}},{"rule_type":"max_streams_per_ip","provider":null,"server_id":null,"is_enabled":1,"priority":100,"rule":{"selector":"kill_newest","warn_title":"Streaming limit reached","warn_text":"You have reached the allowed number of simultaneous streams","max":2,"allow_local_ip":true}}]',
+        ),
+        (
+            "Family sub",
+            "4 streams",
+            365,
+            200,
+            0,
+            0,
+            '[{"rule_type":"max_streams_per_user","provider":null,"server_id":null,"is_enabled":1,"priority":100,"rule":{"selector":"kill_newest","warn_title":"Streaming limit reached","warn_text":"You have reached the allowed number of simultaneous streams","max":4,"allow_local_ip":true}}]',
+        ),
+        (
+            "Plus sub",
+            "3 streams / 2 IP",
+            365,
+            120,
+            0,
+            0,
+            '[{"rule_type":"max_streams_per_user","provider":null,"server_id":null,"is_enabled":1,"priority":100,"rule":{"selector":"kill_newest","warn_title":"Streaming limit reached","warn_text":"You have reached the allowed number of simultaneous streams","max":3,"allow_local_ip":true}},{"rule_type":"max_ips_per_user","provider":null,"server_id":null,"is_enabled":1,"priority":100,"rule":{"selector":"kill_newest","warn_title":"Streaming limit reached","warn_text":"You have reached the allowed number of simultaneous streams","max":2,"allow_local_ip":true}}]',
+        ),
+    ]
+
+    cursor.execute(
+        "SELECT seed_key FROM subscription_template_seed_state WHERE seed_key = ?",
+        ("default_subscription_templates",),
+    )
+    default_templates_already_seeded = cursor.fetchone() is not None
+
+    if not default_templates_already_seeded:
+        cursor.execute("SELECT COUNT(*) FROM subscription_templates")
+        templates_count = int(cursor.fetchone()[0] or 0)
+
+        if templates_count == 0:
+            print("🛠 Creating bundled default subscription templates")
+            for name, notes, duration_days, subscription_value, is_default, is_enabled, policies_json in bundled_templates:
+                cursor.execute(
+                    """
+                    INSERT INTO subscription_templates(
+                        name,
+                        notes,
+                        duration_days,
+                        subscription_value,
+                        is_default,
+                        is_enabled,
+                        policies_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        name,
+                        notes,
+                        duration_days,
+                        subscription_value,
+                        is_default,
+                        is_enabled,
+                        policies_json,
+                    ),
+                )
+
         cursor.execute(
-            "INSERT INTO subscription_templates(name, notes, duration_days, subscription_value, is_default, policies_json) VALUES (?, ?, ?, ?, ?, ?)",
-            (
-                "Default",
-                "Base template with no restrictions. Edit or delete if you want.",
-                30,
-                0,
-                1,
-                "[]",
-            ),
+            "INSERT OR IGNORE INTO subscription_template_seed_state(seed_key) VALUES (?)",
+            ("default_subscription_templates",),
         )
         conn.commit()
 
@@ -1910,145 +1971,240 @@ def run_migrations():
     conn.commit()
 
     # -------------------------------------------------
-    # 3.2 Seed default COMM template: user_creation (EMAIL ONLY)
+    # 3.2 Seed default COMM templates once
     # -------------------------------------------------
-    def ensure_comm_user_creation_template():
-        # Create ONE default template used by the new "user_creation" trigger.
-        # Notes:
-        # - Email only is enforced in users.py (discord_user_id=None)
-        # - Placeholders supported by current code: {username} {email} {expiration_date}
-        key = "user_creation_default"
-        cursor.execute("SELECT 1 FROM comm_templates WHERE key = ?", (key,))
-        if cursor.fetchone():
-            return
-
-        subject = "Welcome - your account is ready"
-        body = (
-            "Hi {username},\n\n"
-            "Your account has been created successfully.\n"
-            "Login email: {email}\n\n"
-            "How to get started:\n"
-            "- Open the Plex/Jellyfin app (TV / mobile / web)\n"
-            "- Sign in with your account\n"
-            "- If this is Plex: accept the share invitation if prompted\n\n"
-            "Subscription expiry date: {expiration_date}\n\n"
-            "Regards,\n"
-            "VODUM Team\n"
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS comm_template_seed_state (
+            seed_key TEXT PRIMARY KEY,
+            seeded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
-
-        cursor.execute(
-            """
-            INSERT INTO comm_templates(
-                key, name, enabled,
-                trigger_event, trigger_provider,
-                days_before, days_after,
-                subject, body,
-                created_at, updated_at
-            )
-            VALUES(
-                ?, ?, 1,
-                'user_creation', 'all',
-                NULL, 0,
-                ?, ?,
-                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-            )
-            """,
-            (key, "Default - User creation", subject, body),
-        )
-        print("➕ Default comm_template inserted: user_creation_default (trigger=user_creation)")
-
-    ensure_comm_user_creation_template()
+    """)
     conn.commit()
 
-    # -------------------------------------------------
-    # 3.2.b Seed default COMM template: pending invite reminder
-    # -------------------------------------------------
-    def ensure_comm_pending_invite_reminder_template():
-        key = "pending_invite_reminder_default"
-        cursor.execute("SELECT 1 FROM comm_templates WHERE key = ?", (key,))
-        if cursor.fetchone():
-            return
+    default_comm_templates = [
+        {
+            "key": "default_expiration_date_change",
+            "name": "Expiration date change",
+            "enabled": 0,
+            "trigger_event": "expiration_change",
+            "trigger_provider": "all",
+            "subscription_scope": "all",
+            "subscription_template_id": None,
+            "expiration_change_direction": "all",
+            "days_before": None,
+            "days_after": 0,
+            "subject": "Your subscription date has been updated",
+            "body": (
+                "Hello {username},\n\n"
+                "Your subscription expiration date has been updated.\n\n"
+                "Previous expiration date: {old_expiration_date}\n"
+                "New expiration date: {new_expiration_date}\n"
+                "Change: {expiration_change_signed_days} day(s)\n"
+                "Reason: {expiration_change_reason}\n\n"
+                "Best regards,\n"
+                "VODUM Team\n"
+            ),
+        },
+        {
+            "key": "default_fin",
+            "name": "Expired subscription",
+            "enabled": 0,
+            "trigger_event": "expiration",
+            "trigger_provider": "all",
+            "subscription_scope": "all",
+            "subscription_template_id": None,
+            "expiration_change_direction": "all",
+            "days_before": 0,
+            "days_after": None,
+            "subject": "Your subscription has expired",
+            "body": (
+                "Hello {username},\n\n"
+                "Your subscription expired on {expiration_date}.\n"
+                "Your access may now be suspended.\n\n"
+                "If you wish to continue using the service, please renew your subscription.\n\n"
+                "Best regards,\n"
+                "VODUM Team\n"
+            ),
+        },
+        {
+            "key": "default_pending_invite_reminder",
+            "name": "Pending invite reminder",
+            "enabled": 0,
+            "trigger_event": "pending_invite_reminder",
+            "trigger_provider": "all",
+            "subscription_scope": "all",
+            "subscription_template_id": None,
+            "expiration_change_direction": "all",
+            "days_before": None,
+            "days_after": 3,
+            "subject": "Reminder - please accept your invitation",
+            "body": (
+                "Hello {username},\n\n"
+                "Your invitation is still waiting for acceptance.\n\n"
+                "To start using your account:\n"
+                "- Open Plex or Jellyfin\n"
+                "- Sign in with your account\n"
+                "- Accept the library share invitation if prompted\n\n"
+                "Your subscription expiration is currently set to: {expiration_date}\n\n"
+                "Best regards,\n"
+                "VODUM Team\n"
+            ),
+        },
+        {
+            "key": "default_preavis",
+            "name": "Expiration notice",
+            "enabled": 0,
+            "trigger_event": "expiration",
+            "trigger_provider": "all",
+            "subscription_scope": "all",
+            "subscription_template_id": None,
+            "expiration_change_direction": "all",
+            "days_before": 30,
+            "days_after": None,
+            "subject": "Your subscription will expire in {days_left} days",
+            "body": (
+                "Hello {username},\n\n"
+                "Your subscription will expire in {days_left} days.\n\n"
+                "Expiration date: {expiration_date}\n\n"
+                "Please renew it to avoid any service interruption.\n\n"
+                "Best regards,\n"
+                "VODUM Team\n"
+            ),
+        },
+        {
+            "key": "default_parrainage",
+            "name": "Referral reward",
+            "enabled": 0,
+            "trigger_event": "referral_reward",
+            "trigger_provider": "all",
+            "subscription_scope": "all",
+            "subscription_template_id": None,
+            "expiration_change_direction": "all",
+            "days_before": None,
+            "days_after": 0,
+            "subject": "Referral reward granted",
+            "body": (
+                "Hello {username},\n\n"
+                "Good news: you earned {referral_reward_days} bonus day(s) thanks to {referred_username}.\n\n"
+                "Previous expiration date: {referrer_old_expiration_date}\n"
+                "New expiration date: {referrer_new_expiration_date}\n\n"
+                "Thank you for your referral.\n\n"
+                "Best regards,\n"
+                "VODUM Team\n"
+            ),
+        },
+        {
+            "key": "default_relance",
+            "name": "Expiration reminder",
+            "enabled": 0,
+            "trigger_event": "expiration",
+            "trigger_provider": "all",
+            "subscription_scope": "all",
+            "subscription_template_id": None,
+            "expiration_change_direction": "all",
+            "days_before": 7,
+            "days_after": None,
+            "subject": "Reminder - your subscription will expire soon",
+            "body": (
+                "Hello {username},\n\n"
+                "This is a friendly reminder that your subscription will expire in {days_left} days.\n\n"
+                "Expiration date: {expiration_date}\n\n"
+                "Please renew it in time to avoid any service interruption.\n\n"
+                "Best regards,\n"
+                "VODUM Team\n"
+            ),
+        },
+        {
+            "key": "default_user_creation",
+            "name": "User creation",
+            "enabled": 0,
+            "trigger_event": "user_creation",
+            "trigger_provider": "all",
+            "subscription_scope": "all",
+            "subscription_template_id": None,
+            "expiration_change_direction": "all",
+            "days_before": None,
+            "days_after": 0,
+            "subject": "Welcome - your account is ready",
+            "body": (
+                "Hello {username},\n\n"
+                "Your account has been created successfully.\n\n"
+                "Login email: {email}\n\n"
+                "How to get started:\n"
+                "- Open Plex or Jellyfin\n"
+                "- Sign in with your account\n"
+                "- Accept the library share invitation if prompted\n\n"
+                "Subscription expiration date: {expiration_date}\n\n"
+                "Best regards,\n"
+                "VODUM Team\n"
+            ),
+        },
+    ]
 
-        subject = "Reminder - please accept your Plex invitation"
-        body = (
-            "Hi {username},\n\n"
-            "Your Plex invitation is still waiting for acceptance.\n\n"
-            "To start using your account:\n"
-            "- Open Plex\n"
-            "- Sign in with {email}\n"
-            "- Accept the library share invitation if prompted\n\n"
-            "Your subscription expiration is currently set to: {expiration_date}\n\n"
-            "Regards,\n"
-            "VODUM Team\n"
-        )
+    cursor.execute(
+        "SELECT seed_key FROM comm_template_seed_state WHERE seed_key = ?",
+        ("default_comm_templates",),
+    )
+    default_comm_templates_already_seeded = cursor.fetchone() is not None
+
+    if not default_comm_templates_already_seeded:
+        print("🛠 Checking bundled default communication templates")
+
+        inserted_defaults = 0
+
+        for tpl in default_comm_templates:
+            cursor.execute(
+                "SELECT id FROM comm_templates WHERE key = ?",
+                (tpl["key"],),
+            )
+
+            if cursor.fetchone():
+                continue
+
+            cursor.execute(
+                """
+                INSERT INTO comm_templates(
+                    key,
+                    name,
+                    enabled,
+                    trigger_event,
+                    trigger_provider,
+                    expiration_change_direction,
+                    subscription_scope,
+                    subscription_template_id,
+                    days_before,
+                    days_after,
+                    subject,
+                    body,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                (
+                    tpl["key"],
+                    tpl["name"],
+                    tpl["enabled"],
+                    tpl["trigger_event"],
+                    tpl["trigger_provider"],
+                    tpl["expiration_change_direction"],
+                    tpl["subscription_scope"],
+                    tpl["subscription_template_id"],
+                    tpl["days_before"],
+                    tpl["days_after"],
+                    tpl["subject"],
+                    tpl["body"],
+                ),
+            )
+            inserted_defaults += 1
 
         cursor.execute(
-            """
-            INSERT INTO comm_templates(
-                key, name, enabled,
-                trigger_event, trigger_provider,
-                days_before, days_after,
-                subject, body,
-                created_at, updated_at
-            )
-            VALUES(
-                ?, ?, 1,
-                'pending_invite_reminder', 'plex',
-                NULL, 3,
-                ?, ?,
-                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-            )
-            """,
-            (key, "Default - Pending invite reminder", subject, body),
+            "INSERT OR IGNORE INTO comm_template_seed_state(seed_key) VALUES (?)",
+            ("default_comm_templates",),
         )
-        print("➕ Default comm_template inserted: pending_invite_reminder_default")
+        conn.commit()
 
-    ensure_comm_pending_invite_reminder_template()
-    conn.commit()
-
-    # -------------------------------------------------
-    # 3.3 Seed default COMM template: referral reward
-    # -------------------------------------------------
-    def ensure_comm_referral_reward_template():
-        key = "referral_reward_default"
-        cursor.execute("SELECT 1 FROM comm_templates WHERE key = ?", (key,))
-        if cursor.fetchone():
-            return
-
-        subject = "Referral reward granted"
-        body = (
-            "Hello {username},\n\n"
-            "Good news: you earned {referral_reward_days} bonus days thanks to {referred_username}.\n\n"
-            "Previous expiration date: {referrer_old_expiration_date}\n"
-            "New expiration date: {referrer_new_expiration_date}\n\n"
-            "Thank you for your referral.\n\n"
-            "Regards,\n"
-            "VODUM Team\n"
-        )
-
-        cursor.execute(
-            """
-            INSERT INTO comm_templates(
-                key, name, enabled,
-                trigger_event, trigger_provider,
-                days_before, days_after,
-                subject, body,
-                created_at, updated_at
-            )
-            VALUES(
-                ?, ?, 1,
-                'referral_reward', 'all',
-                NULL, 0,
-                ?, ?,
-                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-            )
-            """,
-            (key, "Default - Referral reward", subject, body),
-        )
-        print("➕ Default comm_template inserted: referral_reward_default")
-
-    ensure_comm_referral_reward_template()
-    conn.commit()
+        print(f"✔ Bundled default communication templates inserted: {inserted_defaults}")
 
     # -------------------------------------------------
     # 4. Templates email par défaut 

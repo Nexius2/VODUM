@@ -89,7 +89,7 @@ def _get_settings(db) -> Dict[str, Any]:
     r = dict(row)
 
     mode = (r.get("expiry_mode") or "none").strip()
-    if mode not in ("none", "disable", "warn_then_disable"):
+    if mode not in ("none", "warn_only", "warn_then_disable", "disable"):
         mode = "none"
 
     try:
@@ -281,7 +281,7 @@ def _cleanup_orphan_system_policies(db) -> int:
 
 def run(task_id: int, db) -> None:
     settings = _get_settings(db)
-    if settings["expiry_mode"] != "warn_then_disable":
+    if settings["expiry_mode"] not in ("warn_only", "warn_then_disable"):
         return
 
 
@@ -289,8 +289,8 @@ def run(task_id: int, db) -> None:
     log.info("=== EXPIRED SUBSCRIPTION MANAGER : START ===")
 
     settings = _get_settings(db)
-    if settings["expiry_mode"] != "warn_then_disable":
-        msg = "expiry_mode != warn_then_disable, nothing to do."
+    if settings["expiry_mode"] not in ("warn_only", "warn_then_disable"):
+        msg = "expiry_mode is not warn_only or warn_then_disable, nothing to do."
         log.info(msg)
         task_logs(task_id, "info", msg)
         return
@@ -344,7 +344,11 @@ def run(task_id: int, db) -> None:
                 _create_system_policy(db, vodum_user_id)
                 created += 1
 
-            # after delay => disable access + remove policy
+            # warn_only = keep the expired_subscription policy forever until renewal.
+            # warn_then_disable = keep the warning for X days, then hard revoke access.
+            if settings["expiry_mode"] != "warn_then_disable":
+                continue
+
             days_since = (today - exp).days
             if days_since >= delay_days:
                 _, created_jobs = _disable_access_for_user(db, vodum_user_id)

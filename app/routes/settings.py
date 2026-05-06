@@ -78,7 +78,7 @@ def register(app):
         # Expiration handling (2 exclusive modes)
         # --------------------------------------------------
         expiry_mode = (request.form.get("expiry_mode") or settings.get("expiry_mode") or "none").strip()
-        if expiry_mode not in ("none", "disable", "warn_then_disable"):
+        if expiry_mode not in ("none", "warn_only", "warn_then_disable", "disable"):
             expiry_mode = "none"
 
         warn_then_disable_days_raw = (request.form.get("warn_then_disable_days") or settings.get("warn_then_disable_days") or 7)
@@ -91,7 +91,7 @@ def register(app):
         if warn_then_disable_days < 1:
             warn_then_disable_days = 1
 
-        if expiry_mode != "warn_then_disable":
+        if expiry_mode not in ("warn_then_disable", "warn_only"):
             warn_then_disable_days = int(settings.get("warn_then_disable_days") or 7)
 
         old_enable_cron_jobs = 1 if int(settings.get("enable_cron_jobs") or 0) == 1 else 0
@@ -208,7 +208,7 @@ def register(app):
         # Purge immédiate des policies système si on n'est plus en warn_then_disable
         # (évite d'attendre la prochaine exécution d'une tâche)
         # --------------------------------------------------
-        if expiry_mode != "warn_then_disable":
+        if expiry_mode not in ("warn_then_disable", "warn_only"):
             try:
                 rows = db.query("SELECT id, rule_value_json FROM stream_policies WHERE scope_type='user'") or []
                 purged = 0

@@ -1181,7 +1181,12 @@
 	  "delete_user_summary_links_found": "Cet utilisateur est encore lié à un ou plusieurs comptes de plateforme.",
 	  "delete_user_summary_recreated": "Attention : cet utilisateur semble encore exister sur une plateforme active, ou la vérification n’a pas pu confirmer complètement sa suppression. Si tu le supprimes seulement dans Vodum, il peut revenir après la prochaine synchronisation.",
 	  "delete_user_summary_not_recreated": "Aucun compte actif n’a été trouvé pendant la vérification. La suppression locale a peu de chances de revenir au prochain sync.",
-	  "please_wait": "Veuillez patienter..."
+	  "please_wait": "Veuillez patienter...",
+"subscription_expiry_mode_warn_only_title": "Afficher un message d’abonnement expiré et bloquer la lecture",
+"subscription_expiry_mode_warn_only_help": "Recommandé pour Plex. L’utilisateur garde ses accès aux bibliothèques, mais VODUM coupe la lecture avec un message d’abonnement expiré. La réactivation est immédiate et ne nécessite pas de réinvitation.",
+"subscription_expiry_mode_disable_warning": "Attention : sur Plex, retirer les accès aux bibliothèques peut supprimer l’utilisateur des partages. La réactivation peut nécessiter une réinvitation.",
+"recommended_for_plex": "Recommandé pour Plex",
+"comm_templates_defaults_restored": "Templates de communication par défaut restaurés."
   
 }
 

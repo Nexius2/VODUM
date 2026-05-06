@@ -504,7 +504,7 @@ def sync_expiry_tasks_from_settings(expiry_mode: str, cron_enabled: int):
     cron_enabled = 1 if int(cron_enabled) == 1 else 0
 
     disable_task_enabled = 1 if expiry_mode == "disable" else 0
-    warn_task_enabled = 1 if expiry_mode == "warn_then_disable" else 0
+    warn_task_enabled = 1 if expiry_mode in ("warn_only", "warn_then_disable") else 0
 
     if cron_enabled == 1:
         row_disable = db.query_one(
