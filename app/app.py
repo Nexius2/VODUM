@@ -17,7 +17,7 @@ from api.subscriptions import subscriptions_api
 from blueprints.users import users_bp
 
 from web.helpers import get_db, scheduler_db_provider, table_exists, add_log, close_db
-from web.filters import inject_brand_name, safe_datetime, cron_human, tz_filter
+from web.filters import inject_brand_name, safe_datetime, cron_human, tz_filter, browser_datetime, utc_iso
 
 
 task_logger = get_logger("tasks_ui")
@@ -413,6 +413,8 @@ def create_app():
     app.template_filter("safe_datetime")(safe_datetime)
     app.template_filter("cron_human")(cron_human)
     app.template_filter("tz")(tz_filter)
+    app.template_filter("browser_datetime")(browser_datetime)
+    app.template_filter("utc_iso")(utc_iso)
 
     # DB teardown
     app.teardown_appcontext(close_db)

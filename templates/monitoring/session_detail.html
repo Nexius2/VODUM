@@ -35,7 +35,7 @@
       </div>
       <div class="bg-slate-950 border border-slate-800 rounded-xl p-3">
         <div class="text-xs text-slate-400">{{ t("last_seen") }}</div>
-        <div class="mt-1">{{ sess.last_seen_at }}</div>
+        <div class="mt-1">{{ sess.last_seen_at|browser_datetime if sess.last_seen_at else '—' }}</div>
       </div>
     </div>
   </div>

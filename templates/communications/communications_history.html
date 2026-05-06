@@ -76,7 +76,7 @@
           "channel_used": t(h.channel_used) if h.channel_used else "-",
           "status": t('sent') if h.status == 'sent' else t('failed'),
           "error": h.error or "",
-          "sent_at": (h.sent_at|tz) if h.sent_at else "-",
+          "sent_at": h.sent_at or "-",
           "subject": subject_value or "",
           "body": body_value or "",
           "meta_json": h.meta_json or ""
@@ -126,7 +126,7 @@
           </td>
 
           <td class="px-4 py-3 align-top whitespace-nowrap">
-            {{ h.sent_at|tz }}
+            {{ h.sent_at|browser_datetime if h.sent_at else '-' }}
           </td>
         </tr>
       {% else %}
@@ -256,7 +256,7 @@ function openCommHistoryModal(raw) {
   document.getElementById("commHistoryModalUser").textContent = data.user || "-";
   document.getElementById("commHistoryModalChannel").textContent = data.channel_used || "-";
   document.getElementById("commHistoryModalStatus").textContent = data.status || "-";
-  document.getElementById("commHistoryModalSentAt").textContent = data.sent_at || "-";
+  document.getElementById("commHistoryModalSentAt").textContent = vodumFormatDateTime(data.sent_at || "-");
   document.getElementById("commHistoryModalError").textContent = data.error || "-";
   document.getElementById("commHistoryModalSubject").textContent = data.subject || "-";
   document.getElementById("commHistoryModalBody").textContent = data.body || "-";

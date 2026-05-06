@@ -160,8 +160,8 @@
 				} %}
               <span class="px-2 py-1 rounded-full {{ colors.get(c.status, 'bg-slate-700 text-slate-300') }}">{{ t(c.status) }}</span>
             </td>
-            <td class="px-4 py-2">{{ c.created_at or t('not_available') }}</td>
-            <td class="px-4 py-2">{{ c.sent_at or t('not_available') }}</td>
+			<td class="px-4 py-2">{{ c.created_at|browser_datetime if c.created_at else t('not_available') }}</td>
+			<td class="px-4 py-2">{{ c.sent_at|browser_datetime if c.sent_at else t('not_available') }}</td>
             <td class="px-4 py-2 text-right">
               <a href="{{ url_for('communications_campaigns_page', load=c.id) }}" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700">{{ t('open') }}</a>
             </td>

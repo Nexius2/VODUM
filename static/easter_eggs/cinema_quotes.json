@@ -247,6 +247,30 @@
 "quotes": {"en": "I love it when a plan comes together.","fr": "J'aime bien quand un plan se déroule sans accroc."}
 },
 {
+	"key": "alien_space_scream",
+	"media_type": "movie",
+	"ids": {
+		"imdb": "tt0078748",
+		"tmdb": "348"
+	},
+	"quotes": {
+		"en": "In space no one can hear you scream.",
+		"fr": "Dans l'espace, personne ne vous entend crier."
+	}
+},
+{
+	"key": "alien_perfect_organism",
+	"media_type": "movie",
+	"ids": {
+		"imdb": "tt0078748",
+		"tmdb": "348"
+	},
+	"quotes": {
+		"en": "I admire its purity.",
+		"fr": "J'admire sa pureté."
+	}
+},
+{
   "key": "300_force_honneur",
   "media_type": "movie",
   "ids": {
@@ -257,6 +281,186 @@
     "en": "Strength and honor.",
     "fr": "Force et honneur."
   }
+},
+{
+	"key": "blade_runner_tears_rain",
+	"media_type": "movie",
+	"ids": {
+		"imdb": "tt0083658",
+		"tmdb": "78"
+	},
+	"quotes": {
+		"en": "All those moments will be lost in time, like tears in rain.",
+		"fr": "Tous ces moments se perdront dans le temps, comme des larmes dans la pluie."
+	}
+},
+{
+	"key": "tropicthunder_survive",
+	"media_type": "movie",
+	"ids": {
+		"imdb": "tt0942385",
+		"tmdb": "7446"
+	},
+	"quotes": {
+		"en": "Survive!",
+		"fr": "Survis !"
+	}
+},
+{
+	"key": "starwars_nevertellmeodds",
+	"media_type": "movie",
+	"ids": {
+		"imdb": "tt0080684",
+		"tmdb": "1891"
+	},
+	"quotes": {
+		"en": "Never tell me the odds!",
+		"fr": "Ne me dites jamais les probabilités !"
+	}
+},
+{
+	"key": "hal9000_cantdo",
+	"media_type": "movie",
+	"ids": {
+		"imdb": "tt0062622",
+		"tmdb": "62"
+	},
+	"quotes": {
+		"en": "I'm sorry Dave, I'm afraid I can't do that.",
+		"fr": "Je suis désolé Dave, j'ai bien peur de ne pas pouvoir faire ça."
+	}
+},
+{
+	"key": "thanos_inevitable",
+	"media_type": "movie",
+	"ids": {
+		"imdb": "tt4154796",
+		"tmdb": "299534"
+	},
+	"quotes": {
+		"en": "I am inevitable.",
+		"fr": "Je suis inévitable."
+	}
+},
+{
+	"key": "apollo13_failure",
+	"media_type": "movie",
+	"ids": {
+		"imdb": "tt0112384",
+		"tmdb": "568"
+	},
+	"quotes": {
+		"en": "Failure is not an option.",
+		"fr": "L'échec n'est pas une option."
+	}
+},
+{
+	"key": "lotr_begin",
+	"media_type": "movie",
+	"ids": {
+		"imdb": "tt0120737",
+		"tmdb": "120"
+	},
+	"quotes": {
+		"en": "So it begins.",
+		"fr": "Ainsi commence."
+	}
+},
+{
+	"key": "predator_ugly",
+	"media_type": "movie",
+	"ids": {
+		"imdb": "tt0093773",
+		"tmdb": "106"
+	},
+	"quotes": {
+		"en": "You are one ugly motherf***er.",
+		"fr": "Tu es vraiment un sale enfoiré."
+	}
+},
+{
+	"key": "robocop_deadalive",
+	"media_type": "movie",
+	"ids": {
+		"imdb": "tt0093870",
+		"tmdb": "5548"
+	},
+	"quotes": {
+		"en": "Dead or alive, you're coming with me.",
+		"fr": "Mort ou vif, tu viens avec moi."
+	}
+},
+{
+	"key": "scarface_world",
+	"media_type": "movie",
+	"ids": {
+		"imdb": "tt0086250",
+		"tmdb": "111"
+	},
+	"quotes": {
+		"en": "The world is yours.",
+		"fr": "Le monde est à toi."
+	}
+},
+{
+	"key": "interstellar_stay",
+	"media_type": "movie",
+	"ids": {
+		"imdb": "tt0816692",
+		"tmdb": "157336"
+	},
+	"quotes": {
+		"en": "Do not go gentle into that good night.",
+		"fr": "N'entre pas docilement dans cette bonne nuit."
+	}
+},
+{
+	"key": "dexter_tonight",
+	"media_type": "tv",
+	"ids": {
+		"imdb": "tt0773262",
+		"tmdb": "1405"
+	},
+	"quotes": {
+		"en": "Tonight's the night.",
+		"fr": "Ce soir, c'est le soir."
+	}
+},
+{
+	"key": "mrrobot_fsociety",
+	"media_type": "tv",
+	"ids": {
+		"imdb": "tt4158110",
+		"tmdb": "62560"
+	},
+	"quotes": {
+		"en": "Control is an illusion.",
+		"fr": "Le contrôle est une illusion."
+	}
+},
+{
+	"key": "bandofbrothers_grandpa",
+	"media_type": "tv",
+	"ids": {
+		"imdb": "tt0185906",
+		"tmdb": "4613"
+	},
+	"quotes": {
+		"en": "I served in a company of heroes.",
+		"fr": "J'ai servi dans une compagnie de héros."
+	}
+},
+{
+	"key": "vikings_valhalla",
+	"media_type": "tv",
+	"ids": {
+		"imdb": "tt2306299",
+		"tmdb": "44217"
+	},
+	"quotes": {
+		"en": "See you in Valhalla.",
+		"fr": "On se retrouve au Valhalla."
+	}
 },
 {
   "key": "walkingdead_lucille",

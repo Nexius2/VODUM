@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from flask import current_app
+from markupsafe import Markup, escape
 
 from web.helpers import get_db
 from core.i18n import get_translator
@@ -20,6 +21,53 @@ def inject_brand_name():
 
     return {"app_brand_name": brand_name if brand_name else "VODUM"}
 
+def utc_iso(value):
+    if value is None:
+        return ""
+
+    if isinstance(value, datetime):
+        dt = value
+    elif isinstance(value, (int, float)):
+        ts = float(value)
+        if ts > 1e12:
+            ts = ts / 1000.0
+        dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+    elif isinstance(value, str):
+        s = value.strip()
+        if not s:
+            return ""
+
+        if s.isdigit():
+            ts = int(s)
+            if ts > 1_000_000_000_000:
+                ts = ts / 1000
+            dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+        else:
+            try:
+                dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            except Exception:
+                try:
+                    dt = datetime.fromisoformat(s.replace(" ", "T"))
+                except Exception:
+                    return s
+    else:
+        return str(value)
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def browser_datetime(value, mode="datetime", fallback="-"):
+    iso = utc_iso(value)
+    if not iso:
+        return fallback
+
+    return Markup(
+        f'<span data-vodum-datetime="{escape(iso)}" '
+        f'data-vodum-datetime-mode="{escape(mode)}">{escape(str(value))}</span>'
+    )
 
 def safe_datetime(value):
     if isinstance(value, datetime):
@@ -27,11 +75,12 @@ def safe_datetime(value):
     return value
 
 
-def cron_human(expr):
+def cron_human(expr, t=None):
     """
     Convertit une expression CRON en phrase lisible, multilingue via t().
     """
-    t = get_translator()
+    if t is None:
+        t = get_translator()
     if not expr:
         return ""
 

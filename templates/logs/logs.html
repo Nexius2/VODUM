@@ -105,7 +105,7 @@
             <tbody>
                 {% for log in logs %}
                     <tr class="border-t border-slate-800">
-                        <td class="px-4 py-2 whitespace-nowrap">{{ log.created_at }}</td>
+                        <td class="px-4 py-2 whitespace-nowrap">{{ log.created_at|browser_datetime if log.created_at else '—' }}</td>
                         <td class="px-4 py-2">{{ log.level }}</td>
                         <td class="px-4 py-2">{{ log.source }}</td>
                         <td class="px-4 py-2 text-slate-300 max-w-xl break-words whitespace-normal">

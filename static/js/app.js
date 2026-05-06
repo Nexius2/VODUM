@@ -49,6 +49,64 @@ function htmlEscape(str) {
   }[m]));
 }
 
+function vodumParseDate(value) {
+  if (!value) return null;
+
+  const raw = String(value).trim();
+  if (!raw || raw === "-" || raw === "—") return null;
+
+  if (/^\d+$/.test(raw)) {
+    let ts = Number(raw);
+    if (ts > 1000000000000) {
+      ts = Math.floor(ts / 1000);
+    }
+    return new Date(ts * 1000);
+  }
+
+  if (raw.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(raw)) {
+    return new Date(raw);
+  }
+
+  return new Date(raw.replace(" ", "T") + "Z");
+}
+
+function vodumFormatDateTime(value, mode = "datetime") {
+  const date = vodumParseDate(value);
+  if (!date || Number.isNaN(date.getTime())) {
+    return value || "-";
+  }
+
+  if (mode === "short") {
+    return date.toLocaleString(undefined, {
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  }
+
+  return date.toLocaleString(undefined, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  });
+}
+
+function vodumRefreshBrowserDateTimes(root = document) {
+  root.querySelectorAll("[data-vodum-datetime]").forEach((el) => {
+    const value = el.dataset.vodumDatetime;
+    const mode = el.dataset.vodumDatetimeMode || "datetime";
+    el.textContent = vodumFormatDateTime(value, mode);
+  });
+}
+
+window.vodumParseDate = vodumParseDate;
+window.vodumFormatDateTime = vodumFormatDateTime;
+window.vodumRefreshBrowserDateTimes = vodumRefreshBrowserDateTimes;
+
 // ------------ ONGLET ACTIF (pages legacy avec .tab/.tab-content) --------
 
 function activateTab(tabName) {
@@ -206,8 +264,8 @@ async function refreshTasks() {
       <tr>
         <td>${htmlEscape(t.name ?? "")}</td>
         <td>${htmlEscape(t.status ?? "")}</td>
-        <td>${htmlEscape(t.last_run || "-")}</td>
-        <td>${htmlEscape(t.next_run || "-")}</td>
+		<td>${htmlEscape(vodumFormatDateTime(t.last_run || "-"))}</td>
+		<td>${htmlEscape(vodumFormatDateTime(t.next_run || "-"))}</td>
         <td>
           <button onclick="runTask(${Number(t.id)})">Run</button>
         </td>
@@ -226,7 +284,7 @@ async function refreshLogs() {
   data.forEach(log => {
     tbody.innerHTML += `
       <tr>
-        <td>${htmlEscape(log.date ?? "")}</td>
+        <td>${htmlEscape(vodumFormatDateTime(log.date ?? log.created_at ?? ""))}</td>
         <td>${htmlEscape(log.level ?? "")}</td>
         <td>${htmlEscape(log.message ?? "")}</td>
       </tr>
@@ -288,6 +346,7 @@ window.addEventListener("DOMContentLoaded", () => {
   try { initTabs(); } catch (e) { console.error("[vodum] initTabs failed:", e); }
   try { refreshActiveTab(); } catch (e) { console.error("[vodum] refreshActiveTab failed:", e); }
   try { initUserMediaInfoToggles(); } catch (e) { console.error("[vodum] initUserMediaInfoToggles failed:", e); }
+  try { vodumRefreshBrowserDateTimes(document); } catch (e) { console.error("[vodum] browser datetime failed:", e); }
 
 
   // Monitoring Activity charts (si la page est chargée directement sur Activity)
@@ -304,7 +363,9 @@ window.addEventListener("DOMContentLoaded", () => {
 // IMPORTANT: quand HTMX injecte un onglet, DOMContentLoaded ne se déclenche pas.
 // Donc on relance les init JS ici.
 
-
+document.body.addEventListener("htmx:afterSwap", function (event) {
+  try { vodumRefreshBrowserDateTimes(event.target || document); } catch (e) { console.error("[vodum] htmx datetime failed:", e); }
+});
 
 // ------------ INDICATEUR ACTIVITÉ TASKS ----------------------
 

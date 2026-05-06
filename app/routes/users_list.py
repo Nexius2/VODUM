@@ -82,7 +82,12 @@ def register(app):
                 order = "asc"
 
         subscription_templates = db.query(
-            "SELECT id, name, is_default FROM subscription_templates ORDER BY is_default DESC, name ASC"
+            """
+            SELECT id, name, is_default
+            FROM subscription_templates
+            WHERE COALESCE(is_enabled, 1) = 1
+            ORDER BY is_default DESC, name ASC
+            """
         ) or []
 
         referral_settings = db.query_one(

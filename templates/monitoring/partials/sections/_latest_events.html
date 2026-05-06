@@ -11,9 +11,8 @@
               {{ e.server_name }} · {{ e.provider }} · {{ e.title or "-" }}
             </div>
           </div>
-			{% set d = (e.ts|tz) %}
 			<div class="text-xs text-slate-500">
-			  {{ d[8:10] }}/{{ d[5:7] }} {{ d[11:16] }}
+			  {{ e.ts|browser_datetime("short") if e.ts else "-" }}
 			</div>
         </div>
         {% if not loop.last %}<div class="border-t border-slate-800"></div>{% endif %}

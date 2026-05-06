@@ -661,7 +661,7 @@ document.addEventListener("DOMContentLoaded", () => {
             <option value="">-- none --</option>
             {% for tpl in subscription_templates %}
               <option value="{{ tpl.id }}" {% if tpl.is_default %}selected{% endif %}>
-                {{ tpl.name }}{% if tpl.is_default %} — Default{% endif %}
+                {{ tpl.name }}
               </option>
             {% endfor %}
           </select>

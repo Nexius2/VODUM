@@ -342,7 +342,9 @@ def _store_server_resource_stats(
 def _fetch_existing_sessions(db, server_id: int) -> Dict[str, Dict[str, Any]]:
     rows = db.query(
         """
-        SELECT session_key, state, progress_ms, media_key, external_user_id
+        SELECT
+          session_key, state, progress_ms, media_key, external_user_id,
+          client_name, client_product, device, ip
         FROM media_sessions
         WHERE server_id = ?
         """,
@@ -357,8 +359,28 @@ def _fetch_existing_sessions(db, server_id: int) -> Dict[str, Dict[str, Any]]:
             "progress_ms": r["progress_ms"],
             "media_key": r["media_key"],
             "external_user_id": r["external_user_id"],
+            "client_name": r["client_name"],
+            "client_product": r["client_product"],
+            "device": r["device"],
+            "ip": r["ip"],
         }
     return out
+
+def _session_identity_key(sess: Dict[str, Any]) -> Optional[str]:
+    user = str(sess.get("external_user_id") or "").strip()
+    if not user:
+        return None
+
+    client_name = str(sess.get("client_name") or "").strip().lower()
+    client_product = str(sess.get("client_product") or "").strip().lower()
+    device = str(sess.get("device") or "").strip().lower()
+    ip = str(sess.get("ip") or "").strip().lower()
+
+    client = "|".join([client_name, client_product, device, ip]).strip("|")
+    if not client:
+        return None
+
+    return f"{user}|{client}"
 
 def _has_recent_live_sessions(db, server_id: int, window_seconds: int = 180) -> bool:
     row = db.query_one(
@@ -524,6 +546,40 @@ def collect_sessions_for_server(
             )
 
         cur_map = {str(s["session_key"]): s for s in current if s.get("session_key")}
+
+        # Si le même user + même client apparaît avec une nouvelle session_key,
+        # on force la clôture de l'ancienne session immédiatement.
+        # Ça évite d'afficher 2 épisodes en cours pendant la fenêtre de grâce
+        # et ça évite aussi de fausser les pics de streams.
+        current_identities = {
+            _session_identity_key(sess)
+            for sess in cur_map.values()
+            if _session_identity_key(sess)
+        }
+
+        for old_sk, old_sess in prev_map.items():
+            if old_sk in cur_map:
+                continue
+
+            old_identity = _session_identity_key(old_sess)
+            if not old_identity or old_identity not in current_identities:
+                continue
+
+            db.execute(
+                """
+                UPDATE media_sessions
+                SET
+                  missing_count = 999,
+                  last_seen_at = datetime('now', ?)
+                WHERE server_id = ?
+                  AND session_key = ?
+                """,
+                (
+                    f"-{int(_SESSION_MISSING_GRACE_SECONDS) + 1} seconds",
+                    server_id,
+                    old_sk,
+                ),
+            )
 
         # --- upsert + events (start/pause/resume/state_change)
         for sk, sess in cur_map.items():

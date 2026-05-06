@@ -606,7 +606,7 @@
 				  {{ r.ip }}
 				</button>
               </td>
-              <td class="py-3 pr-4 text-slate-300">{{ r.last_seen }}</td>
+              <td class="py-3 pr-4 text-slate-300">{{ r.last_seen|browser_datetime if r.last_seen else "—" }}</td>
               <td class="py-3 pr-4 text-slate-300">{{ r.first_seen }}</td>
               <td class="py-3 pr-4">{{ r.last_platform or "-" }}</td>
               <td class="py-3 pr-4">{{ r.last_player or "-" }}</td>

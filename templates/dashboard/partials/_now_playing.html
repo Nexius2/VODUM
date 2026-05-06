@@ -96,7 +96,7 @@
                             </div>
 
                             <div class="text-[10px] text-slate-500 whitespace-nowrap justify-self-end pt-0.5">
-                                {{ t("last_check") }} : {{ s.last_seen_at|tz }}
+                                {{ t("last_check") }} : {{ s.last_seen_at|browser_datetime if s.last_seen_at else '—' }}
                             </div>
 
                             <div class="col-span-2 text-sm font-semibold truncate min-w-0">
