@@ -1,22 +1,23 @@
-version: "3.8"
 services:
-  backend:
-    build: ./backend
-    ports:
-      - "8000:8000"
-    depends_on:
-      - db
+  vodum:
+    image: nexius2/vodum:latest
+    container_name: vodum
+    restart: unless-stopped
 
-  frontend:
-    build: ./frontend
-    ports:
-      - "3000:3000"
-    depends_on:
-      - backend
+    env_file:
+      - .env
 
-  db:
-    image: postgres
-    environment:
-      POSTGRES_USER: vodum
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: vodum
+    ports:
+      - "8097:5000"
+
+    volumes:
+      - ./appdata:/appdata
+      - ./logs:/appdata/logs
+      - ./backups:/appdata/backups
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5000/ >/dev/null || exit 1"]
+      interval: 240s
+      timeout: 8s
+      retries: 5
+      start_period: 30s
