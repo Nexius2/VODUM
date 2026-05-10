@@ -9,6 +9,7 @@ from core.providers.plex_users import plex_invite_and_share
 import re
 import requests
 from core.plex_rate_limit import install_plex_rate_limit
+from core.plex_connection import find_working_plex_base_url
 
 logger = get_logger("apply_plex_access_updates")
 
@@ -413,21 +414,21 @@ def enable_task(db, name):
 
 
 def get_plex(server_row):
-    """Connexion PlexAPI sécurisée avec rate limit 1 req/sec/server."""
-    baseurl = (
-        server_row["url"]
-        or server_row["local_url"]
-        or server_row["public_url"]
-    )
-    token = server_row["token"]
+	"""Connexion PlexAPI avec sélection automatique de la bonne URL Plex."""
+	baseurl = find_working_plex_base_url(
+		server_row,
+		endpoint="/identity",
+		accept="application/xml",
+	)
+	token = server_row["token"]
 
-    if not baseurl or not token:
-        raise RuntimeError(f"Incomplete server configuration (URL/token) : {server_row['name']}")
+	if not baseurl or not token:
+		raise RuntimeError(f"Incomplete server configuration (URL/token) : {server_row['name']}")
 
-    session = requests.Session()
-    install_plex_rate_limit(session, baseurl)
+	session = requests.Session()
+	install_plex_rate_limit(session, baseurl)
 
-    return PlexServer(baseurl, token, session=session)
+	return PlexServer(baseurl, token, session=session)
 
 
 def get_all_plex_section_titles(plex):
