@@ -11,6 +11,7 @@ from logging_utils import get_logger
 from tasks_engine import task_logs
 from plexapi.server import PlexServer  
 from core.plex_rate_limit import install_plex_rate_limit, wait_for_plex_slot
+from core.plex_connection import plex_candidate_base_urls, find_working_plex_base_url
 
 class TimeoutSession(requests.Session):
     """Session requests qui force un timeout par défaut."""
@@ -144,17 +145,21 @@ def choose_account_token(db) -> Optional[str]:
 
     return token
 
+def _plex_base_urls(server) -> list[str]:
+	return plex_candidate_base_urls(server)
+
+
 def _pick_plex_base_url(server) -> str:
-    """
-    Choisit l'URL Plex utilisable pour les appels API.
-    Important : public_url doit aussi être accepté, sinon un serveur distant
-    peut être vu comme configuré mais retourner 0 libraries.
-    """
-    return (
-        (server.get("url") or "")
-        or (server.get("local_url") or "")
-        or (server.get("public_url") or "")
-    ).strip().rstrip("/")
+	urls = _plex_base_urls(server)
+	return urls[0] if urls else ""
+
+
+def _find_working_plex_base_url(server, endpoint="/identity", accept="application/xml") -> str:
+	return find_working_plex_base_url(
+		server,
+		endpoint=endpoint,
+		accept=accept,
+	)
 
 
 def _ensure_plex_server_identity(db, server) -> None:
@@ -164,7 +169,7 @@ def _ensure_plex_server_identity(db, server) -> None:
     et les users Plex récupérés via /api/users ne peuvent pas être reliés au bon serveur.
     """
     server_id = int(server["id"])
-    base_url = _pick_plex_base_url(server)
+    base_url = _find_working_plex_base_url(server, endpoint="/identity", accept="application/xml")
     token = (server.get("token") or "").strip()
 
     if not base_url or not token:
@@ -687,7 +692,7 @@ def plex_get_libraries(server):
         ...
     ]
     """
-    base_url = _pick_plex_base_url(server)
+    base_url = _find_working_plex_base_url(server, endpoint="/library/sections", accept="application/json")
     token = (server.get("token") or "").strip()
 
     if not base_url or not token:
@@ -731,7 +736,11 @@ def sync_plex_libraries(db, server, libraries):
     """
     server_id = server["id"]
 
-    base_url = (server.get("url") or server.get("local_url") or server.get("public_url") or "").rstrip("/")
+    base_url = _find_working_plex_base_url(
+        server,
+        endpoint="/library/sections",
+        accept="application/json",
+    )
     token = (server.get("token") or "").strip()
 
     rows = db.query(
@@ -1558,7 +1567,7 @@ def sync_all(task_id=None, db=None) -> None:
             continue
 
         # --- Accès utilisateurs ---
-        base_url = _pick_plex_base_url(server)
+        base_url = _find_working_plex_base_url(server, endpoint="/identity", accept="application/xml")
         token = (server.get("token") or "").strip()
 
         if not base_url or not token:

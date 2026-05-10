@@ -12,6 +12,7 @@ from core.plex_rate_limit import install_plex_rate_limit
 from core.providers.jellyfin_users import jellyfin_list_users
 from .users_list import merge_vodum_users
 from core.media_jobs import insert_plex_media_job, insert_jellyfin_media_job
+from core.plex_connection import find_working_plex_base_url
 
 
 task_logger = get_logger("tasks_ui")
@@ -213,11 +214,11 @@ def _json_dict_or_empty(raw):
 
 
 def _pick_server_base_url(server_row):
-    for key in ("url", "local_url", "public_url"):
-        value = str(server_row.get(key) or "").strip().rstrip("/")
-        if value:
-            return value
-    return ""
+	return find_working_plex_base_url(
+		server_row,
+		endpoint="/identity",
+		accept="application/xml",
+	)
 
 
 def _pick_server_token(server_row):

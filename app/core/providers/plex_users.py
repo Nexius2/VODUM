@@ -2,27 +2,22 @@ from typing import Any, Dict, List
 import requests
 from core.plex_rate_limit import install_plex_rate_limit
 from logging_utils import get_logger
+from core.plex_connection import find_working_plex_base_url
 
 log = get_logger("plex_users")
 
 
 def _pick_base_url(server_row: Dict[str, Any]) -> str:
-    def _clean(value: Any) -> str:
-        v = str(value or "").strip()
-        if v.lower() in ("", "none", "null"):
-            return ""
-        return v.rstrip("/")
+	base = find_working_plex_base_url(
+		server_row,
+		endpoint="/identity",
+		accept="application/xml",
+	)
 
-    base = (
-        _clean(server_row.get("url"))
-        or _clean(server_row.get("local_url"))
-        or _clean(server_row.get("public_url"))
-    )
+	if not base:
+		raise RuntimeError("Plex: missing server URL (url/local_url/public_url)")
 
-    if not base:
-        raise RuntimeError("Plex: missing server URL (url/local_url/public_url)")
-
-    return base
+	return base
 
 
 def _token(server_row: Dict[str, Any]) -> str:
