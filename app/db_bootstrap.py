@@ -261,6 +261,9 @@ def run_migrations():
             raise RuntimeError(f"❌ ERROR: table '{table}' does not exist ! "
                                f"-> Check that tables.sql has been imported correctly.")
 
+    ensure_column(cursor, "servers", "server_version", "TEXT DEFAULT NULL")
+    conn.commit()
+
     # -------------------------------------------------
     # USER REFERRAL SETTINGS
     # -------------------------------------------------

@@ -131,9 +131,11 @@ CREATE TABLE IF NOT EXISTS servers (
     public_url TEXT,
     token TEXT,
 
-	settings_json TEXT,              -- pour les trucs spécifiques
+    settings_json TEXT,              -- pour les trucs spécifiques
+    server_version TEXT,
     last_checked TIMESTAMP,
     status TEXT                         -- up/down/unknown
+);
 );
 
 -----------------------------------------------------------------------

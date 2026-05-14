@@ -482,12 +482,11 @@ def _find_shared_server_id_for_machine(plex_user, machine_id: str):
 def _get_shared_servers_for_machine(account, machine_id: str):
     """
     GET https://plex.tv/api/servers/<machine_id>/shared_servers
-    Returns list of dicts: {id, username, email, userID}
+    Returns list of dicts: {id, username, email, userID, section_ids}
     """
     url = f"https://plex.tv/api/servers/{machine_id}/shared_servers"
     resp = account.query(url, account._session.get)
 
-    # plexapi peut renvoyer un Element directement
     if isinstance(resp, ET.Element):
         root = resp
     else:
@@ -506,6 +505,29 @@ def _get_shared_servers_for_machine(account, machine_id: str):
 
     out = []
     for ss in root.findall(".//SharedServer"):
+        section_ids = []
+
+        raw_section_ids = (
+            ss.attrib.get("librarySectionIDs")
+            or ss.attrib.get("librarySectionIds")
+            or ss.attrib.get("library_section_ids")
+            or ""
+        )
+        for part in str(raw_section_ids).replace(";", ",").split(","):
+            part = part.strip()
+            if part.isdigit():
+                section_ids.append(int(part))
+
+        for child in list(ss):
+            child_id = (
+                child.attrib.get("id")
+                or child.attrib.get("key")
+                or child.attrib.get("librarySectionID")
+                or child.attrib.get("librarySectionId")
+            )
+            if child_id and str(child_id).isdigit():
+                section_ids.append(int(child_id))
+
         out.append(
             {
                 "id": ss.attrib.get("id"),
@@ -513,8 +535,10 @@ def _get_shared_servers_for_machine(account, machine_id: str):
                 "email": ss.attrib.get("email"),
                 "userID": ss.attrib.get("userID") or ss.attrib.get("userId"),
                 "invitedId": ss.attrib.get("invitedId") or ss.attrib.get("invitedID") or ss.attrib.get("invited_id"),
+                "section_ids": sorted(set(section_ids)),
             }
         )
+
     return out
 
 
@@ -561,6 +585,38 @@ def _find_shared_server_id_for_user_on_machine(account, machine_id: str, plex_us
             return ss_id
 
     return None
+
+def _find_shared_server_state_for_user_on_machine(account, machine_id: str, plex_user_obj):
+    """
+    Retourne l'état Plex actuel du partage pour CE user sur CE serveur.
+    Utilisé pour logger le diff réel avant modification.
+    """
+    shared_id = _find_shared_server_id_for_user_on_machine(account, machine_id, plex_user_obj)
+    if not shared_id:
+        return None
+
+    for ss in _get_shared_servers_for_machine(account, machine_id):
+        if str(ss.get("id") or "").strip() == str(shared_id):
+            return ss
+
+    return {"id": shared_id, "section_ids": []}
+
+
+def _log_access_diff(action: str, *, vodum_user_id, media_user_id, server_id, machine_id, shared_server_id, current_section_ids, expected_section_ids):
+    current = {int(x) for x in (current_section_ids or []) if str(x).isdigit()}
+    expected = {int(x) for x in (expected_section_ids or []) if str(x).isdigit()}
+
+    keep = sorted(current & expected)
+    add = sorted(expected - current)
+    remove = sorted(current - expected)
+
+    logger.info(
+        f"[PLEX ACCESS DIFF] action={action} "
+        f"vodum_user_id={vodum_user_id} media_user_id={media_user_id} "
+        f"server_id={server_id} machine_id={machine_id} "
+        f"shared_server_id={shared_server_id} "
+        f"keep={keep} add={add} remove={remove}"
+    )
 
 def _extract_already_shared_username(error_message: str) -> str | None:
     """
@@ -1037,7 +1093,21 @@ def apply_grant_job(db, job):
     if not section_ids:
         raise RuntimeError("No valid Plex section ids to grant (all titles missing on server)")
 
+    shared_state = _find_shared_server_state_for_user_on_machine(account, machine_id, plex_user)
     shared_server_id = _ensure_shared_server(account, machine_id, plex_user, section_ids)
+    if not shared_state or str(shared_state.get("id") or "") != str(shared_server_id):
+        shared_state = _find_shared_server_state_for_user_on_machine(account, machine_id, plex_user)
+
+    _log_access_diff(
+        "grant",
+        vodum_user_id=vodum_user_id,
+        media_user_id=user_id,
+        server_id=server_id,
+        machine_id=machine_id,
+        shared_server_id=shared_server_id,
+        current_section_ids=(shared_state or {}).get("section_ids", []),
+        expected_section_ids=section_ids,
+    )
 
     _put_shared_server_form(
         account=account,
@@ -1156,11 +1226,27 @@ def apply_sync_job(db, job):
     section_ids = [int(title_to_id[t]) for t in sections if t in title_to_id]
 
     if not section_ids:
-        logger.warning("SYNC computed an empty section_ids list. Falling back to revoke.")
-        apply_revoke_job(db, job)
-        return
+        raise RuntimeError(
+            "SYNC aborted: computed an empty Plex section list. "
+            "Vodum will not convert a sync job into a full revoke. "
+            "Use an explicit revoke job to remove all Plex access."
+        )
 
+    shared_state = _find_shared_server_state_for_user_on_machine(account, machine_id, plex_user)
     shared_server_id = _ensure_shared_server(account, machine_id, plex_user, section_ids)
+    if not shared_state or str(shared_state.get("id") or "") != str(shared_server_id):
+        shared_state = _find_shared_server_state_for_user_on_machine(account, machine_id, plex_user)
+
+    _log_access_diff(
+        "sync",
+        vodum_user_id=vodum_user_id,
+        media_user_id=user_id,
+        server_id=server_id,
+        machine_id=machine_id,
+        shared_server_id=shared_server_id,
+        current_section_ids=(shared_state or {}).get("section_ids", []),
+        expected_section_ids=section_ids,
+    )
 
     _put_shared_server_form(
         account=account,
@@ -1219,6 +1305,18 @@ def apply_revoke_job(db, job):
     if not shared_server_id:
         logger.info("REVOKE: no existing share found (noop).")
         return
+
+    shared_state = _find_shared_server_state_for_user_on_machine(account, machine_id, plex_user)
+    _log_access_diff(
+        "revoke",
+        vodum_user_id=vodum_user_id,
+        media_user_id=row_get(user, "id"),
+        server_id=server_id,
+        machine_id=machine_id,
+        shared_server_id=shared_server_id,
+        current_section_ids=(shared_state or {}).get("section_ids", []),
+        expected_section_ids=[],
+    )
 
     url = f"https://plex.tv/api/servers/{machine_id}/shared_servers/{shared_server_id}"
     account.query(url, account._session.delete)

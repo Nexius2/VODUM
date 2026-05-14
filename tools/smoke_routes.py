@@ -1,22 +1,15 @@
 """Vodum smoke test (routes)
 
-Usage (inside container or locally):
-  python tools/smoke_routes.py --db /appdata/database.db
-
-What it does:
-- Builds the Flask app
-- Logs-in bypass can be enabled with --no-auth (sets auth_enabled=0 temporarily)
-- Hits every GET route that has no required URL params
-
-This is meant to quickly catch regressions after refactors.
+Usage:
+  python tools/smoke_routes.py --db /appdata/database.db --no-auth
 """
 
 from __future__ import annotations
 
 import argparse
 import os
-import re
-from urllib.parse import urlparse
+import sys
+from pathlib import Path
 
 
 def main() -> int:
@@ -25,21 +18,30 @@ def main() -> int:
     ap.add_argument("--no-auth", action="store_true", help="Disable auth_guard during the test")
     args = ap.parse_args()
 
+    root_dir = Path(__file__).resolve().parents[1]
+    if str(root_dir) not in sys.path:
+        sys.path.insert(0, str(root_dir))
+
     if args.db:
         os.environ["DATABASE_PATH"] = args.db
 
-    # Optional: bypass IP filter in test contexts
     os.environ.setdefault("VODUM_IP_FILTER", "0")
 
-    import app as appmod  # noqa
+    import app as appmod
 
-    flask_app = appmod.app
+    if hasattr(appmod, "app"):
+        flask_app = appmod.app
+    elif hasattr(appmod, "create_app"):
+        flask_app = appmod.create_app()
+    else:
+        raise RuntimeError("Unable to find Flask app or create_app() in app module")
+
     client = flask_app.test_client()
 
-    # Optional: disable auth in DB if requested
     if args.no_auth:
         try:
             import sqlite3
+
             con = sqlite3.connect(flask_app.config["DATABASE"])
             con.execute("UPDATE settings SET auth_enabled=0 WHERE id=1")
             con.commit()
@@ -54,15 +56,12 @@ def main() -> int:
             if "GET" not in rule.methods:
                 continue
 
-            # skip static + api heavy
             if rule.rule.startswith("/static"):
                 continue
 
-            # skip routes with params (/<int:id> etc)
             if "<" in rule.rule and ">" in rule.rule:
                 continue
 
-            # skip logout/login/setup routes (not meaningful in smoke)
             if rule.rule in ("/logout",):
                 continue
 

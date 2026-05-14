@@ -116,7 +116,11 @@
       <div class="relative z-[1] text-[11px] text-slate-400 leading-tight">
         {{ s.libraries_count }} {{ t("libraries") }} · {{ s.users_count }} {{ t("users") }}
       </div>
-
+      {% if s.server_version %}
+      <div class="relative z-[1] text-[11px] text-slate-500 leading-tight">
+        Version: {{ s.server_version }}
+      </div>
+      {% endif %}
     </a>
     {% endfor %}
 
@@ -175,7 +179,12 @@
     <div class="relative z-[1] text-[11px] text-slate-400 leading-tight">
       {{ s.libraries_count }} {{ t("libraries") }} · {{ s.users_count }} {{ t("users") }}
     </div>
-
+    {% if s.server_version %}
+    <div class="relative z-[1] text-[11px] text-slate-500 leading-tight">
+      Version: {{ s.server_version }}
+    </div>
+    {% endif %}
+	
   </a>
   {% endfor %}
 

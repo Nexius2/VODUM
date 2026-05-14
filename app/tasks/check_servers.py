@@ -163,6 +163,7 @@ def run(task_id: int, db):
 
             new_name = old_name
             machine_id = s["server_identifier"]
+            server_version = None
             status = "unknown"
 
             # -----------------------------
@@ -177,6 +178,7 @@ def run(task_id: int, db):
                         break
 
                 if status == "up":
+                    server_version = meta
                     if found_name:
                         new_name = found_name
                     if found_mid and found_mid != machine_id:
@@ -197,6 +199,7 @@ def run(task_id: int, db):
                         break
 
                 if status == "up":
+                    server_version = meta
                     if found_name:
                         new_name = found_name
                     if found_mid and found_mid != machine_id:
@@ -217,10 +220,10 @@ def run(task_id: int, db):
             db.execute(
                 """
                 UPDATE servers
-                SET status=?, last_checked=?, name=?
+                SET status=?, last_checked=?, name=?, server_version=?
                 WHERE id=?
                 """,
-                (status, now, new_name, sid)
+                (status, now, new_name, server_version, sid)
             )
 
         log.info("=== CHECK SERVERS : COMPLETED SUCCESSFULLY ===")
