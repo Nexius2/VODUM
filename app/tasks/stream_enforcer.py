@@ -1,6 +1,7 @@
 import json
 import time
 import ipaddress
+from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
 from core.providers.registry import get_provider
@@ -25,9 +26,264 @@ JELLYFIN_KILL_MESSAGE_SPAM_SLEEP = 1.0 # 1 seconde entre chaque
 JELLYFIN_KILL_MESSAGE_TIMEOUT_MS = 50000  # durée d'affichage de chaque toast
 JELLYFIN_PRE_KILL_DURATION_SECONDS = 60     # 1 minute avant coupure
 JELLYFIN_PRE_KILL_INTERVAL_SECONDS = 10     # un message toutes les 10 secondes
+HOUSEHOLD_TRANSITION_SECONDS = 90
+HOUSEHOLD_MEMORY_SECONDS = 300
+HOUSEHOLD_DEVICE_MATCH_SCORE = 5
+
+_RECENT_SESSION_CACHE: Dict[str, List[dict]] = {}
+
+# -------------------------
+# Smart household helpers
+# -------------------------
+
+def _safe_lower(value) -> str:
+    return str(value or "").strip().lower()
 
 
+def _parse_datetime(value: str):
+    if not value:
+        return None
 
+    value = str(value).replace("T", " ")
+
+    formats = [
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M:%S.%f",
+    ]
+
+    for fmt in formats:
+        try:
+            return datetime.strptime(value, fmt)
+        except Exception:
+            continue
+
+    return None
+
+
+def _seconds_between_sessions(a: dict, b: dict) -> int:
+    a_ts = _parse_datetime(a.get("last_seen_at") or a.get("started_at"))
+    b_ts = _parse_datetime(b.get("last_seen_at") or b.get("started_at"))
+
+    if not a_ts or not b_ts:
+        return 999999
+
+    return int(abs((a_ts - b_ts).total_seconds()))
+
+
+def _same_media_family(a: dict, b: dict) -> bool:
+    a_gp = _safe_lower(a.get("grandparent_title"))
+    b_gp = _safe_lower(b.get("grandparent_title"))
+
+    if a_gp and b_gp and a_gp == b_gp:
+        return True
+
+    a_title = _safe_lower(a.get("title"))
+    b_title = _safe_lower(b.get("title"))
+
+    return bool(a_title and b_title and a_title == b_title)
+
+
+def _extract_machine_identifier(sess: dict) -> str:
+    try:
+        raw = _loads_json(sess.get("raw_json"))
+
+        for key in [
+            "PlayerMachineIdentifier",
+            "MachineIdentifier",
+            "DeviceId",
+            "ClientIdentifier",
+            "clientIdentifier",
+        ]:
+            value = raw.get(key)
+
+            if value:
+                return str(value).strip().lower()
+
+    except Exception as e:
+        logger.debug(
+            "[smart_household] failed to extract machine identifier: %s",
+            e,
+        )
+
+    return ""
+
+
+def _same_subnet(ip1: str, ip2: str) -> bool:
+    try:
+        a = ipaddress.ip_address(ip1)
+        b = ipaddress.ip_address(ip2)
+
+        if a.version != b.version:
+            return False
+
+        if a.version == 4:
+            return str(ip1).split(".")[:3] == str(ip2).split(".")[:3]
+
+        return str(ip1).split(":")[:4] == str(ip2).split(":")[:4]
+
+    except Exception:
+        return False
+
+
+def _household_match_score(a: dict, b: dict) -> int:
+    score = 0
+
+    a_ip = _safe_lower(a.get("ip"))
+    b_ip = _safe_lower(b.get("ip"))
+
+    if a_ip and b_ip and a_ip == b_ip:
+        score += 10
+
+    elif a_ip and b_ip and _same_subnet(a_ip, b_ip):
+        score += 4
+
+    a_machine = _extract_machine_identifier(a)
+    b_machine = _extract_machine_identifier(b)
+
+    if a_machine and b_machine and a_machine == b_machine:
+        score += 10
+
+    a_device = _safe_lower(a.get("device"))
+    b_device = _safe_lower(b.get("device"))
+
+    if a_device and b_device and a_device == b_device:
+        score += 3
+
+    a_client = _safe_lower(a.get("client_product"))
+    b_client = _safe_lower(b.get("client_product"))
+
+    if a_client and b_client and a_client == b_client:
+        score += 2
+
+    if _same_media_family(a, b):
+        score += 2
+
+    delta = _seconds_between_sessions(a, b)
+
+    if delta <= HOUSEHOLD_TRANSITION_SECONDS:
+        score += 3
+
+    return score
+
+
+def _is_probable_same_household(a: dict, b: dict) -> bool:
+    return _household_match_score(a, b) >= HOUSEHOLD_DEVICE_MATCH_SCORE
+
+
+def _deduplicate_household_sessions(sessions: List[dict]) -> List[dict]:
+    kept = []
+
+    _cleanup_recent_session_cache()
+
+    enriched_sessions = []
+
+    for sess in sessions:
+        enriched_sessions.append(sess)
+
+        user_key = str(
+            sess.get("vodum_user_id")
+            or sess.get("external_user_id")
+            or "unknown"
+        )
+
+        previous = _RECENT_SESSION_CACHE.get(user_key, [])
+
+        for old_sess in previous:
+            enriched_sessions.append(old_sess)
+
+    for sess in enriched_sessions:
+        duplicate = False
+
+        for existing in kept:
+            if _is_probable_same_household(sess, existing):
+                duplicate = True
+
+                logger.info(
+                    "[household_dedupe] merged sessions | user=%s | ip_a=%s | ip_b=%s | device_a=%s | device_b=%s | title_a=%s | title_b=%s | score=%s",
+                    sess.get("media_username") or sess.get("external_user_id"),
+                    sess.get("ip"),
+                    existing.get("ip"),
+                    sess.get("device"),
+                    existing.get("device"),
+                    sess.get("title"),
+                    existing.get("title"),
+                    _household_match_score(sess, existing),
+                )
+
+                break
+
+        if not duplicate:
+            kept.append(sess)
+
+            user_key = str(
+                sess.get("vodum_user_id")
+                or sess.get("external_user_id")
+                or "unknown"
+            )
+
+            cache_entry = dict(sess)
+            cache_entry["_cache_ts"] = time.time()
+
+            _RECENT_SESSION_CACHE.setdefault(user_key, []).append(cache_entry)
+
+            # sécurité mémoire
+            if len(_RECENT_SESSION_CACHE[user_key]) > 25:
+                _RECENT_SESSION_CACHE[user_key] = _RECENT_SESSION_CACHE[user_key][-25:]
+
+    logger.debug(
+        "[smart_household] dedupe result original=%s kept=%s",
+        len(sessions),
+        len(kept),
+    )
+
+    return kept
+
+def _cleanup_recent_session_cache():
+    now = time.time()
+
+    for user_key in list(_RECENT_SESSION_CACHE.keys()):
+        kept = []
+
+        for sess in _RECENT_SESSION_CACHE[user_key]:
+            ts = sess.get("_cache_ts", 0)
+
+            if (now - ts) <= HOUSEHOLD_MEMORY_SECONDS:
+                kept.append(sess)
+
+        if kept:
+            _RECENT_SESSION_CACHE[user_key] = kept
+        else:
+            logger.debug(
+                "[smart_household] cleanup cache user=%s",
+                user_key,
+            )
+
+            _RECENT_SESSION_CACHE.pop(user_key, None)
+
+def _debug_log_sessions(user_key: str, sessions: List[dict], reason: str):
+    logger.warning(
+        "[policy_debug] user=%s reason=%s session_count=%s",
+        user_key,
+        reason,
+        len(sessions),
+    )
+
+    for idx, s in enumerate(sessions, start=1):
+        logger.warning(
+            "[policy_debug] #%s | title=%s | grandparent=%s | ip=%s | device=%s | client=%s | transcode=%s | state=%s | started=%s | last_seen=%s | session_key=%s | machine=%s",
+            idx,
+            s.get("title"),
+            s.get("grandparent_title"),
+            s.get("ip"),
+            s.get("device"),
+            s.get("client_product"),
+            s.get("is_transcode"),
+            s.get("state"),
+            s.get("started_at"),
+            s.get("last_seen_at"),
+            s.get("session_key"),
+            _extract_machine_identifier(s),
+        )
 
 # -------------------------
 # Utils
@@ -51,8 +307,11 @@ def _jellyfin_session_id_from_target(target: dict, fallback_session_key: str) ->
         sid = raw.get("Id")
         if sid:
             return str(sid)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(
+            "[stream_enforcer] failed to extract jellyfin session id: %s",
+            e,
+        )
     return str(fallback_session_key)
 
 
@@ -589,24 +848,37 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
                 # VIP: override must supersede stream limitation policies
                 continue
 
+            deduped_sessions = _deduplicate_household_sessions(user_sessions)
+
+            _debug_log_sessions(
+                str(user_key),
+                deduped_sessions,
+                "before_ip_count",
+            )
+
             ips = set()
-            for s in user_sessions:
+
+            for s in deduped_sessions:
                 ip = (s.get("ip") or "").strip() or "unknown"
+
                 if ip == "unknown" and ignore_unknown:
                     continue
+
                 if allow_local_ip and _is_local_ip(ip):
                     continue
+
                 ips.add(ip)
 
             if len(ips) <= max_ips:
                 continue
 
             # ✅ On tue une session du user (selector), sur le serveur de la session ciblée
-            candidates = user_sessions
+            candidates = deduped_sessions
             if allow_local_ip:
-                candidates = [s for s in user_sessions if not _is_local_ip((s.get('ip') or '').strip())]
+                candidates = [s for s in deduped_sessions if not _is_local_ip((s.get('ip') or '').strip())]
+
                 if not candidates:
-                    candidates = user_sessions
+                    candidates = deduped_sessions
 
             target = _pick_kill_target(candidates, selector)
             if not target:
@@ -622,7 +894,7 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
                 "server_id": server_id,
                 "provider": provider,
                 "target_user": user_key,
-                "sessions": user_sessions,
+                "sessions": deduped_sessions,
                 "reason": reason,
                 "selector": selector,
                 "warn_title": warn_title,
@@ -671,6 +943,8 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
 
             server_id = int(target["server_id"])
             provider = target["provider"]
+
+
 
             violations.append({
                 "policy": policy,
