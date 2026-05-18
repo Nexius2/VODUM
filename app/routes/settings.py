@@ -44,6 +44,16 @@ def register(app):
     def settings_save():
         db = get_db()
 
+
+        # plex user gathering mode
+        plex_user_import_mode = request.form.get(
+            "plex_user_import_mode",
+            "global"
+        ).strip().lower()
+
+        if plex_user_import_mode not in ("global", "shared_only"):
+            plex_user_import_mode = "global"
+
         # ------------------------------
         # Charger settings (source unique)
         # ------------------------------
@@ -114,7 +124,8 @@ def register(app):
                 "delete_after_expiry_days",
                 settings["delete_after_expiry_days"],
             ),
-
+            "plex_user_import_mode": plex_user_import_mode,
+            "enable_anonymous_telemetry": 1 if request.form.get("enable_anonymous_telemetry") == "on" else 0,
             # ✅ délais statut (settings ONLY)
             "preavis_days": request.form.get(
                 "preavis_days",
@@ -185,7 +196,8 @@ def register(app):
                 debug_mode = :debug_mode,
                 web_secure_cookies = :web_secure_cookies,
                 web_cookie_samesite = :web_cookie_samesite,
-                web_trust_proxy = :web_trust_proxy
+                web_trust_proxy = :web_trust_proxy,
+                plex_user_import_mode = :plex_user_import_mode
             WHERE id = 1
             """,
             new_values,

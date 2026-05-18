@@ -265,6 +265,14 @@ def run_migrations():
     conn.commit()
 
     # -------------------------------------------------
+    # TELEMETRY SETTINGS
+    # -------------------------------------------------
+    ensure_column(cursor, "settings", "enable_anonymous_telemetry", "INTEGER DEFAULT 1")
+    ensure_column(cursor, "settings", "telemetry_instance_id", "TEXT DEFAULT NULL")
+    ensure_column(cursor, "settings", "telemetry_last_sent_at", "TEXT DEFAULT NULL")
+    conn.commit()
+
+    # -------------------------------------------------
     # USER REFERRAL SETTINGS
     # -------------------------------------------------
     if not table_exists(cursor, "user_referral_settings"):
@@ -605,6 +613,9 @@ def run_migrations():
     ensure_column(cursor, "settings", "backup_retention_days", "INTEGER DEFAULT 30")
     ensure_column(cursor, "settings", "data_retention_years", "INTEGER DEFAULT 0")
     ensure_column(cursor, "settings", "skip_never_used_accounts", "INTEGER DEFAULT 0")
+
+    # Plex settings
+    ensure_column(cursor, "settings", "plex_user_import_mode", "TEXT DEFAULT 'global'")
 
 
     

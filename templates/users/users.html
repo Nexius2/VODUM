@@ -8,7 +8,7 @@
   {% if tab == "users" %}
   <button id="btn_create_user" type="button"
           class="text-sm px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white">
-    + Create user
+    + {{ t("create_user") }}
   </button>
   {% endif %}
 {% endblock %}
@@ -620,8 +620,8 @@ document.addEventListener("DOMContentLoaded", () => {
   <div class="relative max-w-4xl mx-auto mt-16 bg-slate-950 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
     <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800">
       <div>
-        <div class="text-lg font-semibold">Create user</div>
-        <div class="text-sm text-slate-400">Create a user on Plex/Jellyfin and in Vodum, assign libraries, send welcome mail.</div>
+        <div class="text-lg font-semibold">{{ t("create_user") }}</div>
+        <div class="text-sm text-slate-400">{{ t("create_user_modal_description") }}</div>
       </div>
       <button class="text-slate-300 hover:text-white" onclick="VodumCreateUser.close()">✕</button>
     </div>
@@ -698,8 +698,8 @@ document.addEventListener("DOMContentLoaded", () => {
       <!-- SERVERS BLOCKS -->
       <div>
         <div class="flex items-center justify-between mb-2">
-          <div class="text-sm font-semibold">Servers & libraries</div>
-          <button type="button" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700" onclick="VodumCreateUser.addServerBlock()">+ Add server</button>
+          <div class="text-sm font-semibold">{{ t("servers_libraries") }}</div>
+          <button type="button" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700" onclick="VodumCreateUser.addServerBlock()">+ {{ t("add_server") }}</button>
         </div>
 
         <div id="cu_servers_container" class="space-y-4"></div>
@@ -715,8 +715,8 @@ document.addEventListener("DOMContentLoaded", () => {
     </div>
 
     <div class="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-800">
-      <button type="button" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700" onclick="VodumCreateUser.close()">Cancel</button>
-      <button id="cu_submit" type="button" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white" onclick="VodumCreateUser.submit()">Create</button>
+      <button type="button" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700" onclick="VodumCreateUser.close()">{{ t("cancel") }}</button>
+      <button id="cu_submit" type="button" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white" onclick="VodumCreateUser.submit()">{{ t("create") }}</button>
     </div>
   </div>
 </div>
@@ -948,9 +948,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
           <div>
-            <label class="text-xs text-slate-400">Libraries</label>
+            <label class="text-xs text-slate-400">{{ t("libraries") }}</label>
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs max-h-40 overflow-y-auto" data-libs>
-              <div class="text-slate-500">Select a server first</div>
+              <div class="text-slate-500">{{ t("select_server_first") }}</div>
             </div>
           </div>
 

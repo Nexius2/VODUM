@@ -29,7 +29,9 @@ def register(app):
         # --------------------------------------------------
         # Common params
         # --------------------------------------------------
-        search = request.args.get("q", "").strip()
+        search = " ".join(
+            request.args.get("q", "").split()
+        ).strip()
         page = max(request.args.get("page", 1, type=int), 1)
         per_page = 20
         offset = (page - 1) * per_page
@@ -67,6 +69,26 @@ def register(app):
 
             arg_statuses = request.args.getlist("status")
             selected_statuses = arg_statuses if "status" in request.args else cookie_statuses
+
+            valid_statuses = {
+                "active",
+                "pre_expired",
+                "reminder",
+                "expired",
+                "invited",
+                "unfriended",
+                "suspended",
+                "unknown",
+            }
+
+            selected_statuses = [
+                str(s).strip().lower()
+                for s in selected_statuses
+                if str(s).strip().lower() in valid_statuses
+            ]
+
+            if not selected_statuses:
+                selected_statuses = default_statuses[:]
 
             sort = (request.args.get("sort") or cookie_sort or "username").strip()
             order = (request.args.get("order") or cookie_order or "asc").strip().lower()
@@ -172,10 +194,24 @@ def register(app):
                     "COALESCE(u.second_email,'') LIKE ? OR "
                     "COALESCE(u.firstname,'') LIKE ? OR "
                     "COALESCE(u.lastname,'') LIKE ? OR "
-                    "COALESCE(u.notes,'') LIKE ?"
+                    "COALESCE(u.notes,'') LIKE ? OR "
+                    "EXISTS ("
+                    "   SELECT 1 FROM media_users mu_search "
+                    "   WHERE mu_search.vodum_user_id = u.id "
+                    "   AND COALESCE(mu_search.username,'') LIKE ?"
+                    ")"
                     ")"
                 )
-                params.extend([like, like, like, like, like, like])
+
+                params.extend([
+                    like,  # username
+                    like,  # email
+                    like,  # second_email
+                    like,  # firstname
+                    like,  # lastname
+                    like,  # notes
+                    like,  # media_users.username
+                ])
 
             if conditions:
                 query += " WHERE " + " AND ".join(conditions)
@@ -183,9 +219,19 @@ def register(app):
             query += f"""
                 GROUP BY u.id
                 ORDER BY
-                    CASE WHEN {sort_column} IS NULL OR {sort_column} = '' THEN 1 ELSE 0 END ASC,
+                    CASE
+                        WHEN u.status IN ('active', 'pre_expired', 'reminder') THEN 0
+                        ELSE 1
+                    END ASC,
+
+                    CASE
+                        WHEN {sort_column} IS NULL OR {sort_column} = '' THEN 1
+                        ELSE 0
+                    END ASC,
+
                     {sort_column} {order.upper()},
-                    u.username ASC
+                    LOWER(COALESCE(u.username, '')) ASC,
+                    u.id ASC
                 LIMIT ?
                 OFFSET ?
             """

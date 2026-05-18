@@ -25,6 +25,38 @@
       <span class="text-sm text-slate-300">{{ t("debug_mode") }}</span>
     </div>
 
+    <!-- Plex User Import Mode -->
+    <div class="pt-4 mt-4 border-t border-slate-800">
+      <label class="block text-sm font-medium text-white mb-2">
+        {{ t("plex_user_import_mode") }}
+      </label>
+
+      <select
+        name="plex_user_import_mode"
+        class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+      >
+        <option
+          value="global"
+          {% if settings.plex_user_import_mode == 'global' %}selected{% endif %}
+        >
+          {{ t("plex_user_import_mode_global") }}
+        </option>
+
+        <option
+          value="shared_only"
+          {% if settings.plex_user_import_mode == 'shared_only' %}selected{% endif %}
+        >
+          {{ t("plex_user_import_mode_shared_only") }}
+        </option>
+      </select>
+
+      <p class="text-xs text-slate-400 mt-2 leading-relaxed">
+        {{ t("plex_user_import_mode_help") }}
+      </p>
+    </div>
+
+
+	<!-- Securitu settings -->
     <div class="border-t border-slate-800 pt-4 mt-4">
       <h3 class="text-sm font-semibold text-slate-200 mb-1">{{ t("web_security") }}</h3>
       <p class="text-xs text-slate-400 mb-4">

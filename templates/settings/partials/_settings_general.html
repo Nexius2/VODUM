@@ -78,5 +78,103 @@
       <p class="text-xs text-slate-400 mt-1">{{ t("brand_name_hint") }}</p>
     </div>
 
+<!-- Anonymous telemetry -->
+<div class="pt-4 border-t border-slate-800">
+
+  <div class="flex items-center gap-2">
+
+    <label class="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+
+      <input
+        type="checkbox"
+        name="enable_anonymous_telemetry"
+        class="rounded border-slate-700 bg-slate-800"
+        {% if settings.enable_anonymous_telemetry %}checked{% endif %}
+      >
+
+      <span>{{ t("send_anonymous_telemetry") }}</span>
+
+    </label>
+
+    <button
+      type="button"
+      onclick="document.getElementById('telemetry-modal').classList.remove('hidden')"
+      class="w-5 h-5 rounded-full bg-slate-700 hover:bg-slate-600 text-xs text-white"
+    >
+      ?
+    </button>
+
+  </div>
+
+  <p class="text-xs text-slate-400 mt-1">
+    {{ t("telemetry_help_improve") }}
+  </p>
+
+</div>
+
+<!-- Telemetry modal -->
+<div
+  id="telemetry-modal"
+  class="hidden fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+>
+
+  <div class="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl p-6">
+
+    <div class="flex items-center justify-between mb-4">
+
+      <h3 class="text-lg font-semibold text-white">
+        {{ t("anonymous_telemetry") }}
+      </h3>
+
+      <button
+        type="button"
+        onclick="document.getElementById('telemetry-modal').classList.add('hidden')"
+        class="text-slate-400 hover:text-white"
+      >
+        ✕
+      </button>
+
+    </div>
+
+    <div class="space-y-4 text-sm text-slate-300">
+
+      <p>
+        {{ t("telemetry_modal_intro") }}
+      </p>
+
+      <p class="text-green-400 font-medium">
+        {{ t("telemetry_modal_no_private_data") }}
+      </p>
+
+      <div>
+
+        <p class="mb-2">
+          {{ t("telemetry_modal_sent_data") }}
+        </p>
+
+        <ul class="list-disc pl-5 space-y-1 text-slate-400">
+          <li>{{ t("telemetry_data_version") }}</li>
+          <li>{{ t("telemetry_data_platform") }}</li>
+          <li>{{ t("telemetry_data_python") }}</li>
+          <li>{{ t("telemetry_data_docker") }}</li>
+          <li>{{ t("telemetry_data_users") }}</li>
+          <li>{{ t("telemetry_data_plex") }}</li>
+          <li>{{ t("telemetry_data_jellyfin") }}</li>
+          <li>{{ t("telemetry_data_features") }}</li>
+          <li>{{ t("telemetry_data_country") }}</li>
+        </ul>
+
+      </div>
+
+      <p class="text-slate-500 text-xs">
+        {{ t("telemetry_modal_no_sensitive") }}
+      </p>
+
+    </div>
+
+  </div>
+
+</div>
+
   </div>
 </div>

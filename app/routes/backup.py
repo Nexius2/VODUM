@@ -2,7 +2,7 @@
 from datetime import datetime
 from pathlib import Path
 
-from flask import render_template, request, redirect, url_for, flash
+from flask import render_template, request, redirect, url_for, flash, send_file
 from werkzeug.utils import secure_filename
 
 from logging_utils import get_logger
@@ -115,6 +115,47 @@ def register(app):
             plex_servers=plex_servers,
             tautulli_job=tautulli_job,
         )
+
+    @app.route("/backup/download/<path:filename>", methods=["GET"])
+    def download_backup(filename):
+        try:
+            backup_path = _resolve_backup_path(filename)
+
+            return send_file(
+                backup_path,
+                as_attachment=True,
+                download_name=backup_path.name,
+                mimetype="application/octet-stream",
+                max_age=0,
+            )
+
+        except Exception as e:
+            flash(f"Download failed: {e}", "error")
+            return redirect(url_for("backup_page"))
+
+
+
+    @app.route("/backup/delete", methods=["POST"])
+    def delete_backup():
+        try:
+            data = request.get_json(silent=True) or {}
+            filename = data.get("filename")
+
+            if not filename:
+                return {"success": False, "error": "missing filename"}, 400
+
+            if not filename.endswith(".sqlite"):
+                return {"success": False, "error": "invalid backup"}, 400
+
+            backup_path = _resolve_backup_path(filename)
+
+            if backup_path.exists():
+                backup_path.unlink()
+
+            return {"success": True}
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}, 500
 
     @app.route("/backup/action", methods=["POST"])
     def backup_action():

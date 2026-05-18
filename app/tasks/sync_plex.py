@@ -33,6 +33,23 @@ class TimeoutSession(requests.Session):
 
 log = get_logger("sync_plex")
 
+
+def get_plex_user_import_mode(db) -> str:
+    row = db.query_one(
+        "SELECT plex_user_import_mode FROM settings LIMIT 1"
+    )
+
+    if not row:
+        return "global"
+
+    value = str(row["plex_user_import_mode"] or "global").strip().lower()
+
+    if value not in ("global", "shared_only"):
+        return "global"
+
+    return value
+
+
 def _row_value(row, key, default=None):
     try:
         return row[key]
@@ -1015,7 +1032,6 @@ def fetch_admin_account_from_token(token: str) -> Optional[Dict[str, Any]]:
         "subscription_status": None,
         "subscription_plan": None,
 
-        # IMPORTANT: sera rempli plus bas avec tous les serveurs
         "servers": [],
     }
 
@@ -1166,6 +1182,104 @@ def fetch_users_from_plex_api(token: str, db=None) -> Dict[str, Dict[str, Any]]:
     return users
 
 
+def fetch_shared_server_users(
+    token: str,
+    machine_identifier: str,
+    db=None
+) -> Dict[str, Dict[str, Any]]:
+
+    result = {}
+
+    if not token or not machine_identifier:
+        return result
+
+    session = TimeoutSession(timeout=20)
+
+    url = (
+        f"https://plex.tv/api/servers/{machine_identifier}/shared_servers"
+        f"?X-Plex-Token={token}"
+    )
+
+    try:
+        response = session.get(url)
+        response.raise_for_status()
+
+        root = ET.fromstring(response.content)
+
+        for server in root.findall("Server"):
+
+            user = server.find("User")
+
+            source = user if user is not None else server
+
+            plex_id = str(
+                source.attrib.get("id")
+                or source.attrib.get("userID")
+                or ""
+            ).strip()
+
+            if not plex_id:
+                continue
+
+            username = (
+                source.attrib.get("username")
+                or source.attrib.get("title")
+                or source.attrib.get("name")
+                or f"plex_{plex_id}"
+            )
+
+            email = source.attrib.get("email") or None
+
+            thumb = (
+                source.attrib.get("thumb")
+                or source.attrib.get("avatar")
+                or ""
+            )
+
+            home = str(
+                source.attrib.get("home")
+                or "0"
+            ).lower() in ("1", "true")
+
+            restricted = str(
+                source.attrib.get("restricted")
+                or "0"
+            ).lower() in ("1", "true")
+
+            allow_sync = str(
+                source.attrib.get("allowSync")
+                or "0"
+            ).lower() in ("1", "true")
+
+            result[plex_id] = {
+                "plex_id": plex_id,
+                "username": username,
+                "email": email,
+                "avatar": thumb,
+                "plex_role": "friend",
+                "home": home,
+                "protected": False,
+                "restricted": restricted,
+                "allow_sync": allow_sync,
+                "allow_camera_upload": False,
+                "allow_channels": False,
+                "joined_at": None,
+                "accepted_at": None,
+                "servers": [
+                    {
+                        "machineIdentifier": machine_identifier
+                    }
+                ]
+            }
+
+
+    except Exception as e:
+        log.error(
+            f"[SYNC USERS] shared_servers failed for {machine_identifier}: {e}"
+        )
+
+    return result
+
 
 # ---------------------------------------------------------------------------
 # Sync USERS + user_servers (à partir de /api/users)
@@ -1173,13 +1287,24 @@ def fetch_users_from_plex_api(token: str, db=None) -> Dict[str, Dict[str, Any]]:
 def sync_users_from_api(db) -> None:
     log.info("=== [SYNC USERS] Starting Plex user synchronization (API Plex.tv) ===")
 
+    import_mode = get_plex_user_import_mode(db)
+
+    log.info(
+        f"[SYNC USERS] using import_mode={import_mode} "
+        f"for entire synchronization run"
+    )
+
+    log.info(
+        f"[SYNC USERS] plex_user_import_mode={import_mode}"
+    )
+
     # ----------------------------------------------------
     # 1) Récupérer TOUS les serveurs Plex avec token
     #    (PAS de dédupe par token : on exécute /api/users par serveur)
     # ----------------------------------------------------
     server_rows = db.query(
         """
-        SELECT id, name, token
+        SELECT id, name, token, server_identifier
         FROM servers
         WHERE type='plex'
           AND token IS NOT NULL
@@ -1249,14 +1374,46 @@ def sync_users_from_api(db) -> None:
 
     for idx, srv in enumerate(server_rows, start=1):
         token = (srv["token"] or "").strip()
+
         if not token:
+            log.warning(
+                f"[SYNC USERS] {srv['name']}: missing Plex token"
+            )
             continue
 
-        log.info(f"[SYNC USERS] server #{idx}/{len(server_rows)}: {srv['name']} (server_id={srv['id']}) -> /api/users")
+        machine_identifier = (
+            srv["server_identifier"] or ""
+        ).strip()
 
-        data = fetch_users_from_plex_api(token, db=db)
+        if import_mode == "shared_only":
+            log.info(
+                f"[SYNC USERS] server #{idx}/{len(server_rows)}: "
+                f"{srv['name']} (server_id={srv['id']}) -> /shared_servers"
+            )
+
+            data = fetch_shared_server_users(
+                token=token,
+                machine_identifier=machine_identifier,
+                db=db
+            )
+
+        else:
+            log.info(
+                f"[SYNC USERS] server #{idx}/{len(server_rows)}: "
+                f"{srv['name']} (server_id={srv['id']}) -> /api/users"
+            )
+
+            data = fetch_users_from_plex_api(token, db=db)
         if not data:
-            log.warning(f"[SYNC USERS] {srv['name']}: /api/users blank or error")
+            endpoint_name = (
+                "/shared_servers"
+                if import_mode == "shared_only"
+                else "/api/users"
+            )
+
+            log.warning(
+                f"[SYNC USERS] {srv['name']}: {endpoint_name} blank or error"
+            )
             continue
 
         servers_ok += 1

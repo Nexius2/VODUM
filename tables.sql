@@ -299,7 +299,15 @@ CREATE TABLE IF NOT EXISTS settings (
     discord_bot_id INTEGER DEFAULT NULL,
 
     mailing_enabled INTEGER DEFAULT 0,
-    skip_never_used_accounts INTEGER DEFAULT 0
+    skip_never_used_accounts INTEGER DEFAULT 0,
+	
+	plex_user_import_mode TEXT DEFAULT 'global',
+
+	-- Telemetry
+	enable_anonymous_telemetry INTEGER DEFAULT 1,
+	telemetry_instance_id TEXT DEFAULT NULL,
+	telemetry_last_sent_at TEXT DEFAULT NULL
+
 );
 
 -----------------------------------------------------------------------
