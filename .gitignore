@@ -50,4 +50,5 @@ instance/
 
 # Files
 create-container-test.sh
+create-container.sh
 get-container.sh

@@ -7,6 +7,7 @@ import os
 
 from db_manager import DBManager
 from logging_utils import get_logger
+from tasks.send_telemetry import run as send_telemetry
 
 # -------------------------------------------------------------------
 # DB / LOGGER
@@ -1437,6 +1438,14 @@ def run_auto_enable_pass():
             exc_info=True
         )
 
+    # -------------------------------------------------
+    # TELEMETRY
+    # -------------------------------------------------
+    try:
+        send_telemetry()
+    except Exception:
+        pass
+
 def _recover_scheduler_state_at_boot():
     """
     Répare l'état des tâches au démarrage du scheduler.
@@ -1678,6 +1687,63 @@ def scheduler_loop():
         except Exception as e:
             logger.error(f"Error scheduler (global): {e}", exc_info=True)
 
+        # -------------------------------------------------
+        # TELEMETRY
+        # -------------------------------------------------
+        try:
+
+            settings = db.query_one(
+                """
+                SELECT
+                    enable_anonymous_telemetry,
+                    telemetry_last_sent_at
+                FROM settings
+                WHERE id = 1
+                """
+            )
+
+            if (
+                settings
+                and int(settings["enable_anonymous_telemetry"] or 0) == 1
+            ):
+
+                should_send = False
+
+                last_sent = settings["telemetry_last_sent_at"]
+
+                if not last_sent:
+
+                    should_send = True
+
+                else:
+
+                    check = db.query_one(
+                        """
+                        SELECT
+                            telemetry_last_sent_at <= datetime('now', '-7 days')
+                            AS expired
+                        FROM settings
+                        WHERE id = 1
+                        """
+                    )
+
+                    should_send = bool(check["expired"])
+
+                if should_send:
+
+                    logger.info(
+                        "Executing scheduled telemetry sync"
+                    )
+
+                    send_telemetry(0, db)
+
+        except Exception as e:
+
+            logger.warning(
+                f"Telemetry scheduler error: {e}",
+                exc_info=True
+            )
+
         time.sleep(30)
 
 
@@ -1746,3 +1812,35 @@ def start_scheduler():
     scheduler_thread.start()
 
     logger.info("Scheduler started")
+
+    # -------------------------------------------------
+    # TELEMETRY FIRST SYNC
+    # -------------------------------------------------
+    try:
+
+        settings = db.query_one(
+            """
+            SELECT
+                enable_anonymous_telemetry,
+                telemetry_last_sent_at
+            FROM settings
+            WHERE id = 1
+            """
+        )
+
+        if (
+            settings
+            and int(settings["enable_anonymous_telemetry"] or 0) == 1
+            and not settings["telemetry_last_sent_at"]
+        ):
+
+            logger.info("Running first telemetry sync")
+
+            send_telemetry(0, db)
+
+    except Exception as e:
+
+        logger.warning(
+            f"Unable to execute telemetry first sync: {e}",
+            exc_info=True
+        )
