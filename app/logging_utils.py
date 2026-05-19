@@ -102,6 +102,18 @@ class AnonymizeFilter(logging.Filter):
         r'(?i)\b(x-plex-token|token|authorization|bearer)\b\s*[:=]\s*[a-z0-9\-._]+'
     )
 
+    BEARER_REGEX = re.compile(
+        r'(?i)(authorization\s*:\s*bearer\s+)([a-z0-9\-._~+/]+=*)'
+    )
+
+    QUERY_TOKEN_REGEX = re.compile(
+        r'(?i)(x-plex-token=|token=)([^&\s]+)'
+    )
+
+    IP_REGEX = re.compile(
+        r'\b(?:\d{1,3}\.){3}\d{1,3}\b'
+    )
+
     def filter(self, record: logging.LogRecord) -> bool:
         # 🧪 Debug actif → logs NON anonymisés
         if is_debug_mode_enabled():
@@ -118,6 +130,24 @@ class AnonymizeFilter(logging.Filter):
         # 🔑 Tokens → REDACTED
         msg = self.TOKEN_REGEX.sub(
             lambda m: f"{m.group(1)}=***REDACTED***",
+            msg
+        )
+
+        # Bearer tokens
+        msg = self.BEARER_REGEX.sub(
+            lambda m: f"{m.group(1)}***REDACTED***",
+            msg
+        )
+
+        # Querystring tokens
+        msg = self.QUERY_TOKEN_REGEX.sub(
+            lambda m: f"{m.group(1)}***REDACTED***",
+            msg
+        )
+
+        # IP anonymization
+        msg = self.IP_REGEX.sub(
+            "***.***.***.***",
             msg
         )
 

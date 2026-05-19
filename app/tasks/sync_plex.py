@@ -1325,59 +1325,7 @@ def fetch_shared_server_users(
                 ]
             }
 
-            if not plex_id:
-                continue
 
-            username = (
-                source.attrib.get("username")
-                or source.attrib.get("title")
-                or source.attrib.get("name")
-                or f"plex_{plex_id}"
-            )
-
-            email = source.attrib.get("email") or None
-
-            thumb = (
-                source.attrib.get("thumb")
-                or source.attrib.get("avatar")
-                or ""
-            )
-
-            home = str(
-                source.attrib.get("home")
-                or "0"
-            ).lower() in ("1", "true")
-
-            restricted = str(
-                source.attrib.get("restricted")
-                or "0"
-            ).lower() in ("1", "true")
-
-            allow_sync = str(
-                source.attrib.get("allowSync")
-                or "0"
-            ).lower() in ("1", "true")
-
-            result[plex_id] = {
-                "plex_id": plex_id,
-                "username": username,
-                "email": email,
-                "avatar": thumb,
-                "plex_role": "friend",
-                "home": home,
-                "protected": False,
-                "restricted": restricted,
-                "allow_sync": allow_sync,
-                "allow_camera_upload": False,
-                "allow_channels": False,
-                "joined_at": None,
-                "accepted_at": None,
-                "servers": [
-                    {
-                        "machineIdentifier": machine_identifier
-                    }
-                ]
-            }
 
 
     except Exception as e:

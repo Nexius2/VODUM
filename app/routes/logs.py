@@ -5,7 +5,7 @@ from datetime import datetime
 
 from flask import Response, render_template, request
 
-from logging_utils import read_all_logs
+from logging_utils import read_all_logs, AnonymizeFilter, LOG_FILE
 from web.helpers import get_db
 
 def register(app):
@@ -124,33 +124,16 @@ def register(app):
 
     @app.route("/logs/download")
     def download_logs():
-        log_path = "/logs/app.log"
-
-        # Même règles d’anonymisation que logging_utils
-        EMAIL_REGEX = re.compile(
-            r'([a-zA-Z0-9._%+-])([a-zA-Z0-9._%+-]*)(@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
-        )
-        TOKEN_REGEX = re.compile(
-            r'(?i)\b(x-plex-token|token|authorization|bearer)\b\s*[:=]\s*[a-z0-9\-._]+'
-        )
-
-        def anonymize(line: str) -> str:
-            line = EMAIL_REGEX.sub(
-                lambda m: f"{m.group(1)}{'*' * len(m.group(2))}{m.group(3)}",
-                line
-            )
-            line = TOKEN_REGEX.sub(
-                lambda m: f"{m.group(1)}=***REDACTED***",
-                line
-            )
-            return line
+        log_path = LOG_FILE
 
         output = []
 
         try:
             with open(log_path, "r", encoding="utf-8") as f:
                 for line in f:
-                    output.append(anonymize(line))
+                    record = type("Record", (), {"msg": line, "args": (), "getMessage": lambda self: self.msg})()
+                    AnonymizeFilter().filter(record)
+                    output.append(record.msg)
         except FileNotFoundError:
             output.append("No logs available.\n")
 

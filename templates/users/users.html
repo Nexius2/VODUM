@@ -76,24 +76,18 @@
 
 {% if tab == "users" %}
 <!-- Filtres -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-6 flex flex-col justify-center min-h-[124px]">
-<div class="flex items-center justify-between gap-4 mb-4">
-  <div>
-    <div class="text-sm font-semibold text-slate-100">{{ total_users }} {{ t("users") }}</div>
-    <div class="text-xs text-slate-500">
-      {{ t("search") }}, {{ t("status") }}, {{ t("expiration") }}, {{ t("servers") }}, {{ t("libraries") }}
-    </div>
-  </div>
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-6">
+  <div class="flex justify-between items-start gap-4">
 
-	<button id="btn_create_user"
-			type="button"
-			class="text-sm px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/30">
-    + {{ t("create_user") }}
-	</button>
-</div>
+    <div>
+      <div class="text-sm font-semibold text-slate-100">{{ total_users }} {{ t("users") }}</div>
 
-<form method="get" id="users_filter_form" class="flex flex-wrap items-center gap-3">
-  <input type="hidden" name="tab" value="users">
+      <div class="text-xs text-slate-500 mb-4">
+        {{ t("search") }}, {{ t("status") }}, {{ t("expiration") }}, {{ t("servers") }}, {{ t("libraries") }}
+      </div>
+
+      <form method="get" id="users_filter_form" class="flex flex-wrap items-center gap-3">
+        <input type="hidden" name="tab" value="users">
 
     <!-- Search -->
     <input type="text"
@@ -145,16 +139,19 @@
 	  </div>
 	</details>
 
-<!-- 
-    <button class="text-sm px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white">
-        {{ t("filter") }}
-    </button>
 
-    <a href="{{ url_for('users_list') }}"
-       class="text-sm px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700">
-        {{ t("reset") }}
-    </a>-->
-</form>
+      </form>
+    </div>
+
+    <div class="flex items-center self-center">
+      <button id="btn_create_user"
+              type="button"
+              class="text-sm px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/30">
+        + {{ t("create_user") }}
+      </button>
+    </div>
+
+  </div>
 </div>
 
 
@@ -583,7 +580,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     <div class="mt-6 bg-slate-950 border border-slate-800 rounded-2xl p-4">
       <div class="text-sm font-medium text-slate-200 mb-1">{{ t("referral_eligible_statuses") }}</div>
-      <div class="text-xs text-slate-500 mb-4">{{ t("referral_eligible_statuses_help") }}</div>
+      <div class="text-xs text-slate-500 mb-3">{{ t("referral_eligible_statuses_help") }}</div>
 
       {% set _eligible = (referral_settings.eligible_statuses or 'active').split(',') %}
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
