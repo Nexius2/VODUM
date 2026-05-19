@@ -85,7 +85,7 @@ def _same_media_family(a: dict, b: dict) -> bool:
 
 def _extract_machine_identifier(sess: dict) -> str:
     try:
-        raw = _loads_json(sess.get("raw_json"))
+        raw = sess.get("_parsed_raw_json") or {}
 
         for key in [
             "PlayerMachineIdentifier",
@@ -176,9 +176,14 @@ def _deduplicate_household_sessions(sessions: List[dict]) -> List[dict]:
     _cleanup_recent_session_cache()
 
     enriched_sessions = []
+    seen_session_keys = set()
 
     for sess in sessions:
-        enriched_sessions.append(sess)
+        session_key = str(sess.get("session_key") or "")
+
+        if session_key and session_key not in seen_session_keys:
+            enriched_sessions.append(sess)
+            seen_session_keys.add(session_key)
 
         user_key = str(
             sess.get("vodum_user_id")
@@ -189,7 +194,16 @@ def _deduplicate_household_sessions(sessions: List[dict]) -> List[dict]:
         previous = _RECENT_SESSION_CACHE.get(user_key, [])
 
         for old_sess in previous:
+            old_key = str(old_sess.get("session_key") or "")
+
+            # Avoid reprocessing same session repeatedly
+            if old_key and old_key in seen_session_keys:
+                continue
+
             enriched_sessions.append(old_sess)
+
+            if old_key:
+                seen_session_keys.add(old_key)
 
     for sess in enriched_sessions:
         duplicate = False
@@ -198,7 +212,7 @@ def _deduplicate_household_sessions(sessions: List[dict]) -> List[dict]:
             if _is_probable_same_household(sess, existing):
                 duplicate = True
 
-                logger.info(
+                logger.debug(
                     "[household_dedupe] merged sessions | user=%s | ip_a=%s | ip_b=%s | device_a=%s | device_b=%s | title_a=%s | title_b=%s | score=%s",
                     sess.get("media_username") or sess.get("external_user_id"),
                     sess.get("ip"),
@@ -303,7 +317,7 @@ def _jellyfin_session_id_from_target(target: dict, fallback_session_key: str) ->
     Fallback to current session_key.
     """
     try:
-        raw = _loads_json(target.get("raw_json"))
+        raw = target.get("_parsed_raw_json") or {}
         sid = raw.get("Id")
         if sid:
             return str(sid)
@@ -457,7 +471,10 @@ def _build_enforcement_snapshot(
         raw_parsed = None
         if raw_value:
             try:
-                raw_parsed = json.loads(raw_value)
+                raw_parsed = sess.get("_parsed_raw_json")
+
+                if raw_parsed is None:
+                    raw_parsed = json.loads(raw_value)
             except Exception:
                 raw_parsed = raw_value
 
@@ -626,7 +643,19 @@ def _load_live_sessions() -> List[dict]:
         _now_sql_window(),
         f"-{int(LIVE_STABLE_SECONDS)} seconds",
     ))
-    return [dict(r) for r in rows]
+    sessions = []
+
+    for r in rows:
+        sess = dict(r)
+
+        try:
+            sess["_parsed_raw_json"] = _loads_json(sess.get("raw_json"))
+        except Exception:
+            sess["_parsed_raw_json"] = {}
+
+        sessions.append(sess)
+
+    return sessions
 
 
 def _policy_applies(policy: dict, sess: dict) -> bool:
@@ -738,16 +767,62 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
 
     violations: List[dict] = []
 
+    # --------------------------------------------------
+    # Fast pre-checks to avoid useless policy scans
+    # --------------------------------------------------
+
+    scope_type = policy.get("scope_type")
+    scope_id = policy.get("scope_id")
+    server_id = policy.get("server_id")
+    provider = (policy.get("provider") or "").strip().lower()
+
+    # Skip provider instantly
+    if provider:
+        has_provider_match = any(
+            (s.get("provider") or "").strip().lower() == provider
+            for s in sessions
+        )
+
+        if not has_provider_match:
+            return violations
+
+    # Skip server instantly
+    if server_id:
+        has_server_match = any(
+            int(s.get("server_id", 0)) == int(server_id)
+            for s in sessions
+        )
+
+        if not has_server_match:
+            return violations
+
+    # Skip user instantly
+    if scope_type == "user" and scope_id:
+        has_user_match = any(
+            int(s.get("vodum_user_id") or 0) == int(scope_id)
+            for s in sessions
+        )
+
+        if not has_user_match:
+            return violations
+
+    # Real scoped filtering only if needed
     scoped = [s for s in sessions if _policy_applies(policy, s)]
+
+    # Nothing in scope
+    if not scoped:
+        return violations
     
     # Visibilité : combien de sessions sont réellement dans le scope de cette policy
     try:
-        logger.debug(
-            "[stream_enforcer] policy_scope_check "
-            f"id={policy.get('id')} priority={policy.get('priority')} rule={policy.get('rule_type')} "
-            f"scope={policy.get('scope_type')}:{policy.get('scope_id')} provider={policy.get('provider') or '*'} "
-            f"server_id={policy.get('server_id') or '*'} scoped_sessions={len(scoped)}/{len(sessions)}"
-        )
+        # Only log policies that actually match sessions
+        if scoped:
+            logger.debug(
+                "[stream_enforcer] policy_scope_check "
+                f"id={policy.get('id')} "
+                f"rule={policy.get('rule_type')} "
+                f"scoped_sessions={len(scoped)}"
+            )
     except Exception:
         pass
 
@@ -850,11 +925,12 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
 
             deduped_sessions = _deduplicate_household_sessions(user_sessions)
 
-            _debug_log_sessions(
-                str(user_key),
-                deduped_sessions,
-                "before_ip_count",
-            )
+            if len(deduped_sessions) > 1:
+                _debug_log_sessions(
+                    str(user_key),
+                    deduped_sessions,
+                    "before_ip_count",
+                )
 
             ips = set()
 

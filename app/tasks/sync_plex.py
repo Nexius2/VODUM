@@ -444,9 +444,65 @@ def plex_get_user_access(db, plex, server_name, media_user_id: int):
 
     try:
         account = plex.myPlexAccount()
-        user_acct = account.user(user_email)
+
+        user_acct = None
+
+        masked_email = "unknown"
+
+        if user_email and "@" in user_email:
+            name, domain = user_email.split("@", 1)
+
+            if len(name) > 2:
+                masked_email = f"{name[0]}*****@{domain}"
+            else:
+                masked_email = f"*****@{domain}"
+
+        # Retry via email
+        for attempt in range(3):
+            try:
+                user_acct = account.user(user_email)
+
+                if user_acct:
+                    break
+
+            except Exception as retry_error:
+                log.warning(
+                    f"[ACCESS] Plex lookup retry "
+                    f"{attempt + 1}/3 failed for {masked_email}: "
+                    f"{retry_error}"
+                )
+
+                time.sleep(2)
+
+        # Fallback username
+        if not user_acct:
+            username = media_user.get("username")
+
+            if username:
+                try:
+                    user_acct = account.user(username)
+
+                    if user_acct:
+                        log.info(
+                            f"[ACCESS] Plex lookup recovered "
+                            f"via username for {masked_email}"
+                        )
+
+                except Exception:
+                    pass
+
+        if not user_acct:
+            log.warning(
+                f"[ACCESS] Plex user not found "
+                f"for {masked_email}"
+            )
+            return None
+
     except Exception as e:
-        log.error(f"[ACCESS] Unable to retrieve Plex information for {user_email}: {e}")
+        log.error(
+            f"[ACCESS] Unable to retrieve Plex information "
+            f"for {masked_email}: {e}"
+        )
         return None
 
     out = []
@@ -1206,17 +1262,68 @@ def fetch_shared_server_users(
 
         root = ET.fromstring(response.content)
 
-        for server in root.findall("Server"):
-
-            user = server.find("User")
-
-            source = user if user is not None else server
+        for shared in root.findall("SharedServer"):
 
             plex_id = str(
-                source.attrib.get("id")
-                or source.attrib.get("userID")
+                shared.attrib.get("userID")
+                or shared.attrib.get("userId")
+                or shared.attrib.get("id")
                 or ""
             ).strip()
+
+            if not plex_id:
+                continue
+
+            username = (
+                shared.attrib.get("username")
+                or shared.attrib.get("title")
+                or shared.attrib.get("name")
+                or f"plex_{plex_id}"
+            )
+
+            email = shared.attrib.get("email") or None
+
+            thumb = (
+                shared.attrib.get("thumb")
+                or shared.attrib.get("avatar")
+                or ""
+            )
+
+            home = str(
+                shared.attrib.get("home")
+                or "0"
+            ).lower() in ("1", "true")
+
+            restricted = str(
+                shared.attrib.get("restricted")
+                or "0"
+            ).lower() in ("1", "true")
+
+            allow_sync = str(
+                shared.attrib.get("allowSync")
+                or "0"
+            ).lower() in ("1", "true")
+
+            result[plex_id] = {
+                "plex_id": plex_id,
+                "username": username,
+                "email": email,
+                "avatar": thumb,
+                "plex_role": "friend",
+                "home": home,
+                "protected": False,
+                "restricted": restricted,
+                "allow_sync": allow_sync,
+                "allow_camera_upload": False,
+                "allow_channels": False,
+                "joined_at": shared.attrib.get("invitedAt"),
+                "accepted_at": shared.attrib.get("acceptedAt"),
+                "servers": [
+                    {
+                        "machineIdentifier": machine_identifier
+                    }
+                ]
+            }
 
             if not plex_id:
                 continue
@@ -1274,8 +1381,19 @@ def fetch_shared_server_users(
 
 
     except Exception as e:
+        body_preview = ""
+
+        try:
+            body_preview = response.text[:500]
+        except Exception:
+            pass
+
         log.error(
-            f"[SYNC USERS] shared_servers failed for {machine_identifier}: {e}"
+            f"[SYNC USERS] shared_servers failed | "
+            f"machine_identifier={machine_identifier} | "
+            f"url={url} | "
+            f"error={e} | "
+            f"response_preview={body_preview}"
         )
 
     return result
@@ -1412,8 +1530,12 @@ def sync_users_from_api(db) -> None:
             )
 
             log.warning(
-                f"[SYNC USERS] {srv['name']}: {endpoint_name} blank or error"
+                f"[SYNC USERS] {srv['name']}: {endpoint_name} returned no data | "
+                f"server_id={srv['id']} | "
+                f"machine_identifier={machine_identifier or 'missing'} | "
+                f"token_present={'yes' if token else 'no'}"
             )
+
             continue
 
         servers_ok += 1
@@ -1426,7 +1548,11 @@ def sync_users_from_api(db) -> None:
                 users_data[plex_id] = u
 
     if not users_data:
-        raise RuntimeError("[SYNC USERS] No users returned by Plex.tv (all servers).")
+        log.warning(
+            "[SYNC USERS] Plex.tv returned no users for all servers. "
+            "Keeping existing database state and skipping destructive sync."
+        )
+        return
 
     log.info(
         f"[SYNC USERS] /api/users global MERGE: {len(users_data)} uniques user(s) "

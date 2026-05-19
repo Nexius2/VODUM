@@ -67,6 +67,64 @@ scheduler_start_lock = threading.Lock()
 scheduler_started = False
 
 
+# -------------------------------------------------------------------
+# Forced task enqueue
+# -------------------------------------------------------------------
+forced_task_runs = set()
+forced_task_runs_lock = threading.Lock()
+
+# -------------------------------------------------------------------
+# Auto-enable dirty state
+# -------------------------------------------------------------------
+auto_enable_dirty = True
+auto_enable_dirty_lock = threading.Lock()
+
+
+def mark_auto_enable_dirty():
+	global auto_enable_dirty
+
+	with auto_enable_dirty_lock:
+		auto_enable_dirty = True
+
+
+def consume_auto_enable_dirty() -> bool:
+	global auto_enable_dirty
+
+	with auto_enable_dirty_lock:
+
+		if auto_enable_dirty:
+			auto_enable_dirty = False
+			return True
+
+	return False
+
+def force_task_run(task_name: str):
+	"""
+	Force une tâche à être exécutée au prochain tick scheduler,
+	sans attendre son prochain cron.
+	"""
+	global forced_task_runs
+
+	with forced_task_runs_lock:
+		forced_task_runs.add(task_name)
+
+
+def consume_forced_task_run(task_name: str) -> bool:
+	"""
+	Consomme un forced run.
+	Retourne True si la tâche était marquée.
+	"""
+	global forced_task_runs
+
+	with forced_task_runs_lock:
+
+		if task_name in forced_task_runs:
+			forced_task_runs.remove(task_name)
+			return True
+
+	return False
+
+
 def _start_task_worker_locked():
     """
     Démarre le worker de tâches.
@@ -568,6 +626,18 @@ def prepare_restored_database(restored_db):
 
 def recover_stuck_tasks(max_minutes=30):
     try:
+        row = db.query_one(
+            """
+            SELECT COUNT(*) AS cnt
+            FROM tasks
+            WHERE status = 'running'
+              AND datetime(updated_at) < datetime('now', ?)
+            """,
+            (f'-{max_minutes} minutes',)
+        )
+
+        if not row or int(row["cnt"] or 0) <= 0:
+            return
         db.execute(
             """
             UPDATE tasks
@@ -592,7 +662,7 @@ def recover_stuck_tasks(max_minutes=30):
 def _watchdog_loop():
     while True:
         recover_stuck_tasks()
-        time.sleep(30)
+        time.sleep(300)
 
 
 # -------------------------------------------------------------------
@@ -725,6 +795,12 @@ def _kick_worker_if_needed():
     jamais repasser par enqueue_task() -> donc sans démarrer le worker.
     """
     global worker_running
+
+    # -------------------------------------------------
+    # Worker déjà actif → inutile de requêter SQLite
+    # -------------------------------------------------
+    if worker_running:
+        return
 
     try:
         row = db.query_one("SELECT COUNT(*) AS cnt FROM tasks WHERE queued_count > 0 AND enabled = 1")
@@ -1003,7 +1079,13 @@ def _process_task_result(task_id: int, task_name: str, result, start_time: float
     """
     if result is not None:
         try:
-            logger.info(f"Task '{task_name}' returned: {result}")
+            if result:
+                logger.info(f"Task '{task_name}' returned data")
+                task_logs(
+                    task_id,
+                    "info",
+                    f"Task '{task_name}' returned data"
+                )
             task_logs(task_id, "info", f"Task '{task_name}' returned", details=result)
         except Exception as log_exc:
             logger.warning(
@@ -1473,7 +1555,7 @@ def _recover_scheduler_state_at_boot():
     except Exception as e:
         logger.warning(f"Recovery tasks failed: {e}", exc_info=True)
 
-def _run_scheduler_tick(now):
+def _run_scheduler_tick(now, run_auto_enable=True):
     """
     Exécute un tick complet du scheduler cron :
     - auto-enable / auto-disable des tâches dépendantes
@@ -1487,7 +1569,8 @@ def _run_scheduler_tick(now):
     # -------------------------------------------------
     # 0) Auto-enable / disable des tâches dépendantes
     # -------------------------------------------------
-    run_auto_enable_pass()
+    if run_auto_enable:
+        run_auto_enable_pass()
 
     # -------------------------------------------------
     # 1) Charger les tâches actives
@@ -1495,11 +1578,20 @@ def _run_scheduler_tick(now):
     try:
         rows = db.query(
             """
-            SELECT
-                id, name, schedule, enabled, last_run, next_run, status,
-                retry_count, max_retries, next_retry_at
-            FROM tasks
-            WHERE enabled = 1
+                SELECT
+                    id,
+                    name,
+                    schedule,
+                    enabled,
+                    last_run,
+                    next_run,
+                    status,
+                    queued_count,
+                    retry_count,
+                    max_retries,
+                    next_retry_at
+                FROM tasks
+                WHERE enabled = 1
             """
         )
     except Exception as e:
@@ -1553,10 +1645,8 @@ def _run_scheduler_tick(now):
             continue
 
         # Anti-spam: si déjà en file ou en cours, on n'enfile pas plus
-        queued_count = None
         try:
-            qc = db.query_one("SELECT queued_count FROM tasks WHERE id = ?", (task_id,))
-            queued_count = int(qc["queued_count"]) if qc else 0
+            queued_count = int(row["queued_count"] or 0)
         except Exception:
             queued_count = 0
 
@@ -1638,10 +1728,17 @@ def _run_scheduler_tick(now):
             continue
 
         # Exécution planifiée (rattrapage 1x, sans catch-up)
-        if next_exec <= now:
-            logger.info(f"Scheduled task due (late): {name}")
+        forced_run = consume_forced_task_run(name)
+
+        if forced_run or next_exec <= now:
+
+            if forced_run:
+                logger.info(f"Forced task execution: {name}")
+            else:
+                logger.info(f"Scheduled task due (late): {name}")
 
             enqueued = enqueue_task(task_id)
+
             if not enqueued:
                 logger.warning(
                     f"Scheduled execution enqueue refused for '{name}' (id={task_id}); keeping next_run unchanged"
@@ -1651,15 +1748,23 @@ def _run_scheduler_tick(now):
             # IMPORTANT: on décale next_run dans le futur seulement si l'enqueue a réussi
             try:
                 next_future = croniter(schedule, now).get_next(datetime)
+
                 db.execute(
                     "UPDATE tasks SET next_run = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                     (next_future, task_id),
                 )
+
             except Exception as e:
+
                 # si DB locked, on évite de spammer: la tâche reste queueée de toute façon
                 if "locked" in str(e).lower():
-                    logger.warning(f"DB locked while updating next_run for '{name}' after enqueue")
+
+                    logger.warning(
+                        f"DB locked while updating next_run for '{name}' after enqueue"
+                    )
+
                     continue
+
                 raise
 
     return True
@@ -1682,8 +1787,16 @@ def scheduler_loop():
         now = datetime.now()
         _kick_worker_if_needed()
 
+        # -------------------------------------------------
+        # Auto-enable pass uniquement si nécessaire
+        # -------------------------------------------------
+        should_run_auto_enable = consume_auto_enable_dirty()
+
         try:
-            _run_scheduler_tick(now)
+            _run_scheduler_tick(
+                now,
+                run_auto_enable=should_run_auto_enable
+            )
         except Exception as e:
             logger.error(f"Error scheduler (global): {e}", exc_info=True)
 
