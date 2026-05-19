@@ -501,7 +501,37 @@ def register(app):
             return redirect(url_for("servers"))
         name = f"{server_type.upper()} - pending"
 
-        url = request.form.get("url") or None
+        url = (request.form.get("url") or "").strip()
+
+        # --------------------------------------------------
+        # Normalize Plex/Jellyfin URLs
+        # --------------------------------------------------
+        url = url.rstrip("/")
+
+        if url.endswith("/web/index.html"):
+            url = url[:-15]
+
+        if url.endswith("/web"):
+            url = url[:-4]
+
+        url = url.rstrip("/")
+
+        # --------------------------------------------------
+        # Basic validation
+        # --------------------------------------------------
+        if not url.startswith(("http://", "https://")):
+            flash("Server URL must start with http:// or https://", "error")
+            return redirect(url_for("servers_list"))
+
+        # --------------------------------------------------
+        # Detect invalid Plex web UI URLs
+        # --------------------------------------------------
+        if "/web/" in url or url.endswith("/web"):
+            flash(
+                "Invalid Plex URL detected. Please use the server base URL without /web",
+                "error",
+            )
+            return redirect(url_for("servers_list"))
         local_url = request.form.get("local_url") or None
         public_url = request.form.get("public_url") or None
         token = request.form.get("token") or None
