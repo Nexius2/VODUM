@@ -3,7 +3,7 @@ import json
 import uuid
 import threading
 import sqlite3
-
+from tasks_engine import mark_auto_enable_dirty, force_task_run
 from flask import (
     render_template, request, redirect, url_for, flash, current_app,
 )
@@ -557,6 +557,16 @@ def register(app):
                 pass
 
             # --------------------------------------------------
+            # Wakeup auto-enable system
+            # --------------------------------------------------
+            mark_auto_enable_dirty()
+
+            # --------------------------------------------------
+            # Wakeup monitoring / access workers
+            # --------------------------------------------------
+            force_task_run("check_servers")
+
+            # --------------------------------------------------
             # 4) Enchaîner check + sync (FIFO, jamais perdu)
             # --------------------------------------------------
             try:
@@ -755,6 +765,16 @@ def register(app):
             ),
         )
 
+        # --------------------------------------------------
+        # Wakeup auto-enable system
+        # --------------------------------------------------
+        mark_auto_enable_dirty()
+
+        # --------------------------------------------------
+        # Wakeup server checks
+        # --------------------------------------------------
+        force_task_run("check_servers")
+
         flash("server_updated", "success")
         return redirect(url_for("server_detail", server_id=server_id))
 
@@ -936,6 +956,12 @@ def register(app):
         except Exception:
             pass
 
+        # --------------------------------------------------
+        # Wakeup scheduler systems immediately
+        # --------------------------------------------------
+        mark_auto_enable_dirty()
+        force_task_run("apply_plex_access_updates")
+
         flash(
             f"Grant access done on {server['name']}: "
             f"{len(valid_library_ids)} librar{'y' if len(valid_library_ids) == 1 else 'ies'}, "
@@ -1111,6 +1137,12 @@ def register(app):
             enable_and_run_task_by_name("apply_plex_access_updates")
         except Exception:
             pass
+
+        # --------------------------------------------------
+        # Wakeup scheduler systems immediately
+        # --------------------------------------------------
+        mark_auto_enable_dirty()
+        force_task_run("apply_plex_access_updates")
 
         flash(
             f"Remove access done on {server['name']}: "

@@ -1794,7 +1794,7 @@ def run_migrations():
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "monitor_enqueue_refresh",
         "description": "task_description.monitor_enqueue_refresh",
-        "schedule": "*/1 * * * *",
+        "schedule": "*/3 * * * *",
         "enabled": 1,
         "status": "idle"
     })
@@ -1862,6 +1862,14 @@ def run_migrations():
         "name": "send_pending_invite_reminders",
         "description": "task_description.send_pending_invite_reminders",
         "schedule": "0 10 * * *",
+        "enabled": 1,
+        "status": "idle"
+    })
+
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "send_telemetry",
+        "description": "Send anonymous Vodum telemetry statistics.",
+        "schedule": "0 0 * * *",
         "enabled": 1,
         "status": "idle"
     })
@@ -2321,7 +2329,7 @@ def run_migrations():
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "send_mail_campaigns",
         "description": "task_description.send_mail_campaigns",
-        "schedule": "*/5 * * * *",  # toutes les 5 minutes
+        "schedule": "*/15 * * * *",  # toutes les 5 minutes
         "enabled": 0,
         "status": "disabled"
     })
@@ -2330,7 +2338,7 @@ def run_migrations():
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "check_mailing_status",
         "description": "task_description.check_mailing_status",
-        "schedule": "*/5 * * * *",  # toutes les 5 minutes
+        "schedule": "0 * * * *",  # toutes les 5 minutes
         "enabled": 1,
         "status": "idle"
     })
@@ -2340,7 +2348,7 @@ def run_migrations():
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "stream_enforcer",
         "description": "task_description.stream_enforcer",
-        "schedule": "*/1 * * * *",   # toutes les 1 minutes
+        "schedule": "*/2 * * * *",   # toutes les 1 minutes
         "enabled": 0,                
         "status": "disabled"
     })
@@ -2349,7 +2357,7 @@ def run_migrations():
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "apply_plex_access_updates",
         "description": "task_description.apply_plex_access_updates",
-        "schedule": "*/2 * * * *",   # toutes les 2 minutes
+        "schedule": "*/30 * * * *",   # toutes les 2 minutes
         "enabled": 0,                # activée uniquement quand un job est ajouté
         "status": "idle"
     })

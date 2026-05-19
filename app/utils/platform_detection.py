@@ -157,17 +157,60 @@ def detect_platform():
                 except Exception:
                     pass
 
-            pretty_name = os_release.get("PRETTY_NAME")
+            pretty_name = (
+                os_release.get("PRETTY_NAME")
+                or os_release.get("NAME")
+            )
 
-            if pretty_name:
+            version_name = (
+                os_release.get("VERSION")
+                or os_release.get("VERSION_ID")
+            )
+
+            if pretty_name and version_name:
+
+                result["os"] = f"{pretty_name} {version_name}"
+
+            elif pretty_name:
 
                 result["os"] = pretty_name
 
             else:
 
-                distro = platform.platform()
+                try:
 
-                result["os"] = distro
+                    distro = platform.platform()
+
+                    if distro and distro != "Linux-unknown":
+
+                        result["os"] = distro
+
+                    else:
+
+                        uname = platform.uname()
+
+                        result["os"] = (
+                            f"{uname.system} "
+                            f"{uname.release}"
+                        )
+
+                except Exception:
+
+                    result["os"] = "Linux"
+
+            # -----------------------------------------------------
+            # FINAL PLATFORM FALLBACK
+            # -----------------------------------------------------
+
+            if result["platform"] == "unknown":
+
+                if result["container"]:
+
+                    result["platform"] = "container"
+
+                else:
+
+                    result["platform"] = "linux"
 
             return result
 

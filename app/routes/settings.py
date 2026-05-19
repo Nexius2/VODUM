@@ -9,7 +9,7 @@ from logging_utils import get_logger
 from core.i18n import get_translator, get_available_languages
 from werkzeug.security import generate_password_hash
 
-from tasks_engine import apply_cron_master_switch, sync_expiry_tasks_from_settings
+from tasks_engine import apply_cron_master_switch, sync_expiry_tasks_from_settings, force_task_run, mark_auto_enable_dirty
 from web.helpers import get_db, add_log
 
 settings_logger = get_logger("settings")
@@ -253,6 +253,14 @@ def register(app):
                 (generate_password_hash(new_pwd),),
             )
             flash("Mot de passe admin mis à jour.", "success")
+
+        # --------------------------------------------------
+        # Wakeup tasks impacted by settings changes
+        # --------------------------------------------------
+        force_task_run("check_mailing_status")
+        force_task_run("send_comm_campaigns")
+
+        mark_auto_enable_dirty()
 
         # --------------------------------------------------
         # Sync TASKS from SETTINGS (source unique)

@@ -7,6 +7,7 @@ import requests
 from utils.platform_detection import detect_platform
 from db_manager import DBManager
 from logging_utils import get_logger
+from datetime import datetime, timedelta
 
 TELEMETRY_URL = "https://vodum-telemetry.vodum-project.workers.dev/api/ingest"
 
@@ -38,6 +39,48 @@ def get_or_create_instance_id(db):
 def run(task_id: int, db: DBManager):
 
     log.info("Anonymous telemetry task started")
+
+    settings_row = db.query_one(
+        """
+        SELECT telemetry_last_sent_at
+        FROM settings
+        WHERE id = 1
+        """
+    )
+
+    if (
+        settings_row
+        and settings_row["telemetry_last_sent_at"]
+    ):
+
+        try:
+
+            from datetime import datetime, timedelta
+
+            last_sent = datetime.fromisoformat(
+                settings_row["telemetry_last_sent_at"]
+            )
+
+            next_allowed = last_sent + timedelta(days=7)
+
+            if datetime.utcnow() < next_allowed:
+
+                remaining = next_allowed - datetime.utcnow()
+
+                log.info(
+                    f"Telemetry skipped "
+                    f"(next send in {remaining.days} days)"
+                )
+
+                return {
+                    "success": True,
+                    "skipped": True
+                }
+
+        except Exception:
+            pass
+
+
 
     settings = db.query_one(
         "SELECT * FROM settings WHERE id = 1"
