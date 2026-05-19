@@ -8,10 +8,12 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import Config
 from logging_utils import get_logger
+task_logger = get_logger("app")
 from db_manager import DBManager
 from core.backup import BackupConfig
 from core.i18n import init_i18n
 from core.repair.plex_media_users_repair import run_repair_if_needed
+from core.monitoring.plex_websocket import PlexWebsocketClient
 
 from api.subscriptions import subscriptions_api
 from blueprints.users import users_bp
@@ -407,6 +409,38 @@ def create_app():
 
     # i18n (requires DB access)
     init_i18n(app, get_db)
+
+    # ---------------------------------------------------
+    # Plex live websocket engine
+    # ---------------------------------------------------
+    try:
+
+        db = DBManager(Config.DATABASE_PATH)
+
+        plex_servers = db.query(
+            """
+            SELECT *
+            FROM servers
+            WHERE LOWER(TRIM(type)) = 'plex'
+              AND token IS NOT NULL
+              AND TRIM(token) != ''
+            """
+        )
+
+        for server in plex_servers or []:
+
+            server = dict(server)
+
+            try:
+                PlexWebsocketClient(server).start()
+
+            except Exception:
+                task_logger.exception(
+                    f"Unable to start Plex websocket for {server.get('name')}"
+                )
+
+    except Exception:
+        task_logger.exception("Unable to initialize Plex websocket engine")
 
     # Context processor + template filters
     app.context_processor(inject_brand_name)

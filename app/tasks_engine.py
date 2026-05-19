@@ -1,7 +1,8 @@
 import threading
 import time
 import importlib
-from datetime import datetime
+import random
+from datetime import datetime, timedelta
 from croniter import croniter
 import os
 
@@ -965,8 +966,54 @@ def _handle_task_success(task_id: int, task_name: str, schedule):
 
     if schedule:
         try:
-            itr = croniter(schedule, datetime.now())
-            next_exec = itr.get_next(datetime)
+
+            task_row = db.query_one(
+                """
+                SELECT schedule_mode, interval_seconds
+                FROM tasks
+                WHERE id = ?
+                """,
+                (task_id,)
+            )
+
+            schedule_mode = (
+                task_row["schedule_mode"]
+                if task_row and task_row["schedule_mode"]
+                else "cron"
+            )
+
+            interval_seconds = (
+                task_row["interval_seconds"]
+                if task_row
+                else None
+            )
+
+            now = datetime.now()
+
+            # -------------------------------------------------
+            # INTERVAL MODE
+            # -------------------------------------------------
+
+            if (
+                schedule_mode == "interval"
+                and interval_seconds
+                and int(interval_seconds) > 0
+            ):
+
+                jitter = random.randint(0, 15)
+
+                next_exec = now + timedelta(
+                    seconds=int(interval_seconds) + jitter
+                )
+
+            # -------------------------------------------------
+            # CRON MODE
+            # -------------------------------------------------
+
+            else:
+
+                itr = croniter(schedule, now)
+                next_exec = itr.get_next(datetime)
 
             db.execute(
                 "UPDATE tasks SET next_run=? WHERE id=?",
@@ -975,9 +1022,10 @@ def _handle_task_success(task_id: int, task_name: str, schedule):
 
             logger.info(f"Next run '{task_name}' → {next_exec}")
             task_logs(task_id, "info", f"Next run '{task_name}' → {next_exec}")
+
         except Exception as e:
-            logger.error(f"Cron error after execution: {e}")
-            task_logs(task_id, "warning", f"Cron error after execution: {e}")
+            logger.error(f"Schedule error after execution: {e}")
+            task_logs(task_id, "warning", f"Schedule error after execution: {e}")
 
 
 
@@ -1337,13 +1385,13 @@ def auto_enable_monitoring_tasks():
     should_enable = 1 if server_count > 0 else 0
 
     set_tasks_enabled_by_names_for_auto_mode(
-        ["monitor_enqueue_refresh", "media_jobs_worker"],
+        ["monitor_collect_sessions"],
         should_enable,
     )
 
     set_tasks_enabled_by_names_for_auto_mode(
         ["monitor_collect_sessions"],
-        0,
+        should_enable,
     )
 
 

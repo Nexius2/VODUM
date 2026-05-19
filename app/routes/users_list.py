@@ -18,6 +18,7 @@ task_logger = get_logger("tasks_ui")
 def register(app):
     @app.route("/users", methods=["GET"])
     def users_list():
+        archive_mode = "active"
         db = get_db()
 
         tab = (request.args.get("tab") or "users").strip().lower()
@@ -132,6 +133,8 @@ def register(app):
                 SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_referrals,
                 SUM(CASE WHEN status = 'qualified' THEN 1 ELSE 0 END) AS qualified_referrals,
                 SUM(CASE WHEN status = 'rewarded' THEN 1 ELSE 0 END) AS rewarded_referrals,
+                SUM(CASE WHEN status = 'expired' THEN 1 ELSE 0 END) AS expired_referrals,
+                SUM(CASE WHEN status = 'archived' THEN 1 ELSE 0 END) AS archived_referrals,
                 COALESCE(SUM(CASE
                     WHEN reward_granted_at IS NOT NULL THEN COALESCE(reward_days_snapshot, 0)
                     ELSE 0
@@ -144,6 +147,8 @@ def register(app):
             "pending_referrals": 0,
             "qualified_referrals": 0,
             "rewarded_referrals": 0,
+            "expired_referrals": 0,
+            "archived_referrals": 0,
             "granted_days": 0,
         }
 
@@ -294,6 +299,21 @@ def register(app):
 
             conditions = []
             params = []
+            archive_mode = (
+                request.args.get("archive_mode", "active")
+                .strip()
+                .lower()
+            )
+
+            if archive_mode not in ("active", "archived", "all"):
+                archive_mode = "active"
+
+            if archive_mode == "active":
+                conditions.append("r.status != 'archived'")
+
+            elif archive_mode == "archived":
+                conditions.append("r.status = 'archived'")
+            conditions.append("r.status != 'archived'")
 
             if selected_statuses:
                 placeholders = ",".join(["?"] * len(selected_statuses))
@@ -366,6 +386,7 @@ def register(app):
             order=order,
             subscription_templates=subscription_templates,
             settings=settings,
+            archive_mode=archive_mode,
             active_page="users",
         ))
 
@@ -384,6 +405,9 @@ def register(app):
         reward_enabled = 1 if request.form.get("reward_enabled") == "1" else 0
         allow_referrer_change_before_qualification = 1 if request.form.get("allow_referrer_change_before_qualification") == "1" else 0
         auto_notify_reward = 1 if request.form.get("auto_notify_reward") == "1" else 0
+        auto_expire_pending = 1 if request.form.get("auto_expire_pending") == "1" else 0
+        auto_archive_rewarded = 1 if request.form.get("auto_archive_rewarded") == "1" else 0
+        auto_archive_expired = 1 if request.form.get("auto_archive_expired") == "1" else 0
 
         try:
             qualification_days = max(int(request.form.get("qualification_days") or 60), 1)
@@ -394,6 +418,22 @@ def register(app):
             reward_days = max(int(request.form.get("reward_days") or 60), 0)
         except Exception:
             reward_days = 60
+        try:
+            rewarded_archive_days = max(
+                int(request.form.get("rewarded_archive_days") or 90),
+                1
+            )
+        except Exception:
+            rewarded_archive_days = 90
+
+        try:
+            expired_archive_days = max(
+                int(request.form.get("expired_archive_days") or 30),
+                1
+            )
+        except Exception:
+            expired_archive_days = 30
+
 
         eligible_statuses = request.form.getlist("eligible_statuses")
         if not eligible_statuses:
@@ -408,6 +448,14 @@ def register(app):
                 reward_days = ?,
                 allow_referrer_change_before_qualification = ?,
                 auto_notify_reward = ?,
+
+                auto_expire_pending = ?,
+                auto_archive_rewarded = ?,
+                auto_archive_expired = ?,
+
+                rewarded_archive_days = ?,
+                expired_archive_days = ?,
+
                 eligible_statuses = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = 1
@@ -419,6 +467,14 @@ def register(app):
                 reward_days,
                 allow_referrer_change_before_qualification,
                 auto_notify_reward,
+
+                auto_expire_pending,
+                auto_archive_rewarded,
+                auto_archive_expired,
+
+                rewarded_archive_days,
+                expired_archive_days,
+
                 ",".join(eligible_statuses),
             ),
         )

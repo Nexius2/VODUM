@@ -18,6 +18,12 @@ All notable changes to Vodum will be documented in this file.
 - Improved startup/bootstrap logging safety by removing raw exception details from early migration prints.
 - Reduced risk of exposing sensitive environment, SQL or API information in exported logs.
 - Improved consistency between internal logger paths and downloadable log files.
+- Optimized scheduler by staggering recurring worker tasks to reduce simultaneous executions, database locks, and API spikes.
+
+### general improvements
+- live sessions are now using webhooks
+- referrals communication var fix
+- Fixed a server type validation issue that could incorrectly save Plex/Jellyfin servers as other, preventing proper user/library synchronization.
 
 
 

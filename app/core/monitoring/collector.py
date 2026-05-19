@@ -23,7 +23,7 @@ _COLLECT_ERROR_THROTTLE_SECONDS = 300  # 5 minutes
 # Délai de grâce avant de considérer une session comme réellement stoppée.
 # Cela évite qu'un timeout Plex/Jellyfin fasse disparaître temporairement
 # toutes les lectures en cours.
-_SESSION_MISSING_GRACE_SECONDS = 120
+_SESSION_MISSING_GRACE_SECONDS = 30
 
 
 class AttrDict(dict):

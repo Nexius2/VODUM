@@ -1204,6 +1204,24 @@
   "task_description.restore_backup": "Restores a database backup.",
   "task.send_pending_invite_reminders": "Send pending invite reminders",
   "task.send_telemetry": "Send telemetry",
-  "task_description.send_telemetry": "Sends anonymous Vodum telemetry statistics."
+  "task_description.send_telemetry": "Sends anonymous Vodum telemetry statistics.",
+  "comm_var_referred_username_desc": "Username of the referred user.",
+  "comm_var_referral_reward_days_desc": "Number of bonus days granted for the referral reward.",
+  "comm_var_referrer_old_expiration_date_desc": "Previous expiration date before referral reward.",
+  "comm_var_referrer_new_expiration_date_desc": "New expiration date after referral reward.",
+  "referral_cleanup_settings": "Referral cleanup",
+  "referral_cleanup_settings_help": "Automatically expire and archive old referrals.",
+  "referral_auto_expire_pending": "Automatically expire pending referrals",
+  "referral_auto_expire_pending_help": "Pending referrals will automatically expire after their qualification deadline.",
+  "referral_auto_archive_rewarded": "Automatically archive rewarded referrals",
+  "referral_auto_archive_rewarded_help": "Rewarded referrals will be hidden from the main referral list after a delay.",
+  "referral_rewarded_archive_days": "Rewarded archive delay (days)",
+  "referral_rewarded_archive_days_help": "Number of days before rewarded referrals are archived.",
+  "referral_auto_archive_expired": "Automatically archive expired referrals",
+  "referral_auto_archive_expired_help": "Expired referrals will be hidden from the main referral list after a delay.",
+  "referral_expired_archive_days": "Expired archive delay (days)",
+  "referral_expired_archive_days_help": "Number of days before expired referrals are archived.",
+  "task.referral_cleanup": "Referral cleanup",
+  "task_description.referral_cleanup": "Automatically expire and archive old referrals."
   
 }

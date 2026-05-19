@@ -30,6 +30,12 @@ ALLOWED_VARS = {
     "expiration_change_signed_days",
     "expiration_change_direction",
     "expiration_change_reason",
+    
+    # referral rewards
+    "referred_username",
+    "referral_reward_days",
+    "referrer_old_expiration_date",
+    "referrer_new_expiration_date",
 }
 
 
@@ -78,6 +84,12 @@ def build_user_context(user: dict):
         "expiration_change_signed_days": user.get("expiration_change_signed_days", "") or "",
         "expiration_change_direction": user.get("expiration_change_direction", "") or "",
         "expiration_change_reason": user.get("expiration_change_reason", "") or "",
+        
+        # referral rewards
+        "referred_username": user.get("referred_username", "") or "",
+        "referral_reward_days": user.get("referral_reward_days", "") or "",
+        "referrer_old_expiration_date": user.get("referrer_old_expiration_date", "") or "",
+        "referrer_new_expiration_date": user.get("referrer_new_expiration_date", "") or "",
     }
 
 

@@ -487,7 +487,18 @@ def register(app):
     def server_create():
         db = get_db()
 
-        server_type = (request.form.get("type") or "generic").lower()
+        server_type = (
+            request.form.get("server_type")
+            or request.form.get("type")
+            or ""
+        ).strip().lower()
+
+        if server_type not in ("plex", "jellyfin"):
+            logger.error(
+                f"[SERVER CREATE] Invalid server_type received: {server_type}"
+            )
+            flash(_("invalid_server_type"), "error")
+            return redirect(url_for("servers"))
         name = f"{server_type.upper()} - pending"
 
         url = request.form.get("url") or None
@@ -705,7 +716,18 @@ def register(app):
         db = get_db()
 
         name = request.form.get("name", "").strip()
-        server_type = request.form.get("type") or "other"
+        server_type = (
+            request.form.get("server_type")
+            or request.form.get("type")
+            or ""
+        ).strip().lower()
+
+        if server_type not in ("plex", "jellyfin"):
+            logger.error(
+                f"[SERVER SAVE] Invalid server_type received: {server_type}"
+            )
+            flash(_("invalid_server_type"), "error")
+            return redirect(url_for("server_detail", server_id=server_id))
         url = request.form.get("url") or None
         local_url = request.form.get("local_url") or None
         public_url = request.form.get("public_url") or None
