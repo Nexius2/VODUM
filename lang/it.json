@@ -1204,5 +1204,21 @@
   "task_description.restore_backup": "Ripristina un backup del database.",
   "task.send_pending_invite_reminders": "Invia promemoria per gli inviti in sospeso",
   "task.send_telemetry": "Invia telemetria",
-  "task_description.send_telemetry": "Invia statistiche anonime di telemetria di Vodum."
+  "task_description.send_telemetry": "Invia statistiche anonime di telemetria di Vodum.",
+  "comm_var_referred_username_desc": "Nome utente della persona invitata.",
+  "comm_var_referral_reward_days_desc": "Numero di giorni bonus assegnati per la ricompensa referral.",
+  "comm_var_referrer_old_expiration_date_desc": "Data di scadenza precedente prima della ricompensa referral.",
+  "comm_var_referrer_new_expiration_date_desc": "Nuova data di scadenza dopo la ricompensa referral.",
+  "referral_cleanup_settings": "Pulizia referral",
+  "referral_cleanup_settings_help": "Scade e archivia automaticamente i referral più vecchi.",
+  "referral_auto_expire_pending": "Scadenza automatica dei referral in attesa",
+  "referral_auto_expire_pending_help": "I referral in attesa scadranno automaticamente dopo la data limite di qualificazione.",
+  "referral_auto_archive_rewarded": "Archivia automaticamente i referral premiati",
+  "referral_auto_archive_rewarded_help": "I referral premiati verranno nascosti dalla lista principale dopo un certo periodo.",
+  "referral_rewarded_archive_days": "Ritardo archivio premiati (giorni)",
+  "referral_rewarded_archive_days_help": "Numero di giorni prima dell’archiviazione dei referral premiati.",
+  "referral_auto_archive_expired": "Archivia automaticamente i referral scaduti",
+  "referral_auto_archive_expired_help": "I referral scaduti verranno nascosti dalla lista principale dopo un certo periodo.",
+  "referral_expired_archive_days": "Ritardo archivio scaduti (giorni)",
+  "referral_expired_archive_days_help": "Numero di giorni prima dell’archiviazione dei referral scaduti."
 }

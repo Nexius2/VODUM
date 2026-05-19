@@ -174,53 +174,38 @@ def register(app):
 
         latest_logs = latest_logs[:10]
 
-        # --------------------------
-        # NOW PLAYING (Dashboard bubble) : same data as Monitoring / Now Playing
-        # --------------------------
-        live_window_seconds = 120
+        live_window_seconds = 300
         live_window_sql = f"-{live_window_seconds} seconds"
 
-        # Global counts (do NOT limit)
         totals = db.query_one(
             """
             SELECT
               COUNT(*) AS total_live,
-              COALESCE(SUM(CASE WHEN ms.is_transcode = 1 THEN 1 ELSE 0 END), 0) AS total_transcode
-            FROM media_sessions ms
-            WHERE datetime(ms.last_seen_at) >= datetime('now', ?)
+                SUM(
+                    CASE
+                      WHEN is_transcode = 1
+                      THEN 1
+                      ELSE 0
+                    END
+                ) AS total_transcode
+            FROM media_sessions
+            WHERE datetime(last_seen_at) >= datetime('now', ?)
             """,
             (live_window_sql,),
         )
 
-        totals = dict(totals) if totals else {}
+        totals = dict(totals or {})
 
         total_live = int(totals.get("total_live") or 0)
         total_transcode = int(totals.get("total_transcode") or 0)
 
-        # Dashboard preview only: last 6 sessions
         sessions = db.query(
             """
             SELECT
-              ms.id,
-              ms.server_id,
+              ms.*,
               s.name AS server_name,
               s.type AS provider,
-
-              ms.media_type,
-              ms.title,
-              ms.grandparent_title,
-              ms.parent_title,
-
-              ms.state,
-              ms.client_name,
-              mu.username AS username,
-              ms.is_transcode,
-              ms.last_seen_at,
-
-              ms.raw_json,
-              ms.poster_ref_json,
-              ms.backdrop_ref_json,
-              ms.media_key
+              mu.username AS username
             FROM media_sessions ms
             JOIN servers s ON s.id = ms.server_id
             LEFT JOIN media_users mu ON mu.id = ms.media_user_id
@@ -233,6 +218,7 @@ def register(app):
 
         sessions = [dict(r) for r in sessions]
         sessions = [enrich_live_session_artwork(s, db) for s in sessions]
+
 
         idle_card = None
         if total_live <= 0:
@@ -259,7 +245,7 @@ def register(app):
     def dashboard_now_playing_partial():
         db = get_db()
 
-        live_window_seconds = 120
+        live_window_seconds = 300
         live_window_sql = f"-{live_window_seconds} seconds"
 
         # Dashboard preview only: last 6 sessions

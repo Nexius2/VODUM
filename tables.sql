@@ -368,7 +368,15 @@ CREATE TABLE IF NOT EXISTS user_referral_settings (
     eligible_statuses TEXT NOT NULL DEFAULT 'active',
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT,
+	
+	auto_expire_pending INTEGER NOT NULL DEFAULT 1,
+	auto_archive_rewarded INTEGER NOT NULL DEFAULT 1,
+	auto_archive_expired INTEGER NOT NULL DEFAULT 1,
+
+	pending_expire_days INTEGER NOT NULL DEFAULT 0,
+	rewarded_archive_days INTEGER NOT NULL DEFAULT 90,
+	expired_archive_days INTEGER NOT NULL DEFAULT 30
 );
 
 -----------------------------------------------------------------------
@@ -380,8 +388,15 @@ CREATE TABLE IF NOT EXISTS user_referrals (
     referrer_user_id INTEGER NOT NULL,
     referred_user_id INTEGER NOT NULL UNIQUE,
 
-    status TEXT NOT NULL DEFAULT 'pending'
-        CHECK(status IN ('pending','qualified','rewarded','cancelled')),
+	status TEXT NOT NULL DEFAULT 'pending'
+		CHECK(status IN (
+			'pending',
+			'qualified',
+			'rewarded',
+			'expired',
+			'archived',
+			'cancelled'
+		)),
 
     referral_source TEXT DEFAULT 'manual',
 
@@ -395,6 +410,8 @@ CREATE TABLE IF NOT EXISTS user_referrals (
     reward_granted_at TIMESTAMP DEFAULT NULL,
     reward_expiration_before TEXT DEFAULT NULL,
     reward_expiration_after TEXT DEFAULT NULL,
+	expired_at TIMESTAMP DEFAULT NULL,
+	archived_at TIMESTAMP DEFAULT NULL,
 
     notification_sent_at TIMESTAMP DEFAULT NULL,
     notification_template_id INTEGER DEFAULT NULL,
@@ -457,6 +474,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     name TEXT UNIQUE NOT NULL,
     description TEXT,
     schedule TEXT,                    -- cron-like, "0 */1 * * *", etc.
+	schedule_mode TEXT DEFAULT 'cron',
+	interval_seconds INTEGER DEFAULT NULL,
     enabled INTEGER DEFAULT 1,
 	enabled_prev INTEGER DEFAULT NULL,
 

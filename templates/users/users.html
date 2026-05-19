@@ -48,7 +48,7 @@
       {{ t("users_tab_users") }}
     </a>
 
-    <a href="{{ url_for('users_list', tab='referrals') }}"
+    <a href="{{ url_for('users_list', tab='referrals', archive_mode=archive_mode) }}"
        class="pb-2 border-b-2 {{ 'border-primary text-primary' if tab=='referrals' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
       {{ t("users_tab_referrals") }}
     </a>
@@ -101,7 +101,7 @@
 	  <summary class="list-none cursor-pointer bg-slate-900 border border-slate-800 rounded-lg text-sm px-3 py-2 flex items-center gap-2">
 		<span>{{ t("status") }}</span>
 			<span class="text-xs text-slate-400">
-			  {{ selected_statuses|length }}/8
+			  {{ selected_statuses|length }}/4
 			</span>
 		<svg class="w-4 h-4 opacity-70" viewBox="0 0 24 24">
 		  <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
@@ -273,21 +273,47 @@
   </div>
 
   <div class="flex gap-2">
+
+    {% set pagination_args = dict(
+      tab=tab,
+      q=search,
+      status=selected_statuses,
+      sort=sort,
+      order=order
+    ) %}
+
+    {% if archive_mode is defined %}
+      {% set _ = pagination_args.update({'archive_mode': archive_mode}) %}
+    {% endif %}
+
     {% if page > 1 %}
-      <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
-         href="{{ url_for('users_list', page=1, q=search, status=selected_statuses, sort=sort, order=order) }}">First</a>
 
       <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
-         href="{{ url_for('users_list', page=page-1, q=search, status=selected_statuses, sort=sort, order=order) }}">Prev</a>
+         href="{{ url_for('users_list', page=1, **pagination_args) }}">
+        First
+      </a>
+
+      <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
+         href="{{ url_for('users_list', page=page-1, **pagination_args) }}">
+        Prev
+      </a>
+
     {% endif %}
 
     {% if page < total_pages %}
-      <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
-         href="{{ url_for('users_list', page=page+1, q=search, status=selected_statuses, sort=sort, order=order) }}">Next</a>
 
       <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
-         href="{{ url_for('users_list', page=total_pages, q=search, status=selected_statuses, sort=sort, order=order) }}">Last</a>
+         href="{{ url_for('users_list', page=page+1, **pagination_args) }}">
+        Next
+      </a>
+
+      <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
+         href="{{ url_for('users_list', page=total_pages, **pagination_args) }}">
+        Last
+      </a>
+
     {% endif %}
+
   </div>
 </div>
 {% endif %}
@@ -346,7 +372,63 @@ document.addEventListener("DOMContentLoaded", () => {
 
 <form method="get" class="flex flex-wrap items-center gap-3 mb-6">
   <input type="hidden" name="tab" value="referrals">
+<div class="flex items-center rounded-lg overflow-hidden border border-slate-800">
 
+  <a href="{{ url_for(
+      'users_list',
+      tab='referrals',
+      archive_mode='active',
+      q=search,
+      status=selected_statuses,
+      sort=sort,
+      order=order
+  ) }}"
+     class="px-3 py-2 text-sm
+     {% if archive_mode == 'active' %}
+       bg-primary text-white
+     {% else %}
+       bg-slate-900 text-slate-300 hover:bg-slate-800
+     {% endif %}">
+    Active
+  </a>
+
+  <a href="{{ url_for(
+      'users_list',
+      tab='referrals',
+      archive_mode='archived',
+      q=search,
+      status=selected_statuses,
+      sort=sort,
+      order=order
+  ) }}"
+     class="px-3 py-2 text-sm border-l border-slate-800
+     {% if archive_mode == 'archived' %}
+       bg-primary text-white
+     {% else %}
+       bg-slate-900 text-slate-300 hover:bg-slate-800
+     {% endif %}">
+    Archived
+  </a>
+
+  <a href="{{ url_for(
+      'users_list',
+      tab='referrals',
+      archive_mode='all',
+      q=search,
+      status=selected_statuses,
+      sort=sort,
+      order=order
+  ) }}"
+     class="px-3 py-2 text-sm border-l border-slate-800
+     {% if archive_mode == 'all' %}
+       bg-primary text-white
+     {% else %}
+       bg-slate-900 text-slate-300 hover:bg-slate-800
+     {% endif %}">
+    All
+  </a>
+
+</div>
   <input type="text"
          name="q"
          placeholder="{{ t('search') }}…"
@@ -479,18 +561,18 @@ document.addEventListener("DOMContentLoaded", () => {
   <div class="flex gap-2">
     {% if page > 1 %}
       <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
-         href="{{ url_for('users_list', tab='referrals', page=1, q=search, status=selected_statuses, sort=sort, order=order) }}">First</a>
+         href="{{ url_for('users_list', tab='referrals', archive_mode=archive_mode, page=1, q=search, status=selected_statuses, sort=sort, order=order) }}">First</a>
 
       <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
-         href="{{ url_for('users_list', tab='referrals', page=page-1, q=search, status=selected_statuses, sort=sort, order=order) }}">Prev</a>
+         href="{{ url_for('users_list', tab='referrals', archive_mode=archive_mode, page=page-1, q=search, status=selected_statuses, sort=sort, order=order) }}">Prev</a>
     {% endif %}
 
     {% if page < total_pages %}
       <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
-         href="{{ url_for('users_list', tab='referrals', page=page+1, q=search, status=selected_statuses, sort=sort, order=order) }}">Next</a>
+         href="{{ url_for('users_list', tab='referrals', archive_mode=archive_mode, page=page+1, q=search, status=selected_statuses, sort=sort, order=order) }}">Next</a>
 
       <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
-         href="{{ url_for('users_list', tab='referrals', page=total_pages, q=search, status=selected_statuses, sort=sort, order=order) }}">Last</a>
+         href="{{ url_for('users_list', tab='referrals', archive_mode=archive_mode, page=total_pages, q=search, status=selected_statuses, sort=sort, order=order) }}">Last</a>
     {% endif %}
   </div>
 </div>
@@ -577,6 +659,122 @@ document.addEventListener("DOMContentLoaded", () => {
       </div>
 
     </div>
+
+<div class="mt-6 bg-slate-950 border border-slate-800 rounded-2xl p-4">
+
+  <div class="mb-4">
+    <div class="text-sm font-medium text-slate-200">
+      {{ t("referral_cleanup_settings") }}
+    </div>
+
+    <div class="text-xs text-slate-500 mt-1">
+      {{ t("referral_cleanup_settings_help") }}
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+    <!-- LEFT -->
+    <div class="space-y-5">
+
+      <label class="flex items-start gap-3 text-sm">
+        <input type="checkbox"
+               name="auto_expire_pending"
+               value="1"
+               class="mt-1"
+               {% if referral_settings.auto_expire_pending %}checked{% endif %}>
+
+        <div>
+          <div>{{ t("referral_auto_expire_pending") }}</div>
+
+          <div class="text-xs text-slate-500 mt-1">
+            {{ t("referral_auto_expire_pending_help") }}
+          </div>
+        </div>
+      </label>
+
+      <label class="flex items-start gap-3 text-sm">
+        <input type="checkbox"
+               name="auto_archive_rewarded"
+               value="1"
+               class="mt-1"
+               {% if referral_settings.auto_archive_rewarded %}checked{% endif %}>
+
+        <div>
+          <div>{{ t("referral_auto_archive_rewarded") }}</div>
+
+          <div class="text-xs text-slate-500 mt-1">
+            {{ t("referral_auto_archive_rewarded_help") }}
+          </div>
+        </div>
+      </label>
+      <label class="text-sm block">
+        <div>{{ t("referral_rewarded_archive_days") }}</div>
+
+        <div class="text-xs text-slate-500 mt-1">
+          {{ t("referral_rewarded_archive_days_help") }}
+        </div>
+
+        <div class="mt-2 flex items-center gap-2">
+          <input type="number"
+                 min="1"
+                 name="rewarded_archive_days"
+                 value="{{ referral_settings.rewarded_archive_days or 90 }}"
+                 class="w-24 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2">
+
+          <span class="text-xs text-slate-500">
+            {{ t("days") }}
+          </span>
+        </div>
+      </label>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="space-y-5">
+
+
+
+      <label class="flex items-start gap-3 text-sm">
+        <input type="checkbox"
+               name="auto_archive_expired"
+               value="1"
+               class="mt-1"
+               {% if referral_settings.auto_archive_expired %}checked{% endif %}>
+
+        <div>
+          <div>{{ t("referral_auto_archive_expired") }}</div>
+
+          <div class="text-xs text-slate-500 mt-1">
+            {{ t("referral_auto_archive_expired_help") }}
+          </div>
+        </div>
+      </label>
+
+      <label class="text-sm block">
+        <div>{{ t("referral_expired_archive_days") }}</div>
+
+        <div class="text-xs text-slate-500 mt-1">
+          {{ t("referral_expired_archive_days_help") }}
+        </div>
+
+        <div class="mt-2 flex items-center gap-2">
+          <input type="number"
+                 min="1"
+                 name="expired_archive_days"
+                 value="{{ referral_settings.expired_archive_days or 30 }}"
+                 class="w-24 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2">
+
+          <span class="text-xs text-slate-500">
+            {{ t("days") }}
+          </span>
+        </div>
+      </label>
+
+    </div>
+
+  </div>
+
+</div>
 
     <div class="mt-6 bg-slate-950 border border-slate-800 rounded-2xl p-4">
       <div class="text-sm font-medium text-slate-200 mb-1">{{ t("referral_eligible_statuses") }}</div>

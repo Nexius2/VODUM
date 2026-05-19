@@ -235,6 +235,54 @@ def run_migrations():
     """)
     conn.commit()
 
+    # -------------------------------------------------
+    # Tasks scheduler mode migrations
+    # -------------------------------------------------
+
+    ensure_column(cursor, "tasks", "schedule_mode", "TEXT DEFAULT 'cron'")
+    ensure_column(cursor, "tasks", "interval_seconds", "INTEGER DEFAULT NULL")
+
+    cursor.execute("""
+        UPDATE tasks
+        SET schedule_mode = 'cron'
+        WHERE schedule_mode IS NULL
+    """)
+
+    conn.commit()
+
+    # -------------------------------------------------
+    # Convert worker tasks to interval mode
+    # -------------------------------------------------
+
+    cursor.execute("""
+        UPDATE tasks
+        SET
+            schedule_mode = 'interval',
+            interval_seconds = 60
+        WHERE name IN (
+            'monitor_enqueue_refresh',
+            'media_jobs_worker',
+            'stream_enforcer'
+        )
+        AND (
+            schedule_mode IS NULL
+            OR schedule_mode = 'cron'
+        )
+    """)
+
+    cursor.execute("""
+        UPDATE tasks
+        SET
+            schedule_mode = 'interval',
+            interval_seconds = 120
+        WHERE name = 'apply_plex_access_updates'
+        AND (
+            schedule_mode IS NULL
+            OR schedule_mode = 'cron'
+        )
+    """)
+
+    conn.commit()
 
     # -------------------------------------------------
     # 1. Vérifier que toutes les tables existent
@@ -322,7 +370,14 @@ def run_migrations():
             referred_user_id INTEGER NOT NULL UNIQUE,
 
             status TEXT NOT NULL DEFAULT 'pending'
-                CHECK(status IN ('pending','qualified','rewarded','cancelled')),
+                CHECK(status IN (
+                    'pending',
+                    'qualified',
+                    'rewarded',
+                    'expired',
+                    'archived',
+                    'cancelled'
+                )),
 
             referral_source TEXT DEFAULT 'manual',
 
@@ -336,6 +391,9 @@ def run_migrations():
             reward_granted_at TIMESTAMP DEFAULT NULL,
             reward_expiration_before TEXT DEFAULT NULL,
             reward_expiration_after TEXT DEFAULT NULL,
+
+            expired_at TIMESTAMP DEFAULT NULL,
+            archived_at TIMESTAMP DEFAULT NULL,
 
             notification_sent_at TIMESTAMP DEFAULT NULL,
             notification_template_id INTEGER DEFAULT NULL,
@@ -355,6 +413,16 @@ def run_migrations():
 
     ensure_column(cursor, "user_referrals", "notification_template_id", "INTEGER DEFAULT NULL")
     ensure_column(cursor, "user_referrals", "last_error", "TEXT DEFAULT NULL")
+    ensure_column(cursor, "user_referrals", "expired_at", "TIMESTAMP DEFAULT NULL")
+    ensure_column(cursor, "user_referrals", "archived_at", "TIMESTAMP DEFAULT NULL")
+
+    ensure_column(cursor, "user_referral_settings", "auto_expire_pending", "INTEGER NOT NULL DEFAULT 1")
+    ensure_column(cursor, "user_referral_settings", "auto_archive_rewarded", "INTEGER NOT NULL DEFAULT 1")
+    ensure_column(cursor, "user_referral_settings", "auto_archive_expired", "INTEGER NOT NULL DEFAULT 1")
+
+    ensure_column(cursor, "user_referral_settings", "rewarded_archive_days", "INTEGER NOT NULL DEFAULT 90")
+    ensure_column(cursor, "user_referral_settings", "expired_archive_days", "INTEGER NOT NULL DEFAULT 30")
+
     conn.commit()
 
     # -------------------------------------------------
@@ -2454,6 +2522,14 @@ def run_migrations():
         "schedule": "15 2 * * *",
         "enabled": 1,
         "status": "idle",
+    })
+    # Tâche referral_cleanup
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "referral_cleanup",
+        "description": "task_description.referral_cleanup",
+        "schedule": "0 */6 * * *",
+        "enabled": 1,
+        "status": "idle"
     })
     conn.commit()
 

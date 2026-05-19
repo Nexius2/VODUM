@@ -6,3 +6,4 @@ waitress
 itsdangerous
 croniter
 requests
+websocket-client

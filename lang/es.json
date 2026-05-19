@@ -1204,5 +1204,21 @@
   "task_description.restore_backup": "Restaura una copia de seguridad de la base de datos.",
   "task.send_pending_invite_reminders": "Enviar recordatorios de invitaciones pendientes",
   "task.send_telemetry": "Enviar telemetría",
-  "task_description.send_telemetry": "Envía estadísticas anónimas de telemetría de Vodum."
+  "task_description.send_telemetry": "Envía estadísticas anónimas de telemetría de Vodum.",
+  "comm_var_referred_username_desc": "Nombre de usuario del referido.",
+  "comm_var_referral_reward_days_desc": "Número de días de bonificación otorgados por el programa de referidos.",
+  "comm_var_referrer_old_expiration_date_desc": "Fecha de expiración anterior antes de la recompensa por referido.",
+  "comm_var_referrer_new_expiration_date_desc": "Nueva fecha de expiración después de la recompensa por referido.",
+  "referral_cleanup_settings": "Limpieza de referidos",
+  "referral_cleanup_settings_help": "Expira y archiva automáticamente los referidos antiguos.",
+  "referral_auto_expire_pending": "Expirar automáticamente los referidos pendientes",
+  "referral_auto_expire_pending_help": "Los referidos pendientes expirarán automáticamente después de la fecha límite de calificación.",
+  "referral_auto_archive_rewarded": "Archivar automáticamente los referidos recompensados",
+  "referral_auto_archive_rewarded_help": "Los referidos recompensados se ocultarán de la lista principal después de un período.",
+  "referral_rewarded_archive_days": "Retraso de archivado de recompensas (días)",
+  "referral_rewarded_archive_days_help": "Número de días antes de archivar los referidos recompensados.",
+  "referral_auto_archive_expired": "Archivar automáticamente los referidos expirados",
+  "referral_auto_archive_expired_help": "Los referidos expirados se ocultarán de la lista principal después de un período.",
+  "referral_expired_archive_days": "Retraso de archivado de expirados (días)",
+  "referral_expired_archive_days_help": "Número de días antes de archivar los referidos expirados."
 }

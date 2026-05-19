@@ -1204,5 +1204,21 @@
   "task_description.restore_backup": "Stellt eine Datenbanksicherung wieder her.",
   "task.send_pending_invite_reminders": "Erinnerungen für ausstehende Einladungen senden",
   "task.send_telemetry": "Telemetrie senden",
-  "task_description.send_telemetry": "Sendet anonyme Vodum-Telemetriestatistiken."
+  "task_description.send_telemetry": "Sendet anonyme Vodum-Telemetriestatistiken.",
+  "comm_var_referred_username_desc": "Benutzername des geworbenen Nutzers.",
+  "comm_var_referral_reward_days_desc": "Anzahl der Bonus-Tage für die Empfehlungsprämie.",
+  "comm_var_referrer_old_expiration_date_desc": "Vorheriges Ablaufdatum vor der Empfehlungsprämie.",
+  "comm_var_referrer_new_expiration_date_desc": "Neues Ablaufdatum nach der Empfehlungsprämie.",
+  "referral_cleanup_settings": "Empfehlungsbereinigung",
+  "referral_cleanup_settings_help": "Alte Empfehlungen automatisch ablaufen lassen und archivieren.",
+  "referral_auto_expire_pending": "Ausstehende Empfehlungen automatisch ablaufen lassen",
+  "referral_auto_expire_pending_help": "Ausstehende Empfehlungen laufen nach Ablauf der Qualifizierungsfrist automatisch ab.",
+  "referral_auto_archive_rewarded": "Belohnte Empfehlungen automatisch archivieren",
+  "referral_auto_archive_rewarded_help": "Belohnte Empfehlungen werden nach einer Verzögerung aus der Hauptliste ausgeblendet.",
+  "referral_rewarded_archive_days": "Archivierungsverzögerung für Belohnungen (Tage)",
+  "referral_rewarded_archive_days_help": "Anzahl der Tage vor der Archivierung belohnter Empfehlungen.",
+  "referral_auto_archive_expired": "Abgelaufene Empfehlungen automatisch archivieren",
+  "referral_auto_archive_expired_help": "Abgelaufene Empfehlungen werden nach einer Verzögerung aus der Hauptliste ausgeblendet.",
+  "referral_expired_archive_days": "Archivierungsverzögerung für abgelaufene Empfehlungen (Tage)",
+  "referral_expired_archive_days_help": "Anzahl der Tage vor der Archivierung abgelaufener Empfehlungen."
 }
