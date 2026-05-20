@@ -806,6 +806,31 @@ def _sync_users_and_policies_for_server(
             db, server_id, jellyfin_id, username
         )
 
+        # Ignore inactive Vodum users
+        vodum_user = db.query_one(
+            """
+            SELECT status
+            FROM vodum_users
+            WHERE id = ?
+            """,
+            (vodum_user_id,),
+        )
+
+        user_status = (
+            str(vodum_user["status"]).strip().lower()
+            if vodum_user and vodum_user["status"]
+            else ""
+        )
+
+        if user_status in ("expired", "disabled", "removed"):
+            logger.info(
+                f"[SYNC JELLYFIN] ignored user status={user_status} "
+                f"(vodum_user_id={vodum_user_id}, "
+                f"media_user_id={media_user_id}, "
+                f"server_id={server_id})"
+            )
+            continue
+
         # Policy (plus fiable via /Users/{id})
         detail_url = _build_api_url(url, f"/Users/{jellyfin_id}", token)
         try:

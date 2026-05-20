@@ -1,7 +1,8 @@
 # ✅ VODUM – TODO CLEAN
 
 ---
-
+* [ ] add migration option from plex to jellyfin
+* [x] override expiration date in user profile
 
 # 🚨 URGENT — FIX ACCÈS PLEX
 

@@ -8,7 +8,7 @@ from flask import (
     jsonify, abort,
 )
 
-from logging_utils import get_logger
+from logging_utils import get_logger, is_debug_mode_enabled
 from tasks_engine import (
     enqueue_task,
     set_task_enabled,
@@ -35,8 +35,9 @@ def register(app):
                 ORDER BY name
                 """
             )
-
-        task_logger.debug(f"Affichage page tasks → {len(tasks)} tâches détectées")
+        
+        if is_debug_mode_enabled():
+            task_logger.debug(f"Affichage page tasks → {len(tasks)} tâches détectées")
 
         return render_template(
             "tasks/tasks.html",

@@ -6,7 +6,7 @@ from datetime import datetime
 
 from flask import render_template, request, redirect, url_for, flash
 
-from logging_utils import get_logger
+from logging_utils import get_logger, is_debug_mode_enabled
 from tasks_engine import enable_and_run_task_by_name, auto_enable_stream_enforcer
 
 from web.helpers import get_db, add_log
@@ -224,8 +224,9 @@ def register(app):
         )
         current_referral = dict(current_referral) if current_referral else None
 
-        # Optional per-user stream override
+        # Optional per-user override
         # Empty or 0 => NULL (no override, policy applies)
+        expiration_date_override = 1 if form.get("expiration_date_override") == "1" else 0
         raw_override = form.get("max_streams_override")
         max_streams_override = None
         if raw_override is not None:
@@ -259,6 +260,7 @@ def register(app):
                 firstname = ?, lastname = ?, second_email = ?,
                 renewal_date = ?, renewal_method = ?, notes = ?,
                 max_streams_override = ?,
+                expiration_date_override = ?,
                 discord_user_id = ?, discord_name = ?, notifications_order_override = ?
             WHERE id = ?
             """,
@@ -267,6 +269,7 @@ def register(app):
                 firstname, lastname, second_email,
                 renewal_date, renewal_method, notes,
                 max_streams_override,
+                expiration_date_override,
                 discord_user_id, discord_name, notifications_order_override,
                 user_id,
             ),
@@ -537,7 +540,8 @@ def register(app):
             old_plex_share = dict(plex_share)
 
             vals = form.getlist(f"allow_sync_{mu_id}")
-            task_logger.debug(f"FORM DEBUG mu_id={mu_id} allow_sync getlist={vals}")
+            if is_debug_mode_enabled():
+                task_logger.debug(f"FORM DEBUG mu_id={mu_id} allow_sync getlist={vals}")
             v = vals[-1] if vals else None
             if v is not None:
                 plex_share["allowSync"] = 1 if str(v).strip().lower() in truthy else 0
@@ -545,7 +549,8 @@ def register(app):
                 plex_share["allowSync"] = int(plex_share.get("allowSync", 0) or 0)
 
             vals = form.getlist(f"allow_camera_upload_{mu_id}")
-            task_logger.debug(f"FORM DEBUG mu_id={mu_id} allow_camera_upload getlist={vals}")
+            if is_debug_mode_enabled():
+                task_logger.debug(f"FORM DEBUG mu_id={mu_id} allow_camera_upload getlist={vals}")
             v = vals[-1] if vals else None
             if v is not None:
                 plex_share["allowCameraUpload"] = 1 if str(v).strip().lower() in truthy else 0
@@ -553,7 +558,8 @@ def register(app):
                 plex_share["allowCameraUpload"] = int(plex_share.get("allowCameraUpload", 0) or 0)
 
             vals = form.getlist(f"allow_channels_{mu_id}")
-            task_logger.debug(f"FORM DEBUG mu_id={mu_id} allow_channels getlist={vals}")
+            if is_debug_mode_enabled():
+                task_logger.debug(f"FORM DEBUG mu_id={mu_id} allow_channels getlist={vals}")
             v = vals[-1] if vals else None
             if v is not None:
                 plex_share["allowChannels"] = 1 if str(v).strip().lower() in truthy else 0

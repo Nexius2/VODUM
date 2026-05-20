@@ -1220,5 +1220,9 @@
   "referral_auto_archive_expired": "Abgelaufene Empfehlungen automatisch archivieren",
   "referral_auto_archive_expired_help": "Abgelaufene Empfehlungen werden nach einer Verzögerung aus der Hauptliste ausgeblendet.",
   "referral_expired_archive_days": "Archivierungsverzögerung für abgelaufene Empfehlungen (Tage)",
-  "referral_expired_archive_days_help": "Anzahl der Tage vor der Archivierung abgelaufener Empfehlungen."
+  "referral_expired_archive_days_help": "Anzahl der Tage vor der Archivierung abgelaufener Empfehlungen.",
+  "expiration_date_override": "Ablaufdatum-Override",
+  "expiration_date_override_help": "Fügt automatisch 1 Jahr zum Ablaufdatum hinzu, sobald die Vorwarnungsperiode erreicht wird.",
+  "monitoring.cards.live_sessions_no_sessions": "Keine aktiven Sitzungen in den letzten",
+  "subscription_set_as_default_help": "Diese Vorlage wird nur dann automatisch für jeden neuen Benutzer ausgewählt, wenn sie aktiviert ist."
 }

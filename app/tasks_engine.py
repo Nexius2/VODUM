@@ -7,7 +7,7 @@ from croniter import croniter
 import os
 
 from db_manager import DBManager
-from logging_utils import get_logger
+from logging_utils import get_logger, is_debug_mode_enabled
 from tasks.send_telemetry import run as send_telemetry
 
 # -------------------------------------------------------------------
@@ -267,7 +267,8 @@ def _mark_task_retry_or_error(task_id: int, task_name: str, error_message: str):
 
 def run_task_by_name(task_name: str):
     if not _cron_jobs_enabled():
-        logger.info(f"Cron disabled (global); ignoring manual run: {task_name}")
+        if is_debug_mode_enabled():
+            logger.debug(f"Cron disabled (global); ignoring manual run: {task_name}")
         return False
 
     row = db.query_one(
@@ -323,7 +324,8 @@ def enable_and_run_task_by_name(task_name: str):
         )
 
     if status == "running" or queued_count > 0:
-        logger.info(f"Task '{task_name}' already running or queued; not enqueueing again")
+        if is_debug_mode_enabled():
+            logger.debug(f"Task '{task_name}' already running or queued; not enqueueing again")
         return True
 
     return enqueue_task(task_id)
@@ -761,7 +763,8 @@ def enqueue_task(task_id: int):
         (task_id,)
     )
     if not row or not row["enabled"]:
-        logger.info(f"Task {task_id} ignored (disabled)")
+        if is_debug_mode_enabled():
+            logger.debug(f"Task {task_id} ignored (disabled)")
         return False
 
     global worker_running
@@ -945,11 +948,13 @@ def _handle_task_success(task_id: int, task_name: str, schedule):
         (task_id,)
     )
 
-    logger.info(f"Task '{task_name}' completed successfully.")
+    if is_debug_mode_enabled():
+        logger.debug(f"Task '{task_name}' completed successfully.")
     task_logs(task_id, "success", f"Task '{task_name}' completed successfully")
 
     if task_name == "check_servers":
-        logger.info("Auto re-evaluating sync tasks after check_servers")
+        if is_debug_mode_enabled():
+            logger.debug("Auto re-evaluating sync tasks after check_servers")
         task_logs(task_id, "info", "Sync tasks auto re-evaluation")
 
         try:
@@ -1020,7 +1025,8 @@ def _handle_task_success(task_id: int, task_name: str, schedule):
                 (next_exec, task_id)
             )
 
-            logger.info(f"Next run '{task_name}' → {next_exec}")
+            if is_debug_mode_enabled():
+                logger.debug(f"Next run '{task_name}' → {next_exec}")
             task_logs(task_id, "info", f"Next run '{task_name}' → {next_exec}")
 
         except Exception as e:
@@ -1128,7 +1134,8 @@ def _process_task_result(task_id: int, task_name: str, result, start_time: float
     if result is not None:
         try:
             if result:
-                logger.info(f"Task '{task_name}' returned data")
+                if is_debug_mode_enabled():
+                    logger.debug(f"Task '{task_name}' returned data")
                 task_logs(
                     task_id,
                     "info",
@@ -1199,7 +1206,8 @@ def run_task(task_id: int):
     # Exécution réelle
     # -------------------------------------------------
     try:
-        logger.debug(f"Calling run() for task '{name}'")
+        if is_debug_mode_enabled():
+            logger.debug(f"Calling run() for task '{name}'")
 
         result = _execute_task_run_callable(run_func, task_id, name, max_duration)
         _process_task_result(task_id, name, result, start_time, max_duration)
@@ -1271,7 +1279,8 @@ def run_task_sequence(task_names):
     """
     global sequence_thread_running
 
-    logger.info(f"[QUEUE] Sequence added: {task_names}")
+    if is_debug_mode_enabled():
+        logger.debug(f"[QUEUE] Sequence added: {task_names}")
 
     with sequence_lock:
         sequence_queue.append(task_names)
@@ -1279,7 +1288,8 @@ def run_task_sequence(task_names):
         # Si aucun worker ne tourne, on le démarre
         if not sequence_thread_running:
             sequence_thread_running = True
-            logger.info("[QUEUE] starting Sequence worker")
+            if is_debug_mode_enabled():
+                logger.debug("[QUEUE] starting Sequence worker")
             threading.Thread(target=_sequence_worker, daemon=True).start()
 
 def enqueue_server_discovery_sequence(server_type: str):
@@ -1306,23 +1316,27 @@ def _sequence_worker():
     """
     global sequence_thread_running
 
-    logger.info("[QUEUE] Sequence worker started")
+    if is_debug_mode_enabled():
+        logger.debug("[QUEUE] Sequence worker started")
 
     while True:
         with sequence_lock:
             if not sequence_queue:
-                logger.info("[QUEUE] empty queue → worker stopping")
+                if is_debug_mode_enabled():
+                    logger.debug("[QUEUE] empty queue → worker stopping")
                 sequence_thread_running = False
                 return
 
             tasks = sequence_queue.pop(0)
 
-        logger.info(f"[QUEUE] Executing new sequence : {tasks}")
+        if is_debug_mode_enabled():
+            logger.debug(f"[QUEUE] Executing new sequence : {tasks}")
 
         # Exécute la séquence (bloquant)
         try:
             _run_task_sequence_internal(tasks)
-            logger.info(f"[QUEUE] Sequence ended : {tasks}")
+            if is_debug_mode_enabled():
+                logger.debug(f"[QUEUE] Sequence ended : {tasks}")
         except Exception as e:
             logger.error(f"[QUEUE] Erreur while running sequence {tasks}: {e}")
 
@@ -1334,7 +1348,8 @@ def _run_task_sequence_internal(task_names):
     IMPORTANT: on n'ignore jamais une séquence.
     Le worker de séquence exécute déjà en FIFO.
     """
-    logger.info(f"Sequence start : {task_names}")
+    if is_debug_mode_enabled():
+        logger.debug(f"Sequence start : {task_names}")
 
     for name in task_names:
         logger.info(f"[SEQ] starting task : {name}")
@@ -1598,7 +1613,8 @@ def _recover_scheduler_state_at_boot():
             WHERE status IN ('running', 'queued', 'idle')
             """
         )
-        logger.info("Recovery tasks: reset running/queued states OK")
+        if is_debug_mode_enabled():
+            logger.debug("Recovery tasks: reset running/queued states OK")
         _kick_worker_if_needed()
     except Exception as e:
         logger.warning(f"Recovery tasks failed: {e}", exc_info=True)
@@ -1668,7 +1684,8 @@ def _run_scheduler_tick(now, run_auto_enable=True):
 
         if status == "error" and next_retry_at and retry_count < max_retries:
             if next_retry_at <= now:
-                logger.info(f"Retry due for task: {name}")
+                if is_debug_mode_enabled():
+                    logger.debug(f"Retry due for task: {name}")
 
                 enqueued = enqueue_task(task_id)
                 if enqueued:
@@ -1740,7 +1757,8 @@ def _run_scheduler_tick(now, run_auto_enable=True):
             if next_exec and next_exec > now:
                 continue
 
-            logger.info(f"First forced execution (one-shot): {name}")
+            if is_debug_mode_enabled():
+                logger.debug(f"First forced execution (one-shot): {name}")
 
             enqueued = enqueue_task(task_id)
             if not enqueued:
@@ -1780,10 +1798,13 @@ def _run_scheduler_tick(now, run_auto_enable=True):
 
         if forced_run or next_exec <= now:
 
-            if forced_run:
-                logger.info(f"Forced task execution: {name}")
-            else:
-                logger.info(f"Scheduled task due (late): {name}")
+            if is_debug_mode_enabled():
+
+                if forced_run:
+                    logger.debug(f"Forced task execution: {name}")
+
+                else:
+                    logger.debug(f"Scheduled task due (late): {name}")
 
             enqueued = enqueue_task(task_id)
 
@@ -1927,7 +1948,8 @@ def start_scheduler():
 
     with scheduler_start_lock:
         if scheduler_started:
-            logger.info("start_scheduler() ignored: scheduler already started")
+            if is_debug_mode_enabled():
+                logger.debug("start_scheduler() ignored: scheduler already started")
             return
 
         scheduler_started = True

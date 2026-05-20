@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS vodum_users (
     -- Notifications
     notifications_order_override TEXT DEFAULT NULL,
 
+	-- Per-user expiratin date override
+	expiration_date_override INTEGER DEFAULT 0,
+
     -- Discord
     discord_user_id TEXT DEFAULT NULL,
     discord_name TEXT DEFAULT NULL,

@@ -1222,6 +1222,10 @@
   "referral_expired_archive_days": "Expired archive delay (days)",
   "referral_expired_archive_days_help": "Number of days before expired referrals are archived.",
   "task.referral_cleanup": "Referral cleanup",
-  "task_description.referral_cleanup": "Automatically expire and archive old referrals."
+  "task_description.referral_cleanup": "Automatically expire and archive old referrals.",
+  "expiration_date_override": "Expiration date override",
+  "expiration_date_override_help": "Automatically extends the expiration date by 1 year when the warning period is reached.",
+  "monitoring.cards.live_sessions_no_sessions": "No active sessions in the last",
+  "subscription_set_as_default_help": "This template will be automatically selected for every new user only if it is enabled."
   
 }

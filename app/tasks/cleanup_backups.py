@@ -11,7 +11,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 
 from tasks_engine import task_logs
-from logging_utils import get_logger
+from logging_utils import get_logger, is_debug_mode_enabled
 
 log = get_logger("cleanup_backups")
 
@@ -56,8 +56,9 @@ def run(task_id: int, db):
 
     cutoff = datetime.utcnow() - timedelta(days=retention)
 
-    log.debug(f"Retention = {retention} days -> Deadline (UTC) = {cutoff}")
-    log.debug(f"Directory analysis : {base}")
+    if is_debug_mode_enabled():
+        log.debug(f"Retention = {retention} days -> Deadline (UTC) = {cutoff}")
+        log.debug(f"Directory analysis : {base}")
 
     deleted = 0
     scanned = 0
@@ -75,14 +76,16 @@ def run(task_id: int, db):
                 scanned += 1
                 try:
                     mtime = datetime.utcfromtimestamp(f.stat().st_mtime)
-                    log.debug(f"File found : {f.name} | Last modified (UTC) = {mtime}")
+                    if is_debug_mode_enabled():
+                        log.debug(f"File found : {f.name} | Last modified (UTC) = {mtime}")
 
                     if mtime < cutoff:
                         log.info(f"Deleting old backup : {f.name}")
                         f.unlink()
                         deleted += 1
                     else:
-                        log.debug(f"Kept : {f.name}")
+                        if is_debug_mode_enabled():
+                            log.debug(f"Kept : {f.name}")
 
                 except Exception as e:
                     log.error(f"Error while processing file {f}: {e}", exc_info=True)

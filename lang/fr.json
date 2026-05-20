@@ -1222,5 +1222,9 @@
   "referral_expired_archive_days": "Délai d’archivage des expirés (jours)",
   "referral_expired_archive_days_help": "Nombre de jours avant archivage des parrainages expirés.",
   "task.referral_cleanup": "Nettoyage des parrainages",
-  "task_description.referral_cleanup": "Expire et archive automatiquement les anciens parrainages."
+  "task_description.referral_cleanup": "Expire et archive automatiquement les anciens parrainages.",
+  "expiration_date_override": "Override date d'expiration",
+  "expiration_date_override_help": "Ajoute automatiquement 1 an à la date d'expiration lorsque la période de préavis est atteinte.",
+  "monitoring.cards.live_sessions_no_sessions": "Aucune session active au cours des",
+  "subscription_set_as_default_help": "Ce modèle sera automatiquement sélectionné pour chaque nouvel utilisateur uniquement s’il est activé."
 }

@@ -500,17 +500,64 @@
           </select>
         </label>
 
-        <label class="text-sm block">
-          {{ t("max_streams_override") }}
-          <div class="mt-1">
-            <input type="number" name="max_streams_override"
-                   value="{{ user.max_streams_override if user.max_streams_override is not none else '' }}"
-                   class="w-24 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-          </div>
-          <div class="text-xs text-slate-500 mt-2">
-            {{ t("max_streams_override_help") }}
-          </div>
-        </label>
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-6 divide-y md:divide-y-0 md:divide-x divide-slate-800">
+
+		  <!-- Expiration override -->
+		  <label class="text-sm block md:pr-2">
+			<div class="flex items-center gap-2 mb-2">
+			  <span>{{ t("expiration_date_override") }}</span>
+
+			  <div class="relative group">
+				<button type="button"
+						class="w-5 h-5 rounded-full bg-slate-800 text-slate-300 text-xs hover:bg-slate-700">
+				  ?
+				</button>
+
+				<div class="absolute left-0 z-50 hidden group-hover:block w-72 p-3 rounded-xl border border-slate-700 bg-slate-900 text-xs text-slate-300 shadow-xl">
+				  {{ t("expiration_date_override_help") }}
+				</div>
+			  </div>
+			</div>
+
+			<label class="inline-flex items-center gap-2">
+			  <input type="checkbox"
+					 name="expiration_date_override"
+					 value="1"
+					 {% if user.expiration_date_override == 1 %}checked{% endif %}
+					 class="rounded border-slate-700 bg-slate-950 text-indigo-500">
+
+			  <span class="text-slate-300">
+				{{ t("enabled") }}
+			  </span>
+			</label>
+		  </label>
+
+		  <!-- Max streams override -->
+		  <label class="text-sm block md:pl-6">
+
+			<div class="flex items-center gap-2 mb-2">
+			  <span>{{ t("max_streams_override") }}</span>
+
+			  <div class="relative group">
+				<button type="button"
+						class="w-5 h-5 rounded-full bg-slate-800 text-slate-300 text-xs hover:bg-slate-700">
+				  ?
+				</button>
+
+				<div class="absolute left-0 z-50 hidden group-hover:block w-72 p-3 rounded-xl border border-slate-700 bg-slate-900 text-xs text-slate-300 shadow-xl">
+				  {{ t("max_streams_override_help") }}
+				</div>
+			  </div>
+			</div>
+
+			<input type="number"
+				   name="max_streams_override"
+				   value="{{ user.max_streams_override if user.max_streams_override is not none else '' }}"
+				   class="w-24 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+
+		  </label>
+
+		</div>
 
       </div>
     </div>

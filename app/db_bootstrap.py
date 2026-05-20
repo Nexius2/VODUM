@@ -416,6 +416,150 @@ def run_migrations():
     ensure_column(cursor, "user_referrals", "expired_at", "TIMESTAMP DEFAULT NULL")
     ensure_column(cursor, "user_referrals", "archived_at", "TIMESTAMP DEFAULT NULL")
 
+    # -------------------------------------------------
+    # MIGRATION: refresh old referral status CHECK constraint
+    # SQLite cannot ALTER CHECK constraints directly
+    # -------------------------------------------------
+
+    try:
+        cursor.execute("""
+            SELECT sql
+            FROM sqlite_master
+            WHERE type='table'
+              AND name='user_referrals'
+        """)
+
+        row = cursor.fetchone()
+        table_sql = (row[0] or "") if row else ""
+
+        if (
+            "'expired'" not in table_sql
+            or "'archived'" not in table_sql
+        ):
+
+            print("🛠 Migrating user_referrals CHECK constraint...")
+
+            cursor.execute("""
+                ALTER TABLE user_referrals
+                RENAME TO user_referrals_old
+            """)
+
+            cursor.execute("""
+            CREATE TABLE user_referrals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                referrer_user_id INTEGER NOT NULL,
+                referred_user_id INTEGER NOT NULL UNIQUE,
+
+                status TEXT NOT NULL DEFAULT 'pending'
+                    CHECK(status IN (
+                        'pending',
+                        'qualified',
+                        'rewarded',
+                        'expired',
+                        'archived',
+                        'cancelled'
+                    )),
+
+                referral_source TEXT DEFAULT 'manual',
+
+                start_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                qualification_due_at TIMESTAMP,
+                qualified_at TIMESTAMP DEFAULT NULL,
+
+                qualification_days_snapshot INTEGER NOT NULL DEFAULT 60,
+                reward_days_snapshot INTEGER NOT NULL DEFAULT 60,
+
+                reward_granted_at TIMESTAMP DEFAULT NULL,
+                reward_expiration_before TEXT DEFAULT NULL,
+                reward_expiration_after TEXT DEFAULT NULL,
+
+                expired_at TIMESTAMP DEFAULT NULL,
+                archived_at TIMESTAMP DEFAULT NULL,
+
+                notification_sent_at TIMESTAMP DEFAULT NULL,
+                notification_template_id INTEGER DEFAULT NULL,
+                last_error TEXT DEFAULT NULL,
+
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+                FOREIGN KEY(referrer_user_id) REFERENCES vodum_users(id) ON DELETE CASCADE,
+                FOREIGN KEY(referred_user_id) REFERENCES vodum_users(id) ON DELETE CASCADE
+            );
+            """)
+
+            cursor.execute("""
+                INSERT INTO user_referrals (
+                    id,
+                    referrer_user_id,
+                    referred_user_id,
+                    status,
+                    referral_source,
+                    start_at,
+                    qualification_due_at,
+                    qualified_at,
+                    qualification_days_snapshot,
+                    reward_days_snapshot,
+                    reward_granted_at,
+                    reward_expiration_before,
+                    reward_expiration_after,
+                    expired_at,
+                    archived_at,
+                    notification_sent_at,
+                    notification_template_id,
+                    last_error,
+                    created_at,
+                    updated_at
+                )
+                SELECT
+                    id,
+                    referrer_user_id,
+                    referred_user_id,
+                    status,
+                    referral_source,
+                    start_at,
+                    qualification_due_at,
+                    qualified_at,
+                    qualification_days_snapshot,
+                    reward_days_snapshot,
+                    reward_granted_at,
+                    reward_expiration_before,
+                    reward_expiration_after,
+                    expired_at,
+                    archived_at,
+                    notification_sent_at,
+                    notification_template_id,
+                    last_error,
+                    created_at,
+                    updated_at
+                FROM user_referrals_old
+            """)
+
+            cursor.execute("DROP TABLE user_referrals_old")
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_user_referrals_referrer_user_id
+                ON user_referrals(referrer_user_id)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_user_referrals_status
+                ON user_referrals(status)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_user_referrals_qualification_due_at
+                ON user_referrals(qualification_due_at)
+            """)
+
+            conn.commit()
+
+            print("✅ user_referrals CHECK constraint migrated")
+
+    except Exception as e:
+        print(f"❌ Failed migrating user_referrals constraint: {e}")
+
     ensure_column(cursor, "user_referral_settings", "auto_expire_pending", "INTEGER NOT NULL DEFAULT 1")
     ensure_column(cursor, "user_referral_settings", "auto_archive_rewarded", "INTEGER NOT NULL DEFAULT 1")
     ensure_column(cursor, "user_referral_settings", "auto_archive_expired", "INTEGER NOT NULL DEFAULT 1")
@@ -521,9 +665,12 @@ def run_migrations():
         conn.commit()
         print("✔ vodum_users.status constraint upgraded.")
 
-    # 1.2 vodum_users per-user stream override (NEW)
+    # 1.2 vodum_users per-user stream override 
     ensure_column(cursor, "vodum_users", "max_streams_override", "INTEGER DEFAULT NULL")
     ensure_column(cursor, "vodum_users", "notifications_order_override", "TEXT DEFAULT NULL")
+
+    # vodum_users per-user expiration date override
+    ensure_column(cursor, "vodum_users", "expiration_date_override", "INTEGER DEFAULT 0")
 
     # Missing columns on upgraded databases
     ensure_column(cursor, "vodum_users", "renewal_method", "TEXT DEFAULT NULL")
@@ -1929,7 +2076,7 @@ def run_migrations():
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "send_pending_invite_reminders",
         "description": "task_description.send_pending_invite_reminders",
-        "schedule": "0 10 * * *",
+        "schedule": "0 30 * * *",
         "enabled": 1,
         "status": "idle"
     })
@@ -1962,7 +2109,7 @@ def run_migrations():
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "send_comm_campaigns",
         "description": "task_description.send_comm_campaigns",
-        "schedule": "*/5 * * * *",
+        "schedule": "*/10 * * * *",
         "enabled": 0,
         "status": "disabled"
     })
@@ -2397,7 +2544,7 @@ def run_migrations():
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "send_mail_campaigns",
         "description": "task_description.send_mail_campaigns",
-        "schedule": "*/15 * * * *",  # toutes les 5 minutes
+        "schedule": "*/15 * * * *",  # toutes les 15 minutes
         "enabled": 0,
         "status": "disabled"
     })
@@ -2416,7 +2563,7 @@ def run_migrations():
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "stream_enforcer",
         "description": "task_description.stream_enforcer",
-        "schedule": "*/2 * * * *",   # toutes les 1 minutes
+        "schedule": "*/2 * * * *",   # toutes les 2 minutes
         "enabled": 0,                
         "status": "disabled"
     })
@@ -2425,7 +2572,7 @@ def run_migrations():
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "apply_plex_access_updates",
         "description": "task_description.apply_plex_access_updates",
-        "schedule": "*/30 * * * *",   # toutes les 2 minutes
+        "schedule": "*/5 * * * *",   # toutes les 5 minutes
         "enabled": 0,                # activée uniquement quand un job est ajouté
         "status": "idle"
     })
@@ -2462,7 +2609,7 @@ def run_migrations():
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "apply_jellyfin_access_updates",
         "description": "task_description.apply_jellyfin_access_updates",
-        "schedule": "*/2 * * * *",   # toutes les 2 minutes
+        "schedule": "*/5 * * * *",   # toutes les 5 minutes
         "enabled": 0,
         "status": "idle"
     })
@@ -2494,7 +2641,7 @@ def run_migrations():
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "refresh_dashboard_quote_cache",
         "description": "task_description.refresh_dashboard_quote_cache",
-        "schedule": "*/30 * * * *",   # vérifie toutes les 30 min, mais ne recalcule qu'une fois par jour
+        "schedule": "*/3 * * * *",   # vérifie toutes les 3h, mais ne recalcule qu'une fois par jour
         "enabled": 1,
         "status": "idle"
     })
@@ -2527,7 +2674,7 @@ def run_migrations():
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "referral_cleanup",
         "description": "task_description.referral_cleanup",
-        "schedule": "0 */6 * * *",
+        "schedule": "0 12 * * *",
         "enabled": 1,
         "status": "idle"
     })

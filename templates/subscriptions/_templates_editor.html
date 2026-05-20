@@ -91,12 +91,12 @@
 					   value="1"
 					   checked
 					   class="rounded border-slate-700 bg-slate-900">
-				Enabled
+				{{ t("enabled") }}
 			  </label>
 			</div>
 
 			<div class="text-xs text-slate-500 mt-1">
-			  This template will be automatically selected for every new user only if it is enabled.
+			  {{ t("subscription_set_as_default_help") }}
 			</div>
 		  </div>
 		</div>
@@ -106,7 +106,7 @@
     <div class="mt-4">
       <div class="flex items-center justify-between mb-2">
         <h3 class="text-xs uppercase tracking-wide text-slate-400">{{ t("policies") }}</h3>
-        <span class="text-xs text-slate-500">{{ t("subscription_templates_policies_help") }}</span>
+        <!-- <span class="text-xs text-slate-500">{{ t("subscription_templates_policies_help") }}</span>-->
       </div>
 
       <!-- Policy builder -->
