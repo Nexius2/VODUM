@@ -18,7 +18,7 @@ from datetime import datetime, date
 import re
 from email.message import EmailMessage
 from tasks_engine import task_logs
-from logging_utils import get_logger
+from logging_utils import get_logger, is_debug_mode_enabled
 from mailing_utils import build_user_context, render_mail
 from email_layout_utils import build_email_parts
 
@@ -62,10 +62,11 @@ def send_email(settings, to_email, subject, body):
     if not smtp_host:
         raise ValueError("SMTP host manquant")
 
-    log.debug(
-        f"[SMTP] Email sending → to={to_email}, subject={subject}, "
-        f"host={smtp_host}:{smtp_port}, tls={smtp_tls}"
-    )
+    if is_debug_mode_enabled():
+        log.debug(
+            f"[SMTP] Email sending → to={to_email}, subject={subject}, "
+            f"host={smtp_host}:{smtp_port}, tls={smtp_tls}"
+        )
 
     # -------------------------------------------------
     # Construction du mail (texte + HTML)

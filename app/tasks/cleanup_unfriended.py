@@ -16,7 +16,7 @@ But :
 """
 
 from tasks_engine import task_logs
-from logging_utils import get_logger
+from logging_utils import get_logger, is_debug_mode_enabled
 
 log = get_logger("cleanup_unfriended")
 
@@ -26,7 +26,8 @@ def run(task_id: int, db):
     log.info("=== CLEANUP UNFRIENDED : STRATING ===")
 
     try:
-        log.debug("Searching for Plex 'friend' accounts without any Plex libraries…")
+        if is_debug_mode_enabled():
+            log.debug("Searching for Plex 'friend' accounts without any Plex libraries…")
 
         # On travaille sur media_users (comptes sur serveurs)
         # car le rôle Plex est porté par media_users.role, pas par vodum_users.
@@ -61,10 +62,12 @@ def run(task_id: int, db):
             return
 
         media_user_ids = [r["media_user_id"] for r in rows]
-        log.debug(f"{len(media_user_ids)} Account(s) detected : {media_user_ids}")
+        if is_debug_mode_enabled():
+            log.debug(f"{len(media_user_ids)} Account(s) detected : {media_user_ids}")
 
         # Mise à jour en base : on passe le ROLE du compte Plex en 'unfriended'
-        log.debug("Updating the role of the affected Plex accounts…")
+        if is_debug_mode_enabled():
+            log.debug("Updating the role of the affected Plex accounts…")
 
         db.executemany(
             """

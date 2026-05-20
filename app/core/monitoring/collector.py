@@ -12,7 +12,7 @@ from core.monitoring.diff import compute_session_events
 from core.monitoring.mappers import resolve_media_user_id
 from core.monitoring.artwork import extract_artwork_refs
 from core.providers.registry import get_provider
-from logging_utils import get_logger
+from logging_utils import get_logger, is_debug_mode_enabled
 
 logger = get_logger("monitoring.collector")
 
@@ -280,12 +280,12 @@ def _collect_plex_server_resources(srv: Dict[str, Any], timeout: int = 4) -> Dic
 
         except Exception as e:
             last_error = e
-
-    logger.debug(
-        "Plex resource stats fetch failed for server_id=%s: %s",
-        srv.get("id"),
-        str(last_error) if last_error else "unknown",
-    )
+    if is_debug_mode_enabled():
+        logger.debug(
+            "Plex resource stats fetch failed for server_id=%s: %s",
+            srv.get("id"),
+            str(last_error) if last_error else "unknown",
+        )
 
     return {
         "cpu_pct": None,
@@ -539,11 +539,12 @@ def collect_sessions_for_server(
             resource_stats = _collect_server_resource_stats(srv, provider_name)
             _store_server_resource_stats(db, server_id, provider_name, resource_stats)
         except Exception as resource_exc:
-            logger.debug(
-                "server resource stats collection failed (server_id=%s): %s",
-                server_id,
-                str(resource_exc),
-            )
+            if is_debug_mode_enabled():
+                logger.debug(
+                    "server resource stats collection failed (server_id=%s): %s",
+                    server_id,
+                    str(resource_exc),
+                )
 
         cur_map = {str(s["session_key"]): s for s in current if s.get("session_key")}
 
@@ -1010,11 +1011,12 @@ def collect_sessions_for_server(
             _COLLECT_ERROR_LAST_LOG_TS[key] = now
             logger.exception("collect_sessions_for_server failed (server_id=%s)", server_id)
         else:
-            logger.debug(
-                "collect_sessions_for_server failed (server_id=%s) [throttled]: %s",
-                server_id,
-                str(e),
-            )
+            if is_debug_mode_enabled():
+                logger.debug(
+                    "collect_sessions_for_server failed (server_id=%s) [throttled]: %s",
+                    server_id,
+                    str(e),
+                )
 
 
 

@@ -3,7 +3,7 @@ import json
 from datetime import datetime, date, timedelta
 
 from tasks_engine import task_logs
-from logging_utils import get_logger
+from logging_utils import get_logger, is_debug_mode_enabled
 
 
 log = get_logger("update_user_status")
@@ -105,7 +105,8 @@ def compute_status(expiration_date, today, preavis_days, reminder_days):
     """
     Calcul du statut VODUM
     """
-    log.debug(f"[STATUS DEBUG] expiration_date='{expiration_date}'")
+    if is_debug_mode_enabled():
+        log.debug(f"[STATUS DEBUG] expiration_date='{expiration_date}'")
 
     # 1️⃣ Pas de date → pas de changement
     if not expiration_date:
@@ -181,7 +182,7 @@ def run(task_id: int, db):
         # Utilisateurs
         # ----------------------------------------------------
         users = db.query(
-            "SELECT id, status, expiration_date FROM vodum_users"
+            "SELECT id, status, expiration_date, expiration_date_override FROM vodum_users"
         )
 
         log.info(f"{len(users)} users loaded chargés")
@@ -232,6 +233,7 @@ def run(task_id: int, db):
         for user in users:
             uid = user["id"]
             old_status = user["status"]
+            expiration_override = int(user["expiration_date_override"] or 0)
             expiration_date = user["expiration_date"]
 
             # ✅ Cas spécial : invitation Plex encore non acceptée
@@ -286,6 +288,49 @@ def run(task_id: int, db):
                     updated += 1
 
                 continue
+
+            # ----------------------------------------------------
+            # Automatic expiration override (+1 year)
+            # ----------------------------------------------------
+
+            if expiration_override == 1 and expiration_date:
+
+                try:
+                    exp_date = datetime.strptime(
+                        expiration_date,
+                        "%Y-%m-%d"
+                    ).date()
+
+                    warning_date = exp_date - timedelta(days=preavis_days)
+
+                    if today >= warning_date:
+
+                        new_expiration = (
+                            exp_date + timedelta(days=365)
+                        ).isoformat()
+
+                        db.execute(
+                            """
+                            UPDATE vodum_users
+                            SET expiration_date = ?
+                            WHERE id = ?
+                            """,
+                            (new_expiration, uid),
+                        )
+
+                        log.info(
+                            f"[USER {uid}] expiration override applied "
+                            f"{expiration_date} -> {new_expiration}"
+                        )
+
+                        updated += 1
+                        continue
+
+                except Exception:
+                    log.warning(
+                        f"[USER {uid}] invalid expiration date "
+                        f"for override: {expiration_date}"
+                    )
 
             # ✅ Cas normal
             new_status = compute_status(

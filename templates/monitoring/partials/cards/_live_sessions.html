@@ -30,9 +30,9 @@
         {% endif %}
       </div>
 
-      <div class="text-xs text-slate-500 mt-2">
+      <!-- <div class="text-xs text-slate-500 mt-2">
         last {{ live_window_seconds }}s
-      </div>
+      </div> -->
     </div>
 
   {% else %}
@@ -60,9 +60,9 @@
       </div>
     </div>
 
-    <div class="text-xs text-slate-500 mt-3">
+    <!-- <div class="text-xs text-slate-500 mt-3">
       last {{ live_window_seconds }}s
-    </div>
+    </div>-->
 
     {% if live_servers and live_servers|length > 0 %}
       <div class="mt-4 flex items-center justify-between text-[11px] text-slate-500">
@@ -99,7 +99,7 @@
       </div>
     {% else %}
       <div class="mt-4 text-sm text-slate-500">
-        No active sessions in the last {{ live_window_seconds }}s.
+        {{ t("monitoring.cards.live_sessions_no_sessions") }} {{ live_window_seconds }}s.
       </div>
     {% endif %}
 

@@ -7,7 +7,7 @@ import requests
 import xml.etree.ElementTree as ET
 import json
 
-from logging_utils import get_logger
+from logging_utils import get_logger, is_debug_mode_enabled
 from tasks_engine import task_logs
 from plexapi.server import PlexServer  
 from core.plex_rate_limit import install_plex_rate_limit, wait_for_plex_slot
@@ -421,7 +421,7 @@ def plex_get_user_access(db, plex, server_name, media_user_id: int):
 
     media_user = db.query_one(
         """
-        SELECT email, type
+        SELECT email, username, type
         FROM media_users
         WHERE id = ?
         """,
@@ -476,10 +476,15 @@ def plex_get_user_access(db, plex, server_name, media_user_id: int):
 
         # Fallback username
         if not user_acct:
-            username = media_user.get("username")
+            username = (media_user.get("username") or "").strip()
 
             if username:
                 try:
+                    log.info(
+                        f"[ACCESS] Trying Plex lookup via username "
+                        f"for {masked_email} -> {username}"
+                    )
+
                     user_acct = account.user(username)
 
                     if user_acct:
@@ -488,8 +493,12 @@ def plex_get_user_access(db, plex, server_name, media_user_id: int):
                             f"via username for {masked_email}"
                         )
 
-                except Exception:
-                    pass
+                except Exception as username_error:
+                    log.warning(
+                        f"[ACCESS] Username lookup failed "
+                        f"for {masked_email} ({username}): "
+                        f"{username_error}"
+                    )
 
         if not user_acct:
             log.warning(
@@ -654,6 +663,31 @@ def sync_plex_user_library_access(db, plex, server):
         username = _row_value(u, "username", "")
 
         processed_users += 1
+
+        # ✅ Ignore users that should no longer exist on Plex
+        vodum_user = db.query_one(
+            """
+            SELECT status
+            FROM vodum_users
+            WHERE id = ?
+            """,
+            (vodum_user_id,),
+        )
+
+        user_status = (
+            str(vodum_user["status"]).strip().lower()
+            if vodum_user and vodum_user["status"]
+            else ""
+        )
+
+        if user_status in ("expired", "disabled", "removed"):
+            log.info(
+                f"[SYNC SKIPPED] ignored user status={user_status} "
+                f"(vodum_user_id={vodum_user_id}, "
+                f"media_user_id={media_user_id}, "
+                f"server_id={server_id})"
+            )
+            continue
 
         # ✅ Cas spécial : invitation Plex pas encore acceptée
         # On NE TOUCHE PAS aux media_user_libraries déjà prévues en DB.
@@ -1013,7 +1047,8 @@ def fetch_xml(url: str, token: str) -> Optional[ET.Element]:
         "X-Plex-Client-Identifier": "vodum-sync-plex",
     }
 
-    log.debug(f"[API] GET {url}")
+    if is_debug_mode_enabled():
+        log.debug(f"[API] GET {url}")
 
     try:
         resp = requests.get(url, headers=headers, timeout=20)
@@ -1229,10 +1264,11 @@ def fetch_users_from_plex_api(token: str, db=None) -> Dict[str, Dict[str, Any]]:
             "servers": servers,
         }
 
-        log.debug(
-            f"[API] User plex_id={plex_id} username={username!r} "
-            f"role={plex_role}, servers={len(servers)}"
-        )
+        if is_debug_mode_enabled():
+            log.debug(
+                f"[API] User plex_id={plex_id} username={username!r} "
+                f"role={plex_role}, servers={len(servers)}"
+            )
 
     log.info(f"[API] /api/users → {len(users)} User(s) retrieved.")
     return users
@@ -1542,6 +1578,8 @@ def sync_users_from_api(db) -> None:
         email = data["email"] or None
         avatar = data["avatar"]
         plex_role = data["plex_role"]
+
+
 
         joined_at = data.get("joined_at")
         accepted_at = data.get("accepted_at")
@@ -1856,7 +1894,8 @@ def run(task_id: int, db):
     """
 
     log.info("=== [SYNC_PLEX] sync_plex task started ===")
-    log.debug(f"[SYNC_PLEX] task_id={task_id}")
+    if is_debug_mode_enabled():
+        log.debug(f"[SYNC_PLEX] task_id={task_id}")
 
     task_logs(task_id, "info", "Plex synchronization started…")
 

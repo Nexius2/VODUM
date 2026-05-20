@@ -15,7 +15,7 @@ import urllib3
 from datetime import datetime
 from plexapi.server import PlexServer
 from tasks_engine import task_logs
-from logging_utils import get_logger
+from logging_utils import get_logger, is_debug_mode_enabled
 from core.plex_rate_limit import install_plex_rate_limit
 
 
@@ -30,21 +30,25 @@ log = get_logger("check_servers")   # Logger TXT haut niveau
 
 def jellyfin_get_status(base_url, token=None):
     try:
-        log.debug(f"[JELLYFIN] ping url={base_url}/System/Ping")
+        if is_debug_mode_enabled():
+            log.debug(f"[JELLYFIN] ping url={base_url}/System/Ping")
         r = requests.get(f"{base_url}/System/Ping", timeout=5)
-        log.debug(f"[JELLYFIN] ping status_code={r.status_code}")
+        if is_debug_mode_enabled():
+            log.debug(f"[JELLYFIN] ping status_code={r.status_code}")
 
         if r.status_code != 200:
             return ("down", None, None, f"Ping returned {r.status_code}")
 
         if token:
-            log.debug(f"[JELLYFIN] info url={base_url}/System/Info (with api_key)")
+            if is_debug_mode_enabled():
+                log.debug(f"[JELLYFIN] info url={base_url}/System/Info (with api_key)")
             r2 = requests.get(
                 f"{base_url}/System/Info",
                 params={"api_key": token},
                 timeout=5
             )
-            log.debug(f"[JELLYFIN] info status_code={r2.status_code}")
+            if is_debug_mode_enabled():
+                log.debug(f"[JELLYFIN] info status_code={r2.status_code}")
 
             try:
                 info = r2.json()
@@ -55,7 +59,8 @@ def jellyfin_get_status(base_url, token=None):
             name = info.get("ServerName")
             mid = info.get("Id")
             version = info.get("Version")
-            log.debug(f"[JELLYFIN] info parsed name={name} id={mid} version={version}")
+            if is_debug_mode_enabled():
+                log.debug(f"[JELLYFIN] info parsed name={name} id={mid} version={version}")
 
             return ("up", name, mid, version)
 
@@ -84,15 +89,17 @@ def choose_server_base_urls(server_row):
 
 def plex_get_info(base_url, token):
     try:
-        log.debug(f"[PLEX] connecting base_url={base_url} token_present={bool(token)}")
+        if is_debug_mode_enabled():
+            log.debug(f"[PLEX] connecting base_url={base_url} token_present={bool(token)}")
         session = requests.Session()
         session.verify = False
         install_plex_rate_limit(session, base_url)
         plex = PlexServer(base_url, token, session=session)
-        log.debug(
-            f"[PLEX] connected friendlyName={plex.friendlyName} "
-            f"machineId={plex.machineIdentifier} version={plex.version}"
-        )
+        if is_debug_mode_enabled():
+            log.debug(
+                f"[PLEX] connected friendlyName={plex.friendlyName} "
+                f"machineId={plex.machineIdentifier} version={plex.version}"
+            )
         return ("up", plex.friendlyName, plex.machineIdentifier, plex.version)
 
     except Exception as e:
@@ -139,14 +146,15 @@ def run(task_id: int, db):
 
             base_urls = choose_server_base_urls(s)
             base_url = base_urls[0] if base_urls else None
-            log.debug(
-                f"[SERVER #{sid}] raw_urls="
-                f"url={s.get('url')} local={s.get('local_url')} public={s.get('public_url')}"
-            )
-            log.debug(
-                f"[SERVER #{sid}] chosen_base_url={base_url} type={s.get('type')} "
-                f"has_token={bool(s.get('token'))} verify_ssl=disabled_for_plexapi"
-            )
+            if is_debug_mode_enabled():
+                log.debug(
+                    f"[SERVER #{sid}] raw_urls="
+                    f"url={s.get('url')} local={s.get('local_url')} public={s.get('public_url')}"
+                )
+                log.debug(
+                    f"[SERVER #{sid}] chosen_base_url={base_url} type={s.get('type')} "
+                    f"has_token={bool(s.get('token'))} verify_ssl=disabled_for_plexapi"
+                )
 
             if not base_url:
                 log.warning(f"Server #{sid} : No valid URL.")

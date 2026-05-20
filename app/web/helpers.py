@@ -8,7 +8,7 @@ from typing import Optional
 from flask import g, current_app
 
 from db_manager import DBManager
-from logging_utils import get_logger
+from logging_utils import get_logger, is_debug_mode_enabled
 from core.i18n import init_i18n, get_translator
 from core.backup import BackupConfig
 
@@ -91,7 +91,8 @@ def add_log(level, category, message, details=None):
     level = str(level).lower()
 
     if level == "debug":
-        logger.debug(message)
+        if is_debug_mode_enabled():
+            logger.debug(message)
     elif level == "info":
         logger.info(message)
     elif level in ("warn", "warning"):
@@ -103,6 +104,32 @@ def add_log(level, category, message, details=None):
     else:
         logger.info(message)
 
+def get_brand_name() -> str:
+    """
+    Retourne le nom de marque configuré dans les settings.
+    Fallback: Vodum
+    """
+
+    try:
+        db = get_db()
+
+        row = db.query_one(
+            """
+            SELECT value
+            FROM settings
+            WHERE key = 'brand_name'
+            """
+        )
+
+        if not row:
+            return "Vodum"
+
+        value = (row["value"] or "").strip()
+
+        return value or "Vodum"
+
+    except Exception:
+        return "Vodum"
 
 # -----------------------------
 # Email helpers (copied from app.py)
@@ -137,11 +164,13 @@ def _normalize_body_to_html(body: str) -> str:
     return escaped.replace("\n", "<br>\n")
 
 
-def _wrap_email_html(inner_html: str, title: str = "Stream Empire") -> str:
+def _wrap_email_html(inner_html: str, title: str | None = None) -> str:
     """
     Enveloppe 'email-safe' (Gmail/Outlook) : tables + styles inline.
     """
     inner_html = inner_html or ""
+    if not title:
+        title = get_brand_name()
     return f"""\
 <!DOCTYPE html>
 <html>
@@ -236,7 +265,10 @@ def send_email_via_settings(
         body_html_inner = _normalize_body_to_html(body or "")
         body_plain = (body or "").strip()
 
-    body_html = _wrap_email_html(body_html_inner, title="Stream Empire")
+    body_html = _wrap_email_html(
+        body_html_inner,
+        title=get_brand_name()
+    )
 
     msg = EmailMessage()
     msg["From"] = mail_from

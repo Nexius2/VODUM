@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Iterable
 
-from logging_utils import get_logger
+from logging_utils import get_logger, is_debug_mode_enabled
 
 
 @dataclass(frozen=True)
@@ -42,7 +42,8 @@ def ensure_backup_dir(cfg: BackupConfig) -> Path:
         )
         raise
 
-    logger.debug(f"[BACKUP] Dossier de sauvegarde prêt: {backup_dir}")
+    if is_debug_mode_enabled():
+        logger.debug(f"[BACKUP] Dossier de sauvegarde prêt: {backup_dir}")
     return backup_dir
 
 
@@ -129,7 +130,8 @@ def list_backups(cfg: BackupConfig) -> list[dict]:
                 }
             )
 
-        logger.debug(f"[BACKUP] {len(backups)} sauvegarde(s) trouvée(s)")
+        if is_debug_mode_enabled():
+            logger.debug(f"[BACKUP] {len(backups)} sauvegarde(s) trouvée(s)")
         return backups
 
     except Exception as e:

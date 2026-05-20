@@ -4,7 +4,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from logging_utils import get_logger
+from logging_utils import get_logger, is_debug_mode_enabled
 from tasks_engine import task_logs
 from config import Config
 
@@ -34,14 +34,17 @@ def _sqlite_checkpoint_if_possible(db):
     """
     try:
         db.execute("PRAGMA wal_checkpoint(TRUNCATE);")
-        log.debug("SQLite WAL checkpoint executed (TRUNCATE).")
+        if is_debug_mode_enabled():
+            log.debug("SQLite WAL checkpoint executed (TRUNCATE).")
     except Exception as e:
-        log.debug(f"SQLite WAL checkpoint skipped/failed: {e}")
+        if is_debug_mode_enabled():
+            log.debug(f"SQLite WAL checkpoint skipped/failed: {e}")
 
 
 def run(task_id: int, db):
     log.info("=== AUTO BACKUP : starting ===")
-    log.debug(f"task_id={task_id}, db Provided={db is not None}")
+    if is_debug_mode_enabled():
+        log.debug(f"task_id={task_id}, db Provided={db is not None}")
 
     start = time.monotonic()
     task_logs(task_id, "info", "Auto-backup started")
@@ -50,7 +53,8 @@ def run(task_id: int, db):
         # ---------------------------------
         # 1) Lire configuration depuis settings
         # ---------------------------------
-        log.debug("Reading settings configuration…")
+        if is_debug_mode_enabled():
+            log.debug("Reading settings configuration…")
 
         row = db.query_one("SELECT backup_retention_days FROM settings WHERE id = 1")
         retention_days = _row_value(row, "backup_retention_days", 30)
@@ -72,8 +76,9 @@ def run(task_id: int, db):
         # IMPORTANT: on utilise le dossier standard de Vodum (persistant)
         backup_dir = Path(os.environ.get("VODUM_BACKUP_DIR", "/appdata/backups"))
 
-        log.debug(f"Database path from Config : {database_path}")
-        log.debug(f"Backup directory          : {backup_dir}")
+        if is_debug_mode_enabled():
+            log.debug(f"Database path from Config : {database_path}")
+            log.debug(f"Backup directory          : {backup_dir}")
 
         if not database_path.exists():
             raise FileNotFoundError(f"Database not found: {database_path}")
@@ -116,7 +121,8 @@ def run(task_id: int, db):
                 scanned += 1
                 try:
                     if f.stat().st_mtime < cutoff_ts:
-                        log.debug(f"Deleting old backup: {f.name}")
+                        if is_debug_mode_enabled():
+                            log.debug(f"Deleting old backup: {f.name}")
                         f.unlink()
                         deleted += 1
                 except Exception as e:

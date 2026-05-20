@@ -1220,5 +1220,9 @@
   "referral_auto_archive_expired": "Archivia automaticamente i referral scaduti",
   "referral_auto_archive_expired_help": "I referral scaduti verranno nascosti dalla lista principale dopo un certo periodo.",
   "referral_expired_archive_days": "Ritardo archivio scaduti (giorni)",
-  "referral_expired_archive_days_help": "Numero di giorni prima dell’archiviazione dei referral scaduti."
+  "referral_expired_archive_days_help": "Numero di giorni prima dell’archiviazione dei referral scaduti.",
+  "expiration_date_override": "Override data di scadenza",
+  "expiration_date_override_help": "Aggiunge automaticamente 1 anno alla data di scadenza quando viene raggiunto il periodo di preavviso.",
+  "monitoring.cards.live_sessions_no_sessions": "Nessuna sessione attiva negli ultimi",
+  "subscription_set_as_default_help": "Questo modello verrà selezionato automaticamente per ogni nuovo utente solo se è abilitato."
 }

@@ -6,7 +6,7 @@ import os
 from typing import Callable, Dict, Optional
 
 from flask import session, redirect, url_for, request, current_app
-from logging_utils import get_logger
+from logging_utils import get_logger, is_debug_mode_enabled
 
 
 # Cache global pour éviter de relire les JSON à chaque requête
@@ -45,9 +45,10 @@ def load_language_dict(lang_code: str) -> dict:
 
         if isinstance(data, dict):
             translations.update(data)
-            logger.debug(
-                f"[i18n] {len(translations)} traductions chargées depuis fichier ({lang_code})"
-            )
+            if is_debug_mode_enabled():
+                logger.debug(
+                    f"[i18n] {len(translations)} traductions chargées depuis fichier ({lang_code})"
+                )
 
     except Exception as e:
         logger.error(

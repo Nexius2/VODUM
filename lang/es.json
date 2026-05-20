@@ -1220,5 +1220,9 @@
   "referral_auto_archive_expired": "Archivar automáticamente los referidos expirados",
   "referral_auto_archive_expired_help": "Los referidos expirados se ocultarán de la lista principal después de un período.",
   "referral_expired_archive_days": "Retraso de archivado de expirados (días)",
-  "referral_expired_archive_days_help": "Número de días antes de archivar los referidos expirados."
+  "referral_expired_archive_days_help": "Número de días antes de archivar los referidos expirados.",
+  "expiration_date_override": "Override de fecha de expiración",
+  "expiration_date_override_help": "Añade automáticamente 1 año a la fecha de expiración cuando se alcanza el período de aviso.",
+  "monitoring.cards.live_sessions_no_sessions": "No hay sesiones activas en los últimos",
+  "subscription_set_as_default_help": "Esta plantilla se seleccionará automáticamente para cada nuevo usuario solo si está habilitada."
 }

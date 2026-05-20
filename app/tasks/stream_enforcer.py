@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Tuple
 
 from core.providers.registry import get_provider
 from logging_utils import get_logger
+from logging_utils import is_debug_mode_enabled
 
 logger = get_logger("stream_enforcer")
 
@@ -100,10 +101,11 @@ def _extract_machine_identifier(sess: dict) -> str:
                 return str(value).strip().lower()
 
     except Exception as e:
-        logger.debug(
-            "[smart_household] failed to extract machine identifier: %s",
-            e,
-        )
+        if is_debug_mode_enabled():
+            logger.debug(
+                "[smart_household] failed to extract machine identifier: %s",
+                e,
+            )
 
     return ""
 
@@ -212,17 +214,18 @@ def _deduplicate_household_sessions(sessions: List[dict]) -> List[dict]:
             if _is_probable_same_household(sess, existing):
                 duplicate = True
 
-                logger.debug(
-                    "[household_dedupe] merged sessions | user=%s | ip_a=%s | ip_b=%s | device_a=%s | device_b=%s | title_a=%s | title_b=%s | score=%s",
-                    sess.get("media_username") or sess.get("external_user_id"),
-                    sess.get("ip"),
-                    existing.get("ip"),
-                    sess.get("device"),
-                    existing.get("device"),
-                    sess.get("title"),
-                    existing.get("title"),
-                    _household_match_score(sess, existing),
-                )
+                if is_debug_mode_enabled():
+                    logger.debug(
+                        "[household_dedupe] merged sessions | user=%s | ip_a=%s | ip_b=%s | device_a=%s | device_b=%s | title_a=%s | title_b=%s | score=%s",
+                        sess.get("media_username") or sess.get("external_user_id"),
+                        sess.get("ip"),
+                        existing.get("ip"),
+                        sess.get("device"),
+                        existing.get("device"),
+                        sess.get("title"),
+                        existing.get("title"),
+                        _household_match_score(sess, existing),
+                    )
 
                 break
 
@@ -244,11 +247,13 @@ def _deduplicate_household_sessions(sessions: List[dict]) -> List[dict]:
             if len(_RECENT_SESSION_CACHE[user_key]) > 25:
                 _RECENT_SESSION_CACHE[user_key] = _RECENT_SESSION_CACHE[user_key][-25:]
 
-    logger.debug(
-        "[smart_household] dedupe result original=%s kept=%s",
-        len(sessions),
-        len(kept),
-    )
+    if is_debug_mode_enabled():
+        if is_debug_mode_enabled():
+            logger.debug(
+                "[smart_household] dedupe result original=%s kept=%s",
+                len(sessions),
+                len(kept),
+            )
 
     return kept
 
@@ -267,10 +272,11 @@ def _cleanup_recent_session_cache():
         if kept:
             _RECENT_SESSION_CACHE[user_key] = kept
         else:
-            logger.debug(
-                "[smart_household] cleanup cache user=%s",
-                user_key,
-            )
+            if is_debug_mode_enabled():
+                logger.debug(
+                    "[smart_household] cleanup cache user=%s",
+                    user_key,
+                )
 
             _RECENT_SESSION_CACHE.pop(user_key, None)
 
@@ -322,10 +328,11 @@ def _jellyfin_session_id_from_target(target: dict, fallback_session_key: str) ->
         if sid:
             return str(sid)
     except Exception as e:
-        logger.debug(
-            "[stream_enforcer] failed to extract jellyfin session id: %s",
-            e,
-        )
+        if is_debug_mode_enabled():
+            logger.debug(
+                "[stream_enforcer] failed to extract jellyfin session id: %s",
+                e,
+            )
     return str(fallback_session_key)
 
 
@@ -684,11 +691,12 @@ def _policy_applies(policy: dict, sess: dict) -> bool:
 
         # LOG IMPORTANT : si vodum_user_id est NULL, une policy scope=user ne peut jamais matcher
         if vuid is None:
-            logger.debug(
-                "[stream_enforcer] policy scope=user skipped (vodum_user_id is NULL) "
-                f"scope_id={scope_id} media_user_id={sess.get('media_user_id')} external_user_id={sess.get('external_user_id')} "
-                f"server_id={sess.get('server_id')} provider={sess.get('provider')}"
-            )
+            if is_debug_mode_enabled():
+                logger.debug(
+                    "[stream_enforcer] policy scope=user skipped (vodum_user_id is NULL) "
+                    f"scope_id={scope_id} media_user_id={sess.get('media_user_id')} external_user_id={sess.get('external_user_id')} "
+                    f"server_id={sess.get('server_id')} provider={sess.get('provider')}"
+                )
             return False
 
         return (scope_id is not None) and (int(scope_id) == int(vuid))
@@ -817,12 +825,13 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
     try:
         # Only log policies that actually match sessions
         if scoped:
-            logger.debug(
-                "[stream_enforcer] policy_scope_check "
-                f"id={policy.get('id')} "
-                f"rule={policy.get('rule_type')} "
-                f"scoped_sessions={len(scoped)}"
-            )
+            if is_debug_mode_enabled():
+                logger.debug(
+                    "[stream_enforcer] policy_scope_check "
+                    f"id={policy.get('id')} "
+                    f"rule={policy.get('rule_type')} "
+                    f"scoped_sessions={len(scoped)}"
+                )
     except Exception:
         pass
 
