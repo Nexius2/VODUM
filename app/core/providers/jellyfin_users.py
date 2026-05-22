@@ -27,11 +27,17 @@ def _api_key(server_row: Dict[str, Any]) -> str:
     return token
 
 
-def _headers() -> Dict[str, str]:
-    return {
+def _headers(api_key: Optional[str] = None) -> Dict[str, str]:
+
+    headers = {
         "Accept": "application/json",
         "Content-Type": "application/json",
     }
+
+    if api_key:
+        headers["X-Emby-Token"] = api_key
+
+    return headers
 
 
 def jellyfin_list_users(server_row: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -57,9 +63,8 @@ def jellyfin_create_user(
     payload = {"Name": username.strip()}
     r = requests.post(
         f"{base}/Users/New",
-        params={"api_key": api_key},
         json=payload,
-        headers=_headers(),
+        headers=_headers(api_key),
         timeout=20,
     )
 
@@ -99,13 +104,19 @@ def jellyfin_set_password(
 
     r = requests.post(
         f"{base}/Users/{jellyfin_user_id}/Password",
-        params={"api_key": api_key},
         json=payload,
-        headers=_headers(),
+        headers=_headers(api_key),
         timeout=20,
     )
 
     if r.status_code >= 400:
+        log.error(
+            f"[JELLYFIN PASSWORD ERROR] "
+            f"status={r.status_code} "
+            f"url={r.url} "
+            f"response={r.text}"
+        )
+
         raise RuntimeError(
             f"Jellyfin: set password failed ({r.status_code}) {r.text}"
         )

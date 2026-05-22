@@ -671,7 +671,10 @@ def _watchdog_loop():
 # -------------------------------------------------------------------
 # Logging unifié des tâches
 # -------------------------------------------------------------------
-def task_logs(task_id, status, message, details=None):
+def task_logs(task_id, status, message, details=None, debug_only=False):
+
+    if debug_only and not is_debug_mode_enabled():
+        return
 
     # Mapping status → level + label lisible
     status_l = str(status).lower().strip()
@@ -692,24 +695,24 @@ def task_logs(task_id, status, message, details=None):
         level = "error"
         label = "ERROR"
 
-    # Construction message
     log_msg = f"[TASK {task_id}] {label}: {message}"
 
     if details is not None:
-        # évite les logs illisibles quand details est un dict/list
         if not isinstance(details, str):
             try:
                 import json
                 details = json.dumps(details, ensure_ascii=False)
             except Exception:
                 details = str(details)
+
         log_msg += f" | details={details}"
 
-    # Dispatch vers logging_utils
     if level == "error":
         logger.error(log_msg)
+
     elif level == "warning":
         logger.warning(log_msg)
+
     else:
         logger.info(log_msg)
 
@@ -755,7 +758,8 @@ def mark_task_queue_failed(task_id: int, error_message: str):
 
 def enqueue_task(task_id: int):
     if not _cron_jobs_enabled():
-        logger.info(f"Cron disabled (global); ignoring enqueue for task_id={task_id}")
+        if is_debug_mode_enabled():
+            logger.info(f"Cron disabled (global); ignoring enqueue for task_id={task_id}")
         return False
 
     row = db.query_one(
@@ -950,7 +954,13 @@ def _handle_task_success(task_id: int, task_name: str, schedule):
 
     if is_debug_mode_enabled():
         logger.debug(f"Task '{task_name}' completed successfully.")
-    task_logs(task_id, "success", f"Task '{task_name}' completed successfully")
+
+    task_logs(
+        task_id,
+        "success",
+        f"Task '{task_name}' completed successfully",
+        debug_only=True
+    )
 
     if task_name == "check_servers":
         if is_debug_mode_enabled():
@@ -1027,7 +1037,7 @@ def _handle_task_success(task_id: int, task_name: str, schedule):
 
             if is_debug_mode_enabled():
                 logger.debug(f"Next run '{task_name}' → {next_exec}")
-            task_logs(task_id, "info", f"Next run '{task_name}' → {next_exec}")
+                task_logs(task_id, "info", f"Next run '{task_name}' → {next_exec}")
 
         except Exception as e:
             logger.error(f"Schedule error after execution: {e}")
@@ -1136,12 +1146,22 @@ def _process_task_result(task_id: int, task_name: str, result, start_time: float
             if result:
                 if is_debug_mode_enabled():
                     logger.debug(f"Task '{task_name}' returned data")
+
                 task_logs(
                     task_id,
                     "info",
-                    f"Task '{task_name}' returned data"
+                    f"Task '{task_name}' returned data",
+                    debug_only=True
                 )
-            task_logs(task_id, "info", f"Task '{task_name}' returned", details=result)
+
+            task_logs(
+                task_id,
+                "info",
+                f"Task '{task_name}' returned",
+                details=result,
+                debug_only=True
+            )
+
         except Exception as log_exc:
             logger.warning(
                 f"Unable to log task return payload for '{task_name}' (id={task_id}): {log_exc}",
@@ -1175,8 +1195,15 @@ def run_task(task_id: int):
     schedule = ctx["schedule"]
     max_duration = ctx["max_duration"]
 
-    logger.info(f"Starting task '{name}' (id={task_id})")
-    task_logs(task_id, "start", f"Starting task '{name}'")
+    if is_debug_mode_enabled():
+        logger.debug(f"Starting task '{name}' (id={task_id})")
+
+    task_logs(
+        task_id,
+        "start",
+        f"Starting task '{name}'",
+        debug_only=True
+    )
 
     start_time = time.time()
 
@@ -1352,7 +1379,8 @@ def _run_task_sequence_internal(task_names):
         logger.debug(f"Sequence start : {task_names}")
 
     for name in task_names:
-        logger.info(f"[SEQ] starting task : {name}")
+        if is_debug_mode_enabled():
+            logger.debug(f"[SEQ] starting task : {name}")
 
         row = db.query_one(
             "SELECT id FROM tasks WHERE name=?",
@@ -1376,7 +1404,8 @@ def _run_task_sequence_internal(task_names):
         # Attend une exécution réelle (même si la tâche reste 'queued' après)
         wait_for_task_completion(name, last_run_before=last_run_before, timeout=1800)
 
-    logger.info(f"Sequence ended : {task_names}")
+    if is_debug_mode_enabled():
+        logger.debug(f"Sequence ended : {task_names}")
     return True
 
 def auto_enable_monitoring_tasks():

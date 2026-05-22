@@ -310,7 +310,10 @@ def run_migrations():
                                f"-> Check that tables.sql has been imported correctly.")
 
     ensure_column(cursor, "servers", "server_version", "TEXT DEFAULT NULL")
+    # Jellyfin stored password (1 password per media account/server)
+    ensure_column(cursor, "media_users", "stored_password", "TEXT DEFAULT NULL")
     conn.commit()
+
 
     # -------------------------------------------------
     # TELEMETRY SETTINGS
