@@ -5,7 +5,7 @@ import requests
 from datetime import datetime, timedelta
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
-from logging_utils import get_logger
+from logging_utils import get_logger, is_debug_mode_enabled
 
 
 logger = get_logger("sync_jellyfin")
@@ -426,7 +426,14 @@ def _ensure_vodum_user_for_username(
             )
             current_user = dict(urow) if urow else {}
 
-            best_vuid = _pick_best_vodum_user_for_username(db, uname)
+            best_vuid = None
+
+            # IMPORTANT:
+            # Jellyfin users must never auto-merge by username.
+            # Same usernames across Jellyfin servers are not reliable identities.
+            if provider_type != "jellyfin":
+                best_vuid = _pick_best_vodum_user_for_username(db, uname)
+
             if best_vuid and best_vuid != current_vuid and _is_placeholder_vodum_user(current_user):
                 # migre l'identité vers le compte existant "meilleur"
                 db.execute(
@@ -454,23 +461,35 @@ def _ensure_vodum_user_for_username(
             )
             return current_vuid
 
-        # Identité absente -> tenter de rattacher à un vodum_user existant (username)
-        best_vuid = _pick_best_vodum_user_for_username(db, uname)
-        if best_vuid:
-            db.execute(
-                """
-                INSERT INTO user_identities (vodum_user_id, type, server_id, external_user_id)
-                VALUES (?, ?, ?, ?)
-                """,
-                (int(best_vuid), provider_type, int(server_id), str(external_user_id)),
-            )
+        # IMPORTANT:
+        # Jellyfin users must NEVER auto-merge by username.
+        # Same username on different Jellyfin servers can be different people.
+        #
+        # Merge must remain a manual admin action.
+        #
+        # Therefore:
+        # - identity = server_id + external_user_id
+        # - username is display only
 
-            # ✅ Remplit le vodum username si vide
-            db.execute(
-                "UPDATE vodum_users SET username = COALESCE(username, ?) WHERE id = ?",
-                (uname, int(best_vuid)),
-            )
-            return int(best_vuid)
+        if provider_type != "jellyfin":
+            best_vuid = _pick_best_vodum_user_for_username(db, uname)
+
+            if best_vuid:
+                db.execute(
+                    """
+                    INSERT INTO user_identities (vodum_user_id, type, server_id, external_user_id)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (int(best_vuid), provider_type, int(server_id), str(external_user_id)),
+                )
+
+                # ✅ Remplit le vodum username si vide
+                db.execute(
+                    "UPDATE vodum_users SET username = COALESCE(username, ?) WHERE id = ?",
+                    (uname, int(best_vuid)),
+                )
+
+                return int(best_vuid)
 
         # Sinon : crée un vodum_user placeholder + identité
         cur = db.execute(
@@ -859,6 +878,27 @@ def _sync_users_and_policies_for_server(
             if isinstance(detail, dict)
             else {}
         )
+
+        # Force expiration override for Jellyfin admins
+        try:
+            is_admin = bool(policy.get("IsAdministrator"))
+
+            if is_admin:
+                db.execute(
+                    """
+                    UPDATE vodum_users
+                    SET expiration_date_override = 1
+                    WHERE id = ?
+                    """,
+                    (vodum_user_id,),
+                )
+
+        except Exception as e:
+            logger.warning(
+                f"[SYNC JELLYFIN] unable to force expiration override "
+                f"for vodum_user_id={vodum_user_id}: {e}"
+            )
+
 
         enable_all = 1 if policy.get("EnableAllFolders") else 0
         enabled_folders = policy.get("EnabledFolders") or []

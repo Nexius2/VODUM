@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
 from core.providers.registry import get_provider
-from logging_utils import get_logger
+from logging_utils import get_logger, is_debug_mode_enabled
 from logging_utils import is_debug_mode_enabled
 
 logger = get_logger("stream_enforcer")
@@ -1302,20 +1302,24 @@ def run(task_id: int, db):
     """
     _set_db(db)
 
-    logger.info(f"[TASK {task_id}] stream_enforcer: start")
+    if is_debug_mode_enabled():
+        logger.debug(f"[TASK {task_id}] stream_enforcer: start")
 
     policies = _load_enabled_policies()
     global _USER_STREAM_OVERRIDES
     _USER_STREAM_OVERRIDES = _load_user_stream_overrides()
-    logger.info(f"[TASK {task_id}] stream_enforcer: loaded_policies={len(policies)}")
+    if is_debug_mode_enabled():
+        logger.debug(f"[TASK {task_id}] stream_enforcer: loaded_policies={len(policies)}")
     if not policies:
-        logger.info(f"[TASK {task_id}] stream_enforcer: no enabled policies")
+        if is_debug_mode_enabled():
+            logger.debug(f"[TASK {task_id}] stream_enforcer: no enabled policies")
         return
 
     live_sessions = _load_live_sessions()
     logger.info(f"[TASK {task_id}] stream_enforcer: live_sessions={len(live_sessions)}")
     if not live_sessions:
-        logger.info(f"[TASK {task_id}] stream_enforcer: no live sessions")
+        if is_debug_mode_enabled():
+            logger.debug(f"[TASK {task_id}] stream_enforcer: no live sessions")
         return
 
     null_map = sum(1 for s in live_sessions if s.get("vodum_user_id") is None)
@@ -1331,7 +1335,8 @@ def run(task_id: int, db):
         violations.extend(_evaluate_policy(p, live_sessions))
 
     if not violations:
-        logger.info(f"[TASK {task_id}] stream_enforcer: no violations")
+        if is_debug_mode_enabled():
+            logger.debug(f"[TASK {task_id}] stream_enforcer: no violations")
         return
 
     for v in violations:

@@ -4,7 +4,7 @@ import re
 import math
 from datetime import datetime
 
-from flask import render_template, request, redirect, url_for, flash
+from flask import render_template, request, redirect, url_for, flash, jsonify
 
 from logging_utils import get_logger, is_debug_mode_enabled
 from tasks_engine import enable_and_run_task_by_name, auto_enable_stream_enforcer
@@ -15,9 +15,11 @@ from .users_actions import _get_preferred_plex_media_user_id
 from core.media_jobs import insert_plex_media_job
 from api.subscriptions import update_user_expiration
 from notifications_utils import parse_notifications_order
+from core.providers.jellyfin_users import jellyfin_set_password
 
 
 task_logger = get_logger("tasks_ui")
+logger = get_logger("users_detail")
 
 def _iso_date_or_none(raw: str):
     raw = (raw or "").strip()
@@ -122,6 +124,127 @@ def _apply_template_snapshot(db, vodum_user_id: int, template_id: int):
     return tname
 
 def register(app):
+    @app.route("/users/<int:user_id>/change-jellyfin-password", methods=["POST"])
+    def user_change_jellyfin_password(user_id):
+        try:
+            db = get_db()
+
+            password = (
+                request.form.get("jellyfin_new_password")
+                or request.form.get("password")
+                or ""
+            ).strip()
+
+            if not password:
+                return {
+                    "ok": False,
+                    "error": "missing_password",
+                }, 400
+
+            selected_server_ids = {
+                int(x)
+                for x in request.form.getlist("server_ids")
+                if str(x).isdigit()
+            }
+
+            jellyfin_accounts = db.query(
+                """
+                SELECT
+                    mu.id,
+                    mu.server_id,
+                    mu.external_user_id,
+                    mu.username,
+
+                    s.name AS server_name,
+                    s.url,
+                    s.local_url,
+                    s.public_url,
+                    s.token AS token
+
+                FROM media_users mu
+                JOIN servers s ON s.id = mu.server_id
+
+                WHERE mu.vodum_user_id = ?
+                  AND mu.type = 'jellyfin'
+                  AND s.type = 'jellyfin'
+                """,
+                (user_id,),
+            ) or []
+
+            # Filter selected servers
+            if selected_server_ids:
+                jellyfin_accounts = [
+                    x for x in jellyfin_accounts
+                    if int(x["server_id"]) in selected_server_ids
+                ]
+
+            updated = 0
+            errors = []
+
+            for account in jellyfin_accounts:
+
+                try:
+
+                    # THIS is what sends the password to Jellyfin
+                    jellyfin_set_password(
+                        dict(account),
+                        str(account["external_user_id"]),
+                        password,
+                    )
+
+                    # Store password locally
+                    db.execute(
+                        """
+                        UPDATE media_users
+                        SET stored_password = ?
+                        WHERE id = ?
+                        """,
+                        (
+                            password,
+                            account["id"],
+                        ),
+                    )
+
+                    updated += 1
+
+                    task_logger.info(
+                        f"[JELLYFIN PASSWORD] Updated password | "
+                        f"vodum_user_id={user_id} | "
+                        f"server_id={account['server_id']} | "
+                        f"username={account['username']}"
+                    )
+
+                except Exception as e:
+
+                    errors.append(
+                        f"{account['server_name']}: {e}"
+                    )
+
+                    task_logger.error(
+                        f"[JELLYFIN PASSWORD] Failed | "
+                        f"vodum_user_id={user_id} | "
+                        f"server_id={account['server_id']} | "
+                        f"username={account['username']} | "
+                        f"error={e}"
+                    )
+
+            return {
+                "ok": len(errors) == 0,
+                "updated": updated,
+                "errors": errors,
+            }
+        except Exception as e:
+
+            logger.exception(
+                f"[JELLYFIN PASSWORD] Fatal error for user_id={user_id}: {e}"
+            )
+
+            return jsonify({
+                "ok": False,
+                "error": str(e)
+            }), 500
+
+
     @app.route("/users/<int:user_id>/save", methods=["POST"])
     def user_detail_save(user_id):
         db = get_db()

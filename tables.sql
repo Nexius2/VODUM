@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS media_users (
     username TEXT NOT NULL,
     email TEXT,
     avatar TEXT,
+	stored_password TEXT DEFAULT NULL,
 
     type TEXT,                            -- 'plex', 'jellyfin', …
 

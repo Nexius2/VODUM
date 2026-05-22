@@ -398,10 +398,20 @@ def sync_plex_owner_for_server(db, server):
             (server["id"], vodum_user_id, plex_id, username, email, avatar, json.dumps(details, ensure_ascii=False)),
         )
 
-    log.info(
-        f"[OWNER] {server['name']}: owner OK "
-        f"(plex_id={plex_id}, vodum_user_id={vodum_user_id})"
+    # Force expiration override for Plex owner
+    db.execute(
+        """
+        UPDATE vodum_users
+        SET expiration_date_override = 1
+        WHERE id = ?
+        """,
+        (vodum_user_id,),
     )
+    if is_debug_mode_enabled():
+        log.debug(
+            f"[OWNER] {server['name']}: owner OK "
+            f"(plex_id={plex_id}, vodum_user_id={vodum_user_id})"
+        )
 
 
 
