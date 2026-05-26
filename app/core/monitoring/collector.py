@@ -13,6 +13,7 @@ from core.monitoring.mappers import resolve_media_user_id
 from core.monitoring.artwork import extract_artwork_refs
 from core.providers.registry import get_provider
 from logging_utils import get_logger, is_debug_mode_enabled
+from core.server_cooldown import mark_server_unreachable, clear_server_cooldown
 
 logger = get_logger("monitoring.collector")
 
@@ -996,7 +997,15 @@ def collect_sessions_for_server(
         # - sinon, API a répondu => UP aussi (serveur joignable, juste idle)
         status = "up"
         db.execute(
-            "UPDATE servers SET last_checked=CURRENT_TIMESTAMP, status=? WHERE id=?",
+            """
+            UPDATE servers
+            SET last_checked = CURRENT_TIMESTAMP,
+                status = ?,
+                cooldown_until = NULL,
+                unavailable_since = NULL,
+                last_failure = NULL
+            WHERE id = ?
+            """,
             (status, server_id),
         )
         return report
@@ -1019,7 +1028,7 @@ def collect_sessions_for_server(
                 )
 
 
-
+        mark_server_unreachable(db, server_id, str(e), cooldown_seconds=300)
         try:
             _store_server_resource_stats(
                 db,

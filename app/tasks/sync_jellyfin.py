@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
 from logging_utils import get_logger, is_debug_mode_enabled
+from core.server_cooldown import is_server_in_cooldown, mark_server_unreachable, clear_server_cooldown
 
 
 logger = get_logger("sync_jellyfin")
@@ -305,7 +306,7 @@ def _get_json(session: requests.Session, url: str, timeout: int = 20, token: str
 def _get_jellyfin_servers(db):
     return db.query(
         """
-        SELECT id, name, url, local_url, public_url, token
+        SELECT id, name, url, local_url, public_url, token, cooldown_until
         FROM servers
         WHERE type = 'jellyfin'
         """
@@ -986,6 +987,9 @@ def run(task_id: int, db):
             srv = dict(srv)
             server_id = int(srv["id"])
             name = srv.get("name") or f"server_{server_id}"
+            if is_server_in_cooldown(srv):
+                logger.info(f"[SYNC JELLYFIN] skipped server={name} id={server_id} because it is in cooldown")
+                continue
             url = _pick_jellyfin_base_url(srv)
             token = (srv.get("token") or "").strip()
 
@@ -1009,12 +1013,14 @@ def run(task_id: int, db):
                 logger.info(
                     f"[SYNC JELLYFIN] Libraries OK server={name} (libs={len(lib_map)})"
                 )
+                clear_server_cooldown(db, server_id)
 
             except Exception as e:
                 logger.error(
                     f"[SYNC JELLYFIN] Libraries FAILED pour {name} : {e}",
                     exc_info=True,
                 )
+                mark_server_unreachable(db, server_id, str(e), cooldown_seconds=300)
                 # Si même les libs plantent, on passe au serveur suivant
                 continue
 

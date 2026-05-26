@@ -1429,12 +1429,8 @@ def auto_enable_monitoring_tasks():
     should_enable = 1 if server_count > 0 else 0
 
     set_tasks_enabled_by_names_for_auto_mode(
-        ["monitor_collect_sessions"],
-        should_enable,
-    )
-
-    set_tasks_enabled_by_names_for_auto_mode(
-        ["monitor_collect_sessions"],
+        #["monitor_collect_sessions"],
+        ["monitor_enqueue_refresh", "media_jobs_worker"],
         should_enable,
     )
 
