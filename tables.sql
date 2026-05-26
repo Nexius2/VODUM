@@ -127,19 +127,24 @@ CREATE TABLE IF NOT EXISTS servers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 
     name TEXT,
-    server_identifier TEXT UNIQUE NOT NULL,      --  machineIdentifier
-	type TEXT NOT NULL,              -- plex / jellyfin / autre
+    server_identifier TEXT UNIQUE NOT NULL,
+    type TEXT NOT NULL,
 
     url TEXT,
     local_url TEXT,
     public_url TEXT,
     token TEXT,
 
-    settings_json TEXT,              -- pour les trucs spécifiques
+    settings_json TEXT,
     server_version TEXT,
+
+    -- Temporary cooldown for unreachable media servers
+    unavailable_since TIMESTAMP DEFAULT NULL,
+    cooldown_until TIMESTAMP DEFAULT NULL,
+    last_failure TEXT DEFAULT NULL,
+
     last_checked TIMESTAMP,
-    status TEXT                         -- up/down/unknown
-);
+    status TEXT
 );
 
 -----------------------------------------------------------------------
@@ -310,7 +315,8 @@ CREATE TABLE IF NOT EXISTS settings (
 	-- Telemetry
 	enable_anonymous_telemetry INTEGER DEFAULT 1,
 	telemetry_instance_id TEXT DEFAULT NULL,
-	telemetry_last_sent_at TEXT DEFAULT NULL
+	telemetry_last_sent_at TEXT DEFAULT NULL,
+	task_defaults_version INTEGER DEFAULT 0
 
 );
 
@@ -372,7 +378,7 @@ CREATE TABLE IF NOT EXISTS user_referral_settings (
     eligible_statuses TEXT NOT NULL DEFAULT 'active',
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	
 	auto_expire_pending INTEGER NOT NULL DEFAULT 1,
 	auto_archive_rewarded INTEGER NOT NULL DEFAULT 1,

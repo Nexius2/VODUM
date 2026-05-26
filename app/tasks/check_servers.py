@@ -17,6 +17,7 @@ from plexapi.server import PlexServer
 from tasks_engine import task_logs
 from logging_utils import get_logger, is_debug_mode_enabled
 from core.plex_rate_limit import install_plex_rate_limit
+from core.server_cooldown import mark_server_unreachable, clear_server_cooldown
 
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -225,14 +226,35 @@ def run(task_id: int, db):
             # -----------------------------
             # Mise à jour DB
             # -----------------------------
-            db.execute(
-                """
-                UPDATE servers
-                SET status=?, last_checked=?, name=?, server_version=?
-                WHERE id=?
-                """,
-                (status, now, new_name, server_version, sid)
-            )
+            if status == "up":
+                db.execute(
+                    """
+                    UPDATE servers
+                    SET status=?,
+                        last_checked=?,
+                        name=?,
+                        server_version=?,
+                        cooldown_until=NULL,
+                        unavailable_since=NULL,
+                        last_failure=NULL
+                    WHERE id=?
+                    """,
+                    (status, now, new_name, server_version, sid)
+                )
+                clear_server_cooldown(db, sid)
+            else:
+                db.execute(
+                    """
+                    UPDATE servers
+                    SET status=?,
+                        last_checked=?,
+                        name=?,
+                        server_version=?
+                    WHERE id=?
+                    """,
+                    (status, now, new_name, server_version, sid)
+                )
+                mark_server_unreachable(db, sid, meta or "Server check failed", cooldown_seconds=300)
 
         log.info("=== CHECK SERVERS : COMPLETED SUCCESSFULLY ===")
         task_logs(task_id, "success", "Server check completed")

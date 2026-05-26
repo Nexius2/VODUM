@@ -310,6 +310,12 @@ def run_migrations():
                                f"-> Check that tables.sql has been imported correctly.")
 
     ensure_column(cursor, "servers", "server_version", "TEXT DEFAULT NULL")
+
+    # Temporary cooldown for unreachable media servers.
+    # Used to avoid hammering a down server from monitoring/sync tasks.
+    ensure_column(cursor, "servers", "unavailable_since", "TIMESTAMP DEFAULT NULL")
+    ensure_column(cursor, "servers", "cooldown_until", "TIMESTAMP DEFAULT NULL")
+    ensure_column(cursor, "servers", "last_failure", "TEXT DEFAULT NULL")
     # Jellyfin stored password (1 password per media account/server)
     ensure_column(cursor, "media_users", "stored_password", "TEXT DEFAULT NULL")
     conn.commit()
@@ -321,6 +327,7 @@ def run_migrations():
     ensure_column(cursor, "settings", "enable_anonymous_telemetry", "INTEGER DEFAULT 1")
     ensure_column(cursor, "settings", "telemetry_instance_id", "TEXT DEFAULT NULL")
     ensure_column(cursor, "settings", "telemetry_last_sent_at", "TEXT DEFAULT NULL")
+    ensure_column(cursor, "settings", "task_defaults_version", "INTEGER DEFAULT 0")
     conn.commit()
 
     # -------------------------------------------------
@@ -2032,8 +2039,8 @@ def run_migrations():
             status = CASE
                 WHEN status = 'disabled' THEN 'idle'
                 ELSE status
-            END,
-            schedule = '*/1 * * * *'
+            END
+         
         WHERE name IN ('monitor_enqueue_refresh', 'media_jobs_worker')
     """)
 
@@ -2079,7 +2086,7 @@ def run_migrations():
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "send_pending_invite_reminders",
         "description": "task_description.send_pending_invite_reminders",
-        "schedule": "0 30 * * *",
+        "schedule": "30 0 * * *",
         "enabled": 1,
         "status": "idle"
     })
@@ -2116,6 +2123,8 @@ def run_migrations():
         "enabled": 0,
         "status": "disabled"
     })
+
+
 
     # -------------------------------------------------
     # MASTER enable_cron_jobs enforcement
@@ -2714,7 +2723,84 @@ def run_migrations():
         "web_trust_proxy": 0,
     })
 
+    # -------------------------------------------------
+    # 3.x Versioned task schedule defaults migration
+    # -------------------------------------------------
+    # ensure_row() only inserts missing tasks.
+    # This migration updates existing installs when Vodum changes default schedules,
+    # without overwriting admin-customized schedules.
+    TASK_DEFAULTS_VERSION = 1
 
+    TASK_SCHEDULE_DEFAULTS = {
+        "sync_plex": "0 */6 * * *",
+        "check_update": "0 4 * * *",
+        "auto_backup": "0 3 */3 * *",
+        "cleanup_backups": "30 3 * * *",
+        "cleanup_data_retention": "0 4 * * 0",
+        "update_user_status": "0 * * * *",
+        "check_servers": "*/30 * * * *",
+        "cleanup_unfriended": "0 4 * * *",
+        "monitor_enqueue_refresh": "*/1 * * * *",
+        "media_jobs_worker": "*/1 * * * *",
+        "send_pending_invite_reminders": "30 0 * * *",
+        "send_telemetry": "0 0 * * *",
+        "send_expiration_emails": "0 * * * *",
+        "send_expiration_discord": "0 * * * *",
+        "send_campaign_discord": "*/10 * * * *",
+        "send_comm_campaigns": "*/10 * * * *",
+    }
+
+    TASK_SCHEDULE_LEGACY_DEFAULTS = {
+        "monitor_enqueue_refresh": {"*/3 * * * *", "*/1 * * * *"},
+        "media_jobs_worker": {"*/1 * * * *"},
+        "check_servers": {"*/10 * * * *", "*/30 * * * *"},
+        "send_pending_invite_reminders": {"0 30 * * *", "30 * * *", "30 0 * * *"},
+    }
+
+    cursor.execute("SELECT COALESCE(task_defaults_version, 0) FROM settings WHERE id = 1")
+    row = cursor.fetchone()
+    current_task_defaults_version = int(row[0]) if row and row[0] is not None else 0
+
+    if current_task_defaults_version < TASK_DEFAULTS_VERSION:
+        print(f"🔧 Applying task schedule defaults migration v{TASK_DEFAULTS_VERSION}…")
+
+        for task_name, new_schedule in TASK_SCHEDULE_DEFAULTS.items():
+            cursor.execute(
+                "SELECT schedule FROM tasks WHERE name = ?",
+                (task_name,),
+            )
+            task_row = cursor.fetchone()
+            if not task_row:
+                continue
+
+            current_schedule = task_row[0]
+
+            allowed_legacy_schedules = TASK_SCHEDULE_LEGACY_DEFAULTS.get(task_name, {new_schedule})
+
+            if current_schedule in allowed_legacy_schedules:
+                cursor.execute(
+                    """
+                    UPDATE tasks
+                    SET schedule = ?,
+                        next_run = NULL,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE name = ?
+                    """,
+                    (new_schedule, task_name),
+                )
+                print(f"✔ Task schedule updated: {task_name} -> {new_schedule}")
+            else:
+                print(f"↪ Task schedule kept unchanged (custom): {task_name} -> {current_schedule}")
+
+        cursor.execute(
+            """
+            UPDATE settings
+            SET task_defaults_version = ?
+            WHERE id = 1
+            """,
+            (TASK_DEFAULTS_VERSION,),
+        )
+        conn.commit()
 
 
     conn.commit()

@@ -116,6 +116,28 @@ def run(task_id: int, db: DBManager):
             """
         )
 
+        total_servers = (
+            (plex_servers["total"] if plex_servers else 0)
+            + (jellyfin_servers["total"] if jellyfin_servers else 0)
+        )
+
+        # IMPORTANT:
+        # Do not send telemetry for fresh empty installs.
+        # Wait until at least one media server is configured.
+        #
+        # This prevents sending empty statistics during first boot.
+        if total_servers <= 0:
+
+            log.info(
+                "Telemetry skipped: no Plex or Jellyfin servers configured yet"
+            )
+
+            return {
+                "success": True,
+                "skipped": True,
+                "reason": "no_servers"
+            }
+
         active_policies = db.query_one(
             """
             SELECT COUNT(*) AS total
