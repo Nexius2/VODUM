@@ -12,6 +12,7 @@ from tasks_engine import task_logs
 from plexapi.server import PlexServer  
 from core.plex_rate_limit import install_plex_rate_limit, wait_for_plex_slot
 from core.plex_connection import plex_candidate_base_urls, find_working_plex_base_url
+from core.server_cooldown import should_skip_unreachable_server, mark_server_unreachable, clear_server_cooldown
 
 class TimeoutSession(requests.Session):
     """Session requests qui force un timeout par défaut."""
@@ -1416,7 +1417,7 @@ def sync_users_from_api(db) -> None:
     # ----------------------------------------------------
     server_rows = db.query(
         """
-        SELECT id, name, token, server_identifier
+        SELECT id, name, token, server_identifier, status, cooldown_until
         FROM servers
         WHERE type='plex'
           AND token IS NOT NULL
@@ -1485,6 +1486,14 @@ def sync_users_from_api(db) -> None:
         return dst
 
     for idx, srv in enumerate(server_rows, start=1):
+        srv = dict(srv)
+
+        if should_skip_unreachable_server(srv):
+            log.info(
+                f"[SYNC USERS] skipped Plex server={srv.get('name')} "
+                f"id={srv.get('id')} because it is down or in cooldown"
+            )
+            continue
         token = (srv["token"] or "").strip()
 
         if not token:
@@ -1559,6 +1568,10 @@ def sync_users_from_api(db) -> None:
     owner_plex_id_by_server_id: Dict[int, str] = {}
 
     for srv in server_rows:
+        srv = dict(srv)
+
+        if should_skip_unreachable_server(srv):
+            continue
         sid = int(srv["id"])
         token = (srv["token"] or "").strip()
         if not token:
@@ -1809,7 +1822,15 @@ def sync_all(task_id=None, db=None) -> None:
     # 2) Rafraîchir les vrais machineIdentifier Plex AVANT sync_users_from_api()
     #
     for server in servers:
-        _ensure_plex_server_identity(db, dict(server))
+        server = dict(server)
+        if should_skip_unreachable_server(server):
+            log.info(
+                f"[SYNC IDENTITY] skipped Plex server={server.get('name')} "
+                f"id={server.get('id')} because it is in cooldown"
+            )
+            continue
+
+        _ensure_plex_server_identity(db, server)
 
     #
     # 3) Sync utilisateurs depuis Plex.tv (/api/users)
@@ -1820,6 +1841,7 @@ def sync_all(task_id=None, db=None) -> None:
         raise RuntimeError("No Plex server found in the database")
 
     any_success = False
+    skipped_unreachable = 0
 
     #
     # 3) Pour chaque serveur → sync libraries + accès users
@@ -1829,7 +1851,13 @@ def sync_all(task_id=None, db=None) -> None:
         server = dict(server)
 
         server_name = server.get("name") or f"server_{server.get('id')}"
-
+        if should_skip_unreachable_server(server):
+            skipped_unreachable += 1
+            log.info(
+                f"[SYNC ALL] skipped Plex server={server_name} "
+                f"id={server.get('id')} because it is down or in cooldown"
+            )
+            continue
         log.info(f"[SYNC ALL] Plex server: {server_name}")
 
         # --- Libraries ---
@@ -1841,8 +1869,9 @@ def sync_all(task_id=None, db=None) -> None:
         except Exception as e:
             log.error(
                 f"[SYNC LIBS] Library synchronization error for {server_name}: {e}",
-                exc_info=True
+                exc_info=is_debug_mode_enabled()
             )
+            mark_server_unreachable(db, int(server["id"]), str(e), cooldown_seconds=300)
             continue
 
         # --- Accès utilisateurs ---
@@ -1850,9 +1879,11 @@ def sync_all(task_id=None, db=None) -> None:
         token = (server.get("token") or "").strip()
 
         if not base_url or not token:
+            reason = "No working Plex URL or missing token"
             log.warning(
-                f"[SYNC ACCESS] Server {server_name} No URL/token → access ignored"
+                f"[SYNC ACCESS] Server {server_name} {reason} → access ignored"
             )
+            mark_server_unreachable(db, int(server["id"]), reason, cooldown_seconds=300)
             continue
 
         try:
@@ -1874,7 +1905,20 @@ def sync_all(task_id=None, db=None) -> None:
             plex = PlexServer(base_url, token, session=session)
 
             log.info(f"[SYNC ACCESS] PlexAPI connected ({server_name}) → Starting user access synchronization")
+
             sync_plex_user_library_access(db, plex, server)
+
+            db.execute(
+                """
+                UPDATE servers
+                SET status='up',
+                    last_checked=CURRENT_TIMESTAMP
+                WHERE id=?
+                """,
+                (int(server["id"]),),
+            )
+            clear_server_cooldown(db, int(server["id"]))
+
             log.info(f"[SYNC ACCESS] User access synchronization completed ({server_name})")
 
             any_success = True
@@ -1882,12 +1926,16 @@ def sync_all(task_id=None, db=None) -> None:
         except Exception as e:
             log.error(
                 f"[SYNC ACCESS] Connection or synchronization failed for {server_name}: {e}",
-                exc_info=True
+                exc_info=is_debug_mode_enabled()
             )
+            mark_server_unreachable(db, int(server["id"]), str(e), cooldown_seconds=300)
             continue
 
 
     if not any_success:
+        if skipped_unreachable == len(servers):
+            log.warning("[SYNC ALL] All Plex servers are down or in cooldown; sync skipped.")
+            return
         raise RuntimeError("No Plex server could be synchronized")
 
     log.info("=== [SYNC ALL] Plex synchronization completed ===")

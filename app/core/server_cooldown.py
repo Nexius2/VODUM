@@ -21,17 +21,35 @@ def _row_get(row, key, default=None):
         return default
 
 
-def is_server_in_cooldown(server_row) -> bool:
-    cooldown_until = _row_get(server_row, "cooldown_until")
-    if not cooldown_until:
-        return False
+def _parse_sqlite_utc(value):
+    if not value:
+        return None
 
     try:
-        until = datetime.strptime(str(cooldown_until), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        return datetime.strptime(str(value), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
     except Exception:
-        return False
+        return None
 
-    return until > datetime.now(timezone.utc)
+
+def get_server_cooldown_remaining_seconds(server_row) -> int:
+    cooldown_until = _row_get(server_row, "cooldown_until")
+    until = _parse_sqlite_utc(cooldown_until)
+
+    if not until:
+        return 0
+
+    remaining = int((until - datetime.now(timezone.utc)).total_seconds())
+    return max(0, remaining)
+
+
+def is_server_in_cooldown(server_row) -> bool:
+    return get_server_cooldown_remaining_seconds(server_row) > 0
+
+
+def should_skip_unreachable_server(server_row) -> bool:
+    status = str(_row_get(server_row, "status") or "").lower().strip()
+    return status == "down" or is_server_in_cooldown(server_row)
+
 
 
 def mark_server_unreachable(db, server_id: int, reason: str, cooldown_seconds: int = DEFAULT_COOLDOWN_SECONDS) -> None:

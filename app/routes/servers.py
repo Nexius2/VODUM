@@ -14,6 +14,7 @@ from web.helpers import get_db
 from core.media_jobs import insert_plex_media_job
 
 server_delete_logger = get_logger("server_delete")
+logger = get_logger("servers")
 
 SERVER_DELETE_LOCK = threading.Lock()
 SERVER_DELETE_IN_PROGRESS = set()
@@ -497,7 +498,7 @@ def register(app):
             logger.error(
                 f"[SERVER CREATE] Invalid server_type received: {server_type}"
             )
-            flash(_("invalid_server_type"), "error")
+            flash("Invalid server type", "error")
             return redirect(url_for("servers"))
         name = f"{server_type.upper()} - pending"
 
@@ -756,7 +757,7 @@ def register(app):
             logger.error(
                 f"[SERVER SAVE] Invalid server_type received: {server_type}"
             )
-            flash(_("invalid_server_type"), "error")
+            flash("Invalid server type", "error")
             return redirect(url_for("server_detail", server_id=server_id))
         url = request.form.get("url") or None
         local_url = request.form.get("local_url") or None

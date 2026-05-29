@@ -17,7 +17,12 @@ from plexapi.server import PlexServer
 from tasks_engine import task_logs
 from logging_utils import get_logger, is_debug_mode_enabled
 from core.plex_rate_limit import install_plex_rate_limit
-from core.server_cooldown import mark_server_unreachable, clear_server_cooldown
+from core.server_cooldown import (
+    mark_server_unreachable,
+    clear_server_cooldown,
+    is_server_in_cooldown,
+    get_server_cooldown_remaining_seconds,
+)
 
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -68,7 +73,10 @@ def jellyfin_get_status(base_url, token=None):
         return ("up", None, None, None)
 
     except Exception as e:
-        log.error("[JELLYFIN] exception", exc_info=True)
+        if is_debug_mode_enabled():
+            log.error("[JELLYFIN] exception", exc_info=True)
+        else:
+            log.warning(f"[JELLYFIN] unreachable: {e}")
         return ("down", None, None, f"Jellyfin error: {e}")
 
 
@@ -104,7 +112,10 @@ def plex_get_info(base_url, token):
         return ("up", plex.friendlyName, plex.machineIdentifier, plex.version)
 
     except Exception as e:
-        log.error(f"[PLEX] failed base_url={base_url}", exc_info=True)
+        if is_debug_mode_enabled():
+            log.error(f"[PLEX] failed base_url={base_url}", exc_info=True)
+        else:
+            log.warning(f"[PLEX] unreachable base_url={base_url}: {e}")
         return ("down", None, None, f"PlexAPI error: {e}")
 
 
@@ -142,7 +153,13 @@ def run(task_id: int, db):
             s = dict(s) 
             sid = s["id"]
             old_name = s["name"]
-
+            if is_server_in_cooldown(s):
+                remaining = get_server_cooldown_remaining_seconds(s)
+                log.info(
+                    f"--- Server analysis #{sid} ({old_name}) skipped: "
+                    f"cooldown active ({remaining}s remaining) ---"
+                )
+                continue
             log.info(f"--- Server analysis #{sid} ({old_name}) ---")
 
             base_urls = choose_server_base_urls(s)
@@ -174,6 +191,7 @@ def run(task_id: int, db):
             machine_id = s["server_identifier"]
             server_version = None
             status = "unknown"
+            meta = None
 
             # -----------------------------
             # SERVEUR PLEX

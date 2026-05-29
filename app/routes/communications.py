@@ -608,7 +608,12 @@ def register(app):
 
                 if subscription_template_id:
                     sub_exists = db.query_one(
-                        "SELECT id FROM subscription_templates WHERE id = ?",
+                        """
+                        SELECT id
+                        FROM subscription_templates
+                        WHERE id = ?
+                          AND COALESCE(is_enabled, 1) = 1
+                        """,
                         (subscription_template_id,),
                     )
                     if sub_exists:
@@ -800,7 +805,12 @@ def register(app):
 
                 if subscription_template_id:
                     sub_exists = db.query_one(
-                        "SELECT id FROM subscription_templates WHERE id = ?",
+                        """
+                        SELECT id
+                        FROM subscription_templates
+                        WHERE id = ?
+                          AND COALESCE(is_enabled, 1) = 1
+                        """,
                         (subscription_template_id,),
                     )
                     if sub_exists:
@@ -994,7 +1004,12 @@ def register(app):
         templates = [dict(r) for r in (templates or [])]
 
         subscription_templates = db.query(
-            "SELECT id, name FROM subscription_templates ORDER BY name"
+            """
+            SELECT id, name
+            FROM subscription_templates
+            WHERE COALESCE(is_enabled, 1) = 1
+            ORDER BY name COLLATE NOCASE
+            """
         ) or []
         subscription_templates = [dict(r) for r in subscription_templates]
 
