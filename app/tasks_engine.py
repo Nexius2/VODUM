@@ -1608,13 +1608,7 @@ def run_auto_enable_pass():
             exc_info=True
         )
 
-    # -------------------------------------------------
-    # TELEMETRY
-    # -------------------------------------------------
-    try:
-        send_telemetry()
-    except Exception:
-        pass
+
 
 def _recover_scheduler_state_at_boot():
     """

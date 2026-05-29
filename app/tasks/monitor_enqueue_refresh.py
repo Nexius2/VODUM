@@ -1,6 +1,6 @@
 import json
 from datetime import datetime, timezone
-from core.server_cooldown import is_server_in_cooldown
+from core.server_cooldown import should_skip_unreachable_server
 
 DEFAULT_INTERVAL_SEC = 60
 MIN_INTERVAL_SEC = 15
@@ -26,7 +26,7 @@ def run(task_id, db):
     - si le dernier refresh monitoring est trop ancien => enfile un job refresh
     """
     servers = db.query("""
-        SELECT id, type, settings_json, cooldown_until
+        SELECT id, type, settings_json, status, cooldown_until
         FROM servers
         WHERE LOWER(TRIM(type)) IN ('plex','jellyfin')
     """)
@@ -39,7 +39,7 @@ def run(task_id, db):
     for s in servers:
         server_id = int(s["id"])
         provider = (s["type"] or "").lower().strip()
-        if is_server_in_cooldown(s):
+        if should_skip_unreachable_server(s):
             continue
 
         interval = DEFAULT_INTERVAL_SEC

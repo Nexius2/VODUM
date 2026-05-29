@@ -4,44 +4,13 @@ All notable changes to Vodum will be documented in this file.
 
 ---
 
-# VERSION=26.05.20
+- Added a centralized server cooldown mechanism for unreachable Plex and Jellyfin servers.
+- Offline servers are now skipped by monitoring, sync, access update and stream enforcement tasks during cooldown.
+- Reduced noisy stacktraces for unreachable media servers outside debug mode.
+- Added database fields to track server unavailability, cooldown expiration and last failure reason.
 
-
-### Monitoring & task system improvements
-
-- Removed duplicate `monitor_collect_sessions` auto-enable call in task engine.
-- Monitoring auto-enable logic now correctly uses the new monitoring pipeline:
-  - `monitor_enqueue_refresh`
-  - `media_jobs_worker`
-- Legacy `monitor_collect_sessions` task now remains properly disabled.
-
-### Media server cooldown system
-
-- Added automatic temporary cooldown system for unreachable Plex/Jellyfin servers.
-- Down servers are now temporarily skipped by:
-  - monitoring refresh queue
-  - Jellyfin synchronization tasks
-- Prevents repeated connection attempts and excessive error spam when a server is offline.
-- Cooldown is automatically cleared as soon as `check_servers` detects the server online again.
-- Added new server database fields:
-  - `unavailable_since`
-  - `cooldown_until`
-  - `last_failure`
-
-### Stability & performance improvements
-
-- Reduced unnecessary monitoring/network load on offline servers.
-- Reduced duplicated stacktraces and scheduler noise for unreachable servers.
-- Improved scalability for large installations with many servers/users.
-- Fixed SQLite schema issue in `tables.sql`.
-- Fixed compatibility issue with `sqlite3.Row` handling in cooldown helper.
-
-### Task scheduler improvements
-
-- Added versioned task schedule migration for existing Vodum installations.
-- Existing admins now receive updated default task schedules after upgrading.
-- Admin-customized task schedules are preserved and not overwritten.
-- Fixed invalid cron expression for pending invite reminders.
-- Improved default task spacing to reduce unnecessary background activity.
-
-
+### Fixed
+- Fixed a server edit issue that could trigger a HTTP 500 error when saving existing Plex or Jellyfin servers.
+- Fixed missing `server_type` submission in the server edit form, preventing invalid server type validation failures.
+- Fixed an exception path in server save operations caused by an undefined logger reference.
+- Improved server configuration update reliability and error handling.

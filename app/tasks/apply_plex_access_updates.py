@@ -10,6 +10,7 @@ import re
 import requests
 from core.plex_rate_limit import install_plex_rate_limit
 from core.plex_connection import find_working_plex_base_url
+from core.server_cooldown import should_skip_unreachable_server
 
 logger = get_logger("apply_plex_access_updates")
 
@@ -1367,6 +1368,12 @@ def run(task_id: int, db):
 
     for job in jobs:
         job_id = job["id"]
+        server = db.query_one("SELECT * FROM servers WHERE id=?", (job["server_id"],))
+        if server and should_skip_unreachable_server(server):
+            logger.info(
+                f"Skipping Plex job id={job_id}: server_id={job['server_id']} is in cooldown"
+            )
+            continue
         locked_until = (datetime.utcnow() + timedelta(minutes=10)).strftime("%Y-%m-%d %H:%M:%S")
 
         claim = db.execute(

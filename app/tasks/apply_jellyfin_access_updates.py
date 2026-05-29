@@ -2,7 +2,7 @@ import json
 from typing import Any, Dict, List, Optional
 
 import requests
-
+from core.server_cooldown import should_skip_unreachable_server
 from logging_utils import get_logger
 
 logger = get_logger("apply_jellyfin_access_updates")
@@ -266,7 +266,13 @@ def run(task_id: int, db) -> None:
         # sqlite3.Row -> dict (so .get() works safely everywhere)
         job = dict(job_row)
         job_id = int(job["id"])
-
+        server = _get_server(db, int(job["server_id"]))
+        if server and should_skip_unreachable_server(server):
+            logger.info(
+                f"Skipping Jellyfin job id={job_id}: server_id={job['server_id']} is in cooldown"
+            )
+            continue
+            
         # ✅ Sécurité: ne traite que grant/revoke/sync (jamais refresh monitoring)
         action = (job.get("action") or "").lower().strip()
         if action not in ("grant", "revoke", "sync"):

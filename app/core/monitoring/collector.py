@@ -13,7 +13,7 @@ from core.monitoring.mappers import resolve_media_user_id
 from core.monitoring.artwork import extract_artwork_refs
 from core.providers.registry import get_provider
 from logging_utils import get_logger, is_debug_mode_enabled
-from core.server_cooldown import mark_server_unreachable, clear_server_cooldown
+from core.server_cooldown import mark_server_unreachable, clear_server_cooldown, should_skip_unreachable_server
 
 logger = get_logger("monitoring.collector")
 
@@ -78,7 +78,8 @@ def _log_history_write_error(server_id: int, provider_name: str, step: str, live
 def _load_single_server(db, server_id: int) -> Optional[Dict[str, Any]]:
     row = db.query_one(
         """
-        SELECT id, type, url, local_url, public_url, token, server_identifier, settings_json
+        SELECT id, type, url, local_url, public_url, token, server_identifier, settings_json,
+               status, cooldown_until
         FROM servers
         WHERE id = ?
           AND LOWER(TRIM(type)) IN ('plex','jellyfin')
@@ -92,7 +93,8 @@ def _load_single_server(db, server_id: int) -> Optional[Dict[str, Any]]:
 def _load_all_servers(db) -> List[Dict[str, Any]]:
     rows = db.query(
         """
-        SELECT id, type, url, local_url, public_url, token, server_identifier, settings_json
+        SELECT id, type, url, local_url, public_url, token, server_identifier, settings_json,
+               status, cooldown_until
         FROM servers
         WHERE LOWER(TRIM(type)) IN ('plex','jellyfin')
         ORDER BY id
@@ -527,7 +529,11 @@ def collect_sessions_for_server(
         raise RuntimeError(f"Unsupported provider '{provider_name}' for server id={server_id}")
 
     report = {"server_id": server_id, "provider": provider_name, "sessions_seen": 0, "events": 0}
-
+    if should_skip_unreachable_server(srv):
+        if is_debug_mode_enabled():
+            logger.debug("collect_sessions_for_server skipped: server_id=%s in cooldown", server_id)
+        return report
+        
     # IMPORTANT : si ça plante (auth/timeout/provider bug), on marque le serveur DOWN
     try:
         provider_impl = get_provider(srv)
@@ -1018,7 +1024,14 @@ def collect_sessions_for_server(
 
         if now - last >= _COLLECT_ERROR_THROTTLE_SECONDS:
             _COLLECT_ERROR_LAST_LOG_TS[key] = now
-            logger.exception("collect_sessions_for_server failed (server_id=%s)", server_id)
+            if is_debug_mode_enabled():
+                logger.exception("collect_sessions_for_server failed (server_id=%s)", server_id)
+            else:
+                logger.warning(
+                    "collect_sessions_for_server failed: server_id=%s marked down and cooldown enabled: %s",
+                    server_id,
+                    str(e),
+                )
         else:
             if is_debug_mode_enabled():
                 logger.debug(
