@@ -1226,5 +1226,15 @@
   "expiration_date_override": "Override date d'expiration",
   "expiration_date_override_help": "Ajoute automatiquement 1 an à la date d'expiration lorsque la période de préavis est atteinte.",
   "monitoring.cards.live_sessions_no_sessions": "Aucune session active au cours des",
-  "subscription_set_as_default_help": "Ce modèle sera automatiquement sélectionné pour chaque nouvel utilisateur uniquement s’il est activé."
+  "subscription_set_as_default_help": "Ce modèle sera automatiquement sélectionné pour chaque nouvel utilisateur uniquement s’il est activé.",
+  "task.cleanup_artwork_cache": "Nettoyage du cache artwork",
+  "task_description.cleanup_artwork_cache": "Supprime les anciens fichiers du cache disque des posters/backdrops monitoring.",
+  "task.warmup_artwork_cache": "Préchargement du cache artwork",
+  "task_description.warmup_artwork_cache": "Précharge les posters et backdrops récents pour accélérer l'affichage du dashboard et du monitoring.",
+  "task.db_integrity_check": "Vérification intégrité DB",
+  "task_description.db_integrity_check": "Vérifie régulièrement l'intégrité SQLite et les incohérences de clés étrangères.",
+  "active_policies": "Policies actives",
+  "active_policies_help": "Policies actuellement appliquées à cet utilisateur, triées par priorité.",
+  "no_active_policies_for_user": "Aucune policy active n'est actuellement appliquée à cet utilisateur."
+
 }

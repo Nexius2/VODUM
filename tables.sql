@@ -48,6 +48,18 @@ CREATE TABLE IF NOT EXISTS vodum_users (
 CREATE INDEX IF NOT EXISTS idx_vodum_users_referrer_user_id
 ON vodum_users(referrer_user_id);
 
+CREATE INDEX IF NOT EXISTS idx_vodum_users_status
+ON vodum_users(status);
+
+CREATE INDEX IF NOT EXISTS idx_vodum_users_status_expiration
+ON vodum_users(status, expiration_date);
+
+CREATE INDEX IF NOT EXISTS idx_vodum_users_expiration_date
+ON vodum_users(expiration_date);
+
+CREATE INDEX IF NOT EXISTS idx_vodum_users_subscription_template
+ON vodum_users(subscription_template_id);
+
 
 -----------------------------------------------------------------------
 --  USERS Identities

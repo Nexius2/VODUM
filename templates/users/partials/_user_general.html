@@ -619,6 +619,78 @@
 
   </div>
 
+  <!-- ======================= Active policies ======================= -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="flex items-start justify-between gap-4 mb-4">
+      <div>
+        <div class="text-sm font-semibold text-slate-200">
+          {{ t("active_policies") if t("active_policies") != "active_policies" else "Active policies" }}
+        </div>
+        <div class="text-xs text-slate-500 mt-1">
+          {{ t("active_policies_help") if t("active_policies_help") != "active_policies_help" else "Policies currently applied to this user, ordered by priority." }}
+        </div>
+      </div>
+
+      <div class="text-xs text-slate-500">
+        {{ active_user_policies|length if active_user_policies is defined else 0 }}
+      </div>
+    </div>
+
+    {% if active_user_policies is defined and active_user_policies %}
+      <div class="space-y-3">
+        {% for policy in active_user_policies %}
+          <div class="bg-slate-950 border border-slate-800 rounded-xl px-4 py-3">
+            <div class="grid grid-cols-1 xl:grid-cols-[1fr_110px_140px_minmax(260px,360px)] gap-4 items-start">
+
+              <div class="min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+
+                  <span class="text-sm font-semibold text-slate-100">
+                    {{ policy.rule_type }}
+                  </span>
+
+                  <span class="px-2 py-0.5 text-[11px] rounded-full border border-slate-700 text-slate-300">
+                    {{ policy.origin_type }}
+                  </span>
+
+                  <span class="px-2 py-0.5 text-[11px] rounded-full border border-indigo-900/60 text-indigo-300">
+                    {{ policy.scope_label }}
+                  </span>
+                </div>
+
+                <div class="mt-2 text-xs text-slate-400">
+                  {{ t("origin") if t("origin") != "origin" else "Origin" }}:
+                  <span class="text-slate-200">{{ policy.origin_label }}</span>
+                </div>
+              </div>
+
+              <div class="text-xs">
+                <div class="text-slate-500">{{ t("priority") if t("priority") != "priority" else "Priority" }}</div>
+                <div class="text-slate-200">{{ policy.priority }}</div>
+              </div>
+
+              <div class="text-xs">
+                <div class="text-slate-500">{{ t("provider") if t("provider") != "provider" else "Provider" }}</div>
+                <div class="text-slate-200">{{ policy.provider }}</div>
+              </div>
+
+              <div class="text-xs">
+                <div class="text-slate-500">{{ t("value") if t("value") != "value" else "Value" }}</div>
+                <div class="text-slate-200 break-words">{{ policy.value }}</div>
+              </div>
+
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="bg-slate-950 border border-slate-800 rounded-xl px-4 py-5 text-sm text-slate-500">
+        {{ t("no_active_policies_for_user") if t("no_active_policies_for_user") != "no_active_policies_for_user" else "No active policies are currently applied to this user." }}
+      </div>
+    {% endif %}
+  </div>
+
 </div>
 
   <div id="modal_referrer_picker" class="fixed inset-0 z-50 hidden">

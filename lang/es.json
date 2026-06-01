@@ -1224,5 +1224,15 @@
   "expiration_date_override": "Override de fecha de expiración",
   "expiration_date_override_help": "Añade automáticamente 1 año a la fecha de expiración cuando se alcanza el período de aviso.",
   "monitoring.cards.live_sessions_no_sessions": "No hay sesiones activas en los últimos",
-  "subscription_set_as_default_help": "Esta plantilla se seleccionará automáticamente para cada nuevo usuario solo si está habilitada."
+  "subscription_set_as_default_help": "Esta plantilla se seleccionará automáticamente para cada nuevo usuario solo si está habilitada.",
+  "task.cleanup_artwork_cache": "Limpieza de caché de artwork",
+  "task_description.cleanup_artwork_cache": "Elimina los archivos antiguos de caché de pósteres y fondos del monitoreo.",
+  "task.warmup_artwork_cache": "Precarga de caché de artwork",
+  "task_description.warmup_artwork_cache": "Precarga pósteres y fondos recientes para acelerar la visualización del dashboard y del monitoreo.",
+  "task.db_integrity_check": "Verificación de integridad de la base de datos",
+  "task_description.db_integrity_check": "Comprueba regularmente la integridad de SQLite y la coherencia de las claves externas.",
+  "active_policies": "Políticas activas",
+  "active_policies_help": "Políticas aplicadas actualmente a este usuario, ordenadas por prioridad.",
+  "no_active_policies_for_user": "Actualmente no hay políticas activas aplicadas a este usuario."
+
 }

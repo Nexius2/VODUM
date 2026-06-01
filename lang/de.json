@@ -1224,5 +1224,15 @@
   "expiration_date_override": "Ablaufdatum-Override",
   "expiration_date_override_help": "Fügt automatisch 1 Jahr zum Ablaufdatum hinzu, sobald die Vorwarnungsperiode erreicht wird.",
   "monitoring.cards.live_sessions_no_sessions": "Keine aktiven Sitzungen in den letzten",
-  "subscription_set_as_default_help": "Diese Vorlage wird nur dann automatisch für jeden neuen Benutzer ausgewählt, wenn sie aktiviert ist."
+  "subscription_set_as_default_help": "Diese Vorlage wird nur dann automatisch für jeden neuen Benutzer ausgewählt, wenn sie aktiviert ist.",
+  "task.cleanup_artwork_cache": "Artwork-Cache bereinigen",
+  "task_description.cleanup_artwork_cache": "Löscht alte Cache-Dateien für Monitoring-Poster und Backdrops.",
+  "task.warmup_artwork_cache": "Artwork-Cache vorladen",
+  "task_description.warmup_artwork_cache": "Lädt aktuelle Poster und Backdrops vor, um Dashboard und Monitoring schneller anzuzeigen.",
+  "task.db_integrity_check": "Datenbankintegrität prüfen",
+  "task_description.db_integrity_check": "Prüft regelmäßig die SQLite-Integrität und die Konsistenz der Fremdschlüssel.",
+  "active_policies": "Aktive Richtlinien",
+  "active_policies_help": "Derzeit auf diesen Benutzer angewendete Richtlinien, nach Priorität sortiert.",
+  "no_active_policies_for_user": "Für diesen Benutzer sind derzeit keine aktiven Richtlinien angewendet."
+
 }
