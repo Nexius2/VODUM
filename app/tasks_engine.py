@@ -1608,6 +1608,29 @@ def run_auto_enable_pass():
             exc_info=True
         )
 
+    try:
+        settings = db.query_one(
+            """
+            SELECT expiry_mode, enable_cron_jobs
+            FROM settings
+            WHERE id = 1
+            """
+        )
+
+        if settings:
+            expiry_mode = (settings["expiry_mode"] or "none").strip()
+            cron_enabled = int(settings["enable_cron_jobs"] or 1)
+
+            sync_expiry_tasks_from_settings(expiry_mode, cron_enabled)
+
+            if expiry_mode in ("warn_only", "warn_then_disable"):
+                force_task_run("expired_subscription_manager")
+
+    except Exception as e:
+        logger.warning(
+            f"Erreur auto-enable expiry tasks: {e}",
+            exc_info=True
+        )
 
 
 def _recover_scheduler_state_at_boot():

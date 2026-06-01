@@ -1898,6 +1898,10 @@ def run_migrations():
     # 2.6 Server deletion performance indexes
     # -------------------------------------------------
     cursor.execute("DROP INDEX IF EXISTS uq_media_users_vodum_server")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_vodum_users_status ON vodum_users(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_vodum_users_status_expiration ON vodum_users(status, expiration_date)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_vodum_users_expiration_date ON vodum_users(expiration_date)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_vodum_users_subscription_template ON vodum_users(subscription_template_id)")
     cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_media_users_vodum_server
         ON media_users(vodum_user_id, server_id)
@@ -1987,6 +1991,32 @@ def run_migrations():
         "status": "idle"
     })
 
+    # Tâche vérification intégrité DB
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "db_integrity_check",
+        "description": "task_description.db_integrity_check",
+        "schedule": "15 4 * * 0",  # chaque dimanche à 04:15
+        "enabled": 1,
+        "status": "idle"
+    })
+
+    # Tâche cleanup du cache artwork (posters/backdrops monitoring)
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "cleanup_artwork_cache",
+        "description": "task_description.cleanup_artwork_cache",
+        "schedule": "30 4 * * 0",  # chaque dimanche à 04:30
+        "enabled": 1,
+        "status": "idle"
+    })
+
+    # Tâche warmup du cache artwork (posters/backdrops monitoring)
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "warmup_artwork_cache",
+        "description": "task_description.warmup_artwork_cache",
+        "schedule": "*/30 * * * *",  # toutes les 30 minutes
+        "enabled": 1,
+        "status": "idle"
+    })
 
     # Tâche update_user_status
     ensure_row(cursor, "tasks", "name = :name", {
@@ -2737,6 +2767,9 @@ def run_migrations():
         "auto_backup": "0 3 */3 * *",
         "cleanup_backups": "30 3 * * *",
         "cleanup_data_retention": "0 4 * * 0",
+        "db_integrity_check": "15 4 * * 0",
+        "cleanup_artwork_cache": "30 4 * * 0",
+        "warmup_artwork_cache": "*/30 * * * *",
         "update_user_status": "0 * * * *",
         "check_servers": "*/30 * * * *",
         "cleanup_unfriended": "0 4 * * *",

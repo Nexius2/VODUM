@@ -765,6 +765,138 @@ def register(app):
         flash("user_saved", "success")
         return redirect(url_for("user_detail", user_id=user_id))
 
+    def _load_active_policies_for_user(db, vodum_user_id: int):
+        media_rows = db.query(
+            """
+            SELECT
+                mu.server_id,
+                LOWER(COALESCE(s.type, mu.type, '')) AS provider,
+                COALESCE(s.name, '') AS server_name
+            FROM media_users mu
+            LEFT JOIN servers s ON s.id = mu.server_id
+            WHERE mu.vodum_user_id = ?
+            """,
+            (vodum_user_id,),
+        ) or []
+
+        server_ids = []
+        providers = set()
+        server_names = {}
+
+        for row in media_rows:
+            r = dict(row)
+            if r.get("server_id") is not None:
+                sid = int(r["server_id"])
+                server_ids.append(sid)
+                server_names[sid] = r.get("server_name") or f"#{sid}"
+
+            provider = (r.get("provider") or "").strip().lower()
+            if provider:
+                providers.add(provider)
+
+        clauses = ["p.scope_type = 'global'", "(p.scope_type = 'user' AND p.scope_id = ?)"]
+        params = [vodum_user_id]
+
+        if server_ids:
+            placeholders = ",".join("?" for _ in server_ids)
+            clauses.append(f"(p.scope_type = 'server' AND p.scope_id IN ({placeholders}))")
+            params.extend(server_ids)
+
+            clauses.append(f"(p.server_id IN ({placeholders}))")
+            params.extend(server_ids)
+
+        rows = db.query(
+            f"""
+            SELECT
+                p.*,
+                s.name AS policy_server_name
+            FROM stream_policies p
+            LEFT JOIN servers s ON s.id = p.server_id
+            WHERE p.is_enabled = 1
+              AND ({' OR '.join(clauses)})
+            ORDER BY p.priority ASC, p.id ASC
+            """,
+            tuple(params),
+        ) or []
+
+        policies = []
+
+        for row in rows:
+            p = dict(row)
+
+            provider = (p.get("provider") or "").strip().lower()
+            if provider and providers and provider not in providers:
+                continue
+
+            try:
+                rule = json.loads(p.get("rule_value_json") or "{}")
+                if not isinstance(rule, dict):
+                    rule = {}
+            except Exception:
+                rule = {}
+
+            scope_type = (p.get("scope_type") or "").strip()
+            scope_label = scope_type
+
+            if scope_type == "global":
+                scope_label = "Global"
+            elif scope_type == "user":
+                scope_label = "User"
+            elif scope_type == "server":
+                sid = p.get("scope_id")
+                scope_label = server_names.get(int(sid), f"Server #{sid}") if sid is not None else "Server"
+
+            origin_type = "Manual"
+            origin_label = "Manual"
+
+            system_tag = (rule.get("system_tag") or "").strip()
+            subscription_name = (rule.get("subscription_name") or "").strip()
+
+            if system_tag == "expired_subscription":
+                origin_type = "System"
+                origin_label = "Expired subscription"
+            elif subscription_name:
+                origin_type = "Subscription"
+                origin_label = subscription_name
+
+            value_parts = []
+
+            if "max" in rule:
+                value_parts.append(f"max={rule.get('max')}")
+            elif p.get("rule_type") == "max_bitrate_kbps" and rule.get("kbps") is not None:
+                value_parts.append(f"kbps={rule.get('kbps')}")
+            elif p.get("rule_type") == "device_allowlist":
+                devices = rule.get("devices") or rule.get("allowed_devices") or []
+                if isinstance(devices, list):
+                    value_parts.append(", ".join(str(x) for x in devices) if devices else "empty")
+                else:
+                    value_parts.append(str(devices))
+            elif p.get("rule_type") == "ban_4k_transcode":
+                value_parts.append("enabled")
+            else:
+                value_parts.append("configured")
+
+            selector = rule.get("selector")
+            if selector:
+                value_parts.append(f"selector={selector}")
+
+            if rule.get("allow_local_ip") or rule.get("local_ip"):
+                value_parts.append("local_ip=yes")
+
+            policies.append({
+                "id": p.get("id"),
+                "rule_type": p.get("rule_type"),
+                "scope_type": scope_type,
+                "scope_label": scope_label,
+                "origin_type": origin_type,
+                "origin_label": origin_label,
+                "provider": provider or "both",
+                "priority": p.get("priority"),
+                "value": " | ".join(value_parts),
+            })
+
+        return policies
+
     @app.route("/users/<int:user_id>", methods=["GET"])
     def user_detail(user_id):
         db = get_db()
@@ -968,7 +1100,8 @@ def register(app):
             enriched.append(r)
 
         servers = enriched
-
+        active_user_policies = _load_active_policies_for_user(db, user_id)
+        
         libraries = db.query(
             """
             SELECT
@@ -1236,6 +1369,7 @@ def register(app):
             allowed_types=allowed_types,
             merge_suggestions=merge_suggestions,
             user_servers=servers,
+            active_user_policies=active_user_policies,
             merged_usernames=merged_usernames,
             email_page=email_page,
             email_pages=email_pages,

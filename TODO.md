@@ -108,9 +108,10 @@ Empêcher que les accès Plex soient supprimés après réactivation d’un util
 * [~] Mettre en cache les résultats complexes
 * [~] Limiter fréquence appels Plex — partiel : cache disque des artworks + headers HIT/MISS/STALE, reste à supprimer les appels live non-images
 * [~] Stocker/cache les posters pour éviter requêtes répétées — cache disque `/appdata/artwork_cache` avec TTL + fallback stale
-* [ ] Ajouter une tâche de warmup cache artwork pour précharger dashboard/monitoring
-* [ ] Ajouter nettoyage périodique du cache artwork trop ancien
+* [x] Ajouter une tâche de warmup cache artwork pour précharger dashboard/monitoring
+* [x] Ajouter nettoyage périodique du cache artwork trop ancien
 * [ ] Déplacer la logique proxy/cache artwork hors route vers un service dédié
+* [x] Optimiser les index DB pour les grosses instances
 
 ---
 
@@ -207,7 +208,7 @@ Empêcher que les accès Plex soient supprimés après réactivation d’un util
 
 * [~] Script réparation DB au boot
 * [ ] Nettoyage entrées invalides
-* [ ] Vérification intégrité régulière
+* [x] Vérification intégrité régulière
 
 ---
 

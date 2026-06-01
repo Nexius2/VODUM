@@ -1226,6 +1226,15 @@
   "expiration_date_override": "Expiration date override",
   "expiration_date_override_help": "Automatically extends the expiration date by 1 year when the warning period is reached.",
   "monitoring.cards.live_sessions_no_sessions": "No active sessions in the last",
-  "subscription_set_as_default_help": "This template will be automatically selected for every new user only if it is enabled."
+  "subscription_set_as_default_help": "This template will be automatically selected for every new user only if it is enabled.",
+  "task.cleanup_artwork_cache": "Artwork cache cleanup",
+  "task_description.cleanup_artwork_cache": "Deletes old disk cache files for monitoring posters/backdrops.",
+  "task.warmup_artwork_cache": "Artwork cache warmup",
+  "task_description.warmup_artwork_cache": "Preloads recent posters and backdrops to speed up dashboard and monitoring display.",
+  "task.db_integrity_check": "Database integrity check",
+  "task_description.db_integrity_check": "Regularly checks SQLite integrity and foreign key consistency.",
+  "active_policies": "Active policies",
+  "active_policies_help": "Policies currently applied to this user, ordered by priority.",
+  "no_active_policies_for_user": "No active policies are currently applied to this user."
   
 }

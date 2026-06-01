@@ -4,7 +4,7 @@ import math
 
 from flask import render_template, request, redirect, url_for, flash
 
-from tasks_engine import auto_enable_stream_enforcer
+from tasks_engine import auto_enable_stream_enforcer, sync_expiry_tasks_from_settings, force_task_run
 from web.helpers import get_db, add_log
 
 DEFAULT_SUBSCRIPTION_TEMPLATES = [
@@ -312,6 +312,15 @@ def register(app):
                 1 if expiry_mode == "disable" else 0,
             ),
         )
+
+        sync_expiry_tasks_from_settings(
+            expiry_mode,
+            int(settings.get("enable_cron_jobs") or 1),
+        )
+
+        if expiry_mode in ("warn_only", "warn_then_disable"):
+            force_task_run("expired_subscription_manager")
+
 
         add_log("info", "subscriptions", "Subscription settings updated")
         flash("settings_saved", "success")
