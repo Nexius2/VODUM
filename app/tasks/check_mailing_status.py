@@ -133,8 +133,8 @@ def _set_task_state(db, task_name: str, enabled: int, status: str) -> dict | Non
 
 
 def run(task_id: int, db):
-    task_logs(task_id, "info", "Task check_mailing_status started")
-    log.info("=== CHECK MAILING STATUS : START ===")
+    task_logs(task_id, "start", "Task check_mailing_status started")
+    log.debug("=== CHECK MAILING STATUS : START ===")
 
     try:
         # 1) Settings
@@ -153,7 +153,7 @@ def run(task_id: int, db):
         s2 = enrich_discord_settings(db, settings)
         discord_ok = is_discord_ready(s2)
 
-        log.info("Readiness: email_ok=%s discord_ok=%s", email_ok, discord_ok)
+        log.debug("Readiness: email_ok=%s discord_ok=%s", email_ok, discord_ok)
 
         # 3) Desired states
         desired = {
@@ -182,9 +182,9 @@ def run(task_id: int, db):
         if updated:
             task_logs(task_id, "success", f"Comms status applied ({len(updated)} task(s))", details=updated)
         else:
-            task_logs(task_id, "info", "No comm task status changes")
+            task_logs(task_id, "debug", "No comm task status changes")
 
-        log.info("=== CHECK MAILING STATUS : END ===")
+        log.debug("=== CHECK MAILING STATUS : END ===")
         return {"status": "ok", "email_ok": email_ok, "discord_ok": discord_ok, "updated": updated}
 
     except Exception as e:

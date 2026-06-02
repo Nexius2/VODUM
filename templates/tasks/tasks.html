@@ -115,6 +115,8 @@
 </div>
 
 <script>
+const DEBUG_MODE = {{ 1 if (settings.debug_mode|default(0)|int) == 1 else 0 }};
+
 const I18N = {
   run_now: {{ t("run_now")|tojson }},
   running: {{ t("running")|tojson }},
@@ -142,6 +144,7 @@ async function refreshTasksTable() {
         for (const task of data.tasks) {
             html += `
             <tr class="border-b border-slate-800">
+                ${DEBUG_MODE ? `<td class="p-2">${task.id}</td>` : ""}
                 <td class="p-2">${task.name_label}</td>
                 <td class="p-2">${task.description_label || "-"}</td>
                 <td class="p-2">${task.schedule_human || "-"}</td>

@@ -1,12 +1,12 @@
 import json
 import time
 import ipaddress
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 
 from core.providers.registry import get_provider
 from logging_utils import get_logger, is_debug_mode_enabled
-from logging_utils import is_debug_mode_enabled
+
 
 logger = get_logger("stream_enforcer")
 
@@ -30,6 +30,11 @@ JELLYFIN_PRE_KILL_INTERVAL_SECONDS = 10     # un message toutes les 10 secondes
 HOUSEHOLD_TRANSITION_SECONDS = 90
 HOUSEHOLD_MEMORY_SECONDS = 300
 HOUSEHOLD_DEVICE_MATCH_SCORE = 5
+STREAM_ENFORCER_NORMAL_INTERVAL_SECONDS = 60
+STREAM_ENFORCER_BOOST_INTERVAL_SECONDS = 15
+STREAM_ENFORCER_BOOST_KILL_THRESHOLD = 2
+STREAM_ENFORCER_BOOST_WINDOW_MINUTES = 10
+STREAM_ENFORCER_BOOST_DURATION_MINUTES = 30
 
 _RECENT_SESSION_CACHE: Dict[str, List[dict]] = {}
 
@@ -316,6 +321,27 @@ def _loads_json(s: Optional[str]) -> dict:
         return json.loads(s)
     except Exception:
         return {}
+
+def _is_strict_expired_subscription_policy(policy: dict) -> bool:
+    """
+    Policy système d'abonnement expiré.
+    Elle doit couper immédiatement, sans warning ni délai de recheck.
+    """
+    if not policy:
+        return False
+
+    if policy.get("rule_type") != "max_streams_per_user":
+        return False
+
+    rule = _loads_json(policy.get("rule_value_json"))
+
+    if rule.get("system_tag") != "expired_subscription":
+        return False
+
+    try:
+        return int(rule.get("max", 1)) <= 0
+    except Exception:
+        return False
 
 def _jellyfin_session_id_from_target(target: dict, fallback_session_key: str) -> str:
     """
@@ -611,7 +637,9 @@ def _load_enabled_policies() -> List[dict]:
     return [dict(r) for r in rows]
 
 
-def _load_live_sessions() -> List[dict]:
+def _load_live_sessions(stable_seconds: Optional[int] = None) -> List[dict]:
+    if stable_seconds is None:
+        stable_seconds = LIVE_STABLE_SECONDS
     rows = _db.query(f"""
         SELECT
           ms.server_id,
@@ -650,7 +678,7 @@ def _load_live_sessions() -> List[dict]:
         ORDER BY ms.server_id
     """, (
         _now_sql_window(),
-        f"-{int(LIVE_STABLE_SECONDS)} seconds",
+        f"-{int(stable_seconds)} seconds",
     ))
     sessions = []
 
@@ -1292,6 +1320,163 @@ def _recheck_violation(policy: dict, violation: dict) -> bool:
             return True
     return False
 
+def _parse_sql_datetime(value):
+    if not value:
+        return None
+
+    try:
+        return datetime.fromisoformat(str(value))
+    except Exception:
+        pass
+
+    try:
+        return datetime.strptime(str(value), "%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return None
+
+
+def _set_stream_enforcer_interval(seconds: int):
+    seconds = int(seconds)
+
+    _db.execute(
+        """
+        UPDATE tasks
+        SET
+            schedule_mode = 'interval',
+            interval_seconds = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE name = 'stream_enforcer'
+        """,
+        (seconds,)
+    )
+
+
+def _get_stream_enforcer_interval() -> int:
+    row = _db.query_one(
+        """
+        SELECT interval_seconds
+        FROM tasks
+        WHERE name = 'stream_enforcer'
+        LIMIT 1
+        """
+    )
+
+    if not row:
+        return STREAM_ENFORCER_NORMAL_INTERVAL_SECONDS
+
+    try:
+        return int(row["interval_seconds"] or STREAM_ENFORCER_NORMAL_INTERVAL_SECONDS)
+    except Exception:
+        return STREAM_ENFORCER_NORMAL_INTERVAL_SECONDS
+
+
+def _set_stream_enforcer_boost_until(until_dt: datetime):
+    _db.execute(
+        """
+        UPDATE settings
+        SET stream_enforcer_boost_until = ?
+        WHERE id = 1
+        """,
+        (until_dt.strftime("%Y-%m-%d %H:%M:%S"),)
+    )
+
+
+def _clear_stream_enforcer_boost_until():
+    _db.execute(
+        """
+        UPDATE settings
+        SET stream_enforcer_boost_until = NULL
+        WHERE id = 1
+        """
+    )
+
+
+def _get_stream_enforcer_boost_until():
+    row = _db.query_one(
+        """
+        SELECT stream_enforcer_boost_until
+        FROM settings
+        WHERE id = 1
+        LIMIT 1
+        """
+    )
+
+    if not row:
+        return None
+
+    return _parse_sql_datetime(row["stream_enforcer_boost_until"])
+
+
+def _refresh_stream_enforcer_boost_state(task_id: int):
+    """
+    Au début de chaque run :
+    - si boost actif => intervalle 15s
+    - si boost expiré => retour 60s
+    """
+    boost_until = _get_stream_enforcer_boost_until()
+    now = datetime.now()
+
+    if boost_until and boost_until > now:
+        if _get_stream_enforcer_interval() != STREAM_ENFORCER_BOOST_INTERVAL_SECONDS:
+            _set_stream_enforcer_interval(STREAM_ENFORCER_BOOST_INTERVAL_SECONDS)
+            logger.warning(
+                f"[TASK {task_id}] stream_enforcer boost active until {boost_until} "
+                f"-> interval={STREAM_ENFORCER_BOOST_INTERVAL_SECONDS}s"
+            )
+        return
+
+    if boost_until and boost_until <= now:
+        _clear_stream_enforcer_boost_until()
+
+    if _get_stream_enforcer_interval() != STREAM_ENFORCER_NORMAL_INTERVAL_SECONDS:
+        _set_stream_enforcer_interval(STREAM_ENFORCER_NORMAL_INTERVAL_SECONDS)
+        logger.warning(
+            f"[TASK {task_id}] stream_enforcer boost expired "
+            f"-> interval={STREAM_ENFORCER_NORMAL_INTERVAL_SECONDS}s"
+        )
+
+
+def _maybe_boost_stream_enforcer_after_expired_kill(task_id: int, policy_id: int, vodum_user_id: Optional[int]):
+    """
+    Si un user expiré se fait tuer plusieurs fois rapidement,
+    on accélère temporairement stream_enforcer.
+    """
+    if vodum_user_id is None:
+        return
+
+    row = _db.query_one(
+        """
+        SELECT COUNT(*) AS cnt
+        FROM stream_enforcements
+        WHERE policy_id = ?
+          AND vodum_user_id = ?
+          AND action = 'kill'
+          AND datetime(created_at) >= datetime('now', ?)
+        """,
+        (
+            int(policy_id),
+            int(vodum_user_id),
+            f"-{int(STREAM_ENFORCER_BOOST_WINDOW_MINUTES)} minutes",
+        )
+    )
+
+    kill_count = int(row["cnt"] or 0) if row else 0
+
+    if kill_count < STREAM_ENFORCER_BOOST_KILL_THRESHOLD:
+        return
+
+    boost_until = datetime.now() + timedelta(minutes=STREAM_ENFORCER_BOOST_DURATION_MINUTES)
+
+    _set_stream_enforcer_boost_until(boost_until)
+    _set_stream_enforcer_interval(STREAM_ENFORCER_BOOST_INTERVAL_SECONDS)
+
+    logger.warning(
+        f"[TASK {task_id}] stream_enforcer boost enabled: "
+        f"user={vodum_user_id} policy={policy_id} "
+        f"kills={kill_count}/{STREAM_ENFORCER_BOOST_WINDOW_MINUTES}min "
+        f"interval={STREAM_ENFORCER_BOOST_INTERVAL_SECONDS}s "
+        f"until={boost_until.strftime('%Y-%m-%d %H:%M:%S')}"
+    )
 
 # -------------------------
 # Task entrypoint
@@ -1303,6 +1488,7 @@ def run(task_id: int, db):
     ✅ DO NOT instantiate DBManager here
     """
     _set_db(db)
+    _refresh_stream_enforcer_boost_state(task_id)
 
     if is_debug_mode_enabled():
         logger.debug(f"[TASK {task_id}] stream_enforcer: start")
@@ -1318,23 +1504,31 @@ def run(task_id: int, db):
         return
 
     live_sessions = _load_live_sessions()
-    logger.info(f"[TASK {task_id}] stream_enforcer: live_sessions={len(live_sessions)}")
-    if not live_sessions:
+    fresh_live_sessions = _load_live_sessions(stable_seconds=0)
+    
+    if is_debug_mode_enabled():
+        logger.debug(f"[TASK {task_id}] stream_enforcer: live_sessions={len(live_sessions)}")
+    if not live_sessions and not fresh_live_sessions:
         if is_debug_mode_enabled():
             logger.debug(f"[TASK {task_id}] stream_enforcer: no live sessions")
         return
 
-    null_map = sum(1 for s in live_sessions if s.get("vodum_user_id") is None)
+    debug_sessions = fresh_live_sessions if fresh_live_sessions else live_sessions
+
+    null_map = sum(1 for s in debug_sessions if s.get("vodum_user_id") is None)
     if null_map:
         logger.warning(
-            f"[TASK {task_id}] stream_enforcer: sessions_with_vodum_user_id_NULL={null_map}/{len(live_sessions)} "
+            f"[TASK {task_id}] stream_enforcer: sessions_with_vodum_user_id_NULL={null_map}/{len(debug_sessions)} "
             "(=> scope=user policies may never match if your users are not mapped)"
         )
 
 
     violations: List[dict] = []
     for p in policies:
-        violations.extend(_evaluate_policy(p, live_sessions))
+        if _is_strict_expired_subscription_policy(p):
+            violations.extend(_evaluate_policy(p, fresh_live_sessions))
+        else:
+            violations.extend(_evaluate_policy(p, live_sessions))
 
     if not violations:
         if is_debug_mode_enabled():
@@ -1384,6 +1578,61 @@ def run(task_id: int, db):
         # => on veut un texte user-friendly (warn_text), pas un reason technique.
         kill_reason_for_client = warn_text or reason
 
+        # Policy système "abonnement expiré" :
+        # on coupe immédiatement, sans warning, sans délai de recheck.
+        if _is_strict_expired_subscription_policy(policy):
+            try:
+                kill_live_sessions = _load_live_sessions(stable_seconds=0)
+
+                kill_account_username, kill_ips_json, kill_details_json = _build_enforcement_snapshot(
+                    target=target,
+                    violation_sessions=sessions,
+                    live_sessions=kill_live_sessions,
+                    policy=policy,
+                    reason=reason,
+                )
+
+                ok = _kill_session(server_row, session_key, reason=kill_reason_for_client)
+
+                _log_enforcement(
+                    policy_id, server_id, provider_type, session_key,
+                    user_vodum_id, user_ext,
+                    "kill", reason,
+                    account_username=kill_account_username,
+                    ips_json=kill_ips_json,
+                    details_json=kill_details_json,
+                )
+
+                _upsert_state(
+                    policy_id, server_id,
+                    user_vodum_id, user_ext,
+                    warned=False,
+                    killed=True,
+                    reason=reason,
+                )
+
+                logger.warning(
+                    f"[TASK {task_id}] [KILL_IMMEDIATE] policy={policy_id} server={server_id} provider={provider_type} "
+                    f"session={session_key} ok={ok} reason={reason} "
+                    f"target_vodum_user_id={user_vodum_id} target_external_user_id={user_ext} "
+                    f"ip={target.get('ip')} device={target.get('device') or target.get('client_product')} "
+                    f"is_transcode={target.get('is_transcode')} bitrate={target.get('bitrate')}"
+                )
+
+                _maybe_boost_stream_enforcer_after_expired_kill(
+                    task_id,
+                    policy_id,
+                    user_vodum_id,
+                )
+
+            except Exception as e:
+                logger.error(
+                    f"[TASK {task_id}] stream_enforcer: immediate kill failed "
+                    f"server={server_id} session={session_key}: {e}",
+                    exc_info=True
+                )
+
+            continue
 
         # 1) WARN (une fois) + recheck 30s
         if not _already_warned_recently(policy_id, server_id, user_vodum_id, user_ext, minutes=5):
@@ -1418,7 +1667,8 @@ def run(task_id: int, db):
         # 2) recheck 30s -> si toujours violation -> KILL
         still_bad = _recheck_violation(policy, v)
         if not still_bad:
-            logger.info(f"[TASK {task_id}] stream_enforcer: violation cleared after recheck (policy={policy_id} server={server_id})")
+            if is_debug_mode_enabled():
+                logger.debug(f"[TASK {task_id}] stream_enforcer: violation cleared after recheck (policy={policy_id} server={server_id})")
             continue
 
         kill_live_sessions = _load_live_sessions()
@@ -1492,4 +1742,5 @@ def run(task_id: int, db):
             logger.error(f"[TASK {task_id}] stream_enforcer: kill failed server={server_id} session={session_key}: {e}", exc_info=True)
 
 
-    logger.info(f"[TASK {task_id}] stream_enforcer: done")
+    if is_debug_mode_enabled():
+        logger.debug(f"[TASK {task_id}] stream_enforcer: done")

@@ -1325,7 +1325,7 @@ def apply_revoke_job(db, job):
 
 
 def run(task_id: int, db):
-    logger.info("=== APPLY PLEX ACCESS UPDATES : START ===")
+    logger.debug("=== APPLY PLEX ACCESS UPDATES : START ===")
 
     db.execute(
         """
@@ -1358,7 +1358,7 @@ def run(task_id: int, db):
     )
 
     if not jobs:
-        logger.info("No jobs to process.")
+        logger.debug("No jobs to process.")
         return {"processed": 0, "errors": 0}
 
     logger.info(f"{len(jobs)} job(s) to process...")
@@ -1503,6 +1503,6 @@ def run(task_id: int, db):
                 )
 
     cleanup_old_jobs(db)
-    logger.info("=== APPLY PLEX ACCESS UPDATES : END ===")
+    logger.debug("=== APPLY PLEX ACCESS UPDATES : END ===")
 
     return {"processed": processed, "errors": errors}

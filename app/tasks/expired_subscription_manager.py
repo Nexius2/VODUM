@@ -285,14 +285,14 @@ def run(task_id: int, db) -> None:
         return
 
 
-    task_logs(task_id, "info", "Task expired_subscription_manager started")
-    log.info("=== EXPIRED SUBSCRIPTION MANAGER : START ===")
+    task_logs(task_id, "start", "Task expired_subscription_manager started")
+    log.debug("=== EXPIRED SUBSCRIPTION MANAGER : START ===")
 
     settings = _get_settings(db)
     if settings["expiry_mode"] not in ("warn_only", "warn_then_disable"):
         msg = "expiry_mode is not warn_only or warn_then_disable, nothing to do."
-        log.info(msg)
-        task_logs(task_id, "info", msg)
+        log.debug(msg)
+        task_logs(task_id, "debug", msg)
         return
 
     today = date.today()
@@ -301,7 +301,7 @@ def run(task_id: int, db) -> None:
     try:
         removed_orphans = _cleanup_orphan_system_policies(db)
         if removed_orphans:
-            task_logs(task_id, "info", f"Cleaned {removed_orphans} orphan system policies.")
+            task_logs(task_id, "success", f"Cleaned {removed_orphans} orphan system policies.")
 
         users = db.query(
             """

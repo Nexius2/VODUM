@@ -221,8 +221,16 @@
               class="inline-flex items-center gap-1
                      px-2 py-0.5 rounded-md
                      text-[10px] font-medium tracking-wide
-                     bg-indigo-500/10 text-indigo-300
-                     border border-indigo-500/30"
+                     {% if g.update_pending_days >= 30 %}
+					 bg-red-500/20 text-red-300
+					 border border-red-500/60 animate-pulse
+					 {% elif g.update_pending_days >= 7 %}
+					 bg-red-500/10 text-red-300
+					 border border-red-500/40
+					 {% else %}
+					 bg-indigo-500/10 text-indigo-300
+					 border border-indigo-500/30
+					 {% endif %}
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24"
                    stroke="currentColor" stroke-width="2">
@@ -242,7 +250,14 @@
                      bg-slate-900 border border-slate-700
                      shadow-lg whitespace-nowrap"
             >
-              Update available
+              {% if g.update_pending_days >= 30 %}
+			  Update available since {{ g.update_pending_days }} days
+			  (critical delay)
+			  {% elif g.update_pending_days >= 7 %}
+			  Update available since {{ g.update_pending_days }} days
+			  {% else %}
+			  Update available
+			  {% endif %}
             </span>
           </span>
         {% endif %}

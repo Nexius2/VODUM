@@ -250,6 +250,17 @@ def register(app):
             edit_policy=edit_policy,
         )
 
+    @app.post("/subscriptions/templates/enabled-only")
+    def subscription_templates_enabled_only_save():
+        db = get_db()
+        enabled_only = 1 if request.form.get("enabled_only") == "1" else 0
+        db.execute(
+            "UPDATE settings SET subscription_plans_enabled_only = ? WHERE id = 1",
+            (enabled_only,),
+        )
+        return redirect(url_for("subscriptions", tab="templates"))
+
+
     @app.route("/subscriptions/settings", methods=["POST"])
     def subscriptions_settings_save():
         db = get_db()

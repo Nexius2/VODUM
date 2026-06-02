@@ -101,23 +101,16 @@ class PlexWebsocketClient:
     def _refresh_live_sessions(self):
 
         try:
+            from core.monitoring.collector import collect_sessions_for_server
 
-            provider = get_provider(dict(self.server))
-
-            live_sessions = provider.get_live_sessions()
-
-            from core.monitoring.collector import (
-                persist_live_sessions,
-            )
-
-            persist_live_sessions(
+            report = collect_sessions_for_server(
                 self.db,
-                dict(self.server),
-                live_sessions,
+                int(self.server["id"]),
+                provider="plex",
             )
 
             logger.info(
-                f"Refreshed {len(live_sessions or [])} live sessions "
+                f"Refreshed {report.get('sessions_seen', 0)} live sessions "
                 f"for {self.server['name']}"
             )
 

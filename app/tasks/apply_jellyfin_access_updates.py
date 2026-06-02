@@ -254,12 +254,12 @@ def _process_job(db, job: Dict[str, Any]) -> None:
 # Entry point expected by tasks_engine: run(task_id, db)
 # ---------------------------------------------------------------------
 def run(task_id: int, db) -> None:
-    logger.info("=== APPLY JELLYFIN ACCESS UPDATES : START ===")
+    logger.debug("=== APPLY JELLYFIN ACCESS UPDATES : START ===")
 
     jobs = _fetch_pending_jobs(db, limit=50)
     if not jobs:
-        logger.info("No jobs to process.")
-        logger.info("=== APPLY JELLYFIN ACCESS UPDATES : END ===")
+        logger.debug("No jobs to process.")
+        logger.debug("=== APPLY JELLYFIN ACCESS UPDATES : END ===")
         return
 
     for job_row in jobs:
@@ -297,5 +297,5 @@ def run(task_id: int, db) -> None:
             logger.error(f"Jellyfin job {job_id} failed: {e}", exc_info=True)
             _mark_failure(db, job_id, str(e))
 
-    logger.info("=== APPLY JELLYFIN ACCESS UPDATES : END ===")
+    logger.debug("=== APPLY JELLYFIN ACCESS UPDATES : END ===")
 

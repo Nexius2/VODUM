@@ -150,8 +150,8 @@ def run(task_id: int, db):
     - son expiration glisse chaque jour jusqu'à acceptation
     """
 
-    task_logs(task_id, "info", "Task update_user_status started")
-    log.info("=== UPDATE USER STATUS : START ===")
+    task_logs(task_id, "start", "Task update_user_status started")
+    log.debug("=== UPDATE USER STATUS : START ===")
 
     today = date.today()
 
@@ -174,7 +174,7 @@ def run(task_id: int, db):
         reminder_days = int(settings["reminder_days"])
         default_subscription_days = int(settings["default_subscription_days"] or 0)
 
-        log.info(
+        log.debug(
             f"Settings loaded → preavis={preavis_days}j | reminder={reminder_days}j | default_subscription_days={default_subscription_days}j"
         )
 
@@ -185,7 +185,7 @@ def run(task_id: int, db):
             "SELECT id, status, expiration_date, expiration_date_override FROM vodum_users"
         )
 
-        log.info(f"{len(users)} users loaded chargés")
+        log.debug(f"{len(users)} users loaded")
 
         updated = 0
 
@@ -360,12 +360,15 @@ def run(task_id: int, db):
                 updated += 1
 
         msg = f"{updated} user(s) updated"
-        log.info(msg)
+        if updated > 0:
+            log.info(msg)
+        else:
+            log.debug(msg)
 
         if updated > 0:
             task_logs(task_id, "success", msg)
         else:
-            task_logs(task_id, "info", msg)
+            task_logs(task_id, "debug", msg)
 
     except Exception as e:
         log.error("Global error in update_user_status", exc_info=True)

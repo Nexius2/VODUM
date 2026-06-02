@@ -3,7 +3,7 @@ import json
 from typing import Optional
 
 from flask import (
-    render_template, request, url_for, make_response,
+    render_template, request, url_for, make_response, jsonify,
 )
 from core.monitoring.artwork import (
     build_history_poster_url,
@@ -99,6 +99,92 @@ def _build_overview_movie_poster_url(row, db=None):
     return build_history_poster_url(row, db)
 
 def register(app):
+    @app.route("/monitoring/policies/enforcements/by-user")
+    def monitoring_policy_enforcements_by_user():
+        db = get_db()
+
+        actor_key = (request.args.get("actor_key") or "").strip()
+
+        if actor_key.startswith("vodum:"):
+            try:
+                vodum_user_id = int(actor_key.split(":", 1)[1])
+            except Exception:
+                return jsonify({"ok": False, "error": "Invalid vodum actor key"}), 400
+
+            where_clause = "e.vodum_user_id = ?"
+            params = [vodum_user_id]
+
+        elif actor_key.startswith("ext:"):
+            external_user_id = actor_key.split(":", 1)[1].strip()
+            if not external_user_id:
+                return jsonify({"ok": False, "error": "Invalid external actor key"}), 400
+
+            where_clause = "COALESCE(e.external_user_id, '') = ?"
+            params = [external_user_id]
+
+        else:
+            return jsonify({"ok": False, "error": "Missing actor key"}), 400
+
+        rows = db.query(f"""
+            SELECT
+              e.id AS enforcement_id,
+              e.created_at,
+              e.action,
+              e.reason,
+              e.provider,
+              e.session_key,
+              e.policy_id,
+              e.server_id,
+              e.vodum_user_id,
+              e.external_user_id,
+              e.account_username,
+              e.ips_json,
+              e.details_json,
+
+              p.rule_type,
+              p.scope_type,
+              p.scope_id,
+              p.priority AS policy_priority,
+              p.is_enabled AS policy_enabled,
+              p.rule_value_json,
+
+              s.name AS server_name,
+              vu.username AS vodum_username,
+
+              CASE
+                WHEN e.account_username IS NOT NULL AND TRIM(e.account_username) <> '' THEN e.account_username
+                WHEN mu_acc.username IS NOT NULL AND TRIM(mu_acc.username) <> '' THEN mu_acc.username
+                WHEN vu.username IS NOT NULL AND TRIM(vu.username) <> '' THEN vu.username
+                WHEN e.external_user_id IS NOT NULL
+                     AND TRIM(e.external_user_id) <> ''
+                     AND TRIM(e.external_user_id) NOT GLOB '[0-9]*.[0-9]*.[0-9]*.[0-9]*'
+                THEN e.external_user_id
+                ELSE '—'
+              END AS user_label
+            FROM stream_enforcements e
+            LEFT JOIN stream_policies p
+              ON p.id = e.policy_id
+            LEFT JOIN servers s
+              ON s.id = e.server_id
+            LEFT JOIN vodum_users vu
+              ON vu.id = e.vodum_user_id
+            LEFT JOIN (
+              SELECT server_id, external_user_id, MAX(username) AS username
+              FROM media_users
+              GROUP BY server_id, external_user_id
+            ) mu_acc
+              ON mu_acc.server_id = e.server_id
+             AND mu_acc.external_user_id = e.external_user_id
+            WHERE datetime(e.created_at) >= datetime('now', '-24 hours')
+              AND {where_clause}
+            ORDER BY e.created_at DESC
+            LIMIT 200
+        """, params) or []
+
+        return jsonify({
+            "ok": True,
+            "rows": [dict(r) for r in rows],
+        })
     @app.route("/monitoring")
     def monitoring_page():
         db = get_db()
@@ -688,6 +774,7 @@ def register(app):
         policy_scope_breakdown = []
         policy_top_users_30d = []
         policy_recent_enforcements = []
+        policy_grouped_enforcements = []
         policy_tracked_state = {}
         
 
@@ -1333,7 +1420,92 @@ ranked AS (
                 LIMIT 12
             """) or []
             policy_recent_enforcements = [dict(r) for r in policy_recent_enforcements]
+            policy_grouped_raw = db.query("""
+                SELECT
+                  e.id AS enforcement_id,
+                  e.created_at,
+                  e.action,
+                  e.reason,
+                  e.provider,
+                  e.server_id,
+                  e.vodum_user_id,
+                  e.external_user_id,
 
+                  p.rule_type,
+                  s.name AS server_name,
+                  vu.username AS vodum_username,
+
+                  CASE
+                    WHEN e.vodum_user_id IS NOT NULL THEN 'vodum:' || CAST(e.vodum_user_id AS TEXT)
+                    ELSE 'ext:' || COALESCE(e.external_user_id, '')
+                  END AS actor_key,
+
+                  CASE
+                    WHEN e.account_username IS NOT NULL AND TRIM(e.account_username) <> '' THEN e.account_username
+                    WHEN mu_acc.username IS NOT NULL AND TRIM(mu_acc.username) <> '' THEN mu_acc.username
+                    WHEN vu.username IS NOT NULL AND TRIM(vu.username) <> '' THEN vu.username
+                    WHEN e.external_user_id IS NOT NULL
+                         AND TRIM(e.external_user_id) <> ''
+                         AND TRIM(e.external_user_id) NOT GLOB '[0-9]*.[0-9]*.[0-9]*.[0-9]*'
+                    THEN e.external_user_id
+                    ELSE '—'
+                  END AS user_label
+                FROM stream_enforcements e
+                LEFT JOIN stream_policies p
+                  ON p.id = e.policy_id
+                LEFT JOIN servers s
+                  ON s.id = e.server_id
+                LEFT JOIN vodum_users vu
+                  ON vu.id = e.vodum_user_id
+                LEFT JOIN (
+                  SELECT server_id, external_user_id, MAX(username) AS username
+                  FROM media_users
+                  GROUP BY server_id, external_user_id
+                ) mu_acc
+                  ON mu_acc.server_id = e.server_id
+                 AND mu_acc.external_user_id = e.external_user_id
+                WHERE datetime(e.created_at) >= datetime('now', '-24 hours')
+                ORDER BY e.created_at DESC
+                LIMIT 1000
+            """) or []
+
+            grouped = {}
+
+            for r in policy_grouped_raw:
+                row = dict(r)
+                actor_key = row.get("actor_key") or "unknown"
+
+                if actor_key not in grouped:
+                    grouped[actor_key] = {
+                        "actor_key": actor_key,
+                        "user_label": row.get("user_label") or "—",
+                        "warn_count": 0,
+                        "kill_count": 0,
+                        "total_count": 0,
+                        "last_action": row.get("action"),
+                        "last_created_at": row.get("created_at"),
+                        "last_server_name": row.get("server_name"),
+                        "last_rule_type": row.get("rule_type"),
+                        "last_reason": row.get("reason"),
+                    }
+
+                grouped[actor_key]["total_count"] += 1
+
+                if row.get("action") == "warn":
+                    grouped[actor_key]["warn_count"] += 1
+                elif row.get("action") == "kill":
+                    grouped[actor_key]["kill_count"] += 1
+
+            policy_grouped_enforcements = sorted(
+                grouped.values(),
+                key=lambda x: (
+                    int(x.get("kill_count") or 0),
+                    int(x.get("warn_count") or 0),
+                    int(x.get("total_count") or 0),
+                    str(x.get("last_created_at") or ""),
+                ),
+                reverse=True
+            )[:50]
             policy_tracked_state = db.query_one("""
                 SELECT
                   COUNT(*) AS tracked_1h,
@@ -2210,6 +2382,7 @@ ranked AS (
                 policy_scope_breakdown=policy_scope_breakdown,
                 policy_top_users_30d=policy_top_users_30d,
                 policy_recent_enforcements=policy_recent_enforcements,
+                policy_grouped_enforcements=policy_grouped_enforcements,
                 policy_tracked_state=policy_tracked_state,
             ))
             if sort_key and sort_dir:
@@ -2264,6 +2437,7 @@ ranked AS (
             policy_scope_breakdown=policy_scope_breakdown,
             policy_top_users_30d=policy_top_users_30d,
             policy_recent_enforcements=policy_recent_enforcements,
+            policy_grouped_enforcements=policy_grouped_enforcements,
             policy_tracked_state=policy_tracked_state,
         ))
         
