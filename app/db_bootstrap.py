@@ -328,6 +328,8 @@ def run_migrations():
     ensure_column(cursor, "settings", "telemetry_instance_id", "TEXT DEFAULT NULL")
     ensure_column(cursor, "settings", "telemetry_last_sent_at", "TEXT DEFAULT NULL")
     ensure_column(cursor, "settings", "task_defaults_version", "INTEGER DEFAULT 0")
+    ensure_column(cursor, "settings", "stream_enforcer_boost_until", "TIMESTAMP DEFAULT NULL")
+    ensure_column(cursor, "settings", "subscription_plans_enabled_only", "INTEGER DEFAULT 0")
     conn.commit()
 
     # -------------------------------------------------

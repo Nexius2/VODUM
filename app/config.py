@@ -89,6 +89,7 @@ def _get_session_cookie_samesite(db_path: str) -> str:
 class Config:
     # Chemin vers la base SQLite (dans le conteneur)
     DATABASE = os.environ.get("DATABASE_PATH", "/appdata/database.db")
+    DATABASE_PATH = DATABASE
 
     # Secret key auto-générée/persistée
     SECRET_KEY = _get_secret_key()

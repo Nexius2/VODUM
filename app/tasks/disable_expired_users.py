@@ -138,14 +138,14 @@ def run(task_id: int, db):
         log.error("Failed to purge expired_subscription policies", exc_info=True)
 
 
-    task_logs(task_id, "info", "Task disable_expired_users started")
-    log.info("=== DISABLE EXPIRED USERS : START ===")
+    task_logs(task_id, "start", "Task disable_expired_users started")
+    log.debug("=== DISABLE EXPIRED USERS : START ===")
 
     settings = _get_settings(db)
     if (settings.get("expiry_mode") or "disable") != "disable":
         msg = "Skipped: expiry_mode is not 'disable'."
-        log.info(msg)
-        task_logs(task_id, "info", msg)
+        log.debug(msg)
+        task_logs(task_id, "debug", msg)
         return
 
     today = date.today()

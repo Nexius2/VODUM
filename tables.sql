@@ -328,7 +328,8 @@ CREATE TABLE IF NOT EXISTS settings (
 	enable_anonymous_telemetry INTEGER DEFAULT 1,
 	telemetry_instance_id TEXT DEFAULT NULL,
 	telemetry_last_sent_at TEXT DEFAULT NULL,
-	task_defaults_version INTEGER DEFAULT 0
+	task_defaults_version INTEGER DEFAULT 0,
+    stream_enforcer_boost_until TIMESTAMP DEFAULT NULL
 
 );
 

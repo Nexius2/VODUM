@@ -676,24 +676,35 @@ def task_logs(task_id, status, message, details=None, debug_only=False):
     if debug_only and not is_debug_mode_enabled():
         return
 
-    # Mapping status → level + label lisible
     status_l = str(status).lower().strip()
 
     level = "info"
     label = "INFO"
 
-    if status_l in ("start", "starting", "running", "begin", "launch", "launched"):
+    if status_l in ("debug", "noop", "idle", "skip", "skipped"):
+        if not is_debug_mode_enabled():
+            return
+        level = "debug"
+        label = "DEBUG"
+
+    elif status_l in ("start", "starting", "running", "begin", "launch", "launched"):
         level = "info"
         label = "START"
+
     elif status_l in ("success", "ok", "done", "finished"):
         level = "info"
         label = "SUCCESS"
+
     elif status_l in ("warn", "warning"):
         level = "warning"
         label = "WARNING"
+
     elif status_l in ("error", "err", "failed", "ko", "timeout"):
         level = "error"
         label = "ERROR"
+
+    elif status_l == "info" and not is_debug_mode_enabled():
+        return
 
     log_msg = f"[TASK {task_id}] {label}: {message}"
 
@@ -709,10 +720,10 @@ def task_logs(task_id, status, message, details=None, debug_only=False):
 
     if level == "error":
         logger.error(log_msg)
-
     elif level == "warning":
         logger.warning(log_msg)
-
+    elif level == "debug":
+        logger.debug(log_msg)
     else:
         logger.info(log_msg)
 
@@ -1971,7 +1982,71 @@ def scheduler_loop():
         time.sleep(30)
 
 
+def force_check_update_at_startup():
+    """
+    Force un check_update au démarrage pour recalculer immédiatement
+    l'état du bouton UPDATE après une mise à jour de Vodum.
+    """
+    try:
+        row = db.query_one(
+            """
+            SELECT id, enabled, status, queued_count
+            FROM tasks
+            WHERE name = 'check_update'
+            """
+        )
 
+        if not row:
+            logger.warning("check_update startup refresh skipped: task not found")
+            return False
+
+        task_id = int(row["id"])
+        status = str(row["status"] or "").lower()
+        queued_count = int(row["queued_count"] or 0)
+
+        if not int(row["enabled"] or 0):
+            logger.warning("check_update startup refresh skipped: task disabled")
+            return False
+
+        if status in ("running", "queued") or queued_count > 0:
+            if is_debug_mode_enabled():
+                logger.debug("check_update startup refresh skipped: already queued/running")
+            return False
+
+        enqueued = enqueue_task(task_id)
+
+        if enqueued:
+            try:
+                next_future = croniter("0 4 * * *", datetime.now()).get_next(datetime)
+
+                db.execute(
+                    """
+                    UPDATE tasks
+                    SET next_run = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (next_future, task_id),
+                )
+
+            except Exception as e:
+                logger.warning(
+                    f"check_update startup refresh queued but next_run update failed: {e}",
+                    exc_info=True,
+                )
+
+            logger.info("check_update startup refresh queued")
+            return True
+
+        logger.warning("check_update startup refresh enqueue refused")
+        return False
+
+    except Exception as e:
+        logger.warning(
+            f"check_update startup refresh failed: {e}",
+            exc_info=True,
+        )
+        return False
 
 # -------------------------------------------------------------------
 # Entry point
@@ -2017,6 +2092,8 @@ def start_scheduler():
         if _cron_jobs_enabled():
             run_auto_enable_pass()
             logger.info("Task auto-enable pass run at startup")
+
+            force_check_update_at_startup()
         else:
             logger.info("Cron disabled (global); skipping auto-enable at startup")
 

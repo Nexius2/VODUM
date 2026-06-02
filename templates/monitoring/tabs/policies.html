@@ -136,12 +136,24 @@
 
   <!-- Recent enforcements -->
   <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-    <div class="p-4 border-b border-slate-800 flex items-center justify-between">
-      <h3 class="font-semibold text-white">{{ t("monitoring_policies_recent_enforcements") }}</h3>
-      <span class="text-xs text-slate-500">{{ t("last") }} 12</span>
+    <div class="p-4 border-b border-slate-800 flex items-center justify-between gap-3">
+      <div>
+        <h3 id="policyEnforcementTableTitle" class="font-semibold text-white">
+          {{ t("monitoring_policies_recent_enforcements") }}
+        </h3>
+        <div class="mt-1 text-xs text-slate-500">Last 24h grouped view available</div>
+      </div>
+
+      <button
+        type="button"
+        id="policyEnforcementViewToggleBtn"
+        class="rounded-lg border border-indigo-700 bg-indigo-950/40 px-3 py-1.5 text-xs text-indigo-200 hover:bg-indigo-900/60"
+      >
+        Group by user
+      </button>
     </div>
 
-    <div class="overflow-x-auto">
+    <div id="policyEnforcementEventView" class="overflow-x-auto">
       <table class="min-w-full text-sm">
         <thead class="bg-slate-950 text-slate-400">
           <tr>
@@ -187,6 +199,98 @@
           {% endif %}
         </tbody>
       </table>
+    </div>
+
+    <div id="policyEnforcementGroupView" class="hidden overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-950 text-slate-400">
+          <tr>
+            <th class="text-left p-3">User</th>
+            <th class="text-left p-3">Warn</th>
+            <th class="text-left p-3">Kill</th>
+            <th class="text-left p-3">Total</th>
+            <th class="text-left p-3">Last action</th>
+            <th class="text-left p-3">Last server</th>
+            <th class="text-left p-3">Last reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in policy_grouped_enforcements %}
+            <tr
+              class="border-t border-slate-800 cursor-pointer hover:bg-slate-800/40 focus-within:bg-slate-800/40"
+              tabindex="0"
+              role="button"
+              data-enforcement-group='{{ row|tojson|forceescape }}'
+            >
+              <td class="p-3 text-slate-200 font-medium">{{ row.user_label }}</td>
+              <td class="p-3 text-amber-300">{{ row.warn_count }}</td>
+              <td class="p-3 text-rose-300">{{ row.kill_count }}</td>
+              <td class="p-3 text-slate-300">{{ row.total_count }}</td>
+              <td class="p-3 text-slate-400">
+                {{ row.last_action or "—" }}
+                <div class="text-xs text-slate-500">{{ row.last_created_at|browser_datetime if row.last_created_at else "—" }}</div>
+              </td>
+              <td class="p-3 text-slate-400">{{ row.last_server_name or "—" }}</td>
+              <td class="p-3 text-slate-400">{{ row.last_reason or "—" }}</td>
+            </tr>
+          {% endfor %}
+
+          {% if not policy_grouped_enforcements %}
+            <tr>
+              <td class="p-4 text-slate-400" colspan="7">
+                No grouped enforcements in the last 24h.
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="policyEnforcementGroupModal" class="hidden fixed inset-0 z-50" aria-hidden="true">
+    <div class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+
+    <div class="relative z-10 flex min-h-full items-center justify-center p-4">
+      <div class="w-full max-w-5xl rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
+        <div class="flex items-start justify-between gap-4 border-b border-slate-800 px-5 py-4">
+          <div>
+            <div id="policyEnforcementGroupModalTitle" class="text-base font-semibold text-white">
+              User enforcement history
+            </div>
+            <div id="policyEnforcementGroupModalSubtitle" class="mt-1 text-xs text-slate-400">
+              Last 24h
+            </div>
+          </div>
+
+          <button
+            type="button"
+            id="policyEnforcementGroupModalClose"
+            class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div class="max-h-[75vh] overflow-y-auto">
+          <table class="min-w-full text-sm">
+            <thead class="sticky top-0 bg-slate-950 text-slate-400">
+              <tr>
+                <th class="text-left p-3">Date</th>
+                <th class="text-left p-3">Rule</th>
+                <th class="text-left p-3">Provider</th>
+                <th class="text-left p-3">Server</th>
+                <th class="text-left p-3">Action</th>
+                <th class="text-left p-3">Reason</th>
+              </tr>
+            </thead>
+            <tbody id="policyEnforcementGroupModalRows">
+              <tr>
+                <td class="p-4 text-slate-400" colspan="6">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -758,6 +862,171 @@
       document.body.classList.remove("overflow-hidden");
     }
 
+    const viewToggleBtn = document.getElementById("policyEnforcementViewToggleBtn");
+    const eventView = document.getElementById("policyEnforcementEventView");
+    const groupView = document.getElementById("policyEnforcementGroupView");
+    const tableTitle = document.getElementById("policyEnforcementTableTitle");
+
+    const groupModal = document.getElementById("policyEnforcementGroupModal");
+    const groupModalClose = document.getElementById("policyEnforcementGroupModalClose");
+    const groupModalTitle = document.getElementById("policyEnforcementGroupModalTitle");
+    const groupModalSubtitle = document.getElementById("policyEnforcementGroupModalSubtitle");
+    const groupModalRows = document.getElementById("policyEnforcementGroupModalRows");
+
+    function setEnforcementViewMode(mode) {
+      const grouped = mode === "group";
+
+      if (eventView) eventView.classList.toggle("hidden", grouped);
+      if (groupView) groupView.classList.toggle("hidden", !grouped);
+
+      if (tableTitle) {
+        tableTitle.textContent = grouped ? "Grouped enforcements" : "{{ t("monitoring_policies_recent_enforcements") }}";
+      }
+
+      if (viewToggleBtn) {
+        viewToggleBtn.textContent = grouped ? "Event view" : "Group by user";
+        viewToggleBtn.dataset.nextMode = grouped ? "event" : "group";
+      }
+
+      try {
+        localStorage.setItem("vodum_policy_enforcement_view", grouped ? "group" : "event");
+      } catch (_) {}
+    }
+
+    function closeGroupModal() {
+      if (!groupModal) return;
+      groupModal.classList.add("hidden");
+      groupModal.setAttribute("aria-hidden", "true");
+      document.body.classList.remove("overflow-hidden");
+    }
+
+    function openGroupModal(groupData) {
+      if (!groupModal || !groupModalRows) return;
+
+      const actorKey = groupData.actor_key || "";
+      const userLabel = groupData.user_label || "—";
+
+      groupModalTitle.textContent = `User enforcement history: ${userLabel}`;
+      groupModalSubtitle.textContent = "Last 24h";
+
+      groupModalRows.innerHTML = `
+        <tr>
+          <td class="p-4 text-slate-400" colspan="6">Loading...</td>
+        </tr>
+      `;
+
+      groupModal.classList.remove("hidden");
+      groupModal.setAttribute("aria-hidden", "false");
+      document.body.classList.add("overflow-hidden");
+
+      fetch(`/monitoring/policies/enforcements/by-user?actor_key=${encodeURIComponent(actorKey)}`)
+        .then((response) => response.json())
+        .then((payload) => {
+          const rows = Array.isArray(payload.rows) ? payload.rows : [];
+
+          if (!rows.length) {
+            groupModalRows.innerHTML = `
+              <tr>
+                <td class="p-4 text-slate-400" colspan="6">No enforcement found for this user in the last 24h.</td>
+              </tr>
+            `;
+            return;
+          }
+
+          groupModalRows.innerHTML = "";
+
+          rows.forEach((item) => {
+            const tr = document.createElement("tr");
+            tr.className = "border-t border-slate-800 cursor-pointer hover:bg-slate-800/40";
+            tr.tabIndex = 0;
+            tr.setAttribute("role", "button");
+
+            const actionBadge = item.action === "kill"
+              ? '<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-rose-950/40 border border-rose-800 text-[11px] text-rose-300">kill</span>'
+              : '<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-950/40 border border-amber-800 text-[11px] text-amber-300">warn</span>';
+
+            tr.innerHTML = `
+              <td class="p-3 text-slate-300">${escapeHtml(vodumFormatDateTime(item.created_at))}</td>
+              <td class="p-3 text-slate-300">${escapeHtml(item.rule_type || "—")}</td>
+              <td class="p-3 text-slate-400">${escapeHtml(item.provider || "—")}</td>
+              <td class="p-3 text-slate-400">${escapeHtml(item.server_name || "—")}</td>
+              <td class="p-3">${actionBadge}</td>
+              <td class="p-3 text-slate-400">${escapeHtml(item.reason || "—")}</td>
+            `;
+
+            tr.addEventListener("click", () => {
+              closeGroupModal();
+              openModal(item);
+            });
+
+            tr.addEventListener("keydown", (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                closeGroupModal();
+                openModal(item);
+              }
+            });
+
+            groupModalRows.appendChild(tr);
+          });
+        })
+        .catch(() => {
+          groupModalRows.innerHTML = `
+            <tr>
+              <td class="p-4 text-rose-300" colspan="6">Unable to load user enforcement history.</td>
+            </tr>
+          `;
+        });
+    }
+
+    if (viewToggleBtn && viewToggleBtn.dataset.boundPolicyViewToggle !== "1") {
+      viewToggleBtn.dataset.boundPolicyViewToggle = "1";
+
+      viewToggleBtn.addEventListener("click", () => {
+        const currentMode = localStorage.getItem("vodum_policy_enforcement_view") || "event";
+        const nextMode = currentMode === "group" ? "event" : "group";
+        setEnforcementViewMode(nextMode);
+      });
+    }
+
+    try {
+      setEnforcementViewMode(localStorage.getItem("vodum_policy_enforcement_view") || "event");
+    } catch (_) {
+      setEnforcementViewMode("event");
+    }
+
+    root.querySelectorAll('tr[data-enforcement-group]').forEach((row) => {
+      if (row.dataset.boundPolicyGroupModal === "1") return;
+      row.dataset.boundPolicyGroupModal = "1";
+
+      row.addEventListener("click", () => {
+        try {
+          openGroupModal(JSON.parse(row.getAttribute("data-enforcement-group")));
+        } catch (_) {}
+      });
+
+      row.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          try {
+            openGroupModal(JSON.parse(row.getAttribute("data-enforcement-group")));
+          } catch (_) {}
+        }
+      });
+    });
+
+    if (groupModalClose) {
+      groupModalClose.addEventListener("click", closeGroupModal);
+    }
+
+    if (groupModal) {
+      groupModal.addEventListener("click", (e) => {
+        if (e.target === groupModal || (e.target.classList && e.target.classList.contains("bg-black/70"))) {
+          closeGroupModal();
+        }
+      });
+    }
+
     root.querySelectorAll('tr[data-enforcement]').forEach((row) => {
       if (row.dataset.boundPolicyModal === "1") return;
       row.dataset.boundPolicyModal = "1";
@@ -789,7 +1058,14 @@
     });
 
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !modal.classList.contains("hidden")) {
+      if (e.key !== "Escape") return;
+
+      if (groupModal && !groupModal.classList.contains("hidden")) {
+        closeGroupModal();
+        return;
+      }
+
+      if (!modal.classList.contains("hidden")) {
         closeModal();
       }
     });

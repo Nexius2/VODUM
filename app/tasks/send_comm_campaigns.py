@@ -178,8 +178,8 @@ def _apply_campaign_status(db, campaign_ids: set[int]) -> None:
 
 
 def run(task_id: int, db):
-    task_logs(task_id, "info", "Task send_comm_campaigns started")
-    log.info("=== SEND COMM CAMPAIGNS : START ===")
+    task_logs(task_id, "start", "Task send_comm_campaigns started")
+    log.debug("=== SEND COMM CAMPAIGNS : START ===")
 
     try:
         settings = db.query_one("SELECT * FROM settings WHERE id = 1")
@@ -236,7 +236,7 @@ def run(task_id: int, db):
         due = [dict(r) for r in (rows or [])]
 
         if not test_campaigns and not due:
-            task_logs(task_id, "info", "No queued communication campaigns")
+            task_logs(task_id, "debug", "No queued communication campaigns")
             return {"status": "idle", "processed": 0}
 
         processed = 0
@@ -433,8 +433,11 @@ def run(task_id: int, db):
         _apply_campaign_status(db, touched_campaign_ids)
 
         msg = f"send_comm_campaigns finished — processed={processed} success={success} failed={failed}"
-        task_logs(task_id, "success" if success else "info", msg, details={"campaign_ids": sorted(touched_campaign_ids)})
-        log.info(msg)
+        task_logs(task_id, "success" if success else "debug", msg, details={"campaign_ids": sorted(touched_campaign_ids)})
+        if success or failed:
+            log.info(msg)
+        else:
+            log.debug(msg)
         return {"status": "ok", "processed": processed, "success": success, "failed": failed}
 
     except Exception as e:
@@ -442,4 +445,4 @@ def run(task_id: int, db):
         task_logs(task_id, "error", f"Error send_comm_campaigns: {e}")
         raise
     finally:
-        log.info("=== SEND COMM CAMPAIGNS : END ===")
+        log.debug("=== SEND COMM CAMPAIGNS : END ===")

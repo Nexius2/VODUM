@@ -108,9 +108,22 @@ def run(task_id: int = None, db=None):
         "local_version": local_version,
         "latest_version": None,
         "update_available": False,
+        "update_available_since": None,
+        "update_pending_days": 0,
         "error": None,
         "source": url,
     }
+
+    if os.path.exists(STATUS_FILE):
+        try:
+            with open(STATUS_FILE, "r", encoding="utf-8") as f:
+                previous = json.load(f) or {}
+
+            payload["update_available_since"] = previous.get("update_available_since")
+            payload["update_pending_days"] = int(previous.get("update_pending_days") or 0)
+
+        except Exception:
+            pass
 
     try:
         r = requests.get(url, timeout=15)
@@ -120,9 +133,37 @@ def run(task_id: int = None, db=None):
         payload["latest_version"] = latest or None
         payload["update_available"] = _is_update_available(local_version, latest)
 
+        now = datetime.now(timezone.utc)
+
         if payload["update_available"]:
-            logger.info(f"Update available: local={local_version} remote={latest}")
+
+            if not payload["update_available_since"]:
+                payload["update_available_since"] = now.isoformat()
+
+            try:
+                first_seen = datetime.fromisoformat(
+                    payload["update_available_since"]
+                )
+
+                payload["update_pending_days"] = max(
+                    0,
+                    (now - first_seen).days
+                )
+
+            except Exception:
+                payload["update_available_since"] = now.isoformat()
+                payload["update_pending_days"] = 0
+
+            logger.info(
+                f"Update available: local={local_version} remote={latest} "
+                f"pending_days={payload['update_pending_days']}"
+            )
+
         else:
+
+            payload["update_available_since"] = None
+            payload["update_pending_days"] = 0
+
             logger.info(f"No update: local={local_version} remote={latest}")
 
     except Exception as e:

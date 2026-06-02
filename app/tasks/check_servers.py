@@ -73,10 +73,9 @@ def jellyfin_get_status(base_url, token=None):
         return ("up", None, None, None)
 
     except Exception as e:
+        log.warning(f"[JELLYFIN] unreachable: {e}")
         if is_debug_mode_enabled():
-            log.error("[JELLYFIN] exception", exc_info=True)
-        else:
-            log.warning(f"[JELLYFIN] unreachable: {e}")
+            log.debug("[JELLYFIN] unreachable traceback", exc_info=True)
         return ("down", None, None, f"Jellyfin error: {e}")
 
 

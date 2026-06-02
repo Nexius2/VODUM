@@ -1,4 +1,5 @@
 import hashlib
+import json
 import platform
 import socket
 import uuid
@@ -38,18 +39,26 @@ def get_or_create_instance_id(db):
 
 def run(task_id: int, db: DBManager):
 
-    log.info("Anonymous telemetry task started")
-
     settings_row = db.query_one(
         """
-        SELECT telemetry_last_sent_at
+        SELECT telemetry_last_sent_at, debug_mode
         FROM settings
         WHERE id = 1
         """
     )
 
-    if (
+    debug_mode_enabled = bool(
         settings_row
+        and int(settings_row["debug_mode"] or 0) == 1
+    )
+
+    if debug_mode_enabled if "debug_mode_enabled" in locals() else False:
+        log.info("Anonymous telemetry task started")
+
+
+    if (
+        not debug_mode_enabled
+        and settings_row
         and settings_row["telemetry_last_sent_at"]
     ):
 
@@ -147,6 +156,24 @@ def run(task_id: int, db: DBManager):
         )
         
         version = "unknown"
+        update_pending_days = 0
+
+        try:
+
+            status_file = Path("/appdata/update_status.json")
+
+            if status_file.exists():
+
+                status = json.loads(
+                    status_file.read_text()
+                )
+
+                update_pending_days = int(
+                    status.get("update_pending_days") or 0
+                )
+
+        except Exception:
+            pass
 
         try:
 
@@ -183,6 +210,7 @@ def run(task_id: int, db: DBManager):
             "discord_enabled": 1 if settings["discord_enabled"] else 0,
             "mail_enabled": 1 if settings["mailing_enabled"] else 0,
             "policies_enabled": 1 if active_policies and active_policies["total"] > 0 else 0,
+            "update_pending_days": update_pending_days,
         }
         log.info("Telemetry building payload")
         log.info(f"Telemetry payload prepared: {payload}")

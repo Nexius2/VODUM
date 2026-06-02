@@ -1,61 +1,84 @@
 <!-- RIGHT: TEMPLATE LIST -->
 <div class="lg:col-span-4 xl:col-span-4">
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 lg:sticky lg:top-6">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 lg:self-start">
 
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="text-sm uppercase tracking-wide text-slate-400">
-        {{ t("subscription_templates_list") }}
-      </h2>
+    <div class="flex items-start justify-between mb-4 gap-3">
+      <div>
+        <h2 class="text-sm uppercase tracking-wide text-slate-400">
+          {{ t("subscription_plans_existing") }}
+        </h2>
+        <div class="text-xs text-slate-500 mt-1">{{ t("subscription_plans_existing_hint") }}</div>
+      </div>
       <span class="text-xs text-slate-500">{{ templates|length }}</span>
     </div>
+
+    {% if templates %}
+      <form method="post" action="{{ url_for('subscription_templates_enabled_only_save') }}" class="mb-4">
+        <label class="inline-flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-slate-300 cursor-pointer">
+          <input type="checkbox"
+                 id="plansEnabledOnly"
+                 name="enabled_only"
+                 value="1"
+                 class="rounded border-slate-700 bg-slate-900"
+                 {% if settings.get('subscription_plans_enabled_only') %}checked{% endif %}
+                 onchange="this.form.submit()">
+          {{ t("subscription_plans_enabled_only") }}
+        </label>
+      </form>
+    {% endif %}
 
     {% if not templates %}
       <p class="text-slate-500 text-sm">{{ t("subscription_templates_empty") }}</p>
     {% else %}
       <div class="space-y-3">
         {% for tpl in templates %}
-          <div class="rounded-xl border border-slate-800 bg-slate-950 p-4">
+          <div class="js-plan-card rounded-xl border border-slate-800 bg-slate-950 p-4"
+               data-enabled="{{ 1 if tpl.is_enabled else 0 }}"
+               data-policies="{{ (tpl.policies_json or '[]')|e }}">
             <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0">
-                <div class="font-medium text-slate-200">{{ tpl.name }}</div>
-
-                <div class="flex flex-wrap gap-2 mt-2">
-					<span class="inline-flex px-2 py-0.5 rounded-full text-[11px] {{ 'bg-emerald-900/40 text-emerald-300' if tpl.is_enabled else 'bg-slate-800 text-slate-400' }}">
-					  {{ t("enabled") if tpl.is_enabled else t("disabled") }}
-					</span>
-
-					{% if tpl.is_default %}
-					  <span class="inline-flex px-2 py-0.5 rounded-full bg-emerald-900/40 text-emerald-300 text-[11px]">
-						Default
-					  </span>
-					{% endif %}
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <div class="font-semibold text-slate-100 truncate">{{ tpl.name }}</div>
+                  <span class="inline-flex px-2 py-0.5 rounded-full text-[11px] {{ 'bg-emerald-900/40 text-emerald-300' if tpl.is_enabled else 'bg-slate-800 text-slate-400' }}">
+                    {{ t("enabled") if tpl.is_enabled else t("disabled") }}
+                  </span>
+                  {% if tpl.is_default %}
+                    <span class="inline-flex px-2 py-0.5 rounded-full bg-indigo-900/40 text-indigo-300 text-[11px]">
+                      {{ t("default") }}
+                    </span>
+                  {% endif %}
                 </div>
 
-                <div class="text-xs text-slate-500 mt-2">
-                  {{ tpl.duration_days or 30 }} {{ t("days") }}{% if tpl.subscription_value is not none %} / {{ tpl.subscription_value }}{% endif %}
+                <div class="grid grid-cols-2 gap-2 mt-3 text-xs">
+                  <div class="rounded-lg bg-slate-900 border border-slate-800 px-3 py-2">
+                    <div class="text-slate-500">{{ t("duration") }}</div>
+                    <div class="text-slate-200 font-semibold mt-0.5">{{ tpl.duration_days or 30 }} {{ t("days") }}</div>
+                  </div>
+                  <div class="rounded-lg bg-slate-900 border border-slate-800 px-3 py-2">
+                    <div class="text-slate-500">{{ t("subscription_value") }}</div>
+                    <div class="text-slate-200 font-semibold mt-0.5">{{ tpl.subscription_value if tpl.subscription_value is not none else '—' }}</div>
+                  </div>
                 </div>
 
                 {% if tpl.notes %}
-                  <div class="text-xs text-slate-500 mt-1">{{ tpl.notes }}</div>
+                  <div class="text-xs text-slate-500 mt-2 line-clamp-2">{{ tpl.notes }}</div>
                 {% endif %}
 
-                <div class="text-[11px] text-slate-500 mt-2">
-                  {{ t("policies") }}: {{ tpl.policies_count }}
+                <div class="js-plan-summary mt-3 flex flex-wrap gap-2 text-[11px] text-slate-400">
+                  <span class="rounded-full border border-slate-800 bg-slate-900 px-2 py-1">{{ t("policies") }}: {{ tpl.policies_count }}</span>
                 </div>
               </div>
 
-              <div class="flex flex-wrap justify-end gap-2">
-
-
+              <div class="flex flex-col gap-2 shrink-0">
                 <button type="button"
-                        class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs"
+                        class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs text-slate-200"
                         onclick='loadTemplateForEdit({{ tpl|tojson }})'>
                   {{ t("edit") }}
                 </button>
 
                 <form method="post" action="{{ url_for('subscription_templates_duplicate', template_id=tpl.id) }}">
                   <button type="submit"
-                          class="px-2 py-1 rounded bg-indigo-800/40 hover:bg-indigo-800/60 text-indigo-200 text-xs">
+                          class="w-full px-2 py-1 rounded bg-indigo-800/40 hover:bg-indigo-800/60 text-indigo-200 text-xs">
                     {{ t("duplicate") }}
                   </button>
                 </form>
@@ -65,7 +88,7 @@
                       class="js-template-delete-form"
                       data-template-name="{{ tpl.name }}">
                   <button type="submit"
-                          class="px-2 py-1 rounded bg-rose-800/40 hover:bg-rose-800/60 text-rose-200 text-xs">
+                          class="w-full px-2 py-1 rounded bg-rose-800/40 hover:bg-rose-800/60 text-rose-200 text-xs">
                     {{ t("delete") }}
                   </button>
                 </form>
@@ -80,13 +103,14 @@
       <form method="post" action="{{ url_for('subscription_templates_restore_defaults') }}">
         <button type="submit"
                 class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs">
-          Restore default templates
+          {{ t("subscription_restore_default_templates") }}
         </button>
       </form>
     </div>
 
   </div>
 </div>
+
 <div id="templateDeleteConfirmModal" class="hidden fixed inset-0 z-50" aria-hidden="true">
   <div class="absolute inset-0 bg-black/70"></div>
 
@@ -129,6 +153,63 @@
 
 <script>
   document.addEventListener("DOMContentLoaded", () => {
+    function cardEscapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function summarizePolicy(policy) {
+      const rule = policy.rule || {};
+      if (policy.rule_type === "max_streams_per_user") return `${rule.max ?? "?"} streams`;
+      if (policy.rule_type === "max_ips_per_user") return `${rule.max ?? "?"} IPs`;
+      if (policy.rule_type === "max_streams_per_ip") return `${rule.max ?? "?"} streams / IP`;
+      if (policy.rule_type === "max_transcodes_global") return `${rule.max ?? "?"} transcodes`;
+      if (policy.rule_type === "max_bitrate_kbps") return `${rule.max_kbps ?? "?"} kbps`;
+      if (policy.rule_type === "device_allowlist") return `Devices: ${(rule.allowed || []).join(", ") || "—"}`;
+      if (policy.rule_type === "ban_4k_transcode") return `No 4K transcode`;
+      return policy.rule_type || "Policy";
+    }
+
+    document.querySelectorAll(".js-plan-card").forEach((card) => {
+      const box = card.querySelector(".js-plan-summary");
+      if (!box) return;
+
+      let policies = [];
+      try {
+        policies = JSON.parse(card.dataset.policies || "[]") || [];
+      } catch (e) {
+        policies = [];
+      }
+
+      if (!policies.length) return;
+
+      box.innerHTML = policies.slice(0, 4).map((policy) => {
+        const enabledClass = policy.is_enabled ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-slate-700 bg-slate-800 text-slate-400";
+        return `<span class="rounded-full border px-2 py-1 ${enabledClass}">${cardEscapeHtml(summarizePolicy(policy))}</span>`;
+      }).join("");
+
+      if (policies.length > 4) {
+        box.innerHTML += `<span class="rounded-full border border-slate-800 bg-slate-900 px-2 py-1 text-slate-400">+${policies.length - 4}</span>`;
+      }
+    });
+
+    const enabledOnly = document.getElementById("plansEnabledOnly");
+    if (enabledOnly) {
+      const applyEnabledFilter = () => {
+        document.querySelectorAll(".js-plan-card").forEach((card) => {
+          const shouldHide = enabledOnly.checked && card.dataset.enabled !== "1";
+          card.classList.toggle("hidden", shouldHide);
+        });
+      };
+
+      enabledOnly.addEventListener("change", applyEnabledFilter);
+      applyEnabledFilter();
+    }
+
     const modal = document.getElementById("templateDeleteConfirmModal");
     const nameBox = document.getElementById("templateDeleteConfirmName");
     const btnCancel = document.getElementById("templateDeleteConfirmCancel");

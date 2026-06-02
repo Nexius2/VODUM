@@ -396,8 +396,10 @@ def create_app():
                 with open(status_path, "r", encoding="utf-8", errors="ignore") as f:
                     data = json.load(f) or {}
                 g.update_available = bool(data.get("update_available"))
+                g.update_pending_days = int(data.get("update_pending_days") or 0)
         except Exception:
             g.update_available = False
+            g.update_pending_days = 0
 
     app.config.from_object(Config)
 

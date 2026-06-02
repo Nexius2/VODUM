@@ -5,6 +5,9 @@ import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Optional
 from core.plex_rate_limit import wait_for_plex_slot
 from core.providers.base import BaseProvider
+from logging_utils import get_logger
+
+log = get_logger("plex")
 
 
 class PlexProvider(BaseProvider):
@@ -151,8 +154,33 @@ class PlexProvider(BaseProvider):
         # GET puis POST (compat)
         try:
             return self._request("GET", "/status/sessions/terminate", params=params)
-        except Exception:
-            return self._request("POST", "/status/sessions/terminate", params=params)
+
+        except Exception as e:
+            error_text = str(e)
+
+            # La session n'existe déjà plus côté Plex.
+            # Ce n'est pas une erreur fonctionnelle.
+            if "404" in error_text:
+                log.info(
+                    f"Session already terminated on Plex "
+                    f"session_key={session_key} session_id={target_session_id}"
+                )
+                return True
+
+            try:
+                return self._request("POST", "/status/sessions/terminate", params=params)
+
+            except Exception as e2:
+                error_text = str(e2)
+
+                if "404" in error_text:
+                    log.info(
+                        f"Session already terminated on Plex "
+                        f"session_key={session_key} session_id={target_session_id}"
+                    )
+                    return True
+
+                raise
 
 
 
