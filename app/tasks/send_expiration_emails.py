@@ -280,6 +280,7 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
             user,
             exp_iso,
             extra_context=extra_context,
+            settings=settings,
         )
         attachments = fetch_template_attachments(db, tpl_id)
 
@@ -315,7 +316,14 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
             body=body,
             attachments=attachments,
             forced_channels=forced_channels,
-            bypass_skip_never_used_accounts=(trigger_event in ("user_creation", "expiration_change", "pending_invite_reminder")),
+            bypass_skip_never_used_accounts=(
+                trigger_event in (
+                    "user_creation",
+                    "expiration_change",
+                    "pending_invite_reminder",
+                    "stream_blocked",
+                )
+            ),
         )
 
         updated_channels_sent = set(already_sent_channels)
@@ -609,9 +617,23 @@ def _already_sent_for_current_mode(db, settings: dict, user: dict, template_keys
     # FIRST
     return (avail.get("email") and email_sent) or (avail.get("discord") and discord_sent)
 
-def _format_message(subject: str, body: str, user: dict, exp_iso: str, extra_context: dict | None = None) -> tuple[str, str]:
+def _format_message(
+    subject: str,
+    body: str,
+    user: dict,
+    exp_iso: str,
+    extra_context: dict | None = None,
+    settings: dict | None = None,
+) -> tuple[str, str]:
     ctx_input = dict(user or {})
     ctx_input["expiration_date"] = exp_iso
+
+    if settings:
+        ctx_input["brand_name"] = (
+            settings.get("brand_name")
+            or settings.get("app_name")
+            or "VODUM"
+        )
 
     if extra_context:
         for k, v in extra_context.items():

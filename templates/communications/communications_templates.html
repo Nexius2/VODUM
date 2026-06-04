@@ -10,6 +10,9 @@
 {% set current_subpage = 'templates' %}
 {% include "communications/_communications_nav.html" %}
 
+{% set stream_blocked_locked = loaded_is_stream_blocked|default(false) %}
+{% set stream_blocked_enabled_locked = stream_blocked_locked and stream_blocked_required|default(false) %}
+
 <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
 
   <!-- LEFT : editor -->
@@ -22,8 +25,13 @@
 
       <div class="flex items-center gap-2">
         <span class="text-[11px] text-slate-400">{{ t('enabled') }}</span>
-        <label class="relative inline-flex items-center cursor-pointer">
-          <input type="checkbox" id="template_enabled_switch" class="sr-only peer" {% if (loaded_template and loaded_template.enabled) or (not loaded_template) %}checked{% endif %}>
+        <label class="relative inline-flex items-center {% if stream_blocked_enabled_locked %}cursor-not-allowed opacity-70{% else %}cursor-pointer{% endif %}"
+               {% if stream_blocked_enabled_locked %}title="{{ t('comm_stream_blocked_required_by_expiry') }}"{% endif %}>
+          <input type="checkbox"
+                 id="template_enabled_switch"
+                 class="sr-only peer"
+                 {% if stream_blocked_enabled_locked or (loaded_template and loaded_template.enabled) or (not loaded_template) %}checked{% endif %}
+                 {% if stream_blocked_enabled_locked %}disabled{% endif %}>
           <div class="w-11 h-6 bg-slate-600 rounded-full peer-checked:bg-emerald-500 transition"></div>
           <div class="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full transition peer-checked:translate-x-5"></div>
         </label>
@@ -33,7 +41,13 @@
     <form method="post" action="{{ url_for('communications_templates_action') }}" enctype="multipart/form-data" class="space-y-4">
       <input type="hidden" name="action" id="commTemplateFormAction" value="{% if loaded_template %}save{% else %}create{% endif %}">
       <input type="hidden" name="template_id" value="{{ loaded_template.id if loaded_template else '' }}">
-      <input type="hidden" name="enabled" id="template_enabled" value="{{ 1 if (loaded_template and loaded_template.enabled) or (not loaded_template) else 0 }}">
+      <input type="hidden" name="enabled" id="template_enabled" value="{{ 1 if stream_blocked_enabled_locked or (loaded_template and loaded_template.enabled) or (not loaded_template) else 0 }}">
+
+      {% if stream_blocked_locked %}
+      <div class="rounded-xl border border-amber-700/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+        {{ t('comm_stream_blocked_template_notice') }}
+      </div>
+      {% endif %}
 
       <!-- {% if not loaded_template %}
       <div class="text-xs">
@@ -57,19 +71,25 @@
 			  <div class="text-xs">
 				<label class="block mb-1">{{ t('comm_trigger_event') }}</label>
 				{% set ev = (loaded_template.trigger_event if loaded_template and loaded_template.trigger_event else 'expiration') %}
-				<select name="trigger_event" id="trigger_event" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+				<select name="trigger_event"
+						id="trigger_event"
+						class="w-full border rounded-lg px-2 py-1 text-xs {% if stream_blocked_locked %}bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed opacity-70{% else %}bg-slate-950 border-slate-800{% endif %}"
+						{% if stream_blocked_locked %}disabled title="{{ t('comm_stream_blocked_template_notice') }}"{% endif %}>
 				  <option value="expiration" {% if ev == 'expiration' %}selected{% endif %}>{{ t('comm_trigger_expiration') }}</option>
 				  <option value="user_creation" {% if ev == 'user_creation' %}selected{% endif %}>{{ t('comm_trigger_user_creation') }}</option>
 				  <option value="pending_invite_reminder" {% if ev == 'pending_invite_reminder' %}selected{% endif %}>{{ t('comm_trigger_pending_invite_reminder') }}</option>
 				  <option value="referral_reward" {% if ev == 'referral_reward' %}selected{% endif %}>{{ t('comm_trigger_referral_reward') }}</option>
 				  <option value="expiration_change" {% if ev == 'expiration_change' %}selected{% endif %}>{{ t('comm_trigger_expiration_change') }}</option>
+				  <option value="stream_blocked" {% if ev == 'stream_blocked' %}selected{% endif %}>{{ t('comm_trigger_stream_blocked') }}</option>
 				</select>
 			  </div>
 
 			  <div class="text-xs">
 				<label class="block mb-1">{{ t('comm_trigger_provider') }}</label>
 				{% set pv = (loaded_template.trigger_provider if loaded_template and loaded_template.trigger_provider else 'all') %}
-				<select name="trigger_provider" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+				<select name="trigger_provider"
+						class="w-full border rounded-lg px-2 py-1 text-xs {% if stream_blocked_locked %}bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed opacity-70{% else %}bg-slate-950 border-slate-800{% endif %}"
+						{% if stream_blocked_locked %}disabled title="{{ t('comm_stream_blocked_template_notice') }}"{% endif %}>
 				  <option value="all" {% if pv == 'all' %}selected{% endif %}>{{ t('comm_provider_all') }}</option>
 				  <option value="plex" {% if pv == 'plex' %}selected{% endif %}>Plex</option>
 				  <option value="jellyfin" {% if pv == 'jellyfin' %}selected{% endif %}>Jellyfin</option>
@@ -80,12 +100,14 @@
 				<label class="block mb-1">{{ t('comm_subscription_target') }}</label>
 				{% set sub_scope = (loaded_template.subscription_scope if loaded_template and loaded_template.subscription_scope else 'none') %}
 				{% set sub_id = (loaded_template.subscription_template_id if loaded_template and loaded_template.subscription_template_id is not none else None) %}
-				<select name="subscription_scope_value" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+				<select name="subscription_scope_value"
+						class="w-full border rounded-lg px-2 py-1 text-xs {% if stream_blocked_locked %}bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed opacity-70{% else %}bg-slate-950 border-slate-800{% endif %}"
+						{% if stream_blocked_locked %}disabled title="{{ t('comm_stream_blocked_template_notice') }}"{% endif %}>
 				  <option value="none" {% if sub_scope == 'none' %}selected{% endif %}>{{ t('comm_subscription_none') }}</option>
 				  <option value="all" {% if sub_scope == 'all' %}selected{% endif %}>{{ t('comm_subscription_all') }}</option>
 				  {% for sub in subscription_templates %}
 					<option value="subscription:{{ sub.id }}"
-					        {% if sub_scope == 'specific' and sub_id == sub.id %}selected{% endif %}>
+							{% if sub_scope == 'specific' and sub_id == sub.id %}selected{% endif %}>
 					  {{ sub.name }}
 					</option>
 				  {% endfor %}
@@ -122,7 +144,7 @@
 		  {% endif %}
 		{% endif %}
 
-		<div class="text-xs">
+		<div class="text-xs {% if stream_blocked_locked %}hidden{% endif %}">
 		  <label class="block mb-1">{{ t('comm_delay') }}</label>
 
 		  <!-- Expiration : [X] days (before/after) the event -->
@@ -207,7 +229,7 @@
                 </button> -->
               </div>
 
-              <div class="mt-5 grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div class="mt-5 grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4">
 
                 <!-- General -->
                 <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-4">
@@ -216,6 +238,7 @@
                     <div><code>{username}</code><div class="text-slate-400 mt-1">{{ t("comm_var_username_desc") }}</div></div>
                     <div><code>{firstusername}</code><div class="text-slate-400 mt-1">{{ t("comm_var_firstusername_desc") }}</div></div>
                     <div><code>{email}</code><div class="text-slate-400 mt-1">{{ t("comm_var_email_desc") }}</div></div>
+                    <div><code>{brand_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_brand_name_desc") }}</div></div>
                     <div><code>{expiration_date}</code><div class="text-slate-400 mt-1">{{ t("comm_var_expiration_date_desc") }}</div></div>
                     <div><code>{days_left}</code><div class="text-slate-400 mt-1">{{ t("comm_var_days_left_desc") }}</div></div>
                     <div><code>{firstname}</code><div class="text-slate-400 mt-1">{{ t("comm_var_firstname_desc") }}</div></div>
@@ -254,6 +277,20 @@
                   </div>
                 </div>
 
+                <!-- Stream policies -->
+                <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-4">
+                  <div class="text-sm font-semibold text-slate-100 mb-3">{{ t("comm_trigger_stream_blocked") }}</div>
+                  <div class="space-y-2 text-xs">
+                    <div><code>{policy_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_policy_name_desc") }}</div></div>
+                    <div><code>{policy_reason}</code><div class="text-slate-400 mt-1">{{ t("comm_var_policy_reason_desc") }}</div></div>
+                    <div><code>{media_title}</code><div class="text-slate-400 mt-1">{{ t("comm_var_media_title_desc") }}</div></div>
+                    <div><code>{server_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_server_name_desc") }}</div></div>
+                    <div><code>{client_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_client_name_desc") }}</div></div>
+                    <div><code>{device_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_device_name_desc") }}</div></div>
+                    <div><code>{blocked_at}</code><div class="text-slate-400 mt-1">{{ t("comm_var_blocked_at_desc") }}</div></div>
+                  </div>
+                </div>
+
               </div>
             </div>
 
@@ -273,12 +310,12 @@
       <div class="flex flex-wrap gap-2">
         <button type="submit" class="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-dark text-xs font-medium">{{ t('save') if loaded_template else t('create') }}</button>
 
-        {% if loaded_template %}
-		<button type="button"
-				id="commTemplateDeleteBtn"
-				class="px-3 py-1.5 rounded-lg bg-rose-700/50 hover:bg-rose-700 text-xs font-medium">
-		  {{ t('delete') }}
-		</button>
+        {% if loaded_template and not stream_blocked_locked %}
+          <button type="button"
+                  id="commTemplateDeleteBtn"
+                  class="px-3 py-1.5 rounded-lg bg-rose-700/50 hover:bg-rose-700 text-xs font-medium">
+            {{ t('delete') }}
+          </button>
           <a href="{{ url_for('communications_templates_page') }}" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium">{{ t('new') }}</a>
         {% endif %}
       </div>
@@ -327,6 +364,8 @@
 				  {{ t('comm_trigger_referral_reward') }}
 				{% elif tpl.trigger_event == 'expiration_change' %}
 				  {{ t('comm_trigger_expiration_change') }}
+				{% elif tpl.trigger_event == 'stream_blocked' %}
+				  {{ t('comm_trigger_stream_blocked') }}
 				{% else %}
 				  {{ t('comm_trigger_expiration') }}
 				{% endif %}
@@ -381,7 +420,7 @@
 
 </div>
 
-{% if loaded_template %}
+{% if loaded_template and not stream_blocked_locked %}
 <div id="commTemplateDeleteModal" class="hidden fixed inset-0 z-50" aria-hidden="true">
   <div class="absolute inset-0 bg-black/70"></div>
 
@@ -462,8 +501,14 @@
 document.addEventListener('DOMContentLoaded', () => {
   const sw = document.getElementById('template_enabled_switch');
   const hidden = document.getElementById('template_enabled');
+  const streamBlockedEnabledLocked = {{ 'true' if stream_blocked_enabled_locked else 'false' }};
+
   if (sw && hidden) {
-    sw.addEventListener('change', () => hidden.value = sw.checked ? '1' : '0');
+    if (streamBlockedEnabledLocked) {
+      hidden.value = '1';
+    } else {
+      sw.addEventListener('change', () => hidden.value = sw.checked ? '1' : '0');
+    }
   }
 
 const triggerSel = document.getElementById('trigger_event');

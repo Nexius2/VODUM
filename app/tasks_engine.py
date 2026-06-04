@@ -1026,10 +1026,8 @@ def _handle_task_success(task_id: int, task_name: str, schedule):
                 and int(interval_seconds) > 0
             ):
 
-                jitter = random.randint(0, 15)
-
                 next_exec = now + timedelta(
-                    seconds=int(interval_seconds) + jitter
+                    seconds=int(interval_seconds)
                 )
 
             # -------------------------------------------------
@@ -1672,26 +1670,37 @@ def _recover_scheduler_state_at_boot():
     except Exception as e:
         logger.warning(f"Recovery tasks failed: {e}", exc_info=True)
 
+def _compute_next_task_run(schedule, schedule_mode, interval_seconds, base_time):
+    """
+    Calcule le prochain run d'une tâche.
+    Supporte :
+    - schedule_mode = 'interval' avec interval_seconds
+    - schedule_mode = 'cron' avec schedule
+    """
+    schedule_mode = (schedule_mode or "cron").strip().lower()
+
+    try:
+        interval_seconds = int(interval_seconds or 0)
+    except Exception:
+        interval_seconds = 0
+
+    if schedule_mode == "interval" and interval_seconds > 0:
+        return base_time + timedelta(seconds=interval_seconds)
+
+    return croniter(schedule, base_time).get_next(datetime)
+
+
 def _run_scheduler_tick(now, run_auto_enable=True):
     """
-    Exécute un tick complet du scheduler cron :
+    Exécute un tick complet du scheduler :
     - auto-enable / auto-disable des tâches dépendantes
     - chargement des tâches actives
     - calcul des prochains runs
     - enqueue des tâches dues
-
-    Retourne True si le tick s'est déroulé normalement,
-    False si on doit simplement attendre le tick suivant.
     """
-    # -------------------------------------------------
-    # 0) Auto-enable / disable des tâches dépendantes
-    # -------------------------------------------------
     if run_auto_enable:
         run_auto_enable_pass()
 
-    # -------------------------------------------------
-    # 1) Charger les tâches actives
-    # -------------------------------------------------
     try:
         rows = db.query(
             """
@@ -1699,6 +1708,8 @@ def _run_scheduler_tick(now, run_auto_enable=True):
                     id,
                     name,
                     schedule,
+                    schedule_mode,
+                    interval_seconds,
                     enabled,
                     last_run,
                     next_run,
@@ -1715,13 +1726,12 @@ def _run_scheduler_tick(now, run_auto_enable=True):
         logger.error(f"Scheduler error (load tasks): {e}", exc_info=True)
         return False
 
-    # -------------------------------------------------
-    # 2) Planification (CRON → enqueue)
-    # -------------------------------------------------
     for row in rows:
         task_id = row["id"]
         name = row["name"]
         schedule = row["schedule"]
+        schedule_mode = row["schedule_mode"]
+        interval_seconds = row["interval_seconds"]
         last_run = row["last_run"]
         status = row["status"]
         retry_count = int(row["retry_count"] or 0)
@@ -1737,9 +1747,6 @@ def _run_scheduler_tick(now, run_auto_enable=True):
 
         if status == "error" and next_retry_at and retry_count < max_retries:
             if next_retry_at <= now:
-                if is_debug_mode_enabled():
-                    logger.debug(f"Retry due for task: {name}")
-
                 enqueued = enqueue_task(task_id)
                 if enqueued:
                     try:
@@ -1762,18 +1769,14 @@ def _run_scheduler_tick(now, run_auto_enable=True):
         if not schedule:
             continue
 
-        # Anti-spam: si déjà en file ou en cours, on n'enfile pas plus
         try:
             queued_count = int(row["queued_count"] or 0)
         except Exception:
             queued_count = 0
 
-        if status in ("running", "queued") or (queued_count and queued_count > 0):
+        if status in ("running", "queued") or queued_count > 0:
             continue
 
-        # ---------------------------
-        # Calcul du prochain run
-        # ---------------------------
         next_run = row["next_run"]
         next_exec = None
 
@@ -1789,29 +1792,27 @@ def _run_scheduler_tick(now, run_auto_enable=True):
             except Exception:
                 base = now
 
-            next_exec = croniter(schedule, base).get_next(datetime)
-
             try:
+                next_exec = _compute_next_task_run(
+                    schedule,
+                    schedule_mode,
+                    interval_seconds,
+                    base
+                )
+
                 db.execute(
                     "UPDATE tasks SET next_run = ? WHERE id = ?",
                     (next_exec, task_id)
                 )
             except Exception as e:
                 if "locked" in str(e).lower():
-                    logger.warning(
-                        f"DB locked during count next_run for '{name}'"
-                    )
+                    logger.warning(f"DB locked during count next_run for '{name}'")
                     continue
                 raise
 
-        # Première exécution forcée (UNE SEULE FOIS)
         if last_run is None:
-            # si déjà planifiée dans le futur, on ne spam pas
             if next_exec and next_exec > now:
                 continue
-
-            if is_debug_mode_enabled():
-                logger.debug(f"First forced execution (one-shot): {name}")
 
             enqueued = enqueue_task(task_id)
             if not enqueued:
@@ -1821,7 +1822,13 @@ def _run_scheduler_tick(now, run_auto_enable=True):
                 continue
 
             try:
-                next_future = croniter(schedule, now).get_next(datetime)
+                next_future = _compute_next_task_run(
+                    schedule,
+                    schedule_mode,
+                    interval_seconds,
+                    now
+                )
+
                 db.execute(
                     "UPDATE tasks SET next_run = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                     (next_future, task_id),
@@ -1832,7 +1839,6 @@ def _run_scheduler_tick(now, run_auto_enable=True):
                     exc_info=True,
                 )
 
-            # IMPORTANT: on marque un last_run "bootstrap" seulement si l'enqueue a réussi
             try:
                 db.execute(
                     "UPDATE tasks SET last_run = datetime('now'), updated_at = CURRENT_TIMESTAMP WHERE id = ? AND last_run IS NULL",
@@ -1846,19 +1852,9 @@ def _run_scheduler_tick(now, run_auto_enable=True):
 
             continue
 
-        # Exécution planifiée (rattrapage 1x, sans catch-up)
         forced_run = consume_forced_task_run(name)
 
         if forced_run or next_exec <= now:
-
-            if is_debug_mode_enabled():
-
-                if forced_run:
-                    logger.debug(f"Forced task execution: {name}")
-
-                else:
-                    logger.debug(f"Scheduled task due (late): {name}")
-
             enqueued = enqueue_task(task_id)
 
             if not enqueued:
@@ -1867,9 +1863,13 @@ def _run_scheduler_tick(now, run_auto_enable=True):
                 )
                 continue
 
-            # IMPORTANT: on décale next_run dans le futur seulement si l'enqueue a réussi
             try:
-                next_future = croniter(schedule, now).get_next(datetime)
+                next_future = _compute_next_task_run(
+                    schedule,
+                    schedule_mode,
+                    interval_seconds,
+                    now
+                )
 
                 db.execute(
                     "UPDATE tasks SET next_run = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -1877,14 +1877,10 @@ def _run_scheduler_tick(now, run_auto_enable=True):
                 )
 
             except Exception as e:
-
-                # si DB locked, on évite de spammer: la tâche reste queueée de toute façon
                 if "locked" in str(e).lower():
-
                     logger.warning(
                         f"DB locked while updating next_run for '{name}' after enqueue"
                     )
-
                     continue
 
                 raise

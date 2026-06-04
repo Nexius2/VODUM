@@ -23,9 +23,10 @@
 	  <div id="autosave_status" class="text-xs text-slate-500"></div>
 	</div>
 
-	<div class="grid grid-cols-1 gap-6">
+	<div class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
 
     <!-- Email -->
+	<div class="space-y-6 xl:order-2">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
       <div class="flex items-center justify-between">
         <h2 class="text-sm font-semibold">{{ t('email') }}</h2>
@@ -205,10 +206,10 @@
         </div>
       </div>
     </div>
-
+	</div>
 
     <!-- General -->
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 xl:order-1">
       <div class="flex items-center justify-between">
         <h2 class="text-sm font-semibold">{{ t('general') }}</h2>
       </div>

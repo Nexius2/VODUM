@@ -68,6 +68,8 @@ def register(app):
             else:
                 cookie_statuses = default_statuses[:]
 
+            status_none_requested = request.args.get("status_none") == "1"
+
             arg_statuses = request.args.getlist("status")
             selected_statuses = arg_statuses if "status" in request.args else cookie_statuses
 
@@ -88,7 +90,9 @@ def register(app):
                 if str(s).strip().lower() in valid_statuses
             ]
 
-            if not selected_statuses:
+            if status_none_requested:
+                selected_statuses = []
+            elif not selected_statuses:
                 selected_statuses = default_statuses[:]
 
             sort = (request.args.get("sort") or cookie_sort or "username").strip()
@@ -97,7 +101,28 @@ def register(app):
             if order not in ("asc", "desc"):
                 order = "asc"
         else:
-            selected_statuses = request.args.getlist("status")
+            status_none_requested = request.args.get("status_none") == "1"
+
+            valid_referral_statuses = [
+                "pending",
+                "qualified",
+                "rewarded",
+                "cancelled",
+                "expired",
+                "archived",
+            ]
+
+            selected_statuses = [
+                str(s).strip().lower()
+                for s in request.args.getlist("status")
+                if str(s).strip().lower() in valid_referral_statuses
+            ]
+
+            if status_none_requested:
+                selected_statuses = []
+            elif "status" not in request.args:
+                selected_statuses = valid_referral_statuses[:]
+
             sort = (request.args.get("sort") or "username").strip()
             order = (request.args.get("order") or "asc").strip().lower()
 
@@ -185,7 +210,9 @@ def register(app):
             conditions = []
             params = []
 
-            if selected_statuses and not search:
+            if status_none_requested:
+                conditions.append("1 = 0")
+            elif selected_statuses:
                 placeholders = ",".join(["?"] * len(selected_statuses))
                 conditions.append(f"u.status IN ({placeholders})")
                 params.extend(selected_statuses)
@@ -310,12 +337,12 @@ def register(app):
 
             if archive_mode == "active":
                 conditions.append("r.status != 'archived'")
-
             elif archive_mode == "archived":
                 conditions.append("r.status = 'archived'")
-            conditions.append("r.status != 'archived'")
 
-            if selected_statuses:
+            if status_none_requested:
+                conditions.append("1 = 0")
+            elif selected_statuses:
                 placeholders = ",".join(["?"] * len(selected_statuses))
                 conditions.append(f"r.status IN ({placeholders})")
                 params.extend(selected_statuses)
@@ -381,6 +408,7 @@ def register(app):
             total_users=total_users,
             total_referrals=total_referrals,
             selected_statuses=selected_statuses,
+            status_none_requested=status_none_requested,
             search=search,
             sort=sort,
             order=order,

@@ -130,40 +130,66 @@ def get_campaign_target_users(db, campaign: Dict) -> List[Dict]:
     Returns Vodum users targeted by a campaign.
 
     Rules:
-    - only vodum users linked to at least one media user
-    - if campaign.server_id is set, restrict to users having at least one media_user on that server
+    - only Vodum users linked to at least one media user
+    - if campaign.server_id is set, restrict to users linked to this server
+    - if campaign.trigger_provider is plex/jellyfin, restrict to this media provider
+    - if campaign.subscription_scope is all, keep users with a subscription template
+    - if campaign.subscription_scope is specific, keep only this subscription template
     """
     campaign = _as_dict(campaign)
     server_id = campaign.get("server_id")
+    trigger_provider = (campaign.get("trigger_provider") or "all").strip().lower()
+    subscription_scope = (campaign.get("subscription_scope") or "none").strip().lower()
+    subscription_template_id = _safe_nullable_int(campaign.get("subscription_template_id"))
+
+    conditions = [
+        """
+        EXISTS (
+            SELECT 1
+            FROM media_users mu
+            JOIN servers s ON s.id = mu.server_id
+            WHERE mu.vodum_user_id = u.id
+        """
+    ]
+    params = []
 
     if server_id:
-        rows = db.query(
-            """
-            SELECT u.id, u.username, u.email, u.second_email, u.discord_user_id, u.notifications_order_override
-            FROM vodum_users u
-            WHERE EXISTS (
-                SELECT 1
-                FROM media_users mu
-                WHERE mu.vodum_user_id = u.id
-                  AND mu.server_id = ?
-            )
-            ORDER BY u.id ASC
-            """,
-            (server_id,),
-        ) or []
-    else:
-        rows = db.query(
-            """
-            SELECT u.id, u.username, u.email, u.second_email, u.discord_user_id, u.notifications_order_override
-            FROM vodum_users u
-            WHERE EXISTS (
-                SELECT 1
-                FROM media_users mu
-                WHERE mu.vodum_user_id = u.id
-            )
-            ORDER BY u.id ASC
-            """
-        ) or []
+        conditions.append("AND mu.server_id = ?")
+        params.append(server_id)
+
+    if trigger_provider in ("plex", "jellyfin"):
+        conditions.append("AND LOWER(COALESCE(s.type, '')) = ?")
+        params.append(trigger_provider)
+
+    conditions.append(")")
+
+    if subscription_scope == "all":
+        conditions.append("u.subscription_template_id IS NOT NULL")
+
+    elif subscription_scope == "specific":
+        if subscription_template_id is None:
+            return []
+
+        conditions.append("u.subscription_template_id = ?")
+        params.append(subscription_template_id)
+
+    where_sql = "\n".join(conditions)
+
+    rows = db.query(
+        f"""
+        SELECT
+            u.id,
+            u.username,
+            u.email,
+            u.second_email,
+            u.discord_user_id,
+            u.notifications_order_override
+        FROM vodum_users u
+        WHERE {where_sql}
+        ORDER BY u.id ASC
+        """,
+        tuple(params),
+    ) or []
 
     return [dict(r) for r in rows]
 

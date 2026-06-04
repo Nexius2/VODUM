@@ -236,6 +236,11 @@ def run(task_id: int, db):
             expiration_override = int(user["expiration_date_override"] or 0)
             expiration_date = user["expiration_date"]
 
+            # Statuts manuels / administratifs :
+            # ne jamais les écraser automatiquement avec le calcul de date.
+            if old_status in ("suspended", "unfriended"):
+                continue
+
             # ✅ Cas spécial : invitation Plex encore non acceptée
             if _user_has_pending_plex_invite(db, uid):
                 new_expiration = _compute_pending_invite_expiration(

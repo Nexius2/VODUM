@@ -133,7 +133,9 @@ def register(app):
         applications_page = max(request.args.get("applications_page", 1, type=int), 1)
         applications_per_page = 20
         applications_offset = (applications_page - 1) * applications_per_page
-        applications_search = (request.args.get("applications_q") or "").strip()
+        applications_search = " ".join(
+            (request.args.get("applications_q") or "").split()
+        ).strip()
 
         applications_where = []
         applications_params = []
@@ -144,22 +146,62 @@ def register(app):
                 (
                     COALESCE(vu.username, '') LIKE ?
                     OR COALESCE(vu.email, '') LIKE ?
+                    OR COALESCE(vu.second_email, '') LIKE ?
+                    OR COALESCE(vu.firstname, '') LIKE ?
+                    OR COALESCE(vu.lastname, '') LIKE ?
+                    OR COALESCE(vu.notes, '') LIKE ?
+                    OR COALESCE(vu.discord_name, '') LIKE ?
                     OR COALESCE(vu.status, '') LIKE ?
                     OR COALESCE(st.name, '') LIKE ?
                     OR CAST(vu.id AS TEXT) LIKE ?
+                    OR EXISTS (
+                        SELECT 1
+                        FROM media_users mu_search
+                        WHERE mu_search.vodum_user_id = vu.id
+                          AND (
+                            COALESCE(mu_search.username, '') LIKE ?
+                            OR COALESCE(mu_search.email, '') LIKE ?
+                          )
+                    )
                 )
             """)
-            applications_params.extend([like, like, like, like, like])
+            applications_params.extend([
+                like,  # vu.username
+                like,  # vu.email
+                like,  # vu.second_email
+                like,  # vu.firstname
+                like,  # vu.lastname
+                like,  # vu.notes
+                like,  # vu.discord_name
+                like,  # vu.status
+                like,  # subscription template name
+                like,  # vu.id
+                like,  # media_users.username
+                like,  # media_users.email
+            ])
 
         users_query = """
             SELECT
               vu.id,
               vu.username,
               vu.email,
+              vu.second_email,
+              vu.firstname,
+              vu.lastname,
+              vu.notes,
+              vu.discord_name,
               vu.status,
               vu.subscription_template_id,
               vu.max_streams_override,
-              st.name AS subscription_template_name
+              st.name AS subscription_template_name,
+              (
+                SELECT GROUP_CONCAT(
+                  COALESCE(mu.username, '') || ' ' || COALESCE(mu.email, ''),
+                  ' '
+                )
+                FROM media_users mu
+                WHERE mu.vodum_user_id = vu.id
+              ) AS media_search
             FROM vodum_users vu
             LEFT JOIN subscription_templates st ON st.id = vu.subscription_template_id
         """
@@ -202,7 +244,20 @@ def register(app):
                 SELECT
                   p.*,
                   s.name AS server_name,
-                  vu.username AS scope_username
+                  vu.username AS scope_username,
+                  vu.firstname AS scope_firstname,
+                  vu.lastname AS scope_lastname,
+                  vu.email AS scope_email,
+                  vu.second_email AS scope_second_email,
+                  vu.discord_name AS scope_discord_name,
+                  (
+                    SELECT GROUP_CONCAT(
+                      COALESCE(mu.username, '') || ' ' || COALESCE(mu.email, ''),
+                      ' '
+                    )
+                    FROM media_users mu
+                    WHERE mu.vodum_user_id = vu.id
+                  ) AS scope_media_search
                 FROM stream_policies p
                 LEFT JOIN servers s
                   ON s.id = p.server_id
@@ -330,6 +385,15 @@ def register(app):
         )
 
         if expiry_mode in ("warn_only", "warn_then_disable"):
+            db.execute(
+                """
+                UPDATE comm_templates
+                SET enabled = 1,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE key = 'stream_blocked'
+                """
+            )
+
             force_task_run("expired_subscription_manager")
 
 

@@ -115,6 +115,44 @@ def _normalize_send_mode(settings: dict) -> str:
     mode = (mode or "first").strip().lower()
     return mode if mode in ("first", "all") else "first"
 
+def _normalize_campaign_targets(db, request_form) -> tuple[str, str, int | None]:
+    trigger_provider = (request_form.get("trigger_provider") or "all").strip().lower()
+    if trigger_provider not in ("all", "plex", "jellyfin"):
+        trigger_provider = "all"
+
+    subscription_scope_raw = (request_form.get("subscription_scope_value") or "none").strip()
+    subscription_scope = "none"
+    subscription_template_id = None
+
+    if subscription_scope_raw == "all":
+        subscription_scope = "all"
+
+    elif subscription_scope_raw.startswith("subscription:"):
+        sub_id_raw = subscription_scope_raw.split(":", 1)[1].strip()
+
+        try:
+            subscription_template_id = int(sub_id_raw)
+        except Exception:
+            subscription_template_id = None
+
+        if subscription_template_id:
+            sub_exists = db.query_one(
+                """
+                SELECT id
+                FROM subscription_templates
+                WHERE id = ?
+                  AND COALESCE(is_enabled, 1) = 1
+                """,
+                (subscription_template_id,),
+            )
+
+            if sub_exists:
+                subscription_scope = "specific"
+            else:
+                subscription_scope = "none"
+                subscription_template_id = None
+
+    return trigger_provider, subscription_scope, subscription_template_id
 
 def _campaign_attempts_satisfy_mode(db, settings: dict, user: dict, attempts: list) -> bool:
     """
@@ -149,6 +187,20 @@ def _campaign_attempts_satisfy_mode(db, settings: dict, user: dict, attempts: li
 
 DEFAULT_COMM_TEMPLATES = [
     {
+        "key": "stream_blocked",
+        "name": "Stream blocked",
+        "enabled": 0,
+        "trigger_event": "stream_blocked",
+        "trigger_provider": "all",
+        "subscription_scope": "all",
+        "subscription_template_id": None,
+        "expiration_change_direction": "all",
+        "days_before": None,
+        "days_after": 0,
+        "subject": "Playback blocked",
+        "body": "Hello {firstusername},\n\nYour playback has been stopped by VODUM.\n\nReason: {policy_reason}\nMedia: {media_title}\nServer: {server_name}\nDevice: {device_name}\nClient: {client_name}\nTime: {blocked_at}\n\nIf you think this is a mistake, please contact the administrator.\n\nBest regards,\n{brand_name}\n",
+    },
+    {
         "key": "default_expiration_date_change",
         "name": "Expiration date change",
         "enabled": 0,
@@ -160,7 +212,7 @@ DEFAULT_COMM_TEMPLATES = [
         "days_before": None,
         "days_after": 0,
         "subject": "Your subscription date has been updated",
-        "body": "Hello {username},\n\nYour subscription expiration date has been updated.\n\nPrevious expiration date: {old_expiration_date}\nNew expiration date: {new_expiration_date}\nChange: {expiration_change_signed_days} day(s)\nReason: {expiration_change_reason}\n\nBest regards,\nVODUM Team\n",
+        "body": "Hello {username},\n\nYour subscription expiration date has been updated.\n\nPrevious expiration date: {old_expiration_date}\nNew expiration date: {new_expiration_date}\nChange: {expiration_change_signed_days} day(s)\nReason: {expiration_change_reason}\n\nBest regards,\n{brand_name}\n",
     },
     {
         "key": "default_fin",
@@ -174,7 +226,7 @@ DEFAULT_COMM_TEMPLATES = [
         "days_before": 0,
         "days_after": None,
         "subject": "Your subscription has expired",
-        "body": "Hello {username},\n\nYour subscription expired on {expiration_date}.\nYour access may now be suspended.\n\nIf you wish to continue using the service, please renew your subscription.\n\nBest regards,\nVODUM Team\n",
+        "body": "Hello {username},\n\nYour subscription expired on {expiration_date}.\nYour access may now be suspended.\n\nIf you wish to continue using the service, please renew your subscription.\n\nBest regards,\n{brand_name}\n",
     },
     {
         "key": "default_pending_invite_reminder",
@@ -188,7 +240,7 @@ DEFAULT_COMM_TEMPLATES = [
         "days_before": None,
         "days_after": 3,
         "subject": "Reminder - please accept your invitation",
-        "body": "Hello {username},\n\nYour invitation is still waiting for acceptance.\n\nTo start using your account:\n- Open Plex or Jellyfin\n- Sign in with your account\n- Accept the library share invitation if prompted\n\nYour subscription expiration is currently set to: {expiration_date}\n\nBest regards,\nVODUM Team\n",
+        "body": "Hello {username},\n\nYour invitation is still waiting for acceptance.\n\nTo start using your account:\n- Open Plex or Jellyfin\n- Sign in with your account\n- Accept the library share invitation if prompted\n\nYour subscription expiration is currently set to: {expiration_date}\n\nBest regards,\n{brand_name}\n",
     },
     {
         "key": "default_preavis",
@@ -202,7 +254,7 @@ DEFAULT_COMM_TEMPLATES = [
         "days_before": 30,
         "days_after": None,
         "subject": "Your subscription will expire in {days_left} days",
-        "body": "Hello {username},\n\nYour subscription will expire in {days_left} days.\n\nExpiration date: {expiration_date}\n\nPlease renew it to avoid any service interruption.\n\nBest regards,\nVODUM Team\n",
+        "body": "Hello {username},\n\nYour subscription will expire in {days_left} days.\n\nExpiration date: {expiration_date}\n\nPlease renew it to avoid any service interruption.\n\nBest regards,\n{brand_name}\n",
     },
     {
         "key": "default_parrainage",
@@ -216,7 +268,7 @@ DEFAULT_COMM_TEMPLATES = [
         "days_before": None,
         "days_after": 0,
         "subject": "Referral reward granted",
-        "body": "Hello {username},\n\nGood news: you earned {referral_reward_days} bonus day(s) thanks to {referred_username}.\n\nPrevious expiration date: {referrer_old_expiration_date}\nNew expiration date: {referrer_new_expiration_date}\n\nThank you for your referral.\n\nBest regards,\nVODUM Team\n",
+        "body": "Hello {username},\n\nGood news: you earned {referral_reward_days} bonus day(s) thanks to {referred_username}.\n\nPrevious expiration date: {referrer_old_expiration_date}\nNew expiration date: {referrer_new_expiration_date}\n\nThank you for your referral.\n\nBest regards,\n{brand_name}\n",
     },
     {
         "key": "default_relance",
@@ -230,7 +282,7 @@ DEFAULT_COMM_TEMPLATES = [
         "days_before": 7,
         "days_after": None,
         "subject": "Reminder - your subscription will expire soon",
-        "body": "Hello {username},\n\nThis is a friendly reminder that your subscription will expire in {days_left} days.\n\nExpiration date: {expiration_date}\n\nPlease renew it in time to avoid any service interruption.\n\nBest regards,\nVODUM Team\n",
+        "body": "Hello {username},\n\nThis is a friendly reminder that your subscription will expire in {days_left} days.\n\nExpiration date: {expiration_date}\n\nPlease renew it in time to avoid any service interruption.\n\nBest regards,\n{brand_name}\n",
     },
     {
         "key": "default_user_creation",
@@ -244,7 +296,7 @@ DEFAULT_COMM_TEMPLATES = [
         "days_before": None,
         "days_after": 0,
         "subject": "Welcome - your account is ready",
-        "body": "Hello {username},\n\nYour account has been created successfully.\n\nLogin email: {email}\n\nHow to get started:\n- Open Plex or Jellyfin\n- Sign in with your account\n- Accept the library share invitation if prompted\n\nSubscription expiration date: {expiration_date}\n\nBest regards,\nVODUM Team\n",
+        "body": "Hello {username},\n\nYour account has been created successfully.\n\nLogin email: {email}\n\nHow to get started:\n- Open Plex or Jellyfin\n- Sign in with your account\n- Accept the library share invitation if prompted\n\nSubscription expiration date: {expiration_date}\n\nBest regards,\n{brand_name}\n",
     },
 ]
 
@@ -304,6 +356,36 @@ def _restore_default_comm_templates(db) -> int:
 
     return restored
 
+
+def _is_stream_blocked_template(row: dict | None) -> bool:
+    if not row:
+        return False
+
+    return (row.get("key") or "").strip().lower() == "stream_blocked"
+
+
+def _subscription_expired_warning_requires_stream_blocked(settings: dict | None) -> bool:
+    mode = ((settings or {}).get("expiry_mode") or "none").strip().lower()
+    return mode in ("warn_only", "warn_then_disable")
+
+
+def _force_stream_blocked_template_values(template: dict, *, enabled: int | None = None) -> dict:
+    forced = dict(template or {})
+    forced["key"] = "stream_blocked"
+    forced["trigger_event"] = "stream_blocked"
+    forced["trigger_provider"] = "all"
+    forced["subscription_scope"] = "all"
+    forced["subscription_template_id"] = None
+    forced["expiration_change_direction"] = "all"
+    forced["days_before"] = None
+    forced["days_after"] = 0
+
+    if enabled is not None:
+        forced["enabled"] = int(enabled)
+
+    return forced
+
+
 def register(app):
 
     @app.route("/communications")
@@ -323,7 +405,6 @@ def register(app):
         form_mode = (request.form.get("form_mode") or "").strip()
         action = (action_values[-1] if action_values else form_mode).strip().lower()
 
-        # Create
         if action == "create":
             name = (request.form.get("name") or "").strip()
             subject = (request.form.get("subject") or "").strip()
@@ -331,6 +412,7 @@ def register(app):
             raw_server_id = (request.form.get("server_id") or "").strip()
             server_id = _as_int(raw_server_id, None) if raw_server_id else None
             is_test = 1 if request.form.get("is_test") == "1" else 0
+            trigger_provider, subscription_scope, subscription_template_id = _normalize_campaign_targets(db, request.form)
 
             if not name or not subject or not body:
                 flash(t("comm_missing_fields"), "error")
@@ -343,10 +425,31 @@ def register(app):
 
             cur = db.execute(
                 """
-                INSERT INTO comm_campaigns(name, subject, body, server_id, status, is_test, created_at, updated_at)
-                VALUES(?, ?, ?, ?, 'draft', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                INSERT INTO comm_campaigns(
+                    name,
+                    subject,
+                    body,
+                    server_id,
+                    trigger_provider,
+                    subscription_scope,
+                    subscription_template_id,
+                    status,
+                    is_test,
+                    created_at,
+                    updated_at
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?, 'draft', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """,
-                (name, subject, body, server_id, is_test),
+                (
+                    name,
+                    subject,
+                    body,
+                    server_id,
+                    trigger_provider,
+                    subscription_scope,
+                    subscription_template_id,
+                    is_test,
+                ),
             )
             cid = getattr(cur, "lastrowid", None)
 
@@ -362,7 +465,6 @@ def register(app):
             flash(t("comm_campaign_created"), "success")
             return redirect(url_for("communications_campaigns_page", load=cid))
 
-        # Save
         if action == "save":
             cid = request.form.get("campaign_id", type=int)
             name = (request.form.get("name") or "").strip()
@@ -371,6 +473,7 @@ def register(app):
             raw_server_id = (request.form.get("server_id") or "").strip()
             server_id = _as_int(raw_server_id, None) if raw_server_id else None
             is_test = 1 if request.form.get("is_test") == "1" else 0
+            trigger_provider, subscription_scope, subscription_template_id = _normalize_campaign_targets(db, request.form)
 
             if not cid:
                 flash(t("comm_not_found"), "error")
@@ -388,10 +491,28 @@ def register(app):
             db.execute(
                 """
                 UPDATE comm_campaigns
-                SET name=?, subject=?, body=?, server_id=?, is_test=?, updated_at=CURRENT_TIMESTAMP
-                WHERE id=?
+                SET name = ?,
+                    subject = ?,
+                    body = ?,
+                    server_id = ?,
+                    trigger_provider = ?,
+                    subscription_scope = ?,
+                    subscription_template_id = ?,
+                    is_test = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
                 """,
-                (name, subject, body, server_id, is_test, cid),
+                (
+                    name,
+                    subject,
+                    body,
+                    server_id,
+                    trigger_provider,
+                    subscription_scope,
+                    subscription_template_id,
+                    is_test,
+                    cid,
+                ),
             )
 
             files = request.files.getlist("attachments")
@@ -406,7 +527,6 @@ def register(app):
             flash(t("comm_campaign_saved"), "success")
             return redirect(url_for("communications_campaigns_page", load=cid))
 
-        # Delete
         if action == "delete":
             cid = request.form.get("campaign_id", type=int)
 
@@ -425,7 +545,6 @@ def register(app):
             flash(t("comm_campaign_deleted"), "success")
             return redirect(url_for("communications_campaigns_page"))
 
-        # Send
         if action == "send":
             cid = request.form.get("campaign_id", type=int)
             campaign = db.query_one("SELECT * FROM comm_campaigns WHERE id = ?", (cid,))
@@ -435,28 +554,6 @@ def register(app):
             campaign = dict(campaign)
 
             attachments = fetch_campaign_attachments(db, cid)
-
-            users = db.query(
-                """
-                SELECT id, username, email, second_email, discord_user_id, notifications_order_override
-                FROM vodum_users u
-                WHERE EXISTS (SELECT 1 FROM media_users mu WHERE mu.vodum_user_id = u.id)
-                """
-            )
-
-            server_id = campaign.get("server_id")
-            if server_id:
-                users = db.query(
-                    """
-                    SELECT u.id, u.username, u.email, u.second_email, u.discord_user_id, u.notifications_order_override
-                    FROM vodum_users u
-                    WHERE EXISTS (
-                        SELECT 1 FROM media_users mu
-                        WHERE mu.vodum_user_id = u.id AND mu.server_id = ?
-                    )
-                    """,
-                    (server_id,),
-                )
 
             if int(campaign.get("is_test") or 0) == 1:
                 settings = db.query_one("SELECT * FROM settings WHERE id = 1")
@@ -504,6 +601,9 @@ def register(app):
                     "targets_total": queue_result.get("targets_total", 0),
                     "task_enqueued": queue_result.get("task_enqueued", False),
                     "reason": queue_result.get("reason"),
+                    "trigger_provider": campaign.get("trigger_provider"),
+                    "subscription_scope": campaign.get("subscription_scope"),
+                    "subscription_template_id": campaign.get("subscription_template_id"),
                     "attachments": [a.get("filename") for a in (attachments or [])],
                 },
             )
@@ -530,6 +630,15 @@ def register(app):
 
         servers = db.query("SELECT id, name FROM servers ORDER BY name")
 
+        subscription_templates = db.query(
+            """
+            SELECT id, name, is_default
+            FROM subscription_templates
+            WHERE COALESCE(is_enabled, 1) = 1
+            ORDER BY is_default DESC, name ASC
+            """
+        ) or []
+
         load_id = request.args.get("load", type=int)
         loaded = None
         if load_id:
@@ -539,7 +648,15 @@ def register(app):
                 loaded["attachments"] = fetch_campaign_attachments(db, int(loaded["id"]))
 
         campaigns = db.query(
-            "SELECT * FROM comm_campaigns ORDER BY created_at DESC, id DESC LIMIT 200"
+            """
+            SELECT
+                c.*,
+                st.name AS subscription_template_name
+            FROM comm_campaigns c
+            LEFT JOIN subscription_templates st ON st.id = c.subscription_template_id
+            ORDER BY c.created_at DESC, c.id DESC
+            LIMIT 200
+            """
         )
         campaigns = [dict(r) for r in (campaigns or [])]
 
@@ -547,6 +664,7 @@ def register(app):
             "communications/communications_campaigns.html",
             campaigns=campaigns,
             servers=servers,
+            subscription_templates=subscription_templates,
             loaded_campaign=loaded,
             current_subpage="campaigns",
         )
@@ -568,6 +686,8 @@ def register(app):
             subject = (request.form.get("subject") or "").strip()
             body = (request.form.get("body") or "").strip()
             enabled = 1 if request.form.get("enabled") == "1" else 0
+            if stream_blocked_required:
+                enabled = 1
 
             key = _sanitize_key(request.form.get("key") or "")
             if not key:
@@ -579,7 +699,7 @@ def register(app):
                     n += 1
 
             trigger_event = (request.form.get("trigger_event") or "expiration").strip().lower()
-            if trigger_event not in ("expiration", "user_creation", "pending_invite_reminder", "referral_reward", "expiration_change"):
+            if trigger_event not in ("expiration", "user_creation", "pending_invite_reminder", "referral_reward", "expiration_change", "stream_blocked"):
                 trigger_event = "expiration"
 
             trigger_provider = (request.form.get("trigger_provider") or "all").strip().lower()
@@ -655,7 +775,7 @@ def register(app):
                 if days_after is None:
                     days_after = 0
                 delay_direction = "after"
-            elif trigger_event in ("referral_reward", "expiration_change"):
+            elif trigger_event in ("referral_reward", "expiration_change", "stream_blocked"):
                 days_before = None
                 days_after = 0
                 delay_direction = "after"
@@ -766,17 +886,29 @@ def register(app):
 
             existing = dict(existing)
 
+            settings = db.query_one("SELECT expiry_mode FROM settings WHERE id = 1")
+            settings = dict(settings) if settings else {}
+
+            is_stream_blocked = _is_stream_blocked_template(existing)
+            stream_blocked_required = (
+                is_stream_blocked
+                and _subscription_expired_warning_requires_stream_blocked(settings)
+            )
+
             name = (request.form.get("name") or "").strip()
             subject = (request.form.get("subject") or "").strip()
             body = (request.form.get("body") or "").strip()
             enabled = 1 if request.form.get("enabled") == "1" else 0
+
+            if stream_blocked_required:
+                enabled = 1
 
             key = _sanitize_key(request.form.get("key") or existing.get("key") or "")
             if not key:
                 key = existing.get("key") or ""
 
             trigger_event = (request.form.get("trigger_event") or "expiration").strip().lower()
-            if trigger_event not in ("expiration", "user_creation", "pending_invite_reminder", "referral_reward", "expiration_change"):
+            if trigger_event not in ("expiration", "user_creation", "pending_invite_reminder", "referral_reward", "expiration_change", "stream_blocked"):
                 trigger_event = "expiration"
 
             trigger_provider = (request.form.get("trigger_provider") or "all").strip().lower()
@@ -852,7 +984,7 @@ def register(app):
                 if days_after is None:
                     days_after = 0
                 delay_direction = "after"
-            elif trigger_event in ("referral_reward", "expiration_change"):
+            elif trigger_event in ("referral_reward", "expiration_change", "stream_blocked"):
                 days_before = None
                 days_after = 0
                 delay_direction = "after"
@@ -865,6 +997,16 @@ def register(app):
                     offset = days_before if days_before is not None else (days_after if days_after is not None else 0)
                     days_before = offset
                     days_after = None
+
+            if is_stream_blocked:
+                key = "stream_blocked"
+                trigger_event = "stream_blocked"
+                trigger_provider = "all"
+                expiration_change_direction = "all"
+                subscription_scope = "all"
+                subscription_template_id = None
+                days_before = None
+                days_after = 0
 
             if not key or not name or not subject or not body:
                 flash(t("comm_missing_fields"), "error")
@@ -881,7 +1023,7 @@ def register(app):
             duplicate = None
             duplicate_reason = ""
 
-            if enabled:
+            if enabled and not is_stream_blocked:
                 duplicate = _find_enabled_template_duplicate(
                     db,
                     trigger_event=trigger_event,
@@ -957,6 +1099,14 @@ def register(app):
             if not tid:
                 flash(t("comm_not_found"), "error")
                 return redirect(url_for("communications_templates_page"))
+
+            existing = db.query_one("SELECT key FROM comm_templates WHERE id = ?", (tid,))
+            existing = dict(existing) if existing else None
+
+            if _is_stream_blocked_template(existing):
+                flash(t("comm_stream_blocked_template_locked"), "error")
+                return redirect(url_for("communications_templates_page", load=tid))
+
             db.execute("DELETE FROM comm_templates WHERE id = ?", (tid,))
             add_log("info", "communications", "Template deleted", {"id": tid})
             flash(t("comm_template_deleted"), "success")
@@ -986,12 +1136,19 @@ def register(app):
         duplicate_disabled = request.args.get("duplicate_disabled", type=int) == 1
         duplicate_disabled_reason = (request.args.get("duplicate_disabled_reason") or "").strip()
 
+        settings = db.query_one("SELECT expiry_mode FROM settings WHERE id = 1")
+        settings = dict(settings) if settings else {}
+
         loaded = None
+        loaded_is_stream_blocked = False
+        stream_blocked_required = _subscription_expired_warning_requires_stream_blocked(settings)
+
         if load_id:
             loaded = db.query_one("SELECT * FROM comm_templates WHERE id = ?", (load_id,))
             loaded = dict(loaded) if loaded else None
             if loaded:
                 loaded["attachments"] = fetch_template_attachments(db, int(loaded["id"]))
+                loaded_is_stream_blocked = _is_stream_blocked_template(loaded)
 
         templates = db.query("""
             SELECT
@@ -1021,6 +1178,8 @@ def register(app):
             current_subpage="templates",
             duplicate_disabled=duplicate_disabled,
             duplicate_disabled_reason=duplicate_disabled_reason,
+            loaded_is_stream_blocked=loaded_is_stream_blocked,
+            stream_blocked_required=stream_blocked_required,
         )
 
 
