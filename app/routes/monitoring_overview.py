@@ -820,8 +820,27 @@ def register(app):
             params = []
 
             if q:
-                where.append("(h.title LIKE ? OR h.grandparent_title LIKE ?)")
-                params += [f"%{q}%", f"%{q}%"]
+                like = f"%{q}%"
+                where.append("""
+                    (
+                        COALESCE(h.title, '') LIKE ?
+                        OR COALESCE(h.grandparent_title, '') LIKE ?
+                        OR COALESCE(h.media_type, '') LIKE ?
+                        OR COALESCE(h.device, '') LIKE ?
+                        OR COALESCE(h.client_name, '') LIKE ?
+                        OR COALESCE(h.ip, '') LIKE ?
+                        OR COALESCE(mu.username, '') LIKE ?
+                        OR COALESCE(mu.email, '') LIKE ?
+                        OR COALESCE(vu.username, '') LIKE ?
+                        OR COALESCE(vu.email, '') LIKE ?
+                        OR COALESCE(vu.second_email, '') LIKE ?
+                        OR COALESCE(vu.firstname, '') LIKE ?
+                        OR COALESCE(vu.lastname, '') LIKE ?
+                        OR COALESCE(vu.discord_name, '') LIKE ?
+                        OR COALESCE(s.name, '') LIKE ?
+                    )
+                """)
+                params += [like] * 15
             if provider:
                 where.append("s.type = ?")
                 params.append(provider)
@@ -845,6 +864,8 @@ def register(app):
                 SELECT COUNT(*) AS cnt
                 FROM media_session_history h
                 JOIN servers s ON s.id = h.server_id
+                LEFT JOIN media_users mu ON mu.id = h.media_user_id
+                LEFT JOIN vodum_users vu ON vu.id = mu.vodum_user_id
                 WHERE {where_sql}
                 """,
                 tuple(params),
@@ -868,6 +889,7 @@ def register(app):
                 FROM media_session_history h
                 JOIN servers s ON s.id = h.server_id
                 LEFT JOIN media_users mu ON mu.id = h.media_user_id
+                LEFT JOIN vodum_users vu ON vu.id = mu.vodum_user_id
                 WHERE {where_sql}
                 ORDER BY {order_sql}
                 LIMIT {per_page} OFFSET ?
@@ -925,6 +947,7 @@ def register(app):
                       SELECT
                         h.media_user_id AS media_user_id,
                         mu.username AS mu_username,
+                        mu.email AS mu_email,
                         mu.vodum_user_id,
                         CASE
                           WHEN mu.vodum_user_id IS NOT NULL THEN ('v:' || mu.vodum_user_id)
@@ -939,7 +962,11 @@ def register(app):
                         b.group_key,
                         MAX(b.vodum_user_id) AS vodum_user_id,
                         MIN(b.media_user_id) AS user_id,
-                        COALESCE(vu.username, MIN(b.mu_username)) AS username
+                        COALESCE(vu.username, MIN(b.mu_username)) AS username,
+                        GROUP_CONCAT(
+                          COALESCE(b.mu_username, '') || ' ' || COALESCE(b.mu_email, ''),
+                          ' '
+                        ) AS media_search
                       FROM base b
                       LEFT JOIN vodum_users vu ON vu.id = b.vodum_user_id
                       GROUP BY b.group_key
@@ -955,9 +982,11 @@ def register(app):
                       COALESCE(vu.firstname,'') LIKE ? OR
                       COALESCE(vu.lastname,'') LIKE ? OR
                       COALESCE(vu.notes,'') LIKE ?
+                      OR COALESCE(vu.discord_name,'') LIKE ?
+                      OR COALESCE(n.media_search,'') LIKE ?
                     )
                     """,
-                    (like, like, like, like, like, like, like),
+                    (like, like, like, like, like, like, like, like, like),
                 ) or {"cnt": 0}
             else:
                 total = db.query_one(
@@ -1018,10 +1047,12 @@ def register(app):
                   COALESCE(vu.firstname,'') LIKE ? OR
                   COALESCE(vu.lastname,'') LIKE ? OR
                   COALESCE(vu.notes,'') LIKE ?
+                  OR COALESCE(vu.discord_name,'') LIKE ?
+                  OR COALESCE(n.media_search,'') LIKE ?
                 )
                 """
 
-                params.extend([like, like, like, like, like, like, like])
+                params.extend([like, like, like, like, like, like, like, like, like])
 
 
             rows = db.query(
@@ -1040,6 +1071,7 @@ def register(app):
                     h.client_product,
                     h.media_user_id AS media_user_id,
                     mu.username AS mu_username,
+                    mu.email AS mu_email,
                     mu.vodum_user_id,
                     CASE
                       WHEN mu.vodum_user_id IS NOT NULL THEN ('v:' || mu.vodum_user_id)
@@ -1113,7 +1145,11 @@ ranked AS (
                     b.group_key,
                     MAX(b.vodum_user_id) AS vodum_user_id,
                     MIN(b.media_user_id) AS user_id,
-                    COALESCE(vu.username, MIN(b.mu_username)) AS username
+                    COALESCE(vu.username, MIN(b.mu_username)) AS username,
+                    GROUP_CONCAT(
+                      COALESCE(b.mu_username, '') || ' ' || COALESCE(b.mu_email, ''),
+                      ' '
+                    ) AS media_search
                   FROM base b
                   LEFT JOIN vodum_users vu ON vu.id = b.vodum_user_id
                   GROUP BY b.group_key

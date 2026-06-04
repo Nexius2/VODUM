@@ -27,6 +27,17 @@ All notable changes to Vodum will be documented in this file.
 - Fixed an issue where newly started sessions from expired users could bypass immediate enforcement checks.
 - Fixed policy enforcement evaluation for fresh sessions by removing the stabilization delay for expired subscription policies.
 - Fixed Policy View toggle behavior to correctly switch between grouped and event-based views.
+- Fixed Users status filter behavior:
+  - "Select All" now correctly reloads and displays all matching users.
+  - "Select None" now correctly returns an empty result set.
+  - Improved synchronization between filter state and displayed results.
+
+- Fixed Referrals status filter behavior:
+  - Fixed inconsistencies between selected statuses and displayed referrals.
+  - Restored support for all referral statuses in filtering.
+  - Fixed "Select All" and "Select None" actions.
+  - Corrected referral counters and filtering logic to prevent missing entries.
+  - Fixed Monitoring user search to correctly match linked media usernames and emails.
 
 ### Improved
 - Reduced log noise in normal mode by moving repetitive maintenance and idle-task messages to debug-only logging.
@@ -42,6 +53,12 @@ All notable changes to Vodum will be documented in this file.
 - Reduced visual noise caused by repeated warn/kill events from the same users.
 - Simplified view switching with a single toggle button that dynamically switches between Event View and Group by User.
 - Enhanced expired subscription enforcement responsiveness without permanently increasing background task frequency.
+- Improved filtering consistency across Users and Referrals tabs.
+- Improved search consistency across Subscriptions, Policies, Monitoring and user referral selection.
+- Extended user searches to include first name, last name, secondary email, Discord name and linked Plex/Jellyfin identities.
+- Improved dashboard quote refresh handling when media servers are offline or temporarily unavailable.
+- Prevented unnecessary error logs for unreachable Jellyfin servers by skipping offline instances and downgrading connection failures to warnings.
+- Reduced log noise during internet outages, server maintenance, or scheduled shutdowns.
 
 ### Added
 - Added update aging detection based on the number of days an update has been available.
@@ -67,9 +84,54 @@ All notable changes to Vodum will be documented in this file.
 - Added missing multilingual translations across the subscription management pages.
 - Improved scrolling and layout behavior for a more consistent user experience.
 
-### Compatibility
-- No database migration required.
-- Existing subscription plans, policies, assignments and generated rules remain fully compatible with the new interface.
+### Communications
+- Renamed **Templates** tab to **Messages** and **Configuration** to **Settings** across the interface and translations.
+- Added a new built-in **Stream blocked** system message used when playback is stopped by a policy.
+- Stream blocked messages are now automatically sent through the configured communication channels (Email / Discord).
+- Added new variables for playback-block notifications:
+  - `{policy_name}`
+  - `{policy_reason}`
+  - `{media_title}`
+  - `{server_name}`
+  - `{client_name}`
+  - `{device_name}`
+  - `{blocked_at}`
+- Added `{brand_name}` variable to communication templates.
+- Default communication templates now use `{brand_name}` instead of hardcoded "VODUM Team".
+- Stream blocked system messages are protected:
+  - Trigger is locked.
+  - Media target is locked.
+  - Subscription target is locked.
+  - Delay is locked.
+  - Delete and New actions are hidden.
+- Locked fields are now visually disabled to make system-managed messages easier to identify.
+- Campaigns now support advanced audience targeting.
+- Added media provider filtering for campaigns:
+  - All media servers
+  - Plex only
+  - Jellyfin only
+- Added subscription targeting for campaigns:
+  - No subscription filter
+  - All subscriptions
+  - Specific subscription plan
+- Campaign recipient selection now respects server, media provider, and subscription filters.
+- Campaign list now displays media provider and subscription targeting information for improved visibility.
+- Added database support for campaign provider and subscription filters.
+- Existing campaigns are automatically migrated and remain fully compatible.
+
+### Subscription Policies
+- Expiration modes using playback blocking now automatically enable the Stream blocked communication message.
+- Improved integration between subscription expiration policies and communications.
+
+### Referrals
+- Fixed referral status filtering issues.
+- Fixed Select All / Select None behavior in referral filters.
+- Restored proper referral visibility across Active, Archived and All views.
+
+### Users
+- Fixed Select All / Select None behavior in user status filters.
+- Improved consistency of multi-status filtering and user list refresh.
+
 
 
 

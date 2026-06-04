@@ -96,12 +96,14 @@
            value="{{ search }}"
            class="bg-slate-900 border border-slate-800 rounded-lg text-sm px-3 py-2 w-56">
 
-    <!-- Status multiselect -->
+	<!-- Status multiselect -->
+	{% set all_statuses = ['active','pre_expired','reminder','expired','invited','unfriended','suspended','unknown'] %}
+
 	<details class="relative">
 	  <summary class="list-none cursor-pointer bg-slate-900 border border-slate-800 rounded-lg text-sm px-3 py-2 flex items-center gap-2">
 		<span>{{ t("status") }}</span>
 			<span class="text-xs text-slate-400">
-			  {{ selected_statuses|length }}/4
+			  {{ selected_statuses|length }}/{{ all_statuses|length }}
 			</span>
 		<svg class="w-4 h-4 opacity-70" viewBox="0 0 24 24">
 		  <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
@@ -109,21 +111,42 @@
 	  </summary>
 
 	  <div class="absolute z-20 mt-2 w-64 bg-slate-950 border border-slate-800 rounded-xl p-3 shadow-xl">
-		{% set all_statuses = ['active','pre_expired','reminder','expired','invited','unfriended','suspended','unknown'] %}
+		
 
 		<!-- Quick actions -->
 		<div class="flex items-center justify-between mb-2">
-		  <button type="button"
-				  class="text-xs text-slate-300 hover:text-white underline"
-				  onclick="this.closest('details').querySelectorAll('input[name=status]').forEach(i => i.checked = true);">
-			Select all
-		  </button>
+			<button type="button"
+					class="text-xs text-slate-300 hover:text-white underline"
+					onclick="
+						const form = this.closest('form');
+						form.querySelectorAll('input[name=status_none]').forEach(i => i.remove());
+						this.closest('details').querySelectorAll('input[name=status]').forEach(i => i.checked = true);
 
-		  <button type="button"
-				  class="text-xs text-slate-300 hover:text-white underline"
-				  onclick="this.closest('details').querySelectorAll('input[name=status]').forEach(i => i.checked = false);">
+						if (form.requestSubmit) form.requestSubmit();
+						else form.submit();
+					">
+				Select all
+			</button>
+
+		<button type="button"
+				class="text-xs text-slate-300 hover:text-white underline"
+				onclick="
+					const form = this.closest('form');
+					form.querySelectorAll('input[name=status]').forEach(i => i.checked = false);
+
+					form.querySelectorAll('input[name=status_none]').forEach(i => i.remove());
+
+					const hidden = document.createElement('input');
+					hidden.type = 'hidden';
+					hidden.name = 'status_none';
+					hidden.value = '1';
+					form.appendChild(hidden);
+
+					if (form.requestSubmit) form.requestSubmit();
+					else form.submit();
+				">
 			Select none
-		  </button>
+		</button>
 		</div>
 
 		<div class="space-y-2 max-h-56 overflow-y-auto pr-1">
@@ -132,7 +155,7 @@
 			  <span class="text-slate-200">{{ t(s) }}</span>
 			  <input type="checkbox" name="status" value="{{ s }}"
 					 {# ✅ si rien n'est sélectionné -> on coche tout par défaut #}
-					 {% if (not selected_statuses) or (s in selected_statuses) %}checked{% endif %}>
+					 {% if not status_none_requested and ((not selected_statuses) or (s in selected_statuses)) %}checked{% endif %}>
 			</label>
 		  {% endfor %}
 		</div>
@@ -370,7 +393,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 {% elif tab == "referrals" %}
 
-<form method="get" class="flex flex-wrap items-center gap-3 mb-6">
+<form method="get" id="referrals_filter_form" class="flex flex-wrap items-center gap-3 mb-6">
   <input type="hidden" name="tab" value="referrals">
 <div class="flex items-center rounded-lg overflow-hidden border border-slate-800">
 
@@ -435,11 +458,13 @@ document.addEventListener("DOMContentLoaded", () => {
          value="{{ search }}"
          class="bg-slate-900 border border-slate-800 rounded-lg text-sm px-3 py-2 w-56">
 
+  {% set all_referral_statuses = ['pending','qualified','rewarded','cancelled','expired','archived'] %}
+
   <details class="relative">
     <summary class="list-none cursor-pointer bg-slate-900 border border-slate-800 rounded-lg text-sm px-3 py-2 flex items-center gap-2">
       <span>{{ t("status") }}</span>
 		<span class="text-xs text-slate-400">
-		  {{ selected_statuses|length }}/8
+		  {{ selected_statuses|length }}/{{ all_referral_statuses|length }}
 		</span>
       <svg class="w-4 h-4 opacity-70" viewBox="0 0 24 24">
         <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
@@ -447,20 +472,41 @@ document.addEventListener("DOMContentLoaded", () => {
     </summary>
 
     <div class="absolute z-20 mt-2 w-64 bg-slate-950 border border-slate-800 rounded-xl p-3 shadow-xl">
-      {% set all_referral_statuses = ['pending','qualified','rewarded','cancelled'] %}
+      
 
       <div class="flex items-center justify-between mb-2">
-        <button type="button"
-                class="text-xs text-slate-300 hover:text-white underline"
-                onclick="this.closest('details').querySelectorAll('input[name=status]').forEach(i => i.checked = true);">
-          Select all
-        </button>
+			<button type="button"
+					class="text-xs text-slate-300 hover:text-white underline"
+					onclick="
+						const form = this.closest('form');
+						form.querySelectorAll('input[name=status_none]').forEach(i => i.remove());
+						this.closest('details').querySelectorAll('input[name=status]').forEach(i => i.checked = true);
 
-        <button type="button"
-                class="text-xs text-slate-300 hover:text-white underline"
-                onclick="this.closest('details').querySelectorAll('input[name=status]').forEach(i => i.checked = false);">
-          Select none
-        </button>
+						if (form.requestSubmit) form.requestSubmit();
+						else form.submit();
+					">
+				Select all
+			</button>
+
+		<button type="button"
+				class="text-xs text-slate-300 hover:text-white underline"
+				onclick="
+					const form = this.closest('form');
+					form.querySelectorAll('input[name=status]').forEach(i => i.checked = false);
+
+					form.querySelectorAll('input[name=status_none]').forEach(i => i.remove());
+
+					const hidden = document.createElement('input');
+					hidden.type = 'hidden';
+					hidden.name = 'status_none';
+					hidden.value = '1';
+					form.appendChild(hidden);
+
+					if (form.requestSubmit) form.requestSubmit();
+					else form.submit();
+				">
+			Select none
+		</button>
       </div>
 
       <div class="space-y-2 max-h-56 overflow-y-auto pr-1">
@@ -468,7 +514,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <label class="flex items-center justify-between gap-2 text-sm">
             <span class="text-slate-200">{{ t('referral_' ~ s) }}</span>
             <input type="checkbox" name="status" value="{{ s }}"
-                   {% if (not selected_statuses) or (s in selected_statuses) %}checked{% endif %}>
+                   {% if not status_none_requested and ((not selected_statuses) or (s in selected_statuses)) %}checked{% endif %}>
           </label>
         {% endfor %}
       </div>
@@ -577,6 +623,28 @@ document.addEventListener("DOMContentLoaded", () => {
   </div>
 </div>
 {% endif %}
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+
+    const form = document.getElementById("referrals_filter_form");
+
+    if (!form) return;
+
+    form.querySelectorAll('input[name="status"]').forEach(cb => {
+        cb.addEventListener("change", () => {
+
+            if (form.requestSubmit) {
+                form.requestSubmit();
+            } else {
+                form.submit();
+            }
+
+        });
+    });
+
+});
+</script>
 
 {% elif tab == "referral_settings" %}
 

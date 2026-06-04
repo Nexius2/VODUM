@@ -127,17 +127,23 @@ def _get_servers():
 
     rows = db.query(
         """
-        SELECT id, name, type, url, local_url, public_url, token
+        SELECT id, name, type, url, local_url, public_url, token, status, cooldown_until
         FROM servers
         WHERE LOWER(type) IN ('plex', 'jellyfin')
           AND token IS NOT NULL
           AND TRIM(token) != ''
+          AND COALESCE(status, '') != 'down'
+          AND (
+                cooldown_until IS NULL
+                OR TRIM(cooldown_until) = ''
+                OR cooldown_until <= CURRENT_TIMESTAMP
+          )
         ORDER BY name
         """
     )
 
     servers = [dict(r) for r in rows]
-    logger.info(f"Found {len(servers)} eligible servers for dashboard quote refresh")
+    logger.info(f"Found {len(servers)} eligible online servers for dashboard quote refresh")
     return servers
 
 
@@ -345,9 +351,17 @@ def _resolve_on_jellyfin(server, media_type, imdb, tmdb):
 
                 start_index += page_size
 
+            except requests.RequestException as e:
+                logger.warning(
+                    f"[JELLYFIN] Lookup skipped on server={server.get('name')} "
+                    f"url={url} start_index={start_index}: {e}"
+                )
+                break
+
             except Exception:
                 logger.exception(
-                    f"[JELLYFIN] Lookup failed on server={server.get('name')} url={url} start_index={start_index}"
+                    f"[JELLYFIN] Unexpected lookup error on server={server.get('name')} "
+                    f"url={url} start_index={start_index}"
                 )
                 break
 

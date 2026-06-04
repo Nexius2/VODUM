@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Tuple
 
 from core.providers.registry import get_provider
 from logging_utils import get_logger, is_debug_mode_enabled
+from communications_engine import schedule_template_notification, enqueue_named_task
 
 
 logger = get_logger("stream_enforcer")
@@ -30,9 +31,9 @@ JELLYFIN_PRE_KILL_INTERVAL_SECONDS = 10     # un message toutes les 10 secondes
 HOUSEHOLD_TRANSITION_SECONDS = 90
 HOUSEHOLD_MEMORY_SECONDS = 300
 HOUSEHOLD_DEVICE_MATCH_SCORE = 5
-STREAM_ENFORCER_NORMAL_INTERVAL_SECONDS = 60
+STREAM_ENFORCER_NORMAL_INTERVAL_SECONDS = 15
 STREAM_ENFORCER_BOOST_INTERVAL_SECONDS = 15
-STREAM_ENFORCER_BOOST_KILL_THRESHOLD = 2
+STREAM_ENFORCER_BOOST_KILL_THRESHOLD = 1
 STREAM_ENFORCER_BOOST_WINDOW_MINUTES = 10
 STREAM_ENFORCER_BOOST_DURATION_MINUTES = 30
 
@@ -1287,6 +1288,125 @@ def _kill_session(server_row: dict, session_key: str, reason: str) -> bool:
     return provider.terminate_session(session_key, reason=reason)
 
 
+def _media_title_from_session(sess: dict) -> str:
+    title = str(sess.get("title") or "").strip()
+    parent_title = str(sess.get("parent_title") or "").strip()
+    grandparent_title = str(sess.get("grandparent_title") or "").strip()
+
+    parts = []
+    if grandparent_title:
+        parts.append(grandparent_title)
+    if parent_title:
+        parts.append(parent_title)
+    if title:
+        parts.append(title)
+
+    return " - ".join(parts) if parts else title
+
+
+def _policy_display_name(policy: dict) -> str:
+    rule_type = str(policy.get("rule_type") or "").strip()
+    if rule_type:
+        return rule_type
+
+    try:
+        return f"Policy #{int(policy.get('id'))}"
+    except Exception:
+        return "Policy"
+
+
+def _queue_stream_blocked_notification(
+    *,
+    task_id: int,
+    policy: dict,
+    server_row: dict,
+    target: dict,
+    reason: str,
+    kill_reason_for_client: str,
+) -> None:
+    vodum_user_id = target.get("vodum_user_id")
+    if vodum_user_id is None:
+        return
+
+    try:
+        vodum_user_id = int(vodum_user_id)
+    except Exception:
+        return
+
+    tpl = _db.query_one(
+        """
+        SELECT id
+        FROM comm_templates
+        WHERE key = 'stream_blocked'
+          AND enabled = 1
+        LIMIT 1
+        """
+    )
+
+    if not tpl:
+        return
+
+    server_id = target.get("server_id") or server_row.get("id")
+    provider = str(target.get("provider") or server_row.get("type") or "plex").strip().lower()
+    if provider not in ("plex", "jellyfin"):
+        provider = "plex"
+
+    media_title = _media_title_from_session(target)
+    blocked_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    policy_reason = kill_reason_for_client or reason or "Policy violation"
+
+    payload = {
+        "trigger_event": "stream_blocked",
+        "policy_id": policy.get("id"),
+        "policy_name": _policy_display_name(policy),
+        "policy_reason": policy_reason,
+        "reason": reason or "",
+        "media_title": media_title,
+        "server_name": server_row.get("name") or "",
+        "client_name": target.get("client_name") or target.get("client_product") or "",
+        "device_name": target.get("device") or target.get("client_product") or "",
+        "blocked_at": blocked_at,
+        "session_key": target.get("session_key") or "",
+        "server_id": server_id,
+        "provider": provider,
+    }
+
+    dedupe_key = (
+        f"stream_blocked:"
+        f"policy:{policy.get('id')}:"
+        f"user:{vodum_user_id}:"
+        f"server:{server_id}:"
+        f"session:{target.get('session_key')}:"
+        f"at:{int(time.time())}"
+    )
+
+    try:
+        schedule_template_notification(
+            db=_db,
+            template_id=int(tpl["id"]),
+            user_id=vodum_user_id,
+            provider=provider,
+            server_id=int(server_id) if server_id is not None else None,
+            send_at_modifier=None,
+            payload=payload,
+            dedupe_key=dedupe_key,
+            max_attempts=10,
+        )
+        enqueue_named_task(_db, "send_expiration_emails")
+
+        if is_debug_mode_enabled():
+            logger.debug(
+                "[stream_enforcer] stream_blocked notification queued "
+                f"user={vodum_user_id} policy={policy.get('id')} server={server_id}"
+            )
+
+    except Exception as e:
+        logger.warning(
+            f"[TASK {task_id}] stream_enforcer: failed to queue stream_blocked notification: {e}",
+            exc_info=True,
+        )
+
+
 def _warn_session(server_row, session_key, title, text, timeout_ms: int = 8000):
     provider = get_provider(server_row)
     try:
@@ -1594,6 +1714,16 @@ def run(task_id: int, db):
 
                 ok = _kill_session(server_row, session_key, reason=kill_reason_for_client)
 
+                if ok:
+                    _queue_stream_blocked_notification(
+                        task_id=task_id,
+                        policy=policy,
+                        server_row=server_row,
+                        target=target,
+                        reason=reason,
+                        kill_reason_for_client=kill_reason_for_client,
+                    )
+
                 _log_enforcement(
                     policy_id, server_id, provider_type, session_key,
                     user_vodum_id, user_ext,
@@ -1719,6 +1849,16 @@ def run(task_id: int, db):
 
             # Kill stream (Plex affichera kill_reason_for_client ; Jellyfin ignore reason, mais on a déjà envoyé un message)
             ok = _kill_session(server_row, session_key, reason=kill_reason_for_client)
+
+            if ok:
+                _queue_stream_blocked_notification(
+                    task_id=task_id,
+                    policy=policy,
+                    server_row=server_row,
+                    target=target,
+                    reason=reason,
+                    kill_reason_for_client=kill_reason_for_client,
+                )
 
             _log_enforcement(
                 policy_id, server_id, provider_type, session_key,

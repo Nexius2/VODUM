@@ -339,7 +339,7 @@ def api_server_libraries(server_id: int):
 @users_bp.get("/api/users/referrer-candidates")
 def api_referrer_candidates():
     db = get_db()
-    q = (request.args.get("q") or "").strip()
+    q = " ".join((request.args.get("q") or "").split()).strip()
     like = f"%{q}%"
 
     rows = db.query(
@@ -357,14 +357,25 @@ def api_referrer_candidates():
                 ? = ''
                 OR COALESCE(u.username,'') LIKE ?
                 OR COALESCE(u.email,'') LIKE ?
+                OR COALESCE(u.second_email,'') LIKE ?
                 OR COALESCE(u.firstname,'') LIKE ?
                 OR COALESCE(u.lastname,'') LIKE ?
+                OR COALESCE(u.discord_name,'') LIKE ?
+                OR EXISTS (
+                    SELECT 1
+                    FROM media_users mu
+                    WHERE mu.vodum_user_id = u.id
+                      AND (
+                            COALESCE(mu.username,'') LIKE ?
+                            OR COALESCE(mu.email,'') LIKE ?
+                          )
+                )
               )
         GROUP BY u.id
         ORDER BY u.username ASC
         LIMIT 50
         """,
-        (q, like, like, like, like),
+        (q, like, like, like, like, like, like, like, like),
     ) or []
 
     return jsonify([dict(r) for r in rows])

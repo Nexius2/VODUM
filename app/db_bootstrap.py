@@ -258,7 +258,10 @@ def run_migrations():
         UPDATE tasks
         SET
             schedule_mode = 'interval',
-            interval_seconds = 60
+            interval_seconds = CASE
+                WHEN name = 'stream_enforcer' THEN 15
+                ELSE 60
+            END
         WHERE name IN (
             'monitor_enqueue_refresh',
             'media_jobs_worker',
@@ -267,6 +270,7 @@ def run_migrations():
         AND (
             schedule_mode IS NULL
             OR schedule_mode = 'cron'
+            OR name = 'stream_enforcer'
         )
     """)
 
@@ -1030,7 +1034,7 @@ def run_migrations():
             body TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','pending_invite_reminder','referral_reward','expiration_change')),
+            trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','pending_invite_reminder','referral_reward','expiration_change','stream_blocked')),
             trigger_provider TEXT NOT NULL DEFAULT 'all' CHECK(trigger_provider IN ('all','plex','jellyfin')),
             expiration_change_direction TEXT NOT NULL DEFAULT 'all' CHECK(expiration_change_direction IN ('all','increase','decrease')),
             days_after INTEGER DEFAULT NULL,
@@ -1045,7 +1049,7 @@ def run_migrations():
         cursor,
         "comm_templates",
         "trigger_event",
-        "TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','pending_invite_reminder','referral_reward','expiration_change'))",
+        "TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','pending_invite_reminder','referral_reward','expiration_change','stream_blocked'))",
     )
     ensure_column(
         cursor,
@@ -1079,6 +1083,8 @@ def run_migrations():
             return True
         if "'pending_invite_reminder'" not in sql:
             return True
+        if "'stream_blocked'" not in sql:
+            return True
         if "expiration_change_direction" not in sql:
             return True
         return False
@@ -1098,7 +1104,7 @@ def run_migrations():
             body TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','pending_invite_reminder','referral_reward','expiration_change')),
+            trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','pending_invite_reminder','referral_reward','expiration_change','stream_blocked')),
             trigger_provider TEXT NOT NULL DEFAULT 'all' CHECK(trigger_provider IN ('all','plex','jellyfin')),
             expiration_change_direction TEXT NOT NULL DEFAULT 'all' CHECK(expiration_change_direction IN ('all','increase','decrease')),
             days_after INTEGER DEFAULT NULL,
@@ -1128,6 +1134,125 @@ def run_migrations():
         cursor.execute("DROP TABLE comm_templates_old")
         conn.commit()
         print("✔ comm_templates schema upgraded.")
+
+    # -------------------------------------------------
+    # System communication template: stream blocked
+    # -------------------------------------------------
+    cursor.execute(
+        """
+        SELECT id, subject, body
+        FROM comm_templates
+        WHERE key = 'stream_blocked'
+        LIMIT 1
+        """
+    )
+    row = cursor.fetchone()
+
+    stream_blocked_subject = "Playback blocked"
+    stream_blocked_body = (
+        "Hello {firstusername},\n\n"
+        "Your playback has been stopped by VODUM.\n\n"
+        "Reason: {policy_reason}\n"
+        "Media: {media_title}\n"
+        "Server: {server_name}\n"
+        "Device: {device_name}\n"
+        "Client: {client_name}\n"
+        "Time: {blocked_at}\n\n"
+        "If you think this is a mistake, please contact the administrator.\n\n"
+        "Best regards,\n"
+        "{brand_name}\n"
+    )
+
+    if not row:
+        print("➕ Default communication template inserted: stream_blocked")
+        cursor.execute(
+            """
+            INSERT INTO comm_templates(
+                key,
+                name,
+                enabled,
+                trigger_event,
+                trigger_provider,
+                expiration_change_direction,
+                subscription_scope,
+                subscription_template_id,
+                days_before,
+                days_after,
+                subject,
+                body,
+                created_at,
+                updated_at
+            )
+            VALUES(
+                'stream_blocked',
+                'Stream blocked',
+                0,
+                'stream_blocked',
+                'all',
+                'all',
+                'all',
+                NULL,
+                NULL,
+                0,
+                ?,
+                ?,
+                CURRENT_TIMESTAMP,
+                CURRENT_TIMESTAMP
+            )
+            """,
+            (stream_blocked_subject, stream_blocked_body),
+        )
+    else:
+        cursor.execute(
+            """
+            UPDATE comm_templates
+            SET name = CASE
+                    WHEN name IS NULL OR TRIM(name) = '' THEN 'Stream blocked'
+                    ELSE name
+                END,
+                trigger_event = 'stream_blocked',
+                trigger_provider = 'all',
+                expiration_change_direction = 'all',
+                subscription_scope = 'all',
+                subscription_template_id = NULL,
+                days_before = NULL,
+                days_after = 0,
+                subject = CASE
+                    WHEN subject IS NULL OR TRIM(subject) = '' THEN ?
+                    ELSE subject
+                END,
+                body = CASE
+                    WHEN body IS NULL OR TRIM(body) = '' THEN ?
+                    ELSE body
+                END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE key = 'stream_blocked'
+            """,
+            (stream_blocked_subject, stream_blocked_body),
+        )
+
+    cursor.execute(
+        """
+        SELECT expiry_mode
+        FROM settings
+        WHERE id = 1
+        """
+    )
+    settings_row = cursor.fetchone()
+    expiry_mode = settings_row[0] if settings_row else "none"
+
+    if expiry_mode in ("warn_only", "warn_then_disable"):
+        cursor.execute(
+            """
+            UPDATE comm_templates
+            SET enabled = 1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE key = 'stream_blocked'
+            """
+        )
+
+    conn.commit()
+
 
     # -------------------------------------------------
     # Communications scheduled queue (NEW)
@@ -1204,6 +1329,24 @@ def run_migrations():
         );
         """)
         conn.commit()
+
+    ensure_column(cursor, "comm_campaigns", "trigger_provider", "TEXT DEFAULT 'all'")
+    ensure_column(cursor, "comm_campaigns", "subscription_scope", "TEXT DEFAULT 'none'")
+    ensure_column(cursor, "comm_campaigns", "subscription_template_id", "INTEGER DEFAULT NULL")
+
+    cursor.execute("""
+        UPDATE comm_campaigns
+        SET trigger_provider = 'all'
+        WHERE trigger_provider IS NULL
+           OR TRIM(trigger_provider) = ''
+    """)
+
+    cursor.execute("""
+        UPDATE comm_campaigns
+        SET subscription_scope = 'none'
+        WHERE subscription_scope IS NULL
+           OR TRIM(subscription_scope) = ''
+    """)
 
     if not table_exists(cursor, "comm_campaign_attachments"):
         print("🛠 Creating table: comm_campaign_attachments")
@@ -2224,7 +2367,7 @@ def run_migrations():
     - You will then see the server in your Plex home
 
     Regards,
-    Vodum Team
+    {brand_name}
     """
 
     jf_subject = "Welcome to Jellyfin - {server_name}"
@@ -2243,7 +2386,7 @@ def run_migrations():
     - Sign in with your username and password
 
     Regards,
-    Vodum Team
+    {brand_name}
     """
 
     ensure_welcome_template("plex", None, plex_subject, plex_body)
@@ -2283,7 +2426,7 @@ def run_migrations():
                 "Change: {expiration_change_signed_days} day(s)\n"
                 "Reason: {expiration_change_reason}\n\n"
                 "Best regards,\n"
-                "VODUM Team\n"
+                "{brand_name}\n"
             ),
         },
         {
@@ -2304,7 +2447,7 @@ def run_migrations():
                 "Your access may now be suspended.\n\n"
                 "If you wish to continue using the service, please renew your subscription.\n\n"
                 "Best regards,\n"
-                "VODUM Team\n"
+                "{brand_name}\n"
             ),
         },
         {
@@ -2328,7 +2471,7 @@ def run_migrations():
                 "- Accept the library share invitation if prompted\n\n"
                 "Your subscription expiration is currently set to: {expiration_date}\n\n"
                 "Best regards,\n"
-                "VODUM Team\n"
+                "{brand_name}\n"
             ),
         },
         {
@@ -2349,7 +2492,7 @@ def run_migrations():
                 "Expiration date: {expiration_date}\n\n"
                 "Please renew it to avoid any service interruption.\n\n"
                 "Best regards,\n"
-                "VODUM Team\n"
+                "{brand_name}\n"
             ),
         },
         {
@@ -2371,7 +2514,7 @@ def run_migrations():
                 "New expiration date: {referrer_new_expiration_date}\n\n"
                 "Thank you for your referral.\n\n"
                 "Best regards,\n"
-                "VODUM Team\n"
+                "{brand_name}\n"
             ),
         },
         {
@@ -2392,7 +2535,7 @@ def run_migrations():
                 "Expiration date: {expiration_date}\n\n"
                 "Please renew it in time to avoid any service interruption.\n\n"
                 "Best regards,\n"
-                "VODUM Team\n"
+                "{brand_name}\n"
             ),
         },
         {
@@ -2417,7 +2560,7 @@ def run_migrations():
                 "- Accept the library share invitation if prompted\n\n"
                 "Subscription expiration date: {expiration_date}\n\n"
                 "Best regards,\n"
-                "VODUM Team\n"
+                "{brand_name}\n"
             ),
         },
     ]
@@ -2500,7 +2643,7 @@ def run_migrations():
                 "Please renew it to avoid any service interruption.\n\n"
                 "Expiration date: {expiration_date}\n\n"
                 "Best regards,\n"
-                "The VODUM Team"
+                "The {brand_name}"
             )
         },
         "relance": {
@@ -2511,7 +2654,7 @@ def run_migrations():
                 "Don't forget to renew it in time.\n\n"
                 "Expiration date: {expiration_date}\n\n"
                 "Best regards,\n"
-                "The VODUM Team"
+                "The {brand_name}"
             )
         },
         "fin": {
@@ -2522,7 +2665,7 @@ def run_migrations():
                 "Your access has now been suspended.\n\n"
                 "If you wish to continue using our services, you can renew your subscription at any time.\n\n"
                 "Best regards,\n"
-                "The VODUM Team"
+                "The {brand_name}"
             )
         }
     }

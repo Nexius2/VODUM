@@ -9,6 +9,7 @@ ALLOWED_VARS = {
     "email",
     "expiration_date",
     "days_left",
+    "brand_name",
 
     # welcome / personnalisation
     "firstname",
@@ -66,6 +67,7 @@ def build_user_context(user: dict):
         "email": user.get("email", "") or "",
         "expiration_date": str(expiration) if expiration else "",
         "days_left": days_left,
+        "brand_name": user.get("brand_name", "") or "VODUM",
 
         "firstname": firstname,
         "lastname": user.get("lastname", "") or "",

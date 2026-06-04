@@ -378,7 +378,21 @@
             <tr
               class="border-t border-slate-800 policy-row"
               data-policy-id="{{ p.id }}"
-              data-search="{{ (p.rule_type ~ ' ' ~ p.scope_type ~ ' ' ~ (p.scope_username or '') ~ ' ' ~ (p.server_name or '') ~ ' ' ~ (p.provider or 'both') ~ ' ' ~ (p._subscription_name or '') ~ ' ' ~ (p.rule_value_json or ''))|lower }}"
+              data-search="{{ (
+				  p.rule_type ~ ' ' ~
+				  p.scope_type ~ ' ' ~
+				  (p.scope_username or '') ~ ' ' ~
+				  (p.scope_firstname or '') ~ ' ' ~
+				  (p.scope_lastname or '') ~ ' ' ~
+				  (p.scope_email or '') ~ ' ' ~
+				  (p.scope_second_email or '') ~ ' ' ~
+				  (p.scope_discord_name or '') ~ ' ' ~
+				  (p.scope_media_search or '') ~ ' ' ~
+				  (p.server_name or '') ~ ' ' ~
+				  (p.provider or 'both') ~ ' ' ~
+				  (p._subscription_name or '') ~ ' ' ~
+				  (p.rule_value_json or '')
+				)|lower }}"
               data-status="{{ 'enabled' if p.is_enabled else 'disabled' }}"
               data-scope="{{ p.scope_type }}"
               data-provider="{{ provider_label|lower }}"

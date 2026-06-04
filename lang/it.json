@@ -881,8 +881,8 @@
   "template_test_failed": "Test del modello non riuscito",
   "template_test_help": "Un'email di test verrà inviata all'indirizzo admin configurato nelle impostazioni.",
   "template_test_sent": "Email di test inviata con successo",
-  "templates": "Modelli",
-  "templates_saved": "Modelli salvati",
+  "templates": "Messaggi",
+  "templates_saved": "Messaggi salvati",
   "three_months": "3 mesi",
   "thursday": "Giovedì",
   "timezone": "Fuso orario",
@@ -1271,5 +1271,16 @@
   "subscription_summary_server_transcodes": "transcodifiche server",
   "subscription_summary_kbps_max_bitrate": "kbps bitrate massimo",
   "subscription_summary_4k_transcode_blocked": "Transcodifica 4K bloccata",
-  "subscription_no_rules_hint": "Nessuna regola per ora. Attiva un limite semplice sopra o usa l’editor avanzato."
+  "subscription_no_rules_hint": "Nessuna regola per ora. Attiva un limite semplice sopra o usa l’editor avanzato.",
+  "comm_trigger_stream_blocked": "Riproduzione bloccata",
+  "comm_stream_blocked_template_locked": "Questo messaggio di sistema non può essere eliminato.",
+  "comm_stream_blocked_template_notice": "Messaggio di sistema usato quando VODUM interrompe una riproduzione tramite una policy. Trigger, target media, target abbonamento e ritardo sono bloccati.",
+  "comm_stream_blocked_required_by_expiry": "Obbligatorio perché è attiva una modalità di avviso/blocco per abbonamento scaduto.",
+  "comm_var_policy_name_desc": "Nome o tipo della regola che ha attivato il blocco.",
+  "comm_var_policy_reason_desc": "Motivo comprensibile inviato all’utente.",
+  "comm_var_media_title_desc": "Titolo del contenuto in riproduzione.",
+  "comm_var_client_name_desc": "Nome del client usato per la riproduzione.",
+  "comm_var_device_name_desc": "Dispositivo usato per la riproduzione.",
+  "comm_var_blocked_at_desc": "Data e ora del blocco.",
+  "comm_var_brand_name_desc": "Nome del marchio configurato nelle impostazioni di VODUM."
 }

@@ -880,8 +880,8 @@
   "template_test_failed": "Template test failed",
   "template_test_help": "A test email will be sent to the admin email configured in settings.",
   "template_test_sent": "Email de test envoyé avec succès",
-  "templates": "Modèles",
-  "templates_saved": "Modèles enregistrés",
+  "templates": "Messages",
+  "templates_saved": "Messages enregistrés",
   "three_months": "3 mois",
   "thursday": "Thursday",
   "timezone": "Fuseau horaire",
@@ -1273,5 +1273,16 @@
   "subscription_summary_server_transcodes": "transcodages serveur",
   "subscription_summary_kbps_max_bitrate": "kbps bitrate max",
   "subscription_summary_4k_transcode_blocked": "Transcodage 4K bloqué",
-  "subscription_no_rules_hint": "Aucune règle pour le moment. Active une limite simple au-dessus ou utilise l’éditeur avancé."
+  "subscription_no_rules_hint": "Aucune règle pour le moment. Active une limite simple au-dessus ou utilise l’éditeur avancé.",
+  "comm_trigger_stream_blocked": "Lecture bloquée",
+  "comm_stream_blocked_template_locked": "Ce message système ne peut pas être supprimé.",
+  "comm_stream_blocked_template_notice": "Message système utilisé quand VODUM coupe une lecture via une policy. Le déclencheur, la cible média, la cible abonnement et le délai sont verrouillés.",
+  "comm_stream_blocked_required_by_expiry": "Obligatoire car un mode d’expiration avec avertissement/blocage est actif.",
+  "comm_var_policy_name_desc": "Nom ou type de la règle qui a déclenché le blocage.",
+  "comm_var_policy_reason_desc": "Raison lisible envoyée à l’utilisateur.",
+  "comm_var_media_title_desc": "Titre du média qui était en lecture.",
+  "comm_var_client_name_desc": "Nom du client utilisé pour la lecture.",
+  "comm_var_device_name_desc": "Appareil utilisé pour la lecture.",
+  "comm_var_blocked_at_desc": "Date et heure du blocage.",
+  "comm_var_brand_name_desc": "Nom de marque configuré dans les réglages de VODUM."
 }

@@ -46,14 +46,42 @@
         <input type="text" name="name" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs" value="{{ loaded_campaign.name if loaded_campaign else '' }}" required>
       </div>
 
-      <div class="text-xs">
-        <label class="block mb-1">{{ t('target_server') }}</label>
-        <select name="server_id" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
-          <option value="">{{ t('all_servers') }}</option>
-          {% for s in servers %}
-            <option value="{{ s.id }}" {% if loaded_campaign and loaded_campaign.server_id==s.id %}selected{% endif %}>{{ s.name }}</option>
-          {% endfor %}
-        </select>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div class="text-xs">
+          <label class="block mb-1">{{ t('target_server') }}</label>
+          <select name="server_id" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+            <option value="">{{ t('all_servers') }}</option>
+            {% for s in servers %}
+              <option value="{{ s.id }}" {% if loaded_campaign and loaded_campaign.server_id==s.id %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="text-xs">
+          <label class="block mb-1">{{ t('comm_trigger_provider') }}</label>
+          {% set campaign_provider = (loaded_campaign.trigger_provider if loaded_campaign and loaded_campaign.trigger_provider else 'all') %}
+          <select name="trigger_provider" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+            <option value="all" {% if campaign_provider == 'all' %}selected{% endif %}>{{ t('comm_provider_all') }}</option>
+            <option value="plex" {% if campaign_provider == 'plex' %}selected{% endif %}>Plex</option>
+            <option value="jellyfin" {% if campaign_provider == 'jellyfin' %}selected{% endif %}>Jellyfin</option>
+          </select>
+        </div>
+
+        <div class="text-xs">
+          <label class="block mb-1">{{ t('comm_subscription_target') }}</label>
+          {% set campaign_sub_scope = (loaded_campaign.subscription_scope if loaded_campaign and loaded_campaign.subscription_scope else 'none') %}
+          {% set campaign_sub_id = (loaded_campaign.subscription_template_id if loaded_campaign and loaded_campaign.subscription_template_id is not none else None) %}
+          <select name="subscription_scope_value" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+            <option value="none" {% if campaign_sub_scope == 'none' %}selected{% endif %}>{{ t('comm_subscription_none') }}</option>
+            <option value="all" {% if campaign_sub_scope == 'all' %}selected{% endif %}>{{ t('comm_subscription_all') }}</option>
+            {% for sub in subscription_templates %}
+              <option value="subscription:{{ sub.id }}"
+                      {% if campaign_sub_scope == 'specific' and campaign_sub_id == sub.id %}selected{% endif %}>
+                {{ sub.name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
       </div>
 
       <div class="text-xs">
@@ -130,6 +158,8 @@
             <th class="px-4 py-2">{{ t('name') }}</th>
             <th class="px-4 py-2">{{ t('subject') }}</th>
             <th class="px-4 py-2">{{ t('server') }}</th>
+            <th class="px-4 py-2">{{ t('comm_trigger_provider') }}</th>
+            <th class="px-4 py-2">{{ t('comm_subscription_target') }}</th>
             <th class="px-4 py-2">{{ t('is_test') }}</th>
             <th class="px-4 py-2">{{ t('status') }}</th>
             <th class="px-4 py-2">{{ t('created_at') }}</th>
@@ -147,6 +177,21 @@
                 <span class="text-emerald-300">{{ t('all_servers') }}</span>
               {% else %}
                 {{ c.server_id }}
+              {% endif %}
+            </td>
+            <td class="px-4 py-2">
+              {% if c.trigger_provider == 'plex' %}Plex
+              {% elif c.trigger_provider == 'jellyfin' %}Jellyfin
+              {% else %}{{ t('comm_provider_all') }}
+              {% endif %}
+            </td>
+            <td class="px-4 py-2">
+              {% if c.subscription_scope == 'specific' and c.subscription_template_name %}
+                {{ c.subscription_template_name }}
+              {% elif c.subscription_scope == 'all' %}
+                {{ t('comm_subscription_all') }}
+              {% else %}
+                {{ t('comm_subscription_none') }}
               {% endif %}
             </td>
             <td class="px-4 py-2">{% if c.is_test %}<span class="text-emerald-300">{{ t('yes') }}</span>{% else %}<span class="text-slate-400">{{ t('no') }}</span>{% endif %}</td>

@@ -880,8 +880,8 @@
   "template_test_failed": "Vorlagentest fehlgeschlagen",
   "template_test_help": "Eine Test-E-Mail wird an die in den Einstellungen konfigurierte Admin-Adresse gesendet.",
   "template_test_sent": "Test-E-Mail erfolgreich gesendet",
-  "templates": "Vorlagen",
-  "templates_saved": "Vorlagen gespeichert",
+  "templates": "Nachrichten",
+  "templates_saved": "Nachrichten gespeichert",
   "three_months": "3 Monate",
   "thursday": "Donnerstag",
   "timezone": "Zeitzone",
@@ -1271,5 +1271,16 @@
   "subscription_summary_server_transcodes": "Server-Transcodes",
   "subscription_summary_kbps_max_bitrate": "kbps maximale Bitrate",
   "subscription_summary_4k_transcode_blocked": "4K-Transcoding blockiert",
-  "subscription_no_rules_hint": "Noch keine Regeln. Aktiviere oben ein einfaches Limit oder nutze den erweiterten Policy-Editor."
+  "subscription_no_rules_hint": "Noch keine Regeln. Aktiviere oben ein einfaches Limit oder nutze den erweiterten Policy-Editor.",
+  "comm_trigger_stream_blocked": "Wiedergabe blockiert",
+  "comm_stream_blocked_template_locked": "Diese Systemnachricht kann nicht gelöscht werden.",
+  "comm_stream_blocked_template_notice": "Systemnachricht, die verwendet wird, wenn VODUM eine Wiedergabe über eine Policy stoppt. Auslöser, Medienziel, Abonnementziel und Verzögerung sind gesperrt.",
+  "comm_stream_blocked_required_by_expiry": "Erforderlich, weil ein Ablaufmodus mit Warnung/Blockierung aktiv ist.",
+  "comm_var_policy_name_desc": "Name oder Typ der Regel, die die Blockierung ausgelöst hat.",
+  "comm_var_policy_reason_desc": "Benutzerfreundlicher Grund, der an den Benutzer gesendet wird.",
+  "comm_var_media_title_desc": "Titel des Mediums, das wiedergegeben wurde.",
+  "comm_var_client_name_desc": "Name des für die Wiedergabe verwendeten Clients.",
+  "comm_var_device_name_desc": "Für die Wiedergabe verwendetes Gerät.",
+  "comm_var_blocked_at_desc": "Datum und Uhrzeit der Blockierung.",
+  "comm_var_brand_name_desc": "In den VODUM-Einstellungen konfigurierter Markenname."
 }

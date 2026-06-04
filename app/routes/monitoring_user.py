@@ -424,8 +424,19 @@ def register(app):
 
 
             if q:
-                where.append("(h.title LIKE ? OR h.grandparent_title LIKE ?)")
-                params += [f"%{q}%", f"%{q}%"]
+                like = f"%{q}%"
+                where.append("""
+                    (
+                        COALESCE(h.title, '') LIKE ?
+                        OR COALESCE(h.grandparent_title, '') LIKE ?
+                        OR COALESCE(h.media_type, '') LIKE ?
+                        OR COALESCE(h.device, '') LIKE ?
+                        OR COALESCE(h.client_name, '') LIKE ?
+                        OR COALESCE(h.ip, '') LIKE ?
+                        OR COALESCE(s.name, '') LIKE ?
+                    )
+                """)
+                params += [like] * 7
 
             where_sql = " AND ".join(where)
 
@@ -433,6 +444,7 @@ def register(app):
                 f"""
                 SELECT COUNT(*) AS cnt
                 FROM media_session_history h
+                JOIN servers s ON s.id = h.server_id
                 WHERE {where_sql}
                 """,
                 tuple(params),
