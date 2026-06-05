@@ -132,6 +132,43 @@ def register(app):
             stats["error_tasks"] = 0
 
         # --------------------------
+        # DASHBOARD EXTRA STATS
+        # --------------------------
+        if table_exists(db, "stream_enforcements"):
+            row = db.query_one(
+                """
+                SELECT COUNT(*) AS cnt
+                FROM stream_enforcements
+                WHERE action = 'kill'
+                  AND datetime(created_at) >= datetime('now', '-48 hours')
+                """
+            )
+            stats["kills_48h"] = int(row["cnt"] or 0) if row else 0
+        else:
+            stats["kills_48h"] = 0
+
+        subscription_stats = []
+        subscription_stats_more = False
+
+        if table_exists(db, "subscription_templates"):
+            subscription_stats = db.query(
+                """
+                SELECT
+                  st.id,
+                  st.name,
+                  COUNT(vu.id) AS user_count
+                FROM subscription_templates st
+                LEFT JOIN vodum_users vu ON vu.subscription_template_id = st.id
+                WHERE COALESCE(st.is_enabled, 1) = 1
+                GROUP BY st.id, st.name
+                ORDER BY user_count DESC, LOWER(st.name) ASC
+                """
+            ) or []
+
+            subscription_stats = [dict(row) for row in subscription_stats]
+            subscription_stats_more = len(subscription_stats) > 8
+
+        # --------------------------
         # SERVER LIST (tous types)
         # --------------------------
         servers = db.query(
@@ -146,7 +183,50 @@ def register(app):
             FROM servers s
             ORDER BY s.type, s.name
             """
-        )
+        ) or []
+
+        servers = [dict(row) for row in servers]
+
+        for srv in servers:
+            srv["peak_streams_7d"] = 0
+
+        if table_exists(db, "media_session_history"):
+            peak_rows = db.query(
+                """
+                WITH events AS (
+                    SELECT server_id, datetime(started_at) AS ts, 1 AS delta
+                    FROM media_session_history
+                    WHERE stopped_at >= datetime('now', '-7 days')
+
+                    UNION ALL
+
+                    SELECT server_id, datetime(stopped_at) AS ts, -1 AS delta
+                    FROM media_session_history
+                    WHERE stopped_at >= datetime('now', '-7 days')
+                ),
+                running AS (
+                    SELECT
+                        server_id,
+                        SUM(delta) OVER (
+                            PARTITION BY server_id
+                            ORDER BY ts
+                            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                        ) AS active_count
+                    FROM events
+                )
+                SELECT server_id, MAX(active_count) AS peak
+                FROM running
+                GROUP BY server_id
+                """
+            ) or []
+
+            peaks_by_server = {
+                int(row["server_id"]): int(row["peak"] or 0)
+                for row in peak_rows
+            }
+
+            for srv in servers:
+                srv["peak_streams_7d"] = peaks_by_server.get(int(srv["id"]), 0)
 
         # --------------------------
         # LATEST LOGS (fichier)
@@ -231,6 +311,8 @@ def register(app):
         return _no_store_response(render_template(
             "dashboard/dashboard.html",
             stats=stats,
+            subscription_stats=subscription_stats,
+            subscription_stats_more=subscription_stats_more,
             users_stats=users_stats,
             servers=servers,
             latest_logs=latest_logs,

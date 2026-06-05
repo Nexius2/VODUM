@@ -394,7 +394,7 @@
   "maintenance_title": "Manutenzione",
   "managed": "Gestito",
   "manual_backup": "Backup manuale",
-  "manual_backup_desc": "Crea immediatamente un backup SQLite.",
+  "manual_backup_desc": "Crea immediatamente un backup.",
   "max_streams_override": "Max streams override",
   "max_streams_override_help": "If set to a value greater than 0, this number supersedes max_streams_per_user policies for this user. Empty or 0 = no override, policy applies.",
   "max_streams_override_placeholder": "Leave empty to use policies",
@@ -595,7 +595,7 @@
   "request_failed": "Richiesta non riuscita",
   "reset": "Ripristina",
   "restore_backup": "Ripristina backup",
-  "restore_backup_desc": "Carica un file .db salvato in precedenza. Attenzione: sovrascriverà il database attuale.",
+  "restore_backup_desc": "Carica un backup .zip, .sqlite o .db salvato in precedenza. Attenzione: i dati attuali verranno sovrascritti.",
   "restore_btn": "Ripristina",
   "restricted": "Account con restrizioni",
   "retention_saved": "Conservazione salvata",
@@ -1282,5 +1282,9 @@
   "comm_var_client_name_desc": "Nome del client usato per la riproduzione.",
   "comm_var_device_name_desc": "Dispositivo usato per la riproduzione.",
   "comm_var_blocked_at_desc": "Data e ora del blocco.",
-  "comm_var_brand_name_desc": "Nome del marchio configurato nelle impostazioni di VODUM."
+  "comm_var_brand_name_desc": "Nome del marchio configurato nelle impostazioni di VODUM.",
+  "restore_in_progress": "Attendere durante il ripristino...",
+  "restore_in_progress_description": "VODUM sta caricando e ripristinando il backup. L'applicazione potrebbe riavviarsi automaticamente. Non chiudere questa pagina.",
+  "restore_in_progress_warning": "Questa operazione può richiedere diversi minuti a seconda delle dimensioni del backup."
+
 }

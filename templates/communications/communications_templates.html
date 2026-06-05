@@ -213,9 +213,9 @@
       <div id="commVarsHelpModal" class="hidden fixed inset-0 z-50" aria-hidden="true">
         <div class="absolute inset-0 bg-black/70"></div>
 
-        <div class="relative mx-auto mt-16 w-[92%] max-w-4xl">
-          <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
-            <div class="p-5">
+        <div class="relative mx-auto mt-8 w-[95%] max-w-6xl max-h-[90vh]">
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="p-5 overflow-y-auto">
               <div class="flex items-start justify-between gap-4">
                 <div>
                   <div class="text-sm font-semibold text-slate-100">{{ t("comm_vars_modal_title") }}</div>
@@ -235,14 +235,14 @@
                 <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-4">
                   <div class="text-sm font-semibold text-slate-100 mb-3">{{ t("comm_vars_group_general") }}</div>
                   <div class="space-y-2 text-xs">
-                    <div><code>{username}</code><div class="text-slate-400 mt-1">{{ t("comm_var_username_desc") }}</div></div>
-                    <div><code>{firstusername}</code><div class="text-slate-400 mt-1">{{ t("comm_var_firstusername_desc") }}</div></div>
-                    <div><code>{email}</code><div class="text-slate-400 mt-1">{{ t("comm_var_email_desc") }}</div></div>
-                    <div><code>{brand_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_brand_name_desc") }}</div></div>
-                    <div><code>{expiration_date}</code><div class="text-slate-400 mt-1">{{ t("comm_var_expiration_date_desc") }}</div></div>
-                    <div><code>{days_left}</code><div class="text-slate-400 mt-1">{{ t("comm_var_days_left_desc") }}</div></div>
-                    <div><code>{firstname}</code><div class="text-slate-400 mt-1">{{ t("comm_var_firstname_desc") }}</div></div>
-                    <div><code>{lastname}</code><div class="text-slate-400 mt-1">{{ t("comm_var_lastname_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{username}</code><div class="text-slate-400 mt-1">{{ t("comm_var_username_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{firstusername}</code><div class="text-slate-400 mt-1">{{ t("comm_var_firstusername_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{email}</code><div class="text-slate-400 mt-1">{{ t("comm_var_email_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{brand_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_brand_name_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{expiration_date}</code><div class="text-slate-400 mt-1">{{ t("comm_var_expiration_date_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{days_left}</code><div class="text-slate-400 mt-1">{{ t("comm_var_days_left_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{firstname}</code><div class="text-slate-400 mt-1">{{ t("comm_var_firstname_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{lastname}</code><div class="text-slate-400 mt-1">{{ t("comm_var_lastname_desc") }}</div></div>
                   </div>
                 </div>
 
@@ -250,10 +250,10 @@
                 <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-4">
                   <div class="text-sm font-semibold text-slate-100 mb-3">{{ t("comm_vars_group_server") }}</div>
                   <div class="space-y-2 text-xs">
-                    <div><code>{server_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_server_name_desc") }}</div></div>
-                    <div><code>{server_url}</code><div class="text-slate-400 mt-1">{{ t("comm_var_server_url_desc") }}</div></div>
-                    <div><code>{login_username}</code><div class="text-slate-400 mt-1">{{ t("comm_var_login_username_desc") }}</div></div>
-                    <div><code>{temporary_password}</code><div class="text-slate-400 mt-1">{{ t("comm_var_temporary_password_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{server_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_server_name_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{server_url}</code><div class="text-slate-400 mt-1">{{ t("comm_var_server_url_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{login_username}</code><div class="text-slate-400 mt-1">{{ t("comm_var_login_username_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{temporary_password}</code><div class="text-slate-400 mt-1">{{ t("comm_var_temporary_password_desc") }}</div></div>
                   </div>
                 </div>
 
@@ -261,19 +261,19 @@
                 <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-4">
                   <div class="text-sm font-semibold text-slate-100 mb-3">{{ t("comm_vars_group_subscription") }}</div>
                   <div class="space-y-2 text-xs">
-                    <div><code>{subscription_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_subscription_name_desc") }}</div></div>
-                    <div><code>{subscription_value}</code><div class="text-slate-400 mt-1">{{ t("comm_var_subscription_value_desc") }}</div></div>
-                    <div><code>{subscription_duration_days}</code><div class="text-slate-400 mt-1">{{ t("comm_var_subscription_duration_days_desc") }}</div></div>
-					<div><code>{old_expiration_date}</code><div class="text-slate-400 mt-1">{{ t("comm_var_old_expiration_date_desc") }}</div></div>
-					<div><code>{new_expiration_date}</code><div class="text-slate-400 mt-1">{{ t("comm_var_new_expiration_date_desc") }}</div></div>
-					<div><code>{expiration_change_days}</code><div class="text-slate-400 mt-1">{{ t("comm_var_expiration_change_days_desc") }}</div></div>
-					<div><code>{expiration_change_signed_days}</code><div class="text-slate-400 mt-1">{{ t("comm_var_expiration_change_signed_days_desc") }}</div></div>
-					<div><code>{expiration_change_direction}</code><div class="text-slate-400 mt-1">{{ t("comm_var_expiration_change_direction_desc") }}</div></div>
-					<div><code>{expiration_change_reason}</code><div class="text-slate-400 mt-1">{{ t("comm_var_expiration_change_reason_desc") }}</div></div>
-					<div><code>{referred_username}</code><div class="text-slate-400 mt-1">{{ t("comm_var_referred_username_desc") }}</div></div>
-					<div><code>{referral_reward_days}</code><div class="text-slate-400 mt-1">{{ t("comm_var_referral_reward_days_desc") }}</div></div>
-					<div><code>{referrer_old_expiration_date}</code><div class="text-slate-400 mt-1">{{ t("comm_var_referrer_old_expiration_date_desc") }}</div></div>
-					<div><code>{referrer_new_expiration_date}</code><div class="text-slate-400 mt-1">{{ t("comm_var_referrer_new_expiration_date_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{subscription_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_subscription_name_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{subscription_value}</code><div class="text-slate-400 mt-1">{{ t("comm_var_subscription_value_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{subscription_duration_days}</code><div class="text-slate-400 mt-1">{{ t("comm_var_subscription_duration_days_desc") }}</div></div>
+					<div><code class="break-all text-primary">{old_expiration_date}</code><div class="text-slate-400 mt-1">{{ t("comm_var_old_expiration_date_desc") }}</div></div>
+					<div><code class="break-all text-primary">{new_expiration_date}</code><div class="text-slate-400 mt-1">{{ t("comm_var_new_expiration_date_desc") }}</div></div>
+					<div><code class="break-all text-primary">{expiration_change_days}</code><div class="text-slate-400 mt-1">{{ t("comm_var_expiration_change_days_desc") }}</div></div>
+					<div><code class="break-all text-primary">{expiration_change_signed_days}</code><div class="text-slate-400 mt-1">{{ t("comm_var_expiration_change_signed_days_desc") }}</div></div>
+					<div><code class="break-all text-primary">{expiration_change_direction}</code><div class="text-slate-400 mt-1">{{ t("comm_var_expiration_change_direction_desc") }}</div></div>
+					<div><code class="break-all text-primary">{expiration_change_reason}</code><div class="text-slate-400 mt-1">{{ t("comm_var_expiration_change_reason_desc") }}</div></div>
+					<div><code class="break-all text-primary">{referred_username}</code><div class="text-slate-400 mt-1">{{ t("comm_var_referred_username_desc") }}</div></div>
+					<div><code class="break-all text-primary">{referral_reward_days}</code><div class="text-slate-400 mt-1">{{ t("comm_var_referral_reward_days_desc") }}</div></div>
+					<div><code class="break-all text-primary">{referrer_old_expiration_date}</code><div class="text-slate-400 mt-1">{{ t("comm_var_referrer_old_expiration_date_desc") }}</div></div>
+					<div><code class="break-all text-primary">{referrer_new_expiration_date}</code><div class="text-slate-400 mt-1">{{ t("comm_var_referrer_new_expiration_date_desc") }}</div></div>
                   </div>
                 </div>
 
@@ -281,13 +281,13 @@
                 <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-4">
                   <div class="text-sm font-semibold text-slate-100 mb-3">{{ t("comm_trigger_stream_blocked") }}</div>
                   <div class="space-y-2 text-xs">
-                    <div><code>{policy_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_policy_name_desc") }}</div></div>
-                    <div><code>{policy_reason}</code><div class="text-slate-400 mt-1">{{ t("comm_var_policy_reason_desc") }}</div></div>
-                    <div><code>{media_title}</code><div class="text-slate-400 mt-1">{{ t("comm_var_media_title_desc") }}</div></div>
-                    <div><code>{server_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_server_name_desc") }}</div></div>
-                    <div><code>{client_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_client_name_desc") }}</div></div>
-                    <div><code>{device_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_device_name_desc") }}</div></div>
-                    <div><code>{blocked_at}</code><div class="text-slate-400 mt-1">{{ t("comm_var_blocked_at_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{policy_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_policy_name_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{policy_reason}</code><div class="text-slate-400 mt-1">{{ t("comm_var_policy_reason_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{media_title}</code><div class="text-slate-400 mt-1">{{ t("comm_var_media_title_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{server_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_server_name_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{client_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_client_name_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{device_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_device_name_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{blocked_at}</code><div class="text-slate-400 mt-1">{{ t("comm_var_blocked_at_desc") }}</div></div>
                   </div>
                 </div>
 

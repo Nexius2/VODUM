@@ -289,7 +289,9 @@ class JellyfinProvider(BaseProvider):
                 or now_playing.get("ParentTitle")
                 or None
             )
-
+            season_number = now_playing.get("ParentIndexNumber")
+            episode_number = now_playing.get("IndexNumber")
+            
             item = None
 
             # ✅ Fallback: si /Sessions est incomplet OU trop générique ("Video"),
@@ -320,6 +322,8 @@ class JellyfinProvider(BaseProvider):
                         or item.get("ParentTitle")
                         or None
                     )
+                    season_number = season_number or item.get("ParentIndexNumber")
+                    episode_number = episode_number or item.get("IndexNumber")
 
             # --- Normalize media type
             # Important: chez Jellyfin, "video" peut être un film OU un épisode selon le client.
@@ -358,6 +362,8 @@ class JellyfinProvider(BaseProvider):
                     "title": title,
                     "grandparent_title": grandparent_title,
                     "parent_title": parent_title,
+                    "season_number": int(season_number) if season_number is not None and str(season_number).isdigit() else None,
+                    "episode_number": int(episode_number) if episode_number is not None and str(episode_number).isdigit() else None,
                     "state": state,
 
                     "progress_ms": progress_ms,

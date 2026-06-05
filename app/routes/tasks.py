@@ -26,17 +26,29 @@ def register(app):
     def tasks_page():
         db = get_db()
 
+        debug_mode = is_debug_mode_enabled()
+
         tasks = []
         if table_exists(db, "tasks"):
-            tasks = db.query(
-                """
-                SELECT *
-                FROM tasks
-                ORDER BY name
-                """
-            )
+            if debug_mode:
+                tasks = db.query(
+                    """
+                    SELECT *
+                    FROM tasks
+                    ORDER BY name
+                    """
+                )
+            else:
+                tasks = db.query(
+                    """
+                    SELECT *
+                    FROM tasks
+                    WHERE enabled = 1
+                    ORDER BY name
+                    """
+                )
         
-        if is_debug_mode_enabled():
+        if debug_mode:
             task_logger.debug(f"Affichage page tasks → {len(tasks)} tâches détectées")
 
         return render_template(

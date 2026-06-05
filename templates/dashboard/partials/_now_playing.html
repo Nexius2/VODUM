@@ -14,10 +14,10 @@
 			{% endif %}
 		</h2>
 
-        <a href="{{ url_for('monitoring_page', tab='now_playing') }}"
-           class="text-[11px] text-slate-500 hover:text-primary transition-colors font-medium">
-            See all
-        </a>
+		<a href="{{ url_for('monitoring_page', tab='now_playing') }}"
+		   class="text-xs text-primary hover:text-primary-dark">
+			{{ t("view_all") }}
+		</a>
     </div>
 
     <span class="text-[11px] whitespace-nowrap">

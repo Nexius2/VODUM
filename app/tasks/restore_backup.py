@@ -3,6 +3,7 @@ import shutil
 import sqlite3
 import threading
 import time
+import zipfile
 from pathlib import Path
 
 import tasks_engine
@@ -68,103 +69,224 @@ def _validate_sqlite_backup(candidate_path: Path) -> None:
             conn.close()
 
 
+def _safe_extract_zip_member(zipf: zipfile.ZipFile, member_name: str, target_path: Path) -> None:
+    normalized = Path(member_name)
+
+    if normalized.is_absolute() or ".." in normalized.parts:
+        raise ValueError(f"Unsafe zip member path: {member_name}")
+
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with zipf.open(member_name) as src, open(target_path, "wb") as dst:
+        shutil.copyfileobj(src, dst)
+
+
+def _safe_extract_zip_dir(zipf: zipfile.ZipFile, archive_root: str, target_dir: Path) -> int:
+    extracted = 0
+    prefix = archive_root.rstrip("/") + "/"
+
+    for member in zipf.infolist():
+        if member.is_dir():
+            continue
+
+        name = member.filename
+
+        if not name.startswith(prefix):
+            continue
+
+        rel_name = name[len(prefix):]
+        rel_path = Path(rel_name)
+
+        if not rel_name or rel_path.is_absolute() or ".." in rel_path.parts:
+            raise ValueError(f"Unsafe zip member path: {name}")
+
+        final_path = target_dir / rel_path
+        final_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with zipf.open(member) as src, open(final_path, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+
+        extracted += 1
+
+    return extracted
+
+
+def _prepare_restore_source(backup_path: Path, work_dir: Path) -> tuple[Path, Path | None]:
+    """
+    Returns:
+      - sqlite database path to restore
+      - optional attachments directory extracted from full backup
+    """
+    suffix = backup_path.suffix.lower()
+
+    if suffix in {".sqlite", ".db"}:
+        _validate_sqlite_backup(backup_path)
+        return backup_path, None
+
+    if suffix != ".zip":
+        raise ValueError("Unsupported backup format. Expected .zip, .sqlite or .db")
+
+    if not zipfile.is_zipfile(backup_path):
+        raise ValueError("Invalid zip backup file")
+
+    extracted_db = work_dir / "database.db"
+    extracted_attachments = work_dir / "attachments"
+
+    with zipfile.ZipFile(backup_path, "r") as zipf:
+        names = set(zipf.namelist())
+
+        db_member = None
+        for candidate in ("database.db", "database.sqlite"):
+            if candidate in names:
+                db_member = candidate
+                break
+
+        if not db_member:
+            raise ValueError("Invalid VODUM full backup: database.db is missing")
+
+        _safe_extract_zip_member(zipf, db_member, extracted_db)
+
+        if any(name.startswith("attachments/") for name in names):
+            _safe_extract_zip_dir(zipf, "attachments", extracted_attachments)
+
+    _validate_sqlite_backup(extracted_db)
+    return extracted_db, extracted_attachments if extracted_attachments.exists() else None
+
+
+def _replace_directory(source_dir: Path | None, target_dir: Path) -> None:
+    if source_dir is None:
+        return
+
+    tmp_target = target_dir.with_name(target_dir.name + ".restore_tmp")
+    previous_target = target_dir.with_name(target_dir.name + ".pre_restore")
+
+    if tmp_target.exists():
+        shutil.rmtree(tmp_target, ignore_errors=True)
+
+    if previous_target.exists():
+        shutil.rmtree(previous_target, ignore_errors=True)
+
+    shutil.copytree(source_dir, tmp_target)
+
+    if target_dir.exists():
+        target_dir.rename(previous_target)
+
+    tmp_target.rename(target_dir)
+
+    if previous_target.exists():
+        shutil.rmtree(previous_target, ignore_errors=True)
+
+
 def _safe_restore_from_path(backup_path: Path, db) -> None:
     db_path = Path(Config.DATABASE)
+    appdata_dir = db_path.parent
     backup_path = Path(backup_path)
 
     if not backup_path.exists():
         raise FileNotFoundError(str(backup_path))
 
-    _validate_sqlite_backup(backup_path)
-
-    pre_restore_path = db_path.with_suffix(db_path.suffix + ".pre_restore")
-    if pre_restore_path.exists():
-        try:
-            pre_restore_path.unlink()
-        except Exception:
-            pass
-
-    if db_path.exists():
-        shutil.copy2(str(db_path), str(pre_restore_path))
+    work_dir = appdata_dir / "imports" / f"restore_work_{int(time.time())}"
+    work_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        db.close()
-    except Exception:
-        pass
-    _reset_tasks_engine_db_instance()
+        restore_db_path, restore_attachments_dir = _prepare_restore_source(backup_path, work_dir)
 
-    for suffix in ("-wal", "-shm"):
-        p = db_path.with_name(db_path.name + suffix)
-        if p.exists():
+        pre_restore_path = db_path.with_suffix(db_path.suffix + ".pre_restore")
+        if pre_restore_path.exists():
             try:
-                p.unlink()
+                pre_restore_path.unlink()
             except Exception:
                 pass
 
-    tmp_path = db_path.with_suffix(db_path.suffix + ".restore_tmp")
-    if tmp_path.exists():
-        try:
-            tmp_path.unlink()
-        except Exception:
-            pass
-
-    shutil.copy2(str(backup_path), str(tmp_path))
-    _validate_sqlite_backup(tmp_path)
-
-    os.replace(str(tmp_path), str(db_path))
-
-    for suffix in ("-wal", "-shm"):
-        p = db_path.with_name(db_path.name + suffix)
-        if p.exists():
-            try:
-                p.unlink()
-            except Exception:
-                pass
-
-    try:
-        restored_db = DBManager(str(db_path))
-        prepare_restored_database(restored_db)
+        if db_path.exists():
+            shutil.copy2(str(db_path), str(pre_restore_path))
 
         try:
-            restored_db.close()
+            db.close()
         except Exception:
             pass
 
         _reset_tasks_engine_db_instance()
 
-    except Exception as e:
-        log.exception("Post-restore validation/update failed, restoring previous DB")
+        for suffix in ("-wal", "-shm"):
+            p = db_path.with_name(db_path.name + suffix)
+            if p.exists():
+                try:
+                    p.unlink()
+                except Exception:
+                    pass
 
-        try:
-            if pre_restore_path.exists():
-                if db_path.exists():
-                    try:
-                        db_path.unlink()
-                    except Exception:
-                        pass
-                shutil.copy2(str(pre_restore_path), str(db_path))
-        except Exception:
-            log.exception("Automatic rollback after failed restore also failed")
-
-        _reset_tasks_engine_db_instance()
-
-        raise RuntimeError(
-            f"Restore failed after swap, previous database restored automatically: {e}"
-        ) from e
-
-    finally:
+        tmp_path = db_path.with_suffix(db_path.suffix + ".restore_tmp")
         if tmp_path.exists():
             try:
                 tmp_path.unlink()
             except Exception:
                 pass
 
+        shutil.copy2(str(restore_db_path), str(tmp_path))
+        _validate_sqlite_backup(tmp_path)
+
+        os.replace(str(tmp_path), str(db_path))
+
+        for suffix in ("-wal", "-shm"):
+            p = db_path.with_name(db_path.name + suffix)
+            if p.exists():
+                try:
+                    p.unlink()
+                except Exception:
+                    pass
+
+        try:
+            if restore_attachments_dir is not None:
+                _replace_directory(restore_attachments_dir, appdata_dir / "attachments")
+
+            restored_db = DBManager(str(db_path))
+            prepare_restored_database(restored_db)
+
+            try:
+                restored_db.close()
+            except Exception:
+                pass
+
+            _reset_tasks_engine_db_instance()
+
+        except Exception as e:
+            log.exception("Post-restore validation/update failed, restoring previous DB")
+
+            try:
+                if pre_restore_path.exists():
+                    if db_path.exists():
+                        try:
+                            db_path.unlink()
+                        except Exception:
+                            pass
+                    shutil.copy2(str(pre_restore_path), str(db_path))
+            except Exception:
+                log.exception("Automatic rollback after failed restore also failed")
+
+            _reset_tasks_engine_db_instance()
+
+            raise RuntimeError(
+                f"Restore failed after swap, previous database restored automatically: {e}"
+            ) from e
+
+        finally:
+            if tmp_path.exists():
+                try:
+                    tmp_path.unlink()
+                except Exception:
+                    pass
+
+    finally:
+        if work_dir.exists():
+            shutil.rmtree(work_dir, ignore_errors=True)
+
     def _delayed_exit():
         time.sleep(1.5)
         os._exit(0)
 
     threading.Thread(target=_delayed_exit, daemon=True).start()
-    log.warning("Database restored. Maintenance mode ON. Process will exit for restart.")
+    log.warning("Backup restored. Maintenance mode ON. Process will exit for restart.")
 
 
 def run(task_id: int, db):

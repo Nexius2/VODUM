@@ -88,6 +88,120 @@ function showAlert(type, html) {
    FORM SUBMIT
    ========================= */
 
+function normalizeGiftSearch(value) {
+  return (value || "")
+    .toString()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+function initGiftUserSearch() {
+  const jsonEl = document.getElementById("gift-users-json");
+  const input = document.getElementById("gift-user-search");
+  const hidden = document.getElementById("gift-user-id");
+  const results = document.getElementById("gift-user-results");
+  const selected = document.getElementById("gift-user-selected");
+
+  if (!jsonEl || !input || !hidden || !results || !selected) return;
+
+  let users = [];
+  try {
+    users = JSON.parse(jsonEl.textContent || "[]");
+  } catch {
+    users = [];
+  }
+
+  const prepared = users.map((u) => {
+    const label = `${u.username || ""}${u.email ? " (" + u.email + ")" : ""}`.trim();
+    const details = [
+      u.firstname,
+      u.lastname,
+      u.email,
+      u.second_email,
+      u.discord_name,
+      u.media_search,
+      u.id
+    ].filter(Boolean).join(" ");
+
+    return {
+      ...u,
+      label,
+      search: normalizeGiftSearch(`${label} ${details}`)
+    };
+  });
+
+  function clearSelection() {
+    hidden.value = "";
+    selected.classList.add("hidden");
+    selected.textContent = "";
+  }
+
+  function render(query) {
+    const q = normalizeGiftSearch(query);
+    results.innerHTML = "";
+
+    if (q.length < 2) {
+      results.classList.add("hidden");
+      return;
+    }
+
+    const matches = prepared
+      .filter((u) => u.search.includes(q))
+      .slice(0, 30);
+
+    if (!matches.length) {
+      results.innerHTML = `
+        <div class="px-3 py-2 text-sm text-slate-400">
+          No user found
+        </div>
+      `;
+      results.classList.remove("hidden");
+      return;
+    }
+
+    results.innerHTML = matches.map((u) => `
+      <button type="button"
+              class="gift-user-result w-full text-left px-3 py-2 hover:bg-primary/25 hover:ring-1 hover:ring-primary/50 border-b border-slate-800 last:border-b-0 transition-all"
+              data-user-id="${escapeHtml(u.id)}"
+              data-user-label="${escapeHtml(u.label)}">
+        <div class="text-sm text-slate-100">${escapeHtml(u.label)}</div>
+        <div class="text-xs text-slate-400">
+          ${escapeHtml([u.firstname, u.lastname, u.second_email, u.discord_name].filter(Boolean).join(" · "))}
+        </div>
+      </button>
+    `).join("");
+
+    results.classList.remove("hidden");
+
+    results.querySelectorAll(".gift-user-result").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        hidden.value = btn.dataset.userId || "";
+        input.value = btn.dataset.userLabel || "";
+        selected.textContent = `Selected: ${btn.dataset.userLabel || ""}`;
+        selected.classList.remove("hidden");
+        results.classList.add("hidden");
+      });
+    });
+  }
+
+  input.addEventListener("input", () => {
+    clearSelection();
+    render(input.value);
+  });
+
+  input.addEventListener("focus", () => {
+    render(input.value);
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest("#user-select")) {
+      results.classList.add("hidden");
+    }
+  });
+}
+
 function submitGift() {
   const form = document.getElementById("gift-form");
   const data = new FormData(form);
@@ -303,6 +417,7 @@ document.addEventListener("visibilitychange", () => {
   if (!document.hidden) loadGiftHistory();
 });
 
+initGiftUserSearch();
 toggleGiftTarget("all");
 startGiftHistoryLive();
 

@@ -297,6 +297,8 @@ class PlexProvider(BaseProvider):
             title = node.attrib.get("title")
             grandparent = node.attrib.get("grandparentTitle")
             parent = node.attrib.get("parentTitle")
+            season_number = node.attrib.get("parentIndex")
+            episode_number = node.attrib.get("index")
 
             if not session_key:
                 continue
@@ -323,6 +325,8 @@ class PlexProvider(BaseProvider):
                 "title": title,
                 "grandparent_title": grandparent,
                 "parent_title": parent,
+                "season_number": int(season_number) if season_number and str(season_number).isdigit() else None,
+                "episode_number": int(episode_number) if episode_number and str(episode_number).isdigit() else None,
                 "state": state or "unknown",
                 "progress_ms": int(progress_ms) if progress_ms and str(progress_ms).isdigit() else None,
                 "duration_ms": int(duration_ms) if duration_ms and str(duration_ms).isdigit() else None,

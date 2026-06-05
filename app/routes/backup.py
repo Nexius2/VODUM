@@ -144,7 +144,7 @@ def register(app):
             if not filename:
                 return {"success": False, "error": "missing filename"}, 400
 
-            if not filename.endswith(".sqlite"):
+            if not filename.endswith((".zip", ".sqlite", ".db")):
                 return {"success": False, "error": "invalid backup"}, 400
 
             backup_path = _resolve_backup_path(filename)
@@ -172,10 +172,13 @@ def register(app):
                 queued = enable_and_run_task_by_name("auto_backup")
                 if queued:
                     flash("Manual backup queued.", "success")
+                    return redirect(url_for("backup_page", refresh_backups="1"))
                 else:
                     flash("Manual backup could not be queued.", "error")
+                    return redirect(url_for("backup_page"))
             except Exception as e:
                 flash(t("backup_create_error").format(error=str(e)), "error")
+                return redirect(url_for("backup_page"))
 
         # ───────────────────────────────
         # Restauration d'un backup
@@ -217,7 +220,14 @@ def register(app):
                 if not file or file.filename == "":
                     flash(t("backup_no_file"), "error")
                 else:
-                    temp_path = imports_dir / f"restore_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.sqlite"
+                    original_name = secure_filename(file.filename or "")
+                    original_suffix = Path(original_name).suffix.lower()
+
+                    if original_suffix not in {".zip", ".sqlite", ".db"}:
+                        flash("Unsupported backup format. Please upload a .zip, .sqlite or .db backup.", "error")
+                        return redirect(url_for("backup_page"))
+
+                    temp_path = imports_dir / f"restore_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}{original_suffix}"
 
                     try:
                         file.save(temp_path)
@@ -375,6 +385,12 @@ def register(app):
                 flash(f"Error while starting import: {e}", "error")
 
         return redirect(url_for("backup_page"))
+
+    @app.route("/api/backup/list", methods=["GET"])
+    def api_backup_list():
+        backup_cfg = get_backup_cfg()
+        backups = list_backups(backup_cfg)
+        return {"backups": backups}
 
     @app.route("/backup", methods=["GET"])
     def backup_page():

@@ -5,10 +5,10 @@
     {{ t("restore_backup_desc") }}
   </p>
 
-  <form action="{{ url_for('backup_action') }}" method="post" enctype="multipart/form-data" class="space-y-3">
+  <form action="{{ url_for('backup_action') }}" method="post" enctype="multipart/form-data" class="space-y-3 js-restore-backup-form">
     <input type="hidden" name="action" value="restore">
-    <input type="file" name="backup_file"
-           class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs w-full">
+	<input type="file" name="backup_file" accept=".zip,.sqlite,.db"
+		   class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs w-full">
     <button class="px-4 py-2 rounded-lg bg-rose-900/40 text-rose-200 hover:bg-rose-900/60 text-sm">
       {{ t("restore_btn") }}
     </button>

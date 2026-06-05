@@ -166,6 +166,10 @@ def run(task_id: int = None, db=None):
 
             logger.info(f"No update: local={local_version} remote={latest}")
 
+    except requests.exceptions.RequestException as e:
+        payload["error"] = str(e)
+        logger.warning(f"Update check unavailable: {e}")
+
     except Exception as e:
         payload["error"] = str(e)
         logger.error(f"Update check failed: {e}")

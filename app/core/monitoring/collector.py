@@ -346,8 +346,22 @@ def _fetch_existing_sessions(db, server_id: int) -> Dict[str, Dict[str, Any]]:
     rows = db.query(
         """
         SELECT
-          session_key, state, progress_ms, media_key, external_user_id,
-          client_name, client_product, device, ip
+          session_key,
+          media_user_id,
+          external_user_id,
+          media_key,
+          media_type,
+          title,
+          grandparent_title,
+          parent_title,
+          state,
+          progress_ms,
+          duration_ms,
+          client_name,
+          client_product,
+          device,
+          ip,
+          raw_json
         FROM media_sessions
         WHERE server_id = ?
         """,
@@ -355,18 +369,50 @@ def _fetch_existing_sessions(db, server_id: int) -> Dict[str, Dict[str, Any]]:
     )
 
     out: Dict[str, Dict[str, Any]] = {}
+
     for r in rows:
+        season_number = None
+        episode_number = None
+
+        raw_json = r["raw_json"]
+
+        if raw_json:
+            try:
+                raw = json.loads(raw_json)
+
+                plex_video = raw.get("VideoOrTrack") if isinstance(raw, dict) else None
+                if isinstance(plex_video, dict):
+                    season_number = plex_video.get("parentIndex")
+                    episode_number = plex_video.get("index")
+
+                if isinstance(raw, dict):
+                    season_number = season_number or raw.get("ParentIndexNumber")
+                    episode_number = episode_number or raw.get("IndexNumber")
+
+            except Exception:
+                pass
+
         out[str(r["session_key"])] = {
             "session_key": str(r["session_key"]),
+            "media_user_id": r["media_user_id"],
+            "external_user_id": r["external_user_id"],
+            "media_key": r["media_key"],
+            "media_type": r["media_type"],
+            "title": r["title"],
+            "grandparent_title": r["grandparent_title"],
+            "parent_title": r["parent_title"],
+            "season_number": int(season_number) if season_number and str(season_number).isdigit() else None,
+            "episode_number": int(episode_number) if episode_number and str(episode_number).isdigit() else None,
             "state": r["state"],
             "progress_ms": r["progress_ms"],
-            "media_key": r["media_key"],
-            "external_user_id": r["external_user_id"],
+            "duration_ms": r["duration_ms"],
             "client_name": r["client_name"],
             "client_product": r["client_product"],
             "device": r["device"],
             "ip": r["ip"],
+            "raw_json": raw_json,
         }
+
     return out
 
 def _session_identity_key(sess: Dict[str, Any]) -> Optional[str]:
@@ -739,13 +785,20 @@ def collect_sessions_for_server(
                 """
                 INSERT INTO media_events (
                   server_id, provider, event_type, ts,
-                  session_key, external_user_id, media_key, payload_json
+                  session_key, media_user_id, external_user_id,
+                  media_key, media_type, title,
+                  payload_json
                 )
-                VALUES (?, ?, 'stop', ?, ?, ?, ?, ?)
+                VALUES (?, ?, 'stop', ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     server_id, provider_name, _iso_now(),
-                    sk, prev.get("external_user_id"), prev.get("media_key"),
+                    sk,
+                    prev.get("media_user_id"),
+                    prev.get("external_user_id"),
+                    prev.get("media_key"),
+                    prev.get("media_type"),
+                    prev.get("title"),
                     json.dumps(prev, ensure_ascii=False),
                 ),
             )

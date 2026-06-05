@@ -64,18 +64,26 @@
     </select>
   </div>
 
-  <!-- USER SELECT (hidden unless user mode) -->
-  <div id="user-select" class="mt-3 max-w-sm hidden">
-    <select name="vodum_user_id"
-            class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm w-full">
-      <option value="">Select user</option>
-      {% for user in gift_users %}
-        <option value="{{ user.id }}">
-          {{ user.username }}{% if user.email %} ({{ user.email }}){% endif %}
-        </option>
-      {% endfor %}
-    </select>
-  </div>
+	<!-- USER SEARCH (hidden unless user mode) -->
+	<div id="user-select" class="mt-3 max-w-xl hidden">
+	  <input type="hidden" name="vodum_user_id" id="gift-user-id">
+
+	  <input type="text"
+			 id="gift-user-search"
+			 autocomplete="off"
+			 placeholder="Search user..."
+			 class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm w-full">
+
+	  <div id="gift-user-results"
+		   class="hidden mt-2 max-h-72 overflow-auto rounded-lg border border-slate-800 bg-slate-950"></div>
+
+	  <div id="gift-user-selected"
+		   class="hidden mt-2 text-sm text-emerald-300"></div>
+
+	  <script type="application/json" id="gift-users-json">
+		{{ gift_users|tojson }}
+	  </script>
+	</div>
 
   <h2 class="text-sm uppercase tracking-wide text-slate-400 mt-8 mb-3">
     {{ t("gift_duration") }}

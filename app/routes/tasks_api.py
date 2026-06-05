@@ -12,26 +12,45 @@ def register(app):
         if not table_exists(db, "tasks"):
             return {"tasks": []}
 
-        settings = db.query_one("SELECT default_language FROM settings WHERE id = 1")
+        settings = db.query_one("SELECT default_language, debug_mode FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
+        debug_mode = int(settings.get("debug_mode") or 0) == 1
 
         t = get_translator(settings)
 
-        rows = db.query(
-            """
-            SELECT
-                id,
-                name,
-                description,
-                schedule,
-                status,
-                enabled,
-                last_run,
-                next_run
-            FROM tasks
-            ORDER BY name
-            """
-        )
+        if debug_mode:
+            rows = db.query(
+                """
+                SELECT
+                    id,
+                    name,
+                    description,
+                    schedule,
+                    status,
+                    enabled,
+                    last_run,
+                    next_run
+                FROM tasks
+                ORDER BY name
+                """
+            )
+        else:
+            rows = db.query(
+                """
+                SELECT
+                    id,
+                    name,
+                    description,
+                    schedule,
+                    status,
+                    enabled,
+                    last_run,
+                    next_run
+                FROM tasks
+                WHERE enabled = 1
+                ORDER BY name
+                """
+            )
 
         tasks = []
         for r in rows:
