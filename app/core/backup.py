@@ -1,12 +1,14 @@
 # core/backup.py
 from __future__ import annotations
 
+import json
 import os
 import shutil
+import zipfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import Callable
 
 from logging_utils import get_logger, is_debug_mode_enabled
 
@@ -18,89 +20,96 @@ class BackupConfig:
 
 
 def ensure_backup_dir(cfg: BackupConfig) -> Path:
-    """
-    S'assure que le dossier de sauvegarde existe.
-
-    - Aucun accès DB
-    - Logging applicatif via logging_utils
-    - Exception explicite si le dossier ne peut pas être créé
-    """
     logger = get_logger("backup")
 
     if not cfg.backup_dir:
-        logger.error("[BACKUP] BACKUP_DIR non défini dans la configuration")
+        logger.error("[BACKUP] BACKUP_DIR non défini")
         raise KeyError("BACKUP_DIR missing")
 
     backup_dir = Path(cfg.backup_dir)
-
-    try:
-        backup_dir.mkdir(parents=True, exist_ok=True)
-    except Exception as e:
-        logger.error(
-            f"[BACKUP] Impossible de créer le dossier de sauvegarde ({backup_dir}): {e}",
-            exc_info=True,
-        )
-        raise
-
-    if is_debug_mode_enabled():
-        logger.debug(f"[BACKUP] Dossier de sauvegarde prêt: {backup_dir}")
+    backup_dir.mkdir(parents=True, exist_ok=True)
     return backup_dir
 
 
-def create_backup_file(get_db: Callable[[], object], cfg: BackupConfig) -> str | None:
-    """
-    Crée un fichier de sauvegarde de la base SQLite.
+def _appdata_dir_from_db(db_path: Path) -> Path:
+    return db_path.parent
 
-    - Compatible DBManager (une seule connexion)
-    - WAL checkpoint safe
-    - Aucun close manuel
-    - Aucun lock long
-    - Logs applicatifs UNIQUEMENT via logging_utils
-    - Retourne le nom du fichier de sauvegarde ou None
-    """
+
+def _add_dir_to_zip(zipf: zipfile.ZipFile, source_dir: Path, archive_root: str) -> None:
+    if not source_dir.exists() or not source_dir.is_dir():
+        return
+
+    for path in source_dir.rglob("*"):
+        if not path.is_file():
+            continue
+
+        rel = path.relative_to(source_dir)
+        zipf.write(path, f"{archive_root}/{rel.as_posix()}")
+
+
+def create_backup_file(get_db: Callable[[], object], cfg: BackupConfig) -> str | None:
     logger = get_logger("backup")
     db = get_db()
 
-    # 0) Dossier de sauvegarde
     try:
         backup_dir = ensure_backup_dir(cfg)
     except Exception:
         return None
 
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    backup_filename = f"backup_{timestamp}.sqlite"
+    backup_filename = f"backup_{timestamp}.zip"
     backup_path = backup_dir / backup_filename
+    tmp_backup_path = backup_dir / f".{backup_filename}.uploading"
 
     try:
-        # 1) Forcer un checkpoint WAL (sans fermer la DB)
-        # DBManager doit exposer execute(sql) comme dans ton code actuel.
         db.execute("PRAGMA wal_checkpoint(TRUNCATE);")
 
-        # 2) Copie fichier DB → backup
-        db_path = cfg.database_path
-
-        if not db_path or not os.path.exists(db_path):
+        db_path = Path(cfg.database_path)
+        if not db_path.exists():
             logger.error(f"[BACKUP] Fichier DB introuvable: {db_path}")
             return None
 
-        shutil.copy2(db_path, backup_path)
+        appdata_dir = _appdata_dir_from_db(db_path)
+        attachments_dir = appdata_dir / "attachments"
 
-        logger.info(f"[BACKUP] Sauvegarde créée: {backup_filename}")
+        manifest = {
+            "format": "vodum-full-backup",
+            "version": 1,
+            "created_at_utc": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            "database": "database.db",
+            "includes": {
+                "database": True,
+                "attachments": attachments_dir.exists(),
+            },
+        }
+
+        if tmp_backup_path.exists():
+            tmp_backup_path.unlink()
+
+        with zipfile.ZipFile(tmp_backup_path, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
+            zipf.write(db_path, "database.db")
+            zipf.writestr("manifest.json", json.dumps(manifest, indent=2))
+            _add_dir_to_zip(zipf, attachments_dir, "attachments")
+
+        if tmp_backup_path.stat().st_size <= 0:
+            raise RuntimeError("Backup zip was created empty")
+
+        os.replace(tmp_backup_path, backup_path)
+
+        logger.info(f"[BACKUP] Sauvegarde complète créée: {backup_filename}")
         return backup_filename
 
     except Exception as e:
         logger.error(f"[BACKUP] Erreur création backup: {e}", exc_info=True)
+        try:
+            if "tmp_backup_path" in locals() and tmp_backup_path.exists():
+                tmp_backup_path.unlink()
+        except Exception:
+            pass
         return None
 
 
 def list_backups(cfg: BackupConfig) -> list[dict]:
-    """
-    Liste les fichiers de sauvegarde disponibles.
-
-    - Aucun accès DB
-    - Logging via logging_utils
-    - Retourne une liste de métadonnées triée par date décroissante
-    """
     logger = get_logger("backup")
 
     try:
@@ -111,86 +120,40 @@ def list_backups(cfg: BackupConfig) -> list[dict]:
     backups: list[dict] = []
 
     try:
+        files = []
+        for pattern in (
+            "backup_*.zip",
+            "backup_*.sqlite",
+            "pre_restore_*.sqlite",
+            "vodum-*.db",
+            "database_v1_*.db",
+        ):
+            files.extend(backup_dir.glob(pattern))
+
         files = sorted(
-            backup_dir.glob("backup_*.sqlite"),
+            {f.resolve(): f for f in files}.values(),
             key=lambda p: p.stat().st_mtime,
             reverse=True,
         )
 
         for f in files:
             stat = f.stat()
+            if stat.st_size <= 0:
+                continue
             backups.append(
                 {
                     "name": f.name,
                     "path": str(f),
                     "size": stat.st_size,
-                    "mtime": datetime.fromtimestamp(stat.st_mtime).strftime(
-                        "%Y-%m-%d %H:%M:%S"
-                    ),
+                    "mtime": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
                 }
             )
 
         if is_debug_mode_enabled():
             logger.debug(f"[BACKUP] {len(backups)} sauvegarde(s) trouvée(s)")
+
         return backups
 
     except Exception as e:
-        logger.error(
-            f"[BACKUP] Erreur lors de la liste des sauvegardes: {e}",
-            exc_info=True,
-        )
+        logger.error(f"[BACKUP] Erreur liste backups: {e}", exc_info=True)
         return []
-
-
-def restore_backup_file(uploaded_path: Path, cfg: BackupConfig) -> None:
-    """
-    Écrase la base actuelle par le fichier fourni.
-
-    ⚠️ Action destructive :
-    - crée une sauvegarde de précaution avant écrasement
-    - un redémarrage du conteneur est recommandé après restauration
-
-    - Aucun accès DB
-    - Logging via logging_utils
-    """
-    logger = get_logger("backup")
-
-    db_path = Path(cfg.database_path)
-
-    # Validation
-    if not uploaded_path or not uploaded_path.exists():
-        logger.error("[BACKUP] Fichier de restauration introuvable")
-        raise FileNotFoundError("Backup file not found")
-
-    if uploaded_path.stat().st_size == 0:
-        logger.error("[BACKUP] Fichier de restauration vide")
-        raise ValueError("Backup file is empty")
-
-    # Sauvegarde de précaution
-    try:
-        if db_path.exists():
-            backup_dir = ensure_backup_dir(cfg)
-            timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-            pre_restore_backup = backup_dir / f"pre_restore_{timestamp}.sqlite"
-
-            shutil.copy2(db_path, pre_restore_backup)
-            logger.info(
-                f"[BACKUP] Sauvegarde pré-restauration créée: {pre_restore_backup.name}"
-            )
-    except Exception as e:
-        logger.error(
-            f"[BACKUP] Impossible de créer la sauvegarde pré-restauration: {e}",
-            exc_info=True,
-        )
-        raise
-
-    # Restauration
-    try:
-        shutil.copy2(uploaded_path, db_path)
-        logger.warning("[BACKUP] Base restaurée avec succès – redémarrage recommandé")
-    except Exception as e:
-        logger.error(
-            f"[BACKUP] Erreur lors de la restauration de la base: {e}",
-            exc_info=True,
-        )
-        raise

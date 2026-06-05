@@ -93,8 +93,20 @@ def register(app):
             SELECT
               vu.id,
               vu.username,
+              vu.firstname,
+              vu.lastname,
               vu.email,
-              vu.status
+              vu.second_email,
+              vu.discord_name,
+              vu.status,
+              (
+                SELECT GROUP_CONCAT(
+                  COALESCE(mu.username, '') || ' ' || COALESCE(mu.email, ''),
+                  ' '
+                )
+                FROM media_users mu
+                WHERE mu.vodum_user_id = vu.id
+              ) AS media_search
             FROM vodum_users vu
             WHERE vu.status IN ('active', 'pre_expired', 'reminder')
               AND EXISTS (
@@ -104,6 +116,8 @@ def register(app):
               )
             ORDER BY LOWER(COALESCE(vu.username, '')) ASC, vu.id ASC
         """) or []
+
+        gift_users = [dict(row) for row in gift_users]
 
         templates = db.query("""
             SELECT

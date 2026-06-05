@@ -341,6 +341,8 @@ def register(app):
             "/set_language",
             "/servers",
             "/servers/new",
+            "/api/backup",
+            "/backup",
             "/api/tasks/activity",
             "/health",
             "/login",

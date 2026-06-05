@@ -20,7 +20,7 @@
           </tr>
         </thead>
 
-        <tbody class="overflow-visible">
+        <tbody id="backups-table-body" class="overflow-visible">
           {% for b in backups %}
           <tr class="border-t border-slate-800 overflow-visible">
 			<td class="px-3 py-2 font-mono text-[11px]">
@@ -30,9 +30,9 @@
 				{{ b.name }}
 			  </a>
 			</td>
-            <td class="px-3 py-2 text-slate-300">
-              {{ (b.size / 1024)|round(1) }} KB
-            </td>
+			<td class="px-3 py-2 text-slate-300">
+			  {{ (b.size / 1024 / 1024)|round(2) }} MB
+			</td>
             <td class="px-3 py-2 text-slate-400">
               {{ b.mtime }}
             </td>
@@ -240,11 +240,16 @@
     closeRestoreConfirm();
   });
 
-  btnOk.addEventListener("click", () => {
-    pendingSubmit = true;
-    closeRestoreConfirm();
-    restoreForm.submit();
-  });
+	btnOk.addEventListener("click", () => {
+	  pendingSubmit = true;
+	  closeRestoreConfirm();
+
+	  if (typeof window.showRestoreWaitingModal === "function") {
+		window.showRestoreWaitingModal();
+	  }
+
+	  restoreForm.submit();
+	});
 
   // Close modal on backdrop click
   modal.addEventListener("click", (e) => {

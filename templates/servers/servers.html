@@ -8,81 +8,95 @@
 
 {% block content %}
 
-<!-- NAV INTERNE (comme mailing_nav) -->
 {% include "servers/servers_nav.html" with context %}
-
-
-
-<!-- ===================== -->
-<!--       SERVERS         -->
-<!-- ===================== -->
 
 {% set top_servers = servers[:4] %}
 {% set other_servers = servers[4:] %}
+{% set first_setup = servers|length == 0 %}
+
+{% if first_setup %}
+
+<div class="max-w-5xl mx-auto">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-8">
+    <h1 class="text-2xl font-bold mb-3">Welcome to VODUM</h1>
+
+    <p class="text-slate-400 mb-8">
+      Configure your first media server, or restore an existing VODUM backup.
+    </p>
+
+    <div class="grid md:grid-cols-2 gap-6">
+
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-6">
+        <h2 class="text-lg font-semibold mb-2">Add your first server</h2>
+
+        <p class="text-sm text-slate-400 mb-6">
+          Connect Plex or Jellyfin and start using VODUM.
+        </p>
+
+        <form method="post" action="{{ url_for('server_create') }}"
+              class="grid grid-cols-1 gap-3 text-sm">
+
+          <label class="flex flex-col">
+            {{ t("server_type") }}*
+            <select name="type"
+                    class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm">
+              <option value="plex">{{ t("plex") }}</option>
+              <option value="jellyfin">{{ t("jellyfin") }}</option>
+            </select>
+          </label>
+
+          <label class="flex flex-col">
+            URL*
+            <input
+                type="text"
+                name="url"
+                required
+                placeholder="http://192.168.1.100:32400"
+                autocomplete="off"
+                spellcheck="false"
+                class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm"
+            >
+
+            <span class="mt-1 text-xs text-slate-500">
+              Example Plex URL: http://192.168.1.100:32400
+            </span>
+          </label>
+
+          <label class="flex flex-col">
+            Token*
+            <input type="text" name="token" required
+                   class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono text-xs">
+          </label>
+
+          <button class="mt-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-sm">
+            {{ t("add_server") }}
+          </button>
+
+        </form>
+      </div>
+
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-6">
+        <h2 class="text-lg font-semibold mb-2">Restore from backup</h2>
+
+        <p class="text-sm text-slate-400 mb-6">
+          Recover an existing VODUM installation from a backup archive.
+        </p>
+
+        <a href="{{ url_for('backup_page') }}"
+           class="inline-flex items-center justify-center w-full px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white">
+          Restore Backup
+        </a>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+{% else %}
 
 <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
 
-  <!-- Form add server -->
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 min-h-[320px] h-full">
-    <h2 class="text-sm font-semibold mb-3">{{ t("add_server") }}</h2>
-
-    <form method="post" action="{{ url_for('server_create') }}"
-          class="grid grid-cols-1 gap-3 text-sm">
-
-      <label class="flex flex-col">
-        {{ t("server_type") }}*
-        <select name="type"
-                class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm">
-          <option value="plex">{{ t("plex") }}</option>
-		  <option value="jellyfin">{{ t("jellyfin") }}</option>
-
-          <!-- <option value="other">{{ t("other") }}</option>-->
-        </select>
-      </label>
-
-
-
-		<label class="flex flex-col">
-		  URL*
-		  <input
-			  type="text"
-			  name="url"
-			  required
-			  placeholder="http://192.168.1.100:32400"
-			  autocomplete="off"
-			  spellcheck="false"
-			  class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm"
-		  >
-
-		  <span class="mt-1 text-xs text-slate-500">
-			Example Plex URL: http://192.168.1.100:32400
-		  </span>
-		</label>
-
-      <label class="flex flex-col">
-        Token*
-        <input type="text" name="token" required
-               class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono text-xs">
-      </label>
-
-      <button class="mt-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-sm">
-        {{ t("add_server") }}
-      </button>
-
-    </form>
-  </div>
-
-
-  <!-- ===================== -->
-  <!--   TOP 4 SERVERS       -->
-  <!-- ===================== -->
-
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" style="grid-auto-rows:1fr;">
-
-    {% if servers|length == 0 %}
-      <p class="text-xs text-slate-500">{{ t("no_server") }}</p>
-    {% endif %}
-
     {% for s in top_servers %}
     {% set is_deleting = deleting_server_ids is defined and s.id in deleting_server_ids %}
     <a href="{% if not is_deleting %}{{ url_for('server_detail', server_id=s.id) }}{% else %}#{% endif %}"
@@ -127,6 +141,7 @@
       <div class="relative z-[1] text-[11px] text-slate-400 leading-tight">
         {{ s.libraries_count }} {{ t("libraries") }} · {{ s.users_count }} {{ t("users") }}
       </div>
+
       {% if s.server_version %}
       <div class="relative z-[1] text-[11px] text-slate-500 leading-tight">
         Version: {{ s.server_version }}
@@ -134,14 +149,56 @@
       {% endif %}
     </a>
     {% endfor %}
-
   </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 min-h-[320px] h-full">
+    <h2 class="text-sm font-semibold mb-3">{{ t("add_server") }}</h2>
+
+    <form method="post" action="{{ url_for('server_create') }}"
+          class="grid grid-cols-1 gap-3 text-sm">
+
+      <label class="flex flex-col">
+        {{ t("server_type") }}*
+        <select name="type"
+                class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm">
+          <option value="plex">{{ t("plex") }}</option>
+          <option value="jellyfin">{{ t("jellyfin") }}</option>
+        </select>
+      </label>
+
+      <label class="flex flex-col">
+        URL*
+        <input
+            type="text"
+            name="url"
+            required
+            placeholder="http://192.168.1.100:32400"
+            autocomplete="off"
+            spellcheck="false"
+            class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm"
+        >
+
+        <span class="mt-1 text-xs text-slate-500">
+          Example Plex URL: http://192.168.1.100:32400
+        </span>
+      </label>
+
+      <label class="flex flex-col">
+        Token*
+        <input type="text" name="token" required
+               class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono text-xs">
+      </label>
+
+      <button class="mt-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-sm">
+        {{ t("add_server") }}
+      </button>
+
+    </form>
+  </div>
+
 </div>
 
-
-<!-- ===================== -->
-<!--  OTHER SERVERS (grid) -->
-<!-- ===================== -->
+{% endif %}
 
 {% if other_servers %}
 <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" style="grid-auto-rows:1fr;">
@@ -152,14 +209,7 @@
      class="relative overflow-hidden bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col gap-2 text-sm w-full h-full min-h-[160px] {% if not is_deleting %}hover:bg-slate-800 transition cursor-pointer{% else %}cursor-not-allowed opacity-80{% endif %}"
      {% if is_deleting %}onclick="return false;" aria-disabled="true"{% endif %}>
 
-    {% if is_deleting %}
-    <div class="absolute inset-x-0 top-0 z-10 bg-red-700/90 text-white text-[11px] font-semibold uppercase tracking-wide px-3 py-1 text-center">
-      Deleting...
-    </div>
-    <div class="absolute inset-0 bg-red-950/10 z-0 pointer-events-none"></div>
-    {% endif %}
-
-    <div class="relative z-[1] flex items-center justify-between {% if is_deleting %}mt-5{% endif %}">
+    <div class="relative z-[1] flex items-center justify-between">
       <div class="flex items-center gap-2 font-semibold">
         {{ s.name }}
 
@@ -172,9 +222,7 @@
         {% endif %}
       </div>
 
-      {% if is_deleting %}
-        <span class="px-2 py-0.5 rounded-full bg-red-900/50 text-red-200 text-[10px]">Deleting</span>
-      {% elif s.status == 'up' %}
+      {% if s.status == 'up' %}
         <span class="px-2 py-0.5 rounded-full bg-emerald-900/40 text-emerald-300 text-[10px]">{{ t("online") }}</span>
       {% elif s.status == 'down' %}
         <span class="px-2 py-0.5 rounded-full bg-rose-900/40 text-rose-300 text-[10px]">{{ t("offline") }}</span>
@@ -190,12 +238,12 @@
     <div class="relative z-[1] text-[11px] text-slate-400 leading-tight">
       {{ s.libraries_count }} {{ t("libraries") }} · {{ s.users_count }} {{ t("users") }}
     </div>
+
     {% if s.server_version %}
     <div class="relative z-[1] text-[11px] text-slate-500 leading-tight">
       Version: {{ s.server_version }}
     </div>
     {% endif %}
-	
   </a>
   {% endfor %}
 

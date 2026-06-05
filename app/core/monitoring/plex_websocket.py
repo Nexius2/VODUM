@@ -37,12 +37,14 @@ class PlexWebsocketClient:
             try:
                 self._connect()
 
-            except Exception:
-                logger.exception(
-                    f"Plex websocket crashed for server {self.server['name']}"
+            except Exception as e:
+
+                logger.warning(
+                    f"Plex websocket disconnected for server "
+                    f"{self.server['name']}: {e}"
                 )
 
-            time.sleep(10)
+            time.sleep(60)
 
     def _bootstrap_existing_sessions(self):
 
@@ -76,10 +78,21 @@ class PlexWebsocketClient:
 
         logger.info(f"Connecting Plex websocket: {self.server['name']}")
 
-        self.ws = websocket.create_connection(
-            ws_url,
-            timeout=30
-        )
+        try:
+
+            self.ws = websocket.create_connection(
+                ws_url,
+                timeout=30
+            )
+
+        except Exception as e:
+
+            logger.debug(
+                f"Plex websocket unavailable for "
+                f"{self.server['name']}: {e}"
+            )
+
+            return
 
         logger.info(f"Plex websocket connected: {self.server['name']}")
         self._bootstrap_existing_sessions()

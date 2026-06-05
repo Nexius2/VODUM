@@ -29,5 +29,195 @@
 <div class="mt-8 relative z-10 bg-slate-900 border border-slate-800 rounded-2xl p-6 overflow-visible">
   {% include "backup/_backups_list.html" %}
 </div>
+<div id="restore-waiting-modal"
+     class="hidden fixed inset-0 z-[99999] items-center justify-center bg-black/80 backdrop-blur-sm">
+  <div class="w-[92%] max-w-md rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-6 text-center">
+    <div class="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-slate-700 border-t-primary"></div>
 
+	<h3 class="text-base font-semibold text-white">
+	  {{ t("restore_in_progress") }}
+	</h3>
+
+	<p class="mt-3 text-sm text-slate-400 leading-relaxed">
+	  {{ t("restore_in_progress_description") }}
+	</p>
+	<p class="mt-2 text-xs text-amber-400">
+	  {{ t("restore_in_progress_warning") }}
+	</p>
+  </div>
+</div>
+
+<script>
+  window.showRestoreWaitingModal = function () {
+    const modal = document.getElementById("restore-waiting-modal");
+
+    if (!modal) {
+      return;
+    }
+
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+  };
+
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll(".js-restore-backup-form").forEach(function (form) {
+      form.addEventListener("submit", function () {
+        window.showRestoreWaitingModal();
+      });
+    });
+  });
+</script>
+<script>
+  const shouldAutoRefreshBackups = {{ "true" if request.args.get("refresh_backups") == "1" else "false" }};
+
+  function escapeBackupHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function formatBackupSize(bytes) {
+    const mb = Number(bytes || 0) / 1024 / 1024;
+    return `${mb.toFixed(2)} MB`;
+  }
+
+  function renderBackupRows(backups) {
+    const tbody = document.getElementById("backups-table-body");
+
+    if (!tbody) {
+      return;
+    }
+
+    tbody.innerHTML = backups.map((backup, index) => {
+      const safeName = escapeBackupHtml(backup.name);
+      const filenameJs = JSON.stringify(backup.name);
+      const menuId = `api-${index}`;
+
+      return `
+        <tr class="border-t border-slate-800 overflow-visible">
+          <td class="px-3 py-2 font-mono text-[11px]">
+            <a href="/backup/download/${encodeURIComponent(backup.name)}"
+               class="hover:text-primary transition-colors">
+              ${safeName}
+            </a>
+          </td>
+
+          <td class="px-3 py-2 text-slate-300">
+            ${formatBackupSize(backup.size)}
+          </td>
+
+          <td class="px-3 py-2 text-slate-400">
+            ${escapeBackupHtml(backup.mtime)}
+          </td>
+
+          <td class="px-3 py-2 text-center relative z-[200]">
+            <button
+              type="button"
+              onclick="toggleBackupMenu('${menuId}')"
+              class="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-slate-800/80 text-slate-400 hover:text-slate-200 transition">
+              <svg xmlns="http://www.w3.org/2000/svg"
+                   class="w-4 h-4"
+                   fill="currentColor"
+                   viewBox="0 0 24 24">
+                <circle cx="12" cy="5" r="2"></circle>
+                <circle cx="12" cy="12" r="2"></circle>
+                <circle cx="12" cy="19" r="2"></circle>
+              </svg>
+            </button>
+
+            <div
+              id="backup-menu-${menuId}"
+              class="hidden absolute right-3 bottom-10 z-[9999] w-44 overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl">
+
+              <a href="/backup/download/${encodeURIComponent(backup.name)}"
+                 class="flex items-center gap-2 px-4 py-2.5 text-xs text-slate-300 hover:bg-slate-800 transition">
+                <span>⬇</span>
+                <span>{{ t("download") if t("download") else "Download" }}</span>
+              </a>
+
+              <button
+                type="button"
+                onclick='restoreBackup(${filenameJs})'
+                class="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-left text-amber-300 hover:bg-slate-800 transition">
+                <span>♻</span>
+                <span>{{ t("restore_btn") }}</span>
+              </button>
+
+              <button
+                type="button"
+                onclick='openDeleteBackupModal(${filenameJs})'
+                class="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-left text-rose-300 hover:bg-slate-800 transition">
+                <span>🗑</span>
+                <span>{{ t("delete") if t("delete") else "Delete" }}</span>
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  async function refreshBackupListOnce() {
+    const response = await fetch("/api/backup/list", {
+      cache: "no-store",
+      headers: {
+        "Accept": "application/json"
+      }
+    });
+
+    if (!response.ok) {
+      return;
+    }
+
+    const data = await response.json();
+    renderBackupRows(data.backups || []);
+  }
+
+  async function isAutoBackupStillActive() {
+    try {
+      const response = await fetch("/api/tasks/list", {
+        cache: "no-store",
+        headers: {
+          "Accept": "application/json"
+        }
+      });
+
+      if (!response.ok) {
+        return false;
+      }
+
+      const data = await response.json();
+      const task = (data.tasks || []).find(t => t.name === "auto_backup");
+
+      return task && ["queued", "running"].includes(task.status);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    if (!shouldAutoRefreshBackups) {
+      return;
+    }
+
+    let attempts = 0;
+    const maxAttempts = 45;
+
+    const timer = setInterval(async function () {
+      attempts += 1;
+
+      await refreshBackupListOnce();
+
+      const active = await isAutoBackupStillActive();
+
+      if (!active || attempts >= maxAttempts) {
+        clearInterval(timer);
+        await refreshBackupListOnce();
+      }
+    }, 2000);
+  });
+</script>
 {% endblock %}

@@ -7,9 +7,21 @@
         <div class="flex items-center justify-between">
           <div>
             <div class="text-sm font-semibold">{{ e.event_type }}</div>
-            <div class="text-xs text-slate-400">
-              {{ e.server_name }} · {{ e.provider }} · {{ e.title or "-" }}
-            </div>
+			<div class="text-xs text-slate-400">
+			  {{ e.provider }} · {{ e.server_name }} ·
+			  {% if e.media_type in ["serie", "series", "episode"] or e.series_title %}
+				{{ e.series_title or e.title or "-" }}
+				{% if e.season_number and e.episode_number %}
+				  · S{{ "%02d"|format(e.season_number|int) }}E{{ "%02d"|format(e.episode_number|int) }}
+				{% endif %}
+				{% if e.title %}
+				  · {{ e.title }}
+				{% endif %}
+			  {% else %}
+				{{ e.title or "-" }}
+			  {% endif %}
+			  · {{ e.username or e.external_user_id or "-" }}
+			</div>
           </div>
 			<div class="text-xs text-slate-500">
 			  {{ e.ts|browser_datetime("short") if e.ts else "-" }}

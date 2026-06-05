@@ -789,8 +789,8 @@ def enqueue_task(task_id: int):
         UPDATE tasks
         SET queued_count = queued_count + 1,
             status = CASE
-                WHEN status IN ('idle', 'error') THEN 'queued'
-                ELSE status
+                WHEN status = 'running' THEN 'running'
+                ELSE 'queued'
             END,
             updated_at = CURRENT_TIMESTAMP
         WHERE id = ?

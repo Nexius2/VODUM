@@ -594,7 +594,7 @@
   "request_failed": "Échec de la requête",
   "reset": "Réinitialiser",
   "restore_backup": "Restaurer une sauvegarde",
-  "restore_backup_desc": "Importer un fichier .db sauvegardé précédemment. Attention : cela remplacera la base actuelle.",
+  "restore_backup_desc": "Importez une sauvegarde .zip, .sqlite ou .db précédemment enregistrée. Attention : les données actuelles seront remplacées.",
   "restore_btn": "Restaurer",
   "restricted": "Compte restreint",
   "retention_saved": "Retention saved",
@@ -1284,5 +1284,9 @@
   "comm_var_client_name_desc": "Nom du client utilisé pour la lecture.",
   "comm_var_device_name_desc": "Appareil utilisé pour la lecture.",
   "comm_var_blocked_at_desc": "Date et heure du blocage.",
-  "comm_var_brand_name_desc": "Nom de marque configuré dans les réglages de VODUM."
+  "comm_var_brand_name_desc": "Nom de marque configuré dans les réglages de VODUM.",
+  "restore_in_progress": "Veuillez patienter pendant la restauration...",
+  "restore_in_progress_description": "VODUM importe et restaure votre sauvegarde. L'application peut redémarrer automatiquement. Ne fermez pas cette page.",
+  "restore_in_progress_warning": "Cette opération peut prendre plusieurs minutes selon la taille de la sauvegarde."
+
 }
