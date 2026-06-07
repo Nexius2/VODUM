@@ -23,7 +23,7 @@ ALLOWED_VARS = {
     "subscription_name",
     "subscription_value",
     "subscription_duration_days",
-    
+
     # expiration dates
     "old_expiration_date",
     "new_expiration_date",
@@ -31,12 +31,20 @@ ALLOWED_VARS = {
     "expiration_change_signed_days",
     "expiration_change_direction",
     "expiration_change_reason",
-    
+
     # referral rewards
     "referred_username",
     "referral_reward_days",
     "referrer_old_expiration_date",
     "referrer_new_expiration_date",
+
+    # stream blocked / policies
+    "policy_name",
+    "policy_reason",
+    "media_title",
+    "client_name",
+    "device_name",
+    "blocked_at",
 }
 
 
@@ -92,6 +100,14 @@ def build_user_context(user: dict):
         "referral_reward_days": user.get("referral_reward_days", "") or "",
         "referrer_old_expiration_date": user.get("referrer_old_expiration_date", "") or "",
         "referrer_new_expiration_date": user.get("referrer_new_expiration_date", "") or "",
+        
+        # stream blocked / policies
+        "policy_name": user.get("policy_name", "") or "",
+        "policy_reason": user.get("policy_reason", "") or "",
+        "media_title": user.get("media_title", "") or "",
+        "client_name": user.get("client_name", "") or "",
+        "device_name": user.get("device_name", "") or "",
+        "blocked_at": user.get("blocked_at", "") or "",
     }
 
 

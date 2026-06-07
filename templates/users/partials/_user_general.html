@@ -501,15 +501,18 @@
 
         <label class="text-sm block">
           <div class="text-slate-400 mb-1">{{ t("subscription_template") }}</div>
-          <select name="subscription_template_id"
-                  class="mt-1 max-w-md w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+			<select name="subscription_template_id"
+					id="subscription_template_id"
+                    class="mt-1 max-w-md w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
             <option value="" {% if user.subscription_template_id is none %}selected{% endif %}>
               {{ t("subscription_none") }}
             </option>
             {% for tpl in subscription_templates %}
-              <option value="{{ tpl.id }}" {% if user.subscription_template_id == tpl.id %}selected{% endif %}>
-                {{ tpl.name }}
-              </option>
+				<option value="{{ tpl.id }}"
+						data-lifetime="{{ tpl.is_lifetime or 0 }}"
+						{% if user.subscription_template_id == tpl.id %}selected{% endif %}>
+				  {{ tpl.name }}
+				</option>
             {% endfor %}
           </select>
         </label>
@@ -563,18 +566,25 @@
 			  </div>
 			</div>
 
-			<label class="inline-flex items-center gap-2">
-			  <input type="checkbox"
-					 name="expiration_date_override"
-					 value="1"
-					 {% if user.expiration_date_override == 1 or ns.is_media_admin %}checked{% endif %}
-					 {% if ns.is_media_admin %}disabled{% endif %}
-					 class="rounded border-slate-700 bg-slate-950 text-indigo-500">
+				<label class="inline-flex items-center gap-2">
+				  <input type="checkbox"
+						 id="expiration_date_override_cb"
+						 name="expiration_date_override"
+						 value="1"
+						 data-original="{% if user.expiration_date_override == 1 %}1{% else %}0{% endif %}"
+						 {% if user.expiration_date_override == 1 or ns.is_media_admin %}checked{% endif %}
+						 {% if ns.is_media_admin %}disabled{% endif %}
+						 class="rounded border-slate-700 bg-slate-950 text-indigo-500">
 
-			  <span class="text-slate-300">
-				{{ t("enabled") }}
-			  </span>
-			</label>
+				  <span class="text-slate-300">
+					{{ t("enabled") }}
+				  </span>
+				</label>
+
+				<div id="lifetime_override_notice"
+					 class="hidden mt-2 text-xs text-purple-300">
+				  {{ t("managed_by_lifetime_subscription") }}
+				</div>
 		  </label>
 
 		  <!-- Max streams override -->
@@ -918,6 +928,58 @@
 	}
 }
 </style>
+<script>
+(function () {
+
+  const subscriptionSelect = document.getElementById("subscription_template_id");
+  const overrideCheckbox = document.getElementById("expiration_date_override_cb");
+  const notice = document.getElementById("lifetime_override_notice");
+
+  if (!subscriptionSelect || !overrideCheckbox) {
+    return;
+  }
+
+  function updateLifetimeOverride() {
+
+    const selected =
+      subscriptionSelect.options[subscriptionSelect.selectedIndex];
+
+    const isLifetime =
+      selected &&
+      selected.dataset &&
+      selected.dataset.lifetime === "1";
+
+    if (isLifetime) {
+
+      overrideCheckbox.checked = true;
+      overrideCheckbox.disabled = true;
+
+      if (notice) {
+        notice.classList.remove("hidden");
+      }
+
+    } else {
+
+      overrideCheckbox.disabled = false;
+
+      overrideCheckbox.checked =
+        overrideCheckbox.dataset.original === "1";
+
+      if (notice) {
+        notice.classList.add("hidden");
+      }
+    }
+  }
+
+  subscriptionSelect.addEventListener(
+    "change",
+    updateLifetimeOverride
+  );
+
+  updateLifetimeOverride();
+
+})();
+</script>
 </form>
 
 <!-- ================= Jellyfin password modal ================= -->

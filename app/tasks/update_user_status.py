@@ -182,7 +182,16 @@ def run(task_id: int, db):
         # Utilisateurs
         # ----------------------------------------------------
         users = db.query(
-            "SELECT id, status, expiration_date, expiration_date_override FROM vodum_users"
+            """
+            SELECT
+                u.id,
+                u.status,
+                u.expiration_date,
+                u.expiration_date_override,
+                COALESCE(st.is_lifetime, 0) AS subscription_is_lifetime
+            FROM vodum_users u
+            LEFT JOIN subscription_templates st ON st.id = u.subscription_template_id
+            """
         )
 
         log.debug(f"{len(users)} users loaded")
@@ -196,8 +205,10 @@ def run(task_id: int, db):
             """
             SELECT u.id, u.status
             FROM vodum_users u
+            LEFT JOIN subscription_templates st ON st.id = u.subscription_template_id
             LEFT JOIN media_users mu ON mu.vodum_user_id = u.id
             WHERE (u.expiration_date IS NULL OR u.expiration_date = '')
+              AND COALESCE(st.is_lifetime, 0) = 0
             GROUP BY u.id
             HAVING COUNT(mu.id) = 0
             """
@@ -234,6 +245,8 @@ def run(task_id: int, db):
             uid = user["id"]
             old_status = user["status"]
             expiration_override = int(user["expiration_date_override"] or 0)
+            subscription_is_lifetime = int(user["subscription_is_lifetime"] or 0) == 1
+            expiration_override_enabled = expiration_override == 1 or subscription_is_lifetime
             expiration_date = user["expiration_date"]
 
             # Statuts manuels / administratifs :
@@ -298,34 +311,49 @@ def run(task_id: int, db):
             # Automatic expiration override (+1 year)
             # ----------------------------------------------------
 
-            if expiration_override == 1 and expiration_date:
-
+            if expiration_override_enabled:
                 try:
-                    exp_date = datetime.strptime(
-                        expiration_date,
-                        "%Y-%m-%d"
-                    ).date()
+                    if expiration_date:
+                        exp_date = datetime.strptime(
+                            expiration_date,
+                            "%Y-%m-%d"
+                        ).date()
+                    else:
+                        exp_date = today
 
                     warning_date = exp_date - timedelta(days=preavis_days)
 
                     if today >= warning_date:
+                        new_expiration_date = exp_date
 
-                        new_expiration = (
-                            exp_date + timedelta(days=365)
-                        ).isoformat()
+                        while new_expiration_date - timedelta(days=preavis_days) <= today:
+                            new_expiration_date = new_expiration_date + timedelta(days=365)
+
+                        new_expiration = new_expiration_date.isoformat()
 
                         db.execute(
                             """
                             UPDATE vodum_users
-                            SET expiration_date = ?
+                            SET expiration_date = ?,
+                                status = 'active',
+                                last_status = CASE
+                                    WHEN status != 'active' THEN status
+                                    ELSE last_status
+                                END,
+                                status_changed_at = CASE
+                                    WHEN status != 'active' THEN datetime('now')
+                                    ELSE status_changed_at
+                                END
                             WHERE id = ?
                             """,
                             (new_expiration, uid),
                         )
 
+                        source = "lifetime subscription" if subscription_is_lifetime else "expiration override"
+
                         log.info(
-                            f"[USER {uid}] expiration override applied "
-                            f"{expiration_date} -> {new_expiration}"
+                            f"[USER {uid}] {source} applied "
+                            f"{expiration_date or 'empty'} -> {new_expiration}"
                         )
 
                         updated += 1

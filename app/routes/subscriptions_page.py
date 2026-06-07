@@ -128,6 +128,7 @@ def register(app):
               subscription_value,
               is_default,
               is_enabled,
+              is_lifetime,
               policies_json,
               created_at,
               updated_at
@@ -451,9 +452,6 @@ def register(app):
         except Exception:
             subscription_value = 0
 
-        if duration_days < 1:
-            duration_days = 1
-
         if subscription_value < 0:
             subscription_value = 0
 
@@ -461,6 +459,12 @@ def register(app):
         policies = _parse_json_list(policies_json)
         is_default = 1 if request.form.get("is_default") == "1" else 0
         is_enabled = 1 if request.form.get("is_enabled") == "1" else 0
+        is_lifetime = 1 if request.form.get("is_lifetime") == "1" else 0
+
+        if is_lifetime:
+            duration_days = 0
+        elif duration_days < 1:
+            duration_days = 1
 
         if not name:
             flash("subscription_template_name_required", "error")
@@ -508,11 +512,12 @@ def register(app):
                   subscription_value=?,
                   is_default=?,
                   is_enabled=?,
+                  is_lifetime=?,
                   policies_json=?,
                   updated_at=CURRENT_TIMESTAMP
                 WHERE id=?
                 """,
-                (name, notes, duration_days, subscription_value, is_default, is_enabled, json.dumps(clean), template_id),
+                (name, notes, duration_days, subscription_value, is_default, is_enabled, is_lifetime, json.dumps(clean), template_id),
             )
             refreshed = 0
             assigned_users = db.query(
@@ -553,10 +558,11 @@ def register(app):
                   subscription_value,
                   is_default,
                   is_enabled,
+                  is_lifetime,
                   policies_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (name, notes, duration_days, subscription_value, is_default, is_enabled, json.dumps(clean)),
+                (name, notes, duration_days, subscription_value, is_default, is_enabled, is_lifetime, json.dumps(clean)),
             )
             add_log("info", "subscriptions", f"Template created: {name}")
             flash("subscription_template_created", "success")
@@ -600,8 +606,9 @@ def register(app):
               subscription_value,
               is_default,
               is_enabled,
+              is_lifetime,
               policies_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 new_name,
@@ -610,6 +617,7 @@ def register(app):
                 tpl.get("subscription_value") or 0,
                 0,
                 int(tpl.get("is_enabled") or 0),
+                int(tpl.get("is_lifetime") or 0),
                 tpl.get("policies_json") or "[]",
             ),
         )

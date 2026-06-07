@@ -722,6 +722,7 @@ def run_migrations():
     ensure_column(cursor, "subscription_templates", "subscription_value", "REAL DEFAULT 0")
     ensure_column(cursor, "subscription_templates", "is_default", "INTEGER DEFAULT 0")
     ensure_column(cursor, "subscription_templates", "is_enabled", "INTEGER DEFAULT 1")
+    ensure_column(cursor, "subscription_templates", "is_lifetime", "INTEGER DEFAULT 0")
     conn.commit()
 
     # Seed marker: default subscription templates must be inserted only once.
@@ -1091,6 +1092,7 @@ def run_migrations():
 
     if table_exists(cursor, "comm_templates") and comm_templates_schema_needs_upgrade():
         print("🛠 Upgrading comm_templates schema (add expiration_change trigger + direction)")
+        cursor.execute("PRAGMA legacy_alter_table=ON")
         cursor.execute("ALTER TABLE comm_templates RENAME TO comm_templates_old")
 
         cursor.execute("""
@@ -1132,6 +1134,7 @@ def run_migrations():
         """)
 
         cursor.execute("DROP TABLE comm_templates_old")
+        cursor.execute("PRAGMA legacy_alter_table=OFF")
         conn.commit()
         print("✔ comm_templates schema upgraded.")
 
@@ -1427,6 +1430,155 @@ def run_migrations():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_comm_history_sent_at ON comm_history(sent_at DESC);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_comm_history_user ON comm_history(user_id, sent_at DESC);")
         conn.commit()
+
+    # -------------------------------------------------
+    # Repair old DBs where SQLite rewrote foreign keys
+    # from comm_templates to comm_templates_old during
+    # the comm_templates schema upgrade.
+    # -------------------------------------------------
+    def _table_references_comm_templates_old(table_name):
+        if not table_exists(cursor, table_name):
+            return False
+
+        cursor.execute(f"PRAGMA foreign_key_list({table_name})")
+        return any((row[2] or "") == "comm_templates_old" for row in cursor.fetchall() or [])
+
+    def _repair_comm_scheduled_fk():
+        if not _table_references_comm_templates_old("comm_scheduled"):
+            return
+
+        print("🛠 Repairing comm_scheduled foreign key: comm_templates_old -> comm_templates")
+
+        cursor.execute("ALTER TABLE comm_scheduled RENAME TO comm_scheduled_old")
+
+        cursor.execute("""
+        CREATE TABLE comm_scheduled (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            template_id INTEGER NOT NULL,
+            vodum_user_id INTEGER NOT NULL,
+            provider TEXT NOT NULL CHECK(provider IN ('plex','jellyfin')),
+            server_id INTEGER,
+            send_at TIMESTAMP NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','sent','error')),
+            last_error TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            attempt_count INTEGER NOT NULL DEFAULT 0,
+            max_attempts INTEGER NOT NULL DEFAULT 10,
+            next_attempt_at TIMESTAMP DEFAULT NULL,
+            last_attempt_at TIMESTAMP DEFAULT NULL,
+            payload_json TEXT DEFAULT NULL,
+            dedupe_key TEXT DEFAULT NULL,
+            channels_sent TEXT DEFAULT NULL,
+            FOREIGN KEY(template_id) REFERENCES comm_templates(id) ON DELETE CASCADE,
+            FOREIGN KEY(vodum_user_id) REFERENCES vodum_users(id) ON DELETE CASCADE,
+            FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE SET NULL
+        );
+        """)
+
+        cursor.execute("""
+        INSERT INTO comm_scheduled(
+            id, template_id, vodum_user_id, provider, server_id, send_at,
+            status, last_error, created_at, updated_at,
+            attempt_count, max_attempts, next_attempt_at, last_attempt_at,
+            payload_json, dedupe_key, channels_sent
+        )
+        SELECT
+            id, template_id, vodum_user_id, provider, server_id, send_at,
+            status, last_error, created_at, updated_at,
+            COALESCE(attempt_count, 0),
+            COALESCE(max_attempts, 10),
+            next_attempt_at,
+            last_attempt_at,
+            payload_json,
+            dedupe_key,
+            channels_sent
+        FROM comm_scheduled_old
+        """)
+
+        cursor.execute("DROP TABLE comm_scheduled_old")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_comm_scheduled_due ON comm_scheduled(status, send_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_comm_scheduled_user ON comm_scheduled(vodum_user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_comm_scheduled_retry ON comm_scheduled(status, next_attempt_at)")
+        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_comm_scheduled_dedupe ON comm_scheduled(dedupe_key)")
+
+    def _repair_comm_template_attachments_fk():
+        if not _table_references_comm_templates_old("comm_template_attachments"):
+            return
+
+        print("🛠 Repairing comm_template_attachments foreign key: comm_templates_old -> comm_templates")
+
+        cursor.execute("ALTER TABLE comm_template_attachments RENAME TO comm_template_attachments_old")
+
+        cursor.execute("""
+        CREATE TABLE comm_template_attachments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            template_id INTEGER NOT NULL,
+            filename TEXT NOT NULL,
+            mime_type TEXT,
+            path TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(template_id) REFERENCES comm_templates(id) ON DELETE CASCADE
+        );
+        """)
+
+        cursor.execute("""
+        INSERT INTO comm_template_attachments(
+            id, template_id, filename, mime_type, path, created_at
+        )
+        SELECT
+            id, template_id, filename, mime_type, path, created_at
+        FROM comm_template_attachments_old
+        """)
+
+        cursor.execute("DROP TABLE comm_template_attachments_old")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_comm_template_attachments_template ON comm_template_attachments(template_id)")
+
+    def _repair_comm_history_fk():
+        if not _table_references_comm_templates_old("comm_history"):
+            return
+
+        print("🛠 Repairing comm_history foreign key: comm_templates_old -> comm_templates")
+
+        cursor.execute("ALTER TABLE comm_history RENAME TO comm_history_old")
+
+        cursor.execute("""
+        CREATE TABLE comm_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          kind TEXT NOT NULL CHECK(kind IN ('template','campaign')),
+          template_id INTEGER NULL,
+          campaign_id INTEGER NULL,
+          user_id INTEGER NULL,
+          channel_used TEXT NOT NULL CHECK(channel_used IN ('email','discord')),
+          status TEXT NOT NULL CHECK(status IN ('sent','failed')),
+          error TEXT NULL,
+          sent_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          meta_json TEXT NULL,
+          FOREIGN KEY(template_id) REFERENCES comm_templates(id) ON DELETE SET NULL,
+          FOREIGN KEY(campaign_id) REFERENCES comm_campaigns(id) ON DELETE SET NULL,
+          FOREIGN KEY(user_id) REFERENCES vodum_users(id) ON DELETE SET NULL
+        );
+        """)
+
+        cursor.execute("""
+        INSERT INTO comm_history(
+            id, kind, template_id, campaign_id, user_id,
+            channel_used, status, error, sent_at, meta_json
+        )
+        SELECT
+            id, kind, template_id, campaign_id, user_id,
+            channel_used, status, error, sent_at, meta_json
+        FROM comm_history_old
+        """)
+
+        cursor.execute("DROP TABLE comm_history_old")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_comm_history_sent_at ON comm_history(sent_at DESC)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_comm_history_user ON comm_history(user_id, sent_at DESC)")
+
+    _repair_comm_scheduled_fk()
+    _repair_comm_template_attachments_fk()
+    _repair_comm_history_fk()
+    conn.commit()
 
     # One-time migration (best effort, no data loss): old → unified
     try:

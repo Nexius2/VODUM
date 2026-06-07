@@ -347,9 +347,36 @@ def register(app):
         )
         current_referral = dict(current_referral) if current_referral else None
 
+        selected_subscription_is_lifetime = False
+        if requested_subscription_template_id is not None:
+            selected_subscription = db.query_one(
+                """
+                SELECT is_lifetime
+                FROM subscription_templates
+                WHERE id = ?
+                """,
+                (requested_subscription_template_id,),
+            )
+            selected_subscription_is_lifetime = (
+                int(selected_subscription["is_lifetime"] or 0) == 1
+                if selected_subscription
+                else False
+            )
+
         # Optional per-user override
         # Empty or 0 => NULL (no override, policy applies)
-        expiration_date_override = 1 if form.get("expiration_date_override") == "1" else 0
+        #
+        # Lifetime subscriptions already enable the same automatic extension
+        # in update_user_status.py through:
+        # expiration_override == 1 OR subscription_is_lifetime.
+        #
+        # So when Lifetime is selected, we keep the real stored override value
+        # instead of forcing it to 1. The checkbox is only displayed as checked
+        # and disabled in the UI to make the behavior clear.
+        if selected_subscription_is_lifetime:
+            expiration_date_override = int(user["expiration_date_override"] or 0)
+        else:
+            expiration_date_override = 1 if form.get("expiration_date_override") == "1" else 0
         raw_override = form.get("max_streams_override")
         max_streams_override = None
         if raw_override is not None:
@@ -949,7 +976,12 @@ def register(app):
         user["subscription_template_name"] = subscription_template["name"] if subscription_template else None
 
         subscription_templates = db.query(
-            "SELECT id, name FROM subscription_templates ORDER BY name ASC"
+            """
+            SELECT id, name, is_lifetime
+            FROM subscription_templates
+            WHERE is_enabled = 1
+            ORDER BY name ASC
+            """
         ) or []
 
         # --------------------------------------------------
