@@ -1287,6 +1287,8 @@
   "comm_var_brand_name_desc": "Nom de marque configuré dans les réglages de VODUM.",
   "restore_in_progress": "Veuillez patienter pendant la restauration...",
   "restore_in_progress_description": "VODUM importe et restaure votre sauvegarde. L'application peut redémarrer automatiquement. Ne fermez pas cette page.",
-  "restore_in_progress_warning": "Cette opération peut prendre plusieurs minutes selon la taille de la sauvegarde."
+  "restore_in_progress_warning": "Cette opération peut prendre plusieurs minutes selon la taille de la sauvegarde.",
+  "lifetime_subscription": "Abonnement à vie",
+  "managed_by_lifetime_subscription": "Géré automatiquement par l'abonnement à vie"
 
 }

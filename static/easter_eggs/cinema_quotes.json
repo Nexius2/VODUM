@@ -595,6 +595,30 @@
 "quotes":{"en":"We are the walking dead.","fr":"Nous sommes les morts-vivants."}
 },
 {
+  "key": "heman_power_grayskull",
+  "media_type": "tv",
+  "ids": {
+    "imdb": "tt0085011",
+    "tmdb": "758"
+  },
+  "quotes": {
+    "en": "By the power of Grayskull, I have the power!",
+    "fr": "Par le pouvoir du crâne ancestral, je détiens la force toute-puissante !"
+  }
+},
+{
+  "key": "heman_force_toute_puissante",
+  "media_type": "tv",
+  "ids": {
+    "imdb": "tt0085011",
+    "tmdb": "758"
+  },
+  "quotes": {
+    "en": "I have the power!",
+    "fr": "Je détiens la force toute-puissante !"
+  }
+},
+{
 "key":"walkingdead_corals",
 "media_type":"tv",
 "ids":{"imdb":"tt1520211","tmdb":"1402"},
@@ -707,5 +731,17 @@
 "media_type":"tv",
 "ids":{"imdb":"tt2356777","tmdb":"46648"},
 "quotes":{"en":"Time is a flat circle.","fr":"Le temps est un cercle plat."}
+},
+{
+  "key": "masters_of_the_universe_2026_power",
+  "media_type": "movie",
+  "ids": {
+    "imdb": "tt0427340",
+    "tmdb": "0"
+  },
+  "quotes": {
+    "en": "By the Power of Grayskull! I have the power!",
+    "fr": "Par le pouvoir du Crâne Ancestral ! Je détiens la force toute-puissante !"
+  }
 }
 ]

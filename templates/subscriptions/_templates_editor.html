@@ -89,6 +89,16 @@
                      class="rounded border-slate-700 bg-slate-900">
               {{ t("enabled") }}
             </label>
+
+            <label class="inline-flex items-center gap-2 text-xs text-slate-300 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2">
+              <input type="checkbox"
+                     name="is_lifetime"
+                     id="tpl_is_lifetime"
+                     value="1"
+                     class="rounded border-slate-700 bg-slate-900"
+                     onchange="updateLifetimeDurationState()">
+              {{ t("lifetime_subscription") }}
+            </label>
           </div>
 
           <div class="text-xs text-slate-500 mt-2">
@@ -473,6 +483,29 @@
     document.getElementById("simple_devices_allowed").value = "";
   }
 
+  function updateLifetimeDurationState() {
+    const lifetime = document.getElementById("tpl_is_lifetime");
+    const duration = document.getElementById("tpl_duration_days");
+
+    if (!lifetime || !duration) return;
+
+    if (lifetime.checked) {
+      duration.dataset.previousValue = duration.value || "30";
+      duration.value = "";
+      duration.disabled = true;
+      duration.placeholder = "{{ t('lifetime_subscription') }}";
+      duration.classList.add("opacity-50", "cursor-not-allowed");
+    } else {
+      duration.disabled = false;
+      duration.placeholder = "30";
+      duration.classList.remove("opacity-50", "cursor-not-allowed");
+
+      if (!duration.value) {
+        duration.value = duration.dataset.previousValue || "30";
+      }
+    }
+  }
+
   function resetTemplateEditor() {
     document.getElementById("template_id").value = "";
     document.getElementById("tpl_name").value = "";
@@ -481,6 +514,8 @@
     document.getElementById("tpl_subscription_value").value = "0";
     document.getElementById("tpl_is_default").checked = false;
     document.getElementById("tpl_is_enabled").checked = true;
+    document.getElementById("tpl_is_lifetime").checked = false;
+    updateLifetimeDurationState();
     TEMPLATE_POLICIES = [];
     EDIT_INDEX = null;
     reset{{ t("simple") }}Rules();
@@ -857,6 +892,8 @@
     document.getElementById("tpl_subscription_value").value = tpl.subscription_value || 0;
     document.getElementById("tpl_is_default").checked = String(tpl.is_default || "0") === "1";
     document.getElementById("tpl_is_enabled").checked = String(tpl.is_enabled ?? 1) === "1";
+    document.getElementById("tpl_is_lifetime").checked = String(tpl.is_lifetime || "0") === "1";
+    updateLifetimeDurationState();
 
     TEMPLATE_POLICIES = [];
     try {
@@ -887,6 +924,7 @@
       el.addEventListener("change", () => { sync{{ t("simple") }}RulesToPolicies(); syncPoliciesJson(); });
     });
 
+    updateLifetimeDurationState();
     renderPoliciesTable();
     syncPoliciesJson();
     resetPolicyBuilder();

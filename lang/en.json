@@ -1287,6 +1287,8 @@
   "comm_var_brand_name_desc": "Brand name configured in VODUM settings.",
   "restore_in_progress": "Please wait while restoring...",
   "restore_in_progress_description": "VODUM is uploading and restoring your backup. The application may restart automatically. Do not close this page.",
-  "restore_in_progress_warning": "This operation may take several minutes depending on the backup size."
+  "restore_in_progress_warning": "This operation may take several minutes depending on the backup size.",
+  "lifetime_subscription": "Lifetime subscription",
+  "managed_by_lifetime_subscription": "Managed automatically by Lifetime subscription"
 
 }
