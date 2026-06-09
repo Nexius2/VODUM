@@ -11,15 +11,18 @@
 Empêcher que les accès Plex soient supprimés après réactivation d’un utilisateur.
 
 ---
-* [~] Les accès remis ne sont plus supprimés après sync_plex
-* [~] Aucun ancien job ne casse les droits
+* [x] Les accès remis ne sont plus supprimés après sync_plex
+  - Confirmé dans `app/tasks/sync_plex.py` : si un media_job Plex `queued/running` existe, la sync Plex saute l’utilisateur au lieu d’écraser ses accès.
+* [x] Aucun ancien job queued ne casse les droits
+  - Confirmé dans `app/core/media_jobs.py` : les anciens jobs `queued` du même user/server sont annulés avant insertion du nouveau job.
+  - Confirmé dans `app/api/subscriptions.py` : à la réactivation, les anciens jobs Plex `queued/running/processed=0` sont marqués `canceled` avant de recréer un sync complet.
 
 ## 🔴 Résultat attendu
 
-* [~] Les accès remis ne sont plus supprimés après sync_plex
-* [~] Aucun ancien job ne casse les droits
-* [~] Plex reflète correctement la DB — partiel : les changements d’options/filtres Plex créent maintenant un media_job `apply_plex_access_updates`
-* [ ] Les réactivations sont fiables à 100% — à valider sur un cycle complet invitation → expiration → réactivation → sync_plex
+* [x] Les accès remis ne sont plus supprimés après sync_plex
+* [x] Aucun ancien job queued ne casse les droits
+* [x] Plex reflète correctement la DB — les changements d’options/filtres Plex créent maintenant un media_job `apply_plex_access_updates`
+* [~] Les réactivations sont fiables à 100% — logique présente, mais cycle complet réel à valider : invitation → expiration → réactivation → sync_plex
 
 ---
 
@@ -33,20 +36,27 @@ Empêcher que les accès Plex soient supprimés après réactivation d’un util
 
 ## 🔴 Problème constaté
 
-* [ ] Si Vodum retire toutes les bibliothèques Plex à l’expiration, Plex peut faire disparaître l’utilisateur de la liste des utilisateurs partagés
-* [ ] Après renouvellement, `apply_plex_access_updates` peut échouer avec `[PLEX RESOLVE] unable to resolve user without re-inviting`
-* [ ] La simple modification de la date de renouvellement ne suffit donc pas toujours à restaurer l’accès
+* [x] Si Vodum retire toutes les bibliothèques Plex à l’expiration, Plex peut faire disparaître l’utilisateur de la liste des utilisateurs partagés
+  - Couvert côté UI par l’avertissement du mode `disable`.
+* [x] Après renouvellement, `apply_plex_access_updates` peut échouer avec `[PLEX RESOLVE] unable to resolve user without re-inviting`
+  - Couvert par l’ajout du mode `warn_only`, recommandé pour Plex.
+* [x] La simple modification de la date de renouvellement ne suffit donc pas toujours à restaurer l’accès
+  - Couvert par la création d’un sync Plex complet à la réactivation.
 
 ---
 
 ## ✅ Solution attendue
 
-* [ ] Ajouter/clarifier un mode `soft-disable` Plex : ne jamais casser le partage Plex à l’expiration
-* [ ] En mode avertissement, conserver les bibliothèques et bloquer la lecture via policy `expired_subscription`
-* [ ] En mode suppression dure, afficher clairement que la réactivation peut nécessiter une nouvelle invitation Plex
-* [ ] Au renouvellement, supprimer automatiquement la policy `expired_subscription` puis déclencher la restauration des accès
+* [x] Ajouter/clarifier un mode `soft-disable` Plex : ne jamais casser le partage Plex à l’expiration
+  - Réalisé sous le nom `warn_only`.
+* [x] En mode avertissement, conserver les bibliothèques et bloquer la lecture via policy `expired_subscription`
+  - Confirmé dans `app/tasks/expired_subscription_manager.py` : `warn_only` crée la policy et ne lance pas `_disable_access_for_user`.
+* [x] En mode suppression dure, afficher clairement que la réactivation peut nécessiter une nouvelle invitation Plex
+  - Confirmé dans `templates/settings/partials/_settings_subscription.html` + traductions.
+* [x] Au renouvellement, supprimer automatiquement la policy `expired_subscription` puis déclencher la restauration des accès
+  - Confirmé dans `app/api/subscriptions.py` : suppression policy + queue sync Plex complet après réactivation.
 * [ ] Ajouter un test complet : actif → expiré → policy appliquée → renouvellement → policy supprimée → accès restauré sans ré-invitation
-* [ ] Ajouter un message UI/settings expliquant la différence entre expiration avec blocage lecture et expiration avec retrait d’accès Plex
+* [x] Ajouter un message UI/settings expliquant la différence entre expiration avec blocage lecture et expiration avec retrait d’accès Plex
 
 ---
 
@@ -65,7 +75,7 @@ Empêcher que les accès Plex soient supprimés après réactivation d’un util
 ## Monitoring (reste à finaliser)
 
 * [ ] Utiliser les posters/background stockés en DB pour les tops (overview / libraries)
-* [ ] dans chaque monitoring, les posters liés aux films ne sont pas ceux du films en question
+* [x] Dans chaque monitoring, les posters liés aux films ne sont pas ceux du film en question
 
 ## Task system
 
@@ -84,6 +94,7 @@ Empêcher que les accès Plex soient supprimés après réactivation d’un util
 ## Routes critiques
 
 * [~] Sortir complètement la création de `media_jobs` des routes web
+  - Encore présent notamment dans `app/routes/servers.py`, `app/routes/users_actions.py`, `app/routes/users_detail.py`.
 * [ ] Recenser toutes les routes GET encore non conformes
 * [ ] Lister explicitement les exceptions autorisées (proxy média)
 
@@ -99,15 +110,16 @@ Empêcher que les accès Plex soient supprimés après réactivation d’un util
 ## Sync Plex
 
 * [ ] Améliorer le matching (name + type + server)
-* [ ] Éviter pertes de données
+* [~] Éviter pertes de données
+  - Partiel : protection ajoutée si job Plex pending/running, mais la fiabilité reste à valider sur cycle réel.
 * [ ] Nettoyer les données héritées (Tautulli / thumbs)
 
 ## Performance
 
 * [ ] Découper les traitements lourds
 * [~] Mettre en cache les résultats complexes
-* [~] Limiter fréquence appels Plex — partiel : cache disque des artworks + headers HIT/MISS/STALE, reste à supprimer les appels live non-images
-* [~] Stocker/cache les posters pour éviter requêtes répétées — cache disque `/appdata/artwork_cache` avec TTL + fallback stale
+* [~] Limiter fréquence appels Plex — cache disque artwork présent, reste à supprimer les appels live non-images
+* [x] Stocker/cache les posters pour éviter requêtes répétées — cache disque `/appdata/artwork_cache` avec TTL + fallback stale
 * [x] Ajouter une tâche de warmup cache artwork pour précharger dashboard/monitoring
 * [x] Ajouter nettoyage périodique du cache artwork trop ancien
 * [ ] Déplacer la logique proxy/cache artwork hors route vers un service dédié
@@ -140,7 +152,8 @@ Empêcher que les accès Plex soient supprimés après réactivation d’un util
 
 ## Plex access
 
-* [ ] Fiabiliser la réactivation après expiration sans nouvelle invitation Plex quand le mode soft-disable est utilisé
+* [~] Fiabiliser la réactivation après expiration sans nouvelle invitation Plex quand le mode soft-disable est utilisé
+  - Logique `warn_only` présente ; reste test complet.
 * [ ] Corriger états incohérents (already invited / request sent)
 * [ ] Décaler expiration si compte non utilisé
 
@@ -164,7 +177,6 @@ Empêcher que les accès Plex soient supprimés après réactivation d’un util
 * [ ] Top played fiable
 * [ ] Masquer libraries sans activité
 
-
 ---
 
 # 🧠 6. UI / UX
@@ -172,7 +184,7 @@ Empêcher que les accès Plex soient supprimés après réactivation d’un util
 ## Tables
 
 * [ ] Pagination standard
-* [x] Sauvegarde filtres — partiel : Users mémorise sort/order/status en cookies
+* [x] Sauvegarde filtres — Users mémorise sort/order/status en cookies
 * [ ] Indicateur de tri
 * [ ] Click ligne → modal
 
@@ -186,7 +198,7 @@ Empêcher que les accès Plex soient supprimés après réactivation d’un util
 
 * [ ] Supprimer boutons inutiles
 * [~] Ajouter bulk actions — partiel : bulk delete policies sécurisé, reste à généraliser aux tableaux principaux
-* [x] Recherche complète users — partiel : filtres statuts corrigés et panneau filtres amélioré, reste recherche multi-champs complète
+* [x] Recherche complète users — statuts corrigés + panneau filtres amélioré + recherche multi-champs déjà étendue
 * [ ] Vérifier multilangue partout
 
 ---
@@ -229,4 +241,5 @@ Empêcher que les accès Plex soient supprimés après réactivation d’un util
 * [ ] API publique
 
 ---
+
 

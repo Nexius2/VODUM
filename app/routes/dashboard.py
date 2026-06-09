@@ -140,12 +140,12 @@ def register(app):
                 SELECT COUNT(*) AS cnt
                 FROM stream_enforcements
                 WHERE action = 'kill'
-                  AND datetime(created_at) >= datetime('now', '-48 hours')
+                  AND datetime(created_at) >= datetime('now', '-7 days')
                 """
             )
-            stats["kills_48h"] = int(row["cnt"] or 0) if row else 0
+            stats["kills_7d"] = int(row["cnt"] or 0) if row else 0
         else:
-            stats["kills_48h"] = 0
+            stats["kills_7d"] = 0
 
         subscription_stats = []
         subscription_stats_more = False

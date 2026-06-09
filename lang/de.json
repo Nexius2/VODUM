@@ -1287,6 +1287,9 @@
   "restore_in_progress_description": "VODUM lädt Ihr Backup hoch und stellt es wieder her. Die Anwendung kann dabei automatisch neu gestartet werden. Bitte schließen Sie diese Seite nicht.",
   "restore_in_progress_warning": "Dieser Vorgang kann je nach Größe des Backups mehrere Minuten dauern.",
   "lifetime_subscription": "Lebenslanges Abonnement",
-  "managed_by_lifetime_subscription": "Automatisch durch das lebenslange Abonnement verwaltet"
+  "managed_by_lifetime_subscription": "Automatisch durch das lebenslange Abonnement verwaltet",
+  "subscription_template_invalid_ip_streams_limit": "Die maximale Anzahl von IPs pro Benutzer darf nicht höher sein als die maximale Anzahl von Streams pro Benutzer.",
+  "streams_killed": "Streams killed",
+  "last_7_days": "in den letzten 7 Tagen"
 
 }

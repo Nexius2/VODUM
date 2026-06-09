@@ -1287,6 +1287,9 @@
   "restore_in_progress_description": "VODUM está cargando y restaurando su copia de seguridad. La aplicación puede reiniciarse automáticamente. No cierre esta página.",
   "restore_in_progress_warning": "Esta operación puede tardar varios minutos dependiendo del tamaño de la copia de seguridad.",
   "lifetime_subscription": "Suscripción de por vida",
-  "managed_by_lifetime_subscription": "Gestionado automáticamente por la suscripción de por vida"
+  "managed_by_lifetime_subscription": "Gestionado automáticamente por la suscripción de por vida",
+  "subscription_template_invalid_ip_streams_limit": "El número máximo de IP por usuario no puede ser superior al número máximo de streams por usuario.",
+  "streams_killed": "Streams killed",
+  "last_7_days": "durante los últimos 7 días"
 
 }
