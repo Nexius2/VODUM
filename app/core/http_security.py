@@ -3,6 +3,7 @@ from __future__ import annotations
 from urllib.parse import urljoin, urlsplit
 
 import requests
+import json
 
 
 def url_origin(value: object) -> tuple[str, str, int] | None:
@@ -33,6 +34,19 @@ def server_allowed_origins(server) -> set[tuple[str, str, int]]:
         )
         if origin is not None
     }
+
+
+def server_verify_tls(server) -> bool:
+    if isinstance(server, dict):
+        settings_json = server.get("settings_json")
+    else:
+        settings_json = getattr(server, "settings_json", None)
+
+    try:
+        settings = json.loads(settings_json or "{}")
+    except (TypeError, ValueError):
+        settings = {}
+    return settings.get("verify_tls", True) is not False
 
 
 class ConfiguredHostSession(requests.Session):
@@ -66,7 +80,9 @@ def server_http_session(server, allowed_urls=(), default_timeout=None) -> Config
     origins.update(
         origin for origin in (url_origin(url) for url in allowed_urls) if origin
     )
-    return ConfiguredHostSession(origins, default_timeout=default_timeout)
+    session = ConfiguredHostSession(origins, default_timeout=default_timeout)
+    session.verify = server_verify_tls(server)
+    return session
 
 
 def plex_server_http_session(server, default_timeout=None) -> ConfiguredHostSession:

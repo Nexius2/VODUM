@@ -55,6 +55,7 @@ def create_backup_file(get_db: Callable[[], object], cfg: BackupConfig) -> str |
     try:
         backup_dir = ensure_backup_dir(cfg)
     except Exception:
+        logger.error("[BACKUP] Unable to prepare backup directory", exc_info=True)
         return None
 
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
@@ -109,7 +110,7 @@ def create_backup_file(get_db: Callable[[], object], cfg: BackupConfig) -> str |
             if "tmp_backup_path" in locals() and tmp_backup_path.exists():
                 tmp_backup_path.unlink()
         except Exception:
-            pass
+            logger.warning("[BACKUP] Unable to remove failed temporary backup", exc_info=True)
         return None
 
 
@@ -119,6 +120,7 @@ def list_backups(cfg: BackupConfig) -> list[dict]:
     try:
         backup_dir = ensure_backup_dir(cfg)
     except Exception:
+        logger.error("[BACKUP] Unable to list backups because backup directory is unavailable", exc_info=True)
         return []
 
     backups: list[dict] = []

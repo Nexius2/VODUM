@@ -6,6 +6,7 @@ import time
 import hashlib
 
 import requests
+from core.http_security import server_http_session
 from flask import request, Response, current_app, jsonify, abort, send_file
 
 from logging_utils import get_logger
@@ -153,7 +154,7 @@ def register(app):
         db = get_db()
         srv = db.query_one(
             """
-            SELECT id, LOWER(TRIM(type)) AS type, url, local_url, public_url, token
+            SELECT id, LOWER(TRIM(type)) AS type, url, local_url, public_url, token, settings_json
             FROM servers
             WHERE id = ?
               AND LOWER(TRIM(type)) IN ('plex','jellyfin')
@@ -181,8 +182,10 @@ def register(app):
         if not bases:
             abort(502)
 
+        http = server_http_session(srv)
+
         def _try_get(full_url, headers=None, params=None):
-            r = requests.get(full_url, headers=headers, params=params, timeout=10)
+            r = http.get(full_url, headers=headers, params=params, timeout=10)
             r.raise_for_status()
             return r
 
@@ -197,7 +200,7 @@ def register(app):
             if cached:
                 return cached
 
-            params = {"X-Plex-Token": token}
+            headers = {"X-Plex-Token": token}
 
             candidate_paths = []
             if path:
@@ -221,7 +224,7 @@ def register(app):
                 for base in bases:
                     try:
                         wait_for_plex_slot(base)
-                        r = _try_get(base + candidate_path, params=params)
+                        r = _try_get(base + candidate_path, headers=headers)
                         ct = r.headers.get("Content-Type") or "image/jpeg"
                         return _cached_image_response(cache_key, r.content, ct)
                     except Exception as e:
@@ -678,7 +681,6 @@ def register(app):
             params,
         )
         return json_rows(rows)
-
 
 
 

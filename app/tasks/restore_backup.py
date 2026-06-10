@@ -27,7 +27,7 @@ def _reset_tasks_engine_db_instance():
     try:
         tasks_engine.db._instance = None
     except Exception:
-        pass
+        log.warning("Unable to reset tasks engine database instance", exc_info=True)
 
 
 def _validate_sqlite_backup(candidate_path: Path) -> None:
@@ -363,7 +363,7 @@ def run(task_id: int, db):
     try:
         RESTORE_REQUEST_FILE.unlink(missing_ok=True)
     except Exception:
-        pass
+        log.warning("Unable to remove processed restore request marker", exc_info=True)
 
     _safe_restore_from_path(backup_path, db)
 

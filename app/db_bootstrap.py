@@ -914,6 +914,10 @@ def run_migrations():
     # Auth admin
     ensure_column(cursor, "settings", "admin_password_hash", "TEXT DEFAULT NULL")
     ensure_column(cursor, "settings", "auth_enabled", "INTEGER DEFAULT 1")
+    ensure_column(cursor, "settings", "wizard_active", "INTEGER DEFAULT NULL")
+    ensure_column(cursor, "settings", "wizard_completed", "INTEGER DEFAULT NULL")
+    ensure_column(cursor, "settings", "wizard_step", "INTEGER DEFAULT 1")
+    ensure_column(cursor, "settings", "wizard_state_json", "TEXT DEFAULT '{}'")
     ensure_column(cursor, "settings", "web_secure_cookies", "INTEGER DEFAULT 0")
     ensure_column(cursor, "settings", "web_cookie_samesite", "TEXT DEFAULT 'Lax'")
     ensure_column(cursor, "settings", "web_trust_proxy", "INTEGER DEFAULT 0")
@@ -3115,10 +3119,32 @@ def run_migrations():
         "debug_mode": 0,
         "admin_password_hash": None,
         "auth_enabled": 1,
+        "wizard_active": 1,
+        "wizard_completed": 0,
+        "wizard_step": 1,
+        "wizard_state_json": "{}",
         "web_secure_cookies": 0,
         "web_cookie_samesite": "Lax",
         "web_trust_proxy": 0,
     })
+    cursor.execute(
+        """
+        UPDATE settings
+        SET
+            wizard_completed = CASE
+                WHEN TRIM(COALESCE(admin_password_hash, '')) <> ''
+                 AND EXISTS (SELECT 1 FROM servers)
+                THEN 1 ELSE 0
+            END,
+            wizard_active = CASE
+                WHEN TRIM(COALESCE(admin_password_hash, '')) <> ''
+                 AND EXISTS (SELECT 1 FROM servers)
+                THEN 0 ELSE 1
+            END
+        WHERE id = 1
+          AND (wizard_completed IS NULL OR wizard_active IS NULL)
+        """
+    )
     conn.commit()
 
     encrypted_secrets = encrypt_communication_secrets(conn)

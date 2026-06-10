@@ -14,6 +14,7 @@ from core.backup import BackupConfig
 from core.i18n import init_i18n
 from core.repair.plex_media_users_repair import run_repair_if_needed
 from core.monitoring.plex_websocket import PlexWebsocketClient
+from utils.version import load_app_version
 
 from api.subscriptions import subscriptions_api
 from blueprints.users import users_bp
@@ -166,31 +167,7 @@ def fromjson_safe(value):
     return None
 
 
-def load_version():
-    candidate_paths = [
-        "/app/INFO",
-        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "INFO")),
-        os.path.abspath(os.path.join(os.getcwd(), "INFO")),
-    ]
-
-    info_path = next((p for p in candidate_paths if os.path.exists(p)), None)
-    if not info_path:
-        return "dev"
-
-    version = "dev"
-    try:
-        with open(info_path, encoding="utf-8", errors="ignore") as f:
-            for line in f:
-                if line.startswith("VERSION="):
-                    version = line.split("=", 1)[1].strip()
-                    break
-    except Exception:
-        return "dev"
-
-    return version
-
-
-APP_VERSION = load_version()
+APP_VERSION = load_app_version(fallback="dev")
 
 
 def _reset_maintenance_on_startup(app: Flask):

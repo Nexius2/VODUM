@@ -1,18 +1,19 @@
-import hashlib
 import json
 import platform
-import socket
+import threading
 import uuid
 from pathlib import Path
 import requests
 from utils.platform_detection import detect_platform
 from db_manager import DBManager
 from logging_utils import get_logger
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from utils.version import load_app_version
 
 TELEMETRY_URL = "https://vodum-telemetry.vodum-project.workers.dev/api/ingest"
 
 log = get_logger("telemetry")
+_SEND_LOCK = threading.Lock()
 
 
 def get_or_create_instance_id(db):
@@ -25,9 +26,7 @@ def get_or_create_instance_id(db):
     if current:
         return current
 
-    raw = f"{socket.gethostname()}-{uuid.getnode()}"
-
-    instance_id = hashlib.sha256(raw.encode()).hexdigest()[:32]
+    instance_id = uuid.uuid4().hex
 
     db.execute(
         "UPDATE settings SET telemetry_instance_id = ? WHERE id = 1",
@@ -37,73 +36,52 @@ def get_or_create_instance_id(db):
     return instance_id
 
 
+def _parse_utc_timestamp(value):
+    if not value:
+        return None
+    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _is_due(last_sent_at, now=None):
+    last_sent = _parse_utc_timestamp(last_sent_at)
+    if not last_sent:
+        return True
+    now = now or datetime.now(timezone.utc)
+    return now >= last_sent + timedelta(days=7)
+
+
+def _task_enabled(db):
+    row = db.query_one("SELECT enabled FROM tasks WHERE name='send_telemetry'")
+    return bool(row and int(row["enabled"] or 0) == 1)
+
+
 def run(task_id: int, db: DBManager):
-
-    settings_row = db.query_one(
-        """
-        SELECT telemetry_last_sent_at, debug_mode
-        FROM settings
-        WHERE id = 1
-        """
-    )
-
-    debug_mode_enabled = bool(
-        settings_row
-        and int(settings_row["debug_mode"] or 0) == 1
-    )
-
-    if debug_mode_enabled if "debug_mode_enabled" in locals() else False:
-        log.info("Anonymous telemetry task started")
-
-
-    if (
-        not debug_mode_enabled
-        and settings_row
-        and settings_row["telemetry_last_sent_at"]
-    ):
-
-        try:
-
-            from datetime import datetime, timedelta
-
-            last_sent = datetime.fromisoformat(
-                settings_row["telemetry_last_sent_at"]
-            )
-
-            next_allowed = last_sent + timedelta(days=7)
-
-            if datetime.utcnow() < next_allowed:
-
-                remaining = next_allowed - datetime.utcnow()
-
-                log.info(
-                    f"Telemetry skipped "
-                    f"(next send in {remaining.days} days)"
-                )
-
-                return {
-                    "success": True,
-                    "skipped": True
-                }
-
-        except Exception:
-            pass
-
-
-
-    settings = db.query_one(
-        "SELECT * FROM settings WHERE id = 1"
-    )
-
-    if not settings:
-        log.warning("Telemetry aborted: settings row not found")
-        return
-
-    if int(settings["enable_anonymous_telemetry"] or 0) != 1:
-        log.info("Anonymous telemetry disabled")
-        return
+    if not _SEND_LOCK.acquire(blocking=False):
+        return {"success": True, "skipped": True, "reason": "already_running"}
 
     try:
+        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+
+        if not settings:
+            log.warning("Telemetry aborted: settings row not found")
+            return {"success": False, "reason": "settings_missing"}
+
+        if int(settings["enable_anonymous_telemetry"] or 0) != 1:
+            return {"success": True, "skipped": True, "reason": "disabled"}
+
+        if not _task_enabled(db):
+            return {"success": True, "skipped": True, "reason": "task_disabled"}
+
+        debug_mode = int(settings["debug_mode"] or 0) == 1
+
+        try:
+            if not debug_mode and not _is_due(settings["telemetry_last_sent_at"]):
+                return {"success": True, "skipped": True, "reason": "rate_limited"}
+        except (TypeError, ValueError):
+            log.warning("Invalid telemetry_last_sent_at ignored")
 
         users = db.query_one(
             "SELECT COUNT(*) AS total FROM vodum_users WHERE status NOT IN ('expired', 'pending_invite')"
@@ -155,7 +133,7 @@ def run(task_id: int, db: DBManager):
             """
         )
         
-        version = "unknown"
+        version = load_app_version()
         update_pending_days = 0
 
         try:
@@ -175,33 +153,28 @@ def run(task_id: int, db: DBManager):
         except Exception:
             pass
 
-        try:
-
-            info_path = Path("/app/INFO")
-
-            if info_path.exists():
-
-                for line in info_path.read_text().splitlines():
-
-                    if line.startswith("VERSION="):
-                        version = line.split("=", 1)[1].strip()
-                        break
-
-        except Exception:
-            pass
+        if not version:
+            log.warning(
+                "Telemetry skipped: no valid VODUM version could be read from "
+                "VODUM_VERSION or an INFO file"
+            )
+            return {
+                "success": True,
+                "skipped": True,
+                "reason": "version_unavailable",
+            }
 
         platform_info = detect_platform()
 
         payload = {
             "instance_id": get_or_create_instance_id(db),
+            "schema_version": 1,
             "version": version,
             "platform": platform.system().lower(),
-            "platform_version": platform.version(),
-            "os": platform_info["os"],
             "runtime_platform": platform_info["platform"],
             "container": platform_info["container"],
             "virtualized": platform_info["virtualized"],
-            "python_version": platform.python_version(),
+            "python_version": ".".join(platform.python_version_tuple()[:2]),
             "docker": True,
             "managed_users": users["total"] if users else 0,
             "plex_servers": plex_servers["total"] if plex_servers else 0,
@@ -212,37 +185,39 @@ def run(task_id: int, db: DBManager):
             "policies_enabled": 1 if active_policies and active_policies["total"] > 0 else 0,
             "update_pending_days": update_pending_days,
         }
-        log.info("Telemetry building payload")
-        log.info(f"Telemetry payload prepared: {payload}")
-        log.info("Telemetry sending HTTP request")
+        log.info(
+            "Telemetry sending aggregate payload "
+            f"(version={version}, fields={','.join(sorted(payload))})"
+        )
 
         response = requests.post(
             TELEMETRY_URL,
             json=payload,
-            timeout=10
+            timeout=(5, 10),
+            headers={"User-Agent": f"VODUM/{version}"},
         )
 
         log.info(f"Telemetry HTTP response: {response.status_code}")
-        log.info(f"Telemetry HTTP body: {response.text}")
 
-        if response.status_code == 200:
+        if 200 <= response.status_code < 300:
 
             db.execute(
                 "UPDATE settings SET telemetry_last_sent_at = CURRENT_TIMESTAMP WHERE id = 1"
             )
 
             log.info("Anonymous telemetry successfully sent")
+            return {"success": True}
 
-        else:
+        log.warning(f"Telemetry failed with HTTP {response.status_code}")
+        return {"success": False, "reason": "http_error", "status_code": response.status_code}
 
-            log.warning(
-                f"Telemetry failed with HTTP {response.status_code}. "
-                "If Vodum has no internet access, it is recommended to disable anonymous telemetry in Settings."
-            )
-
-    except Exception as e:
+    except requests.RequestException as exc:
+        log.warning(f"Telemetry network error: {type(exc).__name__}")
+        return {"success": False, "reason": "network_error"}
+    except Exception as exc:
         log.exception(
-            f"Telemetry fatal error: {e}. "
-            "If Vodum has no internet access, it is recommended "
-            "to disable anonymous telemetry in Settings."
+            f"Telemetry fatal error: {type(exc).__name__}"
         )
+        return {"success": False, "reason": "internal_error"}
+    finally:
+        _SEND_LOCK.release()

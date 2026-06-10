@@ -27,6 +27,7 @@ COPY entrypoint.sh /app/entrypoint.sh
 COPY run.py /app/run.py
 COPY INFO /app/INFO
 RUN chmod 644 /app/INFO
+RUN grep -Eiq '^VERSION=v?[0-9]+\.[0-9]+\.[0-9]+([[:space:]._-]+(b|build)[0-9]+)?$' /app/INFO
 
 
 # Ensure entrypoint executable

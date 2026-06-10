@@ -801,6 +801,8 @@ def register(app):
                 ),
             }
 
+        settings["verify_tls"] = request.form.get("verify_tls") == "1"
+
         settings_json = encrypt_server_settings_json(
             json.dumps(settings) if settings else None
         )

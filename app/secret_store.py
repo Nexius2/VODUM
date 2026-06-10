@@ -32,6 +32,38 @@ def encryption_key_bytes() -> bytes:
     return _load_or_create_key()
 
 
+def encryption_key_status() -> dict:
+    env_key = (os.environ.get("VODUM_ENCRYPTION_KEY") or "").strip()
+    key_file = _key_file_path()
+    source = "environment" if env_key else "file"
+    try:
+        if env_key:
+            key_bytes = env_key.encode("ascii")
+        else:
+            key_bytes = key_file.read_text(encoding="ascii").strip().encode("ascii")
+        validate_encryption_key(key_bytes)
+        return {
+            "ok": True,
+            "source": source,
+            "path": str(key_file) if source == "file" else None,
+            "message": "Encryption key is available and valid.",
+        }
+    except FileNotFoundError:
+        return {
+            "ok": False,
+            "source": source,
+            "path": str(key_file),
+            "message": "Encryption key file is missing.",
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "source": source,
+            "path": str(key_file) if source == "file" else None,
+            "message": f"Encryption key is invalid or unavailable: {exc}",
+        }
+
+
 def validate_encryption_key(key_bytes: bytes, *, check_environment: bool = False) -> None:
     try:
         Fernet(key_bytes)

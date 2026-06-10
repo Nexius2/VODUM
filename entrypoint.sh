@@ -42,6 +42,15 @@ log() {
   echo "$ts | $level | entrypoint | $message" | tee -a "$LOG_DIR/entrypoint.log"
 }
 
+on_error() {
+  local exit_code=$?
+  local line_no="${1:-unknown}"
+  log ERROR "Startup failed at line ${line_no} with exit code ${exit_code}"
+  exit "$exit_code"
+}
+
+trap 'on_error $LINENO' ERR
+
 # ---------------------------------------------------------------------------
 # 1️⃣ Détection de la présence de la DB
 # ---------------------------------------------------------------------------
@@ -179,7 +188,7 @@ fi
 
 
 log INFO "Starting DB bootstrap"
-python3 /app/db_bootstrap.py
+python3 /app/db_bootstrap.py 2>&1 | tee -a "$LOG_DIR/entrypoint.log"
 log INFO "DB bootstrap completed"
 
 # ---------------------------------------------------------------------------
@@ -193,6 +202,7 @@ case "$UPLOAD_MB" in
 esac
 MAX_REQUEST_BODY_SIZE=$((UPLOAD_MB * 1024 * 1024))
 
+log INFO "Waitress listening on 0.0.0.0:${VODUM_PORT:-5000}"
 exec waitress-serve \
   --host=0.0.0.0 \
   --port="${VODUM_PORT:-5000}" \

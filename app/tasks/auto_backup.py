@@ -138,6 +138,6 @@ def run(task_id: int, db):
             if "tmp_backup_path" in locals() and tmp_backup_path.exists():
                 tmp_backup_path.unlink()
         except Exception:
-            pass
+            log.warning("Unable to remove failed temporary auto-backup", exc_info=True)
         task_logs(task_id, "error", f"Auto-backup error: {e}")
         raise

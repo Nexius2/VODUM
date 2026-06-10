@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 import requests
+from core.http_security import server_http_session
 import time
 import xml.etree.ElementTree as ET
 
@@ -262,16 +263,14 @@ def _collect_plex_server_resources(srv: Dict[str, Any], timeout: int = 4) -> Dic
         }
 
     last_error = None
+    http = server_http_session(srv)
 
     for base in bases:
         try:
-            r = requests.get(
+            r = http.get(
                 f"{base}/statistics/resources",
-                params={
-                    "timespan": 6,
-                    "X-Plex-Token": token,
-                },
-                headers={"Accept": "application/xml"},
+                params={"timespan": 6},
+                headers={"Accept": "application/xml", "X-Plex-Token": token},
                 timeout=timeout,
             )
             r.raise_for_status()

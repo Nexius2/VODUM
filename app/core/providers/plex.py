@@ -65,7 +65,7 @@ class PlexProvider(BaseProvider):
             url = f"{base}{path}"
             try:
                 wait_for_plex_slot(base)
-                r = self.http.get(url, params={"X-Plex-Token": token}, timeout=self.timeout)
+                r = self.http.get(url, headers={"X-Plex-Token": token}, timeout=self.timeout)
                 # on veut une VRAIE réponse du serveur
                 r.raise_for_status()
                 return r.text
@@ -94,12 +94,14 @@ class PlexProvider(BaseProvider):
         for base in bases:
             url = f"{base}{path}"
             try:
-                p = {"X-Plex-Token": token}
-                if params:
-                    p.update(params)
-
                 wait_for_plex_slot(base)
-                r = self.http.request(method, url, params=p, timeout=self.timeout)
+                r = self.http.request(
+                    method,
+                    url,
+                    params=params,
+                    headers={"X-Plex-Token": token},
+                    timeout=self.timeout,
+                )
                 r.raise_for_status()
                 return True
             except requests.exceptions.RequestException as e:

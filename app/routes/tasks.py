@@ -301,6 +301,10 @@ def register(app):
 
         # pages auth accessibles
         auth_pages = ("/login", "/login/submit", "/logout", "/setup-admin", "/setup-admin/save")
+        if request.path.startswith("/setup"):
+            if not configured or _is_logged_in():
+                return
+            return redirect(url_for("login", next=request.path))
         if request.path in auth_pages:
             if request.path in ("/login", "/login/submit") and not configured:
                 return redirect(url_for("setup_admin"))
@@ -320,4 +324,3 @@ def register(app):
     # -----------------------------
     # AUTH ROUTES
     # -----------------------------
-

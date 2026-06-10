@@ -6,6 +6,25 @@ All notable changes to Vodum will be documented in this file.
 
 
 ### Improved
+- Prevented anonymous telemetry from ever reporting placeholder versions such as `unknown` or `dev`.
+- Centralized VODUM version discovery across the interface and telemetry, with environment and multi-path INFO fallbacks.
+- Made wizard navigation prerequisite-aware: skipped communications now skip message templates, while skipped subscriptions skip their settings and assignments.
+- Hid message-dependent Usage Risk options when no Email or Discord channel is configured, and made Back navigation avoid unavailable steps.
+- Kept every optional first-run setup step inside the installation wizard, with dedicated Email/Discord, message-template, subscription-plan and user-assignment forms.
+- Kept wizard server validation independent from transient monitoring status, displayed validated servers as `OK`, and strengthened Firefox credential-autofill cleanup.
+- Prevented browser credential autofill in the wizard media-server fields, removed the redundant server-name field and clarified Plex token validation errors.
+- Added fatal startup logging and deployment health verification so failed container starts expose their cause immediately.
+- Replaced the legacy first-run screens with a persistent, multilingual guided installation wizard.
+- Added validated Plex/Jellyfin setup with non-blocking background synchronization during installation.
+- Added adaptive optional steps for communications, message templates, subscriptions, settings and assignment.
+- Added backup restoration, resumable progress and a Settings action to rerun the installation wizard.
+- Enabled TLS certificate verification by default for media servers, with an explicit per-server option for trusted self-signed certificates.
+- Centralized additional authenticated Jellyfin, Plex, monitoring and artwork requests through configured-origin HTTP sessions.
+- Removed avoidable Plex/Jellyfin tokens from request URLs in favor of authentication headers.
+- Pinned all runtime dependency versions for reproducible container builds.
+- Added encryption-key health to Settings and existing backup/integrity task diagnostics to the Backup page.
+- Improved error logging for critical backup and Tautulli import operations.
+- Added network-policy, TLS, encryption-key diagnostic and dependency pinning tests.
 - Replaced the dashboard Usage Risk placeholder line with a functional 14-day recommendation history graph.
 - Added a smooth gradient area chart, seven-day change indicator and real date labels for upgrade suggestions.
 - Dashboard server preview now lists online servers first, then orders servers by their seven-day peak stream count.

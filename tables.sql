@@ -284,6 +284,10 @@ CREATE TABLE IF NOT EXISTS settings (
     admin_email TEXT,
     admin_password_hash TEXT,
     auth_enabled INTEGER DEFAULT 1,
+    wizard_active INTEGER DEFAULT 1,
+    wizard_completed INTEGER DEFAULT 0,
+    wizard_step INTEGER DEFAULT 1,
+    wizard_state_json TEXT DEFAULT '{}',
 
     web_secure_cookies INTEGER DEFAULT 0,
     web_cookie_samesite TEXT DEFAULT 'Lax',
@@ -325,7 +329,7 @@ CREATE TABLE IF NOT EXISTS settings (
 	plex_user_import_mode TEXT DEFAULT 'global',
 
 	-- Telemetry
-	enable_anonymous_telemetry INTEGER DEFAULT 1,
+	enable_anonymous_telemetry INTEGER DEFAULT 0,
 	telemetry_instance_id TEXT DEFAULT NULL,
 	telemetry_last_sent_at TEXT DEFAULT NULL,
 	task_defaults_version INTEGER DEFAULT 0,

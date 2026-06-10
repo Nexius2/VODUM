@@ -44,7 +44,9 @@ def _headers(api_key: Optional[str] = None) -> Dict[str, str]:
 def jellyfin_list_users(server_row: Dict[str, Any]) -> List[Dict[str, Any]]:
     base = _pick_base_url(server_row)
     api_key = _api_key(server_row)
-    r = server_http_session(server_row).get(f"{base}/Users", params={"api_key": api_key}, timeout=20)
+    r = server_http_session(server_row).get(
+        f"{base}/Users", headers=_headers(api_key), timeout=20
+    )
     r.raise_for_status()
     data = r.json()
     return data if isinstance(data, list) else []
@@ -137,7 +139,7 @@ def jellyfin_set_policy_folders(
     http = server_http_session(server_row)
     r = http.get(
         f"{base}/Users/{jellyfin_user_id}",
-        params={"api_key": api_key},
+        headers=_headers(api_key),
         timeout=20,
     )
     r.raise_for_status()
@@ -152,17 +154,15 @@ def jellyfin_set_policy_folders(
     url = f"{base}/Users/{jellyfin_user_id}/Policy"
     r2 = http.post(
         url,
-        params={"api_key": api_key},
         json=policy,
-        headers=_headers(),
+        headers=_headers(api_key),
         timeout=20,
     )
     if r2.status_code in (405, 415):
         r2 = http.put(
             url,
-            params={"api_key": api_key},
             json=policy,
-            headers=_headers(),
+            headers=_headers(api_key),
             timeout=20,
         )
     r2.raise_for_status()
@@ -180,7 +180,7 @@ def jellyfin_reset_password_required(
         http = server_http_session(server_row)
         r = http.get(
             f"{base}/Users/{jellyfin_user_id}",
-            params={"api_key": api_key},
+            headers=_headers(api_key),
             timeout=20,
         )
         r.raise_for_status()
@@ -194,17 +194,15 @@ def jellyfin_reset_password_required(
         url = f"{base}/Users/{jellyfin_user_id}/Policy"
         r2 = http.post(
             url,
-            params={"api_key": api_key},
             json=policy,
-            headers=_headers(),
+            headers=_headers(api_key),
             timeout=20,
         )
         if r2.status_code in (405, 415):
             r2 = http.put(
                 url,
-                params={"api_key": api_key},
                 json=policy,
-                headers=_headers(),
+                headers=_headers(api_key),
                 timeout=20,
             )
         r2.raise_for_status()
