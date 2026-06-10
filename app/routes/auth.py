@@ -11,6 +11,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from app import RESET_MAGIC, RESET_FILE
 
 from web.helpers import get_db
+from web.security import safe_redirect_target
 
 auth_logger = get_logger("auth")
 
@@ -317,7 +318,10 @@ def register(app):
         session["vodum_admin_email"] = email
         session.permanent = True
 
-        next_url = request.args.get("next") or url_for("dashboard")
+        next_url = safe_redirect_target(
+            request.args.get("next"),
+            url_for("dashboard"),
+        )
         auth_logger.info("AUTH login ok email=%s ip=%s ua=%s", email, client_ip, request.user_agent.string)
         return redirect(next_url)
 

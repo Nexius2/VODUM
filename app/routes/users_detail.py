@@ -17,6 +17,7 @@ from api.subscriptions import update_user_expiration
 from notifications_utils import parse_notifications_order
 from core.providers.jellyfin_users import jellyfin_set_password
 from core.usage_risk import build_usage_risk_for_user
+from secret_store import find_plex_server_ids_by_token
 
 
 task_logger = get_logger("tasks_ui")
@@ -193,17 +194,16 @@ def register(app):
                         password,
                     )
 
-                    # Store password locally
+                    # The admin token is enough for future password changes.
+                    # Clear legacy plaintext values instead of retaining the
+                    # newly submitted password in the Vodum database.
                     db.execute(
                         """
                         UPDATE media_users
-                        SET stored_password = ?
+                        SET stored_password = NULL
                         WHERE id = ?
                         """,
-                        (
-                            password,
-                            account["id"],
-                        ),
+                        (account["id"],),
                     )
 
                     updated += 1
@@ -609,11 +609,7 @@ def register(app):
             if not owner_token:
                 return
 
-            owner_servers = db.query(
-                "SELECT id FROM servers WHERE type='plex' AND token = ?",
-                (owner_token,),
-            )
-            owner_server_ids = [int(s["id"]) for s in owner_servers]
+            owner_server_ids = find_plex_server_ids_by_token(db, owner_token)
             if not owner_server_ids:
                 return
 
@@ -1430,8 +1426,6 @@ def register(app):
             referral_stats=referral_stats,
             referred_users=referred_users,
         )
-
-
 
 
 

@@ -23,6 +23,7 @@ from core.server_cooldown import (
     is_server_in_cooldown,
     get_server_cooldown_remaining_seconds,
 )
+from core.http_security import plex_server_http_session, server_http_session
 
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -34,11 +35,12 @@ log = get_logger("check_servers")   # Logger TXT haut niveau
 # Helpers
 # ------------------------------------------------------------
 
-def jellyfin_get_status(base_url, token=None):
+def jellyfin_get_status(server_row, base_url, token=None):
     try:
+        http = server_http_session(server_row)
         if is_debug_mode_enabled():
             log.debug(f"[JELLYFIN] ping url={base_url}/System/Ping")
-        r = requests.get(f"{base_url}/System/Ping", timeout=5)
+        r = http.get(f"{base_url}/System/Ping", timeout=5)
         if is_debug_mode_enabled():
             log.debug(f"[JELLYFIN] ping status_code={r.status_code}")
 
@@ -48,7 +50,7 @@ def jellyfin_get_status(base_url, token=None):
         if token:
             if is_debug_mode_enabled():
                 log.debug(f"[JELLYFIN] info url={base_url}/System/Info (with api_key)")
-            r2 = requests.get(
+            r2 = http.get(
                 f"{base_url}/System/Info",
                 params={"api_key": token},
                 timeout=5
@@ -95,11 +97,11 @@ def choose_server_base_urls(server_row):
     return urls
 
 
-def plex_get_info(base_url, token):
+def plex_get_info(server_row, base_url, token):
     try:
         if is_debug_mode_enabled():
             log.debug(f"[PLEX] connecting base_url={base_url} token_present={bool(token)}")
-        session = requests.Session()
+        session = plex_server_http_session(server_row)
         session.verify = False
         install_plex_rate_limit(session, base_url)
         plex = PlexServer(base_url, token, session=session)
@@ -198,7 +200,7 @@ def run(task_id: int, db):
             if s["type"] == "plex" and s["token"]:
                 meta = None
                 for candidate_url in base_urls:
-                    status, found_name, found_mid, meta = plex_get_info(candidate_url, s["token"])
+                    status, found_name, found_mid, meta = plex_get_info(s, candidate_url, s["token"])
                     if status == "up":
                         base_url = candidate_url
                         break
@@ -219,7 +221,7 @@ def run(task_id: int, db):
             elif s["type"] == "jellyfin":
                 meta = None
                 for candidate_url in base_urls:
-                    status, found_name, found_mid, meta = jellyfin_get_status(candidate_url, s["token"])
+                    status, found_name, found_mid, meta = jellyfin_get_status(s, candidate_url, s["token"])
                     if status == "up":
                         base_url = candidate_url
                         break
@@ -280,7 +282,6 @@ def run(task_id: int, db):
         log.error("Error while check_servers", exc_info=True)
         task_logs(task_id, "error", f"Error check_servers : {e}")
         raise
-
 
 
 

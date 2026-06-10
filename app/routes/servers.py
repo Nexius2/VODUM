@@ -12,6 +12,7 @@ from logging_utils import get_logger
 from tasks_engine import enqueue_server_discovery_sequence, enable_and_run_task_by_name, ensure_tasks_enabled
 from web.helpers import get_db
 from core.media_jobs import insert_plex_media_job
+from secret_store import encrypt_secret, encrypt_server_settings_json, keep_existing_secret
 
 server_delete_logger = get_logger("server_delete")
 logger = get_logger("servers")
@@ -547,7 +548,10 @@ def register(app):
         settings = {}
         if tautulli_url or tautulli_api_key:
             settings["tautulli"] = {"url": tautulli_url, "api_key": tautulli_api_key}
-        settings_json = json.dumps(settings) if settings else None
+        settings_json = encrypt_server_settings_json(
+            json.dumps(settings) if settings else None
+        )
+        token = encrypt_secret(token)
 
         try:
             # --------------------------------------------------
@@ -773,7 +777,7 @@ def register(app):
             return redirect(url_for("server_detail", server_id=server_id))
 
         row = db.query_one(
-            "SELECT settings_json FROM servers WHERE id = ?",
+            "SELECT token, settings_json FROM servers WHERE id = ?",
             (server_id,),
         )
 
@@ -784,13 +788,25 @@ def register(app):
             except Exception:
                 settings = {}
 
-        if tautulli_url or tautulli_api_key:
+        existing_tautulli = settings.get("tautulli")
+        if not isinstance(existing_tautulli, dict):
+            existing_tautulli = {}
+
+        if tautulli_url is not None or tautulli_api_key is not None:
             settings["tautulli"] = {
-                "url": tautulli_url,
-                "api_key": tautulli_api_key,
+                "url": tautulli_url or existing_tautulli.get("url"),
+                "api_key": keep_existing_secret(
+                    tautulli_api_key,
+                    existing_tautulli.get("api_key"),
+                ),
             }
 
-        settings_json = json.dumps(settings) if settings else None
+        settings_json = encrypt_server_settings_json(
+            json.dumps(settings) if settings else None
+        )
+        token = encrypt_secret(
+            keep_existing_secret(token, row["token"] if row else None)
+        )
 
         db.execute(
             """

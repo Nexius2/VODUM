@@ -7,3 +7,4 @@ itsdangerous
 croniter
 requests
 websocket-client
+cryptography

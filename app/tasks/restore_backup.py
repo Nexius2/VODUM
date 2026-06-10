@@ -11,6 +11,12 @@ from config import Config
 from db_manager import DBManager
 from logging_utils import get_logger
 from tasks_engine import prepare_restored_database, task_logs
+from core.archive_safety import validate_zip_limits
+from secret_store import (
+    encryption_key_file_path,
+    install_encryption_key,
+    validate_encryption_key,
+)
 
 log = get_logger("restore_backup")
 
@@ -111,17 +117,21 @@ def _safe_extract_zip_dir(zipf: zipfile.ZipFile, archive_root: str, target_dir: 
     return extracted
 
 
-def _prepare_restore_source(backup_path: Path, work_dir: Path) -> tuple[Path, Path | None]:
+def _prepare_restore_source(
+    backup_path: Path,
+    work_dir: Path,
+) -> tuple[Path, Path | None, Path | None]:
     """
     Returns:
       - sqlite database path to restore
       - optional attachments directory extracted from full backup
+      - optional encryption key extracted from full backup
     """
     suffix = backup_path.suffix.lower()
 
     if suffix in {".sqlite", ".db"}:
         _validate_sqlite_backup(backup_path)
-        return backup_path, None
+        return backup_path, None, None
 
     if suffix != ".zip":
         raise ValueError("Unsupported backup format. Expected .zip, .sqlite or .db")
@@ -131,8 +141,10 @@ def _prepare_restore_source(backup_path: Path, work_dir: Path) -> tuple[Path, Pa
 
     extracted_db = work_dir / "database.db"
     extracted_attachments = work_dir / "attachments"
+    extracted_encryption_key = work_dir / "vodum.encryption_key"
 
     with zipfile.ZipFile(backup_path, "r") as zipf:
+        validate_zip_limits(zipf)
         names = set(zipf.namelist())
 
         db_member = None
@@ -146,11 +158,27 @@ def _prepare_restore_source(backup_path: Path, work_dir: Path) -> tuple[Path, Pa
 
         _safe_extract_zip_member(zipf, db_member, extracted_db)
 
+        if "vodum.encryption_key" in names:
+            _safe_extract_zip_member(
+                zipf,
+                "vodum.encryption_key",
+                extracted_encryption_key,
+            )
+
         if any(name.startswith("attachments/") for name in names):
             _safe_extract_zip_dir(zipf, "attachments", extracted_attachments)
 
     _validate_sqlite_backup(extracted_db)
-    return extracted_db, extracted_attachments if extracted_attachments.exists() else None
+    if extracted_encryption_key.exists():
+        validate_encryption_key(
+            extracted_encryption_key.read_bytes(),
+            check_environment=True,
+        )
+    return (
+        extracted_db,
+        extracted_attachments if extracted_attachments.exists() else None,
+        extracted_encryption_key if extracted_encryption_key.exists() else None,
+    )
 
 
 def _replace_directory(source_dir: Path | None, target_dir: Path) -> None:
@@ -189,9 +217,18 @@ def _safe_restore_from_path(backup_path: Path, db) -> None:
     work_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        restore_db_path, restore_attachments_dir = _prepare_restore_source(backup_path, work_dir)
+        (
+            restore_db_path,
+            restore_attachments_dir,
+            restore_encryption_key_path,
+        ) = _prepare_restore_source(backup_path, work_dir)
 
         pre_restore_path = db_path.with_suffix(db_path.suffix + ".pre_restore")
+        encryption_key_path = encryption_key_file_path()
+        pre_restore_key_path = encryption_key_path.with_name(
+            encryption_key_path.name + ".pre_restore"
+        )
+        encryption_key_existed = encryption_key_path.exists()
         if pre_restore_path.exists():
             try:
                 pre_restore_path.unlink()
@@ -200,6 +237,12 @@ def _safe_restore_from_path(backup_path: Path, db) -> None:
 
         if db_path.exists():
             shutil.copy2(str(db_path), str(pre_restore_path))
+
+        if pre_restore_key_path.exists():
+            pre_restore_key_path.unlink()
+        if encryption_key_path.exists():
+            pre_restore_key_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(str(encryption_key_path), str(pre_restore_key_path))
 
         try:
             db.close()
@@ -237,6 +280,13 @@ def _safe_restore_from_path(backup_path: Path, db) -> None:
                     pass
 
         try:
+            if restore_encryption_key_path is not None:
+                install_encryption_key(restore_encryption_key_path.read_bytes())
+            else:
+                log.warning(
+                    "Restore source contains no encryption key; existing key is kept"
+                )
+
             if restore_attachments_dir is not None:
                 _replace_directory(restore_attachments_dir, appdata_dir / "attachments")
 
@@ -261,6 +311,11 @@ def _safe_restore_from_path(backup_path: Path, db) -> None:
                         except Exception:
                             pass
                     shutil.copy2(str(pre_restore_path), str(db_path))
+
+                if pre_restore_key_path.exists():
+                    install_encryption_key(pre_restore_key_path.read_bytes())
+                elif not encryption_key_existed and encryption_key_path.exists():
+                    encryption_key_path.unlink()
             except Exception:
                 log.exception("Automatic rollback after failed restore also failed")
 
@@ -274,6 +329,12 @@ def _safe_restore_from_path(backup_path: Path, db) -> None:
             if tmp_path.exists():
                 try:
                     tmp_path.unlink()
+                except Exception:
+                    pass
+
+            if pre_restore_key_path.exists():
+                try:
+                    pre_restore_key_path.unlink()
                 except Exception:
                     pass
 

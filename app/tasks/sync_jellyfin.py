@@ -7,6 +7,7 @@ from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
 from logging_utils import get_logger, is_debug_mode_enabled
 from core.server_cooldown import should_skip_unreachable_server, mark_server_unreachable, clear_server_cooldown
+from core.http_security import servers_http_session
 
 
 logger = get_logger("sync_jellyfin")
@@ -978,7 +979,7 @@ def run(task_id: int, db):
     total_policy_ok = 0
     total_libraries = 0
 
-    session = requests.Session()
+    session = servers_http_session(servers)
 
     try:
         any_success = False
@@ -1073,4 +1074,3 @@ def run(task_id: int, db):
             f"policies_ok={total_policy_ok}, libraries_seen={total_libraries}"
         )
         logger.info("=== SYNC JELLYFIN : END ===")
-

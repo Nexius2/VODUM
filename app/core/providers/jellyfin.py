@@ -6,10 +6,15 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
 from core.providers.base import BaseProvider
+from core.http_security import server_http_session
 
 
 class JellyfinProvider(BaseProvider):
     provider_name = "jellyfin"
+
+    def __init__(self, server, timeout: int = 15):
+        super().__init__(server, timeout=timeout)
+        self.http = server_http_session(server)
 
     def _candidate_bases(self) -> List[str]:
         # url > local_url > public_url
@@ -71,7 +76,7 @@ class JellyfinProvider(BaseProvider):
         for base in bases:
             url = self._build_api_url(base, path, token)
             try:
-                r = requests.post(url, headers=headers, json=(payload or {}), timeout=self.timeout)
+                r = self.http.post(url, headers=headers, json=(payload or {}), timeout=self.timeout)
                 r.raise_for_status()
                 return True
             except requests.exceptions.RequestException as e:
@@ -119,7 +124,7 @@ class JellyfinProvider(BaseProvider):
         for base in bases:
             url = self._build_api_url(base, path, token)
             try:
-                r = requests.get(url, headers=headers, timeout=self.timeout)
+                r = self.http.get(url, headers=headers, timeout=self.timeout)
                 r.raise_for_status()
                 return r.json()
             except requests.exceptions.RequestException as e:
@@ -388,4 +393,3 @@ class JellyfinProvider(BaseProvider):
             )
 
         return sessions
-

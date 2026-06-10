@@ -7,6 +7,7 @@ from core.i18n import get_translator
 from web.helpers import get_db, add_log, send_email_via_settings
 from discord_utils import validate_discord_bot_token
 from notifications_utils import parse_notifications_order
+from secret_store import encrypt_secret
 
 from communications_engine import (
     store_uploads,
@@ -1303,14 +1304,16 @@ def register(app):
 
             # Safety: do not wipe secrets on auto-save if input is empty
             smtp_pass_raw = request.form.get("smtp_pass")
-            smtp_pass = (smtp_pass_raw or "")
+            smtp_pass = encrypt_secret(smtp_pass_raw or "")
             if smtp_pass_raw is not None and smtp_pass_raw.strip() == "":
                 smtp_pass = settings.get("smtp_pass") or ""
 
             # Discord
             discord_enabled = 1 if request.form.get("discord_enabled") == "1" else 0
             discord_bot_token_raw = request.form.get("discord_bot_token")
-            discord_bot_token = (discord_bot_token_raw or "").strip() or None
+            discord_bot_token = encrypt_secret(
+                (discord_bot_token_raw or "").strip() or None
+            )
             if discord_bot_token_raw is not None and discord_bot_token_raw.strip() == "":
                 discord_bot_token = settings.get("discord_bot_token") or None
 
@@ -1397,6 +1400,10 @@ def register(app):
 
         settings = db.query_one("SELECT * FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
+        settings["smtp_pass_configured"] = bool(settings.get("smtp_pass"))
+        settings["discord_bot_token_configured"] = bool(settings.get("discord_bot_token"))
+        settings["smtp_pass"] = ""
+        settings["discord_bot_token"] = ""
 
         recent_scheduled = db.query(
             """

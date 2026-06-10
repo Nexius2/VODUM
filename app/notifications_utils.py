@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import List, Dict
+from secret_store import decrypt_communication_settings
 
 
 SUPPORTED_CHANNELS = ("discord", "email")
@@ -34,6 +35,7 @@ def normalize_notifications_order(settings: Dict) -> List[str]:
 
 
 def is_email_ready(settings: Dict) -> bool:
+    settings = decrypt_communication_settings(settings)
     if not settings:
         return False
     try:

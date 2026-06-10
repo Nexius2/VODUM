@@ -286,7 +286,7 @@
 		</div>
 	
         <div class="space-y-2">
-            {% for s in servers %}
+            {% for s in dashboard_servers %}
             <div class="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2">
 
                 <div class="min-w-0">
@@ -382,25 +382,49 @@
             </div>
         </div>
 
-        <div class="rounded-xl border border-slate-800 bg-slate-950/40 p-4 mb-3">
-            <div class="flex items-end justify-between gap-4">
-                <div>
-                    <div class="text-xs text-slate-400">{{ t("upgrade_suggestions") }}</div>
-                    <div class="text-3xl font-bold text-primary mt-1">{{ usage_risk_summary.suggested or 0 }}</div>
-                    <div class="text-[11px] text-slate-500 -mt-1">{{ t("users") }}</div>
+        <div class="rounded-xl border border-slate-800 bg-gradient-to-br from-slate-950/80 to-violet-950/20 p-4 mb-3 overflow-hidden">
+            <div class="flex items-stretch justify-between gap-5">
+                <div class="shrink-0 flex flex-col justify-center">
+                    <div class="text-xs text-slate-300 font-medium">{{ t("upgrade_suggestions") }}</div>
+                    <div class="text-4xl font-bold text-primary mt-1 leading-none">{{ usage_risk_summary.suggested or 0 }}</div>
+                    <div class="text-[11px] text-slate-500 mt-2">{{ t("users") }}</div>
+                    <div class="text-[10px] mt-1 {% if usage_risk_dashboard.delta_7d > 0 %}text-amber-300{% elif usage_risk_dashboard.delta_7d < 0 %}text-emerald-300{% else %}text-slate-500{% endif %}">
+                        {% if usage_risk_dashboard.delta_7d > 0 %}+{% endif %}{{ usage_risk_dashboard.delta_7d }} {{ t("over_7_days") }}
+                    </div>
                 </div>
 
-                <svg viewBox="0 0 120 48" class="w-28 h-12 shrink-0">
-                    <polyline
-                        points="{{ usage_risk_dashboard.trend_points }}"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="3"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        class="text-primary"
-                    />
-                </svg>
+                <div class="min-w-0 flex-1">
+                    <svg viewBox="0 0 240 88" class="w-full h-24" role="img" aria-label="{{ t('upgrade_suggestions') }}">
+                        <defs>
+                            <linearGradient id="usage-risk-area" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="rgb(139 92 246)" stop-opacity="0.42" />
+                                <stop offset="100%" stop-color="rgb(139 92 246)" stop-opacity="0.02" />
+                            </linearGradient>
+                            <filter id="usage-risk-glow" x="-20%" y="-20%" width="140%" height="140%">
+                                <feGaussianBlur stdDeviation="2" result="blur" />
+                                <feMerge>
+                                    <feMergeNode in="blur" />
+                                    <feMergeNode in="SourceGraphic" />
+                                </feMerge>
+                            </filter>
+                        </defs>
+                        <path d="{{ usage_risk_dashboard.area_path }}" fill="url(#usage-risk-area)" />
+                        <path
+                            d="{{ usage_risk_dashboard.line_path }}"
+                            fill="none"
+                            stroke="rgb(139 92 246)"
+                            stroke-width="3.5"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            filter="url(#usage-risk-glow)"
+                        />
+                    </svg>
+                    <div class="flex justify-between text-[9px] text-slate-600 -mt-2">
+                        <span>{{ usage_risk_dashboard.start_label }}</span>
+                        <span>{{ t("last_14_days") }}</span>
+                        <span>{{ usage_risk_dashboard.end_label }}</span>
+                    </div>
+                </div>
             </div>
         </div>
 

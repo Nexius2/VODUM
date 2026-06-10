@@ -1,5 +1,6 @@
 import sqlite3
 import os
+from secret_store import encrypt_communication_secrets, encrypt_server_secrets
 
 DB_PATH = os.environ.get("DATABASE_PATH", "/appdata/database.db")
 
@@ -322,6 +323,16 @@ def run_migrations():
     ensure_column(cursor, "servers", "last_failure", "TEXT DEFAULT NULL")
     # Jellyfin stored password (1 password per media account/server)
     ensure_column(cursor, "media_users", "stored_password", "TEXT DEFAULT NULL")
+    # Vodum only needs the Jellyfin admin token to replace a user's password.
+    # Purge legacy plaintext passwords; new password changes also leave this NULL.
+    cursor.execute(
+        """
+        UPDATE media_users
+        SET stored_password = NULL
+        WHERE stored_password IS NOT NULL
+          AND TRIM(stored_password) != ''
+        """
+    )
     conn.commit()
 
 
@@ -3108,6 +3119,17 @@ def run_migrations():
         "web_cookie_samesite": "Lax",
         "web_trust_proxy": 0,
     })
+    conn.commit()
+
+    encrypted_secrets = encrypt_communication_secrets(conn)
+    if encrypted_secrets:
+        print(f"Encrypted {encrypted_secrets} communication secret row(s)")
+        conn.commit()
+
+    encrypted_server_secrets = encrypt_server_secrets(conn)
+    if encrypted_server_secrets:
+        print(f"Encrypted {encrypted_server_secrets} server secret row(s)")
+        conn.commit()
 
     # -------------------------------------------------
     # 3.x Versioned task schedule defaults migration
@@ -3367,4 +3389,3 @@ def run_migrations():
 if __name__ == "__main__":
     run_migrations()
     #ensure_settings_defaults(cursor)
-

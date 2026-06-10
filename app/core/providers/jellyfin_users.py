@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 import requests
 
 from logging_utils import get_logger
+from core.http_security import server_http_session
 
 log = get_logger("jellyfin_users")
 
@@ -43,7 +44,7 @@ def _headers(api_key: Optional[str] = None) -> Dict[str, str]:
 def jellyfin_list_users(server_row: Dict[str, Any]) -> List[Dict[str, Any]]:
     base = _pick_base_url(server_row)
     api_key = _api_key(server_row)
-    r = requests.get(f"{base}/Users", params={"api_key": api_key}, timeout=20)
+    r = server_http_session(server_row).get(f"{base}/Users", params={"api_key": api_key}, timeout=20)
     r.raise_for_status()
     data = r.json()
     return data if isinstance(data, list) else []
@@ -61,7 +62,7 @@ def jellyfin_create_user(
     api_key = _api_key(server_row)
 
     payload = {"Name": username.strip()}
-    r = requests.post(
+    r = server_http_session(server_row).post(
         f"{base}/Users/New",
         json=payload,
         headers=_headers(api_key),
@@ -102,7 +103,7 @@ def jellyfin_set_password(
         "NewPassword": password,
     }
 
-    r = requests.post(
+    r = server_http_session(server_row).post(
         f"{base}/Users/{jellyfin_user_id}/Password",
         json=payload,
         headers=_headers(api_key),
@@ -133,7 +134,8 @@ def jellyfin_set_policy_folders(
     base = _pick_base_url(server_row)
     api_key = _api_key(server_row)
 
-    r = requests.get(
+    http = server_http_session(server_row)
+    r = http.get(
         f"{base}/Users/{jellyfin_user_id}",
         params={"api_key": api_key},
         timeout=20,
@@ -148,7 +150,7 @@ def jellyfin_set_policy_folders(
     policy["EnabledFolders"] = [str(x) for x in (enabled_folders or [])]
 
     url = f"{base}/Users/{jellyfin_user_id}/Policy"
-    r2 = requests.post(
+    r2 = http.post(
         url,
         params={"api_key": api_key},
         json=policy,
@@ -156,7 +158,7 @@ def jellyfin_set_policy_folders(
         timeout=20,
     )
     if r2.status_code in (405, 415):
-        r2 = requests.put(
+        r2 = http.put(
             url,
             params={"api_key": api_key},
             json=policy,
@@ -175,7 +177,8 @@ def jellyfin_reset_password_required(
     try:
         base = _pick_base_url(server_row)
         api_key = _api_key(server_row)
-        r = requests.get(
+        http = server_http_session(server_row)
+        r = http.get(
             f"{base}/Users/{jellyfin_user_id}",
             params={"api_key": api_key},
             timeout=20,
@@ -189,7 +192,7 @@ def jellyfin_reset_password_required(
         policy["RequirePasswordChange"] = bool(required)
 
         url = f"{base}/Users/{jellyfin_user_id}/Policy"
-        r2 = requests.post(
+        r2 = http.post(
             url,
             params={"api_key": api_key},
             json=policy,
@@ -197,7 +200,7 @@ def jellyfin_reset_password_required(
             timeout=20,
         )
         if r2.status_code in (405, 415):
-            r2 = requests.put(
+            r2 = http.put(
                 url,
                 params={"api_key": api_key},
                 json=policy,

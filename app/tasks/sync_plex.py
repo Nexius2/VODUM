@@ -13,6 +13,7 @@ from plexapi.server import PlexServer
 from core.plex_rate_limit import install_plex_rate_limit, wait_for_plex_slot
 from core.plex_connection import plex_candidate_base_urls, find_working_plex_base_url
 from core.server_cooldown import should_skip_unreachable_server, mark_server_unreachable, clear_server_cooldown
+from core.http_security import ConfiguredHostSession, plex_server_http_session, url_origin
 
 class TimeoutSession(requests.Session):
     """Session requests qui force un timeout par défaut."""
@@ -900,7 +901,7 @@ def sync_plex_libraries(db, server, libraries):
     found_ids = set()
     found_section_ids = set()
 
-    session = requests.Session()
+    session = plex_server_http_session(server)
     install_plex_rate_limit(session, base_url)
 
     for lib in libraries:
@@ -1296,7 +1297,10 @@ def fetch_shared_server_users(
     if not token or not machine_identifier:
         return result
 
-    session = TimeoutSession(timeout=20)
+    session = ConfiguredHostSession(
+        {url_origin("https://plex.tv")},
+        default_timeout=20,
+    )
 
     url = (
         f"https://plex.tv/api/servers/{machine_identifier}/shared_servers"
@@ -1891,7 +1895,7 @@ def sync_all(task_id=None, db=None) -> None:
             log.info(f"[SYNC ACCESS] Attempting PlexAPI connection → {server_name} base_url={base_url}")
 
             # ⏱️ timeout forcé pour plexapi
-            session = TimeoutSession(timeout=20)
+            session = plex_server_http_session(server, default_timeout=20)
             install_plex_rate_limit(session, base_url)
 
             # petit ping très parlant (et timeout)
@@ -1979,5 +1983,3 @@ def run(task_id: int, db):
         )
         task_logs(task_id, "error", f"Error during sync_plex : {e}")
         raise
-
-

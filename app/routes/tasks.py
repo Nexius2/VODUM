@@ -17,6 +17,8 @@ from tasks_engine import (
     mark_task_queue_failed,
 )
 from web.helpers import get_db, table_exists, add_log
+from web.security import get_client_ip
+from secret_store import decrypt_communication_settings
 
 task_logger = get_logger("tasks_ui")
 security_logger = get_logger("security")
@@ -130,6 +132,7 @@ def register(app):
     # -----------------------------
     
     def is_smtp_ready(settings) -> bool:
+        settings = decrypt_communication_settings(dict(settings or {}))
         if not settings:
             return False
 
@@ -240,27 +243,6 @@ def register(app):
     def _is_logged_in() -> bool:
         return session.get("vodum_logged_in") is True
 
-    def _is_private_ip(ip_str: str) -> bool:
-        try:
-            ip = ipaddress.ip_address(ip_str)
-            return ip.is_private or ip.is_loopback
-        except Exception:
-            return False
-
-
-    def _get_client_ip() -> str:
-        remote = request.remote_addr or ""
-
-        xff = (request.headers.get("X-Forwarded-For") or "").strip()
-        if xff and _is_private_ip(remote):
-            # XFF peut contenir "client, proxy1, proxy2"
-            first = xff.split(",")[0].strip()
-            if first:
-                return first
-
-        return remote
-
-
     def _ip_allowed(remote_ip: str) -> bool:
         # Permet de désactiver le filtrage si besoin 
         if (os.environ.get("VODUM_IP_FILTER") or "1").strip() in ("0", "false", "False", "no", "NO"):
@@ -294,7 +276,7 @@ def register(app):
     @app.before_request
     def auth_guard():
         # 🔒 Filtrage IP
-        client_ip = _get_client_ip()
+        client_ip = get_client_ip()
         if not _ip_allowed(client_ip):
             security_logger.warning("Blocked request | ip=%s | path=%s", client_ip, request.path)
             abort(403)
@@ -338,6 +320,4 @@ def register(app):
     # -----------------------------
     # AUTH ROUTES
     # -----------------------------
-
-
 

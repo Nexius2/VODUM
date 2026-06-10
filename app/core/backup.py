@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Callable
 
 from logging_utils import get_logger, is_debug_mode_enabled
+from secret_store import encryption_key_bytes
 
 
 @dataclass(frozen=True)
@@ -71,15 +72,17 @@ def create_backup_file(get_db: Callable[[], object], cfg: BackupConfig) -> str |
 
         appdata_dir = _appdata_dir_from_db(db_path)
         attachments_dir = appdata_dir / "attachments"
+        encryption_key = encryption_key_bytes()
 
         manifest = {
             "format": "vodum-full-backup",
-            "version": 1,
+            "version": 2,
             "created_at_utc": datetime.utcnow().isoformat(timespec="seconds") + "Z",
             "database": "database.db",
             "includes": {
                 "database": True,
                 "attachments": attachments_dir.exists(),
+                "encryption_key": True,
             },
         }
 
@@ -88,6 +91,7 @@ def create_backup_file(get_db: Callable[[], object], cfg: BackupConfig) -> str |
 
         with zipfile.ZipFile(tmp_backup_path, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
             zipf.write(db_path, "database.db")
+            zipf.writestr("vodum.encryption_key", encryption_key)
             zipf.writestr("manifest.json", json.dumps(manifest, indent=2))
             _add_dir_to_zip(zipf, attachments_dir, "attachments")
 

@@ -4,6 +4,7 @@ import requests
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Optional
 from core.plex_rate_limit import wait_for_plex_slot
+from core.http_security import server_http_session
 from core.providers.base import BaseProvider
 from logging_utils import get_logger
 
@@ -12,6 +13,10 @@ log = get_logger("plex")
 
 class PlexProvider(BaseProvider):
     provider_name = "plex"
+
+    def __init__(self, server, timeout: int = 15):
+        super().__init__(server, timeout=timeout)
+        self.http = server_http_session(server)
 
     def _candidate_bases(self) -> List[str]:
         """
@@ -60,7 +65,7 @@ class PlexProvider(BaseProvider):
             url = f"{base}{path}"
             try:
                 wait_for_plex_slot(base)
-                r = requests.get(url, params={"X-Plex-Token": token}, timeout=self.timeout)
+                r = self.http.get(url, params={"X-Plex-Token": token}, timeout=self.timeout)
                 # on veut une VRAIE réponse du serveur
                 r.raise_for_status()
                 return r.text
@@ -94,7 +99,7 @@ class PlexProvider(BaseProvider):
                     p.update(params)
 
                 wait_for_plex_slot(base)
-                r = requests.request(method, url, params=p, timeout=self.timeout)
+                r = self.http.request(method, url, params=p, timeout=self.timeout)
                 r.raise_for_status()
                 return True
             except requests.exceptions.RequestException as e:
@@ -364,4 +369,3 @@ class PlexProvider(BaseProvider):
             })
 
         return sessions
-

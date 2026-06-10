@@ -3,6 +3,7 @@ import requests
 from core.plex_rate_limit import install_plex_rate_limit
 from logging_utils import get_logger
 from core.plex_connection import find_working_plex_base_url
+from core.http_security import plex_server_http_session
 
 log = get_logger("plex_users")
 
@@ -67,7 +68,7 @@ def plex_invite_and_share(
     base = _pick_base_url(server_row)
     token = _token(server_row)
 
-    session = requests.Session()
+    session = plex_server_http_session(server_row)
     install_plex_rate_limit(session, base)
 
     plex = PlexServer(base, token, session=session)
