@@ -130,56 +130,7 @@
         {% endif %}
     </div>
 
-	<!-- Kills / Subscription summary -->
-	<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-		<div class="h-full flex items-end gap-5">
-			<a href="{{ url_for('monitoring_page', tab='policies') }}"
-			   title="Streams terminated by VODUM policies during the last 48 hours. Click to open Monitoring Policies."
-			   class="shrink-0 w-32 flex flex-col justify-end rounded-xl px-2 py-1 -mx-2 -my-1 hover:bg-slate-800/40 transition-colors cursor-pointer group">
-
-				<div class="text-4xl font-bold text-rose-400 leading-none group-hover:text-rose-300">
-					{{ stats.kills_48h }}
-				</div>
-
-				<div class="text-xs text-slate-400 mt-1 group-hover:text-slate-300">
-					streams killed
-				</div>
-
-				<div class="text-xs text-slate-500 group-hover:text-slate-400">
-					last 48h
-				</div>
-			</a>
-
-			<div class="h-16 border-l border-slate-800 self-end"></div>
-
-			<div class="flex-1 min-w-0 self-end">
-				{% if subscription_stats %}
-					<div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-						{% for sub in subscription_stats[:8] %}
-							<div class="rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2">
-								<div class="text-slate-100 font-medium truncate">{{ sub.name }}</div>
-								<div class="text-slate-400 mt-1">
-									{{ sub.user_count }} subscribers
-								</div>
-							</div>
-						{% endfor %}
-					</div>
-
-					{% if subscription_stats_more %}
-						<button type="button"
-								onclick="document.getElementById('subscriptions-summary-modal').classList.remove('hidden')"
-								class="mt-3 text-xs text-primary hover:text-primary-dark">
-							More...
-						</button>
-					{% endif %}
-				{% else %}
-					<div class="text-sm text-slate-400">
-						No active subscription configured.
-					</div>
-				{% endif %}
-			</div>
-		</div>
-	</div>
+    {% include "dashboard/partials/_streams_killed_subscriptions.html" %}
 
 </div>
 
@@ -244,7 +195,7 @@
 
 {% else %}
 
-<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+<div class="grid grid-cols-1 xl:grid-cols-[0.85fr_1.15fr] gap-4 mb-6">
 
     <!-- Users -->
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
@@ -304,60 +255,11 @@
       </div>
     </div>
 
-	<!-- Kills / Subscription summary -->
-	<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-		<div class="h-full flex items-end gap-5">
-			<a href="{{ url_for('monitoring_page', tab='policies') }}"
-			   title="Streams terminated by VODUM policies during the last 48 hours. Click to open Monitoring Policies."
-			   class="shrink-0 w-32 flex flex-col justify-end rounded-xl px-2 py-1 -mx-2 -my-1 hover:bg-slate-800/40 transition-colors cursor-pointer group">
-
-				<div class="text-4xl font-bold text-rose-400 leading-none group-hover:text-rose-300">
-					{{ stats.kills_48h }}
-				</div>
-
-				<div class="text-xs text-slate-400 mt-1 group-hover:text-slate-300">
-					streams killed
-				</div>
-
-				<div class="text-xs text-slate-500 group-hover:text-slate-400">
-					last 48h
-				</div>
-			</a>
-
-			<div class="h-16 border-l border-slate-800 self-end"></div>
-
-			<div class="flex-1 min-w-0 self-end">
-				{% if subscription_stats %}
-					<div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-						{% for sub in subscription_stats[:8] %}
-							<div class="rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2">
-								<div class="text-slate-100 font-medium truncate">{{ sub.name }}</div>
-								<div class="text-slate-400 mt-1">
-									{{ sub.user_count }} subscribers
-								</div>
-							</div>
-						{% endfor %}
-					</div>
-
-					{% if subscription_stats_more %}
-						<button type="button"
-								onclick="document.getElementById('subscriptions-summary-modal').classList.remove('hidden')"
-								class="mt-3 text-xs text-primary hover:text-primary-dark">
-							More...
-						</button>
-					{% endif %}
-				{% else %}
-					<div class="text-sm text-slate-400">
-						No active subscription configured.
-					</div>
-				{% endif %}
-			</div>
-		</div>
-	</div>
+    {% include "dashboard/partials/_streams_killed_subscriptions.html" %}
 
 </div>
 
-<div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+<div class="grid grid-cols-1 2xl:grid-cols-[1.25fr_0.95fr_1fr] gap-6">
 
     <!-- Now Playing -->
     <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
@@ -384,7 +286,7 @@
 		</div>
 	
         <div class="space-y-2">
-            {% for s in servers %}
+            {% for s in dashboard_servers %}
             <div class="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2">
 
                 <div class="min-w-0">
@@ -448,47 +350,159 @@
         </div>
     </section>
 
-    <!-- Latest logs -->
+
+
+    <!-- Usage Risk -->
     <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-		<div class="text-sm text-slate-300 mb-3">
-			<span class="font-semibold">{{ t("tasks") }}</span>
-			<span class="text-slate-500">·</span>
-			{{ stats.active_tasks }} {{ t("active_tasks") }}
-			<span class="text-slate-500">·</span>
-			{{ stats.error_tasks }} {{ t("in_error") }}
-		</div>
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-semibold">
+                {{ t("usage_risk") if t("usage_risk") != "usage_risk" else "Usage risk" }}
+            </h2>
 
-		<div class="border-t border-slate-800 mb-3"></div>
+            <a href="{{ url_for('monitoring_page', tab='usage_risk') }}"
+               class="text-xs text-primary hover:text-primary-dark">
+                {{ t("view_all") }}
+            </a>
+        </div>
 
-		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-sm font-semibold">{{ t("latest_logs") }}</h2>
-			<a href="{{ url_for('logs_page') }}" class="text-xs text-primary hover:text-primary-dark">{{ t("view_all") }}</a>
-		</div>
+        <div class="grid grid-cols-3 gap-2 mb-3 text-center">
+            <div class="rounded-lg bg-slate-950/50 border border-slate-800 px-2 py-3">
+                <div class="text-xs text-rose-300">High</div>
+                <div class="text-2xl font-bold text-rose-400">{{ usage_risk_summary.high or 0 }}</div>
+            </div>
 
-        <div class="space-y-2 text-xs">
-            {% for log in latest_logs %}
-            <div class="flex items-start gap-2 rounded-lg bg-slate-950/40 px-3 py-2">
+            <div class="rounded-lg bg-slate-950/50 border border-slate-800 px-2 py-3">
+                <div class="text-xs text-amber-300">Medium</div>
+                <div class="text-2xl font-bold text-amber-400">{{ usage_risk_summary.medium or 0 }}</div>
+            </div>
 
-                <span class="mt-px text-[10px] px-1.5 py-0.5 rounded-full
-                    {% if log.level == 'ERROR' %}bg-rose-900/50 text-rose-200
-                    {% elif log.level == 'WARNING' %}bg-amber-900/50 text-amber-200
-                    {% else %}bg-slate-800 text-slate-200{% endif %}
-                ">
-                    {{ log.level }}
-                </span>
+            <div class="rounded-lg bg-slate-950/50 border border-slate-800 px-2 py-3">
+                <div class="text-xs text-emerald-300">Low</div>
+                <div class="text-2xl font-bold text-emerald-400">{{ usage_risk_summary.low or 0 }}</div>
+            </div>
+        </div>
 
-                <div class="min-w-0 flex-1">
-                    <div class="text-[11px] text-slate-400 truncate">
-                        {{ log.source }} · {{ log.created_at|browser_datetime if log.created_at else '—' }}
-                    </div>
-                    <div class="text-[12px] text-slate-100 truncate">
-                        {{ log.message }}
+        <div class="rounded-xl border border-slate-800 bg-gradient-to-br from-slate-950/80 to-violet-950/20 p-4 mb-3 overflow-hidden">
+            <div class="flex items-stretch justify-between gap-5">
+                <div class="shrink-0 flex flex-col justify-center">
+                    <div class="text-xs text-slate-300 font-medium">{{ t("upgrade_suggestions") }}</div>
+                    <div class="text-4xl font-bold text-primary mt-1 leading-none">{{ usage_risk_summary.suggested or 0 }}</div>
+                    <div class="text-[11px] text-slate-500 mt-2">{{ t("users") }}</div>
+                    <div class="text-[10px] mt-1 {% if usage_risk_dashboard.delta_7d > 0 %}text-amber-300{% elif usage_risk_dashboard.delta_7d < 0 %}text-emerald-300{% else %}text-slate-500{% endif %}">
+                        {% if usage_risk_dashboard.delta_7d > 0 %}+{% endif %}{{ usage_risk_dashboard.delta_7d }} {{ t("over_7_days") }}
                     </div>
                 </div>
 
+                <div class="min-w-0 flex-1">
+                    <svg viewBox="0 0 240 88" class="w-full h-24" role="img" aria-label="{{ t('upgrade_suggestions') }}">
+                        <defs>
+                            <linearGradient id="usage-risk-area" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="rgb(139 92 246)" stop-opacity="0.42" />
+                                <stop offset="100%" stop-color="rgb(139 92 246)" stop-opacity="0.02" />
+                            </linearGradient>
+                            <filter id="usage-risk-glow" x="-20%" y="-20%" width="140%" height="140%">
+                                <feGaussianBlur stdDeviation="2" result="blur" />
+                                <feMerge>
+                                    <feMergeNode in="blur" />
+                                    <feMergeNode in="SourceGraphic" />
+                                </feMerge>
+                            </filter>
+                        </defs>
+                        <path d="{{ usage_risk_dashboard.area_path }}" fill="url(#usage-risk-area)" />
+                        <path
+                            d="{{ usage_risk_dashboard.line_path }}"
+                            fill="none"
+                            stroke="rgb(139 92 246)"
+                            stroke-width="3.5"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            filter="url(#usage-risk-glow)"
+                        />
+                    </svg>
+                    <div class="flex justify-between text-[9px] text-slate-600 -mt-2">
+                        <span>{{ usage_risk_dashboard.start_label }}</span>
+                        <span>{{ t("last_14_days") }}</span>
+                        <span>{{ usage_risk_dashboard.end_label }}</span>
+                    </div>
+                </div>
             </div>
+        </div>
+
+        <div class="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+            <div class="text-xs text-slate-400 mb-3">{{ t("top_reasons") }}</div>
+
+            <div class="space-y-2 text-xs">
+                {% for reason in usage_risk_dashboard.top_reasons %}
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span class="w-5 h-5 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center text-[10px]">
+                                {{ loop.index }}
+                            </span>
+                            <span class="text-slate-300 truncate">{{ reason.label }}</span>
+                        </div>
+
+                        <div class="shrink-0 flex items-center gap-1 font-semibold">
+                            <span class="text-slate-100">
+                                {{ reason.count }}
+                            </span>
+
+                            <span class="text-slate-500">
+                                ({{ reason.percent }}%)
+                            </span>
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="text-xs text-slate-500">
+                        {{ t("no_usage_risk_reason_yet") }}
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+</div>
+
+<div class="grid grid-cols-1 2xl:grid-cols-[1fr_420px] gap-6 mt-6">
+
+    <!-- Next tasks -->
+    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+        <div id="dashboard-next-tasks"
+             hx-get="{{ url_for('dashboard_next_tasks_partial') }}"
+             hx-trigger="load, every 15000ms"
+             hx-swap="innerHTML">
+            {% include "dashboard/partials/_next_tasks.html" %}
+        </div>
+    </section>
+
+    <!-- Latest logs -->
+    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-semibold">{{ t("latest_logs") }}</h2>
+            <a href="{{ url_for('logs_page') }}" class="text-xs text-primary hover:text-primary-dark">{{ t("view_all") }}</a>
+        </div>
+
+        <div class="space-y-2 text-xs">
+            {% for log in latest_logs[:4] %}
+                <div class="flex items-start gap-2 rounded-lg bg-slate-950/40 px-3 py-2">
+                    <span class="mt-px text-[10px] px-1.5 py-0.5 rounded-full
+                        {% if log.level == 'ERROR' %}bg-rose-900/50 text-rose-200
+                        {% elif log.level == 'WARNING' %}bg-amber-900/50 text-amber-200
+                        {% else %}bg-slate-800 text-slate-200{% endif %}
+                    ">
+                        {{ log.level }}
+                    </span>
+
+                    <div class="min-w-0 flex-1">
+                        <div class="text-[11px] text-slate-400 truncate">
+                            {{ log.source }} · {{ log.created_at|browser_datetime if log.created_at else '—' }}
+                        </div>
+                        <div class="text-[12px] text-slate-100 truncate">
+                            {{ log.message }}
+                        </div>
+                    </div>
+                </div>
             {% else %}
-            <p class="text-xs text-slate-500">{{ t("no_logs_yet") }}</p>
+                <p class="text-xs text-slate-500">{{ t("no_logs_yet") }}</p>
             {% endfor %}
         </div>
     </section>

@@ -11,6 +11,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from app import RESET_MAGIC, RESET_FILE
 
 from web.helpers import get_db
+from web.security import safe_redirect_target
 
 auth_logger = get_logger("auth")
 
@@ -185,8 +186,11 @@ def _login_locked_response(email: str, client_ip: str, remaining_seconds: int):
 def register(app):
     @app.route("/setup-admin", methods=["GET"])
     def setup_admin():
+        return redirect(url_for("setup_wizard"))
+
+        # Legacy first-run screen retained for compatibility with old links.
         db = get_db()
-        s = db.query_one("SELECT admin_email, admin_password_hash FROM settings WHERE id = 1")
+        s = db.query_one("SELECT admin_email, admin_password_hash, wizard_active FROM settings WHERE id = 1")
         s = dict(s) if s else {"admin_email": "", "admin_password_hash": None}
 
         # déjà configuré => go login/home
@@ -200,6 +204,9 @@ def register(app):
 
     @app.route("/setup-admin/save", methods=["POST"])
     def setup_admin_save():
+        return redirect(url_for("setup_wizard"))
+
+        # Legacy endpoint retained for compatibility with old forms.
         db = get_db()
         s = db.query_one("SELECT admin_email, admin_password_hash FROM settings WHERE id = 1")
         s = dict(s) if s else {"admin_email": "", "admin_password_hash": None}
@@ -278,7 +285,7 @@ def register(app):
     @app.route("/login/submit", methods=["POST"])
     def login_submit():
         db = get_db()
-        s = db.query_one("SELECT admin_email, admin_password_hash FROM settings WHERE id = 1")
+        s = db.query_one("SELECT admin_email, admin_password_hash, wizard_active FROM settings WHERE id = 1")
         s = dict(s) if s else {"admin_email": "", "admin_password_hash": None}
 
         if not (s.get("admin_password_hash") or "").strip():
@@ -317,7 +324,14 @@ def register(app):
         session["vodum_admin_email"] = email
         session.permanent = True
 
-        next_url = request.args.get("next") or url_for("dashboard")
+        if int(s.get("wizard_active") or 0) == 1:
+            auth_logger.info("AUTH login ok; resuming installation wizard for email=%s", email)
+            return redirect(url_for("setup_wizard"))
+
+        next_url = safe_redirect_target(
+            request.args.get("next"),
+            url_for("dashboard"),
+        )
         auth_logger.info("AUTH login ok email=%s ip=%s ua=%s", email, client_ip, request.user_agent.string)
         return redirect(next_url)
 
@@ -339,11 +353,7 @@ def register(app):
         allowed_prefixes = (
             "/static",
             "/set_language",
-            "/servers",
-            "/servers/new",
-            "/api/backup",
-            "/backup",
-            "/api/tasks/activity",
+            "/setup",
             "/health",
             "/login",
             "/logout",
@@ -363,13 +373,13 @@ def register(app):
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='servers'"
             )
             if not exists:
-                return redirect(url_for("servers_list"))
+                return redirect(url_for("setup_wizard"))
         except Exception:
             return
 
         row = db.query_one("SELECT COUNT(*) AS cnt FROM servers")
         if row and int(row["cnt"] or 0) == 0:
-            return redirect(url_for("servers_list"))
+            return redirect(url_for("setup_wizard"))
 
     @app.before_request
     def maintenance_guard():

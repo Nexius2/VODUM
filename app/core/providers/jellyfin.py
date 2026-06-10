@@ -3,18 +3,18 @@ from __future__ import annotations
 import json
 import requests
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
 from core.providers.base import BaseProvider
-<<<<<<< Updated upstream
-=======
 from core.http_security import server_http_session
 from core.monitoring.library_media import jellyfin_library_section_id
->>>>>>> Stashed changes
 
 
 class JellyfinProvider(BaseProvider):
     provider_name = "jellyfin"
+
+    def __init__(self, server, timeout: int = 15):
+        super().__init__(server, timeout=timeout)
+        self.http = server_http_session(server)
 
     def _candidate_bases(self) -> List[str]:
         # url > local_url > public_url
@@ -43,17 +43,10 @@ class JellyfinProvider(BaseProvider):
 
         return bases
 
-    def _build_api_url(self, base: str, path: str, token: str) -> str:
+    def _build_api_url(self, base: str, path: str) -> str:
         base = (base or "").rstrip("/")
         path = "/" + (path or "").lstrip("/")
-
-        raw = f"{base}{path}"
-        parts = urlsplit(raw)
-
-        q = dict(parse_qsl(parts.query, keep_blank_values=True))
-        q["api_key"] = token
-
-        return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(q), parts.fragment))
+        return f"{base}{path}"
 
     def _post_json(self, path: str, payload: Optional[dict] = None) -> bool:
         bases = self._candidate_bases()
@@ -74,9 +67,9 @@ class JellyfinProvider(BaseProvider):
         errors: List[str] = []
 
         for base in bases:
-            url = self._build_api_url(base, path, token)
+            url = self._build_api_url(base, path)
             try:
-                r = requests.post(url, headers=headers, json=(payload or {}), timeout=self.timeout)
+                r = self.http.post(url, headers=headers, json=(payload or {}), timeout=self.timeout)
                 r.raise_for_status()
                 return True
             except requests.exceptions.RequestException as e:
@@ -122,9 +115,9 @@ class JellyfinProvider(BaseProvider):
         errors: List[str] = []
 
         for base in bases:
-            url = self._build_api_url(base, path, token)
+            url = self._build_api_url(base, path)
             try:
-                r = requests.get(url, headers=headers, timeout=self.timeout)
+                r = self.http.get(url, headers=headers, timeout=self.timeout)
                 r.raise_for_status()
                 return r.json()
             except requests.exceptions.RequestException as e:
@@ -416,4 +409,3 @@ class JellyfinProvider(BaseProvider):
             )
 
         return sessions
-

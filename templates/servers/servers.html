@@ -94,9 +94,54 @@
 
 {% else %}
 
-<div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+<div class="grid grid-cols-1 xl:grid-cols-[420px_minmax(0,1fr)] gap-6">
 
-  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" style="grid-auto-rows:1fr;">
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 min-h-[320px] h-full">
+    <h2 class="text-sm font-semibold mb-3">{{ t("add_server") }}</h2>
+
+    <form method="post" action="{{ url_for('server_create') }}"
+          class="grid grid-cols-1 gap-3 text-sm">
+
+      <label class="flex flex-col">
+        {{ t("server_type") }}*
+        <select name="type"
+                class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm">
+          <option value="plex">{{ t("plex") }}</option>
+          <option value="jellyfin">{{ t("jellyfin") }}</option>
+        </select>
+      </label>
+
+      <label class="flex flex-col">
+        URL*
+        <input
+            type="text"
+            name="url"
+            required
+            placeholder="http://192.168.1.100:32400"
+            autocomplete="off"
+            spellcheck="false"
+            class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm"
+        >
+
+        <span class="mt-1 text-xs text-slate-500">
+          Example Plex URL: http://192.168.1.100:32400
+        </span>
+      </label>
+
+      <label class="flex flex-col">
+        Token*
+        <input type="text" name="token" required
+               class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono text-xs">
+      </label>
+
+      <button class="mt-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-sm">
+        {{ t("add_server") }}
+      </button>
+
+    </form>
+  </div>
+
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-4" style="grid-auto-rows:1fr;">
     {% for s in top_servers %}
     {% set is_deleting = deleting_server_ids is defined and s.id in deleting_server_ids %}
     <a href="{% if not is_deleting %}{{ url_for('server_detail', server_id=s.id) }}{% else %}#{% endif %}"
@@ -149,51 +194,6 @@
       {% endif %}
     </a>
     {% endfor %}
-  </div>
-
-  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 min-h-[320px] h-full">
-    <h2 class="text-sm font-semibold mb-3">{{ t("add_server") }}</h2>
-
-    <form method="post" action="{{ url_for('server_create') }}"
-          class="grid grid-cols-1 gap-3 text-sm">
-
-      <label class="flex flex-col">
-        {{ t("server_type") }}*
-        <select name="type"
-                class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm">
-          <option value="plex">{{ t("plex") }}</option>
-          <option value="jellyfin">{{ t("jellyfin") }}</option>
-        </select>
-      </label>
-
-      <label class="flex flex-col">
-        URL*
-        <input
-            type="text"
-            name="url"
-            required
-            placeholder="http://192.168.1.100:32400"
-            autocomplete="off"
-            spellcheck="false"
-            class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm"
-        >
-
-        <span class="mt-1 text-xs text-slate-500">
-          Example Plex URL: http://192.168.1.100:32400
-        </span>
-      </label>
-
-      <label class="flex flex-col">
-        Token*
-        <input type="text" name="token" required
-               class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono text-xs">
-      </label>
-
-      <button class="mt-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-sm">
-        {{ t("add_server") }}
-      </button>
-
-    </form>
   </div>
 
 </div>

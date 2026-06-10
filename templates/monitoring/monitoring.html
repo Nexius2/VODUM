@@ -43,7 +43,7 @@
   {% set tab_template = "monitoring/overview_body.html" %}
 {% endif %}
 
-{% if current_tab in ['activity', 'servers', 'history', 'users', 'libraries', 'policies'] %}
+{% if current_tab in ['activity', 'servers', 'history', 'users', 'libraries', 'policies', 'usage_risk'] %}
   <div id="monitoring-content">
     {% include tab_template %}
   </div>

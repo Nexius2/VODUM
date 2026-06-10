@@ -14,12 +14,14 @@ from core.backup import BackupConfig
 from core.i18n import init_i18n
 from core.repair.plex_media_users_repair import run_repair_if_needed
 from core.monitoring.plex_websocket import PlexWebsocketClient
+from utils.version import load_app_version
 
 from api.subscriptions import subscriptions_api
 from blueprints.users import users_bp
 
 from web.helpers import get_db, scheduler_db_provider, table_exists, add_log, close_db
 from web.filters import inject_brand_name, safe_datetime, cron_human, tz_filter, browser_datetime, utc_iso
+from web.security import ip_in_networks
 
 
 task_logger = get_logger("tasks_ui")
@@ -35,13 +37,18 @@ class ConditionalProxyFix:
     Applique ProxyFix uniquement si enabled_getter() retourne True.
     Permet d'activer/désactiver dynamiquement le trust proxy via les settings.
     """
-    def __init__(self, wsgi_app, enabled_getter):
+    def __init__(self, wsgi_app, enabled_getter, trusted_networks_getter):
         self._raw_app = wsgi_app
         self._proxy_app = ProxyFix(wsgi_app, x_for=1, x_proto=1, x_host=1)
         self._enabled_getter = enabled_getter
+        self._trusted_networks_getter = trusted_networks_getter
 
     def __call__(self, environ, start_response):
-        if self._enabled_getter():
+        peer_ip = environ.get("REMOTE_ADDR")
+        if (
+            self._enabled_getter()
+            and ip_in_networks(peer_ip, self._trusted_networks_getter())
+        ):
             return self._proxy_app(environ, start_response)
         return self._raw_app(environ, start_response)
 
@@ -91,6 +98,12 @@ def _log_ip_filter_status():
         security_logger.info("IP filter ENABLED | allowed_nets=%s", allowed)
     else:
         security_logger.info("IP filter DISABLED")
+
+    trusted_proxies = os.environ.get(
+        "VODUM_TRUSTED_PROXY_NETS",
+        "127.0.0.1/32,::1/128",
+    )
+    security_logger.info("Trusted proxy networks | trusted_nets=%s", trusted_proxies)
 
 
 def startup_admin_recover_if_requested(app: Flask):
@@ -154,31 +167,7 @@ def fromjson_safe(value):
     return None
 
 
-def load_version():
-    candidate_paths = [
-        "/app/INFO",
-        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "INFO")),
-        os.path.abspath(os.path.join(os.getcwd(), "INFO")),
-    ]
-
-    info_path = next((p for p in candidate_paths if os.path.exists(p)), None)
-    if not info_path:
-        return "dev"
-
-    version = "dev"
-    try:
-        with open(info_path, encoding="utf-8", errors="ignore") as f:
-            for line in f:
-                if line.startswith("VERSION="):
-                    version = line.split("=", 1)[1].strip()
-                    break
-    except Exception:
-        return "dev"
-
-    return version
-
-
-APP_VERSION = load_version()
+APP_VERSION = load_app_version(fallback="dev")
 
 
 def _reset_maintenance_on_startup(app: Flask):
@@ -371,11 +360,16 @@ def create_app():
         initial_trust_proxy = env_trust_proxy
 
     app.config["TRUST_PROXY_ENABLED"] = bool(initial_trust_proxy)
+    app.config["TRUSTED_PROXY_NETS"] = os.environ.get(
+        "VODUM_TRUSTED_PROXY_NETS",
+        "127.0.0.1/32,::1/128",
+    )
 
     # Middleware conditionnel : lit app.config à chaque requête
     app.wsgi_app = ConditionalProxyFix(
         app.wsgi_app,
         lambda: bool(app.config.get("TRUST_PROXY_ENABLED", False)),
+        lambda: str(app.config.get("TRUSTED_PROXY_NETS", "")),
     )
 
     # Absolute path to lang/

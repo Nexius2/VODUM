@@ -1,5 +1,7 @@
 <form method="post" action="{{ url_for('subscriptions_settings_save') }}" class="space-y-6">
   <input type="hidden" name="tab" value="settings">
+  {% set _mode = settings.expiry_mode or "none" %}
+  {% set _stream_blocked_forced = _mode in ["warn_only", "warn_then_disable"] %}
 
   <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
 
@@ -43,6 +45,158 @@
         </div>
 
       </div>
+
+      <div class="mt-8 pt-6 border-t border-slate-800">
+        {% macro help_tip(text) -%}
+          <span class="relative inline-flex items-center justify-center ml-1 w-4 h-4 rounded-full bg-slate-800 text-slate-400 text-[10px] cursor-help group">
+            ?
+            <span class="pointer-events-none absolute left-1/2 bottom-full z-50 mb-2 w-72 -translate-x-1/2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-normal text-slate-200 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity">
+              {{ text }}
+            </span>
+          </span>
+        {%- endmacro %}
+
+        <h2 class="text-lg font-semibold text-slate-200 mb-1">
+          {{ t("usage_risk_upgrade_title") }}
+        </h2>
+        <p class="text-sm text-slate-400 mb-6">
+          {{ t("usage_risk_upgrade_desc") }}
+        </p>
+
+        <div class="space-y-4">
+
+          <label class="flex items-center justify-between gap-4">
+            <span class="text-sm text-slate-200 font-semibold">
+              {{ t("usage_risk_enable_detection") }}
+              {{ help_tip(t("usage_risk_enable_detection_help")) }}
+            </span>
+            <input
+              type="checkbox"
+              name="usage_risk_enabled"
+              value="1"
+              {% if settings.usage_risk_enabled|default(1)|int == 1 %}checked{% endif %}
+              class="w-4 h-4 rounded border-slate-600 bg-slate-800"
+            >
+          </label>
+
+          <label class="flex items-center justify-between gap-4">
+            <span class="text-sm text-slate-200 font-semibold">
+              {{ t("usage_risk_send_upgrade_suggestions") }}
+              {{ help_tip(t("usage_risk_send_upgrade_suggestions_help")) }}
+            </span>
+            <input
+              type="checkbox"
+              name="usage_risk_send_upgrade_suggestions"
+              value="1"
+              {% if settings.usage_risk_send_upgrade_suggestions|default(0)|int == 1 %}checked{% endif %}
+              class="w-4 h-4 rounded border-slate-600 bg-slate-800"
+            >
+          </label>
+
+          <label class="flex items-center justify-between gap-4">
+            <span class="text-sm text-slate-200 font-semibold">
+              {{ t("usage_risk_send_stream_blocked_message") }}
+              {{ help_tip(t("usage_risk_send_stream_blocked_message_help")) }}
+            </span>
+
+            {% if _stream_blocked_forced %}
+              <input type="hidden" name="usage_risk_send_stream_blocked_message" value="1">
+            {% endif %}
+
+            <input
+              type="checkbox"
+              id="usage_risk_send_stream_blocked_message"
+              name="usage_risk_send_stream_blocked_message"
+              value="1"
+              data-current-manual-value="{{ 1 if settings.usage_risk_send_stream_blocked_message|default(0)|int == 1 else 0 }}"
+              {% if _stream_blocked_forced or settings.usage_risk_send_stream_blocked_message|default(0)|int == 1 %}checked{% endif %}
+              {% if _stream_blocked_forced %}disabled{% endif %}
+              class="w-4 h-4 rounded border-slate-600 bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+          </label>
+
+          <details class="pt-2">
+            <summary class="cursor-pointer text-sm font-semibold text-primary hover:text-primary-dark">
+              {{ t("advanced") }}
+            </summary>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-800">
+
+              <div>
+                <label class="block text-xs text-slate-400 mb-1">
+                  {{ t("usage_risk_min_kills_before_suggestion") }}
+                  {{ help_tip(t("usage_risk_min_kills_before_suggestion_help")) }}
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  name="usage_risk_min_kills_before_suggestion"
+                  value="{{ settings.usage_risk_min_kills_before_suggestion or 3 }}"
+                  class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm"
+                >
+              </div>
+
+              <div>
+                <label class="block text-xs text-slate-400 mb-1">
+                  {{ t("usage_risk_analysis_window") }}
+                  {{ help_tip(t("usage_risk_analysis_window_help")) }}
+                </label>
+                <input
+                  type="number"
+                  min="7"
+                  name="usage_risk_analysis_window_days"
+                  value="{{ settings.usage_risk_analysis_window_days or 30 }}"
+                  class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm"
+                >
+              </div>
+
+              <div>
+                <label class="block text-xs text-slate-400 mb-1">
+                  {{ t("usage_risk_suggestion_cooldown") }}
+                  {{ help_tip(t("usage_risk_suggestion_cooldown_help")) }}
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  name="usage_risk_suggestion_cooldown_days"
+                  value="{{ settings.usage_risk_suggestion_cooldown_days or 30 }}"
+                  class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm"
+                >
+              </div>
+
+              <div>
+                <label class="block text-xs text-slate-400 mb-1">
+                  {{ t("usage_risk_medium_threshold") }}
+                  {{ help_tip(t("usage_risk_medium_threshold_help")) }}
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  name="usage_risk_medium_threshold"
+                  value="{{ settings.usage_risk_medium_threshold or 40 }}"
+                  class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm"
+                >
+              </div>
+
+              <div>
+                <label class="block text-xs text-slate-400 mb-1">
+                  {{ t("usage_risk_high_threshold") }}
+                  {{ help_tip(t("usage_risk_high_threshold_help")) }}
+                </label>
+                <input
+                  type="number"
+                  min="2"
+                  name="usage_risk_high_threshold"
+                  value="{{ settings.usage_risk_high_threshold or 75 }}"
+                  class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm"
+                >
+              </div>
+
+            </div>
+          </details>
+
+        </div>
+      </div>
     </div>
 
     <div class="bg-slate-900 p-6 rounded-xl border border-slate-800">
@@ -52,8 +206,6 @@
       <p class="text-sm text-slate-400 mb-6">
         {{ t("subscriptions_settings_expiry_desc") }}
       </p>
-
-      {% set _mode = settings.expiry_mode or "none" %}
 
       <div class="space-y-4">
 
@@ -90,30 +242,30 @@
             <span class="block text-xs text-slate-400 mt-1">
               {{ t("subscription_expiry_mode_disable_help") }}
             </span>
-			<span class="block text-xs text-amber-300 mt-2">
-			  {{ t("subscription_expiry_mode_disable_warning") }}
-			</span>
+            <span class="block text-xs text-amber-300 mt-2">
+              {{ t("subscription_expiry_mode_disable_warning") }}
+            </span>
           </span>
         </label>
 
-		<label class="flex items-start gap-3 p-4 rounded-xl border border-emerald-700/40 bg-emerald-950/20">
-		  <input
-			type="radio"
-			name="expiry_mode"
-			value="warn_only"
-			{% if _mode == "warn_only" %}checked{% endif %}
-			class="mt-1 w-4 h-4 rounded-full border-slate-600 bg-slate-800"
-		  >
-		  <span>
-			<span class="block text-sm text-slate-200 font-semibold">
-			  {{ t("subscription_expiry_mode_warn_only_title") }}
-			  <span class="ml-2 text-xs text-emerald-300">{{ t("recommended_for_plex") }}</span>
-			</span>
-			<span class="block text-xs text-slate-400 mt-1">
-			  {{ t("subscription_expiry_mode_warn_only_help") }}
-			</span>
-		  </span>
-		</label>
+        <label class="flex items-start gap-3 p-4 rounded-xl border border-emerald-700/40 bg-emerald-950/20">
+          <input
+            type="radio"
+            name="expiry_mode"
+            value="warn_only"
+            {% if _mode == "warn_only" %}checked{% endif %}
+            class="mt-1 w-4 h-4 rounded-full border-slate-600 bg-slate-800"
+          >
+          <span>
+            <span class="block text-sm text-slate-200 font-semibold">
+              {{ t("subscription_expiry_mode_warn_only_title") }}
+              <span class="ml-2 text-xs text-emerald-300">{{ t("recommended_for_plex") }}</span>
+            </span>
+            <span class="block text-xs text-slate-400 mt-1">
+              {{ t("subscription_expiry_mode_warn_only_help") }}
+            </span>
+          </span>
+        </label>
 
         <label class="flex items-start gap-3 p-4 rounded-xl border border-slate-800 bg-slate-950/40">
           <input
@@ -160,4 +312,36 @@
       {{ t("save") }}
     </button>
   </div>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const checkbox = document.getElementById("usage_risk_send_stream_blocked_message");
+      const radios = document.querySelectorAll('input[name="expiry_mode"]');
+
+      if (!checkbox || !radios.length) {
+        return;
+      }
+
+      const manualChecked = checkbox.dataset.currentManualValue === "1";
+
+      function syncStreamBlockedCheckbox() {
+        const selected = document.querySelector('input[name="expiry_mode"]:checked');
+        const mode = selected ? selected.value : "none";
+        const forced = mode === "warn_only" || mode === "warn_then_disable";
+
+        if (forced) {
+          checkbox.checked = true;
+          checkbox.disabled = true;
+        } else {
+          checkbox.disabled = false;
+          checkbox.checked = manualChecked;
+        }
+      }
+
+      radios.forEach(function (radio) {
+        radio.addEventListener("change", syncStreamBlockedCheckbox);
+      });
+
+      syncStreamBlockedCheckbox();
+    });
+  </script>
 </form>

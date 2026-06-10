@@ -31,6 +31,7 @@ JELLYFIN_PRE_KILL_INTERVAL_SECONDS = 10     # un message toutes les 10 secondes
 HOUSEHOLD_TRANSITION_SECONDS = 90
 HOUSEHOLD_MEMORY_SECONDS = 300
 HOUSEHOLD_DEVICE_MATCH_SCORE = 5
+HOUSEHOLD_MEDIA_GRACE_SECONDS = 300
 STREAM_ENFORCER_NORMAL_INTERVAL_SECONDS = 15
 STREAM_ENFORCER_BOOST_INTERVAL_SECONDS = 15
 STREAM_ENFORCER_BOOST_KILL_THRESHOLD = 1
@@ -38,6 +39,7 @@ STREAM_ENFORCER_BOOST_WINDOW_MINUTES = 10
 STREAM_ENFORCER_BOOST_DURATION_MINUTES = 30
 
 _RECENT_SESSION_CACHE: Dict[str, List[dict]] = {}
+_IP_GRACE_CACHE: Dict[str, float] = {}
 
 # -------------------------
 # Smart household helpers
@@ -285,6 +287,127 @@ def _cleanup_recent_session_cache():
                 )
 
             _RECENT_SESSION_CACHE.pop(user_key, None)
+
+def _media_family_key(sess: dict) -> str:
+    media_type = _safe_lower(sess.get("media_type"))
+    media_key = _safe_lower(sess.get("media_key"))
+    grandparent_title = _safe_lower(sess.get("grandparent_title"))
+    parent_title = _safe_lower(sess.get("parent_title"))
+    title = _safe_lower(sess.get("title"))
+
+    if media_type in ("episode", "series", "show") and grandparent_title:
+        return f"series:{grandparent_title}"
+
+    if media_type in ("movie", "film") and title:
+        return f"movie:{title}"
+
+    if grandparent_title:
+        return f"series:{grandparent_title}"
+
+    if media_key:
+        return f"key:{media_key}"
+
+    if parent_title and title:
+        return f"parent_title:{parent_title}:{title}"
+
+    if title:
+        return f"title:{title}"
+
+    return ""
+
+
+def _is_coherent_media_transition(sessions: List[dict]) -> bool:
+    family_keys = set()
+
+    for sess in sessions:
+        key = _media_family_key(sess)
+
+        if key:
+            family_keys.add(key)
+
+    return bool(len(family_keys) == 1)
+
+
+def _ip_grace_key(policy_id: int, user_key: Tuple[Optional[int], str], sessions: List[dict]) -> str:
+    session_parts = []
+
+    for sess in sessions:
+        session_parts.append(
+            f"{sess.get('server_id')}:{sess.get('session_key')}:{sess.get('ip')}:{_media_family_key(sess)}"
+        )
+
+    return f"policy:{policy_id}|user:{user_key}|" + "|".join(sorted(session_parts))
+
+
+def _cleanup_ip_grace_cache():
+    now = time.time()
+
+    for key in list(_IP_GRACE_CACHE.keys()):
+        if (now - float(_IP_GRACE_CACHE.get(key) or 0)) > HOUSEHOLD_MEDIA_GRACE_SECONDS:
+            _IP_GRACE_CACHE.pop(key, None)
+
+
+def _should_grace_coherent_ip_switch(
+    policy: dict,
+    user_key: Tuple[Optional[int], str],
+    sessions: List[dict],
+    ips: set,
+    max_ips: int,
+) -> bool:
+    _cleanup_ip_grace_cache()
+
+    if len(ips) > (max_ips + 1):
+        return False
+
+    if len(sessions) < 2:
+        return False
+
+    if not _is_coherent_media_transition(sessions):
+        return False
+
+    key = _ip_grace_key(int(policy.get("id") or 0), user_key, sessions)
+    now = time.time()
+    first_seen = _IP_GRACE_CACHE.get(key)
+
+    if not first_seen:
+        _IP_GRACE_CACHE[key] = now
+
+        logger.info(
+            "[max_ips_grace] coherent media switch detected | policy=%s | user=%s | ips=%s | max_ips=%s | grace=%ss",
+            policy.get("id"),
+            user_key,
+            sorted(ips),
+            max_ips,
+            HOUSEHOLD_MEDIA_GRACE_SECONDS,
+        )
+
+        return True
+
+    elapsed = now - float(first_seen)
+
+    if elapsed <= HOUSEHOLD_MEDIA_GRACE_SECONDS:
+        if is_debug_mode_enabled():
+            logger.debug(
+                "[max_ips_grace] still inside grace window | policy=%s | user=%s | elapsed=%ss/%ss",
+                policy.get("id"),
+                user_key,
+                int(elapsed),
+                HOUSEHOLD_MEDIA_GRACE_SECONDS,
+            )
+
+        return True
+
+    _IP_GRACE_CACHE.pop(key, None)
+
+    logger.warning(
+        "[max_ips_grace] grace expired, enforcing violation | policy=%s | user=%s | ips=%s | max_ips=%s",
+        policy.get("id"),
+        user_key,
+        sorted(ips),
+        max_ips,
+    )
+
+    return False
 
 def _debug_log_sessions(user_key: str, sessions: List[dict], reason: str):
     logger.warning(
@@ -986,6 +1109,9 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
                 ips.add(ip)
 
             if len(ips) <= max_ips:
+                continue
+
+            if _should_grace_coherent_ip_switch(policy, user_key, deduped_sessions, ips, max_ips):
                 continue
 
             # ✅ On tue une session du user (selector), sur le serveur de la session ciblée

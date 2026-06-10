@@ -27,6 +27,14 @@ It provides:
 
 Backups are stored as **SQLite database files**.
 
+Full Vodum ZIP backups also contain communication attachments and
+`vodum.encryption_key`, which is required to decrypt stored SMTP and Discord
+secrets. The key is restored automatically.
+
+Store full backup ZIP files securely: they are self-contained and include
+everything needed to decrypt communication secrets. Raw `.db` and `.sqlite`
+files do not include the encryption key.
+
 <hr style="border:0;border-top:1px solid #1f2a44;margin:18px 0;" />
 
 </div>

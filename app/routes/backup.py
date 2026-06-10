@@ -31,9 +31,26 @@ def get_sqlite_db_size_bytes(db_path: str) -> int | None:
             size += shm.stat().st_size
         return size
     except Exception:
+        settings_logger.error("Unable to determine SQLite database size", exc_info=True)
         return None
 
 def register(app):
+
+    def _task_diagnostic(db, task_name: str) -> dict:
+        row = db.query_one(
+            """
+            SELECT status, last_run, last_error, last_attempt_at
+            FROM tasks
+            WHERE name = ?
+            """,
+            (task_name,),
+        )
+        return dict(row) if row else {
+            "status": "unknown",
+            "last_run": None,
+            "last_error": None,
+            "last_attempt_at": None,
+        }
 
     def _resolve_backup_path(selected_name: str) -> Path:
         """
@@ -98,6 +115,8 @@ def register(app):
         plex_servers = db.query("SELECT id, name FROM servers WHERE type='plex' ORDER BY name ASC")
         db_size_bytes = get_sqlite_db_size_bytes(app.config["DATABASE"])
         backups = list_backups(backup_cfg)
+        backup_diagnostic = _task_diagnostic(db, "auto_backup")
+        integrity_diagnostic = _task_diagnostic(db, "db_integrity_check")
 
         tautulli_job = db.query_one("""
             SELECT id, status, created_at, started_at, finished_at, stats_json, last_error
@@ -114,6 +133,8 @@ def register(app):
             active_page="backup",
             plex_servers=plex_servers,
             tautulli_job=tautulli_job,
+            backup_diagnostic=backup_diagnostic,
+            integrity_diagnostic=integrity_diagnostic,
         )
 
     @app.route("/backup/download/<path:filename>", methods=["GET"])
@@ -130,6 +151,7 @@ def register(app):
             )
 
         except Exception as e:
+            settings_logger.warning("Backup download failed for %r: %s", filename, e, exc_info=True)
             flash(f"Download failed: {e}", "error")
             return redirect(url_for("backup_page"))
 
@@ -155,6 +177,7 @@ def register(app):
             return {"success": True}
 
         except Exception as e:
+            settings_logger.error("Backup deletion failed", exc_info=True)
             return {"success": False, "error": str(e)}, 500
 
     @app.route("/backup/action", methods=["POST"])
@@ -303,7 +326,7 @@ def register(app):
                     try:
                         size = tmp_path.stat().st_size
                     except Exception:
-                        pass
+                        log.warning(f"[TAUTULLI UI] unable to read upload size for {tmp_path}", exc_info=True)
 
                     log.info(f"[TAUTULLI UI] uploaded tmp file={tmp_path} size={size} bytes")
 
@@ -312,7 +335,7 @@ def register(app):
                         try:
                             tmp_path.replace(bad)
                         except Exception:
-                            pass
+                            log.warning(f"[TAUTULLI UI] unable to preserve too-small upload {tmp_path}", exc_info=True)
                         flash(
                             f"Upload looks too small ({size} bytes). File kept as {bad.name} for inspection.",
                             "error",
@@ -332,6 +355,7 @@ def register(app):
                                 try:
                                     final_path.replace(invalid_path)
                                 except Exception:
+                                    log.warning(f"[TAUTULLI UI] unable to preserve invalid upload {final_path}", exc_info=True)
                                     invalid_path = final_path
 
                                 flash(
@@ -364,7 +388,7 @@ def register(app):
                                 try:
                                     job_id = int(cur.lastrowid)
                                 except Exception:
-                                    pass
+                                    log.warning("[TAUTULLI UI] unable to read inserted job id", exc_info=True)
 
                                 log.info(
                                     f"[TAUTULLI UI] job enqueued (job_id={job_id}) file={final_path} "
@@ -382,6 +406,7 @@ def register(app):
                                 enable_and_run_task_by_name("import_tautulli")
 
             except Exception as e:
+                get_logger("backup").error("Unable to start Tautulli import", exc_info=True)
                 flash(f"Error while starting import: {e}", "error")
 
         return redirect(url_for("backup_page"))
@@ -395,4 +420,3 @@ def register(app):
     @app.route("/backup", methods=["GET"])
     def backup_page():
         return _render_backup_page()
-

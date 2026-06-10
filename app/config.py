@@ -97,6 +97,12 @@ class Config:
     # Mode debug (0/1)
     DEBUG = bool(int(os.environ.get("VODUM_DEBUG", "0")))
 
+    # Limit the complete HTTP request body, including uploaded backups.
+    MAX_CONTENT_LENGTH = max(
+        1,
+        int(os.environ.get("VODUM_MAX_UPLOAD_MB", "4096")),
+    ) * 1024 * 1024
+
     # évite les collisions avec d'autres applis
     SESSION_COOKIE_NAME = os.environ.get("VODUM_SESSION_COOKIE_NAME", "vodum_session")
 

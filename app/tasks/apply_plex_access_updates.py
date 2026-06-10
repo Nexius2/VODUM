@@ -11,6 +11,7 @@ import requests
 from core.plex_rate_limit import install_plex_rate_limit
 from core.plex_connection import find_working_plex_base_url
 from core.server_cooldown import should_skip_unreachable_server
+from core.http_security import plex_server_http_session
 
 logger = get_logger("apply_plex_access_updates")
 
@@ -426,7 +427,7 @@ def get_plex(server_row):
 	if not baseurl or not token:
 		raise RuntimeError(f"Incomplete server configuration (URL/token) : {server_row['name']}")
 
-	session = requests.Session()
+	session = plex_server_http_session(server_row)
 	install_plex_rate_limit(session, baseurl)
 
 	return PlexServer(baseurl, token, session=session)

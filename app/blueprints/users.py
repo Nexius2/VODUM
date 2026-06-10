@@ -29,6 +29,11 @@ from communications_engine import (
 )
 from core.providers.plex_users import plex_invite_and_share
 from tasks_engine import auto_enable_stream_enforcer
+from secret_store import (
+    decrypt_communication_settings,
+    find_plex_server_ids_by_token,
+    find_plex_servers_by_token,
+)
 
 log = get_logger("users_create")
 
@@ -48,6 +53,7 @@ def is_smtp_ready(settings_row) -> bool:
     - accepte dict
     - accepte sqlite3.Row (ou tout mapping) => conversion dict(...)
     """
+    settings_row = decrypt_communication_settings(dict(settings_row or {}))
     if not settings_row:
         return False
 
@@ -67,6 +73,7 @@ def is_smtp_ready(settings_row) -> bool:
 
 
 def send_email_via_settings(settings: Dict[str, Any], to_email: str, subject: str, body: str) -> bool:
+    settings = decrypt_communication_settings(settings)
     smtp_host = settings.get("smtp_host")
     smtp_port = settings.get("smtp_port") or 587
     smtp_tls = bool(settings.get("smtp_tls"))
@@ -316,11 +323,7 @@ def api_server_libraries(server_id: int):
     if provider == "plex":
         token = server.get("token") or ""
         if token:
-            linked = db.query(
-                "SELECT id FROM servers WHERE type='plex' AND token = ? ORDER BY name ASC",
-                (token,),
-            )
-            server_ids = [int(r["id"]) for r in linked] or [server_id]
+            server_ids = find_plex_server_ids_by_token(db, token) or [server_id]
 
     placeholders = ",".join(["?"] * len(server_ids))
     rows = db.query(
@@ -491,8 +494,7 @@ def api_users_create():
             if srv_type == "plex":
                 tok = (dict(srv).get("token") or "")
                 if tok:
-                    linked = db.query("SELECT id FROM servers WHERE type='plex' AND token=?", (tok,))
-                    allowed_server_ids = [int(r["id"]) for r in linked] or [sid]
+                    allowed_server_ids = find_plex_server_ids_by_token(db, tok) or [sid]
 
             placeholders_ids = ",".join(["?"] * len(lib_ids))
             placeholders_srv = ",".join(["?"] * len(allowed_server_ids))
@@ -692,11 +694,7 @@ def api_users_create():
 
                 tok = (server.get("token") or "")
                 if tok:
-                    group_rows = db.query(
-                        "SELECT * FROM servers WHERE type='plex' AND token=? ORDER BY name ASC",
-                        (tok,),
-                    )
-                    group_servers = [dict(r) for r in group_rows] or [server]
+                    group_servers = find_plex_servers_by_token(db, tok) or [server]
                 else:
                     group_servers = [server]
 
@@ -883,11 +881,7 @@ def api_users_create():
             try:
                 tok = (server.get("token") or "")
                 if tok:
-                    group_rows = db.query(
-                        "SELECT * FROM servers WHERE type='plex' AND token=? ORDER BY name ASC",
-                        (tok,),
-                    )
-                    group_servers = [dict(r) for r in group_rows] or [server]
+                    group_servers = find_plex_servers_by_token(db, tok) or [server]
                 else:
                     group_servers = [server]
 
@@ -1140,4 +1134,3 @@ def api_users_create():
             "mailing_errors": mailing_errors,
         }
     )
-

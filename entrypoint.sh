@@ -42,6 +42,15 @@ log() {
   echo "$ts | $level | entrypoint | $message" | tee -a "$LOG_DIR/entrypoint.log"
 }
 
+on_error() {
+  local exit_code=$?
+  local line_no="${1:-unknown}"
+  log ERROR "Startup failed at line ${line_no} with exit code ${exit_code}"
+  exit "$exit_code"
+}
+
+trap 'on_error $LINENO' ERR
+
 # ---------------------------------------------------------------------------
 # 1️⃣ Détection de la présence de la DB
 # ---------------------------------------------------------------------------
@@ -109,34 +118,15 @@ else
   #  - Ignore toute structure obsolète
   python3 /app/migrations/20251213_import_v1_into_v2.py "$V1_BACKUP"
 
-  # Marquer la migration comme appliquée (version INTEGER + name TEXT)
-  # Choisis un numéro de version > 2, ici 3.
+  # Journaliser l'import sans modifier la version structurelle V2.
+  # Les migrations datées utilisent leur date comme identifiant unique.
   sqlite3 "$DB_PATH" <<'EOF'
 INSERT OR IGNORE INTO schema_migrations (version, name)
-VALUES (3, '20250402_rebuild_from_v1');
+VALUES (20251213, '20251213_import_v1_into_v2');
 EOF
 
   log INFO "V1 → V2 migration completed successfully"
 fi
-
-# ---------------------------------------------------------------------------
-# 3️⃣.1️⃣ Migrations V2 incrémentales
-# ---------------------------------------------------------------------------
-
-# log INFO "Vérification des migrations V2"
-#
-# HAS_JELLYFIN_MIGRATION=$(sqlite3 "$DB_PATH" \
-#   "SELECT 1 FROM schema_migrations WHERE name = '20251215_add_jellyfin_id_and_nullable_plex_id' LIMIT 1;" \
-#   2>/dev/null || true)
-#
-# if [ -z "$HAS_JELLYFIN_MIGRATION" ]; then
-#   log INFO "Application migration Jellyfin (plex_id nullable + jellyfin_id)"
-#   python3 /app/migrations/20251215_add_jellyfin_id_and_nullable_plex_id.py "$DB_PATH"
-#   sqlite3 "$DB_PATH" "INSERT OR IGNORE INTO schema_migrations (version, name) VALUES (4, '20251215_add_jellyfin_id_and_nullable_plex_id');"
-#   log INFO "Migration Jellyfin appliquée avec succès"
-# else
-#   log INFO "Migration Jellyfin déjà appliquée"
-# fi
 
 # ---------------------------------------------------------------------------
 # 4️⃣ Bootstrap DB (idempotent)
@@ -198,18 +188,24 @@ fi
 
 
 log INFO "Starting DB bootstrap"
-python3 /app/db_bootstrap.py
+python3 /app/db_bootstrap.py 2>&1 | tee -a "$LOG_DIR/entrypoint.log"
 log INFO "DB bootstrap completed"
 
 # ---------------------------------------------------------------------------
 # 5️⃣ Démarrage de l'application
 # ---------------------------------------------------------------------------
 
-log INFO "Starting Flask server"
-log INFO "PWD=$(pwd)"
-log INFO "Listing /app:"
-ls -la /app || true
-log INFO "run.py exists?"
-ls -la /app/run.py || true
+log INFO "Starting Waitress production server"
+UPLOAD_MB="${VODUM_MAX_UPLOAD_MB:-4096}"
+case "$UPLOAD_MB" in
+  ''|*[!0-9]*) log ERROR "VODUM_MAX_UPLOAD_MB must be a positive integer"; exit 1 ;;
+esac
+MAX_REQUEST_BODY_SIZE=$((UPLOAD_MB * 1024 * 1024))
 
-exec python3 run.py
+log INFO "Waitress listening on 0.0.0.0:${VODUM_PORT:-5000}"
+exec waitress-serve \
+  --host=0.0.0.0 \
+  --port="${VODUM_PORT:-5000}" \
+  --threads="${VODUM_WAITRESS_THREADS:-6}" \
+  --max-request-body-size="$MAX_REQUEST_BODY_SIZE" \
+  run:app

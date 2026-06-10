@@ -7,6 +7,7 @@ from typing import Callable, Dict, Optional
 
 from flask import session, redirect, url_for, request, current_app
 from logging_utils import get_logger, is_debug_mode_enabled
+from web.security import safe_redirect_target
 
 
 # Cache global pour éviter de relire les JSON à chaque requête
@@ -186,11 +187,11 @@ def init_i18n(app, get_db: Callable[[], object]) -> None:
     @app.route("/set_language", methods=["POST"])
     def set_language():
         lang = (request.form.get("lang") or "").strip()
-        next_url = (
+        requested_next = (
             request.form.get("next")
             or request.referrer
-            or url_for("dashboard")
         )
+        next_url = safe_redirect_target(requested_next, url_for("dashboard"))
 
         available_langs = tuple(get_available_languages().keys())
 

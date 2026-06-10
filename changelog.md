@@ -4,9 +4,6 @@ All notable changes to Vodum will be documented in this file.
 
 ---
 
-<<<<<<< Updated upstream
-### improved
-=======
 
 ### Improved
 - Completed the Libraries and media reliability work: Jellyfin sessions now resolve their collection folder, missing historical associations are repaired when unambiguous, and library statistics include unlinked media users.
@@ -66,15 +63,26 @@ All notable changes to Vodum will be documented in this file.
 - Restricted trusted proxy headers to connections originating from `VODUM_TRUSTED_PROXY_NETS`.
 - Added security documentation for trusted reverse proxies and large uploads.
 - Added automated tests for redirect safety, proxy address handling, archive limits and large Tautulli imports.
->>>>>>> Stashed changes
 - Improved template variable validation to ensure all advertised placeholders are correctly resolved before sending emails.
 - Prevented raw placeholders from appearing in playback interruption notifications.
 - Improved subscription selection in user profiles to display only enabled subscription plans.
 - Improved `comm_templates` schema upgrade to prevent SQLite from rewriting foreign keys incorrectly during table rename.
+- Improved subscription template integrity checks to avoid impossible user configurations.
+- Improved Usage Risk scoring with stronger fixed-device/IP signals and lower risk for TV + mobile/browser usage.
+- Improved User Detail layout with Usage Risk and upgrade recommendation inside the Options card.
+- Improved Subscription settings so Stream Blocked messages are forced when expiration warning modes already require them.
+- Reworked dashboard layout to improve readability and reduce wasted space.
+- Removed the "Kills / Subscription summary" widget.
+- Expanded the "Now Playing" section to display media titles more clearly.
+- Added subscription plan distribution directly to the top statistics card.
+- Added subscription plans donut chart with subscriber counts and percentages.
+- Displayed the number of configured subscription plans.
+- Improved subscription distribution legend layout and readability.
+- Added percentage display styling with muted colors for better visual hierarchy.
+- Improved Usage Risk "Top reasons" display with separate styling for counts and percentages.
+- Reduced dashboard clutter by consolidating subscription statistics into a single widget.
 
 ### Fixed
-<<<<<<< Updated upstream
-=======
 - Fixed Jellyfin plays missing from per-library statistics because active sessions did not expose `library_section_id`.
 - Fixed same-title series from different servers or native series identifiers being merged together.
 - Fixed multiple legitimate plays started within the same minute being collapsed into one Top played entry.
@@ -89,10 +97,12 @@ All notable changes to Vodum will be documented in this file.
 - Stopped storing newly submitted Jellyfin user passwords in plaintext.
 - Added startup cleanup of legacy plaintext Jellyfin user passwords.
 - Added protection against unexpectedly large or highly populated backup ZIP archives.
->>>>>>> Stashed changes
 - Fixed playback-blocked email variable replacement for policy enforcement notifications.
 - Fixed legacy communication database migrations that could leave broken foreign keys pointing to `comm_templates_old`.
 - Fixed recurring `send_expiration_emails` errors caused by missing `comm_templates_old` table on upgraded installations.
+- Fixed Usage Risk detail panel closing due to automatic Monitoring refresh.
+- Fixed device extraction for Usage Risk by reading stored `all_sessions` and `target_session` data.
+- Fixed upgrade suggestions so they are only sent when enabled and when the minimum kill threshold is reached.
 
 ## Added
 - Added support for policy, media, client, device and block timestamp variables in message rendering.
@@ -101,4 +111,20 @@ All notable changes to Vodum will be documented in this file.
 - Added Lifetime badge and duration handling in subscription templates.
 - Disabled duration editing when Lifetime mode is enabled.
 - Added automatic repair at startup for affected tables: scheduled communications, template attachments and communication history.
+- Added a new "Subscription expired warning" expiration mode for Plex/Jellyfin.
+- Expired users can now be blocked through a system-managed playback policy instead of immediately losing library access.
+- Added optional "warn then disable" behavior to display an expiration message before revoking access.
+- Automatic cleanup of expired-subscription policies when a subscription is renewed.
+- Improved Plex reactivation flow by automatically scheduling access synchronization after renewal.
+- Added validation coverage for the full expired → warning → renewal lifecycle.
+- Added a grace period for coherent device switches in max IP policies.
+- VODUM now detects when the same user appears to switch device while watching the same movie or series.
+- Temporary duplicate IP detections can now be ignored for a short delay before enforcing a kill.
+- Reduced false positives when Plex keeps an old session visible during TV → phone / phone → TV transitions.
+- Added validation for subscription templates to prevent inconsistent policy configurations.
+- Max IPs per user can no longer exceed Max Streams per user.
+- Added server-side validation to ensure upgrade suggestions and policy enforcement remain coherent.
+- Added Usage Risk dashboard widget with High, Medium, Low and suggested upgrade counters.
+- Added automatic usage risk recommendation history with cooldown support.
+- Added automatic upgrade suggestion notifications through the existing communications system.
 

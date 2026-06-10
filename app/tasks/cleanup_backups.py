@@ -64,10 +64,11 @@ def run(task_id: int, db):
     scanned = 0
 
     patterns = (
-        "vodum-*.db",          # legacy auto_backup
-        "backup_*.sqlite",     # UI / core.backup
+        "backup_*.zip",        # full backup actuel
+        "backup_*.sqlite",     # legacy UI / core.backup
         "pre_restore_*.sqlite",
-        "database_v1_*.db",
+        "vodum-*.db",          # legacy auto_backup
+        "database_v1_*.db",    # migration V1 -> V2
     )
 
     try:

@@ -11,6 +11,7 @@ from db_manager import DBManager
 from logging_utils import get_logger, is_debug_mode_enabled
 from core.i18n import init_i18n, get_translator
 from core.backup import BackupConfig
+from secret_store import decrypt_communication_settings
 
 
 # -----------------------------
@@ -232,7 +233,7 @@ def send_email_via_settings(
         logger.error("[MAIL] Aucun paramètre mail trouvé en base")
         return False
 
-    settings = dict(settings_row)
+    settings = decrypt_communication_settings(dict(settings_row))
 
     if not settings.get("mailing_enabled"):
         logger.info("[MAIL] Mailing désactivé dans les paramètres")

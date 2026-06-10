@@ -20,6 +20,7 @@ from email.message import EmailMessage
 from tasks_engine import task_logs
 from logging_utils import get_logger, is_debug_mode_enabled
 from mailing_utils import build_user_context, render_mail
+from secret_store import decrypt_communication_settings
 from email_layout_utils import build_email_parts
 
 
@@ -124,7 +125,7 @@ def run(task_id: int, db):
         # 1) Charger settings SMTP
         # --------------------------------------------------------
         settings = db.query_one("SELECT * FROM settings WHERE id = 1")
-        settings = dict(settings) if settings else None
+        settings = decrypt_communication_settings(dict(settings)) if settings else None
 
         if not settings or not settings["mailing_enabled"]:
             msg = "Mailing disabled → no action taken."
@@ -288,4 +289,3 @@ def run(task_id: int, db):
 
     finally:
         log.info("=== SEND MAIL CAMPAIGNS : END ===")
-

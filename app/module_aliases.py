@@ -15,6 +15,7 @@ ALIASES = {
     "discord_utils": "app.discord_utils",
     "mailing_utils": "app.mailing_utils",
     "notifications_utils": "app.notifications_utils",
+    "secret_store": "app.secret_store",
     "tasks_engine": "app.tasks_engine",
 
     # modules dépendants ensuite

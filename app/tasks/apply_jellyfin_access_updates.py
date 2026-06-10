@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional
 
 import requests
 from core.server_cooldown import should_skip_unreachable_server
+from core.http_security import server_http_session
 from logging_utils import get_logger
 
 logger = get_logger("apply_jellyfin_access_updates")
@@ -36,35 +37,37 @@ def _get_jellyfin_api_key(server_row: Dict[str, Any]) -> str:
     return token
 
 
-def _jf_get_user(base_url: str, api_key: str, jf_user_id: str) -> Dict[str, Any]:
+def _jf_get_user(http, base_url: str, api_key: str, jf_user_id: str) -> Dict[str, Any]:
     url = f"{base_url}/Users/{jf_user_id}"
-    r = requests.get(url, params={"api_key": api_key}, timeout=20)
+    r = http.get(url, headers={"X-Emby-Token": api_key}, timeout=20)
     r.raise_for_status()
     return r.json()
 
 
-def _jf_set_policy(base_url: str, api_key: str, jf_user_id: str, policy: Dict[str, Any]) -> None:
+def _jf_set_policy(http, base_url: str, api_key: str, jf_user_id: str, policy: Dict[str, Any]) -> None:
     url = f"{base_url}/Users/{jf_user_id}/Policy"
 
     # IMPORTANT: envoyer du vrai JSON avec Content-Type: application/json
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
+        "X-Emby-Token": api_key,
     }
 
     # `json=` force requests à sérialiser en JSON + bon header
-    r = requests.post(url, params={"api_key": api_key}, json=policy, headers=headers, timeout=20)
+    r = http.post(url, json=policy, headers=headers, timeout=20)
 
     # Certains serveurs/versions acceptent PUT plutôt que POST.
     # Si POST n'est pas accepté, on tente PUT.
     if r.status_code in (405, 415):
-        r = requests.put(url, params={"api_key": api_key}, json=policy, headers=headers, timeout=20)
+        r = http.put(url, json=policy, headers=headers, timeout=20)
 
     r.raise_for_status()
 
 
 
 def _apply_policy_enabled_folders(
+    http,
     base_url: str,
     api_key: str,
     jf_user_id: str,
@@ -75,7 +78,7 @@ def _apply_policy_enabled_folders(
       - EnableAllFolders = False
       - EnabledFolders = [folderIds]
     """
-    user_obj = _jf_get_user(base_url, api_key, jf_user_id)
+    user_obj = _jf_get_user(http, base_url, api_key, jf_user_id)
     policy = user_obj.get("Policy") or {}
     if not isinstance(policy, dict):
         policy = {}
@@ -92,7 +95,7 @@ def _apply_policy_enabled_folders(
         f"EnabledFolders {before_folders} -> {enabled_folders}"
     )
 
-    _jf_set_policy(base_url, api_key, jf_user_id, policy)
+    _jf_set_policy(http, base_url, api_key, jf_user_id, policy)
 
 
 # ---------------------------------------------------------------------
@@ -226,6 +229,7 @@ def _process_job(db, job: Dict[str, Any]) -> None:
 
     base_url = _pick_server_base_url(server)
     api_key = _get_jellyfin_api_key(server)
+    http = server_http_session(server)
 
     accounts = _get_jellyfin_accounts(db, vodum_user_id, server_id)
     if not accounts:
@@ -247,7 +251,7 @@ def _process_job(db, job: Dict[str, Any]) -> None:
             )
             continue
 
-        _apply_policy_enabled_folders(base_url, api_key, jf_user_id, enabled_folders)
+        _apply_policy_enabled_folders(http, base_url, api_key, jf_user_id, enabled_folders)
 
 
 # ---------------------------------------------------------------------
@@ -298,4 +302,3 @@ def run(task_id: int, db) -> None:
             _mark_failure(db, job_id, str(e))
 
     logger.debug("=== APPLY JELLYFIN ACCESS UPDATES : END ===")
-

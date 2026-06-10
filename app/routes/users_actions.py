@@ -13,6 +13,7 @@ from core.providers.jellyfin_users import jellyfin_list_users
 from .users_list import merge_vodum_users
 from core.media_jobs import insert_plex_media_job, insert_jellyfin_media_job
 from core.plex_connection import find_working_plex_base_url
+from core.http_security import plex_server_http_session
 
 
 task_logger = get_logger("tasks_ui")
@@ -274,7 +275,7 @@ def _check_plex_media_user_presence(server_row, media_user_row):
     try:
         from plexapi.server import PlexServer
 
-        session = requests.Session()
+        session = plex_server_http_session(server_row)
         install_plex_rate_limit(session, base)
 
         plex = PlexServer(base, token, session=session)
@@ -1067,5 +1068,3 @@ def register(app):
     # -----------------------------
     # SERVEURS & BIBLIO
     # -----------------------------
-
-
