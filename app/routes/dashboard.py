@@ -1,6 +1,8 @@
 # Auto-split from app.py (keep URLs/endpoints intact)
 from core.monitoring.artwork import enrich_live_session_artwork
-
+from core.usage_risk import build_usage_risk_report
+from collections import Counter
+from datetime import datetime, timedelta
 from flask import render_template, redirect, url_for, make_response
 
 from logging_utils import read_last_logs
@@ -14,6 +16,106 @@ def _no_store_response(html):
 	response.headers["Pragma"] = "no-cache"
 	response.headers["Expires"] = "0"
 	return response
+
+def _get_dashboard_next_tasks(db):
+    if not table_exists(db, "tasks"):
+        return {
+            "items": [],
+            "active": 0,
+            "error": 0,
+        }
+
+    row = db.query_one(
+        """
+        SELECT
+          SUM(CASE WHEN enabled = 1 THEN 1 ELSE 0 END) AS active,
+          SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS error
+        FROM tasks
+        """
+    )
+
+    tasks = db.query(
+        """
+        SELECT
+          name,
+          status,
+          next_run,
+          last_run
+        FROM tasks
+        WHERE enabled = 1
+        ORDER BY
+          CASE WHEN next_run IS NULL THEN 1 ELSE 0 END,
+          datetime(next_run) ASC,
+          LOWER(name) ASC
+        LIMIT 4
+        """
+    ) or []
+
+    return {
+        "items": [dict(t) for t in tasks],
+        "active": int((row["active"] if row else 0) or 0),
+        "error": int((row["error"] if row else 0) or 0),
+    }
+
+def _build_usage_risk_dashboard(usage_risk_report):
+    rows = usage_risk_report.get("rows") or []
+
+    reasons_counter = Counter()
+    trend_counter = Counter()
+
+    today = datetime.now().date()
+    start_day = today - timedelta(days=6)
+
+    for row in rows:
+        for reason in row.get("reasons") or []:
+            reasons_counter[str(reason)] += 1
+
+        if row.get("suggested_subscription"):
+            last_activity = row.get("last_activity")
+            if last_activity:
+                try:
+                    activity_day = datetime.fromisoformat(str(last_activity).replace("Z", "+00:00")).date()
+                    if start_day <= activity_day <= today:
+                        trend_counter[activity_day.isoformat()] += 1
+                except Exception:
+                    pass
+
+    trend_values = []
+    for idx in range(7):
+        day = start_day + timedelta(days=idx)
+        trend_values.append(int(trend_counter.get(day.isoformat(), 0)))
+
+    max_value = max(trend_values) if trend_values else 0
+    points_list = []
+
+    if max_value <= 0:
+        points_list = ["0,42", "20,42", "40,42", "60,42", "80,42", "100,42", "120,42"]
+    else:
+        for idx, value in enumerate(trend_values):
+            x = idx * 20
+            y = 42 - int((value / max_value) * 34)
+            points_list.append(f"{x},{y}")
+
+    trend_points = " ".join(points_list)
+    trend_area_points = f"0,48 {trend_points} 120,48"
+
+    total_reasons = sum(reasons_counter.values()) or 0
+    top_reasons = []
+
+    for label, count in reasons_counter.most_common(3):
+        percent = round((count / total_reasons) * 100, 1) if total_reasons else 0
+        top_reasons.append({
+            "label": label,
+            "count": count,
+            "percent": percent,
+        })
+
+    return {
+        "top_reasons": top_reasons,
+        "trend_values": trend_values,
+        "trend_points": trend_points,
+        "trend_area_points": trend_area_points,
+    }
 
 def register(app):
     @app.route("/")
@@ -111,6 +213,8 @@ def register(app):
                 "offline": int(offline),
             }
 
+        dashboard_tasks = _get_dashboard_next_tasks(db)
+
         # --------------------------
         # TASK STATS
         # --------------------------
@@ -149,6 +253,9 @@ def register(app):
 
         subscription_stats = []
         subscription_stats_more = False
+        subscription_plan_count = 0
+        subscription_user_total = 0
+        subscription_donut = "#334155 0% 100%"
 
         if table_exists(db, "subscription_templates"):
             subscription_stats = db.query(
@@ -167,6 +274,54 @@ def register(app):
 
             subscription_stats = [dict(row) for row in subscription_stats]
             subscription_stats_more = len(subscription_stats) > 8
+
+            subscription_plan_count = len(subscription_stats)
+            subscription_user_total = sum(int(s.get("user_count") or 0) for s in subscription_stats)
+
+            subscription_colors = ["#8b5cf6", "#f97316", "#60a5fa", "#22c55e", "#f43f5e", "#eab308", "#14b8a6", "#a78bfa"]
+            donut_parts = []
+            donut_cursor = 0.0
+
+            for idx, sub in enumerate(subscription_stats):
+                count = int(sub.get("user_count") or 0)
+                percent = round((count / subscription_user_total) * 100, 1) if subscription_user_total else 0.0
+
+                sub["percent"] = percent
+                sub["color"] = subscription_colors[idx % len(subscription_colors)]
+
+                if count > 0 and subscription_user_total > 0:
+                    start = donut_cursor
+                    end = donut_cursor + percent
+                    donut_parts.append(f"{sub['color']} {start:.2f}% {end:.2f}%")
+                    donut_cursor = end
+
+            subscription_donut = ", ".join(donut_parts) if donut_parts else "#334155 0% 100%"
+
+        # --------------------------
+        # USAGE RISK SUMMARY
+        # --------------------------
+        usage_risk_summary = {
+            "high": 0,
+            "medium": 0,
+            "low": 0,
+            "suggested": 0,
+        }
+        usage_risk_dashboard = {
+            "top_reasons": [],
+            "trend_values": [0, 0, 0, 0, 0, 0, 0],
+            "trend_points": "0,42 20,42 40,42 60,42 80,42 100,42 120,42",
+        }
+
+        try:
+            usage_risk_report = build_usage_risk_report(
+                db,
+                {"period_days": 30},
+                persist_history=False,
+            )
+            usage_risk_summary = usage_risk_report.get("summary") or usage_risk_summary
+            usage_risk_dashboard = _build_usage_risk_dashboard(usage_risk_report)
+        except Exception:
+            pass
 
         # --------------------------
         # SERVER LIST (tous types)
@@ -313,14 +468,30 @@ def register(app):
             stats=stats,
             subscription_stats=subscription_stats,
             subscription_stats_more=subscription_stats_more,
+            subscription_plan_count=subscription_plan_count,
+            subscription_user_total=subscription_user_total,
+            subscription_donut=subscription_donut,
+            usage_risk_summary=usage_risk_summary,
+            usage_risk_dashboard=usage_risk_dashboard,
             users_stats=users_stats,
             servers=servers,
+            dashboard_tasks=dashboard_tasks,
             latest_logs=latest_logs,
             sessions=sessions,
             total_live=total_live,
             total_transcode=total_transcode,
             idle_card=idle_card,
             active_page="dashboard",
+        ))
+
+    @app.route("/dashboard/_next_tasks")
+    def dashboard_next_tasks_partial():
+        db = get_db()
+        dashboard_tasks = _get_dashboard_next_tasks(db)
+
+        return _no_store_response(render_template(
+            "dashboard/partials/_next_tasks.html",
+            dashboard_tasks=dashboard_tasks,
         ))
 
     @app.route("/dashboard/_now_playing")

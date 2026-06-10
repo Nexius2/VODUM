@@ -16,6 +16,7 @@ from core.media_jobs import insert_plex_media_job
 from api.subscriptions import update_user_expiration
 from notifications_utils import parse_notifications_order
 from core.providers.jellyfin_users import jellyfin_set_password
+from core.usage_risk import build_usage_risk_for_user
 
 
 task_logger = get_logger("tasks_ui")
@@ -1389,6 +1390,8 @@ def register(app):
         ) or []
         referred_users = [dict(x) for x in referred_users]
 
+        usage_risk = build_usage_risk_for_user(db, user_id)
+
         return render_template(
             "users/user_detail.html",
             user=user,
@@ -1402,6 +1405,7 @@ def register(app):
             merge_suggestions=merge_suggestions,
             user_servers=servers,
             active_user_policies=active_user_policies,
+            usage_risk=usage_risk,
             merged_usernames=merged_usernames,
             email_page=email_page,
             email_pages=email_pages,

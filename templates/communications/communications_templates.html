@@ -81,6 +81,7 @@
 				  <option value="referral_reward" {% if ev == 'referral_reward' %}selected{% endif %}>{{ t('comm_trigger_referral_reward') }}</option>
 				  <option value="expiration_change" {% if ev == 'expiration_change' %}selected{% endif %}>{{ t('comm_trigger_expiration_change') }}</option>
 				  <option value="stream_blocked" {% if ev == 'stream_blocked' %}selected{% endif %}>{{ t('comm_trigger_stream_blocked') }}</option>
+				  <option value="usage_risk_upgrade_suggestion" {% if ev == 'usage_risk_upgrade_suggestion' %}selected{% endif %}>{{ t('comm_trigger_usage_risk_upgrade_suggestion') }}</option>
 				</select>
 			  </div>
 
@@ -366,6 +367,8 @@
 				  {{ t('comm_trigger_expiration_change') }}
 				{% elif tpl.trigger_event == 'stream_blocked' %}
 				  {{ t('comm_trigger_stream_blocked') }}
+				{% elif tpl.trigger_event == 'usage_risk_upgrade_suggestion' %}
+				  {{ t('comm_trigger_usage_risk_upgrade_suggestion') }}
 				{% else %}
 				  {{ t('comm_trigger_expiration') }}
 				{% endif %}

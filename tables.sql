@@ -329,7 +329,16 @@ CREATE TABLE IF NOT EXISTS settings (
 	telemetry_instance_id TEXT DEFAULT NULL,
 	telemetry_last_sent_at TEXT DEFAULT NULL,
 	task_defaults_version INTEGER DEFAULT 0,
-    stream_enforcer_boost_until TIMESTAMP DEFAULT NULL
+    stream_enforcer_boost_until TIMESTAMP DEFAULT NULL,
+
+    usage_risk_enabled INTEGER DEFAULT 1,
+    usage_risk_send_upgrade_suggestions INTEGER DEFAULT 0,
+    usage_risk_send_stream_blocked_message INTEGER DEFAULT 0,
+    usage_risk_min_kills_before_suggestion INTEGER DEFAULT 3,
+    usage_risk_analysis_window_days INTEGER DEFAULT 30,
+    usage_risk_suggestion_cooldown_days INTEGER DEFAULT 30,
+    usage_risk_medium_threshold INTEGER DEFAULT 40,
+    usage_risk_high_threshold INTEGER DEFAULT 75
 
 );
 
@@ -958,7 +967,7 @@ CREATE TABLE IF NOT EXISTS comm_templates (
   enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
 
   -- trigger system
-  trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','pending_invite_reminder','referral_reward','expiration_change')),
+  trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','pending_invite_reminder','referral_reward','expiration_change','stream_blocked','usage_risk_upgrade_suggestion')),
   trigger_provider TEXT NOT NULL DEFAULT 'all' CHECK(trigger_provider IN ('all','plex','jellyfin')),
   expiration_change_direction TEXT NOT NULL DEFAULT 'all' CHECK(expiration_change_direction IN ('all','increase','decrease')),
 
@@ -1092,6 +1101,37 @@ ON comm_campaign_targets(status, next_attempt_at);
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_comm_campaign_targets_dedupe
 ON comm_campaign_targets(dedupe_key);
+
+CREATE TABLE IF NOT EXISTS usage_risk_recommendations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    vodum_user_id INTEGER NOT NULL,
+
+    risk_level TEXT NOT NULL,
+    risk_score INTEGER NOT NULL DEFAULT 0,
+
+    current_subscription TEXT,
+    suggested_subscription TEXT NOT NULL,
+
+    first_detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_notification_at TIMESTAMP DEFAULT NULL,
+
+    cooldown_until TIMESTAMP DEFAULT NULL,
+
+    status TEXT NOT NULL DEFAULT 'detected'
+      CHECK(status IN ('detected','notified','ignored','resolved')),
+
+    meta_json TEXT,
+
+    FOREIGN KEY(vodum_user_id) REFERENCES vodum_users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_usage_risk_recommendations_user
+ON usage_risk_recommendations(vodum_user_id, status);
+
+CREATE INDEX IF NOT EXISTS idx_usage_risk_recommendations_cooldown
+ON usage_risk_recommendations(cooldown_until);
 
 CREATE TABLE IF NOT EXISTS comm_history (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -16,6 +16,11 @@
     Policies
   </a>
 
+  <a href="{{ url_for('monitoring_page', tab='usage_risk') }}"
+     class="pb-2 border-b-2 {% if current=='usage_risk' %}border-primary text-primary{% else %}border-transparent text-slate-400 hover:text-slate-200{% endif %}">
+    Usage Risk
+  </a>
+
   <a href="{{ url_for('monitoring_page', tab='activity') }}"
      class="pb-2 border-b-2 {% if current=='activity' %}border-primary text-primary{% else %}border-transparent text-slate-400 hover:text-slate-200{% endif %}">
     Activity

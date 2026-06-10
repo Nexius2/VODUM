@@ -10,11 +10,17 @@ All notable changes to Vodum will be documented in this file.
 - Improved subscription selection in user profiles to display only enabled subscription plans.
 - Improved `comm_templates` schema upgrade to prevent SQLite from rewriting foreign keys incorrectly during table rename.
 - Improved subscription template integrity checks to avoid impossible user configurations.
+- Improved Usage Risk scoring with stronger fixed-device/IP signals and lower risk for TV + mobile/browser usage.
+- Improved User Detail layout with Usage Risk and upgrade recommendation inside the Options card.
+- Improved Subscription settings so Stream Blocked messages are forced when expiration warning modes already require them.
 
 ### Fixed
 - Fixed playback-blocked email variable replacement for policy enforcement notifications.
 - Fixed legacy communication database migrations that could leave broken foreign keys pointing to `comm_templates_old`.
 - Fixed recurring `send_expiration_emails` errors caused by missing `comm_templates_old` table on upgraded installations.
+- Fixed Usage Risk detail panel closing due to automatic Monitoring refresh.
+- Fixed device extraction for Usage Risk by reading stored `all_sessions` and `target_session` data.
+- Fixed upgrade suggestions so they are only sent when enabled and when the minimum kill threshold is reached.
 
 ## Added
 - Added support for policy, media, client, device and block timestamp variables in message rendering.
@@ -36,3 +42,7 @@ All notable changes to Vodum will be documented in this file.
 - Added validation for subscription templates to prevent inconsistent policy configurations.
 - Max IPs per user can no longer exceed Max Streams per user.
 - Added server-side validation to ensure upgrade suggestions and policy enforcement remain coherent.
+- Added Usage Risk dashboard widget with High, Medium, Low and suggested upgrade counters.
+- Added automatic usage risk recommendation history with cooldown support.
+- Added automatic upgrade suggestion notifications through the existing communications system.
+

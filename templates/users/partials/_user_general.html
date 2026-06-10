@@ -128,8 +128,9 @@
   <!-- ================= Two column row ================= -->
   <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
 
+    <div class="flex flex-col gap-6 h-full">
     <!-- ===== Contact & notifications ===== -->
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex-1">
       <div class="text-sm font-semibold text-slate-200 mb-4">
         {{ _t_contact }}
       </div>
@@ -274,6 +275,195 @@
       {% endif %}
     </div>
 
+    <!-- ======================= Options + Usage Risk ======================= -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shrink-0">
+      <div class="text-sm font-semibold text-slate-200 mb-4">
+        {{ _t_options }}
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_260px] gap-6">
+        <div class="min-w-0">
+      <div class="space-y-5">
+
+        <label class="text-sm block">
+          <div class="text-slate-400 mb-1">{{ t("subscription_template") }}</div>
+			<select name="subscription_template_id"
+					id="subscription_template_id"
+                    class="mt-1 max-w-md w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+            <option value="" {% if user.subscription_template_id is none %}selected{% endif %}>
+              {{ t("subscription_none") }}
+            </option>
+            {% for tpl in subscription_templates %}
+				<option value="{{ tpl.id }}"
+						data-lifetime="{{ tpl.is_lifetime or 0 }}"
+						{% if user.subscription_template_id == tpl.id %}selected{% endif %}>
+				  {{ tpl.name }}
+				</option>
+            {% endfor %}
+          </select>
+        </label>
+
+		{% set ns = namespace(is_media_admin=false) %}
+
+		{% for s in servers %}
+
+		  {% set sraw = s.raw_json if s.raw_json is defined else None %}
+		  {% if sraw is string and sraw %}
+			{% set sraw = sraw | fromjson %}
+		  {% endif %}
+
+		  {% set spolicy = (sraw.Policy if sraw and sraw.Policy is defined else {}) %}
+
+		  {% set is_owner_plex =
+			  (s.media_type == 'plex')
+			  and ((s.media_role or '') | lower == 'owner')
+		  %}
+
+		  {% set is_jellyfin_admin =
+			  (s.media_type == 'jellyfin')
+			  and (
+				  ((s.media_role or '') | lower == 'admin')
+				  or (spolicy and spolicy.IsAdministrator is defined and spolicy.IsAdministrator)
+			  )
+		  %}
+
+		  {% if is_owner_plex or is_jellyfin_admin %}
+			{% set ns.is_media_admin = true %}
+		  {% endif %}
+
+		{% endfor %}
+
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-6 divide-y md:divide-y-0 md:divide-x divide-slate-800">
+
+		  <!-- Expiration override -->
+		  <label class="text-sm block md:pr-2">
+			<div class="flex items-center gap-2 mb-2">
+			  <span>{{ t("expiration_date_override") }}</span>
+
+			  <div class="relative group">
+				<button type="button"
+						class="w-5 h-5 rounded-full bg-slate-800 text-slate-300 text-xs hover:bg-slate-700">
+				  ?
+				</button>
+
+				<div class="absolute left-0 z-50 hidden group-hover:block w-72 p-3 rounded-xl border border-slate-700 bg-slate-900 text-xs text-slate-300 shadow-xl">
+				  {{ t("expiration_date_override_help") }}
+				</div>
+			  </div>
+			</div>
+
+				<label class="inline-flex items-center gap-2">
+				  <input type="checkbox"
+						 id="expiration_date_override_cb"
+						 name="expiration_date_override"
+						 value="1"
+						 data-original="{% if user.expiration_date_override == 1 %}1{% else %}0{% endif %}"
+						 {% if user.expiration_date_override == 1 or ns.is_media_admin %}checked{% endif %}
+						 {% if ns.is_media_admin %}disabled{% endif %}
+						 class="rounded border-slate-700 bg-slate-950 text-indigo-500">
+
+				  <span class="text-slate-300">
+					{{ t("enabled") }}
+				  </span>
+				</label>
+
+				<div id="lifetime_override_notice"
+					 class="hidden mt-2 text-xs text-purple-300">
+				  {{ t("managed_by_lifetime_subscription") }}
+				</div>
+		  </label>
+
+		  <!-- Max streams override -->
+		  <label class="text-sm block md:pl-6">
+
+			<div class="flex items-center gap-2 mb-2">
+			  <span>{{ t("max_streams_override") }}</span>
+
+			  <div class="relative group">
+				<button type="button"
+						class="w-5 h-5 rounded-full bg-slate-800 text-slate-300 text-xs hover:bg-slate-700">
+				  ?
+				</button>
+
+				<div class="absolute left-0 z-50 hidden group-hover:block w-72 p-3 rounded-xl border border-slate-700 bg-slate-900 text-xs text-slate-300 shadow-xl">
+				  {{ t("max_streams_override_help") }}
+				</div>
+			  </div>
+			</div>
+
+			<input type="number"
+				   name="max_streams_override"
+				   value="{{ user.max_streams_override if user.max_streams_override is not none else '' }}"
+				   class="w-24 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+
+		  </label>
+
+		</div>
+
+      </div>
+        </div>
+
+      <a href="{{ url_for('monitoring_page', tab='usage_risk', q=user.username) }}"
+         class="group border-t lg:border-t-0 lg:border-l border-slate-800 pt-5 lg:pt-0 lg:pl-6 flex flex-col justify-center rounded-xl hover:bg-slate-950/40 transition-colors cursor-pointer">
+
+        <div class="text-sm font-semibold text-slate-200 mb-5">
+          {{ t("usage_risk") if t("usage_risk") != "usage_risk" else "Usage Risk" }}
+        </div>
+
+        {% if usage_risk.risk_level == 'high' %}
+          <div class="flex items-center gap-4 text-rose-400">
+            <span class="w-7 h-7 rounded-full bg-rose-500 shadow-lg shadow-rose-950/60"></span>
+            <span class="text-4xl font-bold tracking-tight">
+              {{ t("high") if t("high") != "high" else "High" }}
+            </span>
+          </div>
+        {% elif usage_risk.risk_level == 'medium' %}
+          <div class="flex items-center gap-4 text-amber-400">
+            <span class="w-7 h-7 rounded-full bg-amber-500 shadow-lg shadow-amber-950/60"></span>
+            <span class="text-4xl font-bold tracking-tight">
+              {{ t("medium") if t("medium") != "medium" else "Medium" }}
+            </span>
+          </div>
+        {% else %}
+          <div class="flex items-center gap-4 text-emerald-400">
+            <span class="w-7 h-7 rounded-full bg-emerald-500 shadow-lg shadow-emerald-950/60"></span>
+            <span class="text-4xl font-bold tracking-tight">
+              {{ t("low") if t("low") != "low" else "Low" }}
+            </span>
+          </div>
+        {% endif %}
+      </a>
+      </div>
+
+      {% if usage_risk.suggested_subscription %}
+        <div class="mt-6 pt-5 border-t border-slate-800">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <div class="text-sm font-semibold text-slate-200">
+                {{ t("subscription_upgrade_recommendation") }}
+              </div>
+              <div class="text-xs text-slate-500 mt-1">
+                {{ t("subscription_upgrade_recommendation_help") }}
+              </div>
+            </div>
+
+            <span class="px-3 py-1 rounded-full bg-primary/20 text-primary text-xs font-semibold">
+              {{ t("upgrade_recommended") }}
+            </span>
+          </div>
+
+          <div class="mt-4 rounded-xl bg-primary/10 border border-primary/30 px-4 py-3">
+            <div class="text-xs text-primary/80 mb-1">
+              {{ t("suggested_subscription") }}
+            </div>
+            <div class="text-base font-semibold text-primary">
+              {{ usage_risk.suggested_subscription }}
+            </div>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+    </div>
 
     <!-- ===== Subscription & status ===== -->
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
@@ -487,147 +677,16 @@
 
   </div>
 
-
-  <!-- ======================= Options + Notes ======================= -->
-  <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
-
-    <!-- ======================= Options ======================= -->
-    <div class="xl:col-span-1 bg-slate-900 border border-slate-800 rounded-2xl p-5">
-      <div class="text-sm font-semibold text-slate-200 mb-4">
-        {{ _t_options }}
-      </div>
-
-      <div class="space-y-5">
-
-        <label class="text-sm block">
-          <div class="text-slate-400 mb-1">{{ t("subscription_template") }}</div>
-			<select name="subscription_template_id"
-					id="subscription_template_id"
-                    class="mt-1 max-w-md w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-            <option value="" {% if user.subscription_template_id is none %}selected{% endif %}>
-              {{ t("subscription_none") }}
-            </option>
-            {% for tpl in subscription_templates %}
-				<option value="{{ tpl.id }}"
-						data-lifetime="{{ tpl.is_lifetime or 0 }}"
-						{% if user.subscription_template_id == tpl.id %}selected{% endif %}>
-				  {{ tpl.name }}
-				</option>
-            {% endfor %}
-          </select>
-        </label>
-
-		{% set ns = namespace(is_media_admin=false) %}
-
-		{% for s in servers %}
-
-		  {% set sraw = s.raw_json if s.raw_json is defined else None %}
-		  {% if sraw is string and sraw %}
-			{% set sraw = sraw | fromjson %}
-		  {% endif %}
-
-		  {% set spolicy = (sraw.Policy if sraw and sraw.Policy is defined else {}) %}
-
-		  {% set is_owner_plex =
-			  (s.media_type == 'plex')
-			  and ((s.media_role or '') | lower == 'owner')
-		  %}
-
-		  {% set is_jellyfin_admin =
-			  (s.media_type == 'jellyfin')
-			  and (
-				  ((s.media_role or '') | lower == 'admin')
-				  or (spolicy and spolicy.IsAdministrator is defined and spolicy.IsAdministrator)
-			  )
-		  %}
-
-		  {% if is_owner_plex or is_jellyfin_admin %}
-			{% set ns.is_media_admin = true %}
-		  {% endif %}
-
-		{% endfor %}
-
-		<div class="grid grid-cols-1 md:grid-cols-2 gap-6 divide-y md:divide-y-0 md:divide-x divide-slate-800">
-
-		  <!-- Expiration override -->
-		  <label class="text-sm block md:pr-2">
-			<div class="flex items-center gap-2 mb-2">
-			  <span>{{ t("expiration_date_override") }}</span>
-
-			  <div class="relative group">
-				<button type="button"
-						class="w-5 h-5 rounded-full bg-slate-800 text-slate-300 text-xs hover:bg-slate-700">
-				  ?
-				</button>
-
-				<div class="absolute left-0 z-50 hidden group-hover:block w-72 p-3 rounded-xl border border-slate-700 bg-slate-900 text-xs text-slate-300 shadow-xl">
-				  {{ t("expiration_date_override_help") }}
-				</div>
-			  </div>
-			</div>
-
-				<label class="inline-flex items-center gap-2">
-				  <input type="checkbox"
-						 id="expiration_date_override_cb"
-						 name="expiration_date_override"
-						 value="1"
-						 data-original="{% if user.expiration_date_override == 1 %}1{% else %}0{% endif %}"
-						 {% if user.expiration_date_override == 1 or ns.is_media_admin %}checked{% endif %}
-						 {% if ns.is_media_admin %}disabled{% endif %}
-						 class="rounded border-slate-700 bg-slate-950 text-indigo-500">
-
-				  <span class="text-slate-300">
-					{{ t("enabled") }}
-				  </span>
-				</label>
-
-				<div id="lifetime_override_notice"
-					 class="hidden mt-2 text-xs text-purple-300">
-				  {{ t("managed_by_lifetime_subscription") }}
-				</div>
-		  </label>
-
-		  <!-- Max streams override -->
-		  <label class="text-sm block md:pl-6">
-
-			<div class="flex items-center gap-2 mb-2">
-			  <span>{{ t("max_streams_override") }}</span>
-
-			  <div class="relative group">
-				<button type="button"
-						class="w-5 h-5 rounded-full bg-slate-800 text-slate-300 text-xs hover:bg-slate-700">
-				  ?
-				</button>
-
-				<div class="absolute left-0 z-50 hidden group-hover:block w-72 p-3 rounded-xl border border-slate-700 bg-slate-900 text-xs text-slate-300 shadow-xl">
-				  {{ t("max_streams_override_help") }}
-				</div>
-			  </div>
-			</div>
-
-			<input type="number"
-				   name="max_streams_override"
-				   value="{{ user.max_streams_override if user.max_streams_override is not none else '' }}"
-				   class="w-24 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-
-		  </label>
-
-		</div>
-
-      </div>
-    </div>
-
+  <!-- ======================= Notes ======================= -->
     <!-- ======================= Notes ======================= -->
-    <div class="xl:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
       <div class="text-sm font-semibold text-slate-200 mb-4">
         {{ t("notes") }}
       </div>
 
-      <textarea name="notes" rows="8"
-        class="w-full min-h-[220px] bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm resize-vertical">{{ user.notes or '' }}</textarea>
+      <textarea name="notes" rows="4"
+        class="w-full min-h-[120px] bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm resize-vertical">{{ user.notes or '' }}</textarea>
     </div>
-
-  </div>
 
   <!-- ======================= Active policies ======================= -->
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">

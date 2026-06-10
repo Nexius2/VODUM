@@ -4,7 +4,7 @@ import math
 
 from flask import render_template, request, redirect, url_for, flash
 
-from tasks_engine import auto_enable_stream_enforcer, sync_expiry_tasks_from_settings, force_task_run
+from tasks_engine import auto_enable_stream_enforcer, sync_expiry_tasks_from_settings, force_task_run, enable_and_run_task_by_name, set_tasks_enabled_by_names
 from web.helpers import get_db, add_log
 
 DEFAULT_SUBSCRIPTION_TEMPLATES = [
@@ -363,6 +363,63 @@ def register(app):
         except Exception:
             warn_then_disable_days = int(settings.get("warn_then_disable_days") or 7)
 
+        usage_risk_enabled = 1 if request.form.get("usage_risk_enabled") == "1" else 0
+        usage_risk_send_upgrade_suggestions = 1 if request.form.get("usage_risk_send_upgrade_suggestions") == "1" else 0
+        usage_risk_send_stream_blocked_message = 1 if request.form.get("usage_risk_send_stream_blocked_message") == "1" else 0
+
+        if expiry_mode in ("warn_only", "warn_then_disable"):
+            usage_risk_send_stream_blocked_message = 1
+
+        try:
+            usage_risk_min_kills_before_suggestion = int(
+                request.form.get(
+                    "usage_risk_min_kills_before_suggestion",
+                    settings.get("usage_risk_min_kills_before_suggestion") or 3,
+                )
+            )
+        except Exception:
+            usage_risk_min_kills_before_suggestion = int(settings.get("usage_risk_min_kills_before_suggestion") or 3)
+
+        try:
+            usage_risk_analysis_window_days = int(
+                request.form.get(
+                    "usage_risk_analysis_window_days",
+                    settings.get("usage_risk_analysis_window_days") or 30,
+                )
+            )
+        except Exception:
+            usage_risk_analysis_window_days = int(settings.get("usage_risk_analysis_window_days") or 30)
+
+        try:
+            usage_risk_suggestion_cooldown_days = int(
+                request.form.get(
+                    "usage_risk_suggestion_cooldown_days",
+                    settings.get("usage_risk_suggestion_cooldown_days") or 30,
+                )
+            )
+        except Exception:
+            usage_risk_suggestion_cooldown_days = int(settings.get("usage_risk_suggestion_cooldown_days") or 30)
+
+        try:
+            usage_risk_medium_threshold = int(
+                request.form.get(
+                    "usage_risk_medium_threshold",
+                    settings.get("usage_risk_medium_threshold") or 40,
+                )
+            )
+        except Exception:
+            usage_risk_medium_threshold = int(settings.get("usage_risk_medium_threshold") or 40)
+
+        try:
+            usage_risk_high_threshold = int(
+                request.form.get(
+                    "usage_risk_high_threshold",
+                    settings.get("usage_risk_high_threshold") or 75,
+                )
+            )
+        except Exception:
+            usage_risk_high_threshold = int(settings.get("usage_risk_high_threshold") or 75)
+
         if default_subscription_days < 1:
             default_subscription_days = 1
 
@@ -371,6 +428,21 @@ def register(app):
 
         if warn_then_disable_days < 1:
             warn_then_disable_days = 1
+
+        if usage_risk_min_kills_before_suggestion < 1:
+            usage_risk_min_kills_before_suggestion = 1
+
+        if usage_risk_analysis_window_days < 7:
+            usage_risk_analysis_window_days = 7
+
+        if usage_risk_suggestion_cooldown_days < 1:
+            usage_risk_suggestion_cooldown_days = 1
+
+        if usage_risk_medium_threshold < 1:
+            usage_risk_medium_threshold = 1
+
+        if usage_risk_high_threshold <= usage_risk_medium_threshold:
+            usage_risk_high_threshold = usage_risk_medium_threshold + 1
 
         if expiry_mode not in ("warn_then_disable", "warn_only"):
             warn_then_disable_days = int(settings.get("warn_then_disable_days") or 7)
@@ -382,7 +454,15 @@ def register(app):
                 delete_after_expiry_days = ?,
                 expiry_mode = ?,
                 warn_then_disable_days = ?,
-                disable_on_expiry = ?
+                disable_on_expiry = ?,
+                usage_risk_enabled = ?,
+                usage_risk_send_upgrade_suggestions = ?,
+                usage_risk_send_stream_blocked_message = ?,
+                usage_risk_min_kills_before_suggestion = ?,
+                usage_risk_analysis_window_days = ?,
+                usage_risk_suggestion_cooldown_days = ?,
+                usage_risk_medium_threshold = ?,
+                usage_risk_high_threshold = ?
             WHERE id = 1
             """,
             (
@@ -391,6 +471,14 @@ def register(app):
                 expiry_mode,
                 warn_then_disable_days,
                 1 if expiry_mode == "disable" else 0,
+                usage_risk_enabled,
+                usage_risk_send_upgrade_suggestions,
+                usage_risk_send_stream_blocked_message,
+                usage_risk_min_kills_before_suggestion,
+                usage_risk_analysis_window_days,
+                usage_risk_suggestion_cooldown_days,
+                usage_risk_medium_threshold,
+                usage_risk_high_threshold,
             ),
         )
 
@@ -399,7 +487,7 @@ def register(app):
             int(settings.get("enable_cron_jobs") or 1),
         )
 
-        if expiry_mode in ("warn_only", "warn_then_disable"):
+        if expiry_mode in ("warn_only", "warn_then_disable") or usage_risk_send_stream_blocked_message:
             db.execute(
                 """
                 UPDATE comm_templates
@@ -411,6 +499,57 @@ def register(app):
 
             force_task_run("expired_subscription_manager")
 
+        if usage_risk_send_upgrade_suggestions:
+            db.execute(
+                """
+                UPDATE comm_templates
+                SET enabled = 1,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = (
+                    SELECT id
+                    FROM comm_templates
+                    WHERE key = 'usage_risk_upgrade_suggestion'
+                       OR trigger_event = 'usage_risk_upgrade_suggestion'
+                    ORDER BY
+                        CASE WHEN key = 'usage_risk_upgrade_suggestion' THEN 0 ELSE 1 END,
+                        id ASC
+                    LIMIT 1
+                )
+                """
+            )
+
+            db.execute(
+                """
+                UPDATE comm_templates
+                SET enabled = 0,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE trigger_event = 'usage_risk_upgrade_suggestion'
+                  AND id <> (
+                    SELECT id
+                    FROM comm_templates
+                    WHERE key = 'usage_risk_upgrade_suggestion'
+                       OR trigger_event = 'usage_risk_upgrade_suggestion'
+                    ORDER BY
+                        CASE WHEN key = 'usage_risk_upgrade_suggestion' THEN 0 ELSE 1 END,
+                        id ASC
+                    LIMIT 1
+                  )
+                """
+            )
+
+            enable_and_run_task_by_name("usage_risk_notifications")
+
+        else:
+            db.execute(
+                """
+                UPDATE comm_templates
+                SET enabled = 0,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE trigger_event = 'usage_risk_upgrade_suggestion'
+                """
+            )
+
+            set_tasks_enabled_by_names(["usage_risk_notifications"], 0)
 
         add_log("info", "subscriptions", "Subscription settings updated")
         flash("settings_saved", "success")

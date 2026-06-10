@@ -10,7 +10,7 @@ from core.monitoring.artwork import (
     build_history_backdrop_url,
     enrich_live_session_artwork,
 )
-
+from core.usage_risk import build_usage_risk_report
 from logging_utils import get_logger
 from web.helpers import get_db
 
@@ -786,11 +786,21 @@ def register(app):
         policy_hits_30d = []
         policy_rule_breakdown_30d = []
         policy_provider_breakdown_30d = []
-        policy_scope_breakdown = []
+        policy_scope_breakdown = {}
         policy_top_users_30d = []
         policy_recent_enforcements = []
         policy_grouped_enforcements = []
         policy_tracked_state = {}
+
+        usage_risk_report = {
+            "enabled": True,
+            "summary": {"high": 0, "medium": 0, "low": 0, "suggested": 0},
+            "rows": [],
+            "filters": {},
+        }
+        usage_risk_filters = {}
+        subscription_templates = []
+        stream_policy_types = []
         
 
         if tab == "history":
@@ -943,6 +953,38 @@ def register(app):
                 "playback": playback,
                 "server": server_id,
             }
+
+        elif tab == "usage_risk":
+            usage_risk_filters = {
+                "q": (request.args.get("q") or "").strip(),
+                "risk_level": (request.args.get("risk_level") or "").strip(),
+                "subscription_id": request.args.get("subscription_id", type=int, default=0),
+                "server_id": request.args.get("server_id", type=int, default=0),
+                "policy": (request.args.get("policy") or "").strip(),
+                "period_days": request.args.get("period_days", type=int, default=30),
+            }
+
+            usage_risk_report = build_usage_risk_report(db, usage_risk_filters)
+
+            subscription_templates = db.query(
+                """
+                SELECT id, name
+                FROM subscription_templates
+                WHERE is_enabled = 1
+                ORDER BY subscription_value ASC, name ASC
+                """
+            ) or []
+            subscription_templates = [dict(r) for r in subscription_templates]
+
+            stream_policy_types = db.query(
+                """
+                SELECT DISTINCT rule_type
+                FROM stream_policies
+                WHERE TRIM(COALESCE(rule_type, '')) <> ''
+                ORDER BY rule_type ASC
+                """
+            ) or []
+            stream_policy_types = [dict(r) for r in stream_policy_types]
 
         elif tab == "users":
             page = request.args.get("page", type=int, default=1)
@@ -2381,6 +2423,7 @@ ranked AS (
                 "overview": "monitoring/overview_body.html",
                 "now_playing": "monitoring/tabs/now_playing.html",
                 "policies": "monitoring/tabs/policies.html",
+                "usage_risk": "monitoring/tabs/usage_risk.html",
                 "activity": "monitoring/tabs/activity.html",
                 "history": "monitoring/tabs/history.html",
                 "libraries": "monitoring/tabs/libraries.html",
@@ -2435,6 +2478,10 @@ ranked AS (
                 policy_recent_enforcements=policy_recent_enforcements,
                 policy_grouped_enforcements=policy_grouped_enforcements,
                 policy_tracked_state=policy_tracked_state,
+                usage_risk_report=usage_risk_report,
+                usage_risk_filters=usage_risk_filters,
+                subscription_templates=subscription_templates,
+                stream_policy_types=stream_policy_types,
             ))
             if sort_key and sort_dir:
                 resp.set_cookie(f"monitoring_{tab}_sort", str(sort_key), max_age=60*60*24*365)
@@ -2490,6 +2537,10 @@ ranked AS (
             policy_recent_enforcements=policy_recent_enforcements,
             policy_grouped_enforcements=policy_grouped_enforcements,
             policy_tracked_state=policy_tracked_state,
+            usage_risk_report=usage_risk_report,
+            usage_risk_filters=usage_risk_filters,
+            subscription_templates=subscription_templates,
+            stream_policy_types=stream_policy_types,
         ))
         
         if sort_key and sort_dir:

@@ -676,7 +676,10 @@ def register(app):
     @app.route("/communications/templates/action", methods=["POST"])
     def communications_templates_action():
         db = get_db()
-        t = get_translator()
+
+        settings_row = db.query_one("SELECT * FROM settings WHERE id = 1")
+        settings = dict(settings_row) if settings_row else {}
+        t = get_translator(settings)
 
         action = (request.form.get("action") or "").strip().lower()
 
@@ -686,8 +689,6 @@ def register(app):
             subject = (request.form.get("subject") or "").strip()
             body = (request.form.get("body") or "").strip()
             enabled = 1 if request.form.get("enabled") == "1" else 0
-            if stream_blocked_required:
-                enabled = 1
 
             key = _sanitize_key(request.form.get("key") or "")
             if not key:
@@ -699,7 +700,7 @@ def register(app):
                     n += 1
 
             trigger_event = (request.form.get("trigger_event") or "expiration").strip().lower()
-            if trigger_event not in ("expiration", "user_creation", "pending_invite_reminder", "referral_reward", "expiration_change", "stream_blocked"):
+            if trigger_event not in ("expiration", "user_creation", "pending_invite_reminder", "referral_reward", "expiration_change", "stream_blocked", "usage_risk_upgrade_suggestion"):
                 trigger_event = "expiration"
 
             trigger_provider = (request.form.get("trigger_provider") or "all").strip().lower()
@@ -775,7 +776,7 @@ def register(app):
                 if days_after is None:
                     days_after = 0
                 delay_direction = "after"
-            elif trigger_event in ("referral_reward", "expiration_change", "stream_blocked"):
+            elif trigger_event in ("referral_reward", "expiration_change", "stream_blocked", "usage_risk_upgrade_suggestion"):
                 days_before = None
                 days_after = 0
                 delay_direction = "after"
@@ -799,7 +800,7 @@ def register(app):
                 return redirect(url_for("communications_templates_page"))
 
             duplicate = None
-            duplicate_reason = ""
+
 
             if enabled:
                 duplicate = _find_enabled_template_duplicate(
@@ -813,8 +814,11 @@ def register(app):
                     expiration_change_direction=expiration_change_direction,
                 )
                 if duplicate:
-                    enabled = 0
-                    duplicate_reason = f"#{duplicate['id']} - {duplicate['name']}"
+                    flash(
+                        f"{t('comm_template_duplicate_enabled')} #{duplicate['id']} - {duplicate['name']}",
+                        "error",
+                    )
+                    return redirect(url_for("communications_templates_page"))
 
             cur = db.execute(
                 """
@@ -860,15 +864,7 @@ def register(app):
 
             flash(t("comm_template_created"), "success")
 
-            if duplicate:
-                return redirect(
-                    url_for(
-                        "communications_templates_page",
-                        load=tid,
-                        duplicate_disabled=1,
-                        duplicate_disabled_reason=duplicate_reason,
-                    )
-                )
+
 
             return redirect(url_for("communications_templates_page", load=tid))
 
@@ -908,7 +904,7 @@ def register(app):
                 key = existing.get("key") or ""
 
             trigger_event = (request.form.get("trigger_event") or "expiration").strip().lower()
-            if trigger_event not in ("expiration", "user_creation", "pending_invite_reminder", "referral_reward", "expiration_change", "stream_blocked"):
+            if trigger_event not in ("expiration", "user_creation", "pending_invite_reminder", "referral_reward", "expiration_change", "stream_blocked", "usage_risk_upgrade_suggestion"):
                 trigger_event = "expiration"
 
             trigger_provider = (request.form.get("trigger_provider") or "all").strip().lower()
@@ -984,7 +980,7 @@ def register(app):
                 if days_after is None:
                     days_after = 0
                 delay_direction = "after"
-            elif trigger_event in ("referral_reward", "expiration_change", "stream_blocked"):
+            elif trigger_event in ("referral_reward", "expiration_change", "stream_blocked", "usage_risk_upgrade_suggestion"):
                 days_before = None
                 days_after = 0
                 delay_direction = "after"
@@ -1021,9 +1017,9 @@ def register(app):
                 return redirect(url_for("communications_templates_page", load=tid))
 
             duplicate = None
-            duplicate_reason = ""
+         
 
-            if enabled and not is_stream_blocked:
+            if enabled:
                 duplicate = _find_enabled_template_duplicate(
                     db,
                     trigger_event=trigger_event,
@@ -1036,8 +1032,11 @@ def register(app):
                     exclude_id=tid,
                 )
                 if duplicate:
-                    enabled = 0
-                    duplicate_reason = f"#{duplicate['id']} - {duplicate['name']}"
+                    flash(
+                        f"{t('comm_template_duplicate_enabled')} #{duplicate['id']} - {duplicate['name']}",
+                        "error",
+                    )
+                    return redirect(url_for("communications_templates_page", load=tid))
 
             db.execute(
                 """
@@ -1081,15 +1080,7 @@ def register(app):
 
             flash(t("comm_template_saved"), "success")
 
-            if duplicate:
-                return redirect(
-                    url_for(
-                        "communications_templates_page",
-                        load=tid,
-                        duplicate_disabled=1,
-                        duplicate_disabled_reason=duplicate_reason,
-                    )
-                )
+
 
             return redirect(url_for("communications_templates_page", load=tid))
 
@@ -1119,7 +1110,10 @@ def register(app):
     @app.post("/communications/templates/restore-defaults")
     def communications_templates_restore_defaults():
         db = get_db()
-        t = get_translator()
+
+        settings_row = db.query_one("SELECT * FROM settings WHERE id = 1")
+        settings = dict(settings_row) if settings_row else {}
+        t = get_translator(settings)
 
         restored = _restore_default_comm_templates(db)
 
@@ -1133,8 +1127,8 @@ def register(app):
         db = get_db()
 
         load_id = request.args.get("load", type=int)
-        duplicate_disabled = request.args.get("duplicate_disabled", type=int) == 1
-        duplicate_disabled_reason = (request.args.get("duplicate_disabled_reason") or "").strip()
+        #duplicate_disabled = request.args.get("duplicate_disabled", type=int) == 1
+        #duplicate_disabled_reason = (request.args.get("duplicate_disabled_reason") or "").strip()
 
         settings = db.query_one("SELECT expiry_mode FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
@@ -1176,8 +1170,8 @@ def register(app):
             loaded_template=loaded,
             subscription_templates=subscription_templates,
             current_subpage="templates",
-            duplicate_disabled=duplicate_disabled,
-            duplicate_disabled_reason=duplicate_disabled_reason,
+            #duplicate_disabled=duplicate_disabled,
+            #duplicate_disabled_reason=duplicate_disabled_reason,
             loaded_is_stream_blocked=loaded_is_stream_blocked,
             stream_blocked_required=stream_blocked_required,
         )
@@ -1194,15 +1188,22 @@ def register(app):
         per_page = 20
 
         sort = (request.args.get("sort") or "sent_at").strip().lower()
-        order = (request.args.get("order") or "desc").strip().lower()
+        order = (request.args.get("order") or "").strip().lower()
+
+        if sort == "sent_at" and not order:
+            order = "desc"
 
         if order not in ("asc", "desc"):
+            order = "asc"
+
+        if sort == "sent_at" and order == "asc" and not request.args.get("order"):
             order = "desc"
 
         sent_at_sort_expr = """
             COALESCE(
                 CASE
                     WHEN typeof(h.sent_at) = 'integer' THEN h.sent_at
+                    WHEN typeof(h.sent_at) = 'text' AND h.sent_at GLOB '[0-9][0-9][0-9][0-9]-*' THEN CAST(strftime('%s', h.sent_at) AS INTEGER)
                     WHEN typeof(h.sent_at) = 'text' AND h.sent_at GLOB '[0-9]*' THEN CAST(h.sent_at AS INTEGER)
                     ELSE CAST(strftime('%s', h.sent_at) AS INTEGER)
                 END,

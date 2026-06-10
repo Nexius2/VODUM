@@ -1,0 +1,306 @@
+<div class="space-y-6">
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="text-xs uppercase tracking-wide text-slate-500">High Risk</div>
+      <div class="mt-2 text-3xl font-bold text-rose-400">{{ usage_risk_report.summary.high or 0 }}</div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="text-xs uppercase tracking-wide text-slate-500">Medium Risk</div>
+      <div class="mt-2 text-3xl font-bold text-amber-400">{{ usage_risk_report.summary.medium or 0 }}</div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="text-xs uppercase tracking-wide text-slate-500">Low Risk</div>
+      <div class="mt-2 text-3xl font-bold text-emerald-400">{{ usage_risk_report.summary.low or 0 }}</div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="text-xs uppercase tracking-wide text-slate-500">Suggested Upgrades</div>
+      <div class="mt-2 text-3xl font-bold text-primary">{{ usage_risk_report.summary.suggested or 0 }}</div>
+    </div>
+  </div>
+
+  <form method="get" action="{{ url_for('monitoring_page') }}" class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+    <input type="hidden" name="tab" value="usage_risk">
+
+    <div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-3">
+      <input
+        type="text"
+        name="q"
+        value="{{ usage_risk_filters.q or '' }}"
+        placeholder="Search username, email, IP, device, policy..."
+        class="xl:col-span-2 rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100"
+      >
+
+      <select name="risk_level" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100">
+        <option value="">All risks</option>
+        <option value="high" {% if usage_risk_filters.risk_level == 'high' %}selected{% endif %}>High</option>
+        <option value="medium" {% if usage_risk_filters.risk_level == 'medium' %}selected{% endif %}>Medium</option>
+        <option value="low" {% if usage_risk_filters.risk_level == 'low' %}selected{% endif %}>Low</option>
+      </select>
+
+      <select name="subscription_id" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100">
+        <option value="0">All subscriptions</option>
+        {% for tpl in subscription_templates %}
+          <option value="{{ tpl.id }}" {% if usage_risk_filters.subscription_id == tpl.id %}selected{% endif %}>{{ tpl.name }}</option>
+        {% endfor %}
+      </select>
+
+      <select name="server_id" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100">
+        <option value="0">All servers</option>
+        {% for srv in servers %}
+          <option value="{{ srv.id }}" {% if usage_risk_filters.server_id == srv.id %}selected{% endif %}>{{ srv.name }}</option>
+        {% endfor %}
+      </select>
+
+      <select name="policy" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100">
+        <option value="">All policies</option>
+        {% for p in stream_policy_types %}
+          <option value="{{ p.rule_type }}" {% if usage_risk_filters.policy == p.rule_type %}selected{% endif %}>{{ p.rule_type }}</option>
+        {% endfor %}
+      </select>
+
+      <select name="period_days" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100">
+        <option value="7" {% if usage_risk_filters.period_days == 7 %}selected{% endif %}>7 days</option>
+        <option value="30" {% if usage_risk_filters.period_days == 30 %}selected{% endif %}>30 days</option>
+        <option value="90" {% if usage_risk_filters.period_days == 90 %}selected{% endif %}>90 days</option>
+      </select>
+    </div>
+
+    <div class="mt-4 flex justify-end">
+      <button type="submit" class="px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:opacity-90">
+        Apply filters
+      </button>
+    </div>
+  </form>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-950 text-slate-400">
+          <tr>
+            <th class="text-left px-4 py-3">Risk</th>
+            <th class="text-left px-4 py-3">User</th>
+            <th class="text-left px-4 py-3">Main reason</th>
+            <th class="text-left px-4 py-3">Evidence</th>
+            <th class="text-left px-4 py-3">Kills</th>
+            <th class="text-left px-4 py-3">Suggested Subscription</th>
+            <th class="text-left px-4 py-3">Last Activity</th>
+            <th class="text-right px-4 py-3">Details</th>
+          </tr>
+        </thead>
+
+        <tbody class="divide-y divide-slate-800">
+          {% for row in usage_risk_report.rows %}
+            <tr class="hover:bg-slate-800/40">
+              <td class="px-4 py-3">
+                {% if row.risk_level == 'high' %}
+                  <span class="inline-flex items-center gap-2 text-rose-400 font-semibold">● High</span>
+                {% elif row.risk_level == 'medium' %}
+                  <span class="inline-flex items-center gap-2 text-amber-400 font-semibold">● Medium</span>
+                {% else %}
+                  <span class="inline-flex items-center gap-2 text-emerald-400 font-semibold">● Low</span>
+                {% endif %}
+                <div class="text-xs text-slate-500 mt-1">Score {{ row.risk_score }}</div>
+              </td>
+
+              <td class="px-4 py-3">
+                <div class="font-semibold text-slate-100">{{ row.username }}</div>
+                <div class="text-xs text-slate-500">{{ row.email or row.subscription_name }}</div>
+              </td>
+
+              <td class="px-4 py-3 text-slate-200">
+                {{ row.main_reason }}
+                {% if row.reasons %}
+                  <div class="text-xs text-slate-500 mt-1">{{ row.reasons | join(" · ") }}</div>
+                {% endif %}
+              </td>
+
+              <td class="px-4 py-3 text-slate-300">
+                <div>{{ row.evidence.ips | length }} IPs</div>
+                <div>{{ row.evidence.fixed_devices | length }} fixed devices</div>
+                <div class="text-xs text-slate-500">
+                  {% for rule, count in row.evidence.rules.items() %}
+                    {{ rule }} ×{{ count }}{% if not loop.last %}, {% endif %}
+                  {% endfor %}
+                </div>
+              </td>
+
+              <td class="px-4 py-3 text-slate-200">
+                <div>{{ row.kills_7d }} / 7d</div>
+                <div>{{ row.kills_30d }} / 30d</div>
+                <div>{{ row.kills_90d }} / 90d</div>
+              </td>
+
+              <td class="px-4 py-3">
+                {% if row.suggested_subscription %}
+                  <span class="inline-flex px-2 py-1 rounded-full bg-primary/20 text-primary text-xs font-semibold">
+                    {{ row.suggested_subscription }}
+                  </span>
+                {% else %}
+                  <span class="text-slate-500">—</span>
+                {% endif %}
+              </td>
+
+              <td class="px-4 py-3 text-slate-400">
+                {{ row.last_activity or "—" }}
+              </td>
+
+              <td class="px-4 py-3 text-right">
+                <button
+                  type="button"
+                  onclick="document.getElementById('usage-risk-detail-{{ loop.index }}').classList.toggle('hidden')"
+                  class="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-950 hover:bg-slate-800 text-xs text-slate-200">
+                  View details
+                </button>
+              </td>
+            </tr>
+
+            <tr id="usage-risk-detail-{{ loop.index }}" class="hidden bg-slate-950/60">
+              <td colspan="8" class="px-4 py-5">
+                <div class="grid grid-cols-1 xl:grid-cols-4 gap-4">
+
+                  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+                    <div class="text-xs uppercase tracking-wide text-slate-500 mb-3">Risk</div>
+
+                    <div class="text-sm text-slate-300">
+                      <div class="flex justify-between gap-3">
+                        <span>Level</span>
+                        <span class="font-semibold text-slate-100">{{ row.risk_level|capitalize }}</span>
+                      </div>
+
+                      <div class="flex justify-between gap-3 mt-2">
+                        <span>Score</span>
+                        <span class="font-semibold text-slate-100">{{ row.risk_score }}</span>
+                      </div>
+
+                      <div class="flex justify-between gap-3 mt-2">
+                        <span>Subscription</span>
+                        <span class="font-semibold text-slate-100">{{ row.subscription_name }}</span>
+                      </div>
+
+                      <div class="flex justify-between gap-3 mt-2">
+                        <span>Suggested</span>
+                        <span class="font-semibold text-slate-100">{{ row.suggested_subscription or "—" }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+                    <div class="text-xs uppercase tracking-wide text-slate-500 mb-3">Reasons</div>
+
+                    {% if row.reasons %}
+                      <ul class="space-y-2 text-sm text-slate-300">
+                        {% for reason in row.reasons %}
+                          <li>✓ {{ reason }}</li>
+                        {% endfor %}
+                      </ul>
+                    {% else %}
+                      <div class="text-sm text-slate-500">No suspicious reason detected.</div>
+                    {% endif %}
+                  </div>
+
+                  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+                    <div class="text-xs uppercase tracking-wide text-slate-500 mb-3">IPs</div>
+
+                    {% if row.evidence.ips %}
+                      <div class="flex flex-wrap gap-2">
+                        {% for ip in row.evidence.ips %}
+                          <span class="px-2 py-1 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-300">{{ ip }}</span>
+                        {% endfor %}
+                      </div>
+                    {% else %}
+                      <div class="text-sm text-slate-500">No public IP detected.</div>
+                    {% endif %}
+                  </div>
+
+                  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+                    <div class="text-xs uppercase tracking-wide text-slate-500 mb-3">Kills</div>
+
+                    <div class="grid grid-cols-3 gap-3 text-center">
+                      <div class="rounded-lg bg-slate-950 border border-slate-800 p-3">
+                        <div class="text-xl font-bold text-slate-100">{{ row.kills_7d }}</div>
+                        <div class="text-xs text-slate-500">7d</div>
+                      </div>
+
+                      <div class="rounded-lg bg-slate-950 border border-slate-800 p-3">
+                        <div class="text-xl font-bold text-slate-100">{{ row.kills_30d }}</div>
+                        <div class="text-xs text-slate-500">30d</div>
+                      </div>
+
+                      <div class="rounded-lg bg-slate-950 border border-slate-800 p-3">
+                        <div class="text-xl font-bold text-slate-100">{{ row.kills_90d }}</div>
+                        <div class="text-xs text-slate-500">90d</div>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mt-4">
+
+                  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+                    <div class="text-xs uppercase tracking-wide text-slate-500 mb-3">Fixed devices</div>
+
+                    {% if row.evidence.fixed_devices %}
+                      <ul class="space-y-2 text-sm text-slate-300">
+                        {% for device in row.evidence.fixed_devices %}
+                          <li>{{ device }}</li>
+                        {% endfor %}
+                      </ul>
+                    {% else %}
+                      <div class="text-sm text-slate-500">No fixed device detected.</div>
+                    {% endif %}
+                  </div>
+
+                  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+                    <div class="text-xs uppercase tracking-wide text-slate-500 mb-3">Mobile / browser devices</div>
+
+					{% set mobile_browser_devices = (row.evidence.mobile_devices or []) + (row.evidence.browser_devices or []) %}
+
+					{% if mobile_browser_devices %}
+					  <ul class="space-y-2 text-sm text-slate-300">
+						{% for device in mobile_browser_devices %}
+						  <li>{{ device }}</li>
+						{% endfor %}
+					  </ul>
+					{% else %}
+					  <div class="text-sm text-slate-500">No mobile or browser device detected.</div>
+					{% endif %}
+                  </div>
+
+                  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+                    <div class="text-xs uppercase tracking-wide text-slate-500 mb-3">Triggered policies</div>
+
+                    {% if row.evidence.rules %}
+                      <ul class="space-y-2 text-sm text-slate-300">
+                        {% for rule, count in row.evidence.rules.items() %}
+                          <li class="flex justify-between gap-3">
+                            <span>{{ rule }}</span>
+                            <span class="font-semibold text-slate-100">×{{ count }}</span>
+                          </li>
+                        {% endfor %}
+                      </ul>
+                    {% else %}
+                      <div class="text-sm text-slate-500">No triggered policy detected.</div>
+                    {% endif %}
+                  </div>
+
+                </div>
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="8" class="px-4 py-8 text-center text-slate-500">
+                No usage risk case detected for the selected filters.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
