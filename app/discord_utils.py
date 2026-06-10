@@ -1,5 +1,6 @@
 import time
 import requests
+from secret_store import decrypt_secret
 
 DISCORD_API = "https://discord.com/api/v10"
 
@@ -41,13 +42,13 @@ def resolve_discord_bot(db, settings: dict) -> dict:
             row = db.query_one("SELECT * FROM discord_bots WHERE id = ?", (bot_id,))
             if row:
                 b = dict(row)
-                b['token'] = (b.get('token') or '').strip()
+                b['token'] = (decrypt_secret(b.get('token')) or '').strip()
                 return b
         except Exception:
             pass
 
     # Legacy fallback
-    token = (s.get('discord_bot_token') or '').strip()
+    token = (decrypt_secret(s.get('discord_bot_token')) or '').strip()
     return {
         'id': None,
         'name': 'Legacy token',
@@ -82,7 +83,12 @@ def is_discord_ready(settings: dict) -> bool:
     except Exception:
         enabled = False
     s = _as_dict(settings)
-    token = (s.get('discord_bot_token_effective') or s.get('discord_bot_token') or '').strip()
+    token = (
+        decrypt_secret(
+            s.get('discord_bot_token_effective') or s.get('discord_bot_token')
+        )
+        or ''
+    ).strip()
 
     return bool(enabled and token)
 

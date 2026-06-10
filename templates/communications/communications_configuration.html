@@ -151,7 +151,8 @@
         <div class="text-xs">
           <label class="block mb-1">{{ t('smtp_pass') }}</label>
           <div class="relative">
-            <input type="password" id="smtp_pass" name="smtp_pass" value="{{ settings.smtp_pass or '' }}"
+            <input type="password" id="smtp_pass" name="smtp_pass" value=""
+                   placeholder="{% if settings.smtp_pass_configured %}Configured - leave empty to keep{% endif %}"
                    class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs pr-10">
             <button type="button" id="toggle_pass"
                     class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
@@ -191,7 +192,8 @@
         <div class="text-xs">
           <label class="block mb-1">{{ t('discord_bot_token') }}</label>
           <div class="relative">
-            <input type="password" id="discord_bot_token" name="discord_bot_token" value="{{ settings.discord_bot_token or '' }}"
+            <input type="password" id="discord_bot_token" name="discord_bot_token" value=""
+                   placeholder="{% if settings.discord_bot_token_configured %}Configured - leave empty to keep{% endif %}"
                    class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs pr-10">
             <button type="button" id="toggle_discord_token"
                     class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"

@@ -1,5 +1,6 @@
 import sqlite3
 import os
+from secret_store import encrypt_communication_secrets, encrypt_server_secrets
 
 DB_PATH = os.environ.get("DATABASE_PATH", "/appdata/database.db")
 
@@ -322,6 +323,16 @@ def run_migrations():
     ensure_column(cursor, "servers", "last_failure", "TEXT DEFAULT NULL")
     # Jellyfin stored password (1 password per media account/server)
     ensure_column(cursor, "media_users", "stored_password", "TEXT DEFAULT NULL")
+    # Vodum only needs the Jellyfin admin token to replace a user's password.
+    # Purge legacy plaintext passwords; new password changes also leave this NULL.
+    cursor.execute(
+        """
+        UPDATE media_users
+        SET stored_password = NULL
+        WHERE stored_password IS NOT NULL
+          AND TRIM(stored_password) != ''
+        """
+    )
     conn.commit()
 
 
@@ -333,8 +344,57 @@ def run_migrations():
     ensure_column(cursor, "settings", "telemetry_last_sent_at", "TEXT DEFAULT NULL")
     ensure_column(cursor, "settings", "task_defaults_version", "INTEGER DEFAULT 0")
     ensure_column(cursor, "settings", "stream_enforcer_boost_until", "TIMESTAMP DEFAULT NULL")
+    ensure_column(cursor, "settings", "usage_risk_enabled", "INTEGER DEFAULT 1")
+    ensure_column(cursor, "settings", "usage_risk_send_upgrade_suggestions", "INTEGER DEFAULT 0")
+    ensure_column(cursor, "settings", "usage_risk_send_stream_blocked_message", "INTEGER DEFAULT 0")
+    ensure_column(cursor, "settings", "usage_risk_min_kills_before_suggestion", "INTEGER DEFAULT 3")
+    ensure_column(cursor, "settings", "usage_risk_analysis_window_days", "INTEGER DEFAULT 30")
+    ensure_column(cursor, "settings", "usage_risk_suggestion_cooldown_days", "INTEGER DEFAULT 30")
+    ensure_column(cursor, "settings", "usage_risk_medium_threshold", "INTEGER DEFAULT 40")
+    ensure_column(cursor, "settings", "usage_risk_high_threshold", "INTEGER DEFAULT 75")
     ensure_column(cursor, "settings", "subscription_plans_enabled_only", "INTEGER DEFAULT 0")
     conn.commit()
+
+    # -------------------------------------------------
+    # Usage risk recommendation history
+    # -------------------------------------------------
+    if not table_exists(cursor, "usage_risk_recommendations"):
+        print("🛠 Creating table: usage_risk_recommendations")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS usage_risk_recommendations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            vodum_user_id INTEGER NOT NULL,
+
+            risk_level TEXT NOT NULL,
+            risk_score INTEGER NOT NULL DEFAULT 0,
+
+            current_subscription TEXT,
+            suggested_subscription TEXT NOT NULL,
+
+            first_detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_notification_at TIMESTAMP DEFAULT NULL,
+
+            cooldown_until TIMESTAMP DEFAULT NULL,
+
+            status TEXT NOT NULL DEFAULT 'detected'
+              CHECK(status IN ('detected','notified','ignored','resolved')),
+
+            meta_json TEXT,
+
+            FOREIGN KEY(vodum_user_id) REFERENCES vodum_users(id) ON DELETE CASCADE
+        );
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_usage_risk_recommendations_user
+            ON usage_risk_recommendations(vodum_user_id, status)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_usage_risk_recommendations_cooldown
+            ON usage_risk_recommendations(cooldown_until)
+        """)
+        conn.commit()
 
     # -------------------------------------------------
     # USER REFERRAL SETTINGS
@@ -854,6 +914,10 @@ def run_migrations():
     # Auth admin
     ensure_column(cursor, "settings", "admin_password_hash", "TEXT DEFAULT NULL")
     ensure_column(cursor, "settings", "auth_enabled", "INTEGER DEFAULT 1")
+    ensure_column(cursor, "settings", "wizard_active", "INTEGER DEFAULT NULL")
+    ensure_column(cursor, "settings", "wizard_completed", "INTEGER DEFAULT NULL")
+    ensure_column(cursor, "settings", "wizard_step", "INTEGER DEFAULT 1")
+    ensure_column(cursor, "settings", "wizard_state_json", "TEXT DEFAULT '{}'")
     ensure_column(cursor, "settings", "web_secure_cookies", "INTEGER DEFAULT 0")
     ensure_column(cursor, "settings", "web_cookie_samesite", "TEXT DEFAULT 'Lax'")
     ensure_column(cursor, "settings", "web_trust_proxy", "INTEGER DEFAULT 0")
@@ -1035,7 +1099,7 @@ def run_migrations():
             body TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','pending_invite_reminder','referral_reward','expiration_change','stream_blocked')),
+            trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','pending_invite_reminder','referral_reward','expiration_change','stream_blocked','usage_risk_upgrade_suggestion')),
             trigger_provider TEXT NOT NULL DEFAULT 'all' CHECK(trigger_provider IN ('all','plex','jellyfin')),
             expiration_change_direction TEXT NOT NULL DEFAULT 'all' CHECK(expiration_change_direction IN ('all','increase','decrease')),
             days_after INTEGER DEFAULT NULL,
@@ -1050,7 +1114,7 @@ def run_migrations():
         cursor,
         "comm_templates",
         "trigger_event",
-        "TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','pending_invite_reminder','referral_reward','expiration_change','stream_blocked'))",
+        "TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','pending_invite_reminder','referral_reward','expiration_change','stream_blocked','usage_risk_upgrade_suggestion'))",
     )
     ensure_column(
         cursor,
@@ -1088,6 +1152,8 @@ def run_migrations():
             return True
         if "expiration_change_direction" not in sql:
             return True
+        if "'usage_risk_upgrade_suggestion'" not in sql:
+            return True
         return False
 
     if table_exists(cursor, "comm_templates") and comm_templates_schema_needs_upgrade():
@@ -1106,7 +1172,7 @@ def run_migrations():
             body TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','pending_invite_reminder','referral_reward','expiration_change','stream_blocked')),
+            trigger_event TEXT NOT NULL DEFAULT 'expiration' CHECK(trigger_event IN ('expiration','user_creation','pending_invite_reminder','referral_reward','expiration_change','stream_blocked','usage_risk_upgrade_suggestion')),
             trigger_provider TEXT NOT NULL DEFAULT 'all' CHECK(trigger_provider IN ('all','plex','jellyfin')),
             expiration_change_direction TEXT NOT NULL DEFAULT 'all' CHECK(expiration_change_direction IN ('all','increase','decrease')),
             days_after INTEGER DEFAULT NULL,
@@ -2427,6 +2493,14 @@ def run_migrations():
         "status": "idle"
     })
 
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "usage_risk_notifications",
+        "description": "Send usage risk upgrade suggestions.",
+        "schedule": "*/30 * * * *",
+        "enabled": 0,
+        "status": "disabled"
+    })
+
     # Ajouter les tâches Discord si absentes
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "send_expiration_discord",
@@ -3046,10 +3120,43 @@ def run_migrations():
         "debug_mode": 0,
         "admin_password_hash": None,
         "auth_enabled": 1,
+        "wizard_active": 1,
+        "wizard_completed": 0,
+        "wizard_step": 1,
+        "wizard_state_json": "{}",
         "web_secure_cookies": 0,
         "web_cookie_samesite": "Lax",
         "web_trust_proxy": 0,
     })
+    cursor.execute(
+        """
+        UPDATE settings
+        SET
+            wizard_completed = CASE
+                WHEN TRIM(COALESCE(admin_password_hash, '')) <> ''
+                 AND EXISTS (SELECT 1 FROM servers)
+                THEN 1 ELSE 0
+            END,
+            wizard_active = CASE
+                WHEN TRIM(COALESCE(admin_password_hash, '')) <> ''
+                 AND EXISTS (SELECT 1 FROM servers)
+                THEN 0 ELSE 1
+            END
+        WHERE id = 1
+          AND (wizard_completed IS NULL OR wizard_active IS NULL)
+        """
+    )
+    conn.commit()
+
+    encrypted_secrets = encrypt_communication_secrets(conn)
+    if encrypted_secrets:
+        print(f"Encrypted {encrypted_secrets} communication secret row(s)")
+        conn.commit()
+
+    encrypted_server_secrets = encrypt_server_secrets(conn)
+    if encrypted_server_secrets:
+        print(f"Encrypted {encrypted_server_secrets} server secret row(s)")
+        conn.commit()
 
     # -------------------------------------------------
     # 3.x Versioned task schedule defaults migration
@@ -3134,6 +3241,171 @@ def run_migrations():
         )
         conn.commit()
 
+    # -------------------------------------------------
+    # Usage risk upgrade suggestion template
+    # -------------------------------------------------
+    usage_risk_subject = "A more suitable subscription may be available"
+    usage_risk_body = (
+        "Hello {username},\n\n"
+        "We noticed that your usage regularly reaches the limits of your current subscription.\n\n"
+        "Current subscription: {current_subscription}\n"
+        "Suggested subscription: {suggested_subscription}\n\n"
+        "This is only a recommendation to improve your experience and avoid blocked playback.\n\n"
+        "Best regards,\n"
+        "{brand_name}\n"
+    )
+
+    cursor.execute(
+        """
+        SELECT id, key, enabled, subject, body
+        FROM comm_templates
+        WHERE key = 'usage_risk_upgrade_suggestion'
+           OR trigger_event = 'usage_risk_upgrade_suggestion'
+           OR LOWER(name) = 'usage risk upgrade suggestion'
+        ORDER BY
+            enabled DESC,
+            CASE
+                WHEN COALESCE(subject, '') <> ? OR COALESCE(body, '') <> ? THEN 0
+                ELSE 1
+            END,
+            id ASC
+        LIMIT 1
+        """,
+        (usage_risk_subject, usage_risk_body),
+    )
+    row = cursor.fetchone()
+
+    if row:
+        usage_risk_template_id = int(row[0])
+
+        cursor.execute(
+            """
+            UPDATE comm_templates
+            SET key = 'usage_risk_upgrade_suggestion_duplicate_' || id,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE key = 'usage_risk_upgrade_suggestion'
+              AND id <> ?
+            """,
+            (usage_risk_template_id,),
+        )
+
+    if not row:
+        cursor.execute(
+            """
+            INSERT INTO comm_templates(
+                key,
+                name,
+                enabled,
+                trigger_event,
+                trigger_provider,
+                expiration_change_direction,
+                subscription_scope,
+                subscription_template_id,
+                days_before,
+                days_after,
+                subject,
+                body,
+                created_at,
+                updated_at
+            )
+            VALUES(
+                'usage_risk_upgrade_suggestion',
+                'Usage risk upgrade suggestion',
+                0,
+                'usage_risk_upgrade_suggestion',
+                'all',
+                'all',
+                'all',
+                NULL,
+                NULL,
+                0,
+                ?,
+                ?,
+                CURRENT_TIMESTAMP,
+                CURRENT_TIMESTAMP
+            )
+            """,
+            (usage_risk_subject, usage_risk_body),
+        )
+        usage_risk_template_id = cursor.lastrowid
+    else:
+        #usage_risk_template_id = int(row[0])
+
+        cursor.execute(
+            """
+            UPDATE comm_templates
+            SET key = 'usage_risk_upgrade_suggestion',
+                trigger_event = 'usage_risk_upgrade_suggestion',
+                trigger_provider = 'all',
+                expiration_change_direction = 'all',
+                subscription_scope = 'all',
+                subscription_template_id = NULL,
+                days_before = NULL,
+                days_after = 0,
+                subject = CASE
+                    WHEN subject IS NULL OR TRIM(subject) = '' THEN ?
+                    ELSE subject
+                END,
+                body = CASE
+                    WHEN body IS NULL OR TRIM(body) = '' THEN ?
+                    ELSE body
+                END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (usage_risk_subject, usage_risk_body, usage_risk_template_id),
+        )
+
+    cursor.execute(
+        """
+        DELETE FROM comm_templates
+        WHERE id <> ?
+          AND (
+                key = 'usage_risk_upgrade_suggestion'
+                OR trigger_event = 'usage_risk_upgrade_suggestion'
+              )
+          AND enabled = 0
+          AND subject = ?
+          AND body = ?
+        """,
+        (usage_risk_template_id, usage_risk_subject, usage_risk_body),
+    )
+
+    conn.commit()
+
+    # -------------------------------------------------
+    # Communication templates: disable exact enabled duplicates
+    # -------------------------------------------------
+    cursor.execute(
+        """
+        UPDATE comm_templates
+        SET enabled = 0,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE enabled = 1
+          AND id NOT IN (
+              SELECT MIN(id)
+              FROM comm_templates
+              WHERE enabled = 1
+              GROUP BY
+                  trigger_event,
+                  trigger_provider,
+                  COALESCE(subscription_scope, 'none'),
+                  COALESCE(subscription_template_id, 0),
+                  COALESCE(days_before, -999999),
+                  COALESCE(days_after, -999999),
+                  COALESCE(expiration_change_direction, 'all')
+          )
+        """
+    )
+
+    conn.commit()
+
+    # -------------------------------------------------
+    # Phase 8 disabled
+    # -------------------------------------------------
+    # Automatic usage risk notifications are intentionally disabled here.
+    # Do not rebuild comm_templates in db_bootstrap because related tables
+    # have foreign keys to comm_templates.
 
     conn.commit()
     conn.close()
@@ -3145,4 +3417,3 @@ def run_migrations():
 if __name__ == "__main__":
     run_migrations()
     #ensure_settings_defaults(cursor)
-

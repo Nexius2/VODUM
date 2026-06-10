@@ -5,6 +5,7 @@ from plexapi.server import PlexServer
 
 from logging_utils import get_logger
 from core.plex_rate_limit import install_plex_rate_limit, wait_for_plex_slot
+from core.http_security import plex_server_http_session
 
 log = get_logger("plex_connection")
 
@@ -67,7 +68,7 @@ def find_working_plex_base_url(
 		try:
 			wait_for_plex_slot(base_url)
 
-			resp = requests.get(
+			resp = plex_server_http_session(server_row).get(
 				f"{base_url}{endpoint}",
 				headers={
 					"X-Plex-Token": token,
@@ -118,7 +119,7 @@ def get_plex_server(
 		name = row_get(server_row, "name", "?")
 		raise RuntimeError(f"Incomplete Plex server configuration (URL/token): {name}")
 
-	session = requests.Session()
+	session = plex_server_http_session(server_row)
 	install_plex_rate_limit(session, base_url)
 
 	return PlexServer(base_url, token, session=session)

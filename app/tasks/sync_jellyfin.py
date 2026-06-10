@@ -7,6 +7,7 @@ from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
 from logging_utils import get_logger, is_debug_mode_enabled
 from core.server_cooldown import should_skip_unreachable_server, mark_server_unreachable, clear_server_cooldown
+from core.http_security import servers_http_session
 
 
 logger = get_logger("sync_jellyfin")
@@ -39,7 +40,7 @@ def _jellyfin_list_user_ids(session: requests.Session, base_url: str, token: str
     Utile pour fallback item_count quand le no-user renvoie 0/None.
     """
     users_url = _build_api_url(base_url, "/Users", token)
-    users = _get_json(session, users_url, timeout=timeout) or []
+    users = _get_json(session, users_url, timeout=timeout, token=token) or []
     if not isinstance(users, list):
         return []
 
@@ -282,10 +283,7 @@ def _build_api_url(base_url: str, path: str, token: str) -> str:
     raw = f"{base_url}{path}"
     parts = urlsplit(raw)
 
-    q = dict(parse_qsl(parts.query, keep_blank_values=True))
-    q["api_key"] = token
-
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(q), parts.fragment))
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, parts.query, parts.fragment))
 
 
 def _get_json(session: requests.Session, url: str, timeout: int = 20, token: str | None = None) -> Any:
@@ -978,7 +976,7 @@ def run(task_id: int, db):
     total_policy_ok = 0
     total_libraries = 0
 
-    session = requests.Session()
+    session = servers_http_session(servers)
 
     try:
         any_success = False
@@ -1073,4 +1071,3 @@ def run(task_id: int, db):
             f"policies_ok={total_policy_ok}, libraries_seen={total_libraries}"
         )
         logger.info("=== SYNC JELLYFIN : END ===")
-

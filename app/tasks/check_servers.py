@@ -12,17 +12,17 @@ check_servers.py - VERSION TXT LOGGING
 
 import requests
 import urllib3
+import xml.etree.ElementTree as ET
 from datetime import datetime
-from plexapi.server import PlexServer
 from tasks_engine import task_logs
 from logging_utils import get_logger, is_debug_mode_enabled
-from core.plex_rate_limit import install_plex_rate_limit
 from core.server_cooldown import (
     mark_server_unreachable,
     clear_server_cooldown,
     is_server_in_cooldown,
     get_server_cooldown_remaining_seconds,
 )
+from core.http_security import plex_server_http_session, server_http_session
 
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -34,11 +34,12 @@ log = get_logger("check_servers")   # Logger TXT haut niveau
 # Helpers
 # ------------------------------------------------------------
 
-def jellyfin_get_status(base_url, token=None):
+def jellyfin_get_status(server_row, base_url, token=None):
     try:
+        http = server_http_session(server_row)
         if is_debug_mode_enabled():
             log.debug(f"[JELLYFIN] ping url={base_url}/System/Ping")
-        r = requests.get(f"{base_url}/System/Ping", timeout=5)
+        r = http.get(f"{base_url}/System/Ping", timeout=5)
         if is_debug_mode_enabled():
             log.debug(f"[JELLYFIN] ping status_code={r.status_code}")
 
@@ -47,10 +48,10 @@ def jellyfin_get_status(base_url, token=None):
 
         if token:
             if is_debug_mode_enabled():
-                log.debug(f"[JELLYFIN] info url={base_url}/System/Info (with api_key)")
-            r2 = requests.get(
+                log.debug(f"[JELLYFIN] info url={base_url}/System/Info (authenticated)")
+            r2 = http.get(
                 f"{base_url}/System/Info",
-                params={"api_key": token},
+                headers={"X-Emby-Token": token},
                 timeout=5
             )
             if is_debug_mode_enabled():
@@ -95,20 +96,37 @@ def choose_server_base_urls(server_row):
     return urls
 
 
-def plex_get_info(base_url, token):
+def plex_get_info(server_row, base_url, token):
     try:
         if is_debug_mode_enabled():
             log.debug(f"[PLEX] connecting base_url={base_url} token_present={bool(token)}")
-        session = requests.Session()
-        session.verify = False
-        install_plex_rate_limit(session, base_url)
-        plex = PlexServer(base_url, token, session=session)
+        session = plex_server_http_session(server_row)
+        response = session.get(
+            f"{base_url}/identity",
+            headers={"X-Plex-Token": token, "Accept": "application/xml"},
+            timeout=5,
+        )
+        if response.status_code != 200:
+            return ("down", None, None, f"Plex identity returned HTTP {response.status_code}")
+
+        identity = ET.fromstring(response.content)
+        friendly_name = None
+        root_response = session.get(
+            f"{base_url}/",
+            headers={"X-Plex-Token": token, "Accept": "application/xml"},
+            timeout=5,
+        )
+        if root_response.status_code == 200:
+            friendly_name = ET.fromstring(root_response.content).get("friendlyName")
+
+        machine_id = identity.get("machineIdentifier")
+        version = identity.get("version")
         if is_debug_mode_enabled():
             log.debug(
-                f"[PLEX] connected friendlyName={plex.friendlyName} "
-                f"machineId={plex.machineIdentifier} version={plex.version}"
+                f"[PLEX] connected friendlyName={friendly_name} "
+                f"machineId={machine_id} version={version}"
             )
-        return ("up", plex.friendlyName, plex.machineIdentifier, plex.version)
+        return ("up", friendly_name or "Plex", machine_id, version)
 
     except Exception as e:
         if is_debug_mode_enabled():
@@ -170,7 +188,7 @@ def run(task_id: int, db):
                 )
                 log.debug(
                     f"[SERVER #{sid}] chosen_base_url={base_url} type={s.get('type')} "
-                    f"has_token={bool(s.get('token'))} verify_ssl=disabled_for_plexapi"
+                    f"has_token={bool(s.get('token'))}"
                 )
 
             if not base_url:
@@ -198,7 +216,7 @@ def run(task_id: int, db):
             if s["type"] == "plex" and s["token"]:
                 meta = None
                 for candidate_url in base_urls:
-                    status, found_name, found_mid, meta = plex_get_info(candidate_url, s["token"])
+                    status, found_name, found_mid, meta = plex_get_info(s, candidate_url, s["token"])
                     if status == "up":
                         base_url = candidate_url
                         break
@@ -219,7 +237,7 @@ def run(task_id: int, db):
             elif s["type"] == "jellyfin":
                 meta = None
                 for candidate_url in base_urls:
-                    status, found_name, found_mid, meta = jellyfin_get_status(candidate_url, s["token"])
+                    status, found_name, found_mid, meta = jellyfin_get_status(s, candidate_url, s["token"])
                     if status == "up":
                         base_url = candidate_url
                         break
@@ -280,8 +298,4 @@ def run(task_id: int, db):
         log.error("Error while check_servers", exc_info=True)
         task_logs(task_id, "error", f"Error check_servers : {e}")
         raise
-
-
-
-
 

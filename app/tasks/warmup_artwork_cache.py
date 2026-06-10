@@ -13,6 +13,7 @@ import requests
 
 from core.monitoring.artwork import _resolve_row_artwork
 from core.plex_rate_limit import wait_for_plex_slot
+from core.http_security import server_http_session
 from logging_utils import get_logger, is_debug_mode_enabled
 from routes.monitoring_api import (
     ARTWORK_DISK_CACHE_TTL_SECONDS,
@@ -70,7 +71,8 @@ def _fetch_plex(server, ref):
     if not path or not token:
         return None
 
-    params = {"X-Plex-Token": token}
+    headers = {"X-Plex-Token": token}
+    http = server_http_session(server)
 
     candidate_paths = [path]
     if path.endswith("/art"):
@@ -81,7 +83,7 @@ def _fetch_plex(server, ref):
         for base in _server_bases(server):
             try:
                 wait_for_plex_slot(base)
-                response = requests.get(base + candidate_path, params=params, timeout=REQUEST_TIMEOUT)
+                response = http.get(base + candidate_path, headers=headers, timeout=REQUEST_TIMEOUT)
                 response.raise_for_status()
                 return response.content, response.headers.get("Content-Type") or "image/jpeg"
             except Exception as e:
@@ -109,11 +111,12 @@ def _fetch_jellyfin(server, ref):
 
     headers = {"X-Emby-Token": server.get("token")}
     params = {"maxWidth": width, "quality": quality}
+    http = server_http_session(server)
 
     last_error = None
     for base in _server_bases(server):
         try:
-            response = requests.get(base + path, headers=headers, params=params, timeout=REQUEST_TIMEOUT)
+            response = http.get(base + path, headers=headers, params=params, timeout=REQUEST_TIMEOUT)
             response.raise_for_status()
             return response.content, response.headers.get("Content-Type") or "image/jpeg"
         except Exception as e:
@@ -124,7 +127,7 @@ def _fetch_jellyfin(server, ref):
         fallback_path = f"/Items/{item_id}/Images/Primary"
         for base in _server_bases(server):
             try:
-                response = requests.get(base + fallback_path, headers=headers, params=params, timeout=REQUEST_TIMEOUT)
+                response = http.get(base + fallback_path, headers=headers, params=params, timeout=REQUEST_TIMEOUT)
                 response.raise_for_status()
                 return response.content, response.headers.get("Content-Type") or "image/jpeg"
             except Exception as e:
@@ -162,7 +165,7 @@ def _cache_key_for_ref(server_id, ref):
 def _load_servers(db):
     rows = db.query(
         """
-        SELECT id, LOWER(TRIM(type)) AS type, url, local_url, public_url, token
+        SELECT id, LOWER(TRIM(type)) AS type, url, local_url, public_url, token, settings_json
         FROM servers
         WHERE LOWER(TRIM(type)) IN ('plex','jellyfin')
           AND token IS NOT NULL

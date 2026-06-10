@@ -11,6 +11,7 @@ from werkzeug.security import generate_password_hash
 
 from tasks_engine import apply_cron_master_switch, sync_expiry_tasks_from_settings, force_task_run, mark_auto_enable_dirty
 from web.helpers import get_db, add_log
+from secret_store import encryption_key_status
 
 settings_logger = get_logger("settings")
 
@@ -38,6 +39,7 @@ def register(app):
             current_lang=session.get("lang", settings["default_language"]),
             available_languages=get_available_languages(),
             app_version=g.get("app_version", "dev"),
+            encryption_key_status=encryption_key_status(),
         )
 
     @app.route("/settings/save", methods=["POST"])
@@ -197,14 +199,13 @@ def register(app):
                 web_secure_cookies = :web_secure_cookies,
                 web_cookie_samesite = :web_cookie_samesite,
                 web_trust_proxy = :web_trust_proxy,
-                plex_user_import_mode = :plex_user_import_mode
+                plex_user_import_mode = :plex_user_import_mode,
+                enable_anonymous_telemetry = :enable_anonymous_telemetry
             WHERE id = 1
             """,
             new_values,
         )
 
-<<<<<<< Updated upstream
-=======
         telemetry_enabled = int(new_values["enable_anonymous_telemetry"] or 0)
         db.execute(
             """
@@ -226,7 +227,6 @@ def register(app):
                 """
             )
 
->>>>>>> Stashed changes
         # Appliquer immédiatement au process Flask courant
         current_app.config["SESSION_COOKIE_SAMESITE"] = new_values["web_cookie_samesite"]
         current_app.config["SESSION_COOKIE_SECURE"] = bool(new_values["web_secure_cookies"]) or (
@@ -283,6 +283,8 @@ def register(app):
         # --------------------------------------------------
         force_task_run("check_mailing_status")
         force_task_run("send_comm_campaigns")
+        if telemetry_enabled:
+            force_task_run("send_telemetry")
 
         mark_auto_enable_dirty()
 
@@ -350,6 +352,7 @@ def register(app):
             current_lang=session.get("lang", settings.get("default_language")),
             available_languages=get_available_languages(),
             app_version=g.get("app_version", "dev"),
+            encryption_key_status=encryption_key_status(),
         )
 
 
@@ -364,5 +367,3 @@ def register(app):
         return logs[start:end], total_pages
 
     
-
-

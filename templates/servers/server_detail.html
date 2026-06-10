@@ -65,7 +65,8 @@
 		  id="server_token"
 		  type="password"
 		  name="token"
-		  value="{{ server.token or '' }}"
+		  value=""
+		  placeholder="{{ t('leave_blank_to_keep') }}"
 		  class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 pr-10 font-mono text-xs"
 		  autocomplete="off"
 		  spellcheck="false"
@@ -94,6 +95,17 @@
       {{ t("public_url") }}
       <input type="text" name="public_url" value="{{ server.public_url or '' }}"
              class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+    </label>
+
+    {% set server_settings = server.settings_json|fromjson if server.settings_json else {} %}
+    <label class="flex items-start gap-2 md:col-span-2">
+      <input type="checkbox" name="verify_tls" value="1"
+             {% if server_settings.get('verify_tls', true) %}checked{% endif %}
+             class="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-800">
+      <span>
+        <span class="block text-sm text-slate-300">{{ t("verify_server_tls") }}</span>
+        <span class="block text-xs text-slate-500 mt-1">{{ t("verify_server_tls_help") }}</span>
+      </span>
     </label>
 
   </div>

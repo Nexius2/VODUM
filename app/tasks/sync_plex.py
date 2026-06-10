@@ -13,6 +13,7 @@ from plexapi.server import PlexServer
 from core.plex_rate_limit import install_plex_rate_limit, wait_for_plex_slot
 from core.plex_connection import plex_candidate_base_urls, find_working_plex_base_url
 from core.server_cooldown import should_skip_unreachable_server, mark_server_unreachable, clear_server_cooldown
+from core.http_security import ConfiguredHostSession, plex_server_http_session, url_origin
 
 class TimeoutSession(requests.Session):
     """Session requests qui force un timeout par défaut."""
@@ -195,7 +196,7 @@ def _ensure_plex_server_identity(db, server) -> None:
 
     try:
         wait_for_plex_slot(base_url)
-        resp = requests.get(
+        resp = plex_server_http_session(server).get(
             f"{base_url}/identity",
             headers={
                 "X-Plex-Token": token,
@@ -548,11 +549,13 @@ def plex_get_user_access(db, plex, server_name, media_user_id: int):
 
 def _plex_section_total_items(session, base_url: str, token: str, section_id: str, timeout: int = 10) -> int | None:
     # Astuce Plex: demander 0 item renvoie totalSize dans MediaContainer
-    url = (
-        f"{base_url.rstrip('/')}/library/sections/{section_id}/all"
-        f"?X-Plex-Token={token}&X-Plex-Container-Start=0&X-Plex-Container-Size=0"
+    url = f"{base_url.rstrip('/')}/library/sections/{section_id}/all"
+    r = session.get(
+        url,
+        headers={"X-Plex-Token": token},
+        params={"X-Plex-Container-Start": 0, "X-Plex-Container-Size": 0},
+        timeout=timeout,
     )
-    r = session.get(url, timeout=timeout)
     r.raise_for_status()
 
     root = ET.fromstring(r.text)
@@ -825,7 +828,7 @@ def plex_get_libraries(server):
 
     try:
         wait_for_plex_slot(base_url)
-        resp = requests.get(url, headers=headers, timeout=30)
+        resp = plex_server_http_session(server).get(url, headers=headers, timeout=30)
         resp.raise_for_status()
     except Exception as e:
         log.error(f"[SYNC LIBRARIES] Error API {url}: {e}")
@@ -900,7 +903,7 @@ def sync_plex_libraries(db, server, libraries):
     found_ids = set()
     found_section_ids = set()
 
-    session = requests.Session()
+    session = plex_server_http_session(server)
     install_plex_rate_limit(session, base_url)
 
     for lib in libraries:
@@ -1062,7 +1065,11 @@ def fetch_xml(url: str, token: str) -> Optional[ET.Element]:
         log.debug(f"[API] GET {url}")
 
     try:
-        resp = requests.get(url, headers=headers, timeout=20)
+        session = ConfiguredHostSession(
+            {url_origin("https://plex.tv")},
+            default_timeout=20,
+        )
+        resp = session.get(url, headers=headers)
     except Exception as e:
         log.error(f"[API] Network error on {url}: {e}")
         return None
@@ -1296,15 +1303,15 @@ def fetch_shared_server_users(
     if not token or not machine_identifier:
         return result
 
-    session = TimeoutSession(timeout=20)
-
-    url = (
-        f"https://plex.tv/api/servers/{machine_identifier}/shared_servers"
-        f"?X-Plex-Token={token}"
+    session = ConfiguredHostSession(
+        {url_origin("https://plex.tv")},
+        default_timeout=20,
     )
 
+    url = f"https://plex.tv/api/servers/{machine_identifier}/shared_servers"
+
     try:
-        response = session.get(url)
+        response = session.get(url, headers={"X-Plex-Token": token})
         response.raise_for_status()
 
         root = ET.fromstring(response.content)
@@ -1891,7 +1898,7 @@ def sync_all(task_id=None, db=None) -> None:
             log.info(f"[SYNC ACCESS] Attempting PlexAPI connection → {server_name} base_url={base_url}")
 
             # ⏱️ timeout forcé pour plexapi
-            session = TimeoutSession(timeout=20)
+            session = plex_server_http_session(server, default_timeout=20)
             install_plex_rate_limit(session, base_url)
 
             # petit ping très parlant (et timeout)
@@ -1979,5 +1986,3 @@ def run(task_id: int, db):
         )
         task_logs(task_id, "error", f"Error during sync_plex : {e}")
         raise
-
-

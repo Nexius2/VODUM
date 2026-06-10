@@ -5,6 +5,7 @@ from email.message import EmailMessage
 from typing import Dict, Tuple
 
 from email_layout_utils import build_email_parts
+from secret_store import decrypt_communication_settings
 
 
 def send_email(subject: str, body: str, to_email: str, smtp_settings: Dict, attachments: list[dict] | None = None) -> Tuple[bool, str | None]:
@@ -12,6 +13,8 @@ def send_email(subject: str, body: str, to_email: str, smtp_settings: Dict, atta
 
     Returns (success, error_message).
     """
+    smtp_settings = decrypt_communication_settings(smtp_settings)
+
     if not to_email:
         return False, "Empty recipient email"
 

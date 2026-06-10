@@ -1,6 +1,10 @@
 # Auto-split from app.py (keep URLs/endpoints intact)
 from core.monitoring.artwork import enrich_live_session_artwork
-
+from core.usage_risk import build_usage_risk_report
+from core.dashboard_servers import dashboard_server_preview
+from core.dashboard_usage_risk import build_usage_risk_trend
+from collections import Counter
+from datetime import datetime, timedelta
 from flask import render_template, redirect, url_for, make_response
 
 from logging_utils import read_last_logs
@@ -14,6 +18,76 @@ def _no_store_response(html):
 	response.headers["Pragma"] = "no-cache"
 	response.headers["Expires"] = "0"
 	return response
+
+def _get_dashboard_next_tasks(db):
+    if not table_exists(db, "tasks"):
+        return {
+            "items": [],
+            "active": 0,
+            "error": 0,
+        }
+
+    row = db.query_one(
+        """
+        SELECT
+          SUM(CASE WHEN enabled = 1 THEN 1 ELSE 0 END) AS active,
+          SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS error
+        FROM tasks
+        """
+    )
+
+    tasks = db.query(
+        """
+        SELECT
+          name,
+          status,
+          next_run,
+          last_run
+        FROM tasks
+        WHERE enabled = 1
+        ORDER BY
+          CASE WHEN next_run IS NULL THEN 1 ELSE 0 END,
+          datetime(next_run) ASC,
+          LOWER(name) ASC
+        LIMIT 4
+        """
+    ) or []
+
+    return {
+        "items": [dict(t) for t in tasks],
+        "active": int((row["active"] if row else 0) or 0),
+        "error": int((row["error"] if row else 0) or 0),
+    }
+
+def _build_usage_risk_dashboard(usage_risk_report, history_rows=None):
+    rows = usage_risk_report.get("rows") or []
+
+    reasons_counter = Counter()
+    for row in rows:
+        for reason in row.get("reasons") or []:
+            reasons_counter[str(reason)] += 1
+
+    total_reasons = sum(reasons_counter.values()) or 0
+    top_reasons = []
+
+    for label, count in reasons_counter.most_common(3):
+        percent = round((count / total_reasons) * 100, 1) if total_reasons else 0
+        top_reasons.append({
+            "label": label,
+            "count": count,
+            "percent": percent,
+        })
+
+    result = {
+        "top_reasons": top_reasons,
+    }
+    result.update(
+        build_usage_risk_trend(
+            history_rows or [],
+            usage_risk_report.get("summary", {}).get("suggested", 0),
+        )
+    )
+    return result
 
 def register(app):
     @app.route("/")
@@ -111,6 +185,8 @@ def register(app):
                 "offline": int(offline),
             }
 
+        dashboard_tasks = _get_dashboard_next_tasks(db)
+
         # --------------------------
         # TASK STATS
         # --------------------------
@@ -140,15 +216,18 @@ def register(app):
                 SELECT COUNT(*) AS cnt
                 FROM stream_enforcements
                 WHERE action = 'kill'
-                  AND datetime(created_at) >= datetime('now', '-48 hours')
+                  AND datetime(created_at) >= datetime('now', '-7 days')
                 """
             )
-            stats["kills_48h"] = int(row["cnt"] or 0) if row else 0
+            stats["kills_7d"] = int(row["cnt"] or 0) if row else 0
         else:
-            stats["kills_48h"] = 0
+            stats["kills_7d"] = 0
 
         subscription_stats = []
         subscription_stats_more = False
+        subscription_plan_count = 0
+        subscription_user_total = 0
+        subscription_donut = "#334155 0% 100%"
 
         if table_exists(db, "subscription_templates"):
             subscription_stats = db.query(
@@ -167,6 +246,66 @@ def register(app):
 
             subscription_stats = [dict(row) for row in subscription_stats]
             subscription_stats_more = len(subscription_stats) > 8
+
+            subscription_plan_count = len(subscription_stats)
+            subscription_user_total = sum(int(s.get("user_count") or 0) for s in subscription_stats)
+
+            subscription_colors = ["#8b5cf6", "#f97316", "#60a5fa", "#22c55e", "#f43f5e", "#eab308", "#14b8a6", "#a78bfa"]
+            donut_parts = []
+            donut_cursor = 0.0
+
+            for idx, sub in enumerate(subscription_stats):
+                count = int(sub.get("user_count") or 0)
+                percent = round((count / subscription_user_total) * 100, 1) if subscription_user_total else 0.0
+
+                sub["percent"] = percent
+                sub["color"] = subscription_colors[idx % len(subscription_colors)]
+
+                if count > 0 and subscription_user_total > 0:
+                    start = donut_cursor
+                    end = donut_cursor + percent
+                    donut_parts.append(f"{sub['color']} {start:.2f}% {end:.2f}%")
+                    donut_cursor = end
+
+            subscription_donut = ", ".join(donut_parts) if donut_parts else "#334155 0% 100%"
+
+        # --------------------------
+        # USAGE RISK SUMMARY
+        # --------------------------
+        usage_risk_summary = {
+            "high": 0,
+            "medium": 0,
+            "low": 0,
+            "suggested": 0,
+        }
+        usage_risk_dashboard = {
+            "top_reasons": [],
+            **build_usage_risk_trend([], 0),
+        }
+
+        try:
+            usage_risk_report = build_usage_risk_report(
+                db,
+                {"period_days": 30},
+                persist_history=False,
+            )
+            usage_risk_summary = usage_risk_report.get("summary") or usage_risk_summary
+            history_rows = []
+            if table_exists(db, "usage_risk_recommendations"):
+                history_rows = db.query(
+                    """
+                    SELECT vodum_user_id, first_detected_at, last_detected_at
+                    FROM usage_risk_recommendations
+                    WHERE datetime(first_detected_at) <= datetime('now')
+                      AND datetime(last_detected_at) >= datetime('now', '-13 days', 'start of day')
+                    """
+                ) or []
+            usage_risk_dashboard = _build_usage_risk_dashboard(
+                usage_risk_report,
+                history_rows,
+            )
+        except Exception:
+            pass
 
         # --------------------------
         # SERVER LIST (tous types)
@@ -227,6 +366,8 @@ def register(app):
 
             for srv in servers:
                 srv["peak_streams_7d"] = peaks_by_server.get(int(srv["id"]), 0)
+
+        dashboard_servers = dashboard_server_preview(servers)
 
         # --------------------------
         # LATEST LOGS (fichier)
@@ -313,14 +454,31 @@ def register(app):
             stats=stats,
             subscription_stats=subscription_stats,
             subscription_stats_more=subscription_stats_more,
+            subscription_plan_count=subscription_plan_count,
+            subscription_user_total=subscription_user_total,
+            subscription_donut=subscription_donut,
+            usage_risk_summary=usage_risk_summary,
+            usage_risk_dashboard=usage_risk_dashboard,
             users_stats=users_stats,
             servers=servers,
+            dashboard_servers=dashboard_servers,
+            dashboard_tasks=dashboard_tasks,
             latest_logs=latest_logs,
             sessions=sessions,
             total_live=total_live,
             total_transcode=total_transcode,
             idle_card=idle_card,
             active_page="dashboard",
+        ))
+
+    @app.route("/dashboard/_next_tasks")
+    def dashboard_next_tasks_partial():
+        db = get_db()
+        dashboard_tasks = _get_dashboard_next_tasks(db)
+
+        return _no_store_response(render_template(
+            "dashboard/partials/_next_tasks.html",
+            dashboard_tasks=dashboard_tasks,
         ))
 
     @app.route("/dashboard/_now_playing")
@@ -453,5 +611,3 @@ def register(app):
 
 
             
-
-

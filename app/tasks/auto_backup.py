@@ -9,6 +9,7 @@ from pathlib import Path
 from logging_utils import get_logger, is_debug_mode_enabled
 from tasks_engine import task_logs
 from config import Config
+from secret_store import encryption_key_bytes
 
 log = get_logger("auto_backup")
 
@@ -63,6 +64,7 @@ def run(task_id: int, db):
         database_path = Path(Config.DATABASE)
         backup_dir = Path(os.environ.get("VODUM_BACKUP_DIR", "/appdata/backups"))
         attachments_dir = database_path.parent / "attachments"
+        encryption_key = encryption_key_bytes()
 
         if not database_path.exists():
             raise FileNotFoundError(f"Database not found: {database_path}")
@@ -78,12 +80,13 @@ def run(task_id: int, db):
 
         manifest = {
             "format": "vodum-full-backup",
-            "version": 1,
+            "version": 2,
             "created_at_utc": datetime.utcnow().isoformat(timespec="seconds") + "Z",
             "database": "database.db",
             "includes": {
                 "database": True,
                 "attachments": attachments_dir.exists(),
+                "encryption_key": True,
             },
         }
 
@@ -94,6 +97,7 @@ def run(task_id: int, db):
 
         with zipfile.ZipFile(tmp_backup_path, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
             zipf.write(database_path, "database.db")
+            zipf.writestr("vodum.encryption_key", encryption_key)
             zipf.writestr("manifest.json", json.dumps(manifest, indent=2))
             _add_dir_to_zip(zipf, attachments_dir, "attachments")
 
@@ -134,6 +138,6 @@ def run(task_id: int, db):
             if "tmp_backup_path" in locals() and tmp_backup_path.exists():
                 tmp_backup_path.unlink()
         except Exception:
-            pass
+            log.warning("Unable to remove failed temporary auto-backup", exc_info=True)
         task_logs(task_id, "error", f"Auto-backup error: {e}")
         raise

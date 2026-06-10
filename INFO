@@ -1,8 +1,4 @@
-<<<<<<< Updated upstream
-VERSION=26.06.07 b1427
-=======
 VERSION=26.06.10 b2304
->>>>>>> Stashed changes
 TOOL=vodum
 CREATED_BY=NeXius2
 PYTHON=3.11.15

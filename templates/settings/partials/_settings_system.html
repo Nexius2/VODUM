@@ -4,6 +4,35 @@
 
   <div class="space-y-4">
 
+    <div class="rounded-lg border border-indigo-800/60 bg-indigo-950/20 p-3">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <div class="text-sm text-slate-200">{{ t("installation_wizard") }}</div>
+          <div class="text-xs text-slate-400 mt-1">{{ t("installation_wizard_help") }}</div>
+        </div>
+        <button type="submit"
+                formaction="{{ url_for('setup_wizard_restart') }}"
+                formmethod="post"
+                class="px-3 py-2 rounded-lg bg-indigo-700 hover:bg-indigo-600 text-xs text-white">
+          {{ t("run_installation_wizard") }}
+        </button>
+      </div>
+    </div>
+
+    <div class="rounded-lg border {% if encryption_key_status.ok %}border-emerald-800/60 bg-emerald-950/20{% else %}border-rose-800/60 bg-rose-950/20{% endif %} p-3">
+      <div class="flex items-center justify-between gap-3">
+        <span class="text-sm text-slate-200">{{ t("encryption_key_status") }}</span>
+        <span class="text-xs font-semibold {% if encryption_key_status.ok %}text-emerald-300{% else %}text-rose-300{% endif %}">
+          {{ t("valid") if encryption_key_status.ok else t("error") }}
+        </span>
+      </div>
+      <div class="text-xs text-slate-400 mt-1">{{ encryption_key_status.message }}</div>
+      <div class="text-[11px] text-slate-500 mt-1">
+        {{ t("source") }}: {{ encryption_key_status.source }}
+        {% if encryption_key_status.path %} · {{ encryption_key_status.path }}{% endif %}
+      </div>
+    </div>
+
     <div class="flex items-center gap-2">
       <input type="checkbox" name="enable_cron_jobs" value="1"
              {% if settings.enable_cron_jobs %}checked{% endif %}

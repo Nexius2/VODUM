@@ -4,6 +4,8 @@ import logging
 from typing import Any, Iterable, Optional
 import os
 
+from secret_store import decrypt_server_record
+
 
 class DBManager:
     """
@@ -116,12 +118,20 @@ class DBManager:
         self,
         sql: str,
         params: Iterable[Any] = ()
-    ) -> list[sqlite3.Row]:
+    ) -> list[sqlite3.Row | dict]:
         with self._lock:
             cur = self.conn.cursor()
             try:
                 cur.execute(sql, params)
-                return cur.fetchall()
+                rows = cur.fetchall()
+                if "servers" in sql.lower():
+                    return [
+                        decrypt_server_record(row)
+                        if "token" in row.keys() or "settings_json" in row.keys()
+                        else row
+                        for row in rows
+                    ]
+                return rows
             finally:
                 cur.close()
 

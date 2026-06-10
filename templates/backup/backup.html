@@ -7,6 +7,26 @@
 
 {% block content %}
 
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+  {% for title, diagnostic in [(t("last_backup_result"), backup_diagnostic), (t("sqlite_integrity"), integrity_diagnostic)] %}
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+    <div class="flex items-center justify-between gap-3">
+      <div class="text-sm font-semibold">{{ title }}</div>
+      <span class="text-xs font-semibold {% if diagnostic.status == 'error' %}text-rose-300{% elif diagnostic.last_run %}text-emerald-300{% else %}text-slate-400{% endif %}">
+        {{ diagnostic.status or 'unknown' }}
+      </span>
+    </div>
+    <div class="text-xs text-slate-400 mt-2">
+      {{ t("last_run") }}:
+      {{ diagnostic.last_run|browser_datetime if diagnostic.last_run else '—' }}
+    </div>
+    {% if diagnostic.last_error %}
+    <div class="text-xs text-rose-300 mt-2 break-words">{{ diagnostic.last_error }}</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
   <!-- Création backup -->
