@@ -203,6 +203,30 @@ def register(app):
             new_values,
         )
 
+<<<<<<< Updated upstream
+=======
+        telemetry_enabled = int(new_values["enable_anonymous_telemetry"] or 0)
+        db.execute(
+            """
+            UPDATE tasks
+            SET enabled=?,
+                status=CASE WHEN ?=1 THEN 'idle' ELSE 'disabled' END,
+                next_run=NULL,
+                updated_at=CURRENT_TIMESTAMP
+            WHERE name='send_telemetry'
+            """,
+            (telemetry_enabled, telemetry_enabled),
+        )
+        if not telemetry_enabled:
+            db.execute(
+                """
+                UPDATE settings
+                SET telemetry_last_sent_at=NULL
+                WHERE id=1
+                """
+            )
+
+>>>>>>> Stashed changes
         # Appliquer immédiatement au process Flask courant
         current_app.config["SESSION_COOKIE_SAMESITE"] = new_values["web_cookie_samesite"]
         current_app.config["SESSION_COOKIE_SECURE"] = bool(new_values["web_secure_cookies"]) or (

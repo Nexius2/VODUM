@@ -2213,6 +2213,7 @@ def run_migrations():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_stream_enforcement_state_server ON stream_enforcement_state(server_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_stream_enforcements_server ON stream_enforcements(server_id, created_at)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_server_library_stopped ON media_session_history(server_id, library_section_id, stopped_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_library_top_played ON media_session_history(server_id, library_section_id, media_key, started_at, stopped_at)")
     conn.commit()
 
     print("✔ Server deletion performance indexes verified.")
@@ -2421,7 +2422,7 @@ def run_migrations():
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "send_telemetry",
         "description": "Send anonymous Vodum telemetry statistics.",
-        "schedule": "0 0 * * *",
+        "schedule": "0 * * * *",
         "enabled": 1,
         "status": "idle"
     })
@@ -3056,7 +3057,7 @@ def run_migrations():
     # ensure_row() only inserts missing tasks.
     # This migration updates existing installs when Vodum changes default schedules,
     # without overwriting admin-customized schedules.
-    TASK_DEFAULTS_VERSION = 1
+    TASK_DEFAULTS_VERSION = 2
 
     TASK_SCHEDULE_DEFAULTS = {
         "sync_plex": "0 */6 * * *",
@@ -3073,7 +3074,7 @@ def run_migrations():
         "monitor_enqueue_refresh": "*/1 * * * *",
         "media_jobs_worker": "*/1 * * * *",
         "send_pending_invite_reminders": "30 0 * * *",
-        "send_telemetry": "0 0 * * *",
+        "send_telemetry": "0 * * * *",
         "send_expiration_emails": "0 * * * *",
         "send_expiration_discord": "0 * * * *",
         "send_campaign_discord": "*/10 * * * *",
@@ -3085,6 +3086,7 @@ def run_migrations():
         "media_jobs_worker": {"*/1 * * * *"},
         "check_servers": {"*/10 * * * *", "*/30 * * * *"},
         "send_pending_invite_reminders": {"0 30 * * *", "30 * * *", "30 0 * * *"},
+        "send_telemetry": {"0 0 * * *", "0 * * * *"},
     }
 
     cursor.execute("SELECT COALESCE(task_defaults_version, 0) FROM settings WHERE id = 1")

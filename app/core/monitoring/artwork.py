@@ -2,7 +2,7 @@ import json
 
 from flask import url_for
 
-ARTWORK_CACHE_RESOLVER = "canonical_v12"
+ARTWORK_CACHE_RESOLVER = "canonical_v13"
 
 
 

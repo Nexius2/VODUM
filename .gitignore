@@ -35,6 +35,9 @@ Thumbs.db
 dist/
 build/
 
+# Telemetry
+worker_telemetry/
+
 # Coverage
 .coverage
 htmlcov/
