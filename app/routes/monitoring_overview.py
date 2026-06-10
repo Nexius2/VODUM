@@ -519,17 +519,32 @@ def register(app):
                     h.poster_ref_json,
                     h.backdrop_ref_json,
                     CASE
-                      WHEN TRIM(COALESCE(h.grandparent_title, '')) <> ''
+                      WHEN s.type = 'plex'
+                           AND TRIM(COALESCE(h.grandparent_title, '')) <> ''
                            AND COALESCE(NULLIF(TRIM(json_extract(h.raw_json, '$.VideoOrTrack.grandparentRatingKey')), ''), '') <> ''
-                        THEN 2
+                        THEN 3
                       WHEN COALESCE(NULLIF(TRIM(h.poster_ref_json), ''), '') <> ''
                         THEN 1
                       ELSE 0
                     END AS artwork_rank,
                     COALESCE(
                       CAST(mu.vodum_user_id AS TEXT),
-                      'media:' || CAST(mu.id AS TEXT)
+                      'media:' || CAST(mu.id AS TEXT),
+                      'external:' || NULLIF(TRIM(h.external_user_id), ''),
+                      'unknown'
                     ) AS viewer_id,
+                    CASE
+                      WHEN s.type = 'plex'
+                           AND COALESCE(NULLIF(TRIM(json_extract(h.raw_json, '$.VideoOrTrack.grandparentRatingKey')), ''), '') <> ''
+                        THEN 'server:' || CAST(h.server_id AS TEXT) || '|series-id:' ||
+                             TRIM(json_extract(h.raw_json, '$.VideoOrTrack.grandparentRatingKey'))
+                      WHEN s.type = 'jellyfin'
+                           AND COALESCE(NULLIF(TRIM(json_extract(h.raw_json, '$.NowPlayingItem.SeriesId')), ''), '') <> ''
+                        THEN 'server:' || CAST(h.server_id AS TEXT) || '|series-id:' ||
+                             TRIM(json_extract(h.raw_json, '$.NowPlayingItem.SeriesId'))
+                      ELSE 'server:' || CAST(h.server_id AS TEXT) || '|series-title:' ||
+                           LOWER(TRIM(COALESCE(h.grandparent_title, h.title, 'Unknown')))
+                    END AS media_group_key,
                     MIN(
                       COALESCE(h.watch_ms, 0),
                       CASE
@@ -537,11 +552,16 @@ def register(app):
                         ELSE COALESCE(h.watch_ms, 0)
                       END
                     ) AS watch_ms_capped,
-                    (CAST(h.server_id AS TEXT) || '|' ||
-                     COALESCE(CAST(mu.vodum_user_id AS TEXT), 'media:' || CAST(mu.id AS TEXT)) || '|' ||
-                     COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                     strftime('%Y-%m-%d %H:%M', h.started_at)
-                    ) AS play_key
+                    CASE
+                      WHEN COALESCE(NULLIF(TRIM(h.session_key), ''), '') <> ''
+                        THEN CAST(h.server_id AS TEXT) || '|session:' || TRIM(h.session_key) ||
+                             '|started:' || COALESCE(h.started_at, '')
+                      ELSE CAST(h.server_id AS TEXT) || '|viewer:' ||
+                           COALESCE(CAST(h.media_user_id AS TEXT), NULLIF(TRIM(h.external_user_id), ''), 'unknown') ||
+                           '|media:' || COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') ||
+                           '|started:' || COALESCE(h.started_at, '') ||
+                           '|client:' || LOWER(TRIM(COALESCE(h.client_name, '')))
+                    END AS play_key
                   FROM media_session_history h
                   LEFT JOIN media_users mu ON mu.id = h.media_user_id
                   LEFT JOIN servers s ON s.id = h.server_id
@@ -563,6 +583,7 @@ def register(app):
                     server_id,
                     provider,
                     series_title,
+                    media_group_key,
                     media_key,
                     media_type,
                     raw_json,
@@ -577,16 +598,17 @@ def register(app):
                 ),
                 agg AS (
                   SELECT
-                    series_title AS title,
+                    media_group_key,
                     COUNT(DISTINCT viewer_id) AS viewers,
                     COUNT(*) AS plays,
                     COALESCE(SUM(watch_ms), 0) AS watch_ms
                   FROM plays
-                  GROUP BY series_title
+                  GROUP BY media_group_key
                 ),
                 latest AS (
                   SELECT
                     hist_id,
+                    media_group_key,
                     series_title AS title,
                     server_id,
                     provider,
@@ -597,13 +619,17 @@ def register(app):
                     backdrop_ref_json,
                     artwork_rank,
                     ROW_NUMBER() OVER (
-                      PARTITION BY series_title
-                      ORDER BY artwork_rank DESC, stopped_at DESC, hist_id DESC
+                      PARTITION BY media_group_key
+                      ORDER BY
+                        CASE WHEN provider = 'plex' AND artwork_rank > 0 THEN 1 ELSE 0 END DESC,
+                        artwork_rank DESC,
+                        stopped_at DESC,
+                        hist_id DESC
                     ) AS rn
                   FROM plays
                 )
                 SELECT
-                  a.title,
+                  COALESCE(l.title, 'Unknown') AS title,
                   a.viewers,
                   a.plays,
                   a.watch_ms,
@@ -615,10 +641,10 @@ def register(app):
                   l.raw_json,
                   l.poster_ref_json,
                   l.backdrop_ref_json,
-                  ('series:' || LOWER(TRIM(a.title))) AS media_group_key
+                  a.media_group_key
                 FROM agg a
                 LEFT JOIN latest l
-                  ON l.title = a.title
+                  ON l.media_group_key = a.media_group_key
                  AND l.rn = 1
                 ORDER BY a.viewers DESC, a.watch_ms DESC
                 LIMIT 10
@@ -642,7 +668,9 @@ def register(app):
                     h.backdrop_ref_json,
                     COALESCE(
                       CAST(mu.vodum_user_id AS TEXT),
-                      'media:' || CAST(mu.id AS TEXT)
+                      'media:' || CAST(mu.id AS TEXT),
+                      'external:' || NULLIF(TRIM(h.external_user_id), ''),
+                      'unknown'
                     ) AS viewer_id,
                     ('server:' || CAST(h.server_id AS TEXT) || '|movie:' || TRIM(h.media_key)) AS media_group_key,
                     MIN(
@@ -652,11 +680,16 @@ def register(app):
                         ELSE COALESCE(h.watch_ms, 0)
                       END
                     ) AS watch_ms_capped,
-                    (CAST(h.server_id AS TEXT) || '|' ||
-                     COALESCE(CAST(mu.vodum_user_id AS TEXT), 'media:' || CAST(mu.id AS TEXT)) || '|' ||
-                     TRIM(h.media_key) || '|' ||
-                     strftime('%Y-%m-%d %H:%M', h.started_at)
-                    ) AS play_key
+                    CASE
+                      WHEN COALESCE(NULLIF(TRIM(h.session_key), ''), '') <> ''
+                        THEN CAST(h.server_id AS TEXT) || '|session:' || TRIM(h.session_key) ||
+                             '|started:' || COALESCE(h.started_at, '')
+                      ELSE CAST(h.server_id AS TEXT) || '|viewer:' ||
+                           COALESCE(CAST(h.media_user_id AS TEXT), NULLIF(TRIM(h.external_user_id), ''), 'unknown') ||
+                           '|media:' || TRIM(h.media_key) ||
+                           '|started:' || COALESCE(h.started_at, '') ||
+                           '|client:' || LOWER(TRIM(COALESCE(h.client_name, '')))
+                    END AS play_key
                   FROM media_session_history h
                   LEFT JOIN media_users mu ON mu.id = h.media_user_id
                   LEFT JOIN servers s ON s.id = h.server_id
@@ -744,12 +777,12 @@ def register(app):
             top_content_30d = [dict(r) for r in (top_content_30d or [])]
             for item in top_content_30d:
                 item["poster_url"] = _build_history_poster_url(item, db)
-                item["backdrop_url"] = item["poster_url"]
+                item["backdrop_url"] = _build_history_backdrop_url(item, db) or item["poster_url"]
 
             top_movies_30d = [dict(r) for r in (top_movies_30d or [])]
             for item in top_movies_30d:
                 item["poster_url"] = _build_overview_movie_poster_url(item, db)
-                item["backdrop_url"] = item["poster_url"]
+                item["backdrop_url"] = _build_history_backdrop_url(item, db) or item["poster_url"]
 
             concurrent_7d = db.query_one(
                 """
@@ -1754,9 +1787,6 @@ ranked AS (
             rows = [dict(r) for r in rows]
             hidden_libraries_count = 0
 
-            rows = [dict(r) for r in rows]
-            hidden_libraries_count = 0
-
             for r in rows:
                 ms = r.get("played_ms") or 0
                 r["played_duration"] = f"{ms // 3600000}h {((ms % 3600000) // 60000)}m"
@@ -1837,6 +1867,12 @@ ranked AS (
                     s.name AS server_name,
                     s.type AS provider,
                     vu_ref.id AS vodum_user_id,
+                    COALESCE(
+                      CAST(vu_ref.id AS TEXT),
+                      'media:' || CAST(h.media_user_id AS TEXT),
+                      'external:' || NULLIF(TRIM(h.external_user_id), ''),
+                      'unknown'
+                    ) AS viewer_key,
                     h.media_user_id,
                     h.media_key,
                     h.raw_json,
@@ -1876,20 +1912,33 @@ ranked AS (
 
                     CASE
                       WHEN LOWER(TRIM(COALESCE(h.media_type, ''))) IN ('serie', 'series', 'show', 'episode', 'tv', 'season')
+                           AND s.type = 'plex'
+                           AND COALESCE(NULLIF(TRIM(json_extract(h.raw_json, '$.VideoOrTrack.grandparentRatingKey')), ''), '') <> ''
+                        THEN 'server:' || CAST(h.server_id AS TEXT) || '|series-id:' ||
+                             TRIM(json_extract(h.raw_json, '$.VideoOrTrack.grandparentRatingKey'))
+                      WHEN LOWER(TRIM(COALESCE(h.media_type, ''))) IN ('serie', 'series', 'show', 'episode', 'tv', 'season')
+                           AND s.type = 'jellyfin'
+                           AND COALESCE(NULLIF(TRIM(json_extract(h.raw_json, '$.NowPlayingItem.SeriesId')), ''), '') <> ''
+                        THEN 'server:' || CAST(h.server_id AS TEXT) || '|series-id:' ||
+                             TRIM(json_extract(h.raw_json, '$.NowPlayingItem.SeriesId'))
+                      WHEN LOWER(TRIM(COALESCE(h.media_type, ''))) IN ('serie', 'series', 'show', 'episode', 'tv', 'season')
                            AND TRIM(COALESCE(h.grandparent_title, '')) <> ''
-                        THEN 'server:' || CAST(h.server_id AS TEXT) || '|series:' || LOWER(TRIM(h.grandparent_title))
+                        THEN 'server:' || CAST(h.server_id AS TEXT) || '|series-title:' || LOWER(TRIM(h.grandparent_title))
                       WHEN NULLIF(TRIM(h.media_key), '') IS NOT NULL
                         THEN 'server:' || CAST(h.server_id AS TEXT) || '|media:' || TRIM(h.media_key)
                       ELSE 'server:' || CAST(h.server_id AS TEXT) || '|title:' || LOWER(TRIM(COALESCE(h.title, 'Unknown')))
                     END AS media_group_key,
 
-                    (
-                      CAST(h.server_id AS TEXT) || '|' ||
-                      CAST(h.library_section_id AS TEXT) || '|' ||
-                      CAST(vu_ref.id AS TEXT) || '|' ||
-                      COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                      strftime('%Y-%m-%d %H:%M', h.started_at)
-                    ) AS play_key
+                    CASE
+                      WHEN COALESCE(NULLIF(TRIM(h.session_key), ''), '') <> ''
+                        THEN CAST(h.server_id AS TEXT) || '|session:' || TRIM(h.session_key) ||
+                             '|started:' || COALESCE(h.started_at, '')
+                      ELSE CAST(h.server_id AS TEXT) || '|viewer:' ||
+                           COALESCE(CAST(h.media_user_id AS TEXT), NULLIF(TRIM(h.external_user_id), ''), 'unknown') ||
+                           '|media:' || COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') ||
+                           '|started:' || COALESCE(h.started_at, '') ||
+                           '|client:' || LOWER(TRIM(COALESCE(h.client_name, '')))
+                    END AS play_key
 
                   FROM media_session_history h
                   JOIN libraries l
@@ -1897,9 +1946,9 @@ ranked AS (
                    AND CAST(l.section_id AS TEXT) = CAST(h.library_section_id AS TEXT)
                   JOIN servers s
                     ON s.id = l.server_id
-                  JOIN media_users mu_ref
+                  LEFT JOIN media_users mu_ref
                     ON mu_ref.id = h.media_user_id
-                  JOIN vodum_users vu_ref
+                  LEFT JOIN vodum_users vu_ref
                     ON vu_ref.id = mu_ref.vodum_user_id
                   WHERE {where_hist_sql}
                     AND COALESCE(NULLIF(TRIM(h.library_section_id), ''), '') <> ''
@@ -1923,6 +1972,7 @@ ranked AS (
                     server_name,
                     provider,
                     vodum_user_id,
+                    viewer_key,
                     media_key,
                     raw_json,
                     poster_ref_json,
@@ -1944,7 +1994,7 @@ ranked AS (
                     provider,
                     media_group_key,
                     COUNT(*) AS plays,
-                    COUNT(DISTINCT vodum_user_id) AS user_count,
+                    COUNT(DISTINCT viewer_key) AS user_count,
                     MAX(stopped_at) AS last_play_at
                   FROM plays
                   GROUP BY
@@ -2496,6 +2546,3 @@ ranked AS (
             resp.set_cookie(f"monitoring_{tab}_sort", str(sort_key), max_age=60*60*24*365)
             resp.set_cookie(f"monitoring_{tab}_dir",  str(sort_dir),  max_age=60*60*24*365)
         return resp
-
-
-

@@ -4,13 +4,92 @@ All notable changes to Vodum will be documented in this file.
 
 ---
 
+<<<<<<< Updated upstream
 ### improved
+=======
+
+### Improved
+- Completed the Libraries and media reliability work: Jellyfin sessions now resolve their collection folder, missing historical associations are repaired when unambiguous, and library statistics include unlinked media users.
+- Reworked Top played identities to keep valid repeat plays distinct, merge duplicate native-session snapshots and group series through stable Plex/Jellyfin series identifiers instead of titles alone.
+- Prioritized canonical Plex series artwork, refreshed stored artwork references and used real backdrops instead of duplicating poster URLs in overview tops.
+- Added a dedicated indexed Top played query path and a reproducible Libraries/media validator with a 100,000-row stress scenario.
+- Added a static GET-route audit tool with strict and summary-only modes, plus an explicit registry of authorized read-through proxy exceptions.
+- Cleaned the project TODO so it only tracks work that remains to be completed.
+- Hardened and expanded the Cloudflare telemetry worker with strict payload validation, aggregate-only dashboards, correct build-aware version comparisons, reporting-health indicators, anonymous feature adoption metrics and one-year stale-instance cleanup.
+- Removed per-installation Top 10 telemetry views and stopped collecting detailed OS versions to reduce installation fingerprinting.
+- Audited telemetry end to end, retained default opt-in with no-server suppression, and changed the telemetry task to hourly so debug instances report frequently while normal instances remain limited to seven days.
+- Prevented anonymous telemetry from ever reporting placeholder versions such as `unknown` or `dev`.
+- Centralized VODUM version discovery across the interface and telemetry, with environment and multi-path INFO fallbacks.
+- Made wizard navigation prerequisite-aware: skipped communications now skip message templates, while skipped subscriptions skip their settings and assignments.
+- Hid message-dependent Usage Risk options when no Email or Discord channel is configured, and made Back navigation avoid unavailable steps.
+- Kept every optional first-run setup step inside the installation wizard, with dedicated Email/Discord, message-template, subscription-plan and user-assignment forms.
+- Kept wizard server validation independent from transient monitoring status, displayed validated servers as `OK`, and strengthened Firefox credential-autofill cleanup.
+- Prevented browser credential autofill in the wizard media-server fields, removed the redundant server-name field and clarified Plex token validation errors.
+- Added fatal startup logging and deployment health verification so failed container starts expose their cause immediately.
+- Replaced the legacy first-run screens with a persistent, multilingual guided installation wizard.
+- Added validated Plex/Jellyfin setup with non-blocking background synchronization during installation.
+- Added adaptive optional steps for communications, message templates, subscriptions, settings and assignment.
+- Added backup restoration, resumable progress and a Settings action to rerun the installation wizard.
+- Enabled TLS certificate verification by default for media servers, with an explicit per-server option for trusted self-signed certificates.
+- Centralized additional authenticated Jellyfin, Plex, monitoring and artwork requests through configured-origin HTTP sessions.
+- Removed avoidable Plex/Jellyfin tokens from request URLs in favor of authentication headers.
+- Pinned all runtime dependency versions for reproducible container builds.
+- Added encryption-key health to Settings and existing backup/integrity task diagnostics to the Backup page.
+- Improved error logging for critical backup and Tautulli import operations.
+- Added network-policy, TLS, encryption-key diagnostic and dependency pinning tests.
+- Replaced the dashboard Usage Risk placeholder line with a functional 14-day recommendation history graph.
+- Added a smooth gradient area chart, seven-day change indicator and real date labels for upgrade suggestions.
+- Dashboard server preview now lists online servers first, then orders servers by their seven-day peak stream count.
+- Limited the dashboard server preview to six entries while preserving complete online/offline totals.
+- Restricted authenticated Plex/Jellyfin redirects to the server origins explicitly configured in `url`, `local_url` and `public_url`.
+- Preserved support for remote media servers and configured aliases during authenticated redirects.
+- Server token fields now stay blank in the edit form and preserve the existing secret unless a replacement is submitted.
+- Added automated tests for configured-origin redirects and blank secret preservation.
+- Added encrypted-at-rest storage for Plex/Jellyfin server tokens and Tautulli API keys.
+- Added transparent startup migration of existing plaintext server secrets.
+- Preserved linked Plex server discovery after token encryption by comparing decrypted tokens outside SQL.
+- Added automated tests for server-secret migration, transparent decryption and linked Plex matching.
+- Included `vodum.encryption_key` in full ZIP backups and restored it automatically with rollback protection.
+- Added explicit restore protection when `VODUM_ENCRYPTION_KEY` conflicts with the key contained in a backup.
+- Documented that full ZIP backups are self-contained and must be stored securely.
+- Replaced the Flask development server with the existing Waitress production WSGI server.
+- Added `VODUM_PORT` and `VODUM_WAITRESS_THREADS` server configuration.
+- Aligned the Waitress request-body limit with `VODUM_MAX_UPLOAD_MB` for large Tautulli imports.
+- Added encrypted-at-rest storage for SMTP passwords and Discord tokens using a persistent key stored separately from SQLite.
+- Added transparent startup migration of existing plaintext communication secrets.
+- Stopped rendering configured SMTP passwords and Discord tokens back into the browser.
+- Added encryption key configuration through `VODUM_ENCRYPTION_KEY` and `VODUM_ENCRYPTION_KEY_FILE`.
+- Added automated tests for encryption, decryption, key persistence, wrong-key handling and idempotent plaintext migration.
+- Increased the default upload limit to 4 GB so large Tautulli databases can be imported.
+- Increased the default restored ZIP extraction limit to 8 GB.
+- Added configurable upload and archive limits through `VODUM_MAX_UPLOAD_MB`, `VODUM_MAX_ZIP_EXTRACTED_MB` and `VODUM_MAX_ZIP_MEMBERS`.
+- Restricted trusted proxy headers to connections originating from `VODUM_TRUSTED_PROXY_NETS`.
+- Added security documentation for trusted reverse proxies and large uploads.
+- Added automated tests for redirect safety, proxy address handling, archive limits and large Tautulli imports.
+>>>>>>> Stashed changes
 - Improved template variable validation to ensure all advertised placeholders are correctly resolved before sending emails.
 - Prevented raw placeholders from appearing in playback interruption notifications.
 - Improved subscription selection in user profiles to display only enabled subscription plans.
 - Improved `comm_templates` schema upgrade to prevent SQLite from rewriting foreign keys incorrectly during table rename.
 
 ### Fixed
+<<<<<<< Updated upstream
+=======
+- Fixed Jellyfin plays missing from per-library statistics because active sessions did not expose `library_section_id`.
+- Fixed same-title series from different servers or native series identifiers being merged together.
+- Fixed multiple legitimate plays started within the same minute being collapsed into one Top played entry.
+- Fixed remaining series cards that could reuse an episode poster or display a poster as their backdrop.
+- Removed duplicate library-monitoring row initialization.
+- Removed the unusable legacy V2-to-V3 rebuild migration that depended on a missing `tables_v3.sql` file and conflicted with existing migration markers.
+- Removed the obsolete Jellyfin migration targeting the retired legacy `users` table.
+- Fixed the V1-to-V2 import journal marker so it no longer uses structural schema version `3`.
+- Added automated validation that `tables.sql` builds successfully with a clean foreign-key check.
+- Fixed a potential IP-filter bypass through client-supplied `X-Forwarded-For` headers.
+- Fixed open redirects after login and language changes.
+- Stopped storing newly submitted Jellyfin user passwords in plaintext.
+- Added startup cleanup of legacy plaintext Jellyfin user passwords.
+- Added protection against unexpectedly large or highly populated backup ZIP archives.
+>>>>>>> Stashed changes
 - Fixed playback-blocked email variable replacement for policy enforcement notifications.
 - Fixed legacy communication database migrations that could leave broken foreign keys pointing to `comm_templates_old`.
 - Fixed recurring `send_expiration_emails` errors caused by missing `comm_templates_old` table on upgraded installations.

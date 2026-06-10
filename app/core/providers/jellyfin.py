@@ -6,6 +6,11 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
 from core.providers.base import BaseProvider
+<<<<<<< Updated upstream
+=======
+from core.http_security import server_http_session
+from core.monitoring.library_media import jellyfin_library_section_id
+>>>>>>> Stashed changes
 
 
 class JellyfinProvider(BaseProvider):
@@ -214,6 +219,12 @@ class JellyfinProvider(BaseProvider):
         except Exception:
             return {}
 
+    def _get_item_ancestors(self, item_id: str) -> List[Dict[str, Any]]:
+        try:
+            data = self._get_json(f"/Items/{item_id}/Ancestors") or []
+            return data if isinstance(data, list) else []
+        except Exception:
+            return []
 
 
 
@@ -325,6 +336,22 @@ class JellyfinProvider(BaseProvider):
                     season_number = season_number or item.get("ParentIndexNumber")
                     episode_number = episode_number or item.get("IndexNumber")
 
+                    for key in (
+                        "SeriesId", "SeriesName", "SeasonId", "SeasonName",
+                        "CollectionFolderId", "LibraryId", "TopParentId",
+                        "ImageTags", "BackdropImageTags",
+                    ):
+                        if not now_playing.get(key) and item.get(key) is not None:
+                            now_playing[key] = item.get(key)
+
+            library_section_id = jellyfin_library_section_id(now_playing, item or {}, [])
+            if not library_section_id:
+                library_section_id = jellyfin_library_section_id(
+                    now_playing,
+                    item or {},
+                    self._get_item_ancestors(str(item_id)),
+                )
+
             # --- Normalize media type
             # Important: chez Jellyfin, "video" peut être un film OU un épisode selon le client.
             if jf_type == "episode":
@@ -364,6 +391,7 @@ class JellyfinProvider(BaseProvider):
                     "parent_title": parent_title,
                     "season_number": int(season_number) if season_number is not None and str(season_number).isdigit() else None,
                     "episode_number": int(episode_number) if episode_number is not None and str(episode_number).isdigit() else None,
+                    "library_section_id": library_section_id,
                     "state": state,
 
                     "progress_ms": progress_ms,

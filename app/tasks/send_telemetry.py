@@ -154,6 +154,9 @@ def run(task_id: int, db: DBManager):
             WHERE is_enabled  = 1
             """
         )
+        automatic_backups = db.query_one(
+            "SELECT enabled FROM tasks WHERE name='auto_backup'"
+        )
         
         version = "unknown"
         update_pending_days = 0
@@ -210,6 +213,10 @@ def run(task_id: int, db: DBManager):
             "discord_enabled": 1 if settings["discord_enabled"] else 0,
             "mail_enabled": 1 if settings["mailing_enabled"] else 0,
             "policies_enabled": 1 if active_policies and active_policies["total"] > 0 else 0,
+            "debug_enabled": 1 if debug_mode else 0,
+            "automatic_backups_enabled": 1 if automatic_backups and automatic_backups["enabled"] else 0,
+            "usage_risk_enabled": 1 if settings["usage_risk_enabled"] else 0,
+            "auth_enabled": 1 if settings["auth_enabled"] else 0,
             "update_pending_days": update_pending_days,
         }
         log.info("Telemetry building payload")

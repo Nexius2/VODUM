@@ -796,6 +796,8 @@ WHERE dedupe_key IS NOT NULL AND status IN ('queued','running');
 
 CREATE INDEX IF NOT EXISTS idx_history_server_library_stopped
 ON media_session_history(server_id, library_section_id, stopped_at);
+CREATE INDEX IF NOT EXISTS idx_history_library_top_played
+ON media_session_history(server_id, library_section_id, media_key, started_at, stopped_at);
 
 -----------------------------------------------------------------------
 -- STREAM POLICIES (enforcement)
