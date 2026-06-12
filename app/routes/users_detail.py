@@ -55,6 +55,57 @@ def _parse_json_list(raw: str):
     except Exception:
         return []
 
+def _get_expiration_lock_for_user(db, user_id: int) -> dict:
+    rows = db.query(
+        """
+        SELECT
+            s.type AS server_type,
+            s.name AS server_name,
+            mu.role AS media_role,
+            mu.raw_json
+        FROM media_users mu
+        JOIN servers s ON s.id = mu.server_id
+        WHERE mu.vodum_user_id = ?
+        """,
+        (user_id,),
+    ) or []
+
+    reasons = []
+
+    for row in rows:
+        r = dict(row)
+        server_type = (r.get("server_type") or "").strip().lower()
+        media_role = (r.get("media_role") or "").strip().lower()
+        server_name = (r.get("server_name") or "").strip()
+
+        if server_type == "plex" and media_role == "owner":
+            reasons.append(f"Plex owner ({server_name})")
+
+        if server_type == "jellyfin":
+            is_admin = media_role == "admin"
+
+            try:
+                raw = json.loads(r.get("raw_json") or "{}")
+                policy = raw.get("Policy") if isinstance(raw, dict) else {}
+                if isinstance(policy, dict) and policy.get("IsAdministrator"):
+                    is_admin = True
+            except Exception:
+                pass
+
+            if is_admin:
+                reasons.append(f"Jellyfin admin ({server_name})")
+
+    role_label = ""
+    if any(r.startswith("Plex owner") for r in reasons):
+        role_label = "Owner"
+    elif any(r.startswith("Jellyfin admin") for r in reasons):
+        role_label = "Admin"
+
+    return {
+        "locked": bool(reasons),
+        "label": " / ".join(reasons),
+        "role_label": role_label,
+    }
 
 def _delete_locked_subscription_policies(db, vodum_user_id: int):
     rows = db.query(
@@ -175,7 +226,8 @@ def register(app):
             return redirect(url_for("users_list"))
 
         user = dict(user)
-
+        expiration_lock = _get_expiration_lock_for_user(db, user_id)
+        
         settings = db.query_one("SELECT * FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
 
@@ -212,7 +264,9 @@ def register(app):
         expiration_date = user.get("expiration_date")
         renewal_date = user.get("renewal_date")
 
-        if raw_exp:
+        if expiration_lock["locked"]:
+            expiration_date = user.get("expiration_date")
+        elif raw_exp:
             parsed = _iso_date_or_none(raw_exp)
             if parsed is not None:
                 expiration_date = parsed
@@ -241,6 +295,9 @@ def register(app):
             if user.get("subscription_template_id") is not None
             else None
         )
+
+        if expiration_lock["locked"]:
+            requested_subscription_template_id = current_subscription_template_id
 
         # Notes : on autorise le vide volontaire
         if "notes" in form:
@@ -290,7 +347,9 @@ def register(app):
         # So when Lifetime is selected, we keep the real stored override value
         # instead of forcing it to 1. The checkbox is only displayed as checked
         # and disabled in the UI to make the behavior clear.
-        if selected_subscription_is_lifetime:
+        if expiration_lock["locked"]:
+            expiration_date_override = 1
+        elif selected_subscription_is_lifetime:
             expiration_date_override = int(user["expiration_date_override"] or 0)
         else:
             expiration_date_override = 1 if form.get("expiration_date_override") == "1" else 0
@@ -1303,7 +1362,8 @@ def register(app):
         referred_users = [dict(x) for x in referred_users]
 
         usage_risk = build_usage_risk_for_user(db, user_id)
-
+        expiration_lock = _get_expiration_lock_for_user(db, user_id)
+        
         return render_template(
             "users/user_detail.html",
             user=user,
@@ -1314,6 +1374,7 @@ def register(app):
             sent_emails=sent_emails,
             sent_discord=sent_discord,
             allowed_types=allowed_types,
+            expiration_lock=expiration_lock,
             merge_suggestions=merge_suggestions,
             user_servers=servers,
             active_user_policies=active_user_policies,

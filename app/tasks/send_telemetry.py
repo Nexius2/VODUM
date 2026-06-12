@@ -1,3 +1,4 @@
+import hashlib
 import json
 import platform
 import threading
@@ -45,12 +46,33 @@ def _parse_utc_timestamp(value):
     return parsed.astimezone(timezone.utc)
 
 
-def _is_due(last_sent_at, now=None):
+TELEMETRY_MIN_INTERVAL = timedelta(days=2)
+TELEMETRY_MAX_INTERVAL = timedelta(days=7)
+
+
+def _telemetry_random_interval(last_sent_at, instance_id):
+    seed = f"{instance_id or ''}|{last_sent_at or ''}".encode("utf-8")
+    digest = hashlib.sha256(seed).digest()
+
+    span_seconds = int((TELEMETRY_MAX_INTERVAL - TELEMETRY_MIN_INTERVAL).total_seconds())
+    jitter_seconds = int.from_bytes(digest[:8], "big") % (span_seconds + 1)
+
+    return TELEMETRY_MIN_INTERVAL + timedelta(seconds=jitter_seconds)
+
+
+def _is_due(last_sent_at, instance_id=None, now=None):
     last_sent = _parse_utc_timestamp(last_sent_at)
+
     if not last_sent:
         return True
+
     now = now or datetime.now(timezone.utc)
-    return now >= last_sent + timedelta(days=7)
+
+    # Safety net: never wait more than 7 days.
+    if now >= last_sent + TELEMETRY_MAX_INTERVAL:
+        return True
+
+    return now >= last_sent + _telemetry_random_interval(last_sent_at, instance_id)
 
 
 def _task_enabled(db):
@@ -76,9 +98,10 @@ def run(task_id: int, db: DBManager):
             return {"success": True, "skipped": True, "reason": "task_disabled"}
 
         debug_mode = int(settings["debug_mode"] or 0) == 1
+        instance_id = get_or_create_instance_id(db)
 
         try:
-            if not debug_mode and not _is_due(settings["telemetry_last_sent_at"]):
+            if not debug_mode and not _is_due(settings["telemetry_last_sent_at"], instance_id):
                 return {"success": True, "skipped": True, "reason": "rate_limited"}
         except (TypeError, ValueError):
             log.warning("Invalid telemetry_last_sent_at ignored")
@@ -170,7 +193,7 @@ def run(task_id: int, db: DBManager):
         platform_info = detect_platform()
 
         payload = {
-            "instance_id": get_or_create_instance_id(db),
+            "instance_id": instance_id,
             "schema_version": 1,
             "version": version,
             "platform": platform.system().lower(),
