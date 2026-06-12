@@ -1,19 +1,15 @@
 # Auto-split from app.py (keep URLs/endpoints intact)
 import json
 
-import requests
 from flask import request, redirect, url_for, flash, jsonify
 
 from logging_utils import get_logger
 from tasks_engine import enable_and_run_task_by_name
 
 from web.helpers import get_db
-from core.plex_rate_limit import install_plex_rate_limit
-from core.providers.jellyfin_users import jellyfin_list_users
 from .users_list import merge_vodum_users
 from core.media_jobs import insert_plex_media_job, insert_jellyfin_media_job
-from core.plex_connection import find_working_plex_base_url
-from core.http_security import plex_server_http_session
+from core.provider_presence import build_user_delete_check
 
 
 task_logger = get_logger("tasks_ui")
@@ -80,12 +76,12 @@ def _queue_plex_share_settings_sync(db, user_id: int, server_id: int, reason: st
 
 def _force_queue_full_plex_sync_for_user(db, user_id: int, reason: str = "admin_force_resync"):
     """
-    Recrée un job 'sync' complet par serveur Plex lié.
+    RecrÃ©e un job 'sync' complet par serveur Plex liÃ©.
 
     Important :
     on passe par _insert_plex_media_job() pour annuler proprement
-    les anciens jobs actifs du même user/server, au lieu de supprimer
-    brutalement des jobs éventuellement en cours.
+    les anciens jobs actifs du mÃªme user/server, au lieu de supprimer
+    brutalement des jobs Ã©ventuellement en cours.
     """
     rows = db.query(
         """
@@ -204,331 +200,11 @@ def _force_queue_full_jellyfin_sync_for_user(db, user_id: int, reason: str = "ad
 
     return queued
 
-def _json_dict_or_empty(raw):
-    if not raw:
-        return {}
-    try:
-        data = json.loads(raw) if isinstance(raw, str) else raw
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
-def _pick_server_base_url(server_row):
-	return find_working_plex_base_url(
-		server_row,
-		endpoint="/identity",
-		accept="application/xml",
-	)
-
-
-def _pick_server_token(server_row):
-    return str(server_row.get("token") or "").strip()
-
-
-def _match_pending_invite(inv, *, email: str, username: str):
-    candidates = [
-        getattr(inv, "email", None),
-        getattr(inv, "user", None),
-        getattr(inv, "username", None),
-        getattr(inv, "title", None),
-    ]
-    for val in candidates:
-        sval = str(val or "").strip().lower()
-        if not sval:
-            continue
-        if email and sval == email.lower():
-            return True
-        if username and sval == username.lower():
-            return True
-    return False
-
-
-def _check_plex_media_user_presence(server_row, media_user_row):
-    server_row = dict(server_row or {})
-    media_user_row = dict(media_user_row or {})
-
-    result = {
-        "provider": "plex",
-        "state": "unknown",               # friend / pending / missing / unknown
-        "exists_on_platform": False,
-        "can_return_on_sync": False,
-        "detail": "",
-    }
-
-    base = _pick_server_base_url(server_row)
-    token = _pick_server_token(server_row)
-
-    if not base or not token:
-        result["detail"] = "Plex server not fully configured"
-        result["can_return_on_sync"] = True
-        return result
-
-    email = str(media_user_row.get("email") or "").strip()
-    username = str(media_user_row.get("username") or "").strip()
-    external_user_id = str(media_user_row.get("external_user_id") or "").strip()
-
-    details = _json_dict_or_empty(media_user_row.get("details_json"))
-    invite_state = details.get("plex_invite_state") or {}
-    invite_is_pending_db = bool(invite_state.get("is_pending")) if isinstance(invite_state, dict) else False
-
-    try:
-        from plexapi.server import PlexServer
-
-        session = plex_server_http_session(server_row)
-        install_plex_rate_limit(session, base)
-
-        plex = PlexServer(base, token, session=session)
-        account = plex.myPlexAccount()
-
-        # 1) friends actuels
-        try:
-            users = account.users() or []
-        except Exception:
-            users = []
-
-        for u in users:
-            uid = str(getattr(u, "id", "") or "").strip()
-            uemail = str(getattr(u, "email", "") or "").strip().lower()
-            uname = str(getattr(u, "username", "") or getattr(u, "title", "") or "").strip().lower()
-
-            if external_user_id and uid and uid == external_user_id:
-                result["state"] = "friend"
-                result["exists_on_platform"] = True
-                result["can_return_on_sync"] = True
-                result["detail"] = "Plex friend still exists on platform"
-                return result
-
-            if email and uemail and uemail == email.lower():
-                result["state"] = "friend"
-                result["exists_on_platform"] = True
-                result["can_return_on_sync"] = True
-                result["detail"] = "Plex friend still exists on platform"
-                return result
-
-            if username and uname and uname == username.lower():
-                result["state"] = "friend"
-                result["exists_on_platform"] = True
-                result["can_return_on_sync"] = True
-                result["detail"] = "Plex friend still exists on platform"
-                return result
-
-        # 2) pending invites actuelles
-        try:
-            pending_fn = getattr(account, "pendingInvites", None)
-            if callable(pending_fn):
-                pending = pending_fn() or []
-            else:
-                pending = []
-        except Exception:
-            pending = []
-
-        for inv in pending:
-            if _match_pending_invite(inv, email=email, username=username):
-                result["state"] = "pending"
-                result["exists_on_platform"] = True
-                result["can_return_on_sync"] = True
-                result["detail"] = "Pending Plex invite still exists on platform"
-                return result
-
-        # 3) fallback DB : si on sait déjà que c'est pending en base
-        if invite_is_pending_db:
-            result["state"] = "pending"
-            result["exists_on_platform"] = True
-            result["can_return_on_sync"] = True
-            result["detail"] = "Pending Plex invite flagged in database"
-            return result
-
-        result["state"] = "missing"
-        result["exists_on_platform"] = False
-        result["can_return_on_sync"] = False
-        result["detail"] = "Plex account/invite not found on platform"
-        return result
-
-    except Exception as e:
-        result["state"] = "unknown"
-        result["exists_on_platform"] = False
-        result["can_return_on_sync"] = True
-        result["detail"] = f"Unable to verify Plex account: {e}"
-        return result
-
-
-def _check_jellyfin_media_user_presence(server_row, media_user_row):
-    server_row = dict(server_row or {})
-    media_user_row = dict(media_user_row or {})
-
-    result = {
-        "provider": "jellyfin",
-        "state": "unknown",               # present / missing / unknown
-        "exists_on_platform": False,
-        "can_return_on_sync": False,
-        "detail": "",
-    }
-
-    base = _pick_server_base_url(server_row)
-    token = _pick_server_token(server_row)
-
-    if not base or not token:
-        result["detail"] = "Jellyfin server not fully configured"
-        result["can_return_on_sync"] = True
-        return result
-
-    external_user_id = str(media_user_row.get("external_user_id") or "").strip()
-    username = str(media_user_row.get("username") or "").strip().lower()
-    email = str(media_user_row.get("email") or "").strip().lower()
-
-    try:
-        users = jellyfin_list_users(server_row) or []
-
-        for u in users:
-            uid = str(u.get("Id") or "").strip()
-            uname = str(u.get("Name") or "").strip().lower()
-
-            if external_user_id and uid and uid == external_user_id:
-                result["state"] = "present"
-                result["exists_on_platform"] = True
-                result["can_return_on_sync"] = True
-                result["detail"] = "Jellyfin user still exists on platform"
-                return result
-
-            if username and uname and uname == username:
-                result["state"] = "present"
-                result["exists_on_platform"] = True
-                result["can_return_on_sync"] = True
-                result["detail"] = "Jellyfin user still exists on platform"
-                return result
-
-            # Best-effort supplémentaire si l'email a été copié dans Name
-            if email and uname and uname == email:
-                result["state"] = "present"
-                result["exists_on_platform"] = True
-                result["can_return_on_sync"] = True
-                result["detail"] = "Jellyfin user still exists on platform"
-                return result
-
-        result["state"] = "missing"
-        result["exists_on_platform"] = False
-        result["can_return_on_sync"] = False
-        result["detail"] = "Jellyfin user not found on platform"
-        return result
-
-    except Exception as e:
-        result["state"] = "unknown"
-        result["exists_on_platform"] = False
-        result["can_return_on_sync"] = True
-        result["detail"] = f"Unable to verify Jellyfin user: {e}"
-        return result
-
-
-def _build_user_delete_check(db, user_id: int):
-    user = db.query_one(
-        """
-        SELECT id, username, email
-        FROM vodum_users
-        WHERE id = ?
-        """,
-        (user_id,),
-    )
-    if not user:
-        return None
-
-    rows = db.query(
-        """
-        SELECT
-            mu.id,
-            mu.server_id,
-            mu.external_user_id,
-            mu.username,
-            mu.email,
-            mu.type,
-            mu.role,
-            mu.joined_at,
-            mu.accepted_at,
-            mu.details_json,
-
-            s.name AS server_name,
-            s.type AS server_type,
-            s.url,
-            s.local_url,
-            s.public_url,
-            s.token
-        FROM media_users mu
-        JOIN servers s ON s.id = mu.server_id
-        WHERE mu.vodum_user_id = ?
-        ORDER BY s.type ASC, s.name ASC, mu.id ASC
-        """,
-        (user_id,),
-    ) or []
-
-    items = []
-    linked_accounts_total = 0
-    still_exists_total = 0
-    pending_total = 0
-    unknown_total = 0
-    will_return_on_sync = False
-
-    for row in rows:
-        linked_accounts_total += 1
-
-        row_dict = dict(row)
-        server_row = row_dict
-        provider = (row_dict.get("type") or row_dict.get("server_type") or "").strip().lower()
-
-        if provider == "plex":
-            live = _check_plex_media_user_presence(server_row, row_dict)
-        elif provider == "jellyfin":
-            live = _check_jellyfin_media_user_presence(server_row, row_dict)
-        else:
-            live = {
-                "provider": provider or "unknown",
-                "state": "unknown",
-                "exists_on_platform": False,
-                "can_return_on_sync": True,
-                "detail": f"Unsupported provider: {provider or 'unknown'}",
-            }
-
-        if live["exists_on_platform"]:
-            still_exists_total += 1
-        if live["state"] == "pending":
-            pending_total += 1
-        if live["state"] == "unknown":
-            unknown_total += 1
-        if live["can_return_on_sync"]:
-            will_return_on_sync = True
-
-        items.append({
-            "media_user_id": int(row["id"]),
-            "provider": provider or "unknown",
-            "server_name": row["server_name"] or "",
-            "username": row["username"] or "",
-            "email": row["email"] or "",
-            "external_user_id": row["external_user_id"] or "",
-            "accepted_at": row["accepted_at"] or "",
-            "state": live["state"],
-            "exists_on_platform": bool(live["exists_on_platform"]),
-            "can_return_on_sync": bool(live["can_return_on_sync"]),
-            "detail": live["detail"],
-        })
-
-    return {
-        "ok": True,
-        "user_id": int(user["id"]),
-        "username": user["username"] or "",
-        "email": user["email"] or "",
-        "linked_accounts_total": linked_accounts_total,
-        "still_exists_total": still_exists_total,
-        "pending_total": pending_total,
-        "unknown_total": unknown_total,
-        "will_return_on_sync": will_return_on_sync,
-        "items": items,
-    }
-
-
 def _delete_vodum_user_everywhere(db, user_id: int) -> bool:
     """
     Suppression LOCALE uniquement.
     Si le compte existe encore sur une plateforme active,
-    un prochain sync peut le recréer.
+    un prochain sync peut le recrÃ©er.
     """
     with db._lock:
         cur = db.conn.cursor()
@@ -559,7 +235,7 @@ def _delete_vodum_user_everywhere(db, user_id: int) -> bool:
                 (user_id,),
             )
 
-            # media_users doit être supprimé avant vodum_users
+            # media_users doit Ãªtre supprimÃ© avant vodum_users
             cur.execute(
                 "DELETE FROM media_users WHERE vodum_user_id = ?",
                 (user_id,),
@@ -661,7 +337,7 @@ def register(app):
             flash("invalid_field", "error")
             return redirect(url_for("user_detail", user_id=user_id))
 
-        # sécurité: s'assurer que ce media_user appartient bien au user_id + server_id
+        # sÃ©curitÃ©: s'assurer que ce media_user appartient bien au user_id + server_id
         mu = db.query_one(
             """
             SELECT mu.id, mu.details_json
@@ -713,7 +389,7 @@ def register(app):
     def user_delete_check(user_id):
         db = get_db()
 
-        data = _build_user_delete_check(db, user_id)
+        data = build_user_delete_check(db, user_id)
         if not data:
             return jsonify({"ok": False, "error": "user_not_found"}), 404
 
@@ -801,7 +477,7 @@ def register(app):
             return redirect(url_for("user_detail", user_id=user_id, tab="access"))
 
         # --------------------------------------------------
-        # Récup library + server (pour savoir sur quel serveur on agit)
+        # RÃ©cup library + server (pour savoir sur quel serveur on agit)
         # --------------------------------------------------
         lib = db.query_one(
             "SELECT id, server_id, name FROM libraries WHERE id = ?",
@@ -821,7 +497,7 @@ def register(app):
 
         # --------------------------------------------------
         # IMPORTANT : on ne doit toggler QUE les media_users
-        # de CE serveur (sinon tu peux lier une lib Plex à un compte Jellyfin)
+        # de CE serveur (sinon tu peux lier une lib Plex Ã  un compte Jellyfin)
         # --------------------------------------------------
         media_users = db.query(
             """
@@ -840,7 +516,7 @@ def register(app):
         placeholders = ",".join("?" * len(media_user_ids))
 
         # --------------------------------------------------
-        # Vérifier si l'accès existe déjà
+        # VÃ©rifier si l'accÃ¨s existe dÃ©jÃ 
         # --------------------------------------------------
         exists = db.query_one(
             f"""
@@ -881,7 +557,7 @@ def register(app):
             flash("library_access_added", "success")
 
         # --------------------------------------------------
-        # Création d'un job pour apply_plex_access_updates
+        # CrÃ©ation d'un job pour apply_plex_access_updates
         # -> uniquement si serveur Plex (pour Jellyfin on fera plus tard)
         # --------------------------------------------------
         if server["type"] == "plex":
@@ -906,8 +582,8 @@ def register(app):
 
             # --------------------------------------------------
             # Choix de l'action:
-            # - Ajout d'une bibliothèque => grant (équivalent plex_api_share.py --add --libraries X)
-            # - Retrait d'une bibliothèque => sync (réapplique la liste DB), ou revoke si plus rien
+            # - Ajout d'une bibliothÃ¨que => grant (Ã©quivalent plex_api_share.py --add --libraries X)
+            # - Retrait d'une bibliothÃ¨que => sync (rÃ©applique la liste DB), ou revoke si plus rien
             # --------------------------------------------------
             if removed and remaining_count == 0:
                 action = "revoke"
@@ -948,11 +624,11 @@ def register(app):
                     f"library_id={job_library_id} preferred_media_user_id={preferred_media_user_id}"
                 )
 
-            # Activer + queue la tâche apply_plex_access_updates
+            # Activer + queue la tÃ¢che apply_plex_access_updates
             try:
                 enable_and_run_task_by_name("apply_plex_access_updates")
             except Exception:
-                # pas bloquant si enqueue échoue, le scheduler le prendra plus tard
+                # pas bloquant si enqueue Ã©choue, le scheduler le prendra plus tard
                 pass
 
         elif server["type"] == "jellyfin":
@@ -1068,3 +744,4 @@ def register(app):
     # -----------------------------
     # SERVEURS & BIBLIO
     # -----------------------------
+

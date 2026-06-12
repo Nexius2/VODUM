@@ -273,16 +273,19 @@ def register(app):
         elif action == "save_settings":
             try:
                 days = int(request.form.get("backup_retention_days", "30"))
+                count = int(request.form.get("backup_retention_count", "10"))
                 years = int(request.form.get("data_retention_years", "0"))
 
                 if days < 1:
                     days = 30
+                if count < 1:
+                    count = 10
                 if years < 0:
                     years = 0
 
                 db.execute(
-                    "UPDATE settings SET backup_retention_days = ?, data_retention_years = ?",
-                    (days, years),
+                    "UPDATE settings SET backup_retention_days = ?, backup_retention_count = ?, data_retention_years = ?",
+                    (days, count, years),
                 )
                 flash(t("backup_settings_saved"), "success")
             except Exception as e:

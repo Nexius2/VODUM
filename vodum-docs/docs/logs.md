@@ -90,7 +90,7 @@ The internal module or component that generated the log.
 Examples:
 - `vodum.tasks_engine`
 - `vodum.apply_plex_access_updates`
-- `vodum.send_mail_campaigns`
+- `vodum.send_comm_campaigns`
 
 This is useful for pinpointing the origin of an issue.
 

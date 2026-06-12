@@ -28,6 +28,7 @@ from communications_engine import (
     available_channels,
     schedule_template_notification,
 )
+from core.communications_recovery import recover_missed_scheduled_emails
 #from email_sender import send_email
 from mailing_utils import build_user_context, render_mail
 
@@ -932,6 +933,15 @@ def run(task_id: int | None = None, db=None):
             log.warning(msg)
             return
         
+        catchup = recover_missed_scheduled_emails(db, settings)
+        if catchup.get("requeued"):
+            log.warning("Recovered %s missed scheduled email(s)", catchup["requeued"])
+            task_logs(
+                task_id,
+                "warning",
+                f"Recovered {catchup['requeued']} missed scheduled email(s)",
+            )
+
         # Flush scheduled notifications (user_creation days_after etc.)
         _flush_comm_scheduled(db, settings, task_id)
 

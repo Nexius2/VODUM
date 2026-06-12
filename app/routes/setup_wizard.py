@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import uuid
-import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
 
@@ -11,9 +10,8 @@ from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
 
 from core.i18n import get_available_languages
+from core.server_validation import validate_media_server
 from secret_store import encrypt_secret, encrypt_server_settings_json
-from core.http_security import plex_server_http_session
-from tasks.check_servers import jellyfin_get_status
 from tasks_engine import enable_and_run_task_by_name, enqueue_server_discovery_sequence, ensure_tasks_enabled
 from web.helpers import get_db
 
@@ -153,34 +151,9 @@ def _previous_step(db, current_step: int, state: dict, settings: dict | None = N
     return 1
 
 
-def _validate_plex_server(server: dict, base_url: str, token: str):
-    try:
-        response = plex_server_http_session(server).get(
-            f"{base_url}/identity",
-            headers={"X-Plex-Token": token, "Accept": "application/xml"},
-            timeout=10,
-        )
-        if response.status_code == 401:
-            return ("down", None, None, "Plex rejected the token (HTTP 401).")
-        if response.status_code != 200:
-            return ("down", None, None, f"Plex returned HTTP {response.status_code}.")
-
-        identity = ET.fromstring(response.content)
-        machine_id = identity.get("machineIdentifier")
-        version = identity.get("version")
-
-        root = plex_server_http_session(server).get(
-            f"{base_url}/",
-            headers={"X-Plex-Token": token, "Accept": "application/xml"},
-            timeout=10,
-        )
-        friendly_name = None
-        if root.status_code == 200:
-            friendly_name = ET.fromstring(root.content).get("friendlyName")
-
-        return ("up", friendly_name or "Plex", machine_id, version)
-    except Exception as exc:
-        return ("down", None, None, f"Plex connection failed: {exc}")
+def _display_step(db, settings: dict, state: dict) -> int:
+    step = max(1, min(TOTAL_STEPS, int(settings.get("wizard_step") or 1)))
+    return step if _step_available(db, step, state, settings) else _next_step(db, step, state, settings)
 
 
 def _validated_server_ids(state: dict) -> set[int]:
@@ -194,17 +167,12 @@ def _validated_server_ids(state: dict) -> set[int]:
 
 
 def register(app):
-    @app.route("/setup", methods=["GET", "POST"])
+    @app.post("/setup")
     def setup_wizard():
         db = get_db()
         settings = _settings(db)
         state = _state(settings)
-        step = max(1, min(TOTAL_STEPS, int(settings.get("wizard_step") or 1)))
-
-        if request.method == "GET" and not _step_available(db, step, state, settings):
-            next_step = _next_step(db, step, state, settings)
-            _save(db, step=next_step, state=state, active=1)
-            return redirect(url_for("setup_wizard"))
+        step = _display_step(db, settings, state)
 
         if request.method == "POST":
             action = (request.form.get("action") or "continue").strip()
@@ -276,7 +244,7 @@ def register(app):
                         flash("Provider, URL and token are required.", "error")
                         return redirect(url_for("setup_wizard"))
                     candidate = {"url": url, "local_url": None, "public_url": None, "settings_json": '{"verify_tls": true}'}
-                    result = _validate_plex_server(candidate, url, token) if server_type == "plex" else jellyfin_get_status(candidate, url, token)
+                    result = validate_media_server(server_type, url, token, server=candidate)
                     if result[0] != "up":
                         flash(f"Connection failed: {result[3]}", "error")
                         return redirect(url_for("setup_wizard"))
@@ -297,7 +265,13 @@ def register(app):
                         ),
                     )
                     server_id = int(cursor.lastrowid)
-                    ensure_tasks_enabled(["check_servers", "update_user_status"])
+                    if server_type == "plex":
+                        ensure_tasks_enabled(["check_servers", "sync_plex", "update_user_status"])
+                    elif server_type == "jellyfin":
+                        ensure_tasks_enabled(["check_servers", "sync_jellyfin", "update_user_status"])
+                    else:
+                        ensure_tasks_enabled(["check_servers", "update_user_status"])
+
                     enqueue_server_discovery_sequence(server_type)
                     state["media_server"] = "configured"
                     validated_ids = _validated_server_ids(state)
@@ -526,6 +500,10 @@ def register(app):
             wizard_templates=wizard_templates, subscription_templates=subscription_templates, wizard_users=wizard_users,
             communications_available=communications_available,
         )
+
+    @app.get("/setup")
+    def setup_wizard_page():
+        return setup_wizard()
 
     @app.post("/setup/restart")
     def setup_wizard_restart():

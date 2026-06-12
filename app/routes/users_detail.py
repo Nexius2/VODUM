@@ -15,7 +15,7 @@ from .users_actions import _get_preferred_plex_media_user_id
 from core.media_jobs import insert_plex_media_job
 from api.subscriptions import update_user_expiration
 from notifications_utils import parse_notifications_order
-from core.providers.jellyfin_users import jellyfin_set_password
+from core.user_credentials import change_jellyfin_password
 from core.usage_risk import build_usage_risk_for_user
 from secret_store import find_plex_server_ids_by_token
 
@@ -149,91 +149,7 @@ def register(app):
                 if str(x).isdigit()
             }
 
-            jellyfin_accounts = db.query(
-                """
-                SELECT
-                    mu.id,
-                    mu.server_id,
-                    mu.external_user_id,
-                    mu.username,
-
-                    s.name AS server_name,
-                    s.url,
-                    s.local_url,
-                    s.public_url,
-                    s.token AS token
-
-                FROM media_users mu
-                JOIN servers s ON s.id = mu.server_id
-
-                WHERE mu.vodum_user_id = ?
-                  AND mu.type = 'jellyfin'
-                  AND s.type = 'jellyfin'
-                """,
-                (user_id,),
-            ) or []
-
-            # Filter selected servers
-            if selected_server_ids:
-                jellyfin_accounts = [
-                    x for x in jellyfin_accounts
-                    if int(x["server_id"]) in selected_server_ids
-                ]
-
-            updated = 0
-            errors = []
-
-            for account in jellyfin_accounts:
-
-                try:
-
-                    # THIS is what sends the password to Jellyfin
-                    jellyfin_set_password(
-                        dict(account),
-                        str(account["external_user_id"]),
-                        password,
-                    )
-
-                    # The admin token is enough for future password changes.
-                    # Clear legacy plaintext values instead of retaining the
-                    # newly submitted password in the Vodum database.
-                    db.execute(
-                        """
-                        UPDATE media_users
-                        SET stored_password = NULL
-                        WHERE id = ?
-                        """,
-                        (account["id"],),
-                    )
-
-                    updated += 1
-
-                    task_logger.info(
-                        f"[JELLYFIN PASSWORD] Updated password | "
-                        f"vodum_user_id={user_id} | "
-                        f"server_id={account['server_id']} | "
-                        f"username={account['username']}"
-                    )
-
-                except Exception as e:
-
-                    errors.append(
-                        f"{account['server_name']}: {e}"
-                    )
-
-                    task_logger.error(
-                        f"[JELLYFIN PASSWORD] Failed | "
-                        f"vodum_user_id={user_id} | "
-                        f"server_id={account['server_id']} | "
-                        f"username={account['username']} | "
-                        f"error={e}"
-                    )
-
-            return {
-                "ok": len(errors) == 0,
-                "updated": updated,
-                "errors": errors,
-            }
+            return change_jellyfin_password(db, user_id, password, selected_server_ids)
         except Exception as e:
 
             logger.exception(
@@ -1426,6 +1342,5 @@ def register(app):
             referral_stats=referral_stats,
             referred_users=referred_users,
         )
-
 
 

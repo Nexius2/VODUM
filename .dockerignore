@@ -31,6 +31,11 @@ Thumbs.db
 # Telemetry
 worker_telemetry/
 
+# Build
+dist/
+build/
+test/
+
 # IDE
 .vscode
 .idea

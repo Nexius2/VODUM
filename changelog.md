@@ -6,6 +6,82 @@ All notable changes to Vodum will be documented in this file.
 
 
 ### Improved
+- Completed Communications worker unification: expiration, scheduled templates and campaigns now run exclusively through the shared delivery, retry and history pipeline.
+- Removed the obsolete email-only and Discord-only campaign workers and automatically deletes their legacy task rows while preserving old data tables for migration and history.
+- Added bounded automatic catch-up for scheduled emails that exhausted normal retries after temporary SMTP or recipient configuration failures, limited to three recovery cycles over 30 days.
+- Manual retry of failed scheduled communications now grants a complete fresh retry cycle and records the number of requeued deliveries.
+- Extracted the complete cached Monitoring overview aggregation pipeline from the web route into a dedicated read-only service, reducing the route by more than 400 lines.
+- Removed the obsolete Monitoring movie-poster route wrapper after moving overview enrichment into the aggregate service.
+- Added a bounded thread-safe TTL aggregate cache and applied it to expensive dashboard Usage Risk, server peak and primary Monitoring overview calculations including 30-day media rankings, while keeping live sessions and server states uncached.
+- Monitoring live totals now fall back to the latest recent snapshot while the refresh pipeline is busy, with a visible stale-data notice and no fallback once the pipeline is idle.
+- Scheduler task enqueues are now coalesced to one pending rerun per task, preventing repeated triggers from inflating the queue.
+- Scheduled tasks now remain strictly sequential even after exceeding their expected duration, and the watchdog no longer resets a legitimately running long task into a duplicate execution.
+- The sidebar task indicator now clearly labels task activity and distinguishes tasks actually running from tasks waiting in the queue.
+- Default hourly, six-hourly and half-hourly maintenance schedules are now staggered to avoid large queue spikes at minute zero while preserving administrator-customized schedules.
+- Rejects non-image Plex/Jellyfin artwork responses using trusted binary signatures, preventing HTML/XML error pages from being cached as posters.
+- Invalid artwork cache pairs are now removed automatically when read, warmup no longer reports rejected payloads as cached, and broken dashboard images disappear cleanly.
+- Added a conservative weekly data-consistency repair that removes only orphaned or impossible cross-server library-access relationships.
+- Completed automatic cleanup of invalid database entries and access inconsistencies without deleting users, servers, libraries or valid same-server access.
+- Deferred subscription expiration now starts only when VODUM observes the user's first real playback, rather than when Plex/Jellyfin library access is synchronized.
+- Centralized first-playback subscription activation for both Plex and Jellyfin and made it idempotent across repeated session collection.
+- Moved all Plex/Jellyfin artwork retrieval, provider authentication, URL validation and stale-cache fallback out of the monitoring route into a tested service.
+- Removed the final direct media-provider calls from web routes; monitoring routes now delegate artwork retrieval through a provider-neutral boundary.
+- Added a conservative weekly cleanup task for old Tautulli diagnostic uploads and completed import-job records, while always protecting queued and running imports.
+- Completed automatic cleanup coverage for obsolete Tautulli artifacts and artwork-cache files.
+- Moved monitoring artwork disk-cache keys, metadata, freshness checks and atomic writes into a provider-neutral service shared by the proxy, warmup and cleanup tasks.
+- Removed the artwork warmup task's dependency on the monitoring route and added a validator for fresh and stale cache behavior.
+- Added configurable backup retention by maximum file count, defaulting to the 10 newest backups and combined with the existing age limit.
+- Centralized backup cleanup rules so automatic backup creation and the scheduled cleanup task enforce the same retention policy.
+- Restored exact translation-key parity across English, French, German, Spanish and Italian catalogs, and added a validator preventing missing or obsolete localization keys.
+- Moved live Plex/Jellyfin account-presence checks and deletion-risk summaries out of user-action routes into a tested provider-presence service.
+- Moved setup-wizard Plex/Jellyfin connection validation into a provider-neutral service, removing route dependencies on provider HTTP details and task modules.
+- Moved Jellyfin password changes into a credential service that clears legacy stored passwords after successful provider updates.
+- Split the installation wizard into read-only GET and state-changing POST routes; unavailable optional steps are now selected in memory and persisted only after a user action.
+- Removed the final direct `media_jobs` SQL insertions from web modules and added a validator enforcing the central media-job service boundary.
+- User creation now queues one complete Plex/Jellyfin access synchronization per server instead of potentially conflicting per-library grant jobs.
+- Completed a full migration-logic audit across every Plex/Jellyfin direction, campaign lifecycle state, eligibility constraint, retry path, source-removal guard and rollback path.
+- Existing destination accounts are now reconciled instead of silently skipped; pre-existing Jellyfin passwords are never reset, while accounts created by an interrupted migration resume safely.
+- Aligned migration execution identity fallbacks with analysis, so source-account usernames and emails remain usable when the linked VODUM fields are empty.
+- Unused source libraries no longer block saved drafts, cross-provider native identifiers cannot cause false self-migration detection, and invalid server-pair selections remain correctable in the interface.
+- Hardened migration execution by retrying failed already-present accounts, preventing empty campaigns from starting, suppressing duplicate queued source removals and enforcing the copy-mode source-removal prohibition in the core service.
+- Simplified migration-draft deletion to a standard confirmation dialog and fixed the mismatched form field that prevented drafts from being deleted.
+- Users without any source-library access are now automatically excluded instead of blocking a migration; existing drafts can exclude all blocked users in one action.
+- Completed the stable Migrations feature set with pause/resume, targeted retries, per-user exclusion, active-campaign conflict prevention, operational dashboard counts and explicit transfer limits.
+- Added 30-day retention and automatic cleanup for encrypted generated Jellyfin migration credentials, with reveal auditing and no secret exposure in reports.
+- Retired the completed `User Migration System.md` specification after moving optional future extensions into the TODO.
+- Added draft-only migration editing and strongly confirmed deletion; edits recalculate eligibility, mappings and source snapshots without changing any media server.
+- Made the migration workflow explicit: imported plans explain their safe draft-only behavior, saved drafts open directly, and campaign pages now show the next required action with a prominent start or correction path.
+- Fixed migration availability by recognizing the monitoring status `up` as online across planning, execution, source removal and rollback.
+- Completed migration Phase 4 with an extensible provider-capability registry, learned library-mapping suggestions and secret-free reusable plan import/export.
+- Imported migration plans resolve servers and libraries locally, reject ambiguous matches and always create a reviewable draft before execution.
+- Reworded unavailable migration states to describe an optional feature that is currently unavailable rather than a required operation.
+- Completed migration Phase 3 with manual or first-activity destination validation, configurable safety delays, scheduled execution, bounded campaign batches and advanced secret-sanitized reports.
+- Source removal and rollback use exact access snapshots and existing provider access-job workers, expose requested/applied/error states, require the source server online and never delete source or destination accounts.
+- Copy campaigns can never remove source access; progressive and move campaigns still require explicit confirmation using the exact campaign name.
+- Completed migration Phase 2 with strict cross-owner Plex invitations, periodic acceptance reconciliation, transient-error retries and destination-access validation before completion.
+- Migration Plex reminders now reuse configured `pending_invite_reminder` Communication templates, honor each template delay and deduplicate every scheduled notification.
+- Added campaign invitation timestamps, reminder tracking and an explicit action to check pending Plex invitations immediately.
+- Plex destination migrations now fail safely when accepted-user library application fails instead of being marked complete.
+- Migration planning now proposes only online servers and rejects self-migrations, duplicate native-server identifiers and Plex pairs sharing the same owner at analysis, draft creation and campaign start.
+- Added an explicit migration campaign execution view with per-user runtime status, actionable errors and on-demand encrypted Jellyfin credential reveal.
+- Made Jellyfin destination creation recover safely when execution is interrupted between account creation, password setup and access assignment.
+- Migration campaigns now reconcile their final state on every worker pass, including after a crash following the last user operation.
+- Added the Phase 1 destination-only migration worker for idempotent Plex invitations/shares and Jellyfin account creation/access, with strict per-user library isolation and no source revocation path.
+- Generated Jellyfin migration passwords are encrypted immediately and keep the user waiting for validation instead of being marked complete prematurely.
+- Made migration-draft creation transactional so an interrupted database write cannot leave a partial campaign.
+- Added a read-only migration-campaign audit page showing the exact saved users, blockers and library mappings before any future execution is possible.
+- Completed the migration-planning foundations with strict no-migration warning screens, editable library mappings and persistent read-only campaign drafts.
+- Migration planning now hides every other control when only one server exists or when the relevant Plex servers already share the same owner account and users.
+- Added the first read-only Migrations workspace with automatic multi-provider mode detection, per-user eligibility analysis, explicit Plex email requirements and safe library-mapping suggestions.
+- Added migration campaign, user, step and library-mapping database foundations for resumable future background execution.
+- Expanded the user-migration specification to cover every Plex/Jellyfin direction, per-user eligibility constraints, library mapping, safe source removal, rollback, background orchestration and the dedicated Migrations interface.
+- Centralized Plex invitation-state resolution so `already invited`, `request sent`, accepted friends and missing invitations are interpreted consistently.
+- Reconciled accepted Plex invitations with their existing VODUM media-user row and automatically removed matching stale invitation duplicates while preserving library assignments.
+- Stopped stale database invitation flags from overriding a successful live Plex check, and made unrecognized Plex invitation failures explicit instead of silently persisting an unknown state.
+- Added idempotent communication-campaign recovery on every worker pass so interrupted campaigns resume automatically after application restarts.
+- Campaign recovery now repairs missing retry dates and reconciles campaign status from its actual recipient queue without resending completed targets.
+- Re-audited the project TODO and removed completed artwork, media matching, library user-count and campaign-recovery items.
+- Restored telemetry capacity views with totals, min/average/max, server distributions and anonymous ranked Top 10 values for managed users, total servers, Plex servers and Jellyfin servers.
 - Completed the Libraries and media reliability work: Jellyfin sessions now resolve their collection folder, missing historical associations are repaired when unambiguous, and library statistics include unlinked media users.
 - Reworked Top played identities to keep valid repeat plays distinct, merge duplicate native-session snapshots and group series through stable Plex/Jellyfin series identifiers instead of titles alone.
 - Prioritized canonical Plex series artwork, refreshed stored artwork references and used real backdrops instead of duplicating poster URLs in overview tops.
@@ -13,7 +89,7 @@ All notable changes to Vodum will be documented in this file.
 - Added a static GET-route audit tool with strict and summary-only modes, plus an explicit registry of authorized read-through proxy exceptions.
 - Cleaned the project TODO so it only tracks work that remains to be completed.
 - Hardened and expanded the Cloudflare telemetry worker with strict payload validation, aggregate-only dashboards, correct build-aware version comparisons, reporting-health indicators, anonymous feature adoption metrics and one-year stale-instance cleanup.
-- Removed per-installation Top 10 telemetry views and stopped collecting detailed OS versions to reduce installation fingerprinting.
+- Removed installation identifiers from telemetry Top 10 views and stopped collecting detailed OS versions to reduce installation fingerprinting.
 - Audited telemetry end to end, retained default opt-in with no-server suppression, and changed the telemetry task to hourly so debug instances report frequently while normal instances remain limited to seven days.
 - Prevented anonymous telemetry from ever reporting placeholder versions such as `unknown` or `dev`.
 - Centralized VODUM version discovery across the interface and telemetry, with environment and multi-path INFO fallbacks.
@@ -83,6 +159,8 @@ All notable changes to Vodum will be documented in this file.
 - Reduced dashboard clutter by consolidating subscription statistics into a single widget.
 
 ### Fixed
+- Fixed test campaigns crashing after delivery because `SendAttempt` results were incorrectly treated as dictionaries, which could leave campaigns stuck in `sending`.
+- Fixed retryable campaigns remaining marked as `error` or `sending` indefinitely after interrupted worker runs.
 - Fixed Jellyfin plays missing from per-library statistics because active sessions did not expose `library_section_id`.
 - Fixed same-title series from different servers or native series identifiers being merged together.
 - Fixed multiple legitimate plays started within the same minute being collapsed into one Top played entry.

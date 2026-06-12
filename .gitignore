@@ -34,6 +34,7 @@ Thumbs.db
 # Build
 dist/
 build/
+test/
 
 # Telemetry
 worker_telemetry/

@@ -8,6 +8,7 @@ from communications_engine import (
     record_history,
     available_channels,
 )
+from core.communications.campaign_recovery import recover_campaigns
 
 log = get_logger("send_comm_campaigns")
 
@@ -106,13 +107,13 @@ def _send_test_campaign(db, settings: dict, campaign: dict) -> bool:
 
     if mode == "all":
         sent_channels = {
-            (att.get("channel") or "").strip()
+            (att.channel or "").strip()
             for att in attempts
-            if att.get("ok")
+            if att.status == "sent"
         }
         ok = all(ch in sent_channels for ch in required_channels) if required_channels else True
     else:
-        ok = any(att.get("ok") for att in attempts)
+        ok = any(att.status == "sent" for att in attempts)
 
     db.execute(
         """
@@ -182,6 +183,11 @@ def run(task_id: int, db):
     log.debug("=== SEND COMM CAMPAIGNS : START ===")
 
     try:
+        recovery = recover_campaigns(db)
+        if any(recovery.values()):
+            log.warning("Recovered interrupted communication campaigns: %s", recovery)
+            task_logs(task_id, "warning", "Recovered interrupted communication campaigns", details=recovery)
+
         settings = db.query_one("SELECT * FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
 
@@ -237,7 +243,7 @@ def run(task_id: int, db):
 
         if not test_campaigns and not due:
             task_logs(task_id, "debug", "No queued communication campaigns")
-            return {"status": "idle", "processed": 0}
+            return {"status": "idle", "processed": 0, "recovery": recovery}
 
         processed = 0
         success = 0
@@ -438,7 +444,7 @@ def run(task_id: int, db):
             log.info(msg)
         else:
             log.debug(msg)
-        return {"status": "ok", "processed": processed, "success": success, "failed": failed}
+        return {"status": "ok", "processed": processed, "success": success, "failed": failed, "recovery": recovery}
 
     except Exception as e:
         log.error("Error in send_comm_campaigns", exc_info=True)

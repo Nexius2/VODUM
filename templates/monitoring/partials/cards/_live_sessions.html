@@ -7,6 +7,12 @@
   {% set direct = sessions_stats.direct_plays or 0 %}
   {% set transcodes = sessions_stats.transcodes or 0 %}
 
+  {% if sessions_stats.is_snapshot_fallback %}
+    <div class="mt-2 text-[11px] text-amber-300">
+      {{ t("monitoring.cards.snapshot_fallback") }}
+    </div>
+  {% endif %}
+
   {% if configured_server_count|default(0) <= 1 %}
 
     <div class="mt-3">
@@ -97,7 +103,7 @@
           {% endif %}
         {% endfor %}
       </div>
-    {% else %}
+    {% elif not sessions_stats.is_snapshot_fallback %}
       <div class="mt-4 text-sm text-slate-500">
         {{ t("monitoring.cards.live_sessions_no_sessions") }} {{ live_window_seconds }}s.
       </div>
