@@ -166,7 +166,7 @@ def register(app):
 
             # Activer / désactiver les tâches liées au mailing (WRITE)
             set_tasks_enabled_by_names(
-                ["send_expiration_emails", "send_mail_campaigns", "send_comm_campaigns"],
+                ["send_expiration_emails", "send_comm_campaigns"],
                 enabled,
             )
 

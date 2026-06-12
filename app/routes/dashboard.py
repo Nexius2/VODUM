@@ -3,6 +3,7 @@ from core.monitoring.artwork import enrich_live_session_artwork
 from core.usage_risk import build_usage_risk_report
 from core.dashboard_servers import dashboard_server_preview
 from core.dashboard_usage_risk import build_usage_risk_trend
+from core.aggregate_cache import cached_aggregate
 from collections import Counter
 from datetime import datetime, timedelta
 from flask import render_template, redirect, url_for, make_response
@@ -284,10 +285,14 @@ def register(app):
         }
 
         try:
-            usage_risk_report = build_usage_risk_report(
-                db,
-                {"period_days": 30},
-                persist_history=False,
+            usage_risk_report = cached_aggregate(
+                "dashboard:usage-risk:30d",
+                60,
+                lambda: build_usage_risk_report(
+                    db,
+                    {"period_days": 30},
+                    persist_history=False,
+                ),
             )
             usage_risk_summary = usage_risk_report.get("summary") or usage_risk_summary
             history_rows = []
@@ -330,8 +335,11 @@ def register(app):
             srv["peak_streams_7d"] = 0
 
         if table_exists(db, "media_session_history"):
-            peak_rows = db.query(
-                """
+            peak_rows = cached_aggregate(
+                "dashboard:server-peaks:7d",
+                120,
+                lambda: [dict(row) for row in (db.query(
+                    """
                 WITH events AS (
                     SELECT server_id, datetime(started_at) AS ts, 1 AS delta
                     FROM media_session_history
@@ -356,8 +364,9 @@ def register(app):
                 SELECT server_id, MAX(active_count) AS peak
                 FROM running
                 GROUP BY server_id
-                """
-            ) or []
+                    """
+                ) or [])],
+            )
 
             peaks_by_server = {
                 int(row["server_id"]): int(row["peak"] or 0)

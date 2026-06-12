@@ -1,120 +1,15 @@
 # Auto-split from app.py (keep URLs/endpoints intact)
 import json
 import ipaddress
-import os
-import time
-import hashlib
 
 import requests
-from core.http_security import server_http_session
 from flask import request, Response, current_app, jsonify, abort, send_file
 
-from logging_utils import get_logger
-from core.plex_rate_limit import wait_for_plex_slot
+from core.monitoring.artwork_cache import (
+    ARTWORK_CACHE_TTL_SECONDS,
+)
+from core.monitoring.artwork_proxy import ArtworkProxyError, fetch_monitoring_artwork
 from web.helpers import get_db
-
-task_logger = get_logger("tasks_ui")
-
-ARTWORK_DISK_CACHE_DIR = os.environ.get("VODUM_ARTWORK_CACHE_DIR", "/appdata/artwork_cache")
-ARTWORK_DISK_CACHE_TTL_SECONDS = int(os.environ.get("VODUM_ARTWORK_CACHE_TTL_SECONDS", str(7 * 24 * 3600)))
-
-
-def _artwork_cache_key(*parts) -> str:
-    raw = "|".join(str(p or "") for p in parts)
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
-
-
-def _artwork_cache_paths(cache_key: str):
-    safe_key = "".join(c for c in str(cache_key) if c.isalnum())
-    if not safe_key:
-        return None, None
-
-    os.makedirs(ARTWORK_DISK_CACHE_DIR, exist_ok=True)
-
-    return (
-        os.path.join(ARTWORK_DISK_CACHE_DIR, f"{safe_key}.img"),
-        os.path.join(ARTWORK_DISK_CACHE_DIR, f"{safe_key}.json"),
-    )
-
-
-def _read_artwork_cache(cache_key: str, allow_stale: bool = False):
-    img_path, meta_path = _artwork_cache_paths(cache_key)
-    if not img_path or not meta_path:
-        return None
-
-    if not os.path.exists(img_path) or not os.path.exists(meta_path):
-        return None
-
-    age = time.time() - os.path.getmtime(img_path)
-    is_stale = age > ARTWORK_DISK_CACHE_TTL_SECONDS
-
-    if is_stale and not allow_stale:
-        return None
-
-    try:
-        with open(meta_path, "r", encoding="utf-8") as f:
-            meta = json.load(f)
-    except Exception:
-        meta = {}
-
-    mimetype = meta.get("content_type") or "image/jpeg"
-    response_max_age = 300 if is_stale else ARTWORK_DISK_CACHE_TTL_SECONDS
-
-    response = send_file(
-        img_path,
-        mimetype=mimetype,
-        conditional=True,
-        max_age=response_max_age,
-    )
-
-    response.headers["Cache-Control"] = f"public, max-age={response_max_age}"
-    response.headers["X-VODUM-Artwork-Cache"] = "STALE" if is_stale else "HIT"
-
-    return response
-
-
-def _write_artwork_cache(cache_key: str, content: bytes, content_type: str):
-    if not content:
-        return
-
-    img_path, meta_path = _artwork_cache_paths(cache_key)
-    if not img_path or not meta_path:
-        return
-
-    tmp_img_path = img_path + ".tmp"
-    tmp_meta_path = meta_path + ".tmp"
-
-    with open(tmp_img_path, "wb") as f:
-        f.write(content)
-
-    with open(tmp_meta_path, "w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "content_type": content_type or "image/jpeg",
-                "saved_at": int(time.time()),
-            },
-            f,
-            ensure_ascii=False,
-        )
-
-    os.replace(tmp_img_path, img_path)
-    os.replace(tmp_meta_path, meta_path)
-
-
-def _cached_image_response(cache_key: str, content: bytes, content_type: str):
-    try:
-        _write_artwork_cache(cache_key, content, content_type)
-    except Exception:
-        task_logger.warning("Unable to write artwork disk cache", exc_info=True)
-
-    return Response(
-        content,
-        mimetype=content_type or "image/jpeg",
-        headers={
-            "Cache-Control": f"public, max-age={ARTWORK_DISK_CACHE_TTL_SECONDS}",
-            "X-VODUM-Artwork-Cache": "MISS",
-        },
-    )
 
 def json_rows(rows):
     return current_app.response_class(
@@ -165,134 +60,30 @@ def register(app):
         if not srv:
             abort(404)
 
-        srv = dict(srv)
-        stype = (srv.get("type") or "").lower()
-        token = srv.get("token")
-        if not token:
-            abort(404)
+        try:
+            result = fetch_monitoring_artwork(dict(srv), request.args)
+        except ArtworkProxyError as exc:
+            abort(exc.status_code)
 
-        # url > local_url > public_url
-        bases = []
-        for u in (srv.get("url"), srv.get("local_url"), srv.get("public_url")):
-            if u and str(u).strip():
-                b = str(u).strip().rstrip("/")
-                if b not in bases:
-                    bases.append(b)
+        if result["kind"] == "content":
+            return Response(
+                result["content"],
+                mimetype=result["content_type"],
+                headers={
+                    "Cache-Control": f"public, max-age={ARTWORK_CACHE_TTL_SECONDS}",
+                    "X-VODUM-Artwork-Cache": "MISS",
+                },
+            )
 
-        if not bases:
-            abort(502)
-
-        http = server_http_session(srv)
-
-        def _try_get(full_url, headers=None, params=None):
-            r = http.get(full_url, headers=headers, params=params, timeout=10)
-            r.raise_for_status()
-            return r
-
-        # ---------------- PLEX ----------------
-        if stype == "plex":
-            path = (request.args.get("path") or "").strip()
-            if not _is_safe_relative_media_path(path):
-                abort(400)
-
-            cache_key = _artwork_cache_key("plex", server_id, path)
-            cached = _read_artwork_cache(cache_key)
-            if cached:
-                return cached
-
-            headers = {"X-Plex-Token": token}
-
-            candidate_paths = []
-            if path:
-                candidate_paths.append(path)
-
-            # Fallback utile :
-            # si /art échoue, on tente le /thumb du même media
-            if path.endswith("/art"):
-                candidate_paths.append(path[:-4] + "/thumb")
-
-            # on évite les doublons
-            deduped_paths = []
-            seen_paths = set()
-            for p in candidate_paths:
-                if p and p not in seen_paths:
-                    deduped_paths.append(p)
-                    seen_paths.add(p)
-
-            last_err = None
-            for candidate_path in deduped_paths:
-                for base in bases:
-                    try:
-                        wait_for_plex_slot(base)
-                        r = _try_get(base + candidate_path, headers=headers)
-                        ct = r.headers.get("Content-Type") or "image/jpeg"
-                        return _cached_image_response(cache_key, r.content, ct)
-                    except Exception as e:
-                        last_err = e
-                        continue
-
-            stale = _read_artwork_cache(cache_key, allow_stale=True)
-            if stale:
-                task_logger.warning(
-                    f"Serving stale Plex artwork cache after provider failure: server_id={server_id} path={path}"
-                )
-                return stale
-
-            abort(502)
-
-        # --------------- JELLYFIN --------------
-        if stype == "jellyfin":
-            item_id = request.args.get("item_id")
-            if not item_id:
-                abort(400)
-
-            image_type = (request.args.get("image_type") or "Primary").strip()
-            image_index = request.args.get("image_index")
-
-            w = request.args.get("w", "120")
-            q = request.args.get("q", "90")
-
-            cache_key = _artwork_cache_key("jellyfin", server_id, item_id, image_type, image_index, w, q)
-            cached = _read_artwork_cache(cache_key)
-            if cached:
-                return cached
-
-            path = f"/Items/{item_id}/Images/{image_type}"
-            if image_index not in (None, ""):
-                path += f"/{image_index}"
-
-            params = {"maxWidth": w, "quality": q}
-            headers = {"X-Emby-Token": token}
-
-            last_err = None
-            for base in bases:
-                try:
-                    r = _try_get(base + path, headers=headers, params=params)
-                    ct = r.headers.get("Content-Type") or "image/jpeg"
-                    return _cached_image_response(cache_key, r.content, ct)
-                except Exception as e:
-                    last_err = e
-                    continue
-
-            if image_type.lower() != "primary":
-                path = f"/Items/{item_id}/Images/Primary"
-                for base in bases:
-                    try:
-                        r = _try_get(base + path, headers=headers, params=params)
-                        ct = r.headers.get("Content-Type") or "image/jpeg"
-                        return _cached_image_response(cache_key, r.content, ct)
-                    except Exception:
-                        continue
-            stale = _read_artwork_cache(cache_key, allow_stale=True)
-            if stale:
-                task_logger.warning(
-                    f"Serving stale Jellyfin artwork cache after provider failure: server_id={server_id} item_id={item_id}"
-                )
-                return stale
-
-            abort(502)
-        abort(404)
-
+        response = send_file(
+            result["path"],
+            mimetype=result["content_type"],
+            conditional=True,
+            max_age=result["max_age"],
+        )
+        response.headers["Cache-Control"] = f"public, max-age={result['max_age']}"
+        response.headers["X-VODUM-Artwork-Cache"] = "STALE" if result["is_stale"] else "HIT"
+        return response
 
     # =====================================================================
     # ⚠️ END MONITORING ROUTES
@@ -681,7 +472,3 @@ def register(app):
             params,
         )
         return json_rows(rows)
-
-
-
-

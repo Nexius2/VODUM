@@ -55,6 +55,7 @@
                         alt=""
                         class="absolute inset-0 h-full w-full object-cover opacity-30 pointer-events-none"
                         loading="lazy"
+                        onerror="this.remove()"
                     >
                     <div class="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/70 to-slate-950/90"></div>
                 {% endif %}
@@ -65,6 +66,7 @@
                             src="{{ s.poster_url }}"
                             alt="{{ s.title or s.grandparent_title or 'Poster' }}"
                             class="w-10 h-14 rounded-lg object-cover border border-slate-700/70 shrink-0"
+                            onerror="this.remove()"
                         />
                     {% endif %}
 

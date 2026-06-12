@@ -12,6 +12,7 @@ import xml.etree.ElementTree as ET
 from core.monitoring.diff import compute_session_events
 from core.monitoring.mappers import resolve_media_user_id
 from core.monitoring.artwork import extract_artwork_refs
+from core.subscription_activation import activate_subscription_on_playback
 from core.monitoring.library_media import repair_unambiguous_library_associations
 from core.providers.registry import get_provider
 from logging_utils import get_logger, is_debug_mode_enabled
@@ -714,6 +715,9 @@ def collect_sessions_for_server(
                     sess.get("library_section_id"),
                 ),
             )
+
+            if media_user_id is not None:
+                activate_subscription_on_playback(db, int(media_user_id))
 
             for ev in events:
                 db.execute(

@@ -4,6 +4,7 @@ import json
 from flask import render_template, request, redirect, url_for, flash, jsonify
 
 from core.i18n import get_translator
+from core.communications_recovery import retry_failed_scheduled_communications
 from web.helpers import get_db, add_log, send_email_via_settings
 from discord_utils import validate_discord_bot_token
 from notifications_utils import parse_notifications_order
@@ -1369,21 +1370,13 @@ def register(app):
         # Queue retry of failed scheduled communications
         if action == "retry_scheduled_errors":
             try:
-                db.execute(
-                    """
-                    UPDATE comm_scheduled
-                    SET status = 'pending',
-                        last_error = NULL,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE status = 'error'
-                    """
-                )
+                retried = retry_failed_scheduled_communications(db)
                 try:
                     enable_and_run_task_by_name("send_expiration_emails")
                 except Exception:
                     pass
 
-                add_log("info", "communications", "Scheduled communication errors requeued")
+                add_log("info", "communications", f"{retried} scheduled communication error(s) requeued")
                 flash(t("comm_retry_scheduled_success"), "success")
             except Exception as e:
                 flash(f"{t('comm_retry_scheduled_error')}: {e}", "error")

@@ -155,6 +155,7 @@ TASK_MAX_DURATION = {
     "monitor_collect_sessions": 60,        # 1 min
     "monitor_enqueue_refresh": 60,         # 1 min
     "media_jobs_worker": 120,              # 2 min
+    "migration_worker": 30 * 60,
 }
 
 DEFAULT_TASK_MAX_DURATION = 30 * 60
@@ -627,6 +628,11 @@ def prepare_restored_database(restored_db):
 
 
 def recover_stuck_tasks(max_minutes=30):
+    # A live worker may legitimately own a long-running task. Resetting its DB
+    # state here would allow the scheduler to enqueue a duplicate execution.
+    if worker_running:
+        return
+
     try:
         row = db.query_one(
             """
@@ -786,7 +792,10 @@ def enqueue_task(task_id: int):
     db.execute(
         """
         UPDATE tasks
-        SET queued_count = queued_count + 1,
+        SET queued_count = CASE
+                WHEN queued_count > 0 THEN queued_count
+                ELSE 1
+            END,
             status = CASE
                 WHEN status = 'running' THEN 'running'
                 ELSE 'queued'
@@ -917,29 +926,15 @@ def _load_task_run_callable(task_name: str):
 
 
 def _execute_task_run_callable(run_func, task_id: int, task_name: str, max_duration: int):
-    result_box = {"value": None, "exc": None}
+    """
+    Execute the task inside the single scheduler worker.
 
-    def _runner():
-        try:
-            result_box["value"] = run_func(task_id, db)
-        except Exception as e:
-            result_box["exc"] = e
-
-    t = threading.Thread(
-        target=_runner,
-        name=f"vodum-task-{task_name}-{task_id}",
-        daemon=True
-    )
-    t.start()
-    t.join(timeout=max_duration)
-
-    if t.is_alive():
-        raise TimeoutError(f"Task {task_name} exceeded maximum duration ({max_duration}s)")
-
-    if result_box["exc"] is not None:
-        raise result_box["exc"]
-
-    return result_box["value"]
+    Python cannot safely stop a timed-out thread. The previous helper allowed
+    that thread to continue while the worker started following tasks, creating
+    hidden concurrency. Duration is still checked after return by
+    _process_task_result(), without allowing scheduler tasks to overlap.
+    """
+    return run_func(task_id, db)
 
 
 def _handle_task_success(task_id: int, task_name: str, schedule):
@@ -1444,12 +1439,19 @@ def auto_enable_monitoring_tasks():
 
 
 def auto_enable_sync_tasks():
+    """
+    Active les tâches de sync si au moins un serveur du type existe.
+
+    Important:
+    On ne dépend PAS de status='up' ici.
+    Au boot, un serveur peut être unknown/down avant check_servers.
+    Si sync_plex/sync_jellyfin reste désactivée, les utilisateurs ne sont jamais importés.
+    """
     plex_count = db.query_one(
         """
         SELECT COUNT(*) AS cnt
         FROM servers
         WHERE LOWER(TRIM(type)) = 'plex'
-          AND LOWER(TRIM(COALESCE(status, 'unknown'))) = 'up'
         """
     )["cnt"]
 
@@ -1467,7 +1469,6 @@ def auto_enable_sync_tasks():
         SELECT COUNT(*) AS cnt
         FROM servers
         WHERE LOWER(TRIM(type)) = 'jellyfin'
-          AND LOWER(TRIM(COALESCE(status, 'unknown'))) = 'up'
         """
     )["cnt"]
 

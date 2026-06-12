@@ -66,6 +66,15 @@ Defines how long backups are kept (in days).
 Example:
 - **30 days** → backups older than 30 days are automatically deleted
 
+### Maximum number of backups
+Defines how many backup files may be kept, regardless of their age.
+
+Example:
+- **10 backups** → only the 10 newest backups are kept
+
+The age and count limits are combined: a backup is removed when it exceeds
+either limit.
+
 ### Save settings
 Click **Save settings** to apply the retention policy.
 

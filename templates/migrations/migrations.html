@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+{% set active_page = "migrations" %}
+
+{% block title %}{{ t("migrations") }} - {{ app_brand_name }}{% endblock %}
+{% block header_title %}{{ t("migrations") }}{% endblock %}
+{% block header_subtitle %}{{ t("migrations_description") }}{% endblock %}
+
+{% block content %}
+{% if workspace_blocker %}
+  <div class="max-w-3xl mx-auto mt-12 bg-amber-950/50 border border-amber-700 rounded-2xl p-8 text-center">
+    <span class="material-icons-outlined text-amber-300 text-5xl">info</span>
+    <h2 class="mt-4 text-xl font-semibold text-amber-100">{{ t("migration_unavailable_title") }}</h2>
+    <p class="mt-3 text-sm text-amber-200">{{ t("migration_blocker." ~ (workspace_blocker or selection_blocker)) }}</p>
+  </div>
+{% else %}
+<div class="space-y-6">
+  <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+    <div class="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h2 class="font-semibold">{{ t("migration_import_plan") }}</h2>
+        <p class="mt-1 text-sm text-slate-400">{{ t("migration_import_plan_hint") }}</p>
+        <div class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+          <div class="bg-slate-950 border border-slate-800 rounded-lg p-3"><strong class="text-indigo-300">1.</strong> {{ t("migration_import_step_file") }}</div>
+          <div class="bg-slate-950 border border-slate-800 rounded-lg p-3"><strong class="text-indigo-300">2.</strong> {{ t("migration_import_step_review") }}</div>
+          <div class="bg-slate-950 border border-slate-800 rounded-lg p-3"><strong class="text-indigo-300">3.</strong> {{ t("migration_import_step_start") }}</div>
+        </div>
+        <p class="mt-3 text-xs text-amber-300">{{ t("migration_import_plan_safety") }}</p>
+      </div>
+      <form method="post" action="{{ url_for('migration_plan_import') }}" enctype="multipart/form-data" class="flex flex-wrap items-end gap-3">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+        <label class="text-sm">
+          <span class="block mb-2 text-slate-300">{{ t("migration_plan_file") }}</span>
+          <input type="file" name="plan_file" accept="application/json,.json" required class="block text-sm text-slate-300">
+        </label>
+        <label class="text-sm">
+          <span class="block mb-2 text-slate-300">{{ t("migration_draft_name") }}</span>
+          <input name="name" maxlength="160" class="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
+        </label>
+        <button class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm">{{ t("migration_import_plan") }}</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+    {% for label, value, color in [
+      (t("migration_active_campaigns"), campaign_counts.active, "text-blue-300"),
+      (t("migration_waiting_users"), campaign_counts.waiting_users, "text-blue-300"),
+      (t("migration_blocked_users"), campaign_counts.blocked_users, "text-red-300"),
+      (t("migration_needs_attention"), campaign_counts.needs_attention, "text-amber-300"),
+      (t("migration_completed_campaigns"), campaign_counts.completed, "text-emerald-300")
+    ] %}
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+        <div class="text-sm text-slate-400">{{ label }}</div>
+        <div class="mt-2 text-3xl font-semibold {{ color }}">{{ value }}</div>
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+    <div class="flex flex-wrap items-start justify-between gap-3 mb-5">
+      <div>
+        <h2 class="text-lg font-semibold">{{ t("migration_dry_run") }}</h2>
+        <p class="text-sm text-slate-400 mt-1">{{ t("migration_dry_run_hint") }}</p>
+      </div>
+      <span class="px-3 py-1 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 text-xs">{{ t("migration_read_only") }}</span>
+    </div>
+    <form method="get" action="{{ url_for('migrations_page') }}" class="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr_auto] gap-4 items-end">
+      <label class="text-sm">
+        <span class="block mb-2 text-slate-300">{{ t("migration_source_server") }}</span>
+        <select id="migration-source-server" name="source_server_id" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
+          <option value="">{{ t("migration_choose_server") }}</option>
+          {% for server in servers %}
+            <option value="{{ server.id }}" {{ 'selected' if source_id == server.id else '' }}>{{ server.name }} ({{ server.type|capitalize }})</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="hidden md:block pb-2 text-slate-500 text-xl">-&gt;</div>
+      <label class="text-sm">
+        <span class="block mb-2 text-slate-300">{{ t("migration_destination_server") }}</span>
+        <select id="migration-destination-server" name="destination_server_id" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
+          <option value="">{{ t("migration_choose_server") }}</option>
+          {% for server in servers %}
+            <option value="{{ server.id }}" {{ 'selected' if destination_id == server.id else '' }}>{{ server.name }} ({{ server.type|capitalize }})</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button class="px-5 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white">{{ t("migration_analyze") }}</button>
+    </form>
+    {% if analysis_error %}
+      <div class="mt-4 px-4 py-3 rounded-lg bg-red-950 border border-red-800 text-red-200 text-sm">{{ analysis_error }}</div>
+    {% endif %}
+    {% if selection_blocker %}
+      <div class="mt-4 px-4 py-3 rounded-lg bg-amber-950 border border-amber-800 text-amber-200 text-sm">{{ t("migration_blocker." ~ selection_blocker) }}</div>
+    {% endif %}
+  </div>
+
+  {% if analysis %}
+  <form method="post" action="{{ url_for('migration_draft_create') }}" class="space-y-6">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="source_server_id" value="{{ source_id }}">
+    <input type="hidden" name="destination_server_id" value="{{ destination_id }}">
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+      <div class="flex flex-wrap justify-between gap-4">
+        <div>
+          <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("migration_detected_mode") }}</div>
+          <div class="mt-1 text-xl font-semibold">{{ analysis.source.name }} -&gt; {{ analysis.destination.name }}</div>
+          <div class="mt-2 flex flex-wrap gap-2 text-xs">
+            <span class="px-2 py-1 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">{{ analysis.migration_type }}</span>
+            <span class="px-2 py-1 rounded bg-slate-800 text-slate-300">{{ t("migration_mode." ~ analysis.mode) }}</span>
+            {% if analysis.requires_email %}
+              <span class="px-2 py-1 rounded bg-amber-950 text-amber-300 border border-amber-800">{{ t("migration_email_required") }}</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+          {% for label, value, color in [
+            (t("migration_total_users"), analysis.counts.total, "text-slate-100"),
+            (t("migration_ready"), analysis.counts.ready, "text-emerald-300"),
+            (t("migration_blocked"), analysis.counts.blocked, "text-red-300"),
+            (t("migration_already_present"), analysis.counts.already_present, "text-blue-300")
+          ] %}
+            <div class="bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 min-w-[110px]">
+              <div class="text-xs text-slate-500">{{ label }}</div>
+              <div class="text-2xl font-semibold {{ color }}">{{ value }}</div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)] gap-6">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-800">
+          <h2 class="font-semibold">{{ t("migration_user_eligibility") }}</h2>
+          <p class="text-xs text-slate-500 mt-1">{{ t("migration_user_eligibility_hint") }}</p>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="text-left text-slate-400 bg-slate-950/50">
+              <tr>
+                <th class="px-4 py-3">{{ t("users") }}</th>
+                <th class="px-4 py-3">{{ t("email") }}</th>
+                <th class="px-4 py-3">{{ t("libraries") }}</th>
+                <th class="px-4 py-3">{{ t("status") }}</th>
+                <th class="px-4 py-3">{{ t("migration_constraints") }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for user in analysis.users %}
+                <tr class="border-t border-slate-800">
+                  <td class="px-4 py-3"><div class="font-medium">{{ user.username or ("#" ~ user.vodum_user_id) }}</div><div class="text-xs text-slate-500">VODUM #{{ user.vodum_user_id }}</div></td>
+                  <td class="px-4 py-3 text-slate-300">{{ user.email or "-" }}</td>
+                  <td class="px-4 py-3">{{ user.source_library_count }}</td>
+                  <td class="px-4 py-3">
+                    {% set status_colors = {"ready":"bg-emerald-950 text-emerald-300 border-emerald-800","blocked":"bg-red-950 text-red-300 border-red-800","already_present":"bg-blue-950 text-blue-300 border-blue-800"} %}
+                    <span class="px-2 py-1 rounded border text-xs {{ status_colors.get(user.classification, 'bg-slate-800 border-slate-700') }}">{{ t("migration_classification." ~ user.classification) }}</span>
+                  </td>
+                  <td class="px-4 py-3">
+                    {% if user.reasons %}
+                      <div class="flex flex-wrap gap-1">{% for reason in user.reasons %}<span class="px-2 py-1 rounded bg-slate-800 text-slate-300 text-xs">{{ t("migration_reason." ~ reason) }}</span>{% endfor %}</div>
+                    {% else %}<span class="text-slate-500">-</span>{% endif %}
+                  </td>
+                </tr>
+              {% else %}
+                <tr><td colspan="5" class="px-4 py-8 text-center text-slate-500">{{ t("migration_no_source_users") }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-800">
+          <h2 class="font-semibold">{{ t("migration_library_mapping") }}</h2>
+          <p class="text-xs text-slate-500 mt-1">{{ t("migration_library_mapping_hint") }}</p>
+        </div>
+        <div class="divide-y divide-slate-800">
+          {% for mapping in analysis.library_mappings %}
+            <div class="px-5 py-4">
+              <div class="flex items-center justify-between gap-2">
+                <div class="text-sm font-medium">{{ mapping.source.name }}</div>
+                {% if mapping.status == "unused" %}
+                  <span class="px-2 py-1 rounded bg-slate-800 text-slate-400 text-[11px]">{{ t("migration_unused") }}</span>
+                {% elif mapping.suggestion_reason %}
+                  <span class="px-2 py-1 rounded bg-slate-800 text-slate-400 text-[11px]">{{ t("migration_mapping_reason." ~ mapping.suggestion_reason) }}</span>
+                {% endif %}
+              </div>
+              <select name="library_mapping_{{ mapping.source.id }}" class="mt-2 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs">
+                <option value="">{{ t("migration_leave_unmapped") }}</option>
+                {% for destination in mapping.destination_options %}
+                  <option value="{{ destination.id }}" {{ 'selected' if mapping.suggested_destination and mapping.suggested_destination.id == destination.id else '' }}>{{ destination.name }}{% if destination.type %} ({{ destination.type }}){% endif %}</option>
+                {% endfor %}
+              </select>
+            </div>
+          {% else %}
+            <div class="px-5 py-8 text-sm text-center text-slate-500">{{ t("migration_no_source_libraries") }}</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+      <h2 class="font-semibold">{{ t("migration_policy_compatibility") }}</h2>
+      <p class="mt-1 text-xs text-slate-500">{{ t("migration_policy_compatibility_hint") }}</p>
+      <div class="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+        {% for item in analysis.policy_compatibility %}
+          <div class="bg-slate-950 border border-slate-800 rounded-lg px-4 py-3">
+            <div class="text-sm font-medium">{{ t("migration_policy." ~ item.policy) }}</div>
+            <div class="mt-1 text-xs {{ 'text-red-300' if item.status == 'unsupported' else 'text-emerald-300' }}">{{ t("migration_policy_status." ~ item.status) }}</div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="bg-indigo-950/40 border border-indigo-800 rounded-xl px-5 py-4 text-sm text-indigo-200">{{ t("migration_analysis_notice") }}</div>
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-wrap items-end gap-4">
+      <label class="flex-1 min-w-[260px] text-sm">
+        <span class="block mb-2 text-slate-300">{{ t("migration_draft_name") }}</span>
+        <input name="name" maxlength="160" placeholder="{{ analysis.source.name }} to {{ analysis.destination.name }}" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
+      </label>
+      <label class="text-sm">
+        <span class="block mb-2 text-slate-300">{{ t("migration_safety_delay_days") }}</span>
+        <input name="safety_delay_days" type="number" min="0" max="365" value="7" class="w-32 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
+      </label>
+      <label class="text-sm">
+        <span class="block mb-2 text-slate-300">{{ t("migration_intent") }}</span>
+        <select name="intent" class="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
+          <option value="copy">{{ t("migration_intent.copy") }}</option>
+          <option value="progressive">{{ t("migration_intent.progressive") }}</option>
+          <option value="move">{{ t("migration_intent.move") }}</option>
+        </select>
+      </label>
+      <label class="text-sm">
+        <span class="block mb-2 text-slate-300">{{ t("migration_batch_size") }}</span>
+        <input name="batch_size" type="number" min="1" max="100" value="10" class="w-28 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
+      </label>
+      <label class="text-sm">
+        <span class="block mb-2 text-slate-300">{{ t("migration_scheduled_at") }}</span>
+        <input name="scheduled_at" type="datetime-local" class="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
+      </label>
+      <button class="px-5 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white">{{ t("migration_save_draft_and_continue") }}</button>
+    </div>
+  </form>
+  {% endif %}
+
+  {% if campaigns %}
+    <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-800"><h2 class="font-semibold">{{ t("migration_saved_campaigns") }}</h2></div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="text-left text-slate-400 bg-slate-950/50"><tr><th class="px-4 py-3">{{ t("name") }}</th><th class="px-4 py-3">{{ t("migration_source_server") }}</th><th class="px-4 py-3">{{ t("migration_destination_server") }}</th><th class="px-4 py-3">{{ t("users") }}</th><th class="px-4 py-3">{{ t("status") }}</th><th class="px-4 py-3">{{ t("actions") }}</th></tr></thead>
+          <tbody>
+            {% for campaign in campaigns %}
+              <tr class="border-t border-slate-800"><td class="px-4 py-3 font-medium">{{ campaign.name }}<a class="ml-3 text-xs text-slate-400 hover:text-slate-200" href="{{ url_for('migration_plan_export', campaign_id=campaign.id) }}">{{ t("migration_export_plan") }}</a></td><td class="px-4 py-3">{{ campaign.source_name }}</td><td class="px-4 py-3">{{ campaign.destination_name }}</td><td class="px-4 py-3">{{ campaign.users_count }}</td><td class="px-4 py-3"><span class="px-2 py-1 rounded bg-slate-800 text-xs">{{ campaign.status }}</span></td><td class="px-4 py-3"><div class="flex flex-wrap gap-2"><a class="px-3 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-xs whitespace-nowrap" href="{{ url_for('migration_campaign_detail', campaign_id=campaign.id) }}">{{ t("migration_review_and_continue") }}</a>{% if campaign.status == "draft" %}<a class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs whitespace-nowrap" href="{{ url_for('migration_campaign_detail', campaign_id=campaign.id) }}#edit-draft">{{ t("migration_edit_draft") }}</a>{% endif %}</div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+</div>
+<script>
+(() => {
+  const source = document.getElementById("migration-source-server");
+  const destination = document.getElementById("migration-destination-server");
+  if (!source || !destination) return;
+  const incompatible = {{ incompatible_servers|tojson }};
+  const refreshDestinations = () => {
+    const blocked = new Set((incompatible[source.value] || []).map(String));
+    Array.from(destination.options).forEach(option => {
+      if (!option.value) return;
+      option.disabled = blocked.has(option.value);
+    });
+    if (blocked.has(destination.value)) destination.value = "";
+  };
+  source.addEventListener("change", refreshDestinations);
+  refreshDestinations();
+})();
+</script>
+{% endif %}
+{% endblock %}

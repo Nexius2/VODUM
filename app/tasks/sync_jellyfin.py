@@ -939,9 +939,6 @@ def _sync_users_and_policies_for_server(
         )
 
         # Si accès réel → init expiration_date sur le vodum_user
-        if allowed_db_lib_ids:
-            ensure_expiration_date_on_first_access(db, vodum_user_id)
-
         processed += 1
 
     logger.info(

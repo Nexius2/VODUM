@@ -237,6 +237,93 @@ def run_migrations():
     conn.commit()
 
     # -------------------------------------------------
+    # 0.6 User migration foundations
+    # -------------------------------------------------
+    cursor.executescript("""
+        CREATE TABLE IF NOT EXISTS migration_campaigns (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          source_server_id INTEGER NOT NULL,
+          destination_server_id INTEGER NOT NULL,
+          migration_type TEXT NOT NULL,
+          migration_mode TEXT NOT NULL,
+          intent TEXT NOT NULL DEFAULT 'copy',
+          status TEXT NOT NULL DEFAULT 'draft',
+          options_json TEXT,
+          library_mapping_json TEXT,
+          analysis_json TEXT,
+          scheduled_at TIMESTAMP,
+          batch_size INTEGER,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          started_at TIMESTAMP,
+          completed_at TIMESTAMP,
+          FOREIGN KEY(source_server_id) REFERENCES servers(id) ON DELETE RESTRICT,
+          FOREIGN KEY(destination_server_id) REFERENCES servers(id) ON DELETE RESTRICT
+        );
+        CREATE INDEX IF NOT EXISTS idx_migration_campaigns_status ON migration_campaigns(status, updated_at);
+        CREATE TABLE IF NOT EXISTS migration_users (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          campaign_id INTEGER NOT NULL,
+          vodum_user_id INTEGER NOT NULL,
+          source_media_user_id INTEGER,
+          destination_media_user_id INTEGER,
+          status TEXT NOT NULL DEFAULT 'pending',
+          eligibility TEXT NOT NULL DEFAULT 'pending',
+          blockers_json TEXT,
+          options_json TEXT,
+          source_snapshot_json TEXT,
+          result_json TEXT,
+          attempts INTEGER NOT NULL DEFAULT 0,
+          last_error TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          started_at TIMESTAMP,
+          completed_at TIMESTAMP,
+          UNIQUE(campaign_id, vodum_user_id),
+          FOREIGN KEY(campaign_id) REFERENCES migration_campaigns(id) ON DELETE CASCADE,
+          FOREIGN KEY(vodum_user_id) REFERENCES vodum_users(id) ON DELETE CASCADE,
+          FOREIGN KEY(source_media_user_id) REFERENCES media_users(id) ON DELETE SET NULL,
+          FOREIGN KEY(destination_media_user_id) REFERENCES media_users(id) ON DELETE SET NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_migration_users_campaign_status ON migration_users(campaign_id, status);
+        CREATE TABLE IF NOT EXISTS migration_steps (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          migration_user_id INTEGER NOT NULL,
+          step_key TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          attempt_count INTEGER NOT NULL DEFAULT 0,
+          max_attempts INTEGER NOT NULL DEFAULT 10,
+          run_after TIMESTAMP,
+          locked_by TEXT,
+          locked_until TIMESTAMP,
+          last_error TEXT,
+          details_json TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          completed_at TIMESTAMP,
+          UNIQUE(migration_user_id, step_key),
+          FOREIGN KEY(migration_user_id) REFERENCES migration_users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_migration_steps_queue ON migration_steps(status, run_after, locked_until);
+        CREATE TABLE IF NOT EXISTS migration_library_mappings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          campaign_id INTEGER NOT NULL,
+          source_library_id INTEGER NOT NULL,
+          destination_library_id INTEGER,
+          mapping_status TEXT NOT NULL DEFAULT 'unmapped',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(campaign_id, source_library_id, destination_library_id),
+          FOREIGN KEY(campaign_id) REFERENCES migration_campaigns(id) ON DELETE CASCADE,
+          FOREIGN KEY(source_library_id) REFERENCES libraries(id) ON DELETE RESTRICT,
+          FOREIGN KEY(destination_library_id) REFERENCES libraries(id) ON DELETE RESTRICT
+        );
+        CREATE INDEX IF NOT EXISTS idx_migration_library_mappings_campaign ON migration_library_mappings(campaign_id, mapping_status);
+    """)
+    conn.commit()
+
+    # -------------------------------------------------
     # Tasks scheduler mode migrations
     # -------------------------------------------------
 
@@ -305,7 +392,11 @@ def run_migrations():
         "user_identities": [],
         "media_jobs": [],
         "tautulli_import_jobs": [],
-        "tasks": []
+        "tasks": [],
+        "migration_campaigns": [],
+        "migration_users": [],
+        "migration_steps": [],
+        "migration_library_mappings": []
     }
 
 
@@ -903,6 +994,7 @@ def run_migrations():
     ensure_column(cursor, "settings", "brand_name", "TEXT DEFAULT NULL")
     ensure_column(cursor, "settings", "email_history_retention_years", "INTEGER DEFAULT 2")
     ensure_column(cursor, "settings", "backup_retention_days", "INTEGER DEFAULT 30")
+    ensure_column(cursor, "settings", "backup_retention_count", "INTEGER DEFAULT 10")
     ensure_column(cursor, "settings", "data_retention_years", "INTEGER DEFAULT 0")
     ensure_column(cursor, "settings", "skip_never_used_accounts", "INTEGER DEFAULT 0")
 
@@ -1359,8 +1451,11 @@ def run_migrations():
     ensure_column(cursor, "comm_scheduled", "payload_json", "TEXT DEFAULT NULL")
     ensure_column(cursor, "comm_scheduled", "dedupe_key", "TEXT DEFAULT NULL")
     ensure_column(cursor, "comm_scheduled", "channels_sent", "TEXT DEFAULT NULL")
+    ensure_column(cursor, "comm_scheduled", "catchup_count", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column(cursor, "comm_scheduled", "last_catchup_at", "TIMESTAMP DEFAULT NULL")
 
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_comm_scheduled_retry ON comm_scheduled(status, next_attempt_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_comm_scheduled_catchup ON comm_scheduled(status, catchup_count, last_catchup_at)")
     cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_comm_scheduled_dedupe ON comm_scheduled(dedupe_key)")
     conn.commit()
 
@@ -1536,6 +1631,8 @@ def run_migrations():
             payload_json TEXT DEFAULT NULL,
             dedupe_key TEXT DEFAULT NULL,
             channels_sent TEXT DEFAULT NULL,
+            catchup_count INTEGER NOT NULL DEFAULT 0,
+            last_catchup_at TIMESTAMP DEFAULT NULL,
             FOREIGN KEY(template_id) REFERENCES comm_templates(id) ON DELETE CASCADE,
             FOREIGN KEY(vodum_user_id) REFERENCES vodum_users(id) ON DELETE CASCADE,
             FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE SET NULL
@@ -1547,7 +1644,8 @@ def run_migrations():
             id, template_id, vodum_user_id, provider, server_id, send_at,
             status, last_error, created_at, updated_at,
             attempt_count, max_attempts, next_attempt_at, last_attempt_at,
-            payload_json, dedupe_key, channels_sent
+            payload_json, dedupe_key, channels_sent,
+            catchup_count, last_catchup_at
         )
         SELECT
             id, template_id, vodum_user_id, provider, server_id, send_at,
@@ -1558,7 +1656,9 @@ def run_migrations():
             last_attempt_at,
             payload_json,
             dedupe_key,
-            channels_sent
+            channels_sent,
+            COALESCE(catchup_count, 0),
+            last_catchup_at
         FROM comm_scheduled_old
         """)
 
@@ -1566,6 +1666,7 @@ def run_migrations():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_comm_scheduled_due ON comm_scheduled(status, send_at)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_comm_scheduled_user ON comm_scheduled(vodum_user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_comm_scheduled_retry ON comm_scheduled(status, next_attempt_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_comm_scheduled_catchup ON comm_scheduled(status, catchup_count, last_catchup_at)")
         cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_comm_scheduled_dedupe ON comm_scheduled(dedupe_key)")
 
     def _repair_comm_template_attachments_fk():
@@ -2293,7 +2394,7 @@ def run_migrations():
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "sync_plex",
         "description": "task_description.sync_plex",
-        "schedule": "0 */6 * * *",  # toutes les 6h
+        "schedule": "7 */6 * * *",  # toutes les 6h, décale les tâches lourdes
         "enabled": 0,
         "status": "disabled"
     })
@@ -2382,11 +2483,27 @@ def run_migrations():
         "status": "idle"
     })
 
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "cleanup_tautulli_imports",
+        "description": "task_description.cleanup_tautulli_imports",
+        "schedule": "45 4 * * 0",
+        "enabled": 1,
+        "status": "idle"
+    })
+
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "cleanup_data_consistency",
+        "description": "task_description.cleanup_data_consistency",
+        "schedule": "50 4 * * 0",
+        "enabled": 1,
+        "status": "idle"
+    })
+
     # Tâche update_user_status
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "update_user_status",
         "description": "task_description.update_user_status",
-        "schedule": "0 * * * *",  # Toutes les heures
+        "schedule": "5 * * * *",  # Toutes les heures, hors minute de pointe
         "enabled": 1,
         "status": "idle"
     })
@@ -2395,7 +2512,7 @@ def run_migrations():
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "check_servers",
         "description": "task_description.check_servers",
-        "schedule": "*/30 * * * *",  # toutes les 30 minutes
+        "schedule": "7,37 * * * *",  # toutes les 30 minutes, étalé
         "enabled": 1,
         "status": "idle"
     })
@@ -2473,7 +2590,7 @@ def run_migrations():
     if not exists:
         cursor.execute("""
             INSERT INTO tasks (name, schedule, enabled, status)
-            VALUES ('send_expiration_emails', '0 * * * *', 0, 'disabled')
+            VALUES ('send_expiration_emails', '27 * * * *', 0, 'disabled')
         """)
         print("➕ Task send_expiration_emails added.")
 
@@ -2488,7 +2605,7 @@ def run_migrations():
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "send_telemetry",
         "description": "Send anonymous Vodum telemetry statistics.",
-        "schedule": "0 * * * *",
+        "schedule": "23 * * * *",
         "enabled": 1,
         "status": "idle"
     })
@@ -2496,24 +2613,7 @@ def run_migrations():
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "usage_risk_notifications",
         "description": "Send usage risk upgrade suggestions.",
-        "schedule": "*/30 * * * *",
-        "enabled": 0,
-        "status": "disabled"
-    })
-
-    # Ajouter les tâches Discord si absentes
-    ensure_row(cursor, "tasks", "name = :name", {
-        "name": "send_expiration_discord",
-        "description": "task_description.send_expiration_discord",
-        "schedule": "0 * * * *",
-        "enabled": 0,
-        "status": "disabled"
-    })
-
-    ensure_row(cursor, "tasks", "name = :name", {
-        "name": "send_campaign_discord",
-        "description": "task_description.send_campaign_discord",
-        "schedule": "*/10 * * * *",
+        "schedule": "19,49 * * * *",
         "enabled": 0,
         "status": "disabled"
     })
@@ -2525,6 +2625,20 @@ def run_migrations():
         "enabled": 0,
         "status": "disabled"
     })
+
+    # Communications are handled exclusively by send_expiration_emails and
+    # send_comm_campaigns. Keep legacy data tables for migration/history, but
+    # remove obsolete executable task rows from existing installations.
+    cursor.execute(
+        """
+        DELETE FROM tasks
+        WHERE name IN (
+            'send_mail_campaigns',
+            'send_campaign_discord',
+            'send_expiration_discord'
+        )
+        """
+    )
 
 
 
@@ -2954,20 +3068,11 @@ def run_migrations():
                     )
                 )
 
-    # Tâche d'envoi des campagnes email
-    ensure_row(cursor, "tasks", "name = :name", {
-        "name": "send_mail_campaigns",
-        "description": "task_description.send_mail_campaigns",
-        "schedule": "*/15 * * * *",  # toutes les 15 minutes
-        "enabled": 0,
-        "status": "disabled"
-    })
-
     # Tâche check_mailing_status : active/désactive automatiquement les tâches Email/Discord
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "check_mailing_status",
         "description": "task_description.check_mailing_status",
-        "schedule": "0 * * * *",  # toutes les 5 minutes
+        "schedule": "9 * * * *",  # toutes les heures, hors minute de pointe
         "enabled": 1,
         "status": "idle"
     })
@@ -2995,7 +3100,7 @@ def run_migrations():
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "sync_jellyfin",
         "description": "task_description.sync_jellyfin",
-        "schedule": "0 */6 * * *",  # toutes les 6 heures (comme Plex)
+        "schedule": "17 */6 * * *",  # toutes les 6 heures, après Plex
         "enabled": 0,
         "status": "disabled"
     })
@@ -3012,7 +3117,7 @@ def run_migrations():
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "expired_subscription_manager",
         "description": "task_description.expired_subscription_manager",
-        "schedule": "0 */1 * * *",  # toutes les heures
+        "schedule": "13 * * * *",  # toutes les heures, hors minute de pointe
         "enabled": 0,               # pilotée par settings.expiry_mode
         "status": "disabled"
     })
@@ -3037,6 +3142,14 @@ def run_migrations():
         "name": "monitor_collect_sessions",
         "description": "task_description.monitor_collect_sessions",
         "schedule": None,
+        "enabled": 0,
+        "status": "disabled"
+    })
+
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "migration_worker",
+        "description": "task_description.migration_worker",
+        "schedule": "*/2 * * * *",
         "enabled": 0,
         "status": "disabled"
     })
@@ -3164,10 +3277,11 @@ def run_migrations():
     # ensure_row() only inserts missing tasks.
     # This migration updates existing installs when Vodum changes default schedules,
     # without overwriting admin-customized schedules.
-    TASK_DEFAULTS_VERSION = 2
+    TASK_DEFAULTS_VERSION = 3
 
     TASK_SCHEDULE_DEFAULTS = {
-        "sync_plex": "0 */6 * * *",
+        "sync_plex": "7 */6 * * *",
+        "sync_jellyfin": "17 */6 * * *",
         "check_update": "0 4 * * *",
         "auto_backup": "0 3 */3 * *",
         "cleanup_backups": "30 3 * * *",
@@ -3175,16 +3289,19 @@ def run_migrations():
         "db_integrity_check": "15 4 * * 0",
         "cleanup_artwork_cache": "30 4 * * 0",
         "warmup_artwork_cache": "*/30 * * * *",
-        "update_user_status": "0 * * * *",
-        "check_servers": "*/30 * * * *",
+        "cleanup_tautulli_imports": "45 4 * * 0",
+        "cleanup_data_consistency": "50 4 * * 0",
+        "update_user_status": "5 * * * *",
+        "check_servers": "7,37 * * * *",
         "cleanup_unfriended": "0 4 * * *",
         "monitor_enqueue_refresh": "*/1 * * * *",
         "media_jobs_worker": "*/1 * * * *",
         "send_pending_invite_reminders": "30 0 * * *",
-        "send_telemetry": "0 * * * *",
-        "send_expiration_emails": "0 * * * *",
-        "send_expiration_discord": "0 * * * *",
-        "send_campaign_discord": "*/10 * * * *",
+        "check_mailing_status": "9 * * * *",
+        "expired_subscription_manager": "13 * * * *",
+        "send_telemetry": "23 * * * *",
+        "send_expiration_emails": "27 * * * *",
+        "usage_risk_notifications": "19,49 * * * *",
         "send_comm_campaigns": "*/10 * * * *",
     }
 
@@ -3194,6 +3311,13 @@ def run_migrations():
         "check_servers": {"*/10 * * * *", "*/30 * * * *"},
         "send_pending_invite_reminders": {"0 30 * * *", "30 * * *", "30 0 * * *"},
         "send_telemetry": {"0 0 * * *", "0 * * * *"},
+        "sync_plex": {"0 */6 * * *"},
+        "sync_jellyfin": {"0 */6 * * *"},
+        "update_user_status": {"0 * * * *"},
+        "check_mailing_status": {"0 * * * *"},
+        "expired_subscription_manager": {"0 */1 * * *"},
+        "send_expiration_emails": {"0 * * * *"},
+        "usage_risk_notifications": {"*/30 * * * *"},
     }
 
     cursor.execute("SELECT COALESCE(task_defaults_version, 0) FROM settings WHERE id = 1")

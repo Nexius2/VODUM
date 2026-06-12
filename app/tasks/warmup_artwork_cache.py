@@ -7,20 +7,15 @@ warmup_artwork_cache.py
 """
 
 import os
-import time
-
-import requests
-
 from core.monitoring.artwork import _resolve_row_artwork
+from core.monitoring.artwork_cache import (
+    artwork_cache_key,
+    is_artwork_cache_fresh,
+    write_artwork_cache,
+)
 from core.plex_rate_limit import wait_for_plex_slot
 from core.http_security import server_http_session
 from logging_utils import get_logger, is_debug_mode_enabled
-from routes.monitoring_api import (
-    ARTWORK_DISK_CACHE_TTL_SECONDS,
-    _artwork_cache_key,
-    _artwork_cache_paths,
-    _write_artwork_cache,
-)
 from tasks_engine import task_logs
 
 log = get_logger("warmup_artwork_cache")
@@ -42,16 +37,6 @@ def _row_to_dict(row):
         return dict(row or {})
     except Exception:
         return row or {}
-
-
-def _is_cache_fresh(cache_key: str) -> bool:
-    img_path, meta_path = _artwork_cache_paths(cache_key)
-    if not img_path or not meta_path:
-        return False
-    if not os.path.exists(img_path) or not os.path.exists(meta_path):
-        return False
-    age = time.time() - os.path.getmtime(img_path)
-    return age <= ARTWORK_DISK_CACHE_TTL_SECONDS
 
 
 def _server_bases(server):
@@ -147,7 +132,7 @@ def _cache_key_for_ref(server_id, ref):
         path = (ref.get("path") or "").strip()
         if not path:
             return None
-        return _artwork_cache_key("plex", server_id, path)
+        return artwork_cache_key("plex", server_id, path)
 
     if provider == "jellyfin":
         item_id = ref.get("item_id")
@@ -157,7 +142,7 @@ def _cache_key_for_ref(server_id, ref):
         image_index = ref.get("image_index")
         width = str(ref.get("w") or "120")
         quality = str(ref.get("q") or "90")
-        return _artwork_cache_key("jellyfin", server_id, item_id, image_type, image_index, width, quality)
+        return artwork_cache_key("jellyfin", server_id, item_id, image_type, image_index, width, quality)
 
     return None
 
@@ -374,7 +359,7 @@ def _warmup_one(server, ref):
     if not cache_key:
         return "skipped"
 
-    if _is_cache_fresh(cache_key):
+    if is_artwork_cache_fresh(cache_key):
         return "hit"
 
     if provider == "plex":
@@ -388,8 +373,7 @@ def _warmup_one(server, ref):
         return "error"
 
     content, content_type = fetched
-    _write_artwork_cache(cache_key, content, content_type)
-    return "warmed"
+    return "warmed" if write_artwork_cache(cache_key, content, content_type) else "error"
 
 
 def run(task_id: int, db):

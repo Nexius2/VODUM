@@ -371,18 +371,24 @@ document.body.addEventListener("htmx:afterSwap", function (event) {
 
 (function taskActivityIndicator() {
   const box = document.getElementById("taskActivity");
-  const countEl = document.getElementById("taskActivityCount");
-  if (!box || !countEl) return;
+  const textEl = document.getElementById("taskActivityText");
+  if (!box || !textEl) return;
 
   async function refresh() {
     try {
       const r = await fetch("/api/tasks/activity", { cache: "no-store" });
       if (!r.ok) throw new Error("bad status");
       const data = await r.json();
-      const n = Number(data.active || 0);
+      const running = Number(data.running || 0);
+      const queued = Number(data.queued || 0);
+      const n = running + queued;
 
       if (n > 0) {
-        countEl.textContent = n;
+        const parts = [];
+        if (running > 0) parts.push(`${running} running`);
+        if (queued > 0) parts.push(`${queued} queued`);
+        const label = textEl.dataset.label || "Tasks";
+        textEl.textContent = `${label}: ${parts.join(" · ")}`;
         box.classList.remove("hidden");
       } else {
         box.classList.add("hidden");

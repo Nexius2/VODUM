@@ -13,10 +13,8 @@ Règles:
 - discord_ok = discord_enabled == 1 ET token bot dispo (via table bots ou legacy)
 
 Tasks pilotées:
-- send_expiration_emails : task "unifiée" (si email_ok OU discord_ok)
-- send_mail_campaigns   : email only
-- send_campaign_discord : discord only
-- send_expiration_discord : deprecated -> toujours disabled
+- send_expiration_emails : expirations et envois planifiés
+- send_comm_campaigns : campagnes email et Discord
 """
 
 from __future__ import annotations
@@ -163,10 +161,6 @@ def run(task_id: int, db):
             # Unified modern campaigns
             "send_comm_campaigns": 1 if (email_ok or discord_ok) else 0,
 
-            # Legacy / deprecated
-            "send_mail_campaigns": 0,
-            "send_campaign_discord": 0,
-            "send_expiration_discord": 0,
         }
 
         updated = []

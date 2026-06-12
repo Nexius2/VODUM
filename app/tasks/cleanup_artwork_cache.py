@@ -6,16 +6,16 @@ cleanup_artwork_cache.py
 - Supprime aussi les fichiers orphelins quand le binôme .img/.json n'existe plus.
 """
 
-import os
 from pathlib import Path
 from datetime import datetime, timedelta
+import os
 
+from core.monitoring.artwork_cache import ARTWORK_CACHE_DIR
 from tasks_engine import task_logs
 from logging_utils import get_logger, is_debug_mode_enabled
 
 log = get_logger("cleanup_artwork_cache")
 
-ARTWORK_DISK_CACHE_DIR = os.environ.get("VODUM_ARTWORK_CACHE_DIR", "/appdata/artwork_cache")
 ARTWORK_CACHE_RETENTION_DAYS = int(os.environ.get("VODUM_ARTWORK_CACHE_RETENTION_DAYS", "30"))
 
 
@@ -45,7 +45,7 @@ def run(task_id: int, db):
     task_logs(task_id, "info", "Task cleanup_artwork_cache started")
     log.info("=== CLEANUP ARTWORK CACHE : STARTING ===")
 
-    base = Path(ARTWORK_DISK_CACHE_DIR)
+    base = Path(ARTWORK_CACHE_DIR)
 
     if not base.exists():
         msg = f"Artwork cache directory not found: {base} (no action performed)."

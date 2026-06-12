@@ -28,6 +28,8 @@ from communications_engine import (
     select_comm_template_for_user,
 )
 from core.providers.plex_users import plex_invite_and_share
+from core.providers.plex_invitation_state import plex_invite_state_payload
+from core.media_jobs import insert_jellyfin_media_job, insert_plex_media_job
 from tasks_engine import auto_enable_stream_enforcer
 from secret_store import (
     decrypt_communication_settings,
@@ -794,11 +796,15 @@ def api_users_create():
                         if not server_username and st2.get("username"):
                             server_username = st2.get("username")
 
-                details_json["plex_invite_state"] = {
-                    "is_friend": bool(invite_state.get("is_friend")),
-                    "is_pending": bool(invite_state.get("is_pending")),
-                    "primary_server_id": int(primary_sid),
-                }
+                resolved_invite_state = (
+                    "friend" if invite_state.get("is_friend")
+                    else "pending" if invite_state.get("is_pending")
+                    else "unknown"
+                )
+                details_json["plex_invite_state"] = plex_invite_state_payload(
+                    resolved_invite_state,
+                    primary_server_id=int(primary_sid),
+                )
 
                 details_json["plex_linked_servers"] = [{"id": int(s["id"]), "name": s.get("name")} for s in group_servers]
 
@@ -862,12 +868,13 @@ def api_users_create():
                     [(media_user_id, lid) for lid in library_ids],
                 )
 
-            db.execute(
-                """
-                INSERT INTO media_jobs(provider, action, vodum_user_id, server_id, library_id, payload_json)
-                VALUES ('jellyfin','grant', ?, ?, NULL, ?)
-                """,
-                (vodum_user_id, server_id, json.dumps({"source": "create_user"})),
+            insert_jellyfin_media_job(
+                db,
+                action="sync",
+                vodum_user_id=vodum_user_id,
+                server_id=server_id,
+                dedupe_key=f"jellyfin:sync:server={server_id}:user={vodum_user_id}:create_user",
+                payload={"source": "create_user"},
             )
 
             created_accounts.append({
@@ -1017,14 +1024,14 @@ def api_users_create():
                     )
 
                     if enqueue_jobs:
-                        for lid in selected_lib_ids:
-                            db.execute(
-                                """
-                                INSERT INTO media_jobs(provider, action, vodum_user_id, server_id, library_id, payload_json)
-                                VALUES ('plex','grant', ?, ?, ?, ?)
-                                """,
-                                (vodum_user_id, sid2, lid, json.dumps({"source": "create_user"})),
-                            )
+                        insert_plex_media_job(
+                            db,
+                            action="sync",
+                            vodum_user_id=vodum_user_id,
+                            server_id=sid2,
+                            dedupe_key=f"plex:sync:server={sid2}:user={vodum_user_id}:create_user",
+                            payload={"source": "create_user", "library_ids": selected_lib_ids},
+                        )
 
                     created_accounts.append({
                         "server_id": sid2,

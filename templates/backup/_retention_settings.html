@@ -14,6 +14,21 @@
           <input type="number" min="1" name="backup_retention_days"
                  value="{{ settings.backup_retention_days }}"
                  class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs w-full">
+          <div class="text-[11px] text-slate-500 mt-1">
+            {{ t("backup_retention_desc") }}
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">
+            {{ t("backup_retention_count") }}
+          </label>
+          <input type="number" min="1" name="backup_retention_count"
+                 value="{{ settings.backup_retention_count or 10 }}"
+                 class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs w-full">
+          <div class="text-[11px] text-slate-500 mt-1">
+            {{ t("backup_retention_count_desc") }}
+          </div>
         </div>
 
         <div>
