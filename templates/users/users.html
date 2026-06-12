@@ -201,6 +201,15 @@
 				</a>
 			</th>
 
+			<th class="px-4 py-3 text-left sortable {% if sort == 'subscription' %}sorted sorted-{{ order }}{% endif %}">
+				<a href="{{ users_sort_url('subscription') }}" class="flex items-center gap-1">
+					<span>{{ t("subscription") }}</span>
+					<svg class="arrow" viewBox="0 0 24 24">
+						<path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/>
+					</svg>
+				</a>
+			</th>
+
 			<th class="px-4 py-3 text-left sortable {% if sort == 'status' %}sorted sorted-{{ order }}{% endif %}">
 				<a href="{{ users_sort_url('status') }}" class="flex items-center gap-1">
 					<span>{{ t("status") }}</span>
@@ -250,6 +259,14 @@
 			  {{ u.email or t("not_available") }}
 			</td>
 
+			<td class="px-4 py-3 text-slate-300"
+				data-sort-value="{{ u.subscription_role_label or u.subscription_name or '' }}">
+			  {% if u.subscription_role_label %}
+				<span class="text-amber-300">{{ u.subscription_role_label }}</span>
+			  {% else %}
+				{{ u.subscription_name or t("not_available") }}
+			  {% endif %}
+			</td>
 
             <td class="px-4 py-3">
                 {% set colors = {
@@ -278,13 +295,13 @@
 
         </tr>
 
-        {% else %}
-        <tr>
-            <td colspan="6" class="px-4 py-6 text-center text-slate-500">
-                {{ t("no_user_found") }}
-            </td>
-        </tr>
-        {% endfor %}
+		{% else %}
+		<tr>
+			<td colspan="7" class="px-4 py-6 text-center text-slate-500">
+				{{ t("no_user_found") }}
+			</td>
+		</tr>
+		{% endfor %}
     </tbody>
 </table>
 </div>

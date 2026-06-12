@@ -191,6 +191,7 @@ def register(app):
                 "username": "u.username",
                 "email": "u.email",
                 "status": "u.status",
+                "subscription": "subscription_sort_label",
                 "expiration_date": "u.expiration_date",
                 "servers_count": "servers_count",
                 "libraries_count": "libraries_count",
@@ -200,12 +201,48 @@ def register(app):
             query = """
                 SELECT
                     u.*,
+                    st.name AS subscription_name,
+                    CASE
+                        WHEN MAX(CASE WHEN LOWER(COALESCE(s.type, '')) = 'plex'
+                                       AND LOWER(COALESCE(mu.role, '')) = 'owner'
+                                      THEN 1 ELSE 0 END) = 1
+                            THEN 'Owner'
+                        WHEN MAX(CASE WHEN LOWER(COALESCE(s.type, '')) = 'jellyfin'
+                                       AND (
+                                            LOWER(COALESCE(mu.role, '')) = 'admin'
+                                            OR COALESCE(mu.raw_json, '') LIKE '%"IsAdministrator":true%'
+                                            OR COALESCE(mu.raw_json, '') LIKE '%"IsAdministrator": true%'
+                                       )
+                                      THEN 1 ELSE 0 END) = 1
+                            THEN 'Admin'
+                        ELSE NULL
+                    END AS subscription_role_label,
+                    COALESCE(
+                        CASE
+                            WHEN MAX(CASE WHEN LOWER(COALESCE(s.type, '')) = 'plex'
+                                           AND LOWER(COALESCE(mu.role, '')) = 'owner'
+                                          THEN 1 ELSE 0 END) = 1
+                                THEN 'Owner'
+                            WHEN MAX(CASE WHEN LOWER(COALESCE(s.type, '')) = 'jellyfin'
+                                           AND (
+                                                LOWER(COALESCE(mu.role, '')) = 'admin'
+                                                OR COALESCE(mu.raw_json, '') LIKE '%"IsAdministrator":true%'
+                                                OR COALESCE(mu.raw_json, '') LIKE '%"IsAdministrator": true%'
+                                           )
+                                          THEN 1 ELSE 0 END) = 1
+                                THEN 'Admin'
+                            ELSE NULL
+                        END,
+                        st.name
+                    ) AS subscription_sort_label,
                     COUNT(DISTINCT mu.server_id) AS servers_count,
                     COUNT(DISTINCT mul.library_id) AS libraries_count
-                FROM vodum_users u
-                LEFT JOIN media_users mu ON mu.vodum_user_id = u.id
-                LEFT JOIN media_user_libraries mul ON mul.media_user_id = mu.id
-            """
+                                    FROM vodum_users u
+                                    LEFT JOIN subscription_templates st ON st.id = u.subscription_template_id
+                                    LEFT JOIN media_users mu ON mu.vodum_user_id = u.id
+                                    LEFT JOIN servers s ON s.id = mu.server_id
+                                    LEFT JOIN media_user_libraries mul ON mul.media_user_id = mu.id
+                                """
 
             conditions = []
             params = []
