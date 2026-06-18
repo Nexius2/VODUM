@@ -200,7 +200,7 @@ DEFAULT_COMM_TEMPLATES = [
         "days_before": None,
         "days_after": 0,
         "subject": "Playback blocked",
-        "body": "Hello {firstusername},\n\nYour playback has been stopped by VODUM.\n\nReason: {policy_reason}\nMedia: {media_title}\nServer: {server_name}\nDevice: {device_name}\nClient: {client_name}\nTime: {blocked_at}\n\nIf you think this is a mistake, please contact the administrator.\n\nBest regards,\n{brand_name}\n",
+        "body": "Hello {firstusername},\n\nYour playback has been stopped by VODUM.\n\nReason: {policy_reason}\nStream killed: {stream_killed}\nRule usage: {policy_observed} / {policy_limit}\nOther active streams ({other_streams_count}):\n{other_streams}\nTime: {blocked_at}\n\nIf you think this is a mistake, please contact the administrator.\n\nBest regards,\n{brand_name}\n",
     },
     {
         "key": "default_expiration_date_change",
@@ -1232,6 +1232,33 @@ def register(app):
         total_rows = int(total_row["total"]) if total_row and total_row["total"] is not None else 0
         total_pages = max((total_rows + per_page - 1) // per_page, 1)
 
+        summary_row = db.query_one(
+            """
+            SELECT
+              SUM(CASE WHEN channel_used='email' AND status='sent' THEN 1 ELSE 0 END) AS email_sent,
+              SUM(CASE WHEN channel_used='email' AND status='failed' THEN 1 ELSE 0 END) AS email_failed,
+              SUM(CASE WHEN channel_used='discord' AND status='sent' THEN 1 ELSE 0 END) AS discord_sent,
+              SUM(CASE WHEN channel_used='discord' AND status='failed' THEN 1 ELSE 0 END) AS discord_failed,
+              SUM(CASE WHEN status='sent' AND datetime(sent_at) >= datetime('now', '-24 hours') THEN 1 ELSE 0 END) AS sent_24h,
+              SUM(CASE WHEN status='failed' AND datetime(sent_at) >= datetime('now', '-24 hours') THEN 1 ELSE 0 END) AS failed_24h
+            FROM comm_history
+            """
+        ) or {}
+        communication_summary = dict(summary_row)
+        queue_row = db.query_one(
+            """
+            SELECT
+              SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending,
+              SUM(CASE WHEN status='error' THEN 1 ELSE 0 END) AS errors
+            FROM comm_scheduled
+            """
+        ) or {}
+        communication_summary.update(dict(queue_row))
+        communication_summary = {
+            key: int(value or 0)
+            for key, value in communication_summary.items()
+        }
+
         if page > total_pages:
             page = total_pages
 
@@ -1276,6 +1303,7 @@ def register(app):
             total_pages=total_pages,
             sort=sort,
             order=order,
+            communication_summary=communication_summary,
         )
 
 

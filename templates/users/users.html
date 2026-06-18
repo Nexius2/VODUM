@@ -286,9 +286,13 @@
 
             </td>
 
-            <td class="px-4 py-3 text-slate-300"
-				data-sort-value="{{ u.expiration_date or '' }}">
-			  {{ u.expiration_date or t("not_available") }}
+			<td class="px-4 py-3 text-slate-300"
+				data-sort-value="{{ u.subscription_role_label or u.expiration_date or '' }}">
+			  {% if u.subscription_role_label %}
+				<span class="text-amber-300">{{ u.subscription_role_label }}</span>
+			  {% else %}
+				{{ u.expiration_date or t("not_available") }}
+			  {% endif %}
 			</td>
             <td class="px-4 py-3 text-slate-300">{{ u.servers_count }}</td>
             <td class="px-4 py-3 text-slate-300">{{ u.libraries_count }}</td>

@@ -4,12 +4,19 @@ from __future__ import annotations
 
 import sqlite3
 import sys
+import os
+import tempfile
 import types
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "app"))
+
+# Keep import-time logging fully isolated from the host filesystem.
+_LOG_TMP = tempfile.TemporaryDirectory()
+os.environ["VODUM_LOG_DIR"] = _LOG_TMP.name
+os.environ.setdefault("DATABASE_PATH", ":memory:")
 
 jellyfin_users = types.ModuleType("core.providers.jellyfin_users")
 jellyfin_users.jellyfin_set_password = lambda *_args, **_kwargs: None

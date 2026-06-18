@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 
 from core.providers.registry import get_provider
+from core.policy_transition_grace import should_defer_stream_violation
 from logging_utils import get_logger, is_debug_mode_enabled
 from communications_engine import schedule_template_notification, enqueue_named_task
 
@@ -1036,7 +1037,26 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
             if allow_local_ip:
                 counted_sessions = [s for s in user_sessions if not _is_local_ip((s.get('ip') or '').strip())]
 
+            defer_probable_switch = should_defer_stream_violation(
+                policy_id=int(policy.get("id") or 0),
+                user_key=user_key,
+                sessions=counted_sessions,
+                limit=eff_max,
+                current_count=len(counted_sessions),
+            )
+
             if len(counted_sessions) <= eff_max:
+                continue
+
+            if defer_probable_switch:
+                logger.info(
+                    "[max_streams_grace] probable device switch | policy=%s | user=%s | streams=%s | max=%s | grace=%ss",
+                    policy.get("id"),
+                    user_key,
+                    len(counted_sessions),
+                    eff_max,
+                    HOUSEHOLD_MEDIA_GRACE_SECONDS,
+                )
                 continue
 
             # ✅ On choisit la session à tuer globalement (tous serveurs confondus)
@@ -1441,6 +1461,85 @@ def _policy_display_name(policy: dict) -> str:
         return "Policy"
 
 
+def _notification_policy_context(policy: dict, target: dict, related_sessions: list[dict] | None) -> dict:
+    try:
+        rule = json.loads(policy.get("rule_value_json") or "{}")
+    except Exception:
+        rule = {}
+    if not isinstance(rule, dict):
+        rule = {}
+
+    target_key = _normalize_user_key(target)
+    related = [
+        session
+        for session in (related_sessions or [])
+        if _normalize_user_key(session) == target_key
+    ]
+    if not any(
+        str(session.get("session_key") or "") == str(target.get("session_key") or "")
+        for session in related
+    ):
+        related.append(target)
+
+    target_session_key = str(target.get("session_key") or "")
+    others = [
+        session
+        for session in related
+        if str(session.get("session_key") or "") != target_session_key
+    ]
+
+    def summary(session: dict) -> str:
+        parts = [_media_title_from_session(session) or "Unknown media"]
+        device = session.get("device") or session.get("client_product") or session.get("client_name")
+        if device:
+            parts.append(str(device))
+        if session.get("ip"):
+            parts.append(str(session["ip"]))
+        if session.get("server_name"):
+            parts.append(str(session["server_name"]))
+        return " - ".join(parts)
+
+    rule_type = str(policy.get("rule_type") or "")
+    try:
+        limit = int(rule.get("max") or 0)
+    except (TypeError, ValueError):
+        limit = 0
+    unique_ips = {
+        str(session.get("ip") or "").strip()
+        for session in related
+        if str(session.get("ip") or "").strip()
+    }
+    if rule_type == "max_ips_per_user":
+        observed = len(unique_ips)
+    elif rule_type == "max_streams_per_ip":
+        target_ip = str(target.get("ip") or "").strip()
+        observed = sum(1 for session in related if str(session.get("ip") or "").strip() == target_ip)
+    elif rule_type in {"max_streams_per_server", "max_transcodes_per_server"}:
+        target_server_id = target.get("server_id")
+        server_sessions = [session for session in related if session.get("server_id") == target_server_id]
+        observed = (
+            sum(int(session.get("is_transcode") or 0) for session in server_sessions)
+            if rule_type == "max_transcodes_per_server"
+            else len(server_sessions)
+        )
+    else:
+        observed = len(related)
+
+    return {
+        "policy_rule_type": rule_type,
+        "policy_limit": limit,
+        "policy_observed": observed,
+        "maximum_streams": limit if "streams" in rule_type else "",
+        "maximum_ips": limit if "ips" in rule_type else "",
+        "stream_count": len(related),
+        "ip_count": len(unique_ips),
+        "stream_killed": summary(target),
+        "other_streams_count": len(others),
+        "other_streams": "\n".join(f"- {summary(session)}" for session in others) or "None",
+        "all_streams": "\n".join(f"- {summary(session)}" for session in related),
+    }
+
+
 def _queue_stream_blocked_notification(
     *,
     task_id: int,
@@ -1449,6 +1548,7 @@ def _queue_stream_blocked_notification(
     target: dict,
     reason: str,
     kill_reason_for_client: str,
+    related_sessions: list[dict] | None = None,
 ) -> None:
     vodum_user_id = target.get("vodum_user_id")
     if vodum_user_id is None:
@@ -1480,6 +1580,7 @@ def _queue_stream_blocked_notification(
     media_title = _media_title_from_session(target)
     blocked_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     policy_reason = kill_reason_for_client or reason or "Policy violation"
+    policy_context = _notification_policy_context(policy, target, related_sessions)
 
     payload = {
         "trigger_event": "stream_blocked",
@@ -1495,6 +1596,7 @@ def _queue_stream_blocked_notification(
         "session_key": target.get("session_key") or "",
         "server_id": server_id,
         "provider": provider,
+        **policy_context,
     }
 
     dedupe_key = (
@@ -1848,6 +1950,7 @@ def run(task_id: int, db):
                         target=target,
                         reason=reason,
                         kill_reason_for_client=kill_reason_for_client,
+                        related_sessions=kill_live_sessions,
                     )
 
                 _log_enforcement(
@@ -1984,6 +2087,7 @@ def run(task_id: int, db):
                     target=target,
                     reason=reason,
                     kill_reason_for_client=kill_reason_for_client,
+                    related_sessions=kill_live_sessions,
                 )
 
             _log_enforcement(

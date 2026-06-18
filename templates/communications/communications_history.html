@@ -13,6 +13,29 @@
 {% set sort = sort or 'sent_at' %}
 {% set order = order or 'desc' %}
 
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-4">
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+    <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("comm_summary_email") }}</div>
+    <div class="mt-2 text-2xl font-semibold text-emerald-300">{{ communication_summary.email_sent }}</div>
+    <div class="mt-1 text-xs text-slate-400">{{ t("sent") }} · <span class="text-rose-300">{{ communication_summary.email_failed }} {{ t("failed") }}</span></div>
+  </div>
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+    <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("comm_summary_discord") }}</div>
+    <div class="mt-2 text-2xl font-semibold text-indigo-300">{{ communication_summary.discord_sent }}</div>
+    <div class="mt-1 text-xs text-slate-400">{{ t("sent") }} · <span class="text-rose-300">{{ communication_summary.discord_failed }} {{ t("failed") }}</span></div>
+  </div>
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+    <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("comm_summary_last_24h") }}</div>
+    <div class="mt-2 text-2xl font-semibold text-slate-100">{{ communication_summary.sent_24h }}</div>
+    <div class="mt-1 text-xs text-slate-400">{{ t("sent") }} · <span class="text-rose-300">{{ communication_summary.failed_24h }} {{ t("failed") }}</span></div>
+  </div>
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+    <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("comm_summary_queue") }}</div>
+    <div class="mt-2 text-2xl font-semibold text-amber-300">{{ communication_summary.pending }}</div>
+    <div class="mt-1 text-xs text-slate-400">{{ t("pending") }} · <span class="text-rose-300">{{ communication_summary.errors }} {{ t("in_error") }}</span></div>
+  </div>
+</div>
+
 {% macro sort_link(label, key) -%}
   {% set is_active = (sort == key) %}
   <a

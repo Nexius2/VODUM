@@ -324,36 +324,9 @@ def register(app):
 
     @app.route("/settings/<section>", methods=["GET"])
     def settings_section_page(section: str):
-        db = get_db()
-
-        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
-        if not settings:
-            flash("Settings row missing in DB", "error")
-            return redirect("/")
-
-        settings = dict(settings)
-
-        # Map section -> template
-        template_map = {
-            "general": "settings/settings_general.html",
-            "subscription": "settings/settings_subscription.html",
-            "notifications": "settings/settings_notifications.html",
-            "system": "settings/settings_system.html",
-        }
-
-        tpl = template_map.get(section)
-        if not tpl:
-            return redirect(url_for("settings_page"))
-
-        return render_template(
-            tpl,
-            settings=settings,
-            active_page="settings",
-            current_lang=session.get("lang", settings.get("default_language")),
-            available_languages=get_available_languages(),
-            app_version=g.get("app_version", "dev"),
-            encryption_key_status=encryption_key_status(),
-        )
+        # Legacy section URLs predate the unified settings page. Keeping them as
+        # redirects avoids rendering templates that no longer exist.
+        return redirect(url_for("settings_page"))
 
 
     # -----------------------------

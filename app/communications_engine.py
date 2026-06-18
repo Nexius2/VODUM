@@ -12,7 +12,7 @@ from notifications_utils import effective_notifications_order, is_email_ready
 from discord_utils import enrich_discord_settings, is_discord_ready, send_discord_dm, DiscordSendError
 from email_sender import send_email
 from tasks_engine import enqueue_task
-
+from mailing_utils import build_user_context, render_mail
 log = get_logger("communications_engine")
 
 
@@ -790,7 +790,28 @@ def send_to_user(
     """
     s = _as_dict(settings)
     u = _as_dict(user)
+    render_input = dict(u)
 
+    if db is not None and render_input.get("id") is not None:
+        try:
+            sub_ctx = get_user_subscription_context(db, int(render_input["id"]))
+            render_input.update({
+                k: v
+                for k, v in sub_ctx.items()
+                if k not in render_input or render_input.get(k) in (None, "")
+            })
+        except Exception:
+            pass
+
+    render_input["brand_name"] = (
+        s.get("brand_name")
+        or s.get("app_name")
+        or "VODUM"
+    )
+
+    render_context = build_user_context(render_input)
+    subject = render_mail(subject or "", render_context)
+    body = render_mail(body or "", render_context)
     # ----------------------------------------------------------
     # Skip users who never used the account
     # ----------------------------------------------------------

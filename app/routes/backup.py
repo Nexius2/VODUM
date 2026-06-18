@@ -9,6 +9,7 @@ from logging_utils import get_logger
 from tasks_engine import enable_and_run_task_by_name
 from core.i18n import get_translator
 from core.backup import list_backups
+from core.app_paths import imports_dir as get_imports_dir
 
 from web.helpers import get_db, get_backup_cfg
 
@@ -208,7 +209,7 @@ def register(app):
         # ───────────────────────────────
         elif action == "restore":
             selected = request.form.get("selected_backup")
-            imports_dir = Path("/appdata/imports")
+            imports_dir = get_imports_dir()
             imports_dir.mkdir(parents=True, exist_ok=True)
             request_path_file = imports_dir / "restore_request_path.txt"
 
@@ -311,7 +312,7 @@ def register(app):
                 if not file or file.filename == "":
                     flash("No file provided.", "error")
                 else:
-                    imports_dir = Path("/appdata/imports")
+                    imports_dir = get_imports_dir()
                     imports_dir.mkdir(parents=True, exist_ok=True)
 
                     ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")

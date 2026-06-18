@@ -5,13 +5,15 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from core.app_paths import imports_dir as get_imports_dir
+
 from core.tautulli_cleanup import cleanup_tautulli_imports
 from logging_utils import get_logger
 from tasks_engine import task_logs
 
 
 log = get_logger("cleanup_tautulli_imports")
-IMPORTS_DIR = Path(os.environ.get("VODUM_IMPORTS_DIR", "/appdata/imports"))
+IMPORTS_DIR = get_imports_dir()
 RETENTION_DAYS = int(os.environ.get("VODUM_TAUTULLI_IMPORT_RETENTION_DAYS", "30"))
 def run(task_id: int, db):
     task_logs(task_id, "info", "Task cleanup_tautulli_imports started")

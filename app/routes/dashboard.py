@@ -4,6 +4,7 @@ from core.usage_risk import build_usage_risk_report
 from core.dashboard_servers import dashboard_server_preview
 from core.dashboard_usage_risk import build_usage_risk_trend
 from core.aggregate_cache import cached_aggregate
+from core.dashboard_now_playing import load_dashboard_now_playing
 from collections import Counter
 from datetime import datetime, timedelta
 from flask import render_template, redirect, url_for, make_response
@@ -404,49 +405,11 @@ def register(app):
 
         latest_logs = latest_logs[:10]
 
-        live_window_seconds = 300
-        live_window_sql = f"-{live_window_seconds} seconds"
-
-        totals = db.query_one(
-            """
-            SELECT
-              COUNT(*) AS total_live,
-                SUM(
-                    CASE
-                      WHEN is_transcode = 1
-                      THEN 1
-                      ELSE 0
-                    END
-                ) AS total_transcode
-            FROM media_sessions
-            WHERE datetime(last_seen_at) >= datetime('now', ?)
-            """,
-            (live_window_sql,),
-        )
-
-        totals = dict(totals or {})
-
-        total_live = int(totals.get("total_live") or 0)
-        total_transcode = int(totals.get("total_transcode") or 0)
-
-        sessions = db.query(
-            """
-            SELECT
-              ms.*,
-              s.name AS server_name,
-              s.type AS provider,
-              mu.username AS username
-            FROM media_sessions ms
-            JOIN servers s ON s.id = ms.server_id
-            LEFT JOIN media_users mu ON mu.id = ms.media_user_id
-            WHERE datetime(ms.last_seen_at) >= datetime('now', ?)
-            ORDER BY datetime(ms.last_seen_at) DESC
-            LIMIT 6
-            """,
-            (live_window_sql,),
-        )
-
-        sessions = [dict(r) for r in sessions]
+        now_playing = load_dashboard_now_playing(db)
+        sessions = now_playing["sessions"]
+        total_live = now_playing["total_live"]
+        total_transcode = now_playing["total_transcode"]
+        now_playing_stale = now_playing["stale_fallback"]
         sessions = [enrich_live_session_artwork(s, db) for s in sessions]
 
 
@@ -476,6 +439,7 @@ def register(app):
             sessions=sessions,
             total_live=total_live,
             total_transcode=total_transcode,
+            now_playing_stale=now_playing_stale,
             idle_card=idle_card,
             active_page="dashboard",
         ))
@@ -494,61 +458,11 @@ def register(app):
     def dashboard_now_playing_partial():
         db = get_db()
 
-        live_window_seconds = 300
-        live_window_sql = f"-{live_window_seconds} seconds"
-
-        # Dashboard preview only: last 6 sessions
-        totals = db.query_one(
-            """
-            SELECT
-              COUNT(*) AS total_live,
-              COALESCE(SUM(CASE WHEN ms.is_transcode = 1 THEN 1 ELSE 0 END), 0) AS total_transcode
-            FROM media_sessions ms
-            WHERE datetime(ms.last_seen_at) >= datetime('now', ?)
-            """,
-            (live_window_sql,),
-        )
-
-        totals = dict(totals) if totals else {}
-
-        total_live = int(totals.get("total_live") or 0)
-        total_transcode = int(totals.get("total_transcode") or 0)
-
-        sessions = db.query(
-            """
-            SELECT
-              ms.id,
-              ms.server_id,
-              s.name AS server_name,
-              s.type AS provider,
-
-              ms.media_type,
-              ms.title,
-              ms.grandparent_title,
-              ms.parent_title,
-
-              ms.state,
-              ms.client_name,
-              mu.username AS username,
-              ms.is_transcode,
-              ms.last_seen_at,
-
-              ms.raw_json,
-              ms.poster_ref_json,
-              ms.backdrop_ref_json,
-              ms.media_key
-            FROM media_sessions ms
-            JOIN servers s ON s.id = ms.server_id
-            LEFT JOIN media_users mu ON mu.id = ms.media_user_id
-            WHERE datetime(ms.last_seen_at) >= datetime('now', ?)
-            ORDER BY datetime(ms.last_seen_at) DESC
-            LIMIT 6
-            """,
-            (live_window_sql,),
-        )
-
-        sessions = [dict(r) for r in sessions]
+        now_playing = load_dashboard_now_playing(db)
+        sessions = now_playing["sessions"]
         sessions = [enrich_live_session_artwork(s, db) for s in sessions]
+        total_live = now_playing["total_live"]
+        total_transcode = now_playing["total_transcode"]
 
         idle_card = None
         if total_live <= 0:
@@ -560,6 +474,7 @@ def register(app):
             sessions=sessions,
             total_live=total_live,
             total_transcode=total_transcode,
+            now_playing_stale=now_playing["stale_fallback"],
             idle_card=idle_card,
         ))
 

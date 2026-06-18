@@ -323,6 +323,7 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
                     "expiration_change",
                     "pending_invite_reminder",
                     "stream_blocked",
+                    "usage_risk_upgrade_suggestion",
                 )
             ),
         )
@@ -434,6 +435,19 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
                             ensure_ascii=False,
                         ),
                     ),
+                )
+
+            if trigger_event == "usage_risk_upgrade_suggestion" and payload.get("recommendation_id"):
+                cooldown_days = max(1, int(payload.get("suggestion_cooldown_days") or 30))
+                db.execute(
+                    """
+                    UPDATE usage_risk_recommendations
+                    SET status='notified',
+                        last_notification_at=CURRENT_TIMESTAMP,
+                        cooldown_until=datetime('now', ?)
+                    WHERE id=?
+                    """,
+                    (f"+{cooldown_days} days", int(payload["recommendation_id"])),
                 )
 
             sent += 1

@@ -30,8 +30,6 @@ documentes dans `changelog.md`.
 - [~] Reduire les responsabilites de `tasks_engine.py` (file d'attente
   dedupliquee et execution strictement sequentielle; decoupage structurel
   restant).
-- [ ] Rendre la sequence de boot plus lisible et centralisee.
-
 ### Exceptions GET autorisees
 
 - `GET /api/monitoring/poster/<server_id>` : proxy authentifie de posters et
@@ -45,7 +43,6 @@ documentes dans `changelog.md`.
 ## Communications
 
 - [~] Completer les retries et les logs d'erreur.
-- [ ] Ajouter un resume global email/Discord.
 
 ## Utilisateurs et acces
 
@@ -61,11 +58,6 @@ documentes dans `changelog.md`.
 - [ ] Ajouter SMTP OAuth.
 - [ ] Definir puis ajouter un mode global `--summary-only` aux taches CLI
   concernees.
-  [ ] reorganiser le menu, du plus utile au moins utile. (tasks devrait etre a coté des logs)
-  [ ] pour les owner et admin de plex / jellyfin, dans le champs date d'expiration, indiquer juste Owner ou admin, pas besoin d'ecrire le nom du serveur. sinon, c'est pas lisible en cas de nombreux serveurs.
-  [x] owner et admin ne devrait pas avoir d'abonnement, il faut les cacher comme pour la date d'expiration. c'est visible dans user detail et dans le tableau user. il faudrait indiquer owner ou admin seulement a la place
-  [ ] quand le user est owner plex, on ne devrait pas avoir le bouton supprimer vu que c'est techniquement impossible. 
-  [ ] quand le user est admin jellyfin, on ne devrait avoir le bouton grisé vu qu'il est admin, et avec un hover "remove admin to delete". 
 
 ## Refactor
 

@@ -23,12 +23,13 @@ Chaîne réelle de démarrage VODUM
 3. app/app.py -> create_app()
    - configure Flask, templates, static, i18n, csrf, trust proxy
    - enregistre blueprints et routes
-   - exécute ensuite les boot fixes via _run_startup_boot_fixes(app)
+   - exécute ensuite la séquence centralisée via _run_application_startup(app)
 
-4. _run_startup_boot_fixes(app)
+4. _run_application_startup(app)
    - startup_admin_recover_if_requested(app)
    - _reset_maintenance_on_startup(app)
-   - run_repair_if_needed(...)
+   - _run_one_shot_repair(app)
+   - _start_plex_websocket_engine(app) (non bloquant)
 """
 
 app = create_app()

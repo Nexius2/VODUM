@@ -1,6 +1,14 @@
 import sqlite3
 import os
+import sys
 from secret_store import encrypt_communication_secrets, encrypt_server_secrets
+
+
+# Bootstrap messages contain Unicode symbols. Some host consoles (notably
+# Windows cp1252) cannot encode them and used to abort before opening the DB.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(errors="replace")
 
 DB_PATH = os.environ.get("DATABASE_PATH", "/appdata/database.db")
 
@@ -1314,10 +1322,10 @@ def run_migrations():
         "Hello {firstusername},\n\n"
         "Your playback has been stopped by VODUM.\n\n"
         "Reason: {policy_reason}\n"
-        "Media: {media_title}\n"
-        "Server: {server_name}\n"
-        "Device: {device_name}\n"
-        "Client: {client_name}\n"
+        "Stream killed: {stream_killed}\n"
+        "Rule usage: {policy_observed} / {policy_limit}\n"
+        "Other active streams ({other_streams_count}):\n"
+        "{other_streams}\n"
         "Time: {blocked_at}\n\n"
         "If you think this is a mistake, please contact the administrator.\n\n"
         "Best regards,\n"

@@ -63,11 +63,14 @@
 		</button>
 		{% endif %}
 
+		{% if not expiration_lock or expiration_lock.role_label != 'Owner' %}
 		<button type="button"
 				id="openDeleteUserModalBtn"
-				class="px-4 py-2 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-sm transition-colors">
+				{% if expiration_lock and expiration_lock.role_label == 'Admin' %}disabled title="{{ t('remove_admin_to_delete') }}"{% endif %}
+				class="px-4 py-2 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-rose-700">
 		  {{ t("delete_user") if t("delete_user") != "delete_user" else "Delete user" }}
 		</button>
+		{% endif %}
 
 		<button type="submit"
 				class="px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-sm transition-colors">
@@ -491,7 +494,7 @@
 
 		  {% if expiration_lock and expiration_lock.locked %}
 			<input type="text"
-				   value="{{ expiration_lock.label }}"
+				   value="{{ expiration_lock.role_label or expiration_lock.label }}"
 				   readonly
 				   class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60 cursor-not-allowed text-amber-300">
 
@@ -1328,6 +1331,5 @@
 
 })();
 </script>
-
 
 
