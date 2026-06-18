@@ -419,6 +419,9 @@ def register(app):
         policy_scope_breakdown = {}
         policy_top_users_30d = []
         policy_recent_enforcements = []
+        policy_enforcement_page = 1
+        policy_enforcement_total_pages = 1
+        policy_enforcement_total = 0
         policy_grouped_enforcements = []
         policy_tracked_state = {}
 
@@ -890,6 +893,19 @@ ranked AS (
             }
 
         elif tab == "policies":
+            policy_enforcement_page = max(request.args.get("enforcement_page", 1, type=int), 1)
+            policy_enforcement_per_page = 12
+            policy_enforcement_count = db.query_one(
+                "SELECT COUNT(*) AS total FROM stream_enforcements"
+            ) or {"total": 0}
+            policy_enforcement_total = int(policy_enforcement_count["total"] or 0)
+            policy_enforcement_total_pages = max(
+                (policy_enforcement_total + policy_enforcement_per_page - 1) // policy_enforcement_per_page,
+                1,
+            )
+            policy_enforcement_page = min(policy_enforcement_page, policy_enforcement_total_pages)
+            policy_enforcement_offset = (policy_enforcement_page - 1) * policy_enforcement_per_page
+
             policies = db.query("""
                 SELECT
                   p.*,
@@ -1140,8 +1156,8 @@ ranked AS (
                   ON mu_acc.server_id = e.server_id
                  AND mu_acc.external_user_id = e.external_user_id
                 ORDER BY e.created_at DESC
-                LIMIT 12
-            """) or []
+                LIMIT ? OFFSET ?
+            """, (policy_enforcement_per_page, policy_enforcement_offset)) or []
             policy_recent_enforcements = [dict(r) for r in policy_recent_enforcements]
             policy_grouped_raw = db.query("""
                 SELECT
@@ -2123,6 +2139,9 @@ ranked AS (
                 policy_scope_breakdown=policy_scope_breakdown,
                 policy_top_users_30d=policy_top_users_30d,
                 policy_recent_enforcements=policy_recent_enforcements,
+                policy_enforcement_page=policy_enforcement_page,
+                policy_enforcement_total_pages=policy_enforcement_total_pages,
+                policy_enforcement_total=policy_enforcement_total,
                 policy_grouped_enforcements=policy_grouped_enforcements,
                 policy_tracked_state=policy_tracked_state,
                 usage_risk_report=usage_risk_report,
@@ -2182,6 +2201,9 @@ ranked AS (
             policy_scope_breakdown=policy_scope_breakdown,
             policy_top_users_30d=policy_top_users_30d,
             policy_recent_enforcements=policy_recent_enforcements,
+            policy_enforcement_page=policy_enforcement_page,
+            policy_enforcement_total_pages=policy_enforcement_total_pages,
+            policy_enforcement_total=policy_enforcement_total,
             policy_grouped_enforcements=policy_grouped_enforcements,
             policy_tracked_state=policy_tracked_state,
             usage_risk_report=usage_risk_report,

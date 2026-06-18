@@ -14,6 +14,7 @@ from core.backup import BackupConfig
 from core.i18n import init_i18n
 from core.repair.plex_media_users_repair import run_repair_if_needed
 from core.monitoring.plex_websocket import PlexWebsocketClient
+from core.startup import StartupStep, run_startup_sequence
 from utils.version import load_app_version
 
 from api.subscriptions import subscriptions_api
@@ -224,70 +225,62 @@ def _reset_maintenance_on_startup(app: Flask):
     except Exception:
         get_logger("boot").exception("Failed to reset maintenance mode on startup")
 
-def _run_startup_boot_fixes(app: Flask):
-    """
-    Séquence unique des correctifs de démarrage applicatifs.
-
-    Cette fonction intervient APRÈS :
-    - l'initialisation DB faite par entrypoint.sh
-    - l'éventuelle migration structurelle
-    - le db_bootstrap idempotent
-    - la création complète de l'app Flask
-    - l'enregistrement des blueprints et routes
-
-    Ordre volontaire :
-    1. reset admin one-shot via fichier local
-    2. sortie maintenance si la DB restaurée avait laissé l'app bloquée
-    3. one-shot repair DB
-
-    Cette séquence ne doit contenir que des actions de démarrage
-    applicatives, lisibles, idempotentes ou one-shot contrôlés.
-    """
+def _run_one_shot_repair(app: Flask):
     boot_logger = get_logger("boot")
+    with app.app_context():
+        db = get_db()
+        repair_result = run_repair_if_needed(db, app.logger)
 
-    boot_logger.info("[BOOT] startup boot fixes begin")
+    if repair_result and repair_result.get("status") == "done":
+        boot_logger.warning(
+            "[BOOT] one-shot repair executed | key=%s | stats=%s",
+            repair_result.get("repair_key"),
+            repair_result.get("stats"),
+        )
+    elif repair_result and repair_result.get("status") == "skipped":
+        boot_logger.info(
+            "[BOOT] one-shot repair skipped | key=%s | reason=%s",
+            repair_result.get("repair_key"),
+            repair_result.get("reason"),
+        )
+    else:
+        boot_logger.info("[BOOT] one-shot repair finished with no explicit result")
 
-    # 1) reset admin one-shot via fichier local
-    try:
-        startup_admin_recover_if_requested(app)
-        boot_logger.info("[BOOT] startup_admin_recover_if_requested done")
-    except Exception:
-        boot_logger.exception("[BOOT] startup_admin_recover_if_requested failed")
-        raise
 
-    # 2) sortie maintenance si besoin
-    try:
-        _reset_maintenance_on_startup(app)
-        boot_logger.info("[BOOT] _reset_maintenance_on_startup done")
-    except Exception:
-        boot_logger.exception("[BOOT] _reset_maintenance_on_startup failed")
-        raise
+def _start_plex_websocket_engine(app: Flask):
+    db = DBManager(app.config["DATABASE"])
+    plex_servers = db.query(
+        """
+        SELECT *
+        FROM servers
+        WHERE LOWER(TRIM(type)) = 'plex'
+          AND token IS NOT NULL
+          AND TRIM(token) != ''
+        """
+    )
 
-    # 3) one-shot repair DB
-    try:
-        with app.app_context():
-            db = get_db()
-            repair_result = run_repair_if_needed(db, app.logger)
-
-        if repair_result and repair_result.get("status") == "done":
-            boot_logger.warning(
-                "[BOOT] one-shot repair executed | key=%s | stats=%s",
-                repair_result.get("repair_key"),
-                repair_result.get("stats"),
+    for server_row in plex_servers or []:
+        server = dict(server_row)
+        try:
+            PlexWebsocketClient(server).start()
+        except Exception:
+            task_logger.exception(
+                "Unable to start Plex websocket for %s",
+                server.get("name"),
             )
-        elif repair_result and repair_result.get("status") == "skipped":
-            boot_logger.info(
-                "[BOOT] one-shot repair skipped | key=%s | reason=%s",
-                repair_result.get("repair_key"),
-                repair_result.get("reason"),
-            )
-        else:
-            boot_logger.info("[BOOT] one-shot repair finished with no explicit result")
-    except Exception:
-        boot_logger.exception("[BOOT] one-shot repair failed")
-        raise
 
-    boot_logger.info("[BOOT] startup boot fixes end")
+
+def _run_application_startup(app: Flask):
+    """Declare the complete post-registration startup order in one place."""
+    run_startup_sequence(
+        app,
+        (
+            StartupStep("admin_recovery", startup_admin_recover_if_requested),
+            StartupStep("maintenance_recovery", _reset_maintenance_on_startup),
+            StartupStep("one_shot_repair", _run_one_shot_repair),
+            StartupStep("plex_websocket_engine", _start_plex_websocket_engine, fatal=False),
+        ),
+    )
 
 def _resolve_asset_dir(start_dir: str, target: str) -> str:
     """
@@ -406,38 +399,6 @@ def create_app():
     # i18n (requires DB access)
     init_i18n(app, get_db)
 
-    # ---------------------------------------------------
-    # Plex live websocket engine
-    # ---------------------------------------------------
-    try:
-
-        db = DBManager(Config.DATABASE_PATH)
-
-        plex_servers = db.query(
-            """
-            SELECT *
-            FROM servers
-            WHERE LOWER(TRIM(type)) = 'plex'
-              AND token IS NOT NULL
-              AND TRIM(token) != ''
-            """
-        )
-
-        for server in plex_servers or []:
-
-            server = dict(server)
-
-            try:
-                PlexWebsocketClient(server).start()
-
-            except Exception:
-                task_logger.exception(
-                    f"Unable to start Plex websocket for {server.get('name')}"
-                )
-
-    except Exception:
-        task_logger.exception("Unable to initialize Plex websocket engine")
-
     # Context processor + template filters
     app.context_processor(inject_brand_name)
     app.template_filter("safe_datetime")(safe_datetime)
@@ -462,6 +423,6 @@ def create_app():
     app.table_exists = table_exists
     app.scheduler_db_provider = lambda: DBManager(app.config["DATABASE"])
 
-    _run_startup_boot_fixes(app)
+    _run_application_startup(app)
 
     return app

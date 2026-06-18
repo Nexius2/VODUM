@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from core.http_security import server_http_session
 from core.monitoring.artwork_cache import artwork_cache_key, read_artwork_cache, write_artwork_cache
 from core.plex_rate_limit import wait_for_plex_slot
@@ -44,6 +46,27 @@ def _content_result(cache_key: str, response) -> dict:
     }
 
 
+def _plex_candidate_paths(path: str) -> list[str]:
+    """Return safe fallbacks for Plex's expiring/versioned artwork paths."""
+    path = str(path or "").strip()
+    candidates = [path]
+
+    match = re.fullmatch(
+        r"(/library/metadata/[^/]+)/(thumb|art)(?:/[^/?#]+)?",
+        path,
+        flags=re.IGNORECASE,
+    )
+    if match:
+        media_path, image_kind = match.groups()
+        candidates.append(f"{media_path}/{image_kind}")
+        if image_kind.lower() == "art":
+            candidates.append(f"{media_path}/thumb")
+    elif path.endswith("/art"):
+        candidates.append(path[:-4] + "/thumb")
+
+    return list(dict.fromkeys(candidates))
+
+
 def fetch_monitoring_artwork(server: dict, query, timeout: int = 10) -> dict:
     provider = str(server.get("type") or "").strip().lower()
     token = str(server.get("token") or "").strip()
@@ -62,8 +85,7 @@ def fetch_monitoring_artwork(server: dict, query, timeout: int = 10) -> dict:
         cached = _cached_result(cache_key)
         if cached:
             return cached
-        candidate_paths = [path, path[:-4] + "/thumb"] if path.endswith("/art") else [path]
-        for candidate_path in dict.fromkeys(candidate_paths):
+        for candidate_path in _plex_candidate_paths(path):
             for base in bases:
                 try:
                     wait_for_plex_slot(base)

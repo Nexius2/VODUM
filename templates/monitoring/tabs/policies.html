@@ -199,6 +199,21 @@
           {% endif %}
         </tbody>
       </table>
+      {% if policy_enforcement_total_pages > 1 %}
+      <div class="flex items-center justify-between gap-3 border-t border-slate-800 px-4 py-3 text-xs">
+        <span class="text-slate-500">{{ policy_enforcement_total }} · {{ t("page") }} {{ policy_enforcement_page }} / {{ policy_enforcement_total_pages }}</span>
+        <div class="flex gap-2">
+          {% if policy_enforcement_page > 1 %}
+          <a class="rounded-lg bg-slate-800 px-3 py-1.5 text-slate-200 hover:bg-slate-700"
+             href="{{ url_for('monitoring_page', tab='policies', enforcement_page=policy_enforcement_page-1) }}">{{ t("previous") }}</a>
+          {% endif %}
+          {% if policy_enforcement_page < policy_enforcement_total_pages %}
+          <a class="rounded-lg bg-primary px-3 py-1.5 text-white hover:bg-primary-dark"
+             href="{{ url_for('monitoring_page', tab='policies', enforcement_page=policy_enforcement_page+1) }}">{{ t("next") }}</a>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
     </div>
 
     <div id="policyEnforcementGroupView" class="hidden overflow-x-auto">

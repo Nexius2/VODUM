@@ -4,6 +4,15 @@
 // + compat HTMX (Monitoring tabs)
 // ===========================================================
 
+// Artwork is also injected by HTMX, so handle failures at document level.
+// This prevents broken-image icons or alt text from shifting a media card.
+document.addEventListener("error", (event) => {
+  const image = event.target;
+  if (image instanceof HTMLImageElement && image.classList.contains("js-artwork-image")) {
+    image.remove();
+  }
+}, true);
+
 // ------------ UTILITAIRES ---------------------------------
 
 async function apiGet(url) {

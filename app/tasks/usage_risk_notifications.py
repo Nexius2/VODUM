@@ -1,11 +1,9 @@
 import json
-from string import Formatter
 
 from communications_engine import (
-    send_to_user,
-    record_history,
     select_comm_template_for_user,
-    fetch_template_attachments,
+    schedule_template_notification,
+    enqueue_named_task,
 )
 from core.usage_risk import build_usage_risk_report
 from logging_utils import get_logger
@@ -35,14 +33,6 @@ def _safe_int(value, default=0):
         return int(value or default)
     except Exception:
         return default
-
-
-def _safe_format(text, values):
-    class SafeDict(dict):
-        def __missing__(self, key):
-            return "{" + key + "}"
-
-    return Formatter().vformat(text or "", (), SafeDict(values))
 
 
 def _load_user(db, user_id):
@@ -123,8 +113,7 @@ def run(task_id=None, db=None):
         (f"-{analysis_window_days} days",),
     ) or []
 
-    sent = 0
-    failed = 0
+    queued = 0
     skipped = 0
 
     for rec in rows:
@@ -179,71 +168,34 @@ def run(task_id=None, db=None):
             user_id=user_id,
         )
 
-        template_id = int(template["id"]) if template else None
-        attachments = fetch_template_attachments(db, template_id) if template_id else []
-
         if not template:
             skipped += 1
             continue
 
-        subject = _safe_format(template.get("subject"), values)
-        body = _safe_format(template.get("body"), values)
-
-        attempts = send_to_user(
+        template_id = int(template["id"])
+        values.update({
+            "template_key": "usage_risk_upgrade_suggestion",
+            "recommendation_id": int(rec["id"]),
+            "suggestion_cooldown_days": cooldown_days,
+        })
+        delivery_cycle = rec.get("last_notification_at") or "initial"
+        schedule_template_notification(
             db=db,
-            settings=settings,
-            user=user,
-            subject=subject,
-            body=body,
-            attachments=attachments,
-            forced_channels=None,
-            bypass_skip_never_used_accounts=True,
+            template_id=template_id,
+            user_id=int(user_id),
+            provider="all",
+            server_id=None,
+            send_at_modifier=None,
+            payload=values,
+            dedupe_key=f"usage_risk_upgrade:{int(rec['id'])}:{delivery_cycle}",
+            max_attempts=10,
         )
+        queued += 1
 
-        has_success = False
-
-        for attempt in attempts:
-            record_history(
-                db=db,
-                kind="template",
-                template_id=template_id,
-                campaign_id=None,
-                user_id=user_id,
-                attempt=attempt,
-                meta={
-                    "template_key": "usage_risk_upgrade_suggestion",
-                    "trigger_event": "usage_risk_upgrade_suggestion",
-                    "recommendation_id": rec.get("id"),
-                    "risk_level": rec.get("risk_level"),
-                    "risk_score": rec.get("risk_score"),
-                    "current_subscription": rec.get("current_subscription"),
-                    "suggested_subscription": rec.get("suggested_subscription"),
-                    "kills_30d": kills_30d,
-                },
-            )
-
-            if attempt.status == "sent":
-                has_success = True
-
-        if has_success:
-            db.execute(
-                """
-                UPDATE usage_risk_recommendations
-                SET status = 'notified',
-                    last_notification_at = CURRENT_TIMESTAMP,
-                    cooldown_until = datetime('now', ?)
-                WHERE id = ?
-                """,
-                (
-                    f"+{cooldown_days} days",
-                    rec["id"],
-                ),
-            )
-            sent += 1
-        else:
-            failed += 1
+    if queued:
+        enqueue_named_task(db, "send_expiration_emails")
 
     return {
         "status": "success",
-        "message": f"Usage risk upgrade suggestions sent={sent}, failed={failed}, skipped={skipped}",
+        "message": f"Usage risk upgrade suggestions queued={queued}, skipped={skipped}",
     }

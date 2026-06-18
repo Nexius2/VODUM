@@ -36,6 +36,10 @@ class Session:
 
 def main() -> int:
     server_validation.plex_server_http_session = lambda _server: Session()
+    server_validation.requests.get = lambda *_args, **_kwargs: Response(
+        200,
+        b'<user username="plex-owner"/>',
+    )
     assert server_validation.validate_media_server("plex", "http://plex", "token") == (
         "up", "Plex Test", "plex-id", "1.2.3",
     )

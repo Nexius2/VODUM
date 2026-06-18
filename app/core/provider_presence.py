@@ -125,6 +125,35 @@ def check_jellyfin_account_presence(server: dict, account_row: dict) -> dict:
         return result
 
 
+def get_user_deletion_protection(db, user_id: int) -> dict:
+    columns = {
+        str(row["name"])
+        for row in (db.query("PRAGMA table_info(media_users)") or [])
+    }
+    role_payload_column = "mu.raw_json" if "raw_json" in columns else "mu.details_json"
+    rows = db.query(
+        f"""
+        SELECT s.type AS server_type, mu.role, {role_payload_column} AS role_json
+        FROM media_users mu
+        JOIN servers s ON s.id = mu.server_id
+        WHERE mu.vodum_user_id = ?
+        """,
+        (int(user_id),),
+    ) or []
+    for raw in rows:
+        row = dict(raw)
+        provider = str(row.get("server_type") or "").strip().lower()
+        role = str(row.get("role") or "").strip().lower()
+        if provider == "plex" and role == "owner":
+            return {"can_delete": False, "protected_role": "owner", "blocked_reason": "plex_owner_cannot_be_deleted"}
+        if provider == "jellyfin":
+            payload = _json_dict(row.get("role_json"))
+            policy = payload.get("Policy") if isinstance(payload, dict) else {}
+            if role == "admin" or (isinstance(policy, dict) and policy.get("IsAdministrator")):
+                return {"can_delete": False, "protected_role": "admin", "blocked_reason": "remove_admin_to_delete"}
+    return {"can_delete": True, "protected_role": "", "blocked_reason": ""}
+
+
 def build_user_delete_check(db, user_id: int) -> dict | None:
     user = db.query_one("SELECT id,username,email FROM vodum_users WHERE id=?", (int(user_id),))
     if not user:
@@ -141,6 +170,7 @@ def build_user_delete_check(db, user_id: int) -> dict | None:
         """,
         (int(user_id),),
     ) or []
+    protection = get_user_deletion_protection(db, user_id)
     items = []
     totals = {"still_exists_total": 0, "pending_total": 0, "unknown_total": 0}
     will_return = False
@@ -171,5 +201,6 @@ def build_user_delete_check(db, user_id: int) -> dict | None:
     return {
         "ok": True, "user_id": int(user["id"]), "username": user["username"] or "",
         "email": user["email"] or "", "linked_accounts_total": len(rows),
+        **protection,
         **totals, "will_return_on_sync": will_return, "items": items,
     }

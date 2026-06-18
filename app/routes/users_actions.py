@@ -9,7 +9,7 @@ from tasks_engine import enable_and_run_task_by_name
 from web.helpers import get_db
 from .users_list import merge_vodum_users
 from core.media_jobs import insert_plex_media_job, insert_jellyfin_media_job
-from core.provider_presence import build_user_delete_check
+from core.provider_presence import build_user_delete_check, get_user_deletion_protection
 
 
 task_logger = get_logger("tasks_ui")
@@ -399,6 +399,11 @@ def register(app):
     @app.route("/users/<int:user_id>/delete", methods=["POST"])
     def user_delete(user_id):
         db = get_db()
+
+        protection = get_user_deletion_protection(db, user_id)
+        if not protection.get("can_delete", True):
+            flash(protection.get("blocked_reason") or "delete_user_failed", "error")
+            return redirect(url_for("user_detail", user_id=user_id, tab="general"))
 
         user = db.query_one(
             "SELECT id, username, email FROM vodum_users WHERE id = ?",

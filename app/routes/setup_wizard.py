@@ -4,6 +4,7 @@ import json
 import uuid
 from datetime import datetime
 from pathlib import Path
+from core.app_paths import imports_dir as get_imports_dir
 
 from flask import flash, redirect, render_template, request, session, url_for
 from werkzeug.security import generate_password_hash
@@ -188,7 +189,7 @@ def register(app):
                     if not upload or suffix not in {".zip", ".sqlite", ".db"}:
                         flash("Please select a valid VODUM backup.", "error")
                         return redirect(url_for("setup_wizard"))
-                    imports_dir = Path("/appdata/imports")
+                    imports_dir = get_imports_dir()
                     imports_dir.mkdir(parents=True, exist_ok=True)
                     path = imports_dir / f"restore_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}{suffix}"
                     upload.save(path)

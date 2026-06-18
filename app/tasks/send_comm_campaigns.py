@@ -280,9 +280,23 @@ def run(task_id: int, db):
 
             user = db.query_one(
                 """
-                SELECT id, username, firstname, lastname, email, second_email, discord_user_id, notifications_order_override, expiration_date
-                FROM vodum_users
-                WHERE id = ?
+                SELECT
+                    u.id,
+                    u.username,
+                    u.firstname,
+                    u.lastname,
+                    u.email,
+                    u.second_email,
+                    u.discord_user_id,
+                    u.notifications_order_override,
+                    u.expiration_date,
+                    u.subscription_template_id,
+                    st.name AS subscription_name,
+                    st.duration_days AS subscription_duration_days,
+                    st.subscription_value AS subscription_value
+                FROM vodum_users u
+                LEFT JOIN subscription_templates st ON st.id = u.subscription_template_id
+                WHERE u.id = ?
                 """,
                 (user_id,),
             )
