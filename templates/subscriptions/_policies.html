@@ -257,7 +257,7 @@
             <label class="block text-xs text-slate-500 mb-1">{{ t("status") }}</label>
             <select id="policyFilterStatus"
                     class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm">
-              <option value="">All</option>
+              <option value="">{{ t("all") }}</option>
               <option value="enabled">{{ t("enabled") }}</option>
               <option value="disabled">{{ t("disabled") }}</option>
             </select>
@@ -267,8 +267,8 @@
             <label class="block text-xs text-slate-500 mb-1">{{ t("scope") }}</label>
             <select id="policyFilterScope"
                     class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm">
-              <option value="">All</option>
-              <option value="global">Global</option>
+              <option value="">{{ t("all") }}</option>
+              <option value="global">{{ t("policies_scope_global") }}</option>
               <option value="server">{{ t("server") }}</option>
               <option value="user">{{ t("user") }}</option>
             </select>
@@ -278,7 +278,7 @@
             <label class="block text-xs text-slate-500 mb-1">{{ t("provider") }}</label>
             <select id="policyFilterProvider"
                     class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm">
-              <option value="">All</option>
+              <option value="">{{ t("all") }}</option>
               <option value="both">{{ t("policies_provider_both_short") }}</option>
               <option value="plex">plex</option>
               <option value="jellyfin">jellyfin</option>
@@ -286,18 +286,18 @@
           </div>
 
           <div>
-            <label class="block text-xs text-slate-500 mb-1">Origin</label>
+            <label class="block text-xs text-slate-500 mb-1">{{ t("origin") }}</label>
             <select id="policyFilterOrigin"
                     class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm">
-              <option value="">All</option>
-              <option value="manual">Manual</option>
+              <option value="">{{ t("all") }}</option>
+              <option value="manual">{{ t("policies_manual") }}</option>
               <option value="subscription">{{ t("subscription") }}</option>
               <option value="system">{{ t("system") }}</option>
             </select>
           </div>
 
           <div>
-            <label class="block text-xs text-slate-500 mb-1">Per page</label>
+            <label class="block text-xs text-slate-500 mb-1">{{ t("policies_per_page") }}</label>
             <select id="policyPageSize"
                     class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm">
               <option value="20" selected>20</option>
@@ -309,7 +309,7 @@
           <button type="button"
                   id="policyFilterReset"
                   class="px-3 py-2 rounded-lg border border-slate-700 bg-slate-950/40 text-slate-200 hover:bg-slate-950/70 text-sm">
-            Reset
+            {{ t("reset") }}
           </button>
         </div>
       </div>
@@ -342,12 +342,12 @@
               <input id="policySelectAll"
                      type="checkbox"
                      class="h-4 w-4 rounded border-slate-500 bg-slate-950 text-rose-500 focus:ring-rose-500 cursor-pointer"
-                     title="Select all visible policies">
+                     title="{{ t('policies_select_visible') }}">
             </th>
             <th class="text-left p-3 w-[56px]">{{ t("status") }}</th>
             <th class="text-left p-3">{{ t("rule") }}</th>
             <th class="text-left p-3">{{ t("scope") }}</th>
-            <th class="text-left p-3">Origin</th>
+            <th class="text-left p-3">{{ t("origin") }}</th>
             <th class="text-left p-3">{{ t("provider") }}</th>
             <th class="text-left p-3">{{ t("priority") }}</th>
             <th class="text-left p-3">{{ t("value") }}</th>
@@ -509,7 +509,7 @@
                   </a>
 
                     {% if p._is_system or p._is_locked %}
-                      <span class="text-xs text-slate-600">Read-only</span>
+                      <span class="text-xs text-slate-600">{{ t("read_only") }}</span>
                     {% else %}
                       <form method="post" action="{{ url_for('stream_policy_delete', policy_id=p.id) }}">
                         <input type="hidden" name="redirect_endpoint" value="{{ current_redirect_endpoint }}">
@@ -535,7 +535,7 @@
 
     <div class="border-t border-slate-800 px-5 py-4">
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-xs text-slate-400">
-        <div id="policyTableSummary">0 result</div>
+        <div id="policyTableSummary">{{ t("policies_zero_results") }}</div>
 
         <div class="flex items-center gap-2">
           <button type="button"
@@ -564,17 +564,17 @@
     <div class="relative z-10 flex min-h-full items-center justify-center p-4">
       <div class="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
         <div class="px-5 py-4 border-b border-slate-800">
-          <h3 class="text-base font-semibold text-white">Delete selected policies</h3>
+          <h3 class="text-base font-semibold text-white">{{ t("policies_delete_selected") }}</h3>
           <p class="mt-1 text-sm text-slate-400">
-            This action will permanently delete
+            {{ t("policies_delete_intro") }}
             <span id="policyBulkDeleteModalCount" class="text-slate-200 font-medium">0</span>
-            selected polic<span id="policyBulkDeleteModalPlural">ies</span>.
+            <span id="policyBulkDeleteModalPlural">{{ t("policies_selected_policies") }}</span>.
           </p>
         </div>
 
         <div class="px-5 py-4">
           <p class="text-sm text-slate-300">
-            Are you sure you want to continue?
+            {{ t("policies_delete_confirm") }}
           </p>
         </div>
 
@@ -679,7 +679,9 @@
         if (!selectedCount) return;
 
         bulkDeleteModalCount.textContent = String(selectedCount);
-        bulkDeleteModalPlural.textContent = selectedCount > 1 ? 'ies' : 'y';
+        bulkDeleteModalPlural.textContent = selectedCount > 1
+          ? {{ t("policies_selected_policies")|tojson }}
+          : {{ t("policies_selected_policy")|tojson }};
 
         bulkDeleteModal.classList.remove('hidden');
         document.body.classList.add('overflow-hidden');
@@ -736,8 +738,11 @@
         const shownTo = Math.min(end, filtered.length);
 
         summaryEl.textContent = filtered.length
-          ? `Showing ${shownFrom}-${shownTo} of ${filtered.length}`
-          : '0 result';
+          ? {{ t("policies_showing_results")|tojson }}
+              .replace('{from}', shownFrom)
+              .replace('{to}', shownTo)
+              .replace('{total}', filtered.length)
+          : {{ t("policies_zero_results")|tojson }};
 
         pageIndicatorEl.textContent = `${currentPage} / ${totalPages}`;
         prevBtn.disabled = currentPage <= 1;

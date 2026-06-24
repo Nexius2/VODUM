@@ -1,60 +1,27 @@
----
-title: 🧯 Troubleshooting
----
+# Troubleshooting
 
-<!-- Auto-generated improved docs for GitHub Pages (MkDocs Material) -->
+## First checks
 
-<div align="left">
+1. Open **Tasks** and identify queued/running/error work.
+2. Open **Logs**, filter by source and download anonymized logs if needed.
+3. Check `docker compose logs vodum` for entrypoint/startup errors.
+4. Confirm database, logs, backups and encryption key are persistent.
 
-# 🧯 Troubleshooting
+## Common symptoms
 
-<span class="hint-badge">Common issues • Diagnostics • Logs • Checks</span>
+**Server offline:** verify URL from inside Docker, token/API key, TLS and redirects.
 
-<br><br>
+**Access unchanged:** inspect provider jobs, run the relevant worker and then
+synchronize the provider to confirm final state.
 
-</div>
+**Messages not sent:** test channel configuration, inspect Communications
+history and verify recipient email/Discord identity.
 
+**Now Playing delayed:** inspect the task queue and monitoring refresh tasks. A
+bounded stale fallback is expected while the sequential queue is busy.
 
-## First reflex: check Logs
+**Restore fails:** verify archive format, encryption-key compatibility, free
+space and ZIP limits. Keep the original backup unchanged.
 
-Most issues are visible in:
-- UI Logs page → [Logs](logs.md)
-- Container logs (`docker logs vodum`)
-
----
-
-## Common issues
-
-??? question "Server shows offline but it is reachable"
-    - Check URL (http/https, port, trailing slash)
-    - Check DNS resolution inside container
-    - Check token validity
-    - Check network routing (Unraid custom networks, VPN containers)
-
-??? question "Policies don't apply"
-    - Confirm tasks are enabled and running → [Tasks](tasks.md)
-    - Check last execution timestamps
-    - Review task logs for errors
-
-??? question "Emails not sent"
-    - Verify SMTP settings
-    - Verify templates exist
-    - Check mailing history
-    - Check logs for SMTP/auth errors
-
-??? question "Discord not sending"
-    - Validate token
-    - Ensure the bot is in the server and has permissions
-    - Check logs for “not ready” / validation errors
-
----
-
-## Provide useful info when opening an issue
-
-Include:
-- VODUM version
-- Docker logs excerpt (sanitized)
-- Screenshots (tokens hidden)
-- Steps to reproduce
-
-GitHub Issues: https://github.com/Nexius2/VODUM/issues
+**Locked out:** use the documented password reset marker from the host and
+restart the container; never expose the marker path publicly.

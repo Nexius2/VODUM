@@ -28,7 +28,7 @@
     <span class="text-[11px] whitespace-nowrap">
 
         {% if live == 0 %}
-            <span class="text-slate-500 font-medium">0 live</span>
+            <span class="text-slate-500 font-medium">0 {{ t("monitoring_servers_live") }}</span>
         {% else %}
 
 			<span class="text-[14px]">
@@ -36,7 +36,7 @@
 			</span>
 
             {% if direct > 0 %}
-                · <span class="text-emerald-300 font-medium">{{ direct }}</span> direct play
+                · <span class="text-emerald-300 font-medium">{{ direct }}</span> {{ t("monitoring_live_direct_play") }}
             {% endif %}
 
             {% if transcode > 0 %}
@@ -91,9 +91,9 @@
                                     </span>
 
                                     {% if s.is_transcode %}
-                                        <span class="text-[10px] px-2 py-0.5 rounded-full border border-orange-500 text-orange-300">Transcoding</span>
+                                        <span class="text-[10px] px-2 py-0.5 rounded-full border border-orange-500 text-orange-300">{{ t("transcoding") }}</span>
                                     {% else %}
-                                        <span class="text-[10px] px-2 py-0.5 rounded-full border border-emerald-600 text-emerald-300">Direct Play</span>
+                                        <span class="text-[10px] px-2 py-0.5 rounded-full border border-emerald-600 text-emerald-300">{{ t("monitoring_direct_play") }}</span>
                                     {% endif %}
 
                                     <span class="text-[10px] px-2 py-0.5 rounded-full border border-slate-700 text-slate-200">
@@ -157,5 +157,5 @@
     </div>
 
 {% else %}
-    <p class="text-xs text-slate-500">No active session.</p>
+    <p class="text-xs text-slate-500">{{ t("monitoring_no_active_session") }}</p>
 {% endif %}

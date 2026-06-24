@@ -12,6 +12,7 @@ from flask import (
 from logging_utils import get_logger
 
 from web.helpers import get_db
+from core.referral_bulk import bulk_update_referrals, normalize_referral_ids
 
 task_logger = get_logger("tasks_ui")
 
@@ -461,6 +462,45 @@ def register(app):
             resp.set_cookie("users_list_statuses", json.dumps(selected_statuses), max_age=60 * 60 * 24 * 365)
 
         return resp
+
+    @app.route("/users/referrals/bulk-status", methods=["POST"])
+    def referrals_bulk_status():
+        action = (request.form.get("action") or "").strip().lower()
+        referral_ids = normalize_referral_ids(request.form.getlist("referral_ids"))
+
+        if not referral_ids:
+            flash("referral_bulk_no_selection", "warning")
+        else:
+            try:
+                affected = bulk_update_referrals(get_db(), referral_ids, action)
+            except ValueError:
+                flash("referral_bulk_invalid_action", "error")
+            else:
+                message = (
+                    "referral_bulk_archived"
+                    if action == "archive"
+                    else "referral_bulk_restored"
+                )
+                flash(message, "success" if affected else "warning")
+
+        archive_mode = (request.form.get("return_archive_mode") or "active").strip()
+        if archive_mode not in {"active", "archived", "all"}:
+            archive_mode = "active"
+        page = max(request.form.get("return_page", 1, type=int), 1)
+        search = " ".join((request.form.get("return_q") or "").split()).strip()
+        sort = (request.form.get("return_sort") or "created_at").strip()
+        order = (request.form.get("return_order") or "desc").strip().lower()
+        selected_statuses = request.form.getlist("return_status")
+        return redirect(url_for(
+            "users_list",
+            tab="referrals",
+            archive_mode=archive_mode,
+            page=page,
+            q=search,
+            status=selected_statuses,
+            sort=sort,
+            order=order,
+        ))
         
     @app.route("/users/referral-settings", methods=["POST"])
     def users_referral_settings_save():
@@ -1090,9 +1130,6 @@ def build_merge_preview(master: dict, other: dict) -> dict:
         sources.setdefault(k, "master")
 
     return {"result": result, "sources": sources}
-
-
-
 
 
 

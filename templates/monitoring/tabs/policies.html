@@ -16,9 +16,9 @@
       <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_actions_24h") }}</div>
       <div class="mt-2 text-3xl font-bold text-white">{{ policy_dashboard.actions_24h or 0 }}</div>
       <div class="mt-2 text-xs text-slate-400">
-        Warn: <span class="text-amber-400">{{ policy_dashboard.warn_24h or 0 }}</span>
+        {{ t("monitoring_policies_warn_action") }}: <span class="text-amber-400">{{ policy_dashboard.warn_24h or 0 }}</span>
         <span class="mx-2 text-slate-600">•</span>
-        Kill: <span class="text-rose-400">{{ policy_dashboard.kill_24h or 0 }}</span>
+        {{ t("monitoring_policies_kill_action") }}: <span class="text-rose-400">{{ policy_dashboard.kill_24h or 0 }}</span>
       </div>
     </div>
 
@@ -35,9 +35,9 @@
       <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_tracked_1h") }}</div>
       <div class="mt-2 text-3xl font-bold text-white">{{ policy_tracked_state.tracked_1h or 0 }}</div>
       <div class="mt-2 text-xs text-slate-400">
-        Warned: <span class="text-amber-400">{{ policy_tracked_state.warned_1h or 0 }}</span>
+        {{ t("monitoring_policies_warned") }}: <span class="text-amber-400">{{ policy_tracked_state.warned_1h or 0 }}</span>
         <span class="mx-2 text-slate-600">•</span>
-        Killed: <span class="text-rose-400">{{ policy_tracked_state.killed_1h or 0 }}</span>
+        {{ t("monitoring_policies_killed") }}: <span class="text-rose-400">{{ policy_tracked_state.killed_1h or 0 }}</span>
       </div>
     </div>
 
@@ -54,9 +54,9 @@
       <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_scope_user") }}</div>
       <div class="mt-2 text-3xl font-bold text-white">{{ policy_dashboard.scope_user or 0 }}</div>
       <div class="mt-2 text-xs text-slate-400">
-        Global: <span class="text-slate-200">{{ policy_dashboard.scope_global or 0 }}</span>
+        {{ t("policies_scope_global") }}: <span class="text-slate-200">{{ policy_dashboard.scope_global or 0 }}</span>
         <span class="mx-2 text-slate-600">•</span>
-        Server: <span class="text-slate-200">{{ policy_dashboard.scope_server or 0 }}</span>
+        {{ t("server") }}: <span class="text-slate-200">{{ policy_dashboard.scope_server or 0 }}</span>
       </div>
     </div>
 
@@ -64,9 +64,9 @@
       <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_system_managed") }}</div>
       <div class="mt-2 text-3xl font-bold text-white">{{ policy_dashboard.system_count or 0 }}</div>
       <div class="mt-2 text-xs text-slate-400">
-        Locked: <span class="text-slate-200">{{ policy_dashboard.locked_count or 0 }}</span>
+        {{ t("monitoring_policies_locked") }}: <span class="text-slate-200">{{ policy_dashboard.locked_count or 0 }}</span>
         <span class="mx-2 text-slate-600">•</span>
-        Subscription: <span class="text-slate-200">{{ policy_dashboard.subscription_managed_count or 0 }}</span>
+        {{ t("subscription") }}: <span class="text-slate-200">{{ policy_dashboard.subscription_managed_count or 0 }}</span>
       </div>
     </div>
 
@@ -74,9 +74,9 @@
       <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_actions_7d") }}</div>
       <div class="mt-2 text-3xl font-bold text-white">{{ policy_dashboard.actions_7d or 0 }}</div>
       <div class="mt-2 text-xs text-slate-400">
-        Warn: <span class="text-amber-400">{{ policy_dashboard.warn_7d or 0 }}</span>
+        {{ t("monitoring_policies_warn_action") }}: <span class="text-amber-400">{{ policy_dashboard.warn_7d or 0 }}</span>
         <span class="mx-2 text-slate-600">•</span>
-        Kill: <span class="text-rose-400">{{ policy_dashboard.kill_7d or 0 }}</span>
+        {{ t("monitoring_policies_kill_action") }}: <span class="text-rose-400">{{ policy_dashboard.kill_7d or 0 }}</span>
       </div>
     </div>
   </div>
@@ -86,7 +86,7 @@
     <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
       <div class="flex items-center justify-between mb-3">
         <h3 class="font-semibold text-white">{{ t("monitoring_policies_hits_30d") }}</h3>
-        <span class="text-xs text-slate-500">warn / kill</span>
+        <span class="text-xs text-slate-500">{{ t("monitoring_policies_warn_kill") }}</span>
       </div>
       <div class="chart-container chart-container-md">
         <canvas id="chartPolicyHits30d"></canvas>
@@ -141,7 +141,7 @@
         <h3 id="policyEnforcementTableTitle" class="font-semibold text-white">
           {{ t("monitoring_policies_recent_enforcements") }}
         </h3>
-        <div class="mt-1 text-xs text-slate-500">Last 24h grouped view available</div>
+        <div class="mt-1 text-xs text-slate-500">{{ t("monitoring_policies_grouped_view_available") }}</div>
       </div>
 
       <button
@@ -149,7 +149,7 @@
         id="policyEnforcementViewToggleBtn"
         class="rounded-lg border border-indigo-700 bg-indigo-950/40 px-3 py-1.5 text-xs text-indigo-200 hover:bg-indigo-900/60"
       >
-        Group by user
+        {{ t("monitoring_policies_group_by_user") }}
       </button>
     </div>
 
@@ -181,9 +181,9 @@
               <td class="p-3 text-slate-400">{{ row.server_name or '—' }}</td>
               <td class="p-3">
                 {% if row.action == 'kill' %}
-                  <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-rose-950/40 border border-rose-800 text-[11px] text-rose-300">kill</span>
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-rose-950/40 border border-rose-800 text-[11px] text-rose-300">{{ t("monitoring_policies_kill_action") }}</span>
                 {% else %}
-                  <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-950/40 border border-amber-800 text-[11px] text-amber-300">warn</span>
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-950/40 border border-amber-800 text-[11px] text-amber-300">{{ t("monitoring_policies_warn_action") }}</span>
                 {% endif %}
               </td>
               <td class="p-3 text-slate-400">{{ row.reason or '—' }}</td>
@@ -220,13 +220,13 @@
       <table class="min-w-full text-sm">
         <thead class="bg-slate-950 text-slate-400">
           <tr>
-            <th class="text-left p-3">User</th>
-            <th class="text-left p-3">Warn</th>
-            <th class="text-left p-3">Kill</th>
-            <th class="text-left p-3">Total</th>
-            <th class="text-left p-3">Last action</th>
-            <th class="text-left p-3">Last server</th>
-            <th class="text-left p-3">Last reason</th>
+            <th class="text-left p-3">{{ t("user") }}</th>
+            <th class="text-left p-3">{{ t("monitoring_policies_warn_action") }}</th>
+            <th class="text-left p-3">{{ t("monitoring_policies_kill_action") }}</th>
+            <th class="text-left p-3">{{ t("total") }}</th>
+            <th class="text-left p-3">{{ t("monitoring_policies_last_action") }}</th>
+            <th class="text-left p-3">{{ t("monitoring_policies_last_server") }}</th>
+            <th class="text-left p-3">{{ t("monitoring_policies_last_reason") }}</th>
           </tr>
         </thead>
         <tbody>
@@ -253,7 +253,7 @@
           {% if not policy_grouped_enforcements %}
             <tr>
               <td class="p-4 text-slate-400" colspan="7">
-                No grouped enforcements in the last 24h.
+                {{ t("monitoring_policies_no_grouped_24h") }}
               </td>
             </tr>
           {% endif %}
@@ -270,10 +270,10 @@
         <div class="flex items-start justify-between gap-4 border-b border-slate-800 px-5 py-4">
           <div>
             <div id="policyEnforcementGroupModalTitle" class="text-base font-semibold text-white">
-              User enforcement history
+              {{ t("monitoring_policies_user_history") }}
             </div>
             <div id="policyEnforcementGroupModalSubtitle" class="mt-1 text-xs text-slate-400">
-              Last 24h
+              {{ t("monitoring_policies_last_24h") }}
             </div>
           </div>
 
@@ -290,17 +290,17 @@
           <table class="min-w-full text-sm">
             <thead class="sticky top-0 bg-slate-950 text-slate-400">
               <tr>
-                <th class="text-left p-3">Date</th>
-                <th class="text-left p-3">Rule</th>
-                <th class="text-left p-3">Provider</th>
-                <th class="text-left p-3">Server</th>
-                <th class="text-left p-3">Action</th>
-                <th class="text-left p-3">Reason</th>
+                <th class="text-left p-3">{{ t("date") }}</th>
+                <th class="text-left p-3">{{ t("rule") }}</th>
+                <th class="text-left p-3">{{ t("provider") }}</th>
+                <th class="text-left p-3">{{ t("server") }}</th>
+                <th class="text-left p-3">{{ t("action") }}</th>
+                <th class="text-left p-3">{{ t("reason") }}</th>
               </tr>
             </thead>
             <tbody id="policyEnforcementGroupModalRows">
               <tr>
-                <td class="p-4 text-slate-400" colspan="6">Loading...</td>
+                <td class="p-4 text-slate-400" colspan="6">{{ t("monitoring_policies_loading") }}</td>
               </tr>
             </tbody>
           </table>
@@ -316,7 +316,7 @@
       <div class="w-full max-w-5xl rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
         <div class="flex items-start justify-between gap-4 border-b border-slate-800 px-5 py-4">
           <div>
-            <div class="text-base font-semibold text-white">Policy enforcement details</div>
+            <div class="text-base font-semibold text-white">{{ t("monitoring_policies_enforcement_details") }}</div>
             <div id="policyEnforcementModalSubtitle" class="mt-1 text-xs text-slate-400">—</div>
           </div>
           <button
@@ -331,147 +331,147 @@
         <div class="max-h-[80vh] overflow-y-auto px-5 py-5 space-y-5">
           <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Enforcement ID</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_enforcement_id") }}</div>
               <div id="pem_enforcement_id" class="mt-2 text-sm text-slate-100 break-all">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Date</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("date") }}</div>
               <div id="pem_created_at" class="mt-2 text-sm text-slate-100 break-all">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Action</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("action") }}</div>
               <div id="pem_action" class="mt-2 text-sm text-slate-100 break-all">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-              <div class="text-xs uppercase tracking-wide text-slate-500">User label</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_user_label") }}</div>
               <div id="pem_user_label" class="mt-2 text-sm text-slate-100 break-all">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Account username</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_account_username") }}</div>
               <div id="pem_account_username" class="mt-2 text-sm text-slate-100 break-all">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Vodum username</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_vodum_username") }}</div>
               <div id="pem_vodum_username" class="mt-2 text-sm text-slate-100 break-all">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Vodum user ID</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_vodum_user_id") }}</div>
               <div id="pem_vodum_user_id" class="mt-2 text-sm text-slate-100 break-all">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-              <div class="text-xs uppercase tracking-wide text-slate-500">External user ID</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_external_user_id") }}</div>
               <div id="pem_external_user_id" class="mt-2 text-sm text-slate-100 break-all">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4 md:col-span-2 xl:col-span-3">
-              <div class="text-xs uppercase tracking-wide text-slate-500">IPs involved</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_ips_involved") }}</div>
               <div id="pem_ips_involved" class="mt-2 flex flex-wrap gap-2">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Target IP</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_target_ip") }}</div>
               <div id="pem_target_ip" class="mt-2 text-sm text-slate-100 break-all">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Target device</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_target_device") }}</div>
               <div id="pem_target_device" class="mt-2 text-sm text-slate-100 break-all">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Target client</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_target_client") }}</div>
               <div id="pem_target_client" class="mt-2 text-sm text-slate-100 break-all">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Target media</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_target_media") }}</div>
               <div id="pem_target_media" class="mt-2 text-sm text-slate-100 break-words">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Started at</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_started_at") }}</div>
               <div id="pem_target_started_at" class="mt-2 text-sm text-slate-100 break-all">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Last seen at</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_last_seen_at") }}</div>
               <div id="pem_target_last_seen_at" class="mt-2 text-sm text-slate-100 break-all">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Bitrate</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("bitrate") }}</div>
               <div id="pem_target_bitrate" class="mt-2 text-sm text-slate-100 break-all">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Transcode</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_transcode") }}</div>
               <div id="pem_target_transcode" class="mt-2 text-sm text-slate-100 break-all">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Sessions at cut</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_sessions_at_cut") }}</div>
               <div id="pem_session_count" class="mt-2 text-sm text-slate-100 break-all">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4 md:col-span-2 xl:col-span-3">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Sessions snapshot</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_sessions_snapshot") }}</div>
               <div id="pem_sessions_snapshot" class="mt-3 space-y-3">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4 md:col-span-2 xl:col-span-3">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Details JSON</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_details_json") }}</div>
               <pre id="pem_details_json" class="mt-2 text-xs text-slate-200 whitespace-pre-wrap break-words overflow-x-auto">—</pre>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Rule</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("rule") }}</div>
               <div id="pem_rule_type" class="mt-2 text-sm text-slate-100 break-all">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Provider</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("provider") }}</div>
               <div id="pem_provider" class="mt-2 text-sm text-slate-100 break-all">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Server</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("server") }}</div>
               <div id="pem_server_name" class="mt-2 text-sm text-slate-100 break-all">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Policy ID</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_policy_id") }}</div>
               <div id="pem_policy_id" class="mt-2 text-sm text-slate-100 break-all">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Scope</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("scope") }}</div>
               <div id="pem_scope" class="mt-2 text-sm text-slate-100 break-all">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Priority</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("priority") }}</div>
               <div id="pem_policy_priority" class="mt-2 text-sm text-slate-100 break-all">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4 md:col-span-2 xl:col-span-3">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Reason</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("reason") }}</div>
               <div id="pem_reason" class="mt-2 text-sm text-slate-100 break-words">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4 md:col-span-2 xl:col-span-3">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Session key</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("session_key") }}</div>
               <div id="pem_session_key" class="mt-2 text-sm text-slate-100 break-all">—</div>
             </div>
 
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4 md:col-span-2 xl:col-span-3">
-              <div class="text-xs uppercase tracking-wide text-slate-500">Rule value JSON</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_rule_value_json") }}</div>
               <pre id="pem_rule_value_json" class="mt-2 text-xs text-slate-200 whitespace-pre-wrap break-words overflow-x-auto">—</pre>
             </div>
           </div>
@@ -538,7 +538,7 @@
         labels: hits30d.map(x => x.day),
         datasets: [
           {
-            label: "Warn",
+            label: {{ t("monitoring_policies_warn_action")|tojson }},
             data: hits30d.map(x => x.warn_count || 0),
             borderColor: "#F59E0B",
             backgroundColor: "rgba(245,158,11,0.15)",
@@ -546,7 +546,7 @@
             fill: true
           },
           {
-            label: "Kill",
+            label: {{ t("monitoring_policies_kill_action")|tojson }},
             data: hits30d.map(x => x.kill_count || 0),
             borderColor: "#F43F5E",
             backgroundColor: "rgba(244,63,94,0.12)",
@@ -575,7 +575,7 @@
         labels: rule30d.map(x => x.label),
         datasets: [
           {
-            label: "Total",
+            label: {{ t("total")|tojson }},
             data: rule30d.map(x => x.total || 0),
             backgroundColor: "rgba(99,102,241,0.70)",
             borderColor: "#6366F1",
@@ -644,7 +644,7 @@
         labels: topUsers30d.map(x => x.label),
         datasets: [
           {
-            label: "Warn",
+            label: {{ t("monitoring_policies_warn_action")|tojson }},
             data: topUsers30d.map(x => x.warn_count || 0),
             backgroundColor: "rgba(245,158,11,0.70)",
             borderColor: "#F59E0B",
@@ -652,7 +652,7 @@
             borderRadius: 8
           },
           {
-            label: "Kill",
+            label: {{ t("monitoring_policies_kill_action")|tojson }},
             data: topUsers30d.map(x => x.kill_count || 0),
             backgroundColor: "rgba(244,63,94,0.70)",
             borderColor: "#F43F5E",
@@ -717,7 +717,7 @@
     }
 
     function formatBoolTranscode(value) {
-      return Number(value || 0) === 1 ? "Yes" : "No";
+      return Number(value || 0) === 1 ? {{ t("yes")|tojson }} : {{ t("no")|tojson }};
     }
 
     function buildTargetMediaLabel(target) {
@@ -731,8 +731,8 @@
       const parts = [];
       if (mediaType) parts.push(mediaType);
       if (title) parts.push(title);
-      if (gp) parts.push(`show: ${gp}`);
-      if (parent) parts.push(`parent: ${parent}`);
+      if (gp) parts.push({{ t("monitoring_policies_media_show")|tojson }} + `: ${gp}`);
+      if (parent) parts.push({{ t("monitoring_policies_media_parent")|tojson }} + `: ${parent}`);
 
       return parts.length ? parts.join(" • ") : "—";
     }
@@ -764,19 +764,19 @@
         return `
           <div class="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
             <div class="flex items-center justify-between gap-3">
-              <div class="text-sm font-medium text-white">Session ${index + 1}</div>
+              <div class="text-sm font-medium text-white">{{ t("monitoring_policies_session") }} ${index + 1}</div>
               <div class="text-xs text-slate-400">session_key: ${sessionKey}</div>
             </div>
             <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-              <div><div class="text-[11px] uppercase tracking-wide text-slate-500">Server / Provider</div><div class="mt-1 text-sm text-slate-100">${server} / ${provider}</div></div>
+              <div><div class="text-[11px] uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_server_provider") }}</div><div class="mt-1 text-sm text-slate-100">${server} / ${provider}</div></div>
               <div><div class="text-[11px] uppercase tracking-wide text-slate-500">IP</div><div class="mt-1 text-sm text-slate-100">${ip}</div></div>
-              <div><div class="text-[11px] uppercase tracking-wide text-slate-500">Device</div><div class="mt-1 text-sm text-slate-100">${device}</div></div>
-              <div><div class="text-[11px] uppercase tracking-wide text-slate-500">Client</div><div class="mt-1 text-sm text-slate-100">${clientName} / ${clientProduct}</div></div>
-              <div><div class="text-[11px] uppercase tracking-wide text-slate-500">Started at</div><div class="mt-1 text-sm text-slate-100">${startedAt}</div></div>
-              <div><div class="text-[11px] uppercase tracking-wide text-slate-500">Last seen at</div><div class="mt-1 text-sm text-slate-100">${lastSeenAt}</div></div>
-              <div><div class="text-[11px] uppercase tracking-wide text-slate-500">Bitrate</div><div class="mt-1 text-sm text-slate-100">${bitrate}</div></div>
-              <div><div class="text-[11px] uppercase tracking-wide text-slate-500">Transcode</div><div class="mt-1 text-sm text-slate-100">${transcode}</div></div>
-              <div class="md:col-span-2 xl:col-span-3"><div class="text-[11px] uppercase tracking-wide text-slate-500">Media</div><div class="mt-1 text-sm text-slate-100 break-words">${media}</div></div>
+              <div><div class="text-[11px] uppercase tracking-wide text-slate-500">{{ t("device") }}</div><div class="mt-1 text-sm text-slate-100">${device}</div></div>
+              <div><div class="text-[11px] uppercase tracking-wide text-slate-500">{{ t("client") }}</div><div class="mt-1 text-sm text-slate-100">${clientName} / ${clientProduct}</div></div>
+              <div><div class="text-[11px] uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_started_at") }}</div><div class="mt-1 text-sm text-slate-100">${startedAt}</div></div>
+              <div><div class="text-[11px] uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_last_seen_at") }}</div><div class="mt-1 text-sm text-slate-100">${lastSeenAt}</div></div>
+              <div><div class="text-[11px] uppercase tracking-wide text-slate-500">{{ t("bitrate") }}</div><div class="mt-1 text-sm text-slate-100">${bitrate}</div></div>
+              <div><div class="text-[11px] uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_transcode") }}</div><div class="mt-1 text-sm text-slate-100">${transcode}</div></div>
+              <div class="md:col-span-2 xl:col-span-3"><div class="text-[11px] uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_media") }}</div><div class="mt-1 text-sm text-slate-100 break-words">${media}</div></div>
             </div>
           </div>
         `;
@@ -895,11 +895,11 @@
       if (groupView) groupView.classList.toggle("hidden", !grouped);
 
       if (tableTitle) {
-        tableTitle.textContent = grouped ? "Grouped enforcements" : "{{ t("monitoring_policies_recent_enforcements") }}";
+        tableTitle.textContent = grouped ? {{ t("monitoring_policies_grouped_enforcements")|tojson }} : {{ t("monitoring_policies_recent_enforcements")|tojson }};
       }
 
       if (viewToggleBtn) {
-        viewToggleBtn.textContent = grouped ? "Event view" : "Group by user";
+        viewToggleBtn.textContent = grouped ? {{ t("monitoring_policies_event_view")|tojson }} : {{ t("monitoring_policies_group_by_user")|tojson }};
         viewToggleBtn.dataset.nextMode = grouped ? "event" : "group";
       }
 
@@ -921,12 +921,12 @@
       const actorKey = groupData.actor_key || "";
       const userLabel = groupData.user_label || "—";
 
-      groupModalTitle.textContent = `User enforcement history: ${userLabel}`;
-      groupModalSubtitle.textContent = "Last 24h";
+      groupModalTitle.textContent = {{ t("monitoring_policies_user_history")|tojson }} + ": " + userLabel;
+      groupModalSubtitle.textContent = {{ t("monitoring_policies_last_24h")|tojson }};
 
       groupModalRows.innerHTML = `
         <tr>
-          <td class="p-4 text-slate-400" colspan="6">Loading...</td>
+          <td class="p-4 text-slate-400" colspan="6">{{ t("monitoring_policies_loading") }}</td>
         </tr>
       `;
 
@@ -942,7 +942,7 @@
           if (!rows.length) {
             groupModalRows.innerHTML = `
               <tr>
-                <td class="p-4 text-slate-400" colspan="6">No enforcement found for this user in the last 24h.</td>
+                <td class="p-4 text-slate-400" colspan="6">{{ t("monitoring_policies_no_user_history_24h") }}</td>
               </tr>
             `;
             return;
@@ -957,8 +957,8 @@
             tr.setAttribute("role", "button");
 
             const actionBadge = item.action === "kill"
-              ? '<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-rose-950/40 border border-rose-800 text-[11px] text-rose-300">kill</span>'
-              : '<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-950/40 border border-amber-800 text-[11px] text-amber-300">warn</span>';
+              ? '<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-rose-950/40 border border-rose-800 text-[11px] text-rose-300">{{ t("monitoring_policies_kill_action") }}</span>'
+              : '<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-950/40 border border-amber-800 text-[11px] text-amber-300">{{ t("monitoring_policies_warn_action") }}</span>';
 
             tr.innerHTML = `
               <td class="p-3 text-slate-300">${escapeHtml(vodumFormatDateTime(item.created_at))}</td>
@@ -988,7 +988,7 @@
         .catch(() => {
           groupModalRows.innerHTML = `
             <tr>
-              <td class="p-4 text-rose-300" colspan="6">Unable to load user enforcement history.</td>
+              <td class="p-4 text-rose-300" colspan="6">{{ t("monitoring_policies_unable_user_history") }}</td>
             </tr>
           `;
         });

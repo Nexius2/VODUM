@@ -52,21 +52,20 @@ extra_css:
 nav:
   - Home: index.md
   - Getting started: getting-started.md
-  - Interface:
+  - Application:
       - Dashboard: dashboard.md
       - Monitoring: monitoring.md
       - Users: users.md
       - Subscriptions: subscriptions.md
-      - Policies: policies.md
-      - Servers: servers.md
-      - Libraries: libraries.md
-      - Tasks: tasks.md
-      - Mailing: mailing.md
-      - Discord: discord.md
-      - Backup & Restore: backup.md
-      - Logs: logs.md
+      - Servers & Libraries: servers-libraries.md
+      - Communications: communications.md
+      - Migrations: migrations.md
+      - Backup & Import: backup.md
       - Settings: settings.md
+      - Tasks: tasks.md
+      - Logs: logs.md
   - Technical:
+      - Configuration: configuration.md
       - Architecture: architecture.md
       - Security: security.md
       - Troubleshooting: troubleshooting.md

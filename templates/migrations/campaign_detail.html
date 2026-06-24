@@ -47,15 +47,6 @@
       <a href="{{ url_for('migration_plan_export', campaign_id=campaign.id) }}" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm">{{ t("migration_export_plan") }}</a>
       <a href="{{ url_for('migration_campaign_report', campaign_id=campaign.id) }}" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm">{{ t("migration_export_report") }}</a>
       <span class="px-3 py-1 rounded-full bg-slate-800 text-slate-300 text-xs">{{ campaign.status }}</span>
-      {% if campaign.status == "draft" %}
-        <form method="post" action="{{ url_for('migration_campaign_start', campaign_id=campaign.id) }}">
-          <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
-          <button class="px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-sm"
-                  {{ 'disabled' if summary.blocked or summary.unmapped else '' }}>
-            {{ t("migration_start_campaign") }}
-          </button>
-        </form>
-      {% endif %}
       {% if campaign.status in ("running", "scheduled", "waiting_users", "needs_attention") %}
         <form method="post" action="{{ url_for('migration_campaign_pause', campaign_id=campaign.id) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token }}"><button class="px-4 py-2 rounded-lg bg-amber-800 hover:bg-amber-700 text-white text-sm">{{ t("migration_pause_campaign") }}</button></form>
       {% elif campaign.status == "paused" %}

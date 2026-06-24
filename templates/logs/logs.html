@@ -120,31 +120,25 @@
         </table>
     </div>
 
-    <!-- Pagination -->
-    <div class="flex justify-center items-center gap-2 mt-4">
-
-        {% if page > 1 %}
-            <a href="?page={{ page - 1 }}&level={{ level }}&q={{ search }}"
-               class="px-3 py-1 bg-slate-800 rounded text-slate-300">‹</a>
-        {% endif %}
-
-        {% for p in range(page_window_start, page_window_end + 1) %}
-            <a href="?page={{ p }}&level={{ level }}&q={{ search }}"
-               class="px-3 py-1 rounded
-                      {% if p == page %}
-                          bg-primary text-white
-                      {% else %}
-                          bg-slate-800 text-slate-300
-                      {% endif %}">
-                {{ p }}
-            </a>
-        {% endfor %}
-
-        {% if page < total_pages %}
-            <a href="?page={{ page + 1 }}&level={{ level }}&q={{ search }}"
-               class="px-3 py-1 bg-slate-800 rounded text-slate-300">›</a>
-        {% endif %}
-
+    {% set numbered_pages = [] %}
+    {% for p in range(page_window_start, page_window_end + 1) %}
+      {% set _ = numbered_pages.append({
+        "number": p,
+        "url": url_for("logs_page", page=p, level=level, q=search),
+        "current": p == page
+      }) %}
+    {% endfor %}
+    {% set pagination = {
+      "page": page,
+      "total_pages": total_pages,
+      "first_url": url_for("logs_page", page=1, level=level, q=search),
+      "prev_url": url_for("logs_page", page=page-1, level=level, q=search),
+      "next_url": url_for("logs_page", page=page+1, level=level, q=search),
+      "last_url": url_for("logs_page", page=total_pages, level=level, q=search),
+      "numbered_pages": numbered_pages
+    } %}
+    <div class="mt-4">
+      {% include "partials/_pagination.html" %}
     </div>
 
 </div>

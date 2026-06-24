@@ -27,14 +27,23 @@ from __future__ import annotations
 import os
 import sqlite3
 import json
-from dataclasses import dataclass
+import sys
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
+
+# Support direct execution from either the repository or the container.
+APP_DIR = Path(__file__).resolve().parents[1]
+if str(APP_DIR) not in sys.path:
+    sys.path.insert(0, str(APP_DIR))
+
 from db_manager import DBManager
 import argparse
 from logging_utils import get_logger
 from email_sender import send_email
 from core.monitoring.artwork import extract_artwork_refs
+from core.cli_output import add_summary_only_argument, emit_task_result
 
 # -------------------------
 # CONFIG (override via env)
@@ -1090,16 +1099,20 @@ def run(task_id, db):
 
 
 
-def main():
+def build_cli_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Import Tautulli database into VODUM.")
+    parser.add_argument("--tautulli-db", required=True)
+    parser.add_argument("--keep-all-users", action="store_true")
+    parser.add_argument("--keep-all-libraries", action="store_true")
+    parser.add_argument("--target-server-id", type=int, default=0)
+    add_summary_only_argument(parser)
+    return parser
+
+
+def main(argv=None):
 
     logger = get_logger("task_import_tautulli_cli")
-
-    p = argparse.ArgumentParser(description="Import Tautulli database into VODUM.")
-    p.add_argument("--tautulli-db", required=True)
-    p.add_argument("--keep-all-users", action="store_true")
-    p.add_argument("--keep-all-libraries", action="store_true")
-    p.add_argument("--target-server-id", type=int, default=0)
-    args = p.parse_args()
+    args = build_cli_parser().parse_args(argv)
 
     db = DBManager()
 
@@ -1112,13 +1125,22 @@ def main():
         target_server_id=int(args.target_server_id or 0),
     )
 
-    logger.info("=== Tautulli import completed ===")
-    logger.info(f"Scanned: {stats.scanned}")
-    logger.info(f"Inserted: {stats.inserted}")
-    logger.info(f"Skipped (duplicates): {stats.skipped_duplicates}")
-    logger.info(f"Skipped (unknown user): {stats.skipped_unknown_user}")
-    logger.info(f"Skipped (unknown lib): {stats.skipped_unknown_library}")
-    logger.info(f"Skipped (invalid row): {stats.skipped_missing_required}")
+    emit_task_result(
+        logger,
+        task_name="import_tautulli",
+        status="success",
+        summary=asdict(stats),
+        summary_only=bool(args.summary_only),
+        detail_lines=(
+            "=== Tautulli import completed ===",
+            f"Scanned: {stats.scanned}",
+            f"Inserted: {stats.inserted}",
+            f"Skipped (duplicates): {stats.skipped_duplicates}",
+            f"Skipped (unknown user): {stats.skipped_unknown_user}",
+            f"Skipped (unknown lib): {stats.skipped_unknown_library}",
+            f"Skipped (invalid row): {stats.skipped_missing_required}",
+        ),
+    )
 
 
 

@@ -1,372 +1,209 @@
 # VODUM
-### Media Server Subscription, Access & Policy Manager (Beta)
 
-VODUM is a **self-hosted web application** designed to **centralize and automate the management of users, subscriptions and access rights**
-for media servers such as **Plex and Jellyfin**.
+VODUM is a self-hosted administration layer for Plex and Jellyfin. It brings
+users, subscriptions, library access, activity monitoring, policies,
+communications, migrations and backups into one web interface.
 
-Its primary purpose is to act as a **subscription service layer** on top of media servers, handling users, access rules,
-monitoring and communication in a single interface.
+> **Beta:** back up VODUM before every upgrade. Plex support is currently more
+> mature than Jellyfin support, and destructive migration automation should be
+> validated against your own servers before production use.
 
-VODUM replaces manual workflows (spreadsheets, notes, reminders, manual sharing)
-with an **automated, policy-driven system**.
+## What VODUM does
 
-> ⚠️ **Beta notice**: the database schema and features may evolve. Regular backups are strongly recommended.
+- Manages users shared across multiple Plex and Jellyfin servers.
+- Applies subscription expiration and renewal workflows.
+- Grants, removes and restores library access through queued provider jobs.
+- Monitors current sessions, playback history, concurrent streams and IP use.
+- Enforces stream policies, including warnings and session termination.
+- Sends scheduled email and Discord communications with retries.
+- Migrates users and access between supported media servers with dry runs,
+  validation, pause/resume and source-access rollback.
+- Creates and restores SQLite backups, including full backups with attachments
+  and the encryption key.
+- Imports Tautulli history and protects imports against duplicate sessions.
+- Provides an authenticated, multilingual web interface and scheduled task
+  engine.
 
----
+## Requirements
 
-## 🎯 Purpose
+- Docker Engine with Docker Compose, or a compatible container platform.
+- A persistent directory for `/appdata`.
+- A Plex token and/or Jellyfin API key for each managed server.
+- Optional SMTP and Discord credentials for communications.
 
-VODUM is built for media server administrators who:
+The published image is `nexius2/vodum:latest`. VODUM listens on container port
+`5000`; the included Compose file exposes it as host port `8097`.
 
-- share their Plex or Jellyfin servers with friends, family or subscribers
-- need a clear overview of **active, expiring and expired users**
-- want to manage access like a **real subscription service**
-- want to **automate access control** instead of editing shares manually
-- want users to be **notified automatically** about their subscription status
-
-VODUM acts as a **subscription-aware management layer** on top of Plex and Jellyfin.
-
----
-
-## ✨ Main Features
-
-### 👤 User Management (Plex & Jellyfin)
-
-VODUM maintains a **central database of all users**, independently from their current access state.
-
-- Users retrieved via Plex and Jellyfin APIs
-- Users can exist without active library shares
-- A single user can be linked to multiple servers
-- User state automatically derived from subscription status
-
-VODUM becomes the **single source of truth** for user management.
-
----
-
-### 🗂️ Server & Library Management
-
-- Manage multiple Plex and Jellyfin servers
-- Associate users with one or more servers
-- Control exactly which libraries are accessible per user
-- Store advanced Plex sharing options:
-  - Sync permissions
-  - Camera upload
-  - Channel access
-  - Media filters (Movies / TV / Music)
-
-VODUM mirrors **real server access**, not just theoretical permissions.
-
----
-
-### 💳 Subscription Management (Core Feature)
-
-Subscriptions are the **heart of VODUM**.
-
-Each subscription includes:
-
-- Start date
-- End date
-- Automatic state calculation:
-  - Active
-  - Expiring soon
-  - Expired
-
-The subscription state directly drives:
-
-- Library access
-- Policy enforcement
-- Email notifications
-
-VODUM behaves like a **real subscription service**, not a simple reminder tool.
-
----
-
-### ✉️ User Mailing & Notifications
-
-VODUM includes a **built-in mailing system** to communicate automatically with users.
-
-- Email templates stored in the database
-- Multiple email types:
-  - Upcoming expiration reminder
-  - Renewal reminder
-  - Subscription expired notification
-- Per-template delay configuration
-- Daily automated email processing
-
-This removes the need to manually track and warn users.
-
----
-
-### 🔒 Automated Access Control
-
-- Automatic access restriction for expired users
-- Applied **directly on Plex and Jellyfin servers**
-- Users are never deleted
-- Access is restored instantly upon renewal
-- Fully multi-server aware logic
-
-VODUM never relies on local flags only: **changes are applied on the servers themselves**.
-
----
-
-### 📊 Monitoring & Policies
-
-VODUM continuously monitors server activity and user behavior.
-
-- Track active sessions in real time
-- Monitor IP usage and concurrent streams
-- Detect abnormal situations automatically
-- Enforce policies:
-  - warnings
-  - session termination
-  - access restrictions
-
-Policies make VODUM an **active regulation system**, not just a passive dashboard.
-
----
-
-### 🌍 Multi-language Interface
-
-- Browser language auto-detection
-- Manual language selection available in settings
-- Translation system based on JSON language files
-
----
-
-### 🧱 Docker & Unraid Friendly
-
-- Fully containerized application
-- Designed for Unraid and standard Docker hosts
-- Persistent `/appdata` directory
-- Automatic database initialization
-- One-time schema creation
-- Versioned migrations
-- Timestamped log files
-
----
-
-# 🚀 Installation
-
-VODUM is distributed as a Docker image and can run on:
-
-- Any standard **Linux system with Docker**
-- **Unraid**
-
-Choose the method that fits your environment.
-
----
-
-# 🐧 Installation on Linux (Docker)
-
-VODUM runs on any Linux distribution (Ubuntu, Debian, Linux Mint, etc.)
-as long as **Docker and Docker Compose** are installed.
-
-> This method does NOT require Unraid.
-
----
-
-## ✅ Option 1 — Install from DockerHub (Recommended)
-
-### 1️⃣ Create required directories
+## Quick start with Docker Compose
 
 ```bash
-mkdir -p ~/vodum/{appdata,logs,backups}
-cd ~/vodum
-```
-
-### 2️⃣ Run using Docker
-
-```bash
-docker run -d \
-  --name vodum \
-  -p 8097:5000 \
-  -e TZ="Europe/Paris" \
-  -e UID=1000 \
-  -e GID=1000 \
-  -e DATABASE_PATH="/appdata/database.db" \
-  -v ~/vodum/appdata:/appdata \
-  -v ~/vodum/logs:/logs \
-  -v ~/vodum/backups:/backups \
-  --restart unless-stopped \
-  nexius2/vodum:latest
-```
-
-Access VODUM at:
-
-```
-http://YOUR_SERVER_IP:8097
-```
-
----
-
-## 🧩 Option 2 — Docker Compose (Recommended for production)
-
-Create a `docker-compose.yml` file:
-
-```yaml
-services:
-  vodum:
-    image: nexius2/vodum:latest
-    container_name: vodum
-    ports:
-      - "8097:5000"
-    environment:
-      TZ: Europe/Paris
-      UID: "1000"
-      GID: "1000"
-      DATABASE_PATH: /appdata/database.db
-    volumes:
-      - ./appdata:/appdata
-      - ./logs:/logs
-      - ./backups:/backups
-    restart: unless-stopped
-```
-
-Then run:
-
-```bash
+git clone https://github.com/Nexius2/VODUM.git
+cd VODUM
+cp .env.example .env
+mkdir -p appdata logs backups
 docker compose up -d
 ```
 
----
+Open `http://YOUR_SERVER_IP:8097` and complete the setup wizard.
 
-## 🔍 Important: UID / GID
+The included Compose configuration persists:
 
-On most Linux systems:
+| Host path | Container path | Purpose |
+|---|---|---|
+| `./appdata` | `/appdata` | Database, encryption key and application state |
+| `./logs` | `/appdata/logs` | Application and entrypoint logs |
+| `./backups` | `/appdata/backups` | Automatic and manual backups |
 
-```
-UID=1000
-GID=1000
-```
-
-Verify with:
+Follow startup and health information with:
 
 ```bash
-id -u
-id -g
+docker compose logs -f vodum
+docker compose ps
 ```
 
-Adjust if necessary.
+## Quick start with `docker run`
 
----
+```bash
+mkdir -p "$HOME/vodum/appdata"
 
-## ⚠️ Common Error: "failed to read Dockerfile"
-
-If you see:
-
-```
-failed to read dockerfile: open Dockerfile: no such file or directory
-```
-
-It means Docker Compose is trying to **build from source** instead of using the DockerHub image.
-
-To fix:
-
-- Ensure your compose file uses:
-
-```
-image: nexius2/vodum:latest
+docker run -d \
+  --name vodum \
+  --restart unless-stopped \
+  -p 8097:5000 \
+  -e TZ=Europe/Paris \
+  -e DATABASE_PATH=/appdata/database.db \
+  -e VODUM_LOG_DIR=/appdata/logs \
+  -e VODUM_BACKUP_DIR=/appdata/backups \
+  -v "$HOME/vodum/appdata:/appdata" \
+  nexius2/vodum:latest
 ```
 
-- Remove any `build:` section
-- Do NOT use `--build` when running `docker compose up`
+## Configuration
 
----
+Copy `.env.example` to `.env` when using Compose. Important settings include:
 
-# 🐳 Installation on Unraid
+| Variable | Default | Description |
+|---|---|---|
+| `TZ` | `Europe/Paris` | Container timezone |
+| `DATABASE_PATH` | `/appdata/database.db` | SQLite database path |
+| `VODUM_LOG_DIR` | `/appdata/logs` | Log directory |
+| `VODUM_BACKUP_DIR` | `/appdata/backups` | Backup directory |
+| `VODUM_IMPORTS_DIR` | database directory + `/imports` | Uploaded imports and restore requests |
+| `VODUM_ENCRYPTION_KEY_FILE` | `/appdata/vodum.encryption_key` | Persistent secret-encryption key |
+| `VODUM_PORT` | `5000` | Waitress listening port |
+| `VODUM_WAITRESS_THREADS` | `6` | Waitress worker threads |
+| `VODUM_MAX_UPLOAD_MB` | `4096` | Maximum complete HTTP request size |
+| `VODUM_MAX_ZIP_EXTRACTED_MB` | `8192` | Maximum restored ZIP size after extraction |
+| `VODUM_MAX_ZIP_MEMBERS` | `10000` | Maximum number of ZIP entries |
+| `VODUM_DEBUG` | `0` | Debug logging and diagnostics |
 
-VODUM is fully compatible with Unraid.
+If `DATABASE_PATH` is changed, keep the database, encryption key, imports,
+logs and backups on persistent storage. `VODUM_IMPORTS_DIR` can override the
+imports location explicitly.
 
-> Until VODUM becomes available on Community Applications (CA),
-> you can install it manually using the official template settings.
+## Network and security
 
----
+Authentication is configured during the first-run wizard. VODUM also applies
+CSRF protection to state-changing requests and rate-limits failed admin logins.
 
-## ➕ Add VODUM to Unraid
+Access is restricted to private networks by default:
 
-1. Open the Unraid Web UI
-2. Go to Docker
-3. Click Add Container
-4. Switch to Advanced View
-
----
-
-## 🧩 Container configuration
-
-### 🔹 Basic settings
-
-Name  
-VODUM
-
-Repository  
-nexius2/vodum:latest
-
-Network Type  
-bridge
-
----
-
-### 🔌 Port Mappings
-
-| Container Port | Host Port | Description |
-|---------------|----------|-------------|
-| 5000 | 8097 | Web interface |
-
----
-
-### 📁 Path Mappings
-
-| Container Path | Host Path | Description |
-|---------------|----------|-------------|
-| /appdata | /mnt/user/appdata/vodum | Application data |
-| /logs | /mnt/user/appdata/vodum/logs | Logs |
-| /backups | /mnt/user/appdata/vodum/backups | Database backups |
-
----
-
-### ⚙️ Environment Variables
-
-| Variable | Value | Description |
-|----------|-------|-------------|
-| TZ | Europe/Paris | Timezone |
-| UID | 99 | User ID |
-| GID | 100 | Group ID |
-| DATABASE_PATH | /appdata/database.db | SQLite database location |
-
----
-
-## ▶️ Start the container
-
-5. Click Apply  
-6. Wait for the image to download and start
-
----
-
-## 🌐 Web Interface
-
-Open:
-
-```
-http://<unraid-ip>:8097
+```env
+VODUM_IP_FILTER=1
+VODUM_ALLOWED_NETS=127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
 ```
 
----
+When VODUM is behind a reverse proxy, trust forwarded headers only from the
+proxy network:
 
-## Community & Support
+```env
+VODUM_TRUST_PROXY=1
+VODUM_TRUSTED_PROXY_NETS=127.0.0.1/32,::1/128,172.18.0.0/16
+```
 
-💬 Join the Discord server for discussions and troubleshooting:  
-https://discord.gg/5PU7TnegZt
+Use the smallest applicable CIDR, terminate HTTPS at the proxy, and never
+publish VODUM or media-server tokens without authentication and firewall
+protection.
 
----
+SMTP passwords, Discord tokens and media-server tokens are encrypted in
+SQLite. Full ZIP backups contain both encrypted secrets and their encryption
+key, so treat them as credentials. Raw `.db` and `.sqlite` backups do not
+contain the key; preserve `vodum.encryption_key` separately when using them.
 
-## 📸 Interface Preview
+See the [security guide](https://nexius2.github.io/vodum-docs/security/) for
+recovery, proxy and secret-handling details.
+
+## Upgrades and backups
+
+Create a full backup from **Backup & Import** before upgrading, then update the
+container:
+
+```bash
+docker compose pull
+docker compose up -d
+docker compose logs -f vodum
+```
+
+Database bootstrap and schema migrations run automatically at startup. Do not
+interrupt the first startup after an upgrade. If it fails, retain the database,
+logs, backup and encryption-key files before attempting recovery.
+
+## Development and validation
+
+Build the current source tree locally:
+
+```bash
+docker build -t vodum:local .
+docker run --rm -p 8097:5000 -v "$PWD/appdata:/appdata" vodum:local
+```
+
+For Python validation outside Docker:
+
+```bash
+python -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
+
+python -m compileall -q app migrations tools
+for test in tools/validate_*.py; do python "$test"; done
+python tools/smoke_routes.py
+python tools/smoke_application_runtime.py
+```
+
+The runtime smoke test creates an isolated temporary database. It validates
+idempotent bootstrap, foreign keys, template compilation, authentication,
+route rendering, CSRF, maintenance mode, brute-force locking and redirect
+safety without touching production data.
+
+The Tautulli CLI supports one machine-readable result for automation:
+
+```bash
+python app/tasks/import_tautulli.py --help
+python app/tasks/import_tautulli.py \
+  --tautulli-db /path/to/tautulli.db \
+  --summary-only
+```
+
+## Documentation and support
+
+- [Full documentation](https://nexius2.github.io/vodum-docs/)
+- [Getting started](https://nexius2.github.io/vodum-docs/getting-started/)
+- [Backup and restore](https://nexius2.github.io/vodum-docs/backup/)
+- [Troubleshooting](https://nexius2.github.io/vodum-docs/troubleshooting/)
+- [Discord community](https://discord.gg/5PU7TnegZt)
+
+## Interface preview
 
 <p align="center">
-  <img src="screenshots/dashboard.png" width="45%">
-  <img src="screenshots/monitoring.png" width="45%">
+  <img src="screenshots/dashboard.png" width="45%" alt="VODUM dashboard">
+  <img src="screenshots/monitoring.png" width="45%" alt="VODUM monitoring">
 </p>
 
 <p align="center">
-  <img src="screenshots/policies.png" width="45%">
-  <img src="screenshots/activity.png" width="45%">
+  <img src="screenshots/policies.png" width="45%" alt="VODUM policies">
+  <img src="screenshots/activity.png" width="45%" alt="VODUM activity">
 </p>
+
+## License
+
+VODUM is distributed under the [MIT License](LICENSE).

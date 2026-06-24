@@ -46,28 +46,28 @@ documentes dans `changelog.md`.
 
 ## Utilisateurs et acces
 
-- [ ] ameliorer les actions globales d'ajout et de retrait d'acces.
+- [x] ameliorer les actions globales d'ajout et de retrait d'acces.
 
 ## UI, configuration et automatisation
 
-- [ ] Uniformiser les paginations et les modales.
-- [ ] Generaliser les bulk actions utiles.
-- [ ] Reduire le bruit visuel et supprimer les boutons inutiles.
-- [~] Finaliser la traduction de toutes les vues (les catalogues ont maintenant
-  une parite de cles validee automatiquement).
+- [x] Uniformiser les paginations et les modales : composant de pagination
+  partage adopte par toutes les paginations serveur, y compris la fenetre
+  numerotee des logs; cycle de vie global des modales uniformise pour
+  l'accessibilite, le focus, Escape, le verrouillage du defilement et HTMX.
+- [x] Generaliser les bulk actions utiles : ajout de la sélection multiple des
+  parrainages avec archivage/restauration, limite de requête et protection des
+  statuts non réversibles, en complément des actions groupées existantes.
+- [x] Reduire le bruit visuel et supprimer les boutons inutiles.
+- [x] Finaliser la traduction de toutes les vues : les 5 catalogues ont une
+  parite de cles, de types et de placeholders validee automatiquement; l'audit
+  strict du texte visible ne recense plus aucune occurrence codee en dur.
 - [ ] Ajouter SMTP OAuth.
-- [ ] Definir puis ajouter un mode global `--summary-only` aux taches CLI
-  concernees.
-
 ## Refactor
 
-- [ ] Decouper les fichiers de plus de 1000 lignes.
+- [~] Decouper les fichiers de plus de 1000 lignes.
 - [~] Continuer la separation routes / services / providers.
 - [ ] Uniformiser les acces DB.
-- [ ] Supprimer le code mort.
-- [ ] better readme.md for github
-- [ ] better documentation on vodum... 
-
+- [~] Supprimer le code mort.
 ## Futur
 
 - [ ] Completer le support Jellyfin.

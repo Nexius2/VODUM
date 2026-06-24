@@ -1,23 +1,24 @@
----
-title: 🖥️ Servers & Libraries
----
+# Servers & Libraries
 
-<!-- Auto-generated improved docs for GitHub Pages (MkDocs Material) -->
+## Add a server
 
-<div align="left">
+Provide a unique name, provider type, reachable URL and token/API key. VODUM
+validates the provider before saving it. Plex validation also checks the account
+token against plex.tv, not only the local server.
 
-# 🖥️ Servers & Libraries
+You may configure local and public URLs. Redirects are accepted only when their
+destination matches an explicitly configured server origin, preventing token
+forwarding to unrelated hosts.
 
-<span class="hint-badge">Legacy page • Use new split docs</span>
+## Synchronization
 
-<br><br>
+- Plex synchronization imports server metadata, libraries, users and shares.
+- Jellyfin synchronization imports native users, libraries and current access.
+- Server checks update availability and temporary cooldown state.
 
-</div>
+Library access can be changed per user or through bulk grant/remove actions.
+Provider operations are queued and deduplicated; review Tasks and Logs when a
+change remains pending.
 
-
-This page has been split for clarity:
-
-- **[Servers](servers.md)**
-- **[Libraries](libraries.md)**
-
-If you prefer the original combined page, see the repository history.
+Deleting a server cascades its local provider data. Create a backup first and
+confirm no migration campaign still depends on it.
