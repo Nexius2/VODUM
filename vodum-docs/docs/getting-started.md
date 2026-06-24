@@ -1,92 +1,52 @@
----
-title: 🚀 Getting Started
----
+# Getting started
 
-<!-- Auto-generated improved docs for GitHub Pages (MkDocs Material) -->
+## Requirements
 
-<div align="left">
+- Docker Engine and Docker Compose.
+- Persistent storage for `/appdata`.
+- A Plex token and/or Jellyfin API key.
+- Optional SMTP and Discord credentials.
 
-# 🚀 Getting Started
-
-<span class="hint-badge">Installation • First run • Admin setup • Security • Updates</span>
-
-<br><br>
-
-</div>
-
-
-## ✅ Prerequisites
-
-- A machine capable of running Docker (Unraid, Linux, Windows + Docker Desktop, etc.)
-- Access to your Plex/Jellyfin servers (URL + token/API key)
-- (Optional) An SMTP account for email notifications
-- (Optional) A Discord bot token for Discord notifications
-
-!!! tip "Unraid users"
-    Map the VODUM **/app/data** volume to a persistent location on your array/cache.
-
----
-
-## 🐳 Docker Installation (recommended)
-
-Example (generic Docker):
+## Install with Compose
 
 ```bash
-docker run -d   --name vodum   -p 5000:5000   -v /path/to/vodum-data:/app/data   -e VODUM_SECRET_KEY="change_me"   -e VODUM_ALLOWED_NETS="127.0.0.1/32,192.168.0.0/16"   nexius2/vodum:latest
+git clone https://github.com/Nexius2/VODUM.git
+cd VODUM
+cp .env.example .env
+mkdir -p appdata logs backups
+docker compose up -d
 ```
 
-### Key volumes
+Open `http://YOUR_SERVER_IP:8097`. The included Compose file maps:
 
-- `/app/data` contains:
-  - the database
-  - backups (if enabled)
-  - local app state
+| Host | Container |
+|---|---|
+| `./appdata` | `/appdata` |
+| `./logs` | `/appdata/logs` |
+| `./backups` | `/appdata/backups` |
 
----
+## First-run wizard
 
-## 🔐 First run: create the admin account
+The wizard creates the administrator account, chooses the interface language
+and guides initial server configuration. Use a strong password and keep the
+application restricted to trusted networks.
 
-On first access, VODUM will guide you through **admin setup** (username/password).
+After setup:
 
-!!! warning
-    Keep your admin password safe. If you use the recovery/reset feature, make sure it’s restricted to trusted access only.
+1. Add a server and validate its credentials.
+2. Run the provider synchronization task.
+3. Confirm libraries and users were imported.
+4. Configure expiration behavior and Communications.
+5. Review enabled tasks before turning on global scheduling.
+6. Create a full backup.
 
----
+## Upgrade
 
-## 🌐 Network protection (IP filter)
+```bash
+docker compose pull
+docker compose up -d
+docker compose logs -f vodum
+```
 
-VODUM can restrict access to allowed networks.
-
-- `VODUM_IP_FILTER`  
-  - `1` (default): enabled  
-  - `0`: disabled
-- `VODUM_ALLOWED_NETS`  
-  A comma-separated list of CIDRs, e.g.:
-  `127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16`
-
-!!! tip
-    Put VODUM behind a reverse proxy (Traefik / Nginx Proxy Manager / Caddy) and enable HTTPS.
-
----
-
-## 🧭 Typical onboarding workflow
-
-1. **Add your servers** → [Servers](servers.md)
-2. **Sync libraries** → [Libraries](libraries.md)
-3. **Import / manage users** → [Users](users.md)
-4. **Set subscription expirations** → [Subscriptions](subscriptions.md)
-5. **Define policies** → [Policies](policies.md)
-6. **Enable tasks** → [Tasks](tasks.md)
-7. (Optional) Configure **Mailing** and/or **Discord**
-
----
-
-## 🔄 Updates & migrations
-
-VODUM includes an update-check mechanism and migrations.
-
-- Always backup your database before major updates → [Backup](backup.md)
-- Check the logs if something looks off after an upgrade → [Logs](logs.md)
-
-!!! important
-    If you run VODUM on Unraid Community Apps, updates are usually managed by Unraid. Still, **back up before updating**.
+Startup applies idempotent database bootstrap and migrations automatically.
+Do not interrupt the first start after an upgrade.

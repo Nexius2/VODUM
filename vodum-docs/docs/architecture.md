@@ -1,51 +1,20 @@
----
-title: 🏗 Architecture
----
+# Architecture
 
-<!-- Auto-generated improved docs for GitHub Pages (MkDocs Material) -->
+VODUM is a Flask application served by Waitress with SQLite as its durable
+state. The container entrypoint initializes/migrates the database before Flask
+registers routes and runs the centralized startup sequence.
 
-<div align="left">
+## Boundaries
 
-# 🏗 Architecture
+- **Routes/templates** validate requests and render state.
+- **Core services** contain provider-neutral business logic.
+- **Providers** encapsulate Plex/Jellyfin API behavior.
+- **Tasks** perform scheduled or queued external work.
+- **DBManager** provides SQLite access and transaction-safe helpers.
 
-<span class="hint-badge">Flask • SQLite • Tasks engine • Providers</span>
+Provider mutations are queued rather than performed by GET routes. Monitoring
+pages read snapshots from SQLite. The sole audited GET exception is the
+authenticated artwork proxy, which fetches provider images into a local cache.
 
-<br><br>
-
-</div>
-
-
-## High-level components
-
-VODUM is made of:
-
-- **Web UI** (Flask templates)
-- **Database** (SQLite by default; used for users, subscriptions, server config, templates, logs metadata)
-- **Tasks engine** to run scheduled checks and apply access updates
-- **Providers** layer for Plex/Jellyfin operations
-
----
-
-## Data model (conceptual)
-
-- Users
-- Subscriptions (expiration dates)
-- Servers (type + connectivity)
-- Libraries (per server)
-- Shared access rules (who can access what)
-- Templates (mail/discord)
-- Logs / history
-
-!!! tip
-    For a safe upgrade workflow, always export a backup before updating.
-
----
-
-## Task orchestration
-
-Tasks are responsible for:
-- checking servers
-- enforcing policies
-- applying Plex/Jellyfin access updates
-- dispatching notifications
-- running backups/cleanup if enabled
+Startup runs admin recovery, maintenance recovery, one-shot repairs and the
+non-fatal Plex websocket engine as explicit ordered steps.

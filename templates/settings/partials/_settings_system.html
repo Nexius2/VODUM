@@ -124,7 +124,7 @@
                   class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
             <option value="Lax" {% if (settings.web_cookie_samesite or 'Lax') == 'Lax' %}selected{% endif %}>Lax</option>
             <option value="Strict" {% if settings.web_cookie_samesite == 'Strict' %}selected{% endif %}>Strict</option>
-            <option value="None" {% if settings.web_cookie_samesite == 'None' %}selected{% endif %}>None</option>
+            <option value="None" {% if settings.web_cookie_samesite == 'None' %}selected{% endif %}>{{ t("subscription_none") }}</option>
           </select>
           <p class="text-xs text-slate-500 mt-1">
             {{ t("cookie_samesite_help") }}

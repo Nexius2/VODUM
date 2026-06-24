@@ -310,57 +310,29 @@
 </table>
 </div>
 
-{% if total_pages > 1 %}
-<div class="flex items-center justify-between mt-4">
-  <div class="text-xs text-slate-500">
-    Page {{ page }} / {{ total_pages }} ({{ total_users }} users)
-  </div>
-
-  <div class="flex gap-2">
-
-    {% set pagination_args = dict(
-      tab=tab,
-      q=search,
-      status=selected_statuses,
-      sort=sort,
-      order=order
-    ) %}
-
-    {% if archive_mode is defined %}
-      {% set _ = pagination_args.update({'archive_mode': archive_mode}) %}
-    {% endif %}
-
-    {% if page > 1 %}
-
-      <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
-         href="{{ url_for('users_list', page=1, **pagination_args) }}">
-        First
-      </a>
-
-      <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
-         href="{{ url_for('users_list', page=page-1, **pagination_args) }}">
-        Prev
-      </a>
-
-    {% endif %}
-
-    {% if page < total_pages %}
-
-      <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
-         href="{{ url_for('users_list', page=page+1, **pagination_args) }}">
-        Next
-      </a>
-
-      <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
-         href="{{ url_for('users_list', page=total_pages, **pagination_args) }}">
-        Last
-      </a>
-
-    {% endif %}
-
-  </div>
-</div>
+{% set pagination_args = dict(
+  tab=tab,
+  q=search,
+  status=selected_statuses,
+  sort=sort,
+  order=order
+) %}
+{% if archive_mode is defined %}
+  {% set _ = pagination_args.update({"archive_mode": archive_mode}) %}
 {% endif %}
+{% set pagination = {
+  "page": page,
+  "total_pages": total_pages,
+  "total_rows": total_users,
+  "unit_label": t("users"),
+  "first_url": url_for("users_list", page=1, **pagination_args),
+  "prev_url": url_for("users_list", page=page-1, **pagination_args),
+  "next_url": url_for("users_list", page=page+1, **pagination_args),
+  "last_url": url_for("users_list", page=total_pages, **pagination_args)
+} %}
+<div class="mt-4">
+  {% include "partials/_pagination.html" %}
+</div>
 
 <!-- SCRIPT FILTRES -->
 <script>
@@ -566,10 +538,42 @@ document.addEventListener("DOMContentLoaded", () => {
   </div>
 </div>
 
-<div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+<form method="post" action="{{ url_for('referrals_bulk_status') }}" id="referrals_bulk_form">
+  <input type="hidden" name="return_archive_mode" value="{{ archive_mode }}">
+  <input type="hidden" name="return_page" value="{{ page }}">
+  <input type="hidden" name="return_q" value="{{ search }}">
+  <input type="hidden" name="return_sort" value="{{ sort }}">
+  <input type="hidden" name="return_order" value="{{ order }}">
+  {% for selected_status in selected_statuses %}
+  <input type="hidden" name="return_status" value="{{ selected_status }}">
+  {% endfor %}
+  <div class="flex flex-wrap items-center gap-3 mb-3">
+    <label class="inline-flex items-center gap-2 text-sm text-slate-300">
+      <input type="checkbox" id="referrals_select_all" class="rounded border-slate-700 bg-slate-950">
+      {{ t("referral_bulk_select_visible") }}
+    </label>
+    <span id="referrals_selected_count" class="text-xs text-slate-500">0 {{ t("referral_bulk_selected") }}</span>
+    <div id="referrals_bulk_actions" class="hidden gap-2 sm:ml-auto">
+      {% if archive_mode in ('active', 'all') %}
+      <button type="submit" name="action" value="archive" data-bulk-action
+              class="px-3 py-2 rounded-lg bg-amber-700 hover:bg-amber-600 text-sm disabled:opacity-40 disabled:cursor-not-allowed" disabled>
+        {{ t("referral_bulk_archive") }}
+      </button>
+      {% endif %}
+      {% if archive_mode in ('archived', 'all') %}
+      <button type="submit" name="action" value="restore" data-bulk-action
+              class="px-3 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-sm disabled:opacity-40 disabled:cursor-not-allowed" disabled>
+        {{ t("referral_bulk_restore") }}
+      </button>
+      {% endif %}
+    </div>
+  </div>
+
+<div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-x-auto">
   <table class="w-full text-sm">
     <thead class="bg-slate-950/60 text-slate-400">
       <tr>
+        <th class="px-4 py-3 text-left"><span class="sr-only">{{ t("referral_bulk_select_item") }}</span></th>
         <th class="px-4 py-3 text-left">{{ t("referrer") }}</th>
         <th class="px-4 py-3 text-left">{{ t("referred_user") }}</th>
         <th class="px-4 py-3 text-left">{{ t("referral_status") }}</th>
@@ -582,6 +586,13 @@ document.addEventListener("DOMContentLoaded", () => {
     <tbody>
       {% for r in referrals %}
       <tr class="border-t border-slate-800 hover:bg-slate-800/50">
+        <td class="px-4 py-3">
+          {% if r.status != 'cancelled' %}
+          <input type="checkbox" name="referral_ids" value="{{ r.id }}"
+                 class="referral-row-checkbox rounded border-slate-700 bg-slate-950"
+                 aria-label="{{ t('referral_bulk_select_item') }} {{ r.referred_username }}">
+          {% endif %}
+        </td>
         <td class="px-4 py-3">
           <div class="font-medium text-slate-100">{{ r.referrer_username }}</div>
           <div class="text-xs text-slate-400">{{ r.referrer_email or '' }}</div>
@@ -610,7 +621,7 @@ document.addEventListener("DOMContentLoaded", () => {
       </tr>
       {% else %}
       <tr>
-        <td colspan="7" class="px-4 py-6 text-center text-slate-500">
+        <td colspan="8" class="px-4 py-6 text-center text-slate-500">
           {{ t("no_user_found") }}
         </td>
       </tr>
@@ -618,32 +629,29 @@ document.addEventListener("DOMContentLoaded", () => {
     </tbody>
   </table>
 </div>
+</form>
 
-{% if total_pages > 1 %}
-<div class="flex items-center justify-between mt-4">
-  <div class="text-xs text-slate-500">
-    Page {{ page }} / {{ total_pages }} ({{ total_referrals }} referrals)
-  </div>
-
-  <div class="flex gap-2">
-    {% if page > 1 %}
-      <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
-         href="{{ url_for('users_list', tab='referrals', archive_mode=archive_mode, page=1, q=search, status=selected_statuses, sort=sort, order=order) }}">First</a>
-
-      <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
-         href="{{ url_for('users_list', tab='referrals', archive_mode=archive_mode, page=page-1, q=search, status=selected_statuses, sort=sort, order=order) }}">Prev</a>
-    {% endif %}
-
-    {% if page < total_pages %}
-      <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
-         href="{{ url_for('users_list', tab='referrals', archive_mode=archive_mode, page=page+1, q=search, status=selected_statuses, sort=sort, order=order) }}">Next</a>
-
-      <a class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
-         href="{{ url_for('users_list', tab='referrals', archive_mode=archive_mode, page=total_pages, q=search, status=selected_statuses, sort=sort, order=order) }}">Last</a>
-    {% endif %}
-  </div>
+{% set referral_pagination_args = {
+  "tab": "referrals",
+  "archive_mode": archive_mode,
+  "q": search,
+  "status": selected_statuses,
+  "sort": sort,
+  "order": order
+} %}
+{% set pagination = {
+  "page": page,
+  "total_pages": total_pages,
+  "total_rows": total_referrals,
+  "unit_label": t("users_tab_referrals"),
+  "first_url": url_for("users_list", page=1, **referral_pagination_args),
+  "prev_url": url_for("users_list", page=page-1, **referral_pagination_args),
+  "next_url": url_for("users_list", page=page+1, **referral_pagination_args),
+  "last_url": url_for("users_list", page=total_pages, **referral_pagination_args)
+} %}
+<div class="mt-4">
+  {% include "partials/_pagination.html" %}
 </div>
-{% endif %}
 
 <script>
 document.addEventListener("DOMContentLoaded", () => {
@@ -664,6 +672,37 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+    const bulkForm = document.getElementById("referrals_bulk_form");
+    if (!bulkForm) return;
+
+    const selectAll = document.getElementById("referrals_select_all");
+    const checkboxes = [...bulkForm.querySelectorAll(".referral-row-checkbox")];
+    const count = document.getElementById("referrals_selected_count");
+    const selectedLabel = {{ t("referral_bulk_selected")|tojson }};
+    const buttons = [...bulkForm.querySelectorAll("[data-bulk-action]")];
+    const actions = document.getElementById("referrals_bulk_actions");
+
+    const refresh = () => {
+        const selected = checkboxes.filter(cb => cb.checked).length;
+        count.textContent = `${selected} ${selectedLabel}`;
+        buttons.forEach(button => { button.disabled = selected === 0; });
+        if (actions) {
+            actions.classList.toggle("hidden", selected === 0 || buttons.length === 0);
+            actions.classList.toggle("flex", selected > 0 && buttons.length > 0);
+        }
+        selectAll.checked = checkboxes.length > 0 && selected === checkboxes.length;
+        selectAll.indeterminate = selected > 0 && selected < checkboxes.length;
+    };
+
+    selectAll.addEventListener("change", () => {
+        checkboxes.forEach(cb => { cb.checked = selectAll.checked; });
+        refresh();
+    });
+    checkboxes.forEach(cb => cb.addEventListener("change", refresh));
+    refresh();
 });
 </script>
 
@@ -909,34 +948,34 @@ document.addEventListener("DOMContentLoaded", () => {
       <!-- USER FIELDS -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label class="text-xs text-slate-400">Email (required for Plex)</label>
+          <label class="text-xs text-slate-400">{{ t("users_email_plex_required") }}</label>
           <input id="cu_email" type="email" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" placeholder="user@mail.com">
         </div>
         <div>
-          <label class="text-xs text-slate-400">Second email (optional)</label>
+          <label class="text-xs text-slate-400">{{ t("users_second_email_optional") }}</label>
           <input id="cu_second_email" type="email" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" placeholder="backup@mail.com">
         </div>
         <div>
-          <label class="text-xs text-slate-400">Username</label>
-          <input id="cu_username" type="text" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" placeholder="username">
-          <div class="text-xs text-slate-500 mt-1">If empty, we'll use email local-part.</div>
+          <label class="text-xs text-slate-400">{{ t("username") }}</label>
+          <input id="cu_username" type="text" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" placeholder="{{ t('username') }}">
+          <div class="text-xs text-slate-500 mt-1">{{ t("users_username_empty_help") }}</div>
         </div>
         <div>
-          <label class="text-xs text-slate-400">Expiration date</label>
+          <label class="text-xs text-slate-400">{{ t("expiration_date") }}</label>
           <input id="cu_expiration" type="date" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm">
         </div>
         <div>
-          <label class="text-xs text-slate-400">Firstname</label>
-          <input id="cu_firstname" type="text" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" placeholder="Firstname">
+          <label class="text-xs text-slate-400">{{ t("firstname") }}</label>
+          <input id="cu_firstname" type="text" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" placeholder="{{ t('firstname') }}">
         </div>
         <div>
-          <label class="text-xs text-slate-400">Lastname</label>
-          <input id="cu_lastname" type="text" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" placeholder="Lastname">
+          <label class="text-xs text-slate-400">{{ t("lastname") }}</label>
+          <input id="cu_lastname" type="text" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" placeholder="{{ t('lastname') }}">
         </div>
         <div class="md:col-span-2">
-          <label class="text-xs text-slate-400">Subscription</label>
+          <label class="text-xs text-slate-400">{{ t("subscription") }}</label>
           <select id="cu_subscription_template_id" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm">
-            <option value="">-- none --</option>
+            <option value="">{{ t("users_none") }}</option>
             {% for tpl in subscription_templates %}
               <option value="{{ tpl.id }}" {% if tpl.is_default %}selected{% endif %}>
                 {{ tpl.name }}
@@ -968,8 +1007,8 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>
 		
         <div class="md:col-span-2">
-          <label class="text-xs text-slate-400">Notes</label>
-          <textarea id="cu_notes" rows="3" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" placeholder="internal notes..."></textarea>
+          <label class="text-xs text-slate-400">{{ t("notes") }}</label>
+          <textarea id="cu_notes" rows="3" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" placeholder="{{ t('notes') }}..."></textarea>
         </div>
       </div>
 
@@ -1189,7 +1228,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const label = `${s.name} (${(s.type||'').toUpperCase()})`;
       return `<option value="${s.id}">${label}</option>`;
     });
-    return `<option value="">-- choose server --</option>` + opts.join('');
+    return `<option value="">{{ t("users_choose_server") }}</option>` + opts.join('');
   }
 
   async function loadLibraries(serverId){
@@ -1202,20 +1241,20 @@ document.addEventListener("DOMContentLoaded", () => {
     const node = el(`
       <div class="border border-slate-800 rounded-2xl p-4 bg-slate-950">
         <div class="flex items-center justify-between mb-3">
-          <div class="text-sm font-semibold">Server</div>
-          <button type="button" class="text-xs px-2 py-1 rounded bg-slate-800 hover:bg-slate-700" data-action="remove">Remove</button>
+          <div class="text-sm font-semibold">{{ t("server") }}</div>
+          <button type="button" class="text-xs px-2 py-1 rounded bg-slate-800 hover:bg-slate-700" data-action="remove">{{ t("remove") }}</button>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label class="text-xs text-slate-400">Server</label>
+            <label class="text-xs text-slate-400">{{ t("server") }}</label>
             <div class="flex gap-2 items-center">
               <select class="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" data-field="server_id">
                 ${serverOptionsHtml()}
               </select>
               <button type="button"
                       class="hidden"
-                      title="Add linked Plex servers"
+                      title="{{ t('users_add_linked_plex_servers') }}"
                       data-add-linked>
                 +
               </button>
@@ -1233,21 +1272,21 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
 
           <div data-jellyfin class="hidden md:col-span-2">
-            <div class="text-xs text-slate-400 mb-1">Jellyfin options</div>
+            <div class="text-xs text-slate-400 mb-1">{{ t("users_jellyfin_options") }}</div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label class="text-xs text-slate-500">Initial password (optional)</label>
+                <label class="text-xs text-slate-500">{{ t("users_initial_password_optional") }}</label>
                 <input type="password" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" data-field="jellyfin_password" autocomplete="new-password">
               </div>
               <label class="flex items-center gap-2 text-sm mt-5">
                 <input type="checkbox" data-field="jellyfin_force_password_change">
-                <span class="text-slate-200">Force password change</span>
+                <span class="text-slate-200">{{ t("users_force_password_change") }}</span>
               </label>
             </div>
           </div>
 
           <div data-plex class="hidden md:col-span-2">
-            <div class="text-xs text-slate-400 mb-1">Plex share flags (stored in details_json)</div>
+            <div class="text-xs text-slate-400 mb-1">{{ t("users_plex_share_flags") }}</div>
             <div class="flex flex-wrap gap-4 text-sm">
               <label class="flex items-center gap-2">
                 <input type="checkbox" data-plex-flag="allowSync">
@@ -1280,7 +1319,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             <label class="flex items-center gap-2 text-sm mt-3">
               <input type="checkbox" data-field="enqueue_plex_jobs">
-              <span class="text-slate-200">Enqueue Plex jobs (debug / optional)</span>
+              <span class="text-slate-200">{{ t("users_enqueue_plex_jobs") }}</span>
             </label>
           </div>
         </div>
@@ -1316,7 +1355,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Show linked Plex servers (same token)
       if(provider === 'plex' && srv?.linked_servers?.length){
-        linkedInfo.textContent = `Linked Plex servers: ${srv.linked_servers.map(x => x.name).join(', ')}`;
+        linkedInfo.textContent = {{ t("users_linked_plex_servers")|tojson }} + ': ' + srv.linked_servers.map(x => x.name).join(', ');
         btnAddLinked.disabled = false;
       } else {
         linkedInfo.textContent = '';
@@ -1327,11 +1366,11 @@ document.addEventListener("DOMContentLoaded", () => {
       jellyfinBox.classList.toggle('hidden', provider!=='jellyfin');
       plexBox.classList.toggle('hidden', provider!=='plex');
 
-      libsBox.innerHTML = `<div class="text-slate-500">Loading libraries…</div>`;
+      libsBox.innerHTML = `<div class="text-slate-500">{{ t("users_loading_libraries") }}</div>`;
       try{
         const libs = await loadLibraries(serverId);
         if(!libs.length){
-          libsBox.innerHTML = `<div class="text-slate-500">No libraries found for this server.</div>`;
+          libsBox.innerHTML = `<div class="text-slate-500">{{ t("users_no_libraries_server") }}</div>`;
           return;
         }
 
@@ -1356,7 +1395,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
       } catch(e){
-        libsBox.innerHTML = `<div class="text-red-400">Failed to load libraries</div>`;
+        libsBox.innerHTML = `<div class="text-red-400">{{ t("users_failed_libraries") }}</div>`;
       }
     });
 
@@ -1527,7 +1566,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if(!state.servers.length) await initServers();
       VodumCreateUser.open();
     }catch(e){
-      alert('Failed to load servers: ' + (e.message || e));
+      alert({{ t("users_failed_servers")|tojson }}.replace('{error}', e.message || e));
     }
   });
 })();

@@ -1,5 +1,5 @@
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-  <div class="text-sm font-semibold mb-4">Now Playing</div>
+  <div class="text-sm font-semibold mb-4">{{ t("monitoring.section.sessions") }}</div>
 
   {% if sessions and sessions|length > 0 %}
     <div class="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(380px,1fr))]">
@@ -43,9 +43,9 @@
               </span>
 
               {% if s.is_transcode %}
-                <span class="text-xs px-2 py-1 rounded-full border border-orange-500 text-orange-300">Transcoding</span>
+                <span class="text-xs px-2 py-1 rounded-full border border-orange-500 text-orange-300">{{ t("transcoding") }}</span>
               {% else %}
-                <span class="text-xs px-2 py-1 rounded-full border border-emerald-600 text-emerald-300">Direct Play</span>
+                <span class="text-xs px-2 py-1 rounded-full border border-emerald-600 text-emerald-300">{{ t("monitoring_direct_play") }}</span>
               {% endif %}
 
               <span class="text-xs px-2 py-1 rounded-full border border-slate-700">{{ s.server_name }}</span>
@@ -101,6 +101,6 @@
       {% endfor %}
     </div>
   {% else %}
-    <div class="text-slate-500">No active session.</div>
+    <div class="text-slate-500">{{ t("monitoring_no_active_session") }}</div>
   {% endif %}
 </div>

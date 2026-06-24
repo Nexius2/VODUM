@@ -1,7 +1,7 @@
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
   <div class="flex items-center justify-between mb-4">
-    <div class="text-sm font-semibold">History</div>
-    <div class="text-xs text-slate-400">30 rows / page</div>
+    <div class="text-sm font-semibold">{{ t("history") }}</div>
+    <div class="text-xs text-slate-400">{{ t("monitoring_user_rows_page") }}</div>
   </div>
 
   {% if rows is not defined %}
@@ -75,7 +75,7 @@
             </tr>
           {% endfor %}
           {% if rows|length == 0 %}
-            <tr><td colspan="8" class="py-6 text-slate-500">No results.</td></tr>
+            <tr><td colspan="8" class="py-6 text-slate-500">{{ t("monitoring_user_no_results") }}</td></tr>
           {% endif %}
         </tbody>
       </table>

@@ -1,0 +1,41 @@
+{% if pagination and pagination.total_pages > 1 %}
+  {% set unit_label = pagination.unit_label|default(t("comm_history_rows"), true) %}
+  <nav
+    class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+    aria-label="{{ t('page') }}"
+  >
+    <div class="text-xs text-slate-500">
+      {{ t("page") }} {{ pagination.page }} / {{ pagination.total_pages }}
+      {% if pagination.total_rows is defined and pagination.total_rows is not none %}
+        ({{ pagination.total_rows }} {{ unit_label }})
+      {% endif %}
+    </div>
+
+    <div class="flex flex-wrap items-center gap-2">
+      {% if pagination.page > 1 %}
+        <a class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
+           href="{{ pagination.first_url }}">{{ t("users_first_page") }}</a>
+        <a class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
+           href="{{ pagination.prev_url }}">{{ t("previous") }}</a>
+      {% endif %}
+
+      {% if pagination.numbered_pages is defined %}
+        {% for item in pagination.numbered_pages %}
+          <a
+            class="rounded-lg border px-3 py-1.5 text-xs
+                   {{ 'border-primary bg-primary text-white' if item.current else 'border-slate-700 bg-slate-950 text-slate-200 hover:bg-slate-800' }}"
+            href="{{ item.url }}"
+            {% if item.current %}aria-current="page"{% endif %}
+          >{{ item.number }}</a>
+        {% endfor %}
+      {% endif %}
+
+      {% if pagination.page < pagination.total_pages %}
+        <a class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
+           href="{{ pagination.next_url }}">{{ t("next") }}</a>
+        <a class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
+           href="{{ pagination.last_url }}">{{ t("last") }}</a>
+      {% endif %}
+    </div>
+  </nav>
+{% endif %}

@@ -1,11 +1,11 @@
 <div class="flex items-center justify-between mb-4">
-  <div class="text-sm text-slate-400">Range</div>
+  <div class="text-sm text-slate-400">{{ t("monitoring_servers_range") }}</div>
   <select id="serversRangePicker" class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm">
-    <option value="7d"  {% if server_range=='7d' %}selected{% endif %}>7 days</option>
-    <option value="1m"  {% if server_range=='1m' %}selected{% endif %}>1 month</option>
-    <option value="6m"  {% if server_range=='6m' %}selected{% endif %}>6 months</option>
-    <option value="12m" {% if server_range=='12m' %}selected{% endif %}>12 months</option>
-    <option value="all" {% if server_range=='all' %}selected{% endif %}>All time</option>
+    <option value="7d"  {% if server_range=='7d' %}selected{% endif %}>{{ t("seven_days") }}</option>
+    <option value="1m"  {% if server_range=='1m' %}selected{% endif %}>{{ t("one_month") }}</option>
+    <option value="6m"  {% if server_range=='6m' %}selected{% endif %}>{{ t("six_months") }}</option>
+    <option value="12m" {% if server_range=='12m' %}selected{% endif %}>{{ t("one_year") }}</option>
+    <option value="all" {% if server_range=='all' %}selected{% endif %}>{{ t("monitoring_servers_all_time") }}</option>
   </select>
 </div>
 
@@ -16,70 +16,70 @@
 
 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4 mb-6">
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-    <div class="text-xs text-slate-400">Sessions</div>
+    <div class="text-xs text-slate-400">{{ t("monitoring_servers_sessions") }}</div>
     <div class="text-3xl font-semibold mt-2">{{ servers_combined.sessions or 0 }}</div>
   </div>
 
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-    <div class="text-xs text-slate-400">Active users</div>
+    <div class="text-xs text-slate-400">{{ t("active_users") }}</div>
     <div class="text-3xl font-semibold mt-2">{{ servers_combined.active_users or 0 }}</div>
   </div>
 
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-    <div class="text-xs text-slate-400">Watch time</div>
+    <div class="text-xs text-slate-400">{{ t("monitoring_servers_watch_time") }}</div>
     <div class="text-3xl font-semibold mt-2">{{ g_hours }}h {{ g_mins }}m</div>
   </div>
 
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-    <div class="text-xs text-slate-400">Transcodes</div>
+    <div class="text-xs text-slate-400">{{ t("monitoring.cards.transcodes") }}</div>
     <div class="text-3xl font-semibold mt-2">{{ servers_combined.transcodes or 0 }}</div>
   </div>
 
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-    <div class="text-xs text-slate-400">Unique IPs</div>
+    <div class="text-xs text-slate-400">{{ t("monitoring_servers_unique_ips") }}</div>
     <div class="text-3xl font-semibold mt-2">{{ servers_combined.unique_ips or 0 }}</div>
   </div>
 
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-    <div class="text-xs text-slate-400">Peak bitrate</div>
+    <div class="text-xs text-slate-400">{{ t("monitoring_servers_peak_bitrate") }}</div>
     <div class="text-sm mt-2 text-slate-200">
-      Avg: {{ (servers_combined.avg_peak_bitrate or 0) | round(0) }} kbps<br>
-      Max: {{ (servers_combined.max_peak_bitrate or 0) }} kbps
+      {{ t("monitoring_servers_average") }}: {{ (servers_combined.avg_peak_bitrate or 0) | round(0) }} kbps<br>
+      {{ t("monitoring_servers_maximum") }}: {{ (servers_combined.max_peak_bitrate or 0) }} kbps
     </div>
   </div>
 </div>
 
 <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-    <div class="text-sm font-semibold mb-3">Sessions/day</div>
+    <div class="text-sm font-semibold mb-3">{{ t("monitoring_servers_sessions_day") }}</div>
     <canvas id="chartServersSessionsDay" height="120"></canvas>
   </div>
 
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-    <div class="text-sm font-semibold mb-3">Media types</div>
+    <div class="text-sm font-semibold mb-3">{{ t("monitoring_servers_media_types") }}</div>
     <canvas id="chartServersMediaTypes" height="120"></canvas>
   </div>
 </div>
 
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-6">
-  <div class="text-sm font-semibold mb-3">Per server (summary)</div>
+  <div class="text-sm font-semibold mb-3">{{ t("monitoring_servers_summary") }}</div>
 
   <div class="overflow-x-auto">
     <table class="min-w-full text-sm">
       <thead class="text-slate-400">
         <tr class="border-b border-slate-800">
-          <th class="text-left py-2 pr-4">Server</th>
-          <th class="text-left py-2 pr-4">Status</th>
-          <th class="text-left py-2 pr-4">Live</th>
-          <th class="text-left py-2 pr-4">Users</th>
-          <th class="text-left py-2 pr-4">Libraries</th>
-          <th class="text-left py-2 pr-4">Sessions</th>
-          <th class="text-left py-2 pr-4">Active</th>
-          <th class="text-left py-2 pr-4">Watch time</th>
-          <th class="text-left py-2 pr-4">Transcodes</th>
+          <th class="text-left py-2 pr-4">{{ t("server") }}</th>
+          <th class="text-left py-2 pr-4">{{ t("status") }}</th>
+          <th class="text-left py-2 pr-4">{{ t("monitoring_servers_live") }}</th>
+          <th class="text-left py-2 pr-4">{{ t("users") }}</th>
+          <th class="text-left py-2 pr-4">{{ t("libraries") }}</th>
+          <th class="text-left py-2 pr-4">{{ t("monitoring_servers_sessions") }}</th>
+          <th class="text-left py-2 pr-4">{{ t("active") }}</th>
+          <th class="text-left py-2 pr-4">{{ t("monitoring_servers_watch_time") }}</th>
+          <th class="text-left py-2 pr-4">{{ t("monitoring.cards.transcodes") }}</th>
           <th class="text-left py-2 pr-4">IPs</th>
-          <th class="text-left py-2 pr-4">Bitrate</th>
-          <th class="text-left py-2 pr-4">Last check</th>
+          <th class="text-left py-2 pr-4">{{ t("bitrate") }}</th>
+          <th class="text-left py-2 pr-4">{{ t("last_check") }}</th>
         </tr>
       </thead>
       <tbody>
@@ -87,7 +87,7 @@
         {% set ms = s.watch_ms or 0 %}
         <tr class="border-b border-slate-800">
           <td class="py-2 pr-4 min-w-[260px]">
-            <div class="font-semibold">{{ s.name or ('Server ' ~ s.server_id) }}</div>
+            <div class="font-semibold">{{ s.name or (t("server") ~ ' ' ~ s.server_id) }}</div>
             <div class="text-xs text-slate-500">{{ (s.type or '')|upper }}</div>
 
             {% with row=s, max_width_class='max-w-[220px]', show_unavailable_message=True %}
@@ -97,18 +97,18 @@
 
           <td class="py-2 pr-4">
             {% if s.status == 'up' %}
-              <span class="px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">UP</span>
+              <span class="px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">{{ t("monitoring_servers_up") }}</span>
             {% elif s.status == 'down' %}
-              <span class="px-2 py-1 rounded-lg bg-red-500/10 text-red-300 border border-red-500/30">DOWN</span>
+              <span class="px-2 py-1 rounded-lg bg-red-500/10 text-red-300 border border-red-500/30">{{ t("monitoring_servers_down") }}</span>
             {% else %}
-              <span class="px-2 py-1 rounded-lg bg-slate-500/10 text-slate-300 border border-slate-500/30">UNKNOWN</span>
+              <span class="px-2 py-1 rounded-lg bg-slate-500/10 text-slate-300 border border-slate-500/30">{{ t("unknown") }}</span>
             {% endif %}
           </td>
 
           <td class="py-2 pr-4">
             <div class="font-semibold">{{ s.live_sessions or 0 }}</div>
-            <div class="text-xs text-slate-500">direct: {{ s.live_direct_plays or 0 }}</div>
-            <div class="text-xs text-slate-500">transcodes: {{ s.live_transcodes or 0 }}</div>
+            <div class="text-xs text-slate-500">{{ t("monitoring_servers_direct") }}: {{ s.live_direct_plays or 0 }}</div>
+            <div class="text-xs text-slate-500">{{ t("monitoring.cards.transcodes") }}: {{ s.live_transcodes or 0 }}</div>
           </td>
 
           <td class="py-2 pr-4">{{ s.users or 0 }}</td>
@@ -124,8 +124,8 @@
           <td class="py-2 pr-4">{{ s.unique_ips or 0 }}</td>
 
           <td class="py-2 pr-4 text-xs text-slate-300">
-            Avg: {{ (s.avg_peak_bitrate or 0) | round(0) }} kbps<br>
-            Max: {{ (s.max_peak_bitrate or 0) }} kbps
+            {{ t("monitoring_servers_average") }}: {{ (s.avg_peak_bitrate or 0) | round(0) }} kbps<br>
+            {{ t("monitoring_servers_maximum") }}: {{ (s.max_peak_bitrate or 0) }} kbps
           </td>
 
           <td class="py-2 pr-4 text-xs text-slate-500">{{ s.last_checked|browser_datetime if s.last_checked else '-' }}</td>
@@ -138,13 +138,13 @@
 
 <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 h-full">
-    <div class="text-sm font-semibold mb-3">Top IPs (by sessions)</div>
+    <div class="text-sm font-semibold mb-3">{{ t("monitoring_servers_top_ips") }}</div>
     <div class="space-y-2 max-h-[360px] overflow-auto pr-2">
       {% for r in (servers_unique_ips or [])[:40] %}
         <div class="flex items-center justify-between border border-slate-800 rounded-xl px-3 py-2">
           <div class="min-w-0">
             <div class="text-sm font-semibold truncate">{{ r.ip }}</div>
-            <div class="text-xs text-slate-500">{{ r.server_name or ('Server ' ~ r.server_id) }} • sessions {{ r.sessions }}</div>
+            <div class="text-xs text-slate-500">{{ r.server_name or (t("server") ~ ' ' ~ r.server_id) }} • {{ t("monitoring_servers_sessions") }} {{ r.sessions }}</div>
           </div>
           {% set ms = r.watch_ms or 0 %}
           <div class="text-xs text-slate-300 text-right whitespace-nowrap">
@@ -156,13 +156,13 @@
   </div>
 
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 h-full">
-    <div class="text-sm font-semibold mb-3">Top clients/devices (by sessions)</div>
+    <div class="text-sm font-semibold mb-3">{{ t("monitoring_servers_top_clients") }}</div>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[360px] overflow-auto pr-2">
       {% for r in (servers_clients or [])[:80] %}
         <div class="border border-slate-800 rounded-xl px-3 py-2">
           <div class="text-sm font-semibold truncate">{{ r.client }}</div>
           <div class="text-xs text-slate-500">
-            {{ r.server_name or ('Server ' ~ r.server_id) }} • sessions {{ r.sessions }} • transcodes {{ r.transcodes }}
+            {{ r.server_name or (t("server") ~ ' ' ~ r.server_id) }} • {{ t("monitoring_servers_sessions") }} {{ r.sessions }} • {{ t("monitoring.cards.transcodes") }} {{ r.transcodes }}
           </div>
         </div>
       {% endfor %}
@@ -215,7 +215,7 @@
     const serverNames = new Map(
       details.map((s) => [
         String(s.server_id),
-        s.name || `Server ${s.server_id}`
+        s.name || {{ t("server")|tojson }} + ` ${s.server_id}`
       ])
     );
 
@@ -228,7 +228,7 @@
     });
 
     const datasetsSessions = serverIds.map((serverId) => ({
-      label: serverNames.get(serverId) || `Server ${serverId}`,
+      label: serverNames.get(serverId) || {{ t("server")|tojson }} + ` ${serverId}`,
       data: days.map((day) => sessionsByDayServer.get(`${day}|${serverId}`) || 0),
       tension: 0.25,
       borderWidth: 2,
@@ -285,7 +285,7 @@
         data: {
           labels: typeList,
           datasets: [{
-            label: "Sessions",
+            label: {{ t("monitoring_servers_sessions")|tojson }},
             data: typeList.map((type) => typeSum.get(type) || 0)
           }]
         },
@@ -298,7 +298,7 @@
           plugins: {
             tooltip: {
               callbacks: {
-                label: (ctx) => `Sessions: ${ctx.parsed.y}`
+                label: (ctx) => {{ t("monitoring_servers_sessions")|tojson }} + `: ${ctx.parsed.y}`
               }
             }
           },

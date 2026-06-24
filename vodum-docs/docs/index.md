@@ -1,56 +1,38 @@
-<div align="left">
+# VODUM documentation
 
-# 🧩 VODUM Documentation
+VODUM is a self-hosted administration layer for Plex and Jellyfin. It combines
+users, subscriptions, library access, monitoring, policies, communications,
+migrations, backups and scheduled work in one authenticated interface.
 
-<span class="hint-badge">Plex • Jellyfin • Subscriptions • Policies • Monitoring • Automation</span>
+!!! warning "Beta software"
+    Back up VODUM before every upgrade. Plex support is currently more mature
+    than Jellyfin support. Validate destructive workflows against your own
+    servers before enabling them in production.
 
-<br><br>
+## Start here
 
-VODUM is a web application designed to **properly manage users**, their **subscriptions**, and their **access rights** on **Plex** servers (and Jellyfin depending on configuration / roadmap).
+1. [Install VODUM and complete first-run setup](getting-started.md).
+2. [Add and validate media servers](servers-libraries.md).
+3. [Synchronize users and libraries](users.md).
+4. [Configure subscriptions](subscriptions.md).
+5. [Review scheduled tasks](tasks.md).
+6. [Create a full backup](backup.md).
 
-> **Goal:** provide a clear overview of your environment (users/servers/libraries), automate expiration handling, and maintain a reliable operational history.
+## Application sections
 
-<div class="two-col">
-  <div class="card">
+| Section | Purpose |
+|---|---|
+| [Dashboard](dashboard.md) | Operational summary and current activity |
+| [Monitoring](monitoring.md) | Live sessions, history, usage risk and policies |
+| [Users](users.md) | Identities, access, expiration and account actions |
+| [Servers & Libraries](servers-libraries.md) | Provider connections and library inventory |
+| [Subscriptions](subscriptions.md) | Plans, assignment and renewal workflows |
+| [Communications](communications.md) | Email, Discord, templates, campaigns and history |
+| [Migrations](migrations.md) | Controlled user/access migration campaigns |
+| [Backup & Import](backup.md) | Backup, restore and Tautulli import |
+| [Settings](settings.md) | Global behavior, security and automation |
+| [Logs](logs.md) | Anonymized operational diagnostics |
+| [Tasks](tasks.md) | Scheduler state and manual execution |
 
-## 🚀 Quick Start
-
-1. Install VODUM (Docker recommended)  
-2. Open the UI and complete the admin setup wizard  
-3. Add your servers (Plex/Jellyfin)  
-4. Synchronize users and libraries  
-5. Configure subscriptions and policies  
-6. Let **Tasks** handle automation
-
-➡️ Start here: **[Getting started](getting-started.md)**
-
-  </div>
-  <div class="card">
-
-## 🧭 Navigation
-
-- **[Dashboard](dashboard.md)** — Global overview (status, statistics, latest logs)
-- **[Monitoring](monitoring.md)** — Real-time system state (Policies / Activity / History / Users / Libraries / Servers)
-- **[Users](users.md)** — User management with advanced multi-field search
-- **[Subscriptions](subscriptions.md)** — Expiration dates, gift handling, history tracking
-- **[Policies](policies.md)** — Warning and automatic disable on expiration
-- **[Servers](servers.md)** & **[Libraries](libraries.md)** — Server integrations and library sharing
-- **[Tasks](tasks.md)** — Scheduler / cron automation and executions
-- **[Mailing](mailing.md)** — SMTP configuration, templates, campaigns, history
-- **[Discord](discord.md)** — Bot integration, templates, campaigns, history
-- **[Backup](backup.md)** — Database backup and restore
-- **[Logs](logs.md)** — Application and task logs
-
-  </div>
-</div>
-
----
-
-## 🧰 Support & Issues
-
-If you encounter a bug or would like to suggest an improvement:
-
-- 📌 GitHub Issues: **https://github.com/Nexius2/VODUM/issues**
-- 🧾 Before opening an issue, please check **[Troubleshooting](troubleshooting.md)**
-
-</div>
+For deployment security, read [Security](security.md) before exposing VODUM
+through a reverse proxy.

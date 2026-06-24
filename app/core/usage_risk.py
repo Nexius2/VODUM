@@ -227,20 +227,29 @@ def _score_usage_item(item, min_kills):
 
     score = 0
     reasons = []
+    reason_items = []
+
+    def add_reason(text, code, **params):
+        reasons.append(text)
+        reason_items.append({"code": code, **params})
 
     if distinct_ips >= 2:
         pts = min(30, 8 + (distinct_ips * 7))
         score += pts
-        reasons.append(f"{distinct_ips} public IPs")
+        add_reason(f"{distinct_ips} public IPs", "public_ips", count=distinct_ips)
 
     if fixed_devices >= 1:
         pts = min(24, fixed_devices * 10)
         score += pts
-        reasons.append(f"{fixed_devices} fixed device{'s' if fixed_devices > 1 else ''}")
+        add_reason(
+            f"{fixed_devices} fixed device{'s' if fixed_devices > 1 else ''}",
+            "fixed_devices",
+            count=fixed_devices,
+        )
 
     if fixed_devices >= 2:
         score += 20
-        reasons.append("multiple fixed devices")
+        add_reason("multiple fixed devices", "multiple_fixed_devices")
 
     fixed_ip_pairs = item["fixed_device_ip_pairs"]
     if len(fixed_ip_pairs) >= 2:
@@ -249,26 +258,29 @@ def _score_usage_item(item, min_kills):
 
         if len(unique_pair_ips) >= 2 and len(unique_pair_devices) >= 2:
             score += 40
-            reasons.append("fixed devices linked to different public IPs")
+            add_reason(
+                "fixed devices linked to different public IPs",
+                "fixed_devices_different_ips",
+            )
 
     if distinct_ips >= 2 and fixed_devices >= 2:
         score += 22
-        reasons.append("multi-household pattern likely")
+        add_reason("multi-household pattern likely", "multi_household")
 
     if kills_7d >= 2:
         pts = min(20, kills_7d * 4)
         score += pts
-        reasons.append(f"{kills_7d} kills in 7 days")
+        add_reason(f"{kills_7d} kills in 7 days", "stops_7d", count=kills_7d)
 
     if kills_30d >= min_kills:
         pts = min(24, kills_30d * 3)
         score += pts
-        reasons.append(f"{kills_30d} kills in 30 days")
+        add_reason(f"{kills_30d} kills in 30 days", "stops_30d", count=kills_30d)
 
     if kills_90d >= max(min_kills * 2, 6):
         pts = min(16, kills_90d)
         score += pts
-        reasons.append(f"{kills_90d} kills in 90 days")
+        add_reason(f"{kills_90d} kills in 90 days", "stops_90d", count=kills_90d)
 
     for rule_type, count in item["rules"].items():
         if count < 2:
@@ -277,31 +289,31 @@ def _score_usage_item(item, min_kills):
         if rule_type in HIGH_RISK_RULES:
             pts = min(22, count * 4)
             score += pts
-            reasons.append(f"repeated {rule_type}")
+            add_reason(f"repeated {rule_type}", "repeated_rule", rule=rule_type)
         elif rule_type in LOW_RISK_RULES:
             pts = min(10, count * 2)
             score += pts
-            reasons.append(f"repeated {rule_type}")
+            add_reason(f"repeated {rule_type}", "repeated_rule", rule=rule_type)
         else:
             pts = min(14, count * 3)
             score += pts
-            reasons.append(f"repeated {rule_type}")
+            add_reason(f"repeated {rule_type}", "repeated_rule", rule=rule_type)
 
     # Cas normal : TV fixe + téléphone/tablette/navigateur sur 2 IP.
     # Ce n'est pas forcément un partage de compte.
     if distinct_ips <= 2 and fixed_devices <= 1 and (mobile_devices or browser_devices):
         score = min(score, 35)
-        reasons.append("TV/mobile usage pattern reduces risk")
+        add_reason("TV/mobile usage pattern reduces risk", "tv_mobile_reduces")
 
     # Cas encore plus faible : aucun appareil fixe identifié.
     if distinct_ips <= 2 and fixed_devices == 0 and (mobile_devices or browser_devices):
         score = min(score, 28)
-        reasons.append("mobile/browser usage reduces risk")
+        add_reason("mobile/browser usage reduces risk", "mobile_browser_reduces")
 
     if distinct_ips <= 1 and fixed_devices <= 1 and kills_30d < min_kills:
         score = max(0, score - 25)
 
-    return score, reasons
+    return score, reasons, reason_items
 
 def _upsert_recommendation_history(db, item_out, cooldown_days):
     vodum_user_id = item_out.get("vodum_user_id")
@@ -590,7 +602,7 @@ def build_usage_risk_report(db, filters=None, persist_history=True):
         fixed_devices = len(item["fixed_devices"])
         kills_30d = item["kills_30d"] or item["kills"]
 
-        score, reasons = _score_usage_item(item, min_kills)
+        score, reasons, reason_items = _score_usage_item(item, min_kills)
         level = _risk_level(score, medium_threshold, high_threshold)
 
         needed_streams = max(1, fixed_devices)
@@ -619,6 +631,7 @@ def build_usage_risk_report(db, filters=None, persist_history=True):
             "risk_score": score,
             "main_reason": main_reason,
             "reasons": reasons,
+            "reason_items": reason_items,
             "evidence": {
                 "ips": sorted(item["ips"]),
                 "fixed_devices": sorted(item["fixed_devices"]),
@@ -701,6 +714,7 @@ def build_usage_risk_for_user(db, vodum_user_id):
         "risk_score": 0,
         "main_reason": "No suspicious usage detected",
         "reasons": [],
+        "reason_items": [],
         "evidence": {
             "ips": [],
             "fixed_devices": [],

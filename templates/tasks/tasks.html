@@ -17,7 +17,7 @@
         <thead>
             <tr class="border-b border-slate-800">
 				{% if (settings.debug_mode|default(0)|int) == 1 %}
-				  <th class="p-2">ID</th>
+				  <th class="p-2">{{ t("id") }}</th>
 				{% endif %}
                 <th class="p-2">{{ t("name") }}</th>
                 <th class="p-2">{{ t("description") }}</th>

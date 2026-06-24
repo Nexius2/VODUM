@@ -35,6 +35,7 @@ worker_telemetry/
 dist/
 build/
 test/
+tests/
 
 # IDE
 .vscode

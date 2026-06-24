@@ -367,17 +367,17 @@
 
         <div class="grid grid-cols-3 gap-2 mb-3 text-center">
             <div class="rounded-lg bg-slate-950/50 border border-slate-800 px-2 py-3">
-                <div class="text-xs text-rose-300">High</div>
+                <div class="text-xs text-rose-300">{{ t("high") }}</div>
                 <div class="text-2xl font-bold text-rose-400">{{ usage_risk_summary.high or 0 }}</div>
             </div>
 
             <div class="rounded-lg bg-slate-950/50 border border-slate-800 px-2 py-3">
-                <div class="text-xs text-amber-300">Medium</div>
+                <div class="text-xs text-amber-300">{{ t("medium") }}</div>
                 <div class="text-2xl font-bold text-amber-400">{{ usage_risk_summary.medium or 0 }}</div>
             </div>
 
             <div class="rounded-lg bg-slate-950/50 border border-slate-800 px-2 py-3">
-                <div class="text-xs text-emerald-300">Low</div>
+                <div class="text-xs text-emerald-300">{{ t("low") }}</div>
                 <div class="text-2xl font-bold text-emerald-400">{{ usage_risk_summary.low or 0 }}</div>
             </div>
         </div>
@@ -514,7 +514,7 @@
      class="hidden fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
     <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
         <div class="flex items-center justify-between px-5 py-4 border-b border-slate-800">
-            <h3 class="text-sm font-semibold">Subscribers by subscription</h3>
+            <h3 class="text-sm font-semibold">{{ t("dashboard_subscribers_by_subscription") }}</h3>
 
             <button type="button"
                     onclick="document.getElementById('subscriptions-summary-modal').classList.add('hidden')"
@@ -530,7 +530,7 @@
                     <div class="text-sm text-slate-300 shrink-0">{{ sub.user_count }} subscribers</div>
                 </div>
             {% else %}
-                <div class="text-sm text-slate-400">No subscription configured.</div>
+                <div class="text-sm text-slate-400">{{ t("dashboard_no_subscription") }}</div>
             {% endfor %}
         </div>
     </div>

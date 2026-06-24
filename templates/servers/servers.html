@@ -18,19 +18,19 @@
 
 <div class="max-w-5xl mx-auto">
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-8">
-    <h1 class="text-2xl font-bold mb-3">Welcome to VODUM</h1>
+    <h1 class="text-2xl font-bold mb-3">{{ t("servers_welcome") }}</h1>
 
     <p class="text-slate-400 mb-8">
-      Configure your first media server, or restore an existing VODUM backup.
+      {{ t("servers_first_setup_intro") }}
     </p>
 
     <div class="grid md:grid-cols-2 gap-6">
 
       <div class="bg-slate-950 border border-slate-800 rounded-xl p-6">
-        <h2 class="text-lg font-semibold mb-2">Add your first server</h2>
+        <h2 class="text-lg font-semibold mb-2">{{ t("servers_add_first") }}</h2>
 
         <p class="text-sm text-slate-400 mb-6">
-          Connect Plex or Jellyfin and start using VODUM.
+          {{ t("servers_connect_help") }}
         </p>
 
         <form method="post" action="{{ url_for('server_create') }}"
@@ -58,7 +58,7 @@
             >
 
             <span class="mt-1 text-xs text-slate-500">
-              Example Plex URL: http://192.168.1.100:32400
+              {{ t("servers_example_url") }}: http://192.168.1.100:32400
             </span>
           </label>
 
@@ -76,15 +76,15 @@
       </div>
 
       <div class="bg-slate-950 border border-slate-800 rounded-xl p-6">
-        <h2 class="text-lg font-semibold mb-2">Restore from backup</h2>
+        <h2 class="text-lg font-semibold mb-2">{{ t("servers_restore_title") }}</h2>
 
         <p class="text-sm text-slate-400 mb-6">
-          Recover an existing VODUM installation from a backup archive.
+          {{ t("servers_restore_help") }}
         </p>
 
         <a href="{{ url_for('backup_page') }}"
            class="inline-flex items-center justify-center w-full px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white">
-          Restore Backup
+           {{ t("restore_backup") }}
         </a>
       </div>
 
@@ -124,7 +124,7 @@
         >
 
         <span class="mt-1 text-xs text-slate-500">
-          Example Plex URL: http://192.168.1.100:32400
+          {{ t("servers_example_url") }}: http://192.168.1.100:32400
         </span>
       </label>
 
@@ -150,7 +150,7 @@
 
       {% if is_deleting %}
       <div class="absolute inset-x-0 top-0 z-10 bg-red-700/90 text-white text-[11px] font-semibold uppercase tracking-wide px-3 py-1 text-center">
-        Deleting...
+        {{ t("servers_deleting") }}...
       </div>
       <div class="absolute inset-0 bg-red-950/10 z-0 pointer-events-none"></div>
       {% endif %}
@@ -160,16 +160,16 @@
           {{ s.name }}
 
           {% if s.type == 'plex' %}
-            <span class="px-2 py-0.5 rounded-full bg-amber-700/40 text-amber-300 text-[10px]">Plex</span>
+            <span class="px-2 py-0.5 rounded-full bg-amber-700/40 text-amber-300 text-[10px]">{{ t("plex") }}</span>
           {% elif s.type == 'jellyfin' %}
-            <span class="px-2 py-0.5 rounded-full bg-blue-700/40 text-blue-300 text-[10px]">Jellyfin</span>
+            <span class="px-2 py-0.5 rounded-full bg-blue-700/40 text-blue-300 text-[10px]">{{ t("jellyfin") }}</span>
           {% else %}
             <span class="px-2 py-0.5 rounded-full bg-slate-700/40 text-slate-300 text-[10px]">{{ s.type }}</span>
           {% endif %}
         </div>
 
         {% if is_deleting %}
-          <span class="px-2 py-0.5 rounded-full bg-red-900/50 text-red-200 text-[10px]">Deleting</span>
+          <span class="px-2 py-0.5 rounded-full bg-red-900/50 text-red-200 text-[10px]">{{ t("servers_deleting") }}</span>
         {% elif s.status == 'up' %}
           <span class="px-2 py-0.5 rounded-full bg-emerald-900/40 text-emerald-300 text-[10px]">{{ t("online") }}</span>
         {% elif s.status == 'down' %}
@@ -214,9 +214,9 @@
         {{ s.name }}
 
         {% if s.type == 'plex' %}
-          <span class="px-2 py-0.5 rounded-full bg-amber-700/40 text-amber-300 text-[10px]">Plex</span>
+          <span class="px-2 py-0.5 rounded-full bg-amber-700/40 text-amber-300 text-[10px]">{{ t("plex") }}</span>
         {% elif s.type == 'jellyfin' %}
-          <span class="px-2 py-0.5 rounded-full bg-blue-700/40 text-blue-300 text-[10px]">Jellyfin</span>
+          <span class="px-2 py-0.5 rounded-full bg-blue-700/40 text-blue-300 text-[10px]">{{ t("jellyfin") }}</span>
         {% else %}
           <span class="px-2 py-0.5 rounded-full bg-slate-700/40 text-slate-300 text-[10px]">{{ s.type }}</span>
         {% endif %}

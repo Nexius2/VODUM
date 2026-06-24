@@ -1,89 +1,27 @@
----
-title: 👁 Monitoring
----
+# Monitoring
 
-<!-- Auto-generated improved docs for GitHub Pages (MkDocs Material) -->
+Monitoring is built from provider snapshots stored in SQLite; normal pages do
+not call Plex or Jellyfin directly.
 
-<div align="left">
+## Tabs
 
-# 👁 Monitoring
+- **Overview** — aggregate users, servers, watch time and top media.
+- **Now Playing** — live sessions, progress, playback decisions and artwork.
+- **Activity** — time-based playback trends.
+- **History** — completed sessions and session details.
+- **Libraries** — activity grouped by media library.
+- **Users** — watch activity and usage per user.
+- **Servers** — activity and availability by server.
+- **Usage risk** — repeated IP/device patterns and suggested plan upgrades.
+- **Policies** — active rules and paginated enforcement history.
 
-<span class="hint-badge">Overview • Policies • Activity • History • Libraries • Users • Servers</span>
+Collector delays do not immediately delete Plex sessions. Missing sessions are
+confirmed across bounded refreshes, and a recent snapshot fallback is only used
+while the processing pipeline is genuinely busy.
 
-<br><br>
+## Policy scope
 
-</div>
-
-
-<p align="center">
-  <img src="screenshots/monitoring.png" width="900">
-</p>
-
-The Monitoring section is designed to answer a simple question:
-
-> “What is happening right now in VODUM — and why?”
-
-It provides multiple tabs focused on **visibility** and **diagnostics**, without forcing you to jump across settings pages.
-
----
-
-## 🧭 Tabs
-
-### ✅ Overview
-Global situation at a glance:
-- active vs expired
-- warnings due
-- quick system summary
-
-### ⚠ Policies
-Shows which users are currently matched by:
-- warning rules
-- disable-on-expiration rules
-
-This tab is your “truth table” to validate policy targeting.
-
-### 🟣 Activity
-A real-time feed of user/system activity.
-
-!!! tip
-    Activity refresh is faster than other tabs to stay readable in production.
-
-### 🕘 History
-Historical view of actions/events (useful for audits).
-
-### 📚 Libraries
-Visibility on libraries & access status across servers:
-- what libraries exist
-- what a user can access
-- potential mismatches
-
-### 👤 Users
-Monitoring-oriented view of users (status badges, quick navigation).
-
-### 🖥 Servers
-Live server status view:
-- online/offline
-- last checks
-- quick diagnostics
-
----
-
-## 🔎 Search behavior
-
-Monitoring uses the same philosophy as the Users module: search should be practical.
-
-Depending on the tab, the search may include:
-- username
-- first name / last name
-- email / secondary email
-- notes
-
----
-
-## ✅ Best practices
-
-- If a user complains about access:
-  1. Monitoring → Policies (is user targeted?)
-  2. Subscriptions (expiration date correct?)
-  3. Libraries (access correct per server?)
-  4. Logs (what was applied and when?)
+Policies may target a user, server or global provider context. Available rules
+include stream/IP limits, server transcode limits and 4K-transcode blocking.
+Violations can warn or stop playback. Test new rules with conservative limits
+and review enforcement history before broad rollout.

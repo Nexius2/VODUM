@@ -1,19 +1,19 @@
 <!-- Range selector -->
 <div class="flex items-center justify-between mb-4">
-  <div class="text-sm text-slate-400">Range</div>
+  <div class="text-sm text-slate-400">{{ t("monitoring_servers_range") }}</div>
   <select id="rangePicker" class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm">
-    <option value="7d" selected>7 days</option>
-    <option value="1m">1 month</option>
-    <option value="6m">6 months</option>
-    <option value="12m">12 months</option>
-    <option value="all">All time</option>
+    <option value="7d" selected>{{ t("seven_days") }}</option>
+    <option value="1m">{{ t("one_month") }}</option>
+    <option value="6m">{{ t("six_months") }}</option>
+    <option value="12m">{{ t("one_year") }}</option>
+    <option value="all">{{ t("monitoring_servers_all_time") }}</option>
   </select>
 </div>
 
 <!-- Charts -->
 <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-    <div class="text-sm font-semibold mb-3">Activity (sessions/day)</div>
+    <div class="text-sm font-semibold mb-3">{{ t("monitoring_activity_sessions_day") }}</div>
     <div class="chart-container chart-container-md">
       <canvas id="chartActivity"></canvas>
     </div>
@@ -23,7 +23,7 @@
 	  <div id="donutGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
 		<!-- LEFT -->
 		<div>
-		  <div class="text-sm font-semibold mb-3">Media types</div>
+		  <div class="text-sm font-semibold mb-3">{{ t("monitoring_servers_media_types") }}</div>
 		  <div class="chart-container chart-container-sm">
 			<canvas id="chartMediaTypes"></canvas>
 		  </div>
@@ -31,7 +31,7 @@
 
 		<!-- RIGHT -->
 		<div id="perServerBlock">
-		  <div class="text-sm font-semibold mb-3">Per server</div>
+		  <div class="text-sm font-semibold mb-3">{{ t("monitoring_activity_per_server") }}</div>
 		  <div class="chart-container chart-container-sm">
 			<canvas id="chartPerServer"></canvas>
 		  </div>
@@ -43,7 +43,7 @@
 </div>
 
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-6">
-  <div class="text-sm font-semibold mb-3">Weekday activity</div>
+  <div class="text-sm font-semibold mb-3">{{ t("monitoring_activity_weekday") }}</div>
   <div class="chart-container chart-container-sm">
     <canvas id="chartWeekday"></canvas>
   </div>
@@ -263,7 +263,7 @@
 
     const chartActivity = getOrCreate(elActivity, () => new Chart(elActivity.getContext("2d"), {
       type: "line",
-      data: { labels: [], datasets: [{ label: "Sessions", data: [], tension: 0.25 }] },
+      data: { labels: [], datasets: [{ label: {{ t("monitoring_servers_sessions")|tojson }}, data: [], tension: 0.25 }] },
       options: {
         ...baseOpts(),
         interaction: { mode: "nearest", intersect: true },
@@ -272,7 +272,7 @@
           legend: { display: true },
           tooltip: {
             enabled: true,
-            callbacks: { label: (ctx) => `Sessions: ${ctx.parsed?.y ?? (Number(ctx.raw) || 0)}` }
+            callbacks: { label: (ctx) => {{ t("monitoring_servers_sessions")|tojson }} + `: ${ctx.parsed?.y ?? (Number(ctx.raw) || 0)}` }
           }
         },
         scales: { y: { beginAtZero: true } }
@@ -281,7 +281,7 @@
 
     const chartMedia = getOrCreate(elMedia, () => new Chart(elMedia.getContext("2d"), {
       type: "doughnut",
-      data: { labels: [], datasets: [{ label: "Sessions", data: [], backgroundColor: [], borderColor: "#0B1220", borderWidth: 2 }] },
+      data: { labels: [], datasets: [{ label: {{ t("monitoring_servers_sessions")|tojson }}, data: [], backgroundColor: [], borderColor: "#0B1220", borderWidth: 2 }] },
       options: {
         ...baseOpts(),
         cutout: "70%",
@@ -296,7 +296,7 @@
 
     const chartServer = getOrCreate(elServer, () => new Chart(elServer.getContext("2d"), {
       type: "doughnut",
-      data: { labels: [], datasets: [{ label: "Sessions", data: [], backgroundColor: [], borderColor: "#0B1220", borderWidth: 2 }] },
+      data: { labels: [], datasets: [{ label: {{ t("monitoring_servers_sessions")|tojson }}, data: [], backgroundColor: [], borderColor: "#0B1220", borderWidth: 2 }] },
       options: {
         ...baseOpts(),
         cutout: "70%",
@@ -311,7 +311,7 @@
 
     const chartWeekday = getOrCreate(elWeekday, () => new Chart(elWeekday.getContext("2d"), {
       type: "bar",
-      data: { labels: [], datasets: [{ label: "Sessions", data: [] }] },
+      data: { labels: [], datasets: [{ label: {{ t("monitoring_servers_sessions")|tojson }}, data: [] }] },
       options: {
         ...baseOpts(),
         plugins: { legend: { display: true }, tooltip: { enabled: true } },
@@ -364,7 +364,15 @@
 
 
 
-    const names = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    const names = [
+      {{ t("weekday_sun")|tojson }},
+      {{ t("weekday_mon")|tojson }},
+      {{ t("weekday_tue")|tojson }},
+      {{ t("weekday_wed")|tojson }},
+      {{ t("weekday_thu")|tojson }},
+      {{ t("weekday_fri")|tojson }},
+      {{ t("weekday_sat")|tojson }}
+    ];
     chartWeekday.data.labels = (w || []).map(x => names[x.weekday] ?? String(x.weekday));
     chartWeekday.data.datasets[0].data = (w || []).map(x => x.sessions);
     chartWeekday.update("none");

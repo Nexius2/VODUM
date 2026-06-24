@@ -278,7 +278,7 @@ function openGiftRunModal(run) {
   // Users placeholder
   const usersBox = document.getElementById("gift-modal-users");
   const usersLabel = document.getElementById("gift-modal-users-label");
-  if (usersBox) usersBox.innerHTML = `<div class="text-slate-400 text-sm">Loading…</div>`;
+  if (usersBox) usersBox.innerHTML = `<div class="text-slate-400 text-sm">{{ t("subscription_loading") }}…</div>`;
   if (usersLabel) usersLabel.textContent = "";
 
   modal.classList.remove("hidden");
@@ -298,7 +298,7 @@ function openGiftRunModal(run) {
       if (usersLabel) usersLabel.textContent = `${users.length} users`;
 
       if (users.length === 0) {
-        usersBox.innerHTML = `<div class="text-slate-400 text-sm">No users</div>`;
+        usersBox.innerHTML = `<div class="text-slate-400 text-sm">{{ t("no_user_found") }}</div>`;
         return;
       }
 

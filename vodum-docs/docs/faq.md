@@ -1,31 +1,19 @@
----
-title: ❓ FAQ
----
+# FAQ
 
-<!-- Auto-generated improved docs for GitHub Pages (MkDocs Material) -->
+**Does VODUM replace Plex or Jellyfin?** No. It manages access and workflows on
+top of those servers.
 
-<div align="left">
+**Can one person use several servers?** Yes. A VODUM user can link multiple
+provider identities.
 
-# ❓ FAQ
+**Are users deleted when subscriptions expire?** Normally access is changed;
+provider accounts are preserved. Behavior depends on expiration settings.
 
-<span class="hint-badge">Subscriptions • Policies • Plex • Jellyfin • Tasks</span>
+**Why did a button only queue work?** External mutations are durable queued
+jobs. This avoids blocking requests and permits retry/recovery.
 
-<br><br>
+**Is Jellyfin fully equivalent to Plex?** Not yet. Review release notes and test
+provider-specific workflows before broad automation.
 
-</div>
-
-
-??? question "Does VODUM delete users?"
-    No. The philosophy is to manage **access**, not deletion.
-
-??? question "Why do I see a user in Policies but it shouldn't match?"
-    Usually it’s an expiration date mismatch, merged user mapping, or a stale state that will be refreshed by the next task run.
-
-??? question "Do tasks re-run missed executions after downtime?"
-    VODUM is designed to avoid “catch-up storms”. After restart it should run safely without replaying hundreds of missed runs.
-
-??? question "Can I run without Mailing/Discord?"
-    Yes. You can manage subscriptions and access without notifications.
-
-??? question "Where are backups stored?"
-    In the configured backup directory (see Backup docs), usually under the persistent data volume.
+**Which backup should I use?** Full ZIP for self-contained restore; raw SQLite
+only when the encryption key is preserved separately.

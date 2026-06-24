@@ -3,35 +3,30 @@
 All notable changes to Vodum will be documented in this file.
 
 ---
-- Added an isolated fresh-database runtime smoke test covering idempotent bootstrap, SQLite integrity and foreign keys, all templates, authentication, route rendering, CSRF, maintenance mode, brute-force locking and open-redirect protection.
-- Fixed legacy `/settings/<section>` URLs returning HTTP 500 after the settings views were unified; they now redirect to the existing settings page.
-- Made `db_bootstrap.py` resilient to non-UTF-8 host consoles instead of aborting on Unicode log symbols.
-- Centralized the imports directory and derived it from `DATABASE_PATH` (or `VODUM_IMPORTS_DIR`) so backup restore, setup uploads and Tautulli cleanup use the same configurable location.
-- Isolated the Jellyfin credential validator from host log paths so the full validation suite runs without `/appdata` access.
-- Updated the runtime startup documentation to match the centralized startup sequence.
-- Centralized the post-registration application startup sequence with ordered steps, consistent timing logs and explicit fatal/non-fatal failure policies.
-- Fixed Plex Now Playing artwork when session payloads omit `ratingKey` by deriving media identifiers from `key`, `thumb` or `art` paths.
-- Added Plex artwork fallback from expired versioned paths to canonical metadata paths, and removed broken images cleanly from HTMX-updated media cards.
-- Added a strict five-minute grace period for probable one-stream device switches when the same media is detected on a new session; larger overages and different media still trigger immediately.
-- Subscription upgrade suggestions now use the unified scheduled delivery pipeline with channel fallback, ten retries and cooldown activation only after a successful delivery.
-- Stream-blocked templates now expose the killed stream, other/all active streams, stream and IP counts, configured policy limits and observed values.
-- Expanded the default stream-blocked message with the killed stream, policy usage and the user's other active streams.
-- Added a global Communications summary for email, Discord, the last 24 hours and the scheduled pending/error queue.
-- Updated the Plex server validation test to cover the required plex.tv account-token check.
-- Reorganized the sidebar so operational diagnostics are grouped together, with Tasks immediately following Logs.
-- Owner and administrator accounts now display concise role labels instead of server-qualified expiration values in user lists and details.
-- Plex owners can no longer be deleted, while Jellyfin administrators expose a disabled delete action with an explanatory tooltip; both restrictions are also enforced server-side.
-- Added complete pagination to Monitoring Policies recent enforcements instead of limiting access to the latest twelve entries.
-- Reworded telemetry as anonymous aggregate telemetry consistently across all five languages.
-- Now Playing retains recent unconfirmed sessions for a bounded period while the sequential task queue delays media collection, and clearly marks the delayed refresh state.
-- Improved dashboard responsiveness by stacking dense summary cards and allowing subscription statistics to wrap cleanly at narrower resolutions.
-- Added subscription name column to the Users list, with sorting support.
-- Improved Plex server validation by detecting tokens accepted locally but rejected by plex.tv.
-- Locked expiration date editing for Plex owners and Jellyfin admins in user detail.
-- Display owner/admin role instead of expiration date when expiration is managed by server role.
-- Added backend protection to prevent expiration changes for protected owner/admin accounts.
-- Added randomized telemetry interval between 2 and 7 days, while keeping the 7-day maximum safety limit.
-- Hidden subscription editing for Plex owner and Jellyfin admin accounts.
-- Displayed Owner/Admin instead of subscription name for protected media accounts.
-- Locked expiration date and subscription changes for protected owner/admin accounts.
-- Kept owner/admin protection reversible after the next media server sync.
+- Split default communication templates and reusable campaign/template rules out of the Communications route into core modules, bringing `app/routes/communications.py` below the 1000-line threshold while preserving all registered routes.
+- Removed the unreachable legacy bulk grant/remove route bodies from the Servers route module after the access logic moved to `core.library_bulk_access`, reducing that route file by several hundred lines without changing the active endpoints.
+- Improved global library access grant/remove actions by moving their validation, access-link mutations and Plex sync/revoke job planning into a dedicated testable service with bounded library-id normalization and focused unit coverage.
+- Reorganized the Backup page into status diagnostics with database size on the SQLite integrity card, followed by four equal-height action cards for settings, restore, manual backup and Tautulli import.
+- Reduced visual noise in admin workflows by removing the duplicate draft migration start button and keeping referral bulk archive/restore actions hidden until at least one visible referral is selected; server deletion and communications deletion controls were intentionally left unchanged.
+- Added safe bulk archive and restore actions to the Referrals view, including visible-row selection, bounded and deduplicated IDs, reversible lifecycle reconstruction, cancelled-referral protection, five-language UI text and focused service tests.
+- Added a shared `--summary-only` CLI contract and enabled it for the Tautulli import command, producing one stable machine-readable JSON result without detailed CLI output.
+- Rebuilt the GitHub README around the current Docker paths, security model, configuration, backup workflow, validation suite and automation CLI, removing obsolete UID/GID and volume guidance.
+- Rebuilt the complete MkDocs site around the current application navigation and workflows, adding Communications, Migrations and deployment configuration, preserving legacy URLs, and validating all pages, internal links and environment variables with a strict site build.
+- Strengthened translation validation across all five catalogs with type, empty-value, placeholder and static-key checks; added 18 missing runtime keys and converted 124 hardcoded template occurrences to existing translations, plus a repeatable hardcoded-text audit for the remaining views.
+- Fully translated the installation wizard in English, French, German, Spanish and Italian with 34 dedicated keys, reducing the hardcoded visible-text audit from 264 occurrences in 31 views to 230 occurrences in 30 views.
+- Fully translated policy monitoring, including charts, grouped history, enforcement details and JavaScript-generated states, with 44 keys across all five languages; the remaining hardcoded visible-text audit now reports 189 occurrences in 29 views.
+- Fully translated the monitoring user-detail workflow across profile analytics, playback history and interactive IP intelligence, adding 55 keys across all five languages and reducing the remaining hardcoded-text audit to 150 occurrences in 28 views.
+- Fully translated Usage Risk filters, tables and evidence details with 42 keys across all five languages; risk scoring now also exposes structured reason codes so dynamic IP, device, stop and policy reasons render in the selected language while legacy notification text remains compatible.
+- Added focused unit coverage for the structured Usage Risk reason contract, preserving legacy notification text alongside translatable reason codes and parameters.
+- Fully translated the Users list creation workflow, including Plex/Jellyfin options, asynchronous library states and JavaScript errors, with 17 keys across all five languages; the remaining hardcoded-text audit now reports 100 occurrences in 26 views.
+- Fully translated server monitoring summaries, statuses, bitrate metrics and Chart.js labels with 17 keys across all five languages; the remaining hardcoded-text audit now reports 86 occurrences in 25 views.
+- Fully translated the Jellyfin user-account card, including policy/configuration fields, badges, links, image alternatives and boolean values, with 16 keys across all five languages; the remaining hardcoded-text audit now reports 74 occurrences in 24 views.
+- Fully translated Communications history pagination, empty state, detail modal and JavaScript fallback labels with four keys across all five languages while reusing existing common labels; the remaining hardcoded-text audit now reports 64 occurrences in 23 views.
+- Fully translated library monitoring tables, range filters, dynamic expansion controls and singular/plural card counters with 15 keys across all five languages; the remaining hardcoded-text audit now reports 56 occurrences in 22 views.
+- Fully translated live-session summaries and the Activity tab, including Chart.js datasets, tooltips and localized weekday abbreviations, with 12 keys across all five languages; the remaining hardcoded-text audit now reports 44 occurrences in 20 views.
+- Fully translated first-server onboarding and subscription-policy filtering/bulk deletion, including JavaScript pagination summaries and localized singular/plural labels, with 18 keys across all five languages; the remaining hardcoded-text audit now reports 36 occurrences in 18 views.
+- Completed the application-wide translation pass: all remaining dashboard, monitoring, subscription, backup and user fragments now use translation keys, technical identifiers are explicitly excluded from the visible-text audit, and the strict audit reports zero hardcoded candidates across all templates.
+- Introduced a shared, responsive and accessible server-rendered pagination component, migrated Monitoring, Communications history and subscription assignments to it, and added a validator preventing those views from reintroducing duplicate pagination markup.
+- Migrated both filtered Users paginations, including referrals and archive mode, to the shared component while preserving every query parameter.
+- Extended the shared pagination component with optional numbered-page windows and migrated Logs without losing level/search filters or direct page navigation.
+- Added a global modal lifecycle manager for all full-screen dialogs, standardizing dialog semantics, aria state, focus entry/restoration, Escape handling, body scroll locking and HTMX-injected content without replacing existing business-specific handlers.
