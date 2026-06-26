@@ -8,7 +8,7 @@
 {% block content %}
 {% if workspace_blocker %}
   <div class="max-w-3xl mx-auto mt-12 bg-amber-950/50 border border-amber-700 rounded-2xl p-8 text-center">
-    <span class="material-icons-outlined text-amber-300 text-5xl">info</span>
+    <svg class="mx-auto h-12 w-12 text-amber-300" aria-hidden="true"><use href="#vodum-icon-info"></use></svg>
     <h2 class="mt-4 text-xl font-semibold text-amber-100">{{ t("migration_unavailable_title") }}</h2>
     <p class="mt-3 text-sm text-amber-200">{{ t("migration_blocker." ~ (workspace_blocker or selection_blocker)) }}</p>
   </div>
@@ -186,12 +186,13 @@
                   <span class="px-2 py-1 rounded bg-slate-800 text-slate-400 text-[11px]">{{ t("migration_mapping_reason." ~ mapping.suggestion_reason) }}</span>
                 {% endif %}
               </div>
-              <select name="library_mapping_{{ mapping.source.id }}" class="mt-2 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs">
-                <option value="">{{ t("migration_leave_unmapped") }}</option>
+              {% set selected_destination_ids = (mapping.suggested_destinations or []) | map(attribute='id') | list %}
+              <select name="library_mapping_{{ mapping.source.id }}" multiple size="4" class="mt-2 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs">
                 {% for destination in mapping.destination_options %}
-                  <option value="{{ destination.id }}" {{ 'selected' if mapping.suggested_destination and mapping.suggested_destination.id == destination.id else '' }}>{{ destination.name }}{% if destination.type %} ({{ destination.type }}){% endif %}</option>
+                  <option value="{{ destination.id }}" {{ 'selected' if destination.id in selected_destination_ids else '' }}>{{ destination.name }}{% if destination.type %} ({{ destination.type }}){% endif %}</option>
                 {% endfor %}
               </select>
+              <p class="mt-2 text-[11px] text-slate-500">{{ t("migration_multiple_destinations_help") }}</p>
             </div>
           {% else %}
             <div class="px-5 py-8 text-sm text-center text-slate-500">{{ t("migration_no_source_libraries") }}</div>
@@ -235,6 +236,24 @@
         <span class="block mb-2 text-slate-300">{{ t("migration_batch_size") }}</span>
         <input name="batch_size" type="number" min="1" max="100" value="10" class="w-28 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
       </label>
+      {% if analysis.destination.type == "jellyfin" %}
+        <label class="text-sm min-w-[240px]">
+          <span class="block mb-2 text-slate-300">{{ t("migration_jellyfin_password_strategy") }}</span>
+          <select name="jellyfin_password_strategy" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
+            <option value="generated">{{ t("migration_jellyfin_password_strategy.generated") }}</option>
+            <option value="admin_defined">{{ t("migration_jellyfin_password_strategy.admin_defined") }}</option>
+            <option value="preserve_existing">{{ t("migration_jellyfin_password_strategy.preserve_existing") }}</option>
+          </select>
+        </label>
+        <label class="text-sm min-w-[220px]">
+          <span class="block mb-2 text-slate-300">{{ t("migration_jellyfin_temp_password") }}</span>
+          <input name="jellyfin_temp_password" type="password" autocomplete="new-password" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
+        </label>
+        <label class="text-sm min-w-[260px] flex items-start gap-2 pt-7">
+          <input type="checkbox" name="jellyfin_auto_deliver_credentials" value="1" class="mt-1 rounded border-slate-700 bg-slate-950">
+          <span><span class="block text-slate-300">{{ t("migration_jellyfin_auto_deliver_credentials") }}</span><span class="block mt-1 text-xs text-slate-500">{{ t("migration_jellyfin_auto_deliver_credentials_help") }}</span></span>
+        </label>
+      {% endif %}
       <label class="text-sm">
         <span class="block mb-2 text-slate-300">{{ t("migration_scheduled_at") }}</span>
         <input name="scheduled_at" type="datetime-local" class="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">

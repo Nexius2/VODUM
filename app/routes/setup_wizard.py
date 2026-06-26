@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import uuid
@@ -12,6 +12,7 @@ from werkzeug.utils import secure_filename
 
 from core.i18n import get_available_languages
 from core.server_validation import validate_media_server
+from core.auth_totp import generate_totp_secret, provisioning_uri, verify_totp_code
 from secret_store import encrypt_secret, encrypt_server_settings_json
 from tasks_engine import enable_and_run_task_by_name, enqueue_server_discovery_sequence, ensure_tasks_enabled
 from web.helpers import get_db
@@ -34,45 +35,45 @@ COPY = {
         "saved": "Progress is saved automatically after every step.",
     },
     "fr": {
-        "title": "Installation de VODUM", "step": "Étape", "continue": "Continuer",
-        "back": "Retour", "skip": "Configurer plus tard", "finish": "Commencer à utiliser VODUM",
-        "configure": "Configurer maintenant", "new": "Créer une nouvelle instance", "restore": "Restaurer une sauvegarde",
+        "title": "Installation de VODUM", "step": "Ã‰tape", "continue": "Continuer",
+        "back": "Retour", "skip": "Configurer plus tard", "finish": "Commencer Ã  utiliser VODUM",
+        "configure": "Configurer maintenant", "new": "CrÃ©er une nouvelle instance", "restore": "Restaurer une sauvegarde",
         "admin": "Compte administrateur", "localization": "Localisation",
-        "servers": "Serveurs multimédias", "communications": "Communications",
-        "messages": "Modèles de messages", "subscriptions": "Abonnements",
-        "subscription_settings": "Paramètres des abonnements", "assignment": "Attribution des abonnements",
-        "summary": "Installation terminée", "required": "Au moins un serveur Plex ou Jellyfin validé est obligatoire.",
-        "sync": "La synchronisation démarre en arrière-plan et ne bloque pas l’installation.",
-        "saved": "La progression est enregistrée automatiquement après chaque étape.",
+        "servers": "Serveurs multimÃ©dias", "communications": "Communications",
+        "messages": "ModÃ¨les de messages", "subscriptions": "Abonnements",
+        "subscription_settings": "ParamÃ¨tres des abonnements", "assignment": "Attribution des abonnements",
+        "summary": "Installation terminÃ©e", "required": "Au moins un serveur Plex ou Jellyfin validÃ© est obligatoire.",
+        "sync": "La synchronisation dÃ©marre en arriÃ¨re-plan et ne bloque pas lâ€™installation.",
+        "saved": "La progression est enregistrÃ©e automatiquement aprÃ¨s chaque Ã©tape.",
     },
     "es": {
-        "title": "Instalación de VODUM", "step": "Paso", "continue": "Continuar", "back": "Atrás",
-        "skip": "Configurar más tarde", "finish": "Empezar a usar VODUM", "configure": "Configurar ahora",
+        "title": "InstalaciÃ³n de VODUM", "step": "Paso", "continue": "Continuar", "back": "AtrÃ¡s",
+        "skip": "Configurar mÃ¡s tarde", "finish": "Empezar a usar VODUM", "configure": "Configurar ahora",
         "new": "Crear nueva instancia", "restore": "Restaurar copia", "admin": "Cuenta administradora",
-        "localization": "Localización", "servers": "Servidores multimedia", "communications": "Comunicaciones",
+        "localization": "LocalizaciÃ³n", "servers": "Servidores multimedia", "communications": "Comunicaciones",
         "messages": "Plantillas de mensajes", "subscriptions": "Suscripciones",
-        "subscription_settings": "Ajustes de suscripción", "assignment": "Asignación de suscripciones",
-        "summary": "Instalación terminada", "required": "Se requiere al menos un servidor Plex o Jellyfin validado.",
-        "sync": "La sincronización continúa en segundo plano.", "saved": "El progreso se guarda automáticamente.",
+        "subscription_settings": "Ajustes de suscripciÃ³n", "assignment": "AsignaciÃ³n de suscripciones",
+        "summary": "InstalaciÃ³n terminada", "required": "Se requiere al menos un servidor Plex o Jellyfin validado.",
+        "sync": "La sincronizaciÃ³n continÃºa en segundo plano.", "saved": "El progreso se guarda automÃ¡ticamente.",
     },
     "de": {
-        "title": "VODUM-Installation", "step": "Schritt", "continue": "Weiter", "back": "Zurück",
-        "skip": "Später konfigurieren", "finish": "VODUM verwenden", "configure": "Jetzt konfigurieren",
+        "title": "VODUM-Installation", "step": "Schritt", "continue": "Weiter", "back": "ZurÃ¼ck",
+        "skip": "SpÃ¤ter konfigurieren", "finish": "VODUM verwenden", "configure": "Jetzt konfigurieren",
         "new": "Neue Instanz erstellen", "restore": "Sicherung wiederherstellen", "admin": "Administratorkonto",
         "localization": "Lokalisierung", "servers": "Medienserver", "communications": "Kommunikation",
         "messages": "Nachrichtenvorlagen", "subscriptions": "Abonnements",
         "subscription_settings": "Abonnementeinstellungen", "assignment": "Abonnements zuweisen",
         "summary": "Installation abgeschlossen", "required": "Mindestens ein validierter Plex- oder Jellyfin-Server ist erforderlich.",
-        "sync": "Die Synchronisierung läuft im Hintergrund.", "saved": "Der Fortschritt wird automatisch gespeichert.",
+        "sync": "Die Synchronisierung lÃ¤uft im Hintergrund.", "saved": "Der Fortschritt wird automatisch gespeichert.",
     },
     "it": {
         "title": "Installazione VODUM", "step": "Passaggio", "continue": "Continua", "back": "Indietro",
-        "skip": "Configura più tardi", "finish": "Inizia a usare VODUM", "configure": "Configura ora",
+        "skip": "Configura piÃ¹ tardi", "finish": "Inizia a usare VODUM", "configure": "Configura ora",
         "new": "Crea nuova istanza", "restore": "Ripristina backup", "admin": "Account amministratore",
         "localization": "Localizzazione", "servers": "Server multimediali", "communications": "Comunicazioni",
         "messages": "Modelli messaggio", "subscriptions": "Abbonamenti",
         "subscription_settings": "Impostazioni abbonamento", "assignment": "Assegnazione abbonamenti",
-        "summary": "Installazione completata", "required": "È richiesto almeno un server Plex o Jellyfin convalidato.",
+        "summary": "Installazione completata", "required": "Ãˆ richiesto almeno un server Plex o Jellyfin convalidato.",
         "sync": "La sincronizzazione continua in background.", "saved": "I progressi vengono salvati automaticamente.",
     },
 }
@@ -209,12 +210,34 @@ def register(app):
                 if not email or "@" not in email or len(password) < 8 or password != confirm:
                     flash("Enter a valid email and matching password of at least 8 characters.", "error")
                     return redirect(url_for("setup_wizard"))
+
+                totp_enabled = request.form.get("admin_totp_enabled") == "1"
+                totp_secret = None
+                if totp_enabled:
+                    pending_secret = (request.form.get("pending_totp_secret") or "").strip()
+                    totp_code = request.form.get("totp_code") or ""
+                    if not pending_secret or not verify_totp_code(pending_secret, totp_code):
+                        flash("Invalid two-factor authentication code.", "error")
+                        return redirect(url_for("setup_wizard"))
+                    totp_secret = encrypt_secret(pending_secret)
+
                 db.execute(
-                    "UPDATE settings SET admin_email=?, admin_password_hash=?, auth_enabled=1 WHERE id=1",
-                    (email, generate_password_hash(password)),
+                    """
+                    UPDATE settings
+                    SET admin_email=?,
+                        contact_email=COALESCE(NULLIF(TRIM(contact_email), ''), ?),
+                        admin_password_hash=?,
+                        auth_enabled=1,
+                        admin_totp_enabled=?,
+                        admin_totp_secret=?
+                    WHERE id=1
+                    """,
+                    (email, email, generate_password_hash(password), 1 if totp_enabled else 0, totp_secret),
                 )
+                session.clear()
                 session["vodum_logged_in"] = True
                 session["vodum_admin_email"] = email
+                session.permanent = True
                 state["administrator"] = "created"
 
             elif step == 3:
@@ -301,15 +324,25 @@ def register(app):
             elif step == 5:
                 if action == "save_communications":
                     smtp_pass_raw = (request.form.get("smtp_pass") or "").strip()
+                    smtp_oauth_token_raw = (request.form.get("smtp_oauth_access_token") or "").strip()
                     discord_token_raw = (request.form.get("discord_bot_token") or "").strip()
                     smtp_pass = encrypt_secret(smtp_pass_raw) if smtp_pass_raw else settings.get("smtp_pass")
+                    smtp_oauth_access_token = (
+                        encrypt_secret(smtp_oauth_token_raw)
+                        if smtp_oauth_token_raw
+                        else settings.get("smtp_oauth_access_token")
+                    )
                     discord_token = encrypt_secret(discord_token_raw) if discord_token_raw else settings.get("discord_bot_token")
+                    smtp_auth_method = (request.form.get("smtp_auth_method") or "password").strip().lower()
+                    if smtp_auth_method not in {"password", "oauth2"}:
+                        smtp_auth_method = "password"
                     mailing_enabled = 1 if request.form.get("mailing_enabled") == "1" else 0
                     discord_enabled = 1 if request.form.get("discord_enabled") == "1" else 0
                     smtp_host = (request.form.get("smtp_host") or "").strip() or None
                     mail_from = (request.form.get("mail_from") or "").strip() or None
-                    if mailing_enabled and (not smtp_host or not mail_from or not smtp_pass):
-                        flash("Email requires an SMTP server, sender address and password.", "error")
+                    smtp_secret = smtp_oauth_access_token if smtp_auth_method == "oauth2" else smtp_pass
+                    if mailing_enabled and (not smtp_host or not mail_from or not smtp_secret):
+                        flash("Email requires an SMTP server, sender address and authentication secret.", "error")
                         return redirect(url_for("setup_wizard"))
                     if discord_enabled and not discord_token:
                         flash("Discord requires a bot token.", "error")
@@ -325,8 +358,8 @@ def register(app):
                     db.execute(
                         """
                         UPDATE settings SET mailing_enabled=?, mail_from=?, smtp_host=?, smtp_port=?,
-                          smtp_tls=?, smtp_user=?, smtp_pass=?, discord_enabled=?, discord_bot_token=?,
-                          notifications_send_mode=?, notifications_order=?
+                          smtp_tls=?, smtp_user=?, smtp_pass=?, smtp_auth_method=?, smtp_oauth_access_token=?,
+                          discord_enabled=?, discord_bot_token=?, notifications_send_mode=?, notifications_order=?
                         WHERE id=1
                         """,
                         (
@@ -337,6 +370,8 @@ def register(app):
                             1 if request.form.get("smtp_tls") == "1" else 0,
                             (request.form.get("smtp_user") or "").strip() or None,
                             smtp_pass,
+                            smtp_auth_method,
+                            smtp_oauth_access_token,
                             discord_enabled,
                             discord_token,
                             send_mode,
@@ -462,8 +497,10 @@ def register(app):
         communications_available = _communications_available(settings, state)
         communication_settings = dict(settings)
         communication_settings["smtp_pass_configured"] = bool(communication_settings.get("smtp_pass"))
+        communication_settings["smtp_oauth_access_token_configured"] = bool(communication_settings.get("smtp_oauth_access_token"))
         communication_settings["discord_bot_token_configured"] = bool(communication_settings.get("discord_bot_token"))
         communication_settings["smtp_pass"] = ""
+        communication_settings["smtp_oauth_access_token"] = ""
         communication_settings["discord_bot_token"] = ""
         wizard_templates = [
             dict(row) for row in (db.query(
@@ -511,3 +548,4 @@ def register(app):
         db = get_db()
         _save(db, step=1, state={}, active=1, completed=0)
         return redirect(url_for("setup_wizard"))
+

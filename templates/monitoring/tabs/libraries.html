@@ -172,6 +172,7 @@
                   alt="{{ top_item.display_title }}"
                   class="absolute inset-0 w-full h-full object-cover opacity-75"
                   loading="lazy"
+                  decoding="async"
                 >
               {% else %}
                 <div class="absolute inset-0 bg-slate-800"></div>
@@ -204,6 +205,7 @@
                       alt=""
                       class="absolute inset-0 h-full w-full object-cover opacity-20 pointer-events-none"
                       loading="lazy"
+                      decoding="async"
                     >
                     <div class="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-950/80 to-slate-950/95"></div>
                   {% endif %}
@@ -215,6 +217,7 @@
                         alt="{{ item.display_title }}"
                         class="w-full h-full object-cover"
                         loading="lazy"
+                        decoding="async"
                       >
                     {% endif %}
                   </div>

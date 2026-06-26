@@ -20,7 +20,7 @@ from core.migrations.lifecycle import (
     set_user_excluded,
 )
 from core.migrations.phase4 import export_migration_plan, import_migration_plan
-from core.migrations.phase3 import remove_validated_source_access, rollback_source_access
+from core.migrations.phase3 import remove_validated_source_access, rollback_destination_access, rollback_source_access
 from tasks_engine import enable_and_run_task_by_name
 from secret_store import decrypt_secret
 from web.helpers import add_log, get_db, table_exists
@@ -41,18 +41,49 @@ def _online_migration_servers(db) -> list[dict]:
     ]
 
 
-def _mapping_overrides_from_form() -> dict[int, int | None]:
-    overrides = {}
-    prefix = "library_mapping_"
-    for key, value in request.form.items():
+def _mapping_overrides_from_form(prefix: str = "library_mapping_") -> dict[int, list[int]]:
+    overrides: dict[int, list[int]] = {}
+    for key in request.form.keys():
         if not key.startswith(prefix):
             continue
         try:
             source_library_id = int(key[len(prefix):])
-            overrides[source_library_id] = int(value) if str(value).strip() else None
         except (TypeError, ValueError):
             continue
+        destination_ids = []
+        for value in request.form.getlist(key):
+            try:
+                if str(value).strip():
+                    destination_ids.append(int(value))
+            except (TypeError, ValueError):
+                continue
+        overrides[source_library_id] = sorted(set(destination_ids))
     return overrides
+
+
+def _group_mapping_rows(rows: list[dict]) -> list[dict]:
+    groups: dict[int, dict] = {}
+    for row in rows:
+        source_id = int(row["source_library_id"])
+        group = groups.setdefault(source_id, {
+            "source_library_id": source_id,
+            "source_name": row.get("source_name"),
+            "source_type": row.get("source_type"),
+            "mapping_status": row.get("mapping_status"),
+            "destination_library_ids": [],
+            "destinations": [],
+        })
+        if row.get("destination_library_id"):
+            destination_id = int(row["destination_library_id"])
+            if destination_id not in group["destination_library_ids"]:
+                group["destination_library_ids"].append(destination_id)
+                group["destinations"].append({
+                    "id": destination_id,
+                    "name": row.get("destination_name"),
+                    "type": row.get("destination_type"),
+                })
+                group["mapping_status"] = "mapped"
+    return list(groups.values())
 
 
 def register(app):
@@ -197,6 +228,9 @@ def register(app):
                 scheduled_at=request.form.get("scheduled_at") or "",
                 batch_size=request.form.get("batch_size", type=int) or 10,
                 intent=request.form.get("intent") or "copy",
+                jellyfin_password_strategy=request.form.get("jellyfin_password_strategy") or "generated",
+                jellyfin_temp_password=request.form.get("jellyfin_temp_password") or "",
+                jellyfin_auto_deliver_credentials=bool(request.form.get("jellyfin_auto_deliver_credentials")),
             )
             add_log("info", "migrations", f"Migration draft created: campaign_id={campaign_id}")
             flash("migration_draft_created", "success")
@@ -284,6 +318,9 @@ def register(app):
         except Exception:
             campaign_options = {}
         campaign["safety_delay_days"] = max(0, int(campaign_options.get("safety_delay_days", 7)))
+        campaign["jellyfin_password_strategy"] = str(campaign_options.get("jellyfin_password_strategy") or "generated")
+        campaign["jellyfin_temp_password_configured"] = bool(campaign_options.get("jellyfin_temp_password"))
+        campaign["jellyfin_auto_deliver_credentials"] = bool(campaign_options.get("jellyfin_auto_deliver_credentials"))
         scheduled_raw = str(campaign.get("scheduled_at") or "")
         campaign["scheduled_at_input"] = (
             f"{scheduled_raw[:10]}T{scheduled_raw[11:16]}"
@@ -337,12 +374,14 @@ def register(app):
                 (campaign["destination_server_id"],),
             )
         ]
+        mapping_groups = _group_mapping_rows(mappings)
+        source_libraries_by_id = {int(group["source_library_id"]): group for group in mapping_groups}
         summary = {
             "total": len(users),
             "ready": sum(1 for user in users if user["eligibility"] == "ready"),
             "blocked": sum(1 for user in users if user["eligibility"] == "blocked"),
             "already_present": sum(1 for user in users if user["eligibility"] == "already_present"),
-            "unmapped": sum(1 for mapping in mappings if mapping["mapping_status"] == "unmapped"),
+            "unmapped": sum(1 for mapping in mapping_groups if not mapping["destination_library_ids"]),
             "failed": sum(1 for user in users if user["status"] == "failed"),
             "excluded": sum(1 for user in users if user["status"] == "excluded"),
         }
@@ -355,6 +394,40 @@ def register(app):
                 result = json.loads(user.get("result_json") or "{}")
             except Exception:
                 result = {}
+            try:
+                user_options = json.loads(user.get("options_json") or "{}")
+            except Exception:
+                user_options = {}
+            try:
+                source_snapshot = json.loads(user.get("source_snapshot_json") or "{}")
+            except Exception:
+                source_snapshot = {}
+            source_library_ids = []
+            for ids in (source_snapshot.get("source_access") or {}).values():
+                for library_id in ids or []:
+                    try:
+                        source_library_ids.append(int(library_id))
+                    except (TypeError, ValueError):
+                        pass
+            user["source_library_ids"] = sorted(set(source_library_ids))
+            user["source_libraries"] = [
+                source_libraries_by_id[library_id]
+                for library_id in user["source_library_ids"]
+                if library_id in source_libraries_by_id
+            ]
+            raw_user_overrides = user_options.get("library_mapping_overrides") or {}
+            user["library_mapping_overrides"] = {}
+            if isinstance(raw_user_overrides, dict):
+                for source_id, destination_ids in raw_user_overrides.items():
+                    if not str(source_id).isdigit():
+                        continue
+                    parsed_destinations = []
+                    for destination_id in destination_ids or []:
+                        try:
+                            parsed_destinations.append(int(destination_id))
+                        except (TypeError, ValueError):
+                            continue
+                    user["library_mapping_overrides"][int(source_id)] = sorted(set(parsed_destinations))
             user["has_credentials"] = bool(result.get("encrypted_generated_password"))
             user["plex_invited_at"] = result.get("plex_invited_at")
             user["plex_last_checked_at"] = result.get("plex_last_checked_at")
@@ -362,6 +435,15 @@ def register(app):
             user["plex_last_reminder_at"] = result.get("plex_last_reminder_at")
             user["plex_reminder_count"] = int(result.get("plex_reminder_count") or 0)
             user["destination_validated_at"] = result.get("destination_validated_at")
+            user["destination_rollback_requested_at"] = result.get("destination_rollback_requested_at")
+            user["destination_rolled_back_at"] = result.get("destination_rolled_back_at")
+            user["destination_library_ids_added"] = [
+                int(library_id)
+                for library_id in result.get("destination_library_ids_added", [])
+                if str(library_id).isdigit()
+            ]
+            user["destination_rollback_job_status"] = result.get("destination_rollback_job_status")
+            user["destination_rollback_job_error"] = result.get("destination_rollback_job_error")
             user["source_removed_at"] = result.get("source_removed_at")
             user["source_removal_requested_at"] = result.get("source_removal_requested_at")
             user["source_restored_at"] = result.get("source_restored_at")
@@ -371,6 +453,9 @@ def register(app):
             user["source_restoration_job_status"] = result.get("source_restoration_job_status")
             user["source_restoration_job_error"] = result.get("source_restoration_job_error")
             user["destination_validation_method"] = result.get("destination_validation_method")
+            user["credentials_delivery_queued_at"] = result.get("credentials_delivery_queued_at")
+            user["credentials_delivery_template_id"] = result.get("credentials_delivery_template_id")
+            user["credentials_delivery_skipped_reason"] = result.get("credentials_delivery_skipped_reason")
             user["source_removal_available_at"] = None
             if user["destination_validated_at"]:
                 try:
@@ -381,6 +466,15 @@ def register(app):
                 except Exception:
                     pass
         summary["validated"] = sum(1 for user in users if user.get("destination_validated_at"))
+        summary["destination_rollback_requested"] = sum(1 for user in users if user.get("destination_rollback_requested_at"))
+        summary["destination_rolled_back"] = sum(1 for user in users if user.get("destination_rolled_back_at"))
+        summary["destination_rollback_available"] = sum(
+            1 for user in users
+            if user.get("destination_media_user_id")
+            and user.get("destination_library_ids_added")
+            and not user.get("destination_rollback_requested_at")
+            and not user.get("destination_rolled_back_at")
+        )
         summary["source_removed"] = sum(1 for user in users if user.get("source_removed_at"))
         summary["source_removal_requested"] = sum(1 for user in users if user.get("source_removal_requested_at"))
         summary["removal_ready"] = sum(
@@ -399,7 +493,7 @@ def register(app):
             active_page="migrations",
             campaign=campaign,
             users=users,
-            mappings=mappings,
+            mappings=mapping_groups,
             destination_libraries=destination_libraries,
             summary=summary,
         )
@@ -417,6 +511,9 @@ def register(app):
                 scheduled_at=request.form.get("scheduled_at") or "",
                 batch_size=request.form.get("batch_size", type=int) or 10,
                 intent=request.form.get("intent") or "copy",
+                jellyfin_password_strategy=request.form.get("jellyfin_password_strategy") or "generated",
+                jellyfin_temp_password=request.form.get("jellyfin_temp_password") or "",
+                jellyfin_auto_deliver_credentials=bool(request.form.get("jellyfin_auto_deliver_credentials")),
             )
             add_log("info", "migrations", f"Migration draft edited: campaign_id={campaign_id}")
             flash("migration_draft_updated", "success")
@@ -582,6 +679,41 @@ def register(app):
             flash(str(exc), "error")
         return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
 
+    @app.post("/migrations/<int:campaign_id>/users/<int:migration_user_id>/mapping-overrides")
+    def migration_user_mapping_overrides(campaign_id: int, migration_user_id: int):
+        db = get_db()
+        row = db.query_one(
+            """
+            SELECT mu.id, mu.options_json, mc.status AS campaign_status
+            FROM migration_users mu
+            JOIN migration_campaigns mc ON mc.id = mu.campaign_id
+            WHERE mu.id = ? AND mu.campaign_id = ?
+            """,
+            (migration_user_id, campaign_id),
+        )
+        if not row:
+            flash("migration_campaign_not_found", "error")
+            return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
+        if row["campaign_status"] != "draft":
+            flash("migration_campaign_cannot_start", "error")
+            return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
+        try:
+            options = json.loads(row["options_json"] or "{}")
+        except Exception:
+            options = {}
+        overrides = _mapping_overrides_from_form(prefix="user_library_mapping_")
+        options["library_mapping_overrides"] = {
+            str(source_id): destination_ids
+            for source_id, destination_ids in sorted(overrides.items())
+        }
+        db.execute(
+            "UPDATE migration_users SET options_json=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            (json.dumps(options), migration_user_id),
+        )
+        add_log("info", "migrations", f"Migration user mapping overrides saved: campaign_id={campaign_id} migration_user_id={migration_user_id}")
+        flash("migration_user_mapping_overrides_saved", "success")
+        return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
+
     @app.post("/migrations/<int:campaign_id>/exclude-blocked")
     def migration_exclude_blocked_users(campaign_id: int):
         db = get_db()
@@ -653,7 +785,7 @@ def register(app):
         return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
 
     def _phase3_confirmed_campaign(db, campaign_id: int):
-        campaign = db.query_one("SELECT id,name,source_server_id,intent FROM migration_campaigns WHERE id=?", (campaign_id,))
+        campaign = db.query_one("SELECT id,name,source_server_id,destination_server_id,intent FROM migration_campaigns WHERE id=?", (campaign_id,))
         if not campaign:
             return None
         if (request.form.get("confirmation") or "").strip() != (campaign["name"] or "").strip():
@@ -711,6 +843,30 @@ def register(app):
         flash("migration_source_rollback_requested", "success")
         return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
 
+    @app.post("/migrations/<int:campaign_id>/rollback-destination-access")
+    def migration_rollback_destination_access(campaign_id: int):
+        db = get_db()
+        campaign = _phase3_confirmed_campaign(db, campaign_id)
+        if campaign is None:
+            flash("migration_campaign_not_found", "error")
+            return redirect(url_for("migrations_page"))
+        if campaign is False:
+            flash("migration_confirmation_mismatch", "error")
+            return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
+        try:
+            result = rollback_destination_access(db, campaign_id)
+        except Exception as exc:
+            add_log("error", "migrations", f"Migration destination access rollback failed: campaign_id={campaign_id} error={exc}")
+            flash(str(exc), "error")
+            return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
+        destination = db.query_one("SELECT type FROM servers WHERE id=?", (campaign["destination_server_id"],))
+        if result["queued"] and destination:
+            enable_and_run_task_by_name("apply_plex_access_updates" if destination["type"] == "plex" else "apply_jellyfin_access_updates")
+            enable_and_run_task_by_name("migration_worker")
+        add_log("warning", "migrations", f"Migration destination access rollback requested: campaign_id={campaign_id} result={result}")
+        flash("migration_destination_rollback_requested", "success")
+        return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
+
     @app.get("/migrations/<int:campaign_id>/report")
     def migration_campaign_report(campaign_id: int):
         db = get_db()
@@ -737,6 +893,8 @@ def register(app):
             "source_removal_requested": 0,
             "source_removed": 0,
             "source_restored": 0,
+            "destination_rollback_requested": 0,
+            "destination_rolled_back": 0,
             "provider_job_errors": 0,
         }
         for user in users:
@@ -746,8 +904,14 @@ def register(app):
             report_summary["source_removal_requested"] += int(bool(result.get("source_removal_requested_at")))
             report_summary["source_removed"] += int(bool(result.get("source_removed_at")))
             report_summary["source_restored"] += int(bool(result.get("source_restored_at")))
+            report_summary["destination_rollback_requested"] += int(bool(result.get("destination_rollback_requested_at")))
+            report_summary["destination_rolled_back"] += int(bool(result.get("destination_rolled_back_at")))
             report_summary["provider_job_errors"] += int(
-                bool(result.get("source_removal_job_error") or result.get("source_restoration_job_error"))
+                bool(
+                    result.get("source_removal_job_error")
+                    or result.get("source_restoration_job_error")
+                    or result.get("destination_rollback_job_error")
+                )
             )
         return jsonify({
             "ok": True,

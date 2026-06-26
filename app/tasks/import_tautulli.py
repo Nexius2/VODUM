@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 """
@@ -351,7 +351,7 @@ def _detect_pms_identifier(tconn: sqlite3.Connection) -> str | None:
         # Plex machineIdentifier is typically 40 hex chars
         if re.fullmatch(r"[0-9a-fA-F]{40}", v):
             return True
-        # fallback: accept other non-empty identifiers that look “id-like”
+        # fallback: accept other non-empty identifiers that look â€œid-likeâ€
         return len(v) >= 12
 
     tables = [r[0] for r in tconn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
@@ -1054,7 +1054,7 @@ def run(task_id, db):
                 if settings:
                     settings_d = dict(settings)
                     if int(settings_d.get("mailing_enabled") or 0) == 1:
-                        to_email = (settings_d.get("admin_email") or "").strip()
+                        to_email = (settings_d.get("contact_email") or "").strip()
                         if to_email:
                             subject = "VODUM - Tautulli import completed"
                             body = "Import completed successfully.\n\n" + json.dumps(payload, indent=2, ensure_ascii=False)
@@ -1147,3 +1147,4 @@ def main(argv=None):
 
 if __name__ == "__main__":
     main()
+

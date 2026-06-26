@@ -1192,14 +1192,16 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
             by_key.setdefault(key, []).append(s)
 
         for key, ip_sessions in by_key.items():
-            if len(ip_sessions) <= max_streams:
+            counted_ip_sessions = _deduplicate_household_sessions(ip_sessions)
+
+            if len(counted_ip_sessions) <= max_streams:
                 continue
 
             ip_value = key.split("|", 1)[1] if ("|" in key) else key
-            reason = f"max_streams_per_ip({ip_value}): {len(ip_sessions)} > {max_streams}"
+            reason = f"max_streams_per_ip({ip_value}): {len(counted_ip_sessions)} > {max_streams}"
 
             # IMPORTANT: choisir la cible ICI pour garantir server_id/provider cohérents
-            target = _pick_kill_target(ip_sessions, selector)
+            target = _pick_kill_target(counted_ip_sessions, selector)
             if not target:
                 continue
 
@@ -1214,7 +1216,7 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
                 "server_id": server_id,
                 "provider": provider,
                 "target_user": _normalize_user_key(target),
-                "sessions": ip_sessions,
+                "sessions": counted_ip_sessions,
                 "reason": reason,
                 "selector": selector,
                 "warn_title": warn_title,

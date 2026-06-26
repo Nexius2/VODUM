@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from logging_utils import get_logger
 from tasks_engine import task_logs
@@ -51,7 +51,7 @@ def _required_channels(db, settings: dict, user: dict) -> list[str]:
 
 
 def _send_test_campaign(db, settings: dict, campaign: dict) -> bool:
-    admin_email = (settings.get("admin_email") or "").strip()
+    admin_email = (settings.get("contact_email") or "").strip()
     campaign_id = int(campaign["id"])
 
     if not admin_email:
@@ -452,7 +452,7 @@ def run(task_id: int, db):
 
         _apply_campaign_status(db, touched_campaign_ids)
 
-        msg = f"send_comm_campaigns finished — processed={processed} success={success} failed={failed}"
+        msg = f"send_comm_campaigns finished â€” processed={processed} success={success} failed={failed}"
         task_logs(task_id, "success" if success else "debug", msg, details={"campaign_ids": sorted(touched_campaign_ids)})
         if success or failed:
             log.info(msg)
@@ -466,3 +466,4 @@ def run(task_id: int, db):
         raise
     finally:
         log.debug("=== SEND COMM CAMPAIGNS : END ===")
+

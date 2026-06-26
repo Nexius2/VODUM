@@ -149,6 +149,16 @@
         </div>
 
         <div class="text-xs">
+          <label class="block mb-1">{{ t('smtp_auth_method') }}</label>
+          {% set smtp_auth_method = settings.smtp_auth_method or 'password' %}
+          <select name="smtp_auth_method" id="smtp_auth_method"
+                  class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+            <option value="password" {% if smtp_auth_method != 'oauth2' %}selected{% endif %}>{{ t('smtp_auth_password') }}</option>
+            <option value="oauth2" {% if smtp_auth_method == 'oauth2' %}selected{% endif %}>{{ t('smtp_auth_oauth2') }}</option>
+          </select>
+        </div>
+
+        <div class="text-xs" id="smtp_password_block">
           <label class="block mb-1">{{ t('smtp_pass') }}</label>
           <div class="relative">
             <input type="password" id="smtp_pass" name="smtp_pass" value=""
@@ -159,6 +169,19 @@
                     aria-label="Toggle password">👁️</button>
           </div>
           <p class="mt-1 text-[11px] text-slate-500">{{ t('comm_password_help') }}</p>
+        </div>
+
+        <div class="text-xs" id="smtp_oauth_block">
+          <label class="block mb-1">{{ t('smtp_oauth_access_token') }}</label>
+          <div class="relative">
+            <input type="password" id="smtp_oauth_access_token" name="smtp_oauth_access_token" value=""
+                   placeholder="{% if settings.smtp_oauth_access_token_configured %}Configured - leave empty to keep{% endif %}"
+                   class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs pr-10">
+            <button type="button" id="toggle_oauth_token"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                    aria-label="Toggle OAuth token">Show</button>
+          </div>
+          <p class="mt-1 text-[11px] text-slate-500">{{ t('smtp_oauth_token_help') }}</p>
         </div>
 
         <div class="pt-1">
@@ -439,7 +462,20 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Toggle SMTP password visibility
+  // Toggle SMTP credential visibility
+  const authMethodSelect = document.getElementById("smtp_auth_method");
+  const smtpPasswordBlock = document.getElementById("smtp_password_block");
+  const smtpOauthBlock = document.getElementById("smtp_oauth_block");
+  function syncSmtpAuthBlocks() {
+    const useOauth = authMethodSelect && authMethodSelect.value === "oauth2";
+    if (smtpPasswordBlock) smtpPasswordBlock.classList.toggle("hidden", useOauth);
+    if (smtpOauthBlock) smtpOauthBlock.classList.toggle("hidden", !useOauth);
+  }
+  if (authMethodSelect) {
+    authMethodSelect.addEventListener("change", () => { syncSmtpAuthBlocks(); scheduleSave(0); });
+    syncSmtpAuthBlocks();
+  }
+
   const passInput = document.getElementById("smtp_pass");
   const passBtn   = document.getElementById("toggle_pass");
   if (passInput && passBtn) {
@@ -447,6 +483,16 @@ document.addEventListener("DOMContentLoaded", () => {
       const isPwd = passInput.type === "password";
       passInput.type = isPwd ? "text" : "password";
       passBtn.textContent = isPwd ? "🙈" : "👁️";
+    });
+  }
+
+  const oauthTokenInput = document.getElementById("smtp_oauth_access_token");
+  const oauthTokenBtn = document.getElementById("toggle_oauth_token");
+  if (oauthTokenInput && oauthTokenBtn) {
+    oauthTokenBtn.addEventListener("click", () => {
+      const isPwd = oauthTokenInput.type === "password";
+      oauthTokenInput.type = isPwd ? "text" : "password";
+      oauthTokenBtn.textContent = isPwd ? "Hide" : "Show";
     });
   }
 

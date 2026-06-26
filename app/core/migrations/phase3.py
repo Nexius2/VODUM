@@ -51,8 +51,18 @@ def _current_source_access(db, source_server_id: int, vodum_user_id: int) -> dic
     return access
 
 
-def _queue_source_sync(db, *, provider: str, action: str, campaign_id: int, migration_user_id: int, vodum_user_id: int, server_id: int) -> tuple[bool, str]:
-    dedupe_key = f"migration:{campaign_id}:{action}:server={server_id}:user={vodum_user_id}"
+def _queue_access_sync(
+    db,
+    *,
+    provider: str,
+    action: str,
+    campaign_id: int,
+    migration_user_id: int,
+    vodum_user_id: int,
+    server_id: int,
+    scope: str,
+) -> tuple[bool, str]:
+    dedupe_key = f"migration:{campaign_id}:{scope}:{action}:server={server_id}:user={vodum_user_id}"
     kwargs = {
         "db": db,
         "action": action,
@@ -65,12 +75,39 @@ def _queue_source_sync(db, *, provider: str, action: str, campaign_id: int, migr
             "campaign_id": campaign_id,
             "migration_user_id": migration_user_id,
             "operation": action,
+            "scope": scope,
         },
-        "cancel_reason": "Canceled because a newer migration source-access operation was queued",
+        "cancel_reason": f"Canceled because a newer migration {scope} access operation was queued",
     }
     if provider == "plex":
         return insert_plex_media_job(**kwargs), dedupe_key
     return insert_jellyfin_media_job(**kwargs), dedupe_key
+
+
+def _queue_source_sync(db, *, provider: str, action: str, campaign_id: int, migration_user_id: int, vodum_user_id: int, server_id: int) -> tuple[bool, str]:
+    return _queue_access_sync(
+        db,
+        provider=provider,
+        action=action,
+        campaign_id=campaign_id,
+        migration_user_id=migration_user_id,
+        vodum_user_id=vodum_user_id,
+        server_id=server_id,
+        scope="source",
+    )
+
+
+def _queue_destination_sync(db, *, provider: str, action: str, campaign_id: int, migration_user_id: int, vodum_user_id: int, server_id: int) -> tuple[bool, str]:
+    return _queue_access_sync(
+        db,
+        provider=provider,
+        action=action,
+        campaign_id=campaign_id,
+        migration_user_id=migration_user_id,
+        vodum_user_id=vodum_user_id,
+        server_id=server_id,
+        scope="destination",
+    )
 
 
 def _campaign_options(campaign: dict) -> dict:
@@ -142,37 +179,48 @@ def reconcile_source_jobs(db) -> int:
     updated = 0
     try:
         rows = db.query(
-            "SELECT id,result_json FROM migration_users WHERE result_json LIKE '%source_%_job_key%'"
+            """
+            SELECT id,result_json FROM migration_users
+            WHERE result_json LIKE '%source_%_job_key%'
+               OR result_json LIKE '%destination_%_job_key%'
+            """
         )
     except Exception:
         return 0
+    operations = {
+        "source": ("removal", "restoration"),
+        "destination": ("rollback",),
+    }
     for raw in rows:
         user = dict(raw)
         result = _json_dict(user.get("result_json"))
         changed = False
-        for operation in ("removal", "restoration"):
-            key = result.get(f"source_{operation}_job_key")
-            if not key:
-                continue
-            job = db.query_one(
-                "SELECT status,last_error,processed_at FROM media_jobs WHERE dedupe_key=? ORDER BY id DESC LIMIT 1",
-                (key,),
-            )
-            if not job:
-                continue
-            status = str(job["status"] or "")
-            if result.get(f"source_{operation}_job_status") != status:
-                result[f"source_{operation}_job_status"] = status
-                if job["last_error"]:
-                    result[f"source_{operation}_job_error"] = str(job["last_error"])
-                if status == "success":
-                    result[f"source_{operation}_applied_at"] = str(job["processed_at"] or _utc_now())
-                    if operation == "removal":
-                        result["source_removed_at"] = result[f"source_{operation}_applied_at"]
-                    else:
-                        result["source_restored_at"] = result[f"source_{operation}_applied_at"]
-                        result.pop("source_removed_at", None)
-                changed = True
+        for scope, scope_operations in operations.items():
+            for operation in scope_operations:
+                key = result.get(f"{scope}_{operation}_job_key")
+                if not key:
+                    continue
+                job = db.query_one(
+                    "SELECT status,last_error,processed_at FROM media_jobs WHERE dedupe_key=? ORDER BY id DESC LIMIT 1",
+                    (key,),
+                )
+                if not job:
+                    continue
+                status = str(job["status"] or "")
+                if result.get(f"{scope}_{operation}_job_status") != status:
+                    result[f"{scope}_{operation}_job_status"] = status
+                    if job["last_error"]:
+                        result[f"{scope}_{operation}_job_error"] = str(job["last_error"])
+                    if status == "success":
+                        result[f"{scope}_{operation}_applied_at"] = str(job["processed_at"] or _utc_now())
+                        if scope == "source" and operation == "removal":
+                            result["source_removed_at"] = result[f"{scope}_{operation}_applied_at"]
+                        elif scope == "source" and operation == "restoration":
+                            result["source_restored_at"] = result[f"{scope}_{operation}_applied_at"]
+                            result.pop("source_removed_at", None)
+                        elif scope == "destination" and operation == "rollback":
+                            result["destination_rolled_back_at"] = result[f"{scope}_{operation}_applied_at"]
+                    changed = True
         if changed:
             db.execute(
                 "UPDATE migration_users SET result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
@@ -256,6 +304,87 @@ def remove_validated_source_access(db, campaign_id: int) -> dict:
         )
         removed += 1
     return {"removed": removed, "queued": queued, "skipped": skipped}
+
+
+def _current_destination_library_ids(db, media_user_id: int, destination_server_id: int) -> list[int]:
+    rows = db.query(
+        """
+        SELECT mul.library_id
+        FROM media_user_libraries mul
+        JOIN libraries l ON l.id=mul.library_id AND l.server_id=?
+        WHERE mul.media_user_id=?
+        ORDER BY mul.library_id
+        """,
+        (int(destination_server_id), int(media_user_id)),
+    )
+    return [int(row["library_id"]) for row in rows]
+
+
+def rollback_destination_access(db, campaign_id: int) -> dict:
+    campaign = dict(db.query_one("SELECT * FROM migration_campaigns WHERE id=?", (campaign_id,)) or {})
+    if not campaign:
+        raise ValueError("Migration campaign not found.")
+    destination = dict(db.query_one("SELECT id, type, status FROM servers WHERE id=?", (campaign["destination_server_id"],)) or {})
+    if not destination:
+        raise ValueError("Destination server not found.")
+    if not is_server_online(destination.get("status")):
+        raise ValueError("Destination server must be online.")
+
+    rolled_back = queued = skipped = 0
+    for raw in db.query("SELECT * FROM migration_users WHERE campaign_id=? ORDER BY id", (campaign_id,)):
+        user = dict(raw)
+        result = _json_dict(user.get("result_json"))
+        media_user_id = result.get("destination_media_user_id") or user.get("destination_media_user_id")
+        if not media_user_id or result.get("destination_rolled_back_at"):
+            skipped += 1
+            continue
+        if (
+            result.get("destination_rollback_requested_at")
+            and str(result.get("destination_rollback_job_status") or "") in {"queued", "running", "success"}
+        ):
+            skipped += 1
+            continue
+        added_library_ids = {
+            int(library_id)
+            for library_id in result.get("destination_library_ids_added", [])
+            if str(library_id).isdigit()
+        }
+        if not added_library_ids:
+            skipped += 1
+            continue
+        current_library_ids = set(_current_destination_library_ids(db, int(media_user_id), int(destination["id"])))
+        removable_library_ids = sorted(added_library_ids & current_library_ids)
+        if not removable_library_ids:
+            skipped += 1
+            continue
+        placeholders = ",".join("?" for _ in removable_library_ids)
+        db.execute(
+            f"DELETE FROM media_user_libraries WHERE media_user_id=? AND library_id IN ({placeholders})",
+            (int(media_user_id), *removable_library_ids),
+        )
+        remaining_library_ids = _current_destination_library_ids(db, int(media_user_id), int(destination["id"]))
+        action = "revoke" if str(destination["type"]).lower() == "plex" and not remaining_library_ids else "sync"
+        inserted, job_key = _queue_destination_sync(
+            db,
+            provider=str(destination["type"]).lower(),
+            action=action,
+            campaign_id=campaign_id,
+            migration_user_id=int(user["id"]),
+            vodum_user_id=int(user["vodum_user_id"]),
+            server_id=int(destination["id"]),
+        )
+        queued += int(inserted)
+        result["destination_rollback_requested_at"] = result.get("destination_rollback_requested_at") or _utc_now()
+        result["destination_rollback_job_key"] = job_key
+        result["destination_rollback_job_status"] = "queued"
+        result["destination_rollback_removed_library_ids"] = removable_library_ids
+        result["destination_rollback_action"] = action
+        db.execute(
+            "UPDATE migration_users SET result_json=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            (json.dumps(result), user["id"]),
+        )
+        rolled_back += 1
+    return {"rolled_back": rolled_back, "queued": queued, "skipped": skipped}
 
 
 def rollback_source_access(db, campaign_id: int) -> dict:

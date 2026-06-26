@@ -208,19 +208,15 @@ async function refreshUsers() {
   if (!tbody) return;
 
   const data = await apiGet("/api/users");
-  tbody.innerHTML = "";
-
-  data.forEach(u => {
-    tbody.innerHTML += `
-      <tr>
-        <td>${htmlEscape(u.title || u.username)}</td>
-        <td>${htmlEscape(u.email || "")}</td>
-        <td>${Number(u.libraries_count ?? 0)}</td>
-        <td>${Number(u.servers_count ?? 0)}</td>
-        <td>${htmlEscape(u.status ?? "")}</td>
-      </tr>
-    `;
-  });
+  tbody.innerHTML = data.map(u => `
+    <tr>
+      <td>${htmlEscape(u.title || u.username)}</td>
+      <td>${htmlEscape(u.email || "")}</td>
+      <td>${Number(u.libraries_count ?? 0)}</td>
+      <td>${Number(u.servers_count ?? 0)}</td>
+      <td>${htmlEscape(u.status ?? "")}</td>
+    </tr>
+  `).join("");
 }
 
 async function refreshServers() {
@@ -228,18 +224,14 @@ async function refreshServers() {
   if (!tbody) return;
 
   const data = await apiGet("/api/servers");
-  tbody.innerHTML = "";
-
-  data.forEach(s => {
-    tbody.innerHTML += `
-      <tr>
-        <td>${htmlEscape(s.name ?? "")}</td>
-        <td>${htmlEscape(s.type ?? "")}</td>
-        <td>${htmlEscape(s.status ?? "")}</td>
-        <td>${htmlEscape(s.libraries ?? "")}</td>
-      </tr>
-    `;
-  });
+  tbody.innerHTML = data.map(s => `
+    <tr>
+      <td>${htmlEscape(s.name ?? "")}</td>
+      <td>${htmlEscape(s.type ?? "")}</td>
+      <td>${htmlEscape(s.status ?? "")}</td>
+      <td>${htmlEscape(s.libraries ?? "")}</td>
+    </tr>
+  `).join("");
 }
 
 async function refreshLibraries() {
@@ -247,18 +239,14 @@ async function refreshLibraries() {
   if (!tbody) return;
 
   const data = await apiGet("/api/libraries");
-  tbody.innerHTML = "";
-
-  data.forEach(lib => {
-    tbody.innerHTML += `
-      <tr>
-        <td>${htmlEscape(lib.title ?? "")}</td>
-        <td>${htmlEscape(lib.type ?? "")}</td>
-        <td>${htmlEscape(lib.server_name ?? "")}</td>
-        <td>${Number(lib.user_count ?? 0)}</td>
-      </tr>
-    `;
-  });
+  tbody.innerHTML = data.map(lib => `
+    <tr>
+      <td>${htmlEscape(lib.title ?? "")}</td>
+      <td>${htmlEscape(lib.type ?? "")}</td>
+      <td>${htmlEscape(lib.server_name ?? "")}</td>
+      <td>${Number(lib.user_count ?? 0)}</td>
+    </tr>
+  `).join("");
 }
 
 async function refreshTasks() {
@@ -266,21 +254,17 @@ async function refreshTasks() {
   if (!tbody) return;
 
   const data = await apiGet("/api/tasks");
-  tbody.innerHTML = "";
-
-  data.forEach(t => {
-    tbody.innerHTML += `
-      <tr>
-        <td>${htmlEscape(t.name ?? "")}</td>
-        <td>${htmlEscape(t.status ?? "")}</td>
-		<td>${htmlEscape(vodumFormatDateTime(t.last_run || "-"))}</td>
-		<td>${htmlEscape(vodumFormatDateTime(t.next_run || "-"))}</td>
-        <td>
-          <button onclick="runTask(${Number(t.id)})">Run</button>
-        </td>
-      </tr>
-    `;
-  });
+  tbody.innerHTML = data.map(t => `
+    <tr>
+      <td>${htmlEscape(t.name ?? "")}</td>
+      <td>${htmlEscape(t.status ?? "")}</td>
+      <td>${htmlEscape(vodumFormatDateTime(t.last_run || "-"))}</td>
+      <td>${htmlEscape(vodumFormatDateTime(t.next_run || "-"))}</td>
+      <td>
+        <button onclick="runTask(${Number(t.id)})">Run</button>
+      </td>
+    </tr>
+  `).join("");
 }
 
 async function refreshLogs() {
@@ -288,17 +272,13 @@ async function refreshLogs() {
   if (!tbody) return;
 
   const data = await apiGet("/api/logs?limit=200");
-  tbody.innerHTML = "";
-
-  data.forEach(log => {
-    tbody.innerHTML += `
-      <tr>
-        <td>${htmlEscape(vodumFormatDateTime(log.date ?? log.created_at ?? ""))}</td>
-        <td>${htmlEscape(log.level ?? "")}</td>
-        <td>${htmlEscape(log.message ?? "")}</td>
-      </tr>
-    `;
-  });
+  tbody.innerHTML = data.map(log => `
+    <tr>
+      <td>${htmlEscape(vodumFormatDateTime(log.date ?? log.created_at ?? ""))}</td>
+      <td>${htmlEscape(log.level ?? "")}</td>
+      <td>${htmlEscape(log.message ?? "")}</td>
+    </tr>
+  `).join("");
 }
 
 // ------------ ACTIONS ---------------------------------------
@@ -383,7 +363,22 @@ document.body.addEventListener("htmx:afterSwap", function (event) {
   const textEl = document.getElementById("taskActivityText");
   if (!box || !textEl) return;
 
+  const idleDelayMs = 15000;
+  const activeDelayMs = 2500;
+  let timer = null;
+  let lastHadActivity = false;
+
+  function schedule(delayMs) {
+    if (timer) window.clearTimeout(timer);
+    timer = window.setTimeout(refresh, delayMs);
+  }
+
   async function refresh() {
+    if (document.hidden) {
+      schedule(idleDelayMs);
+      return;
+    }
+
     try {
       const r = await fetch("/api/tasks/activity", { cache: "no-store" });
       if (!r.ok) throw new Error("bad status");
@@ -391,24 +386,31 @@ document.body.addEventListener("htmx:afterSwap", function (event) {
       const running = Number(data.running || 0);
       const queued = Number(data.queued || 0);
       const n = running + queued;
+      lastHadActivity = n > 0;
 
-      if (n > 0) {
+      if (lastHadActivity) {
         const parts = [];
         if (running > 0) parts.push(`${running} running`);
         if (queued > 0) parts.push(`${queued} queued`);
         const label = textEl.dataset.label || "Tasks";
-        textEl.textContent = `${label}: ${parts.join(" · ")}`;
+        textEl.textContent = `${label}: ${parts.join(" - ")}`;
         box.classList.remove("hidden");
       } else {
         box.classList.add("hidden");
       }
     } catch {
+      lastHadActivity = false;
       box.classList.add("hidden");
     }
+
+    schedule(lastHadActivity ? activeDelayMs : idleDelayMs);
   }
 
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) refresh();
+  });
+
   refresh();
-  setInterval(refresh, 2500);
 })();
 
 

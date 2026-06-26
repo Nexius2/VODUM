@@ -1,59 +1,66 @@
-# Python
+﻿# Python caches
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *.pyo
 *.pyd
 
-# Virtual env
+# Virtual env / local env
 venv/
+.venv/
 .env
 .env.*
 !.env.example
 
-# Logs
-*.log
-logs/
-
-# Database
+# Runtime data / local databases
 *.db
+*.sqlite
 *.sqlite3
+*.db-wal
+*.db-shm
+*.sqlite-wal
+*.sqlite-shm
+logs/
+*.log
+instance/
+docker-data/
 
-# IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Cache / temp
-.cache/
-.tmp/
-*.tmp
-
-# Build
-dist/
-build/
+# Test, validation and dev-only folders
 test/
 tests/
-
-# Telemetry
-worker_telemetry/
-
-# Coverage
+tools/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .coverage
 htmlcov/
 
-# Secrets / config
-config.json
-settings.json
-instance/
+# Documentation / non-application assets
+vodum-docs/
+screenshots/
 
-# Optional Docker
+# Optional side projects / local helper scripts
+worker_telemetry/
+create-container.sh
+create-container-test.sh
+get-container.sh
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Temp / local files
+.cache/
+.tmp/
+*.tmp
 *.pid
 *.seed
-
-# Files
-create-container-test.sh
-create-container.sh
-get-container.sh
+config.json
+settings.json

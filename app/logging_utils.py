@@ -1,10 +1,11 @@
-import logging
+﻿import logging
 import os
 import re
-import sqlite3
 import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+
+from db_manager import open_sqlite_connection
 
 # -------------------------------------------------------------------
 # CONFIG
@@ -54,9 +55,9 @@ logger.propagate = False  # Pas de duplication stdout
 
 def is_debug_mode_enabled() -> bool:
     """
-    Retourne settings.debug_mode avec cache mémoire TTL.
-    Sécurité maximale par défaut : False.
-    Fonctionne sans UI, sans Flask, en tâche de fond.
+    Retourne settings.debug_mode avec cache mÃ©moire TTL.
+    SÃ©curitÃ© maximale par dÃ©faut : False.
+    Fonctionne sans UI, sans Flask, en tÃ¢che de fond.
     """
     now = time.time()
 
@@ -64,18 +65,19 @@ def is_debug_mode_enabled() -> bool:
     if now - _DEBUG_CACHE["last_check"] < DEBUG_CACHE_TTL:
         return _DEBUG_CACHE["value"]
 
-    # Rafraîchissement DB
+    # RafraÃ®chissement DB
+    conn = None
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cur = conn.cursor()
-        cur.execute("SELECT debug_mode FROM settings WHERE id = 1")
-        row = cur.fetchone()
-        conn.close()
+        conn = open_sqlite_connection(DB_PATH, read_only=True)
+        row = conn.execute("SELECT debug_mode FROM settings WHERE id = 1").fetchone()
 
         value = bool(row and row[0] == 1)
 
     except Exception:
         value = False  # fail-safe
+    finally:
+        if conn is not None:
+            conn.close()
 
     _DEBUG_CACHE["value"] = value
     _DEBUG_CACHE["last_check"] = now
@@ -91,7 +93,7 @@ class AnonymizeFilter(logging.Filter):
     """
     - Masque la partie locale des emails (avant @)
     - Masque tous les tokens / Authorization / Bearer
-    - Désactivé automatiquement si debug_mode = 1
+    - DÃ©sactivÃ© automatiquement si debug_mode = 1
     """
 
     EMAIL_REGEX = re.compile(
@@ -115,19 +117,19 @@ class AnonymizeFilter(logging.Filter):
     )
 
     def filter(self, record: logging.LogRecord) -> bool:
-        # 🧪 Debug actif → logs NON anonymisés
+        # ðŸ§ª Debug actif â†’ logs NON anonymisÃ©s
         if is_debug_mode_enabled():
             return True
 
         msg = record.getMessage()
 
-        # 📧 Email → masquer uniquement avant @
+        # ðŸ“§ Email â†’ masquer uniquement avant @
         msg = self.EMAIL_REGEX.sub(
             lambda m: f"{m.group(1)}{'*' * len(m.group(2))}{m.group(3)}",
             msg
         )
 
-        # 🔑 Tokens → REDACTED
+        # ðŸ”‘ Tokens â†’ REDACTED
         msg = self.TOKEN_REGEX.sub(
             lambda m: f"{m.group(1)}=***REDACTED***",
             msg
@@ -158,8 +160,8 @@ class AnonymizeFilter(logging.Filter):
 
 def read_last_logs(limit=10):
     """
-    Retourne les N dernières lignes du fichier de log.
-    Centralisé ici pour éviter toute duplication.
+    Retourne les N derniÃ¨res lignes du fichier de log.
+    CentralisÃ© ici pour Ã©viter toute duplication.
     """
     try:
         with open(LOG_FILE, "r", encoding="utf-8") as f:
@@ -192,3 +194,5 @@ def get_logger(name: str):
     ex: vodum.sync_plex, vodum.tasks_engine
     """
     return logger.getChild(name)
+
+

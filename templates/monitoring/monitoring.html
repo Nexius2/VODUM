@@ -4,6 +4,13 @@
 {% block header_title %}{{ t("monitoring.title") }}{% endblock %}
 {% block header_subtitle %}{{ t("monitoring.subtitle") }}{% endblock %}
 
+{% block head %}
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  {% if request.args.get('tab', 'overview') in ['activity', 'servers', 'policies'] %}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  {% endif %}
+{% endblock %}
+
 {% block content %}
 
 {% include "monitoring/partials/_tabs.html" %}

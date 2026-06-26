@@ -163,7 +163,7 @@ def suggest_library_mappings(
     db,
     source_server_id: int,
     destination_server_id: int,
-    mapping_overrides: dict[int, int | None] | None = None,
+    mapping_overrides: dict[int, list[int]] | None = None,
 ) -> list[dict]:
     mapping_overrides = mapping_overrides or {}
     source_libraries = [
@@ -238,23 +238,29 @@ def suggest_library_mappings(
         suggested = candidates[0][1] if candidates else None
         suggestion_reason = candidates[0][2] if candidates else ""
         suggestion_score = candidates[0][0] if candidates else 0
+        suggested_destinations = [suggested] if suggested else []
         if int(source["id"]) in mapping_overrides:
-            destination_id = mapping_overrides[int(source["id"])]
-            suggested = next(
-                (
-                    destination
-                    for destination in destination_libraries
-                    if destination_id is not None and int(destination["id"]) == int(destination_id)
-                ),
-                None,
-            )
-            suggestion_reason = "manual" if suggested else ""
-            suggestion_score = 1000 if suggested else 0
+            raw_override = mapping_overrides.get(int(source["id"]))
+            raw_destination_ids = raw_override if isinstance(raw_override, (list, tuple, set)) else [raw_override]
+            destination_ids = {
+                int(destination_id)
+                for destination_id in (raw_destination_ids or [])
+                if str(destination_id).strip() and str(destination_id).strip().lower() != "none"
+            }
+            suggested_destinations = [
+                destination
+                for destination in destination_libraries
+                if int(destination["id"]) in destination_ids
+            ]
+            suggested = suggested_destinations[0] if suggested_destinations else None
+            suggestion_reason = "manual" if suggested_destinations else ""
+            suggestion_score = 1000 if suggested_destinations else 0
         mappings.append(
             {
                 "source": source,
                 "suggested_destination": suggested,
-                "status": "suggested" if suggested else "unmapped",
+                "suggested_destinations": suggested_destinations,
+                "status": "suggested" if suggested_destinations else "unmapped",
                 "suggestion_reason": suggestion_reason,
                 "suggestion_score": suggestion_score,
                 "destination_options": destination_libraries,
@@ -316,7 +322,7 @@ def analyze_migration(
     db,
     source_server_id: int,
     destination_server_id: int,
-    mapping_overrides: dict[int, int | None] | None = None,
+    mapping_overrides: dict[int, list[int]] | None = None,
 ) -> dict:
     source_server_id = int(source_server_id)
     destination_server_id = int(destination_server_id)
@@ -343,7 +349,7 @@ def analyze_migration(
         mapping_overrides=mapping_overrides,
     )
     mapping_by_source = {
-        int(item["source"]["id"]): item.get("suggested_destination")
+        int(item["source"]["id"]): item.get("suggested_destinations") or []
         for item in mappings
     }
     source_library_ids = _source_library_ids_by_user(db, source_server_id)

@@ -603,6 +603,11 @@ def build_usage_risk_report(db, filters=None, persist_history=True):
         kills_30d = item["kills_30d"] or item["kills"]
 
         score, reasons, reason_items = _score_usage_item(item, min_kills)
+
+        # Hide false positives neutralized by scoring.
+        if score <= 0 and not risk_level:
+            continue
+
         level = _risk_level(score, medium_threshold, high_threshold)
 
         needed_streams = max(1, fixed_devices)

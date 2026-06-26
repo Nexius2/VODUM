@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <title>{{ t("auth.title_login") }}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="preconnect" href="https://cdn.tailwindcss.com">
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-950 text-slate-100">
@@ -27,6 +28,7 @@
 
       <form method="POST" action="{{ url_for('login_submit') }}" class="space-y-4">
         <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="next" value="{{ next_url or '' }}">
         <div>
           <label class="block text-sm mb-1 text-slate-300">{{ t("auth.admin_email") }}</label>
           <input type="email" name="email" autocomplete="email"
@@ -51,11 +53,20 @@
 			  class="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-emerald-400"
 			  aria-label="Afficher ou masquer le mot de passe"
 			>
-			  👁
+			  ðŸ‘
 			</button>
 		  </div>
 		</div>
 
+
+        {% if totp_enabled %}
+          <div>
+            <label class="block text-sm mb-1 text-slate-300">{{ t("totp_code") }}</label>
+            <input type="text" name="totp_code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code"
+                   class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm"
+                   required>
+          </div>
+        {% endif %}
         <button class="w-full px-4 py-2 bg-indigo-500 hover:bg-indigo-600 rounded text-white text-sm">
           {{ t("common.login") }}
         </button>
@@ -90,7 +101,7 @@
           </div>
           <button type="button" id="closeResetModal"
                   class="text-slate-400 hover:text-slate-200 text-xl leading-none">
-            ×
+            Ã—
           </button>
         </div>
 
@@ -188,3 +199,4 @@
 </script>
 </body>
 </html>
+

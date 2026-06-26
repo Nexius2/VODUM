@@ -2,7 +2,6 @@
 import json
 import uuid
 import threading
-import sqlite3
 from tasks_engine import mark_auto_enable_dirty, force_task_run
 from flask import (
     render_template, request, redirect, url_for, flash, current_app,
@@ -18,6 +17,7 @@ from core.library_bulk_access import (
     remove_libraries_from_users,
 )
 from secret_store import encrypt_secret, encrypt_server_settings_json, keep_existing_secret
+from db_manager import open_sqlite_connection
 
 server_delete_logger = get_logger("server_delete")
 logger = get_logger("servers")
@@ -73,14 +73,12 @@ def _background_delete_server(app, db_path, server_id, server_name):
     conn = None
 
     try:
-        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
-        conn.row_factory = sqlite3.Row
-
-        conn.execute("PRAGMA foreign_keys = ON;")
-        conn.execute("PRAGMA journal_mode = WAL;")
-        conn.execute("PRAGMA synchronous = NORMAL;")
-        conn.execute("PRAGMA busy_timeout = 30000;")
-
+        conn = open_sqlite_connection(
+            db_path,
+            check_same_thread=False,
+            timeout=30,
+            busy_timeout_ms=30000,
+        )
         server_delete_logger.info(
             f"[server_delete] Start background deletion for server_id={server_id} name={server_name}"
         )
@@ -905,3 +903,4 @@ def register(app):
 
         flash(result["message"], "success")
         return redirect(url_for("libraries_list"))
+

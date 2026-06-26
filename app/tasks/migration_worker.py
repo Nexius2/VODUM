@@ -63,7 +63,7 @@ def run(task_id: int, db):
           mu.*,
           mc.source_server_id, mc.destination_server_id,
           mc.migration_type, mc.migration_mode, mc.status AS campaign_status,
-          mc.batch_size,
+          mc.options_json, mc.batch_size,
           destination.type AS destination_type
         FROM migration_users mu
         JOIN migration_campaigns mc ON mc.id = mu.campaign_id

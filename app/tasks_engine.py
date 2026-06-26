@@ -1,13 +1,16 @@
-import threading
+﻿import threading
 import time
 import importlib
 import random
-from datetime import datetime, timedelta
-from croniter import croniter
+from datetime import datetime
 import os
 
 from db_manager import DBManager
 from logging_utils import get_logger, is_debug_mode_enabled
+from core.tasks.scheduler_rules import (
+    compute_next_task_run as _compute_next_task_run,
+    retry_modifier_for_attempt as _retry_modifier_for_attempt,
+)
 
 # -------------------------------------------------------------------
 # DB / LOGGER
@@ -17,8 +20,8 @@ DB_PATH = os.environ.get("DATABASE_PATH", "/appdata/database.db")
 
 class _LazyDB:
     """
-    Évite de figer une connexion SQLite au chargement du module.
-    La vraie instance DBManager n'est créée qu'au premier usage.
+    Ã‰vite de figer une connexion SQLite au chargement du module.
+    La vraie instance DBManager n'est crÃ©Ã©e qu'au premier usage.
     """
 
     def __init__(self, db_path):
@@ -100,7 +103,7 @@ def consume_auto_enable_dirty() -> bool:
 
 def force_task_run(task_name: str):
 	"""
-	Force une tâche à être exécutée au prochain tick scheduler,
+	Force une tÃ¢che Ã  Ãªtre exÃ©cutÃ©e au prochain tick scheduler,
 	sans attendre son prochain cron.
 	"""
 	global forced_task_runs
@@ -112,7 +115,7 @@ def force_task_run(task_name: str):
 def consume_forced_task_run(task_name: str) -> bool:
 	"""
 	Consomme un forced run.
-	Retourne True si la tâche était marquée.
+	Retourne True si la tÃ¢che Ã©tait marquÃ©e.
 	"""
 	global forced_task_runs
 
@@ -127,8 +130,8 @@ def consume_forced_task_run(task_name: str) -> bool:
 
 def _start_task_worker_locked():
     """
-    Démarre le worker de tâches.
-    Cette fonction suppose que queue_lock est déjà pris.
+    DÃ©marre le worker de tÃ¢ches.
+    Cette fonction suppose que queue_lock est dÃ©jÃ  pris.
     """
     global worker_running
 
@@ -151,7 +154,7 @@ TASK_MAX_DURATION = {
     "sync_jellyfin": 30 * 60,
     "import_tautulli": 6 * 60 * 60,  # 6h (migration possible, gros volumes)
 
-    # Monitoring / workers : doivent être rapides
+    # Monitoring / workers : doivent Ãªtre rapides
     "monitor_collect_sessions": 60,        # 1 min
     "monitor_enqueue_refresh": 60,         # 1 min
     "media_jobs_worker": 120,              # 2 min
@@ -160,28 +163,13 @@ TASK_MAX_DURATION = {
 
 DEFAULT_TASK_MAX_DURATION = 30 * 60
 
-def _retry_modifier_for_attempt(next_attempt_number: int) -> str:
-    """
-    Backoff simple et standard pour les tâches scheduler :
-    1 -> +1 minute
-    2 -> +5 minutes
-    3 -> +15 minutes
-    4+ -> +30 minutes
-    """
-    if next_attempt_number <= 1:
-        return "+1 minute"
-    if next_attempt_number == 2:
-        return "+5 minutes"
-    if next_attempt_number == 3:
-        return "+15 minutes"
-    return "+30 minutes"
 
 
 def _mark_task_retry_or_error(task_id: int, task_name: str, error_message: str):
     """
-    Persiste l'état d'erreur d'une tâche.
+    Persiste l'Ã©tat d'erreur d'une tÃ¢che.
     Si des retries restent disponibles, programme un retry via next_retry_at.
-    Sinon laisse la tâche en erreur simple.
+    Sinon laisse la tÃ¢che en erreur simple.
     """
     try:
         row = db.query_one(
@@ -259,7 +247,7 @@ def _mark_task_retry_or_error(task_id: int, task_name: str, error_message: str):
         )
 
 # -------------------------------------------------------------------
-# Compatibilité avec app.py (ne rien changer)
+# CompatibilitÃ© avec app.py (ne rien changer)
 # -------------------------------------------------------------------
 
 
@@ -332,7 +320,7 @@ def enable_and_run_task_by_name(task_name: str):
 
 def set_task_enabled(task_id: int, enabled: int):
     """
-    Active ou désactive une tâche par ID avec un état cohérent.
+    Active ou dÃ©sactive une tÃ¢che par ID avec un Ã©tat cohÃ©rent.
     """
     enabled = 1 if int(enabled) == 1 else 0
 
@@ -369,7 +357,7 @@ def set_task_enabled(task_id: int, enabled: int):
 
 def set_tasks_enabled_by_names(task_names, enabled: int):
     """
-    Active ou désactive plusieurs tâches par nom avec un état cohérent.
+    Active ou dÃ©sactive plusieurs tÃ¢ches par nom avec un Ã©tat cohÃ©rent.
     """
     if not task_names:
         return False
@@ -392,12 +380,12 @@ def set_tasks_enabled_by_names(task_names, enabled: int):
 
 def set_task_enabled_for_auto_mode(task_id: int, enabled: int):
     """
-    Active/désactive une tâche dans le cadre d'un auto-enable périodique.
+    Active/dÃ©sactive une tÃ¢che dans le cadre d'un auto-enable pÃ©riodique.
 
     Important :
     - en ENABLE : on ne reset PAS next_run / retry_count / next_retry_at / last_attempt_at
     - on ne casse PAS running / queued / error
-    - en DISABLE : on n'écrase PAS une tâche déjà running/queued
+    - en DISABLE : on n'Ã©crase PAS une tÃ¢che dÃ©jÃ  running/queued
     """
     enabled = 1 if int(enabled) == 1 else 0
 
@@ -436,8 +424,8 @@ def set_task_enabled_for_auto_mode(task_id: int, enabled: int):
 
 def set_tasks_enabled_by_names_for_auto_mode(task_names, enabled: int):
     """
-    Variante multi-tâches du mode auto-enable.
-    Préserve l'état utile lors d'une activation périodique.
+    Variante multi-tÃ¢ches du mode auto-enable.
+    PrÃ©serve l'Ã©tat utile lors d'une activation pÃ©riodique.
     """
     if not task_names:
         return False
@@ -479,11 +467,11 @@ def set_tasks_enabled_by_names_for_auto_mode(task_names, enabled: int):
 
 def ensure_tasks_enabled(task_names):
     """
-    Active plusieurs tâches sans écraser un état déjà valide.
+    Active plusieurs tÃ¢ches sans Ã©craser un Ã©tat dÃ©jÃ  valide.
 
-    Règle :
+    RÃ¨gle :
     - disabled / vide / NULL -> idle
-    - idle / queued / running / error -> conservé
+    - idle / queued / running / error -> conservÃ©
     """
     if not task_names:
         return False
@@ -511,8 +499,8 @@ def apply_cron_master_switch(enabled: int):
     """
     Applique le switch global settings.enable_cron_jobs.
 
-    - OFF : mémorise enabled -> enabled_prev (une seule fois), puis désactive tout
-    - ON  : restaure enabled depuis enabled_prev si présent, puis vide enabled_prev
+    - OFF : mÃ©morise enabled -> enabled_prev (une seule fois), puis dÃ©sactive tout
+    - ON  : restaure enabled depuis enabled_prev si prÃ©sent, puis vide enabled_prev
     """
     enabled = 1 if int(enabled) == 1 else 0
 
@@ -553,14 +541,14 @@ def apply_cron_master_switch(enabled: int):
 
 def sync_expiry_tasks_from_settings(expiry_mode: str, cron_enabled: int):
     """
-    Synchronise les tâches liées aux expirations depuis les settings.
+    Synchronise les tÃ¢ches liÃ©es aux expirations depuis les settings.
 
     - expiry_mode = 'disable'            -> disable_expired_users = ON
     - expiry_mode = 'warn_then_disable'  -> expired_subscription_manager = ON
     - sinon                              -> les deux OFF
 
-    Si cron est OFF, on ne réactive pas les tâches :
-    on stocke uniquement l'état désiré dans enabled_prev.
+    Si cron est OFF, on ne rÃ©active pas les tÃ¢ches :
+    on stocke uniquement l'Ã©tat dÃ©sirÃ© dans enabled_prev.
     """
     expiry_mode = (expiry_mode or "none").strip()
     cron_enabled = 1 if int(cron_enabled) == 1 else 0
@@ -594,9 +582,9 @@ def sync_expiry_tasks_from_settings(expiry_mode: str, cron_enabled: int):
 
 def prepare_restored_database(restored_db):
     """
-    Prépare une base fraîchement restaurée :
+    PrÃ©pare une base fraÃ®chement restaurÃ©e :
     - force le maintenance_mode
-    - désactive toutes les tâches en mémorisant l'état précédent
+    - dÃ©sactive toutes les tÃ¢ches en mÃ©morisant l'Ã©tat prÃ©cÃ©dent
     """
     restored_db.execute(
         """
@@ -674,7 +662,7 @@ def _watchdog_loop():
 
 
 # -------------------------------------------------------------------
-# Logging unifié des tâches
+# Logging unifiÃ© des tÃ¢ches
 # -------------------------------------------------------------------
 def task_logs(task_id, status, message, details=None, debug_only=False):
 
@@ -736,7 +724,7 @@ def task_logs(task_id, status, message, details=None, debug_only=False):
 
 def mark_task_manual_run_requested(task_id: int):
     """
-    Prépare l'état d'une tâche avant un run manuel depuis l'UI.
+    PrÃ©pare l'Ã©tat d'une tÃ¢che avant un run manuel depuis l'UI.
     """
     db.execute(
         """
@@ -757,7 +745,7 @@ def mark_task_manual_run_requested(task_id: int):
 
 def mark_task_queue_failed(task_id: int, error_message: str):
     """
-    Persiste un échec de mise en file depuis l'UI.
+    Persiste un Ã©chec de mise en file depuis l'UI.
     """
     db.execute(
         """
@@ -807,7 +795,7 @@ def enqueue_task(task_id: int):
         (task_id,)
     )
 
-    # Démarrage du worker SI nécessaire
+    # DÃ©marrage du worker SI nÃ©cessaire
     with queue_lock:
         _start_task_worker_locked()
 
@@ -815,16 +803,16 @@ def enqueue_task(task_id: int):
 
 def _kick_worker_if_needed():
     """
-    Si la DB contient des tâches en attente (queued_count > 0) et que le worker
-    n'est pas en cours, on le démarre.
+    Si la DB contient des tÃ¢ches en attente (queued_count > 0) et que le worker
+    n'est pas en cours, on le dÃ©marre.
 
     Important: au boot, le recovery peut laisser des tasks en 'queued' sans
-    jamais repasser par enqueue_task() -> donc sans démarrer le worker.
+    jamais repasser par enqueue_task() -> donc sans dÃ©marrer le worker.
     """
     global worker_running
 
     # -------------------------------------------------
-    # Worker déjà actif → inutile de requêter SQLite
+    # Worker dÃ©jÃ  actif â†’ inutile de requÃªter SQLite
     # -------------------------------------------------
     if worker_running:
         return
@@ -849,7 +837,7 @@ def _task_worker():
 
     try:
         while True:
-            # 1) Récupère une tâche en file d'attente
+            # 1) RÃ©cupÃ¨re une tÃ¢che en file d'attente
             try:
                 row = db.query_one(
                     """
@@ -874,17 +862,17 @@ def _task_worker():
                 logger.error(f"[WORKER] DB error while fetching queued task: {e}", exc_info=True)
                 return
 
-            # 2) Plus rien à traiter => on sort et on libère le worker
+            # 2) Plus rien Ã  traiter => on sort et on libÃ¨re le worker
             if not row:
                 return
 
             task_id = int(row["id"])
 
-            # 3) Exécute réellement la tâche
+            # 3) ExÃ©cute rÃ©ellement la tÃ¢che
             try:
                 run_task(task_id)
             except Exception as e:
-                # run_task gère déjà beaucoup de cas, mais on sécurise
+                # run_task gÃ¨re dÃ©jÃ  beaucoup de cas, mais on sÃ©curise
                 logger.error(f"[WORKER] Unhandled error while running task id={task_id}: {e}", exc_info=True)
                 try:
                     task_logs(task_id, "error", f"Unhandled worker error: {e}")
@@ -894,16 +882,16 @@ def _task_worker():
                         exc_info=True,
                     )
 
-            # 4) Petite pause pour éviter de marteler la DB
+            # 4) Petite pause pour Ã©viter de marteler la DB
             time.sleep(0.2)
 
     finally:
-        # GARANTIE : le worker se libère toujours
+        # GARANTIE : le worker se libÃ¨re toujours
         with queue_lock:
             worker_running = False
 
-        # Si une tâche a été ajoutée juste avant l'arrêt du worker,
-        # on relance immédiatement un worker pour ne rien laisser bloqué.
+        # Si une tÃ¢che a Ã©tÃ© ajoutÃ©e juste avant l'arrÃªt du worker,
+        # on relance immÃ©diatement un worker pour ne rien laisser bloquÃ©.
         _kick_worker_if_needed()
 
 
@@ -911,7 +899,7 @@ def _task_worker():
 
 
 # -------------------------------------------------------------------
-# Exécution d'une tâche
+# ExÃ©cution d'une tÃ¢che
 # -------------------------------------------------------------------
 def _load_task_run_callable(task_name: str):
     module_name = f"tasks.{task_name}"
@@ -939,8 +927,8 @@ def _execute_task_run_callable(run_func, task_id: int, task_name: str, max_durat
 
 def _handle_task_success(task_id: int, task_name: str, schedule):
     """
-    Persiste le succès d'une tâche, applique les post-traitements éventuels,
-    puis recalcule le prochain run si la tâche est planifiée.
+    Persiste le succÃ¨s d'une tÃ¢che, applique les post-traitements Ã©ventuels,
+    puis recalcule le prochain run si la tÃ¢che est planifiÃ©e.
     """
     db.execute(
         """
@@ -1010,28 +998,12 @@ def _handle_task_success(task_id: int, task_name: str, schedule):
 
             now = datetime.now()
 
-            # -------------------------------------------------
-            # INTERVAL MODE
-            # -------------------------------------------------
-
-            if (
-                schedule_mode == "interval"
-                and interval_seconds
-                and int(interval_seconds) > 0
-            ):
-
-                next_exec = now + timedelta(
-                    seconds=int(interval_seconds)
-                )
-
-            # -------------------------------------------------
-            # CRON MODE
-            # -------------------------------------------------
-
-            else:
-
-                itr = croniter(schedule, now)
-                next_exec = itr.get_next(datetime)
+            next_exec = _compute_next_task_run(
+                schedule,
+                schedule_mode,
+                interval_seconds,
+                now,
+            )
 
             db.execute(
                 "UPDATE tasks SET next_run=? WHERE id=?",
@@ -1039,8 +1011,8 @@ def _handle_task_success(task_id: int, task_name: str, schedule):
             )
 
             if is_debug_mode_enabled():
-                logger.debug(f"Next run '{task_name}' → {next_exec}")
-                task_logs(task_id, "info", f"Next run '{task_name}' → {next_exec}")
+                logger.debug(f"Next run '{task_name}' â†’ {next_exec}")
+                task_logs(task_id, "info", f"Next run '{task_name}' â†’ {next_exec}")
 
         except Exception as e:
             logger.error(f"Schedule error after execution: {e}")
@@ -1052,7 +1024,7 @@ def _handle_task_success(task_id: int, task_name: str, schedule):
 
 def _mark_task_running(task_id: int):
     """
-    Passe une tâche en running et consomme 1 élément de queue.
+    Passe une tÃ¢che en running et consomme 1 Ã©lÃ©ment de queue.
     """
     db.execute(
         """
@@ -1076,8 +1048,8 @@ def _mark_task_running(task_id: int):
 
 def _finalize_task_running_failsafe(task_id: int):
     """
-    Corrige une tâche restée bloquée en RUNNING si aucun autre état
-    n'a été persisté explicitement.
+    Corrige une tÃ¢che restÃ©e bloquÃ©e en RUNNING si aucun autre Ã©tat
+    n'a Ã©tÃ© persistÃ© explicitement.
     """
     row = db.query_one(
         "SELECT status FROM tasks WHERE id = ?",
@@ -1108,8 +1080,8 @@ def _finalize_task_running_failsafe(task_id: int):
 
 def _load_task_execution_context(task_id: int):
     """
-    Charge le contexte minimal nécessaire à l'exécution d'une tâche.
-    Retourne None si la tâche n'existe plus.
+    Charge le contexte minimal nÃ©cessaire Ã  l'exÃ©cution d'une tÃ¢che.
+    Retourne None si la tÃ¢che n'existe plus.
     """
     row = db.query_one(
         """
@@ -1139,9 +1111,9 @@ def _load_task_execution_context(task_id: int):
 
 def _process_task_result(task_id: int, task_name: str, result, start_time: float, max_duration: int):
     """
-    Post-traite le résultat d'une tâche :
-    - log éventuel du payload retourné
-    - contrôle du timeout réel
+    Post-traite le rÃ©sultat d'une tÃ¢che :
+    - log Ã©ventuel du payload retournÃ©
+    - contrÃ´le du timeout rÃ©el
     - transforme un retour {'status': 'error'} en vraie erreur
     """
     if result is not None:
@@ -1211,7 +1183,7 @@ def run_task(task_id: int):
     start_time = time.time()
 
     # -------------------------------------------------
-    # Passage en RUNNING (et consomme 1 élément de queue)
+    # Passage en RUNNING (et consomme 1 Ã©lÃ©ment de queue)
     # -------------------------------------------------
     try:
         _mark_task_running(task_id)
@@ -1233,7 +1205,7 @@ def run_task(task_id: int):
         return
 
     # -------------------------------------------------
-    # Exécution réelle
+    # ExÃ©cution rÃ©elle
     # -------------------------------------------------
     try:
         if is_debug_mode_enabled():
@@ -1242,7 +1214,7 @@ def run_task(task_id: int):
         result = _execute_task_run_callable(run_func, task_id, name, max_duration)
         _process_task_result(task_id, name, result, start_time, max_duration)
 
-        # ---- SUCCÈS ----
+        # ---- SUCCÃˆS ----
         _handle_task_success(task_id, name, schedule)
 
     except Exception as e:
@@ -1265,9 +1237,9 @@ def run_task(task_id: int):
 
 def wait_for_task_completion(task_name, last_run_before=None, poll_interval=2, timeout=1800):
     """
-    Attend qu'une tâche ait VRAIMENT exécuté au moins une fois après un enqueue.
+    Attend qu'une tÃ¢che ait VRAIMENT exÃ©cutÃ© au moins une fois aprÃ¨s un enqueue.
 
-    - Si last_run_before est fourni : on attend que last_run change (recommandé).
+    - Si last_run_before est fourni : on attend que last_run change (recommandÃ©).
     - Sinon : fallback historique (idle/error), mais moins fiable.
     """
     start = time.time()
@@ -1279,7 +1251,7 @@ def wait_for_task_completion(task_name, last_run_before=None, poll_interval=2, t
         )
 
         if not row:
-            return  # tâche inconnue => on considère terminé
+            return  # tÃ¢che inconnue => on considÃ¨re terminÃ©
 
         status = (row["status"] or "").lower().strip()
         last_run = row["last_run"]
@@ -1288,7 +1260,7 @@ def wait_for_task_completion(task_name, last_run_before=None, poll_interval=2, t
         if status == "error":
             return
 
-        # ✅ mode fiable: on attend un changement de last_run
+        # âœ… mode fiable: on attend un changement de last_run
         if last_run_before is not None:
             if last_run is not None and str(last_run) != str(last_run_before):
                 return
@@ -1304,8 +1276,8 @@ def wait_for_task_completion(task_name, last_run_before=None, poll_interval=2, t
 
 def run_task_sequence(task_names):
     """
-    Ajoute la séquence à une file d'attente.
-    Un worker unique exécutera les séquences une par une.
+    Ajoute la sÃ©quence Ã  une file d'attente.
+    Un worker unique exÃ©cutera les sÃ©quences une par une.
     """
     global sequence_thread_running
 
@@ -1315,7 +1287,7 @@ def run_task_sequence(task_names):
     with sequence_lock:
         sequence_queue.append(task_names)
 
-        # Si aucun worker ne tourne, on le démarre
+        # Si aucun worker ne tourne, on le dÃ©marre
         if not sequence_thread_running:
             sequence_thread_running = True
             if is_debug_mode_enabled():
@@ -1324,7 +1296,7 @@ def run_task_sequence(task_names):
 
 def enqueue_server_discovery_sequence(server_type: str):
     """
-    Planifie la séquence de découverte/sync après création d'un serveur.
+    Planifie la sÃ©quence de dÃ©couverte/sync aprÃ¨s crÃ©ation d'un serveur.
     """
     server_type = (server_type or "").strip().lower()
 
@@ -1341,8 +1313,8 @@ def enqueue_server_discovery_sequence(server_type: str):
 
 def _sequence_worker():
     """
-    Worker chargé de vider la file d'attente, dans l'ordre FIFO.
-    Toujours UNE SEULE séquence en cours.
+    Worker chargÃ© de vider la file d'attente, dans l'ordre FIFO.
+    Toujours UNE SEULE sÃ©quence en cours.
     """
     global sequence_thread_running
 
@@ -1353,7 +1325,7 @@ def _sequence_worker():
         with sequence_lock:
             if not sequence_queue:
                 if is_debug_mode_enabled():
-                    logger.debug("[QUEUE] empty queue → worker stopping")
+                    logger.debug("[QUEUE] empty queue â†’ worker stopping")
                 sequence_thread_running = False
                 return
 
@@ -1362,7 +1334,7 @@ def _sequence_worker():
         if is_debug_mode_enabled():
             logger.debug(f"[QUEUE] Executing new sequence : {tasks}")
 
-        # Exécute la séquence (bloquant)
+        # ExÃ©cute la sÃ©quence (bloquant)
         try:
             _run_task_sequence_internal(tasks)
             if is_debug_mode_enabled():
@@ -1374,9 +1346,9 @@ def _sequence_worker():
 
 def _run_task_sequence_internal(task_names):
     """
-    Exécution SÉQUENTIELLE et BLOQUANTE d'une séquence.
-    IMPORTANT: on n'ignore jamais une séquence.
-    Le worker de séquence exécute déjà en FIFO.
+    ExÃ©cution SÃ‰QUENTIELLE et BLOQUANTE d'une sÃ©quence.
+    IMPORTANT: on n'ignore jamais une sÃ©quence.
+    Le worker de sÃ©quence exÃ©cute dÃ©jÃ  en FIFO.
     """
     if is_debug_mode_enabled():
         logger.debug(f"Sequence start : {task_names}")
@@ -1395,7 +1367,7 @@ def _run_task_sequence_internal(task_names):
 
         task_id = row["id"]
 
-        # Capture last_run avant enqueue (permet de détecter 1 exécution)
+        # Capture last_run avant enqueue (permet de dÃ©tecter 1 exÃ©cution)
         before = db.query_one("SELECT last_run FROM tasks WHERE id=?", (task_id,))
         last_run_before = before["last_run"] if before else None
 
@@ -1404,7 +1376,7 @@ def _run_task_sequence_internal(task_names):
             logger.warning(f"[SEQ] Task not enqueued, skipping wait: {name}")
             continue
 
-        # Attend une exécution réelle (même si la tâche reste 'queued' après)
+        # Attend une exÃ©cution rÃ©elle (mÃªme si la tÃ¢che reste 'queued' aprÃ¨s)
         wait_for_task_completion(name, last_run_before=last_run_before, timeout=1800)
 
     if is_debug_mode_enabled():
@@ -1413,11 +1385,11 @@ def _run_task_sequence_internal(task_names):
 
 def auto_enable_monitoring_tasks():
     """
-    Active le pipeline monitoring si au moins un serveur Plex/Jellyfin est configuré.
+    Active le pipeline monitoring si au moins un serveur Plex/Jellyfin est configurÃ©.
 
     Important:
     On ne se base PAS sur status='up'.
-    Un serveur down/unknown doit continuer à être testé, sinon il peut rester bloqué
+    Un serveur down/unknown doit continuer Ã  Ãªtre testÃ©, sinon il peut rester bloquÃ©
     hors monitoring et ne jamais redevenir visible.
     """
     row = db.query_one(
@@ -1440,12 +1412,12 @@ def auto_enable_monitoring_tasks():
 
 def auto_enable_sync_tasks():
     """
-    Active les tâches de sync si au moins un serveur du type existe.
+    Active les tÃ¢ches de sync si au moins un serveur du type existe.
 
     Important:
-    On ne dépend PAS de status='up' ici.
-    Au boot, un serveur peut être unknown/down avant check_servers.
-    Si sync_plex/sync_jellyfin reste désactivée, les utilisateurs ne sont jamais importés.
+    On ne dÃ©pend PAS de status='up' ici.
+    Au boot, un serveur peut Ãªtre unknown/down avant check_servers.
+    Si sync_plex/sync_jellyfin reste dÃ©sactivÃ©e, les utilisateurs ne sont jamais importÃ©s.
     """
     plex_count = db.query_one(
         """
@@ -1484,8 +1456,8 @@ def auto_enable_sync_tasks():
 
 def auto_enable_plex_jobs_worker():
     """
-    Active/désactive apply_plex_access_updates automatiquement :
-    - ON si au moins 1 serveur Plex UP OU si des media_jobs Plex non traités existent
+    Active/dÃ©sactive apply_plex_access_updates automatiquement :
+    - ON si au moins 1 serveur Plex UP OU si des media_jobs Plex non traitÃ©s existent
     - OFF sinon
     """
     plex_up = db.query_one(
@@ -1517,8 +1489,8 @@ def auto_enable_plex_jobs_worker():
 
 def auto_enable_jellyfin_jobs_worker():
     """
-    Active/désactive apply_jellyfin_access_updates automatiquement :
-    - ON si au moins 1 serveur Jellyfin UP OU si des media_jobs Jellyfin non traités existent
+    Active/dÃ©sactive apply_jellyfin_access_updates automatiquement :
+    - ON si au moins 1 serveur Jellyfin UP OU si des media_jobs Jellyfin non traitÃ©s existent
     - OFF sinon
     """
 
@@ -1531,7 +1503,7 @@ def auto_enable_jellyfin_jobs_worker():
         """
     )["cnt"]
 
-    # On compte UNIQUEMENT les jobs liés à un serveur Jellyfin
+    # On compte UNIQUEMENT les jobs liÃ©s Ã  un serveur Jellyfin
     pending_jellyfin_jobs = db.query_one(
         """
         SELECT COUNT(*) AS cnt
@@ -1552,8 +1524,8 @@ def auto_enable_jellyfin_jobs_worker():
 
 def auto_enable_stream_enforcer():
     """
-    Active stream_enforcer automatiquement si au moins 1 policy est activée.
-    Ne désactive PAS automatiquement (on respecte un éventuel choix admin).
+    Active stream_enforcer automatiquement si au moins 1 policy est activÃ©e.
+    Ne dÃ©sactive PAS automatiquement (on respecte un Ã©ventuel choix admin).
     """
     try:
         enabled_policies = db.query_one("""
@@ -1573,8 +1545,8 @@ def auto_enable_stream_enforcer():
 
 def run_auto_enable_pass():
     """
-    Lance tout le passage d'auto-enable/auto-disable des tâches dépendantes.
-    Centralisé ici pour éviter d'avoir la même logique recopiée
+    Lance tout le passage d'auto-enable/auto-disable des tÃ¢ches dÃ©pendantes.
+    CentralisÃ© ici pour Ã©viter d'avoir la mÃªme logique recopiÃ©e
     dans start_scheduler() et dans scheduler_loop().
     """
     try:
@@ -1644,11 +1616,11 @@ def run_auto_enable_pass():
 
 def _recover_scheduler_state_at_boot():
     """
-    Répare l'état des tâches au démarrage du scheduler.
-    Évite de laisser des tâches coincées après crash/restart.
+    RÃ©pare l'Ã©tat des tÃ¢ches au dÃ©marrage du scheduler.
+    Ã‰vite de laisser des tÃ¢ches coincÃ©es aprÃ¨s crash/restart.
 
     Important :
-    - on répare les états instables `running` / `queued`
+    - on rÃ©pare les Ã©tats instables `running` / `queued`
     - on conserve `error` tel quel pour ne pas casser la logique de retry
     """
     try:
@@ -1670,33 +1642,15 @@ def _recover_scheduler_state_at_boot():
     except Exception as e:
         logger.warning(f"Recovery tasks failed: {e}", exc_info=True)
 
-def _compute_next_task_run(schedule, schedule_mode, interval_seconds, base_time):
-    """
-    Calcule le prochain run d'une tâche.
-    Supporte :
-    - schedule_mode = 'interval' avec interval_seconds
-    - schedule_mode = 'cron' avec schedule
-    """
-    schedule_mode = (schedule_mode or "cron").strip().lower()
-
-    try:
-        interval_seconds = int(interval_seconds or 0)
-    except Exception:
-        interval_seconds = 0
-
-    if schedule_mode == "interval" and interval_seconds > 0:
-        return base_time + timedelta(seconds=interval_seconds)
-
-    return croniter(schedule, base_time).get_next(datetime)
 
 
 def _run_scheduler_tick(now, run_auto_enable=True):
     """
-    Exécute un tick complet du scheduler :
-    - auto-enable / auto-disable des tâches dépendantes
-    - chargement des tâches actives
+    ExÃ©cute un tick complet du scheduler :
+    - auto-enable / auto-disable des tÃ¢ches dÃ©pendantes
+    - chargement des tÃ¢ches actives
     - calcul des prochains runs
-    - enqueue des tâches dues
+    - enqueue des tÃ¢ches dues
     """
     if run_auto_enable:
         run_auto_enable_pass()
@@ -1891,9 +1845,9 @@ def _run_scheduler_tick(now, run_auto_enable=True):
 # Scheduler cron
 # -------------------------------------------------------------------
 def scheduler_loop():
-    logger.info("VODUM scheduler started…")
+    logger.info("VODUM scheduler startedâ€¦")
 
-    # RECOVERY AU BOOT : évite les tasks bloquées après crash/restart
+    # RECOVERY AU BOOT : Ã©vite les tasks bloquÃ©es aprÃ¨s crash/restart
     _recover_scheduler_state_at_boot()
 
     while True:
@@ -1906,7 +1860,7 @@ def scheduler_loop():
         _kick_worker_if_needed()
 
         # -------------------------------------------------
-        # Auto-enable pass uniquement si nécessaire
+        # Auto-enable pass uniquement si nÃ©cessaire
         # -------------------------------------------------
         should_run_auto_enable = consume_auto_enable_dirty()
 
@@ -1923,8 +1877,8 @@ def scheduler_loop():
 
 def force_check_update_at_startup():
     """
-    Force un check_update au démarrage pour recalculer immédiatement
-    l'état du bouton UPDATE après une mise à jour de Vodum.
+    Force un check_update au dÃ©marrage pour recalculer immÃ©diatement
+    l'Ã©tat du bouton UPDATE aprÃ¨s une mise Ã  jour de Vodum.
     """
     try:
         row = db.query_one(
@@ -1956,7 +1910,7 @@ def force_check_update_at_startup():
 
         if enqueued:
             try:
-                next_future = croniter("0 4 * * *", datetime.now()).get_next(datetime)
+                next_future = _compute_next_task_run("0 4 * * *", "cron", None, datetime.now())
 
                 db.execute(
                     """
@@ -1992,13 +1946,13 @@ def force_check_update_at_startup():
 # -------------------------------------------------------------------
 def start_scheduler():
     """
-    Démarre :
-    - le watchdog (récupération des tâches bloquées)
-    - l'auto-enable des tâches dépendantes au démarrage
+    DÃ©marre :
+    - le watchdog (rÃ©cupÃ©ration des tÃ¢ches bloquÃ©es)
+    - l'auto-enable des tÃ¢ches dÃ©pendantes au dÃ©marrage
     - le scheduler principal
 
     Cette fonction est idempotente :
-    si elle est appelée plusieurs fois, un seul scheduler/watchdog est lancé.
+    si elle est appelÃ©e plusieurs fois, un seul scheduler/watchdog est lancÃ©.
     """
     global scheduler_started
 
@@ -2013,7 +1967,7 @@ def start_scheduler():
     logger.info("starting VODUM scheduler")
 
     # -------------------------------------------------
-    # 1) Démarrage du WATCHDOG
+    # 1) DÃ©marrage du WATCHDOG
     # -------------------------------------------------
     watchdog_thread = threading.Thread(
         target=_watchdog_loop,
@@ -2025,7 +1979,7 @@ def start_scheduler():
     logger.info("Watchdog started")
 
     # -------------------------------------------------
-    # 2) Auto-enable / disable des tâches dépendantes au boot
+    # 2) Auto-enable / disable des tÃ¢ches dÃ©pendantes au boot
     # -------------------------------------------------
     try:
         if _cron_jobs_enabled():
@@ -2043,7 +1997,7 @@ def start_scheduler():
         )
 
     # -------------------------------------------------
-    # 3) Démarrage du SCHEDULER principal
+    # 3) DÃ©marrage du SCHEDULER principal
     # -------------------------------------------------
     scheduler_thread = threading.Thread(
         target=scheduler_loop,
@@ -2053,3 +2007,5 @@ def start_scheduler():
     scheduler_thread.start()
 
     logger.info("Scheduler started")
+
+

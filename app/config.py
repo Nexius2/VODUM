@@ -1,16 +1,17 @@
-import os
-import sqlite3
+﻿import os
 import secrets
 from datetime import timedelta
 from pathlib import Path
 
+from db_manager import open_sqlite_connection
+
 
 def _get_secret_key() -> str:
     """
-    Ordre de priorité :
+    Ordre de prioritÃ© :
     1. VODUM_SECRET_KEY (env)
-    2. fichier local persistant à côté de la BDD
-    3. génération auto + écriture dans le fichier
+    2. fichier local persistant Ã  cÃ´tÃ© de la BDD
+    3. gÃ©nÃ©ration auto + Ã©criture dans le fichier
     """
     env_key = (os.environ.get("VODUM_SECRET_KEY") or "").strip()
     if env_key:
@@ -44,9 +45,9 @@ def _get_secret_key() -> str:
 
 
 def _read_settings_from_db(db_path: str) -> dict:
+    conn = None
     try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
+        conn = open_sqlite_connection(db_path, read_only=True)
         row = conn.execute(
             """
             SELECT web_secure_cookies, web_cookie_samesite
@@ -54,10 +55,12 @@ def _read_settings_from_db(db_path: str) -> dict:
             WHERE id = 1
             """
         ).fetchone()
-        conn.close()
         return dict(row) if row else {}
     except Exception:
         return {}
+    finally:
+        if conn is not None:
+            conn.close()
 
 
 def _get_session_cookie_secure(db_path: str) -> bool:
@@ -91,7 +94,7 @@ class Config:
     DATABASE = os.environ.get("DATABASE_PATH", "/appdata/database.db")
     DATABASE_PATH = DATABASE
 
-    # Secret key auto-générée/persistée
+    # Secret key auto-gÃ©nÃ©rÃ©e/persistÃ©e
     SECRET_KEY = _get_secret_key()
 
     # Mode debug (0/1)
@@ -103,7 +106,7 @@ class Config:
         int(os.environ.get("VODUM_MAX_UPLOAD_MB", "4096")),
     ) * 1024 * 1024
 
-    # évite les collisions avec d'autres applis
+    # Ã©vite les collisions avec d'autres applis
     SESSION_COOKIE_NAME = os.environ.get("VODUM_SESSION_COOKIE_NAME", "vodum_session")
 
     # session cookie
@@ -111,7 +114,7 @@ class Config:
     _SESSION_COOKIE_SAMESITE = _get_session_cookie_samesite(DATABASE)
     SESSION_COOKIE_SAMESITE = _SESSION_COOKIE_SAMESITE
 
-    # Si SameSite=None, Secure doit être forcé sinon le cookie sera rejeté par les navigateurs modernes
+    # Si SameSite=None, Secure doit Ãªtre forcÃ© sinon le cookie sera rejetÃ© par les navigateurs modernes
     SESSION_COOKIE_SECURE = _get_session_cookie_secure(DATABASE) or _SESSION_COOKIE_SAMESITE == "None"
 
     # session admin
@@ -119,3 +122,5 @@ class Config:
         hours=max(1, int(os.environ.get("VODUM_SESSION_LIFETIME_HOURS", "12")))
     )
     SESSION_REFRESH_EACH_REQUEST = True
+
+

@@ -105,13 +105,18 @@
       <label class="text-sm"><span class="block mb-2 text-slate-300">{{ t("migration_intent") }}</span><select name="intent" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"><option value="copy" {{ 'selected' if campaign.intent == 'copy' else '' }}>{{ t("migration_intent.copy") }}</option><option value="progressive" {{ 'selected' if campaign.intent == 'progressive' else '' }}>{{ t("migration_intent.progressive") }}</option><option value="move" {{ 'selected' if campaign.intent == 'move' else '' }}>{{ t("migration_intent.move") }}</option></select></label>
       <label class="text-sm"><span class="block mb-2 text-slate-300">{{ t("migration_safety_delay_days") }}</span><input name="safety_delay_days" type="number" min="0" max="365" value="{{ campaign.safety_delay_days }}" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
       <label class="text-sm"><span class="block mb-2 text-slate-300">{{ t("migration_batch_size") }}</span><input name="batch_size" type="number" min="1" max="100" value="{{ campaign.batch_size or 10 }}" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
+      {% if campaign.destination_type == "jellyfin" %}
+        <label class="text-sm xl:col-span-2"><span class="block mb-2 text-slate-300">{{ t("migration_jellyfin_password_strategy") }}</span><select name="jellyfin_password_strategy" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"><option value="generated" {{ 'selected' if campaign.jellyfin_password_strategy == 'generated' else '' }}>{{ t("migration_jellyfin_password_strategy.generated") }}</option><option value="admin_defined" {{ 'selected' if campaign.jellyfin_password_strategy == 'admin_defined' else '' }}>{{ t("migration_jellyfin_password_strategy.admin_defined") }}</option><option value="preserve_existing" {{ 'selected' if campaign.jellyfin_password_strategy == 'preserve_existing' else '' }}>{{ t("migration_jellyfin_password_strategy.preserve_existing") }}</option></select></label>
+        <label class="text-sm"><span class="block mb-2 text-slate-300">{{ t("migration_jellyfin_temp_password") }}</span><input name="jellyfin_temp_password" type="password" autocomplete="new-password" placeholder="{% if campaign.jellyfin_temp_password_configured %}{{ t('migration_keep_existing_secret') }}{% endif %}" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
+        <label class="text-sm xl:col-span-2 flex items-start gap-2 pt-7"><input type="checkbox" name="jellyfin_auto_deliver_credentials" value="1" class="mt-1 rounded border-slate-700 bg-slate-950" {% if campaign.jellyfin_auto_deliver_credentials %}checked{% endif %}><span><span class="block text-slate-300">{{ t("migration_jellyfin_auto_deliver_credentials") }}</span><span class="block mt-1 text-xs text-slate-500">{{ t("migration_jellyfin_auto_deliver_credentials_help") }}</span></span></label>
+      {% endif %}
       <label class="text-sm xl:col-span-2"><span class="block mb-2 text-slate-300">{{ t("migration_scheduled_at") }}</span><input name="scheduled_at" type="datetime-local" value="{{ campaign.scheduled_at_input }}" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
     </div>
     <div>
       <h3 class="text-sm font-semibold">{{ t("migration_library_mapping") }}</h3>
       <div class="mt-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
         {% for mapping in mappings %}
-          <label class="bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm"><span class="block mb-2 font-medium">{{ mapping.source_name }}</span><select name="library_mapping_{{ mapping.source_library_id }}" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs"><option value="">{{ t("migration_leave_unmapped") }}</option>{% for destination in destination_libraries %}<option value="{{ destination.id }}" {{ 'selected' if mapping.destination_library_id == destination.id else '' }}>{{ destination.name }}{% if destination.type %} ({{ destination.type }}){% endif %}</option>{% endfor %}</select></label>
+          <label class="bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm"><span class="block mb-2 font-medium">{{ mapping.source_name }}</span><select name="library_mapping_{{ mapping.source_library_id }}" multiple size="4" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs">{% for destination in destination_libraries %}<option value="{{ destination.id }}" {{ 'selected' if destination.id in mapping.destination_library_ids else '' }}>{{ destination.name }}{% if destination.type %} ({{ destination.type }}){% endif %}</option>{% endfor %}</select><span class="block mt-2 text-[11px] text-slate-500">{{ t("migration_multiple_destinations_help") }}</span></label>
         {% endfor %}
       </div>
     </div>
@@ -139,7 +144,13 @@
                   {% if user.plex_accepted_at %}<div class="text-xs text-emerald-400">{{ t("migration_accepted_at") }}: {{ user.plex_accepted_at }}</div>{% endif %}
                   {% if user.plex_reminder_count %}<div class="text-xs text-slate-500">{{ t("migration_reminders_sent") }}: {{ user.plex_reminder_count }}{% if user.plex_last_reminder_at %} ({{ user.plex_last_reminder_at }}){% endif %}</div>{% endif %}
                   {% if user.destination_validated_at %}<div class="text-xs text-emerald-400">{{ t("migration_validated") }}: {{ user.destination_validated_at }}</div>{% endif %}
+                  {% if user.credentials_delivery_queued_at %}<div class="text-xs text-emerald-400">{{ t("migration_credentials_delivery_queued") }}: {{ user.credentials_delivery_queued_at }}</div>{% endif %}
+                  {% if user.credentials_delivery_skipped_reason %}<div class="text-xs text-amber-300">{{ t("migration_credentials_delivery_skipped") }}</div>{% endif %}
                   {% if user.destination_validation_method == "first_activity" %}<div class="text-xs text-emerald-400">{{ t("migration_validated_by_activity") }}</div>{% endif %}
+                  {% if user.destination_rollback_requested_at and not user.destination_rolled_back_at %}<div class="text-xs text-red-300">{{ t("migration_destination_rollback_requested") }}: {{ user.destination_rollback_requested_at }}</div>{% endif %}
+                  {% if user.destination_rolled_back_at %}<div class="text-xs text-red-300">{{ t("migration_destination_rolled_back") }}: {{ user.destination_rolled_back_at }}</div>{% endif %}
+                  {% if user.destination_rollback_job_status %}<div class="text-xs text-slate-500">{{ t("migration_provider_job") }}: {{ user.destination_rollback_job_status }}</div>{% endif %}
+                  {% if user.destination_rollback_job_error %}<div class="text-xs text-red-300">{{ user.destination_rollback_job_error }}</div>{% endif %}
                   {% if user.source_removal_available_at and not user.source_removed_at %}<div class="text-xs text-amber-300">{{ t("migration_source_removal_available_at") }}: {{ user.source_removal_available_at }}</div>{% endif %}
                   {% if user.source_removal_requested_at and not user.source_removed_at %}<div class="text-xs text-red-300">{{ t("migration_source_removal_requested") }}: {{ user.source_removal_requested_at }}</div>{% endif %}
                   {% if user.source_removed_at %}<div class="text-xs text-red-300">{{ t("migration_source_removed") }}: {{ user.source_removed_at }}</div>{% endif %}
@@ -149,7 +160,28 @@
                   {% if user.source_restoration_job_status %}<div class="text-xs text-slate-500">{{ t("migration_provider_job") }}: {{ user.source_restoration_job_status }}</div>{% endif %}
                   {% if user.source_restoration_job_error %}<div class="text-xs text-red-300">{{ user.source_restoration_job_error }}</div>{% endif %}
                 </td>
-                <td class="px-4 py-3">{% for blocker in user.blockers %}<span class="inline-block mr-1 mb-1 px-2 py-1 rounded bg-slate-800 text-xs">{{ t("migration_reason." ~ blocker) }}</span>{% else %}<span class="text-slate-500">-</span>{% endfor %}</td>
+                <td class="px-4 py-3">
+                  {% for blocker in user.blockers %}<span class="inline-block mr-1 mb-1 px-2 py-1 rounded bg-slate-800 text-xs">{{ t("migration_reason." ~ blocker) }}</span>{% else %}<span class="text-slate-500">-</span>{% endfor %}
+                  {% if campaign.status == "draft" and user.source_libraries %}
+                    <form method="post" action="{{ url_for('migration_user_mapping_overrides', campaign_id=campaign.id, migration_user_id=user.id) }}" class="mt-3 space-y-2 min-w-[260px]">
+                      <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+                      <div class="text-xs font-medium text-slate-300">{{ t("migration_user_mapping_overrides") }}</div>
+                      {% for source in user.source_libraries %}
+                        {% set selected_ids = user.library_mapping_overrides.get(source.source_library_id, source.destination_library_ids) %}
+                        <label class="block text-xs text-slate-400">
+                          <span class="block mb-1">{{ source.source_name }}</span>
+                          <select name="user_library_mapping_{{ source.source_library_id }}" multiple size="3" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs">
+                            {% for destination in destination_libraries %}
+                              <option value="{{ destination.id }}" {{ 'selected' if destination.id in selected_ids else '' }}>{{ destination.name }}{% if destination.type %} ({{ destination.type }}){% endif %}</option>
+                            {% endfor %}
+                          </select>
+                        </label>
+                      {% endfor %}
+                      <p class="text-[11px] text-slate-500">{{ t("migration_mapping_override_hint") }}</p>
+                      <button class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs whitespace-nowrap">{{ t("migration_save_user_mapping") }}</button>
+                    </form>
+                  {% endif %}
+                </td>
                 <td class="px-4 py-3">
                   {% if user.has_credentials %}
                     <button type="button"
@@ -184,7 +216,14 @@
       <div class="px-5 py-4 border-b border-slate-800"><h2 class="font-semibold">{{ t("migration_saved_mapping") }}</h2></div>
       <div class="divide-y divide-slate-800">
         {% for mapping in mappings %}
-          <div class="px-5 py-4"><div class="font-medium text-sm">{{ mapping.source_name }}</div><div class="mt-1 text-xs {{ 'text-emerald-300' if mapping.destination_name else 'text-slate-400' if mapping.mapping_status == 'unused' else 'text-amber-300' }}">-&gt; {{ mapping.destination_name or (t("migration_unused") if mapping.mapping_status == "unused" else t("migration_unmapped")) }}</div></div>
+          <div class="px-5 py-4">
+            <div class="font-medium text-sm">{{ mapping.source_name }}</div>
+            {% if mapping.destinations %}
+              <div class="mt-1 flex flex-wrap gap-1 text-xs text-emerald-300">{% for destination in mapping.destinations %}<span class="px-2 py-1 rounded bg-emerald-950/60 border border-emerald-900">-&gt; {{ destination.name }}{% if destination.type %} ({{ destination.type }}){% endif %}</span>{% endfor %}</div>
+            {% else %}
+              <div class="mt-1 text-xs {{ 'text-slate-400' if mapping.mapping_status == 'unused' else 'text-amber-300' }}">-&gt; {{ t("migration_unused") if mapping.mapping_status == "unused" else t("migration_unmapped") }}</div>
+            {% endif %}
+          </div>
         {% endfor %}
       </div>
     </div>
@@ -201,6 +240,20 @@
       <li>{{ t("migration_limit.sent_actions") }}</li>
     </ul>
   </div>
+  {% if summary.destination_rollback_available or summary.destination_rollback_requested %}
+  <div class="bg-slate-900 border border-red-900 rounded-xl p-5">
+    <h2 class="font-semibold text-red-200">{{ t("migration_destination_rollback") }}</h2>
+    <p class="mt-2 text-sm text-slate-400">{{ t("migration_destination_rollback_hint") }}</p>
+    <p class="mt-2 text-sm text-slate-400">{{ t("migration_destination_rollback_available_count") }}: {{ summary.destination_rollback_available }}</p>
+    {% if summary.destination_rolled_back %}<p class="mt-1 text-sm text-red-300">{{ t("migration_destination_rolled_back") }}: {{ summary.destination_rolled_back }}</p>{% endif %}
+    <p class="mt-2 text-xs text-amber-300">{{ t("migration_confirmation_hint") }} <strong>{{ campaign.name }}</strong></p>
+    <form method="post" action="{{ url_for('migration_rollback_destination_access', campaign_id=campaign.id) }}" class="mt-4 flex gap-2">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+      <input name="confirmation" autocomplete="off" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm">
+      <button class="px-4 py-2 rounded-lg bg-red-800 hover:bg-red-700 disabled:opacity-50 text-white text-sm" {{ 'disabled' if not summary.destination_rollback_available else '' }}>{{ t("migration_rollback_destination_access") }}</button>
+    </form>
+  </div>
+  {% endif %}
   {% if summary.validated and campaign.intent != "copy" %}
   <div class="bg-slate-900 border border-red-900 rounded-xl p-5">
     <h2 class="font-semibold text-red-200">{{ t("migration_phase3_source_access") }}</h2>

@@ -10,8 +10,10 @@ from logging_utils import get_logger
 from werkzeug.security import generate_password_hash, check_password_hash
 from app import RESET_MAGIC, RESET_FILE
 
-from web.helpers import get_db
+from web.helpers import get_db, send_email_via_settings
 from web.security import safe_redirect_target
+from secret_store import decrypt_secret
+from core.auth_totp import verify_totp_code
 
 auth_logger = get_logger("auth")
 
@@ -19,6 +21,7 @@ auth_logger = get_logger("auth")
 AUTH_BRUTEFORCE_MAX_ATTEMPTS = max(1, int(os.environ.get("VODUM_AUTH_MAX_ATTEMPTS", "5")))
 AUTH_BRUTEFORCE_WINDOW_MINUTES = max(1, int(os.environ.get("VODUM_AUTH_WINDOW_MINUTES", "15")))
 AUTH_BRUTEFORCE_LOCK_MINUTES = max(1, int(os.environ.get("VODUM_AUTH_LOCK_MINUTES", "15")))
+AUTH_BRUTEFORCE_ALERT_COOLDOWN_MINUTES = max(1, int(os.environ.get("VODUM_AUTH_ALERT_COOLDOWN_MINUTES", "60")))
 
 
 def _utcnow() -> datetime:
@@ -45,7 +48,7 @@ def _client_ip() -> str:
     """
     request.remote_addr suffit :
     - sans trust proxy => IP directe du client
-    - avec trust proxy => ProxyFix l'a déjà corrigée
+    - avec trust proxy => ProxyFix l'a dÃ©jÃ  corrigÃ©e
     """
     return (request.remote_addr or "unknown").strip()
 
@@ -64,7 +67,7 @@ def _get_login_attempt_row(db, scope: str, scope_value: str) -> dict:
     _ensure_login_attempt_row(db, scope, scope_value)
     row = db.query_one(
         """
-        SELECT scope, scope_value, failed_attempts, first_failed_at, last_failed_at, locked_until
+        SELECT scope, scope_value, failed_attempts, first_failed_at, last_failed_at, locked_until, alert_sent_at, alert_count
         FROM auth_login_attempts
         WHERE scope = ? AND scope_value = ?
         """,
@@ -77,6 +80,8 @@ def _get_login_attempt_row(db, scope: str, scope_value: str) -> dict:
         "first_failed_at": None,
         "last_failed_at": None,
         "locked_until": None,
+        "alert_sent_at": None,
+        "alert_count": 0,
     }
 
 
@@ -87,7 +92,7 @@ def _remaining_lock_seconds(row: dict, now: datetime) -> int:
     return int((locked_until - now).total_seconds())
 
 
-def _register_failed_login(db, scope: str, scope_value: str, now: datetime) -> None:
+def _register_failed_login(db, scope: str, scope_value: str, now: datetime) -> dict:
     row = _get_login_attempt_row(db, scope, scope_value)
 
     first_failed_at = _sql_to_dt(row.get("first_failed_at"))
@@ -100,8 +105,10 @@ def _register_failed_login(db, scope: str, scope_value: str, now: datetime) -> N
         failed_attempts = int(row.get("failed_attempts") or 0) + 1
 
     locked_until = None
+    lock_started = False
     if failed_attempts >= AUTH_BRUTEFORCE_MAX_ATTEMPTS:
         locked_until = now + timedelta(minutes=AUTH_BRUTEFORCE_LOCK_MINUTES)
+        lock_started = _remaining_lock_seconds(row, now) <= 0
 
     db.execute(
         """
@@ -123,6 +130,10 @@ def _register_failed_login(db, scope: str, scope_value: str, now: datetime) -> N
             scope_value,
         ),
     )
+
+    updated = _get_login_attempt_row(db, scope, scope_value)
+    updated["lock_started"] = lock_started
+    return updated
 
 
 def _reset_failed_login(db, scope: str, scope_value: str) -> None:
@@ -152,11 +163,92 @@ def _is_login_locked(db, scope: str, scope_value: str, now: datetime) -> tuple[b
     return remaining > 0, remaining
 
 
+def _alert_cooldown_passed(row: dict, now: datetime) -> bool:
+    alert_sent_at = _sql_to_dt(row.get("alert_sent_at"))
+    if not alert_sent_at:
+        return True
+    return (now - alert_sent_at).total_seconds() >= AUTH_BRUTEFORCE_ALERT_COOLDOWN_MINUTES * 60
+
+
+def _mark_bruteforce_alert_sent(db, scope: str, scope_value: str, now: datetime) -> None:
+    db.execute(
+        """
+        UPDATE auth_login_attempts
+        SET
+            alert_sent_at = ?,
+            alert_count = COALESCE(alert_count, 0) + 1,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE scope = ? AND scope_value = ?
+        """,
+        (_dt_to_sql(now), scope, scope_value),
+    )
+
+
+def _admin_alert_email(settings: dict) -> str:
+    return (
+        (settings.get("contact_email") or "").strip()
+        or (settings.get("admin_email") or "").strip()
+        or (settings.get("mail_from") or "").strip()
+    )
+
+
+def _send_bruteforce_alert(db, email: str, client_ip: str, reason: str, rows: list[dict], now: datetime) -> None:
+    alert_rows = [row for row in rows if row.get("lock_started") and _alert_cooldown_passed(row, now)]
+    if not alert_rows:
+        return
+
+    settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+    settings = dict(settings) if settings else {}
+    to_email = _admin_alert_email(settings)
+    if not to_email:
+        auth_logger.warning("AUTH brute force alert skipped: no admin/contact email configured")
+        return
+
+    locked_scopes = ", ".join(
+        f"{row.get('scope')}={row.get('scope_value')}" for row in alert_rows
+    )
+    subject = "VODUM security alert: login brute force detected"
+    body = "\n".join([
+        "A login brute force pattern was detected on the VODUM admin interface.",
+        "",
+        f"Locked scope(s): {locked_scopes}",
+        f"Submitted email: {email or '<empty>'}",
+        f"Client IP: {client_ip}",
+        f"Reason: {reason}",
+        f"Failed attempts threshold: {AUTH_BRUTEFORCE_MAX_ATTEMPTS}",
+        f"Window: {AUTH_BRUTEFORCE_WINDOW_MINUTES} minute(s)",
+        f"Lock duration: {AUTH_BRUTEFORCE_LOCK_MINUTES} minute(s)",
+        f"User-Agent: {request.user_agent.string}",
+    ])
+
+
+    try:
+        sent = send_email_via_settings(to_email, subject, body)
+    except Exception as exc:
+        auth_logger.error("AUTH brute force alert failed: %s", exc, exc_info=True)
+        return
+
+    if not sent:
+        auth_logger.warning("AUTH brute force alert could not be sent to %s", to_email)
+        return
+
+    for row in alert_rows:
+        _mark_bruteforce_alert_sent(db, row["scope"], row["scope_value"], now)
+
+    auth_logger.warning(
+        "AUTH brute force alert sent to %s for %s",
+        to_email,
+        locked_scopes,
+    )
+
+
 def _login_failed(db, email: str, client_ip: str, reason: str) -> None:
     now = _utcnow()
-    _register_failed_login(db, "ip", client_ip, now)
+    rows = [_register_failed_login(db, "ip", client_ip, now)]
     if email:
-        _register_failed_login(db, "email", email, now)
+        rows.append(_register_failed_login(db, "email", email, now))
+
+    _send_bruteforce_alert(db, email, client_ip, reason, rows, now)
 
     auth_logger.warning(
         "AUTH login failed reason=%s email=%s ip=%s ua=%s",
@@ -170,7 +262,7 @@ def _login_failed(db, email: str, client_ip: str, reason: str) -> None:
 def _login_locked_response(email: str, client_ip: str, remaining_seconds: int):
     remaining_minutes = max(1, math.ceil(remaining_seconds / 60))
     flash(
-        f"Trop de tentatives de connexion. Réessayez dans {remaining_minutes} minute(s).",
+        f"Trop de tentatives de connexion. RÃ©essayez dans {remaining_minutes} minute(s).",
         "error",
     )
     auth_logger.warning(
@@ -190,10 +282,10 @@ def register(app):
 
         # Legacy first-run screen retained for compatibility with old links.
         db = get_db()
-        s = db.query_one("SELECT admin_email, admin_password_hash, wizard_active FROM settings WHERE id = 1")
+        s = db.query_one("SELECT admin_email, admin_password_hash, admin_totp_enabled, admin_totp_secret, wizard_active FROM settings WHERE id = 1")
         s = dict(s) if s else {"admin_email": "", "admin_password_hash": None}
 
-        # déjà configuré => go login/home
+        # dÃ©jÃ  configurÃ© => go login/home
         if (s.get("admin_password_hash") or "").strip():
             return redirect(url_for("login"))
 
@@ -208,19 +300,19 @@ def register(app):
 
         # Legacy endpoint retained for compatibility with old forms.
         db = get_db()
-        s = db.query_one("SELECT admin_email, admin_password_hash FROM settings WHERE id = 1")
+        s = db.query_one("SELECT admin_email, admin_password_hash, admin_totp_enabled FROM settings WHERE id = 1")
         s = dict(s) if s else {"admin_email": "", "admin_password_hash": None}
 
-        # déjà configuré => go login/home
+        # dÃ©jÃ  configurÃ© => go login/home
         if (s.get("admin_password_hash") or "").strip():
             return redirect(url_for("login"))
 
-        # Récupération + normalisation (ne plante jamais)
+        # RÃ©cupÃ©ration + normalisation (ne plante jamais)
         email_input = (request.form.get("email") or "").strip().lower()
         password = (request.form.get("password") or "")
 
         # Stricte: email obligatoire.
-        # Si l'utilisateur laisse vide MAIS qu'un email existe déjà en DB, on le reprend.
+        # Si l'utilisateur laisse vide MAIS qu'un email existe dÃ©jÃ  en DB, on le reprend.
         email = email_input or (s.get("admin_email") or "").strip().lower()
 
         # Validation stricte (pas seulement "@")
@@ -239,14 +331,23 @@ def register(app):
 
         # Mot de passe strict
         if len(password) < 8:
-            flash("Mot de passe trop court (8 caractères minimum).", "error")
+            flash("Mot de passe trop court (8 caractÃ¨res minimum).", "error")
             return redirect(url_for("setup_admin"))
 
         pwd_hash = generate_password_hash(password)
 
         db.execute(
-            "UPDATE settings SET admin_email = ?, admin_password_hash = ?, auth_enabled = 1 WHERE id = 1",
-            (email, pwd_hash),
+            """
+            UPDATE settings
+            SET admin_email = ?,
+                contact_email = COALESCE(NULLIF(TRIM(contact_email), ''), ?),
+                admin_password_hash = ?,
+                auth_enabled = 1,
+                admin_totp_enabled = 0,
+                admin_totp_secret = NULL
+            WHERE id = 1
+            """,
+            (email, email, pwd_hash),
         )
 
         session.clear()
@@ -264,7 +365,7 @@ def register(app):
     @app.route("/login", methods=["GET"])
     def login():
         db = get_db()
-        s = db.query_one("SELECT admin_email, admin_password_hash FROM settings WHERE id = 1")
+        s = db.query_one("SELECT admin_email, admin_password_hash, admin_totp_enabled FROM settings WHERE id = 1")
         s = dict(s) if s else {"admin_email": "", "admin_password_hash": None}
 
         if not (s.get("admin_password_hash") or "").strip():
@@ -280,12 +381,14 @@ def register(app):
             "auth/login.html",
             reset_available=os.path.exists(RESET_FILE),
             reset_cmd=reset_cmd,
+            totp_enabled=int(s.get("admin_totp_enabled") or 0) == 1,
+            next_url=safe_redirect_target(request.args.get("next"), ""),
         )
 
     @app.route("/login/submit", methods=["POST"])
     def login_submit():
         db = get_db()
-        s = db.query_one("SELECT admin_email, admin_password_hash, wizard_active FROM settings WHERE id = 1")
+        s = db.query_one("SELECT admin_email, admin_password_hash, admin_totp_enabled, admin_totp_secret, wizard_active FROM settings WHERE id = 1")
         s = dict(s) if s else {"admin_email": "", "admin_password_hash": None}
 
         if not (s.get("admin_password_hash") or "").strip():
@@ -316,6 +419,14 @@ def register(app):
             flash("Email ou mot de passe incorrect.", "error")
             return redirect(url_for("login"))
 
+        if int(s.get("admin_totp_enabled") or 0) == 1:
+            totp_secret = decrypt_secret(s.get("admin_totp_secret"))
+            totp_code = request.form.get("totp_code") or ""
+            if not totp_secret or not verify_totp_code(totp_secret, totp_code):
+                _login_failed(db, email, client_ip, "bad_totp")
+                flash("Code double authentification incorrect.", "error")
+                return redirect(url_for("login"))
+
         _reset_failed_login(db, "ip", client_ip)
         _reset_failed_login(db, "email", email)
 
@@ -329,7 +440,7 @@ def register(app):
             return redirect(url_for("setup_wizard"))
 
         next_url = safe_redirect_target(
-            request.args.get("next"),
+            request.form.get("next") or request.args.get("next"),
             url_for("dashboard"),
         )
         auth_logger.info("AUTH login ok email=%s ip=%s ua=%s", email, client_ip, request.user_agent.string)
@@ -342,13 +453,13 @@ def register(app):
         return redirect(url_for("login"))
 
     # -----------------------------
-    # SETTINGS / PARAMÈTRES
+    # SETTINGS / PARAMÃˆTRES
     # -----------------------------
     @app.before_request
     def setup_guard_no_servers():
         """
-        Mode "setup" : si aucun serveur n'est configuré, on force l'accès
-        uniquement à la page serveurs pour permettre l'initialisation.
+        Mode "setup" : si aucun serveur n'est configurÃ©, on force l'accÃ¨s
+        uniquement Ã  la page serveurs pour permettre l'initialisation.
         """
         allowed_prefixes = (
             "/static",
@@ -405,3 +516,7 @@ def register(app):
                 )
         except Exception:
             return
+
+
+
+

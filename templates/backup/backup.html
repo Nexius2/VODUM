@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 {% set active_page = 'backup' %}
 
 {% block title %}{{ t("backup") }} - VODUM{% endblock %}
@@ -18,7 +18,7 @@
     </div>
     <div class="text-xs text-slate-400 mt-2">
       {{ t("last_run") }}:
-      {{ diagnostic.last_run|browser_datetime if diagnostic.last_run else '—' }}
+      {{ diagnostic.last_run|browser_datetime if diagnostic.last_run else 'â€”' }}
     </div>
     {% if title == t("sqlite_integrity") %}
     <div class="text-xs text-slate-400 mt-2">
@@ -35,7 +35,7 @@
         </span>
         <span class="ml-1 text-[11px] text-slate-500">({{ db_size_bytes }} bytes)</span>
       {% else %}
-        <span class="text-slate-500">&mdash;</span>
+        <span class="text-slate-500">{{ t("not_available") }}</span>
       {% endif %}
     </div>
     {% endif %}
@@ -48,7 +48,7 @@
 
 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 items-stretch">
 
-  <!-- Création backup -->
+  <!-- CrÃ©ation backup -->
 	<div>
 	  {% include "backup/_retention_settings.html" %}
 	</div>
@@ -179,7 +179,7 @@
 
               <a href="/backup/download/${encodeURIComponent(backup.name)}"
                  class="flex items-center gap-2 px-4 py-2.5 text-xs text-slate-300 hover:bg-slate-800 transition">
-                <span>⬇</span>
+                <span>â¬‡</span>
                 <span>{{ t("download") if t("download") else "Download" }}</span>
               </a>
 
@@ -187,7 +187,7 @@
                 type="button"
                 onclick='restoreBackup(${filenameJs})'
                 class="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-left text-amber-300 hover:bg-slate-800 transition">
-                <span>♻</span>
+                <span>â™»</span>
                 <span>{{ t("restore_btn") }}</span>
               </button>
 
@@ -195,7 +195,7 @@
                 type="button"
                 onclick='openDeleteBackupModal(${filenameJs})'
                 class="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-left text-rose-300 hover:bg-slate-800 transition">
-                <span>🗑</span>
+                <span>ðŸ—‘</span>
                 <span>{{ t("delete") if t("delete") else "Delete" }}</span>
               </button>
             </div>
@@ -266,3 +266,4 @@
   });
 </script>
 {% endblock %}
+

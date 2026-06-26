@@ -1,7 +1,10 @@
 import os
+import gzip
 import json
+import hmac
 import secrets
-from datetime import datetime, timezone
+import time
+from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo  # kept for backward compat in other imports
 from flask import Flask, g, request, session, abort
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -9,7 +12,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from config import Config
 from logging_utils import get_logger
 task_logger = get_logger("app")
-from db_manager import DBManager
+from db_manager import DBManager, open_sqlite_connection
 from core.backup import BackupConfig
 from core.i18n import init_i18n
 from core.repair.plex_media_users_repair import run_repair_if_needed
@@ -29,6 +32,7 @@ task_logger = get_logger("tasks_ui")
 auth_logger = get_logger("auth")
 security_logger = get_logger("security")
 settings_logger = get_logger("settings")
+performance_logger = get_logger("performance")
 
 
 _I18N_CACHE: dict[str, dict] = {}
@@ -36,7 +40,7 @@ _I18N_CACHE: dict[str, dict] = {}
 class ConditionalProxyFix:
     """
     Applique ProxyFix uniquement si enabled_getter() retourne True.
-    Permet d'activer/désactiver dynamiquement le trust proxy via les settings.
+    Permet d'activer/dÃ©sactiver dynamiquement le trust proxy via les settings.
     """
     def __init__(self, wsgi_app, enabled_getter, trusted_networks_getter):
         self._raw_app = wsgi_app
@@ -61,16 +65,24 @@ def _env_bool(name: str) -> bool | None:
     return str(raw).strip() not in ("0", "false", "False", "no", "NO")
 
 
-def _read_trust_proxy_from_db(db_path: str) -> bool:
+def _env_int(name: str, default: int, minimum: int | None = None) -> int:
+    raw = os.environ.get(name)
     try:
-        import sqlite3
+        value = int(raw) if raw is not None and str(raw).strip() else default
+    except (TypeError, ValueError):
+        value = default
+    if minimum is not None:
+        value = max(minimum, value)
+    return value
 
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
+
+def _read_trust_proxy_from_db(db_path: str) -> bool:
+    conn = None
+    try:
+        conn = open_sqlite_connection(db_path, read_only=True)
         row = conn.execute(
             "SELECT web_trust_proxy FROM settings WHERE id = 1"
         ).fetchone()
-        conn.close()
 
         if not row:
             return False
@@ -78,6 +90,9 @@ def _read_trust_proxy_from_db(db_path: str) -> bool:
         return int(row["web_trust_proxy"] or 0) == 1
     except Exception:
         return False
+    finally:
+        if conn is not None:
+            conn.close()
 
 # -----------------------------
 # AUTH RESET (local file)
@@ -111,7 +126,7 @@ def startup_admin_recover_if_requested(app: Flask):
     """
     Reset LOCAL (Unraid/Docker) :
     - si RESET_FILE existe et contient RESET_MAGIC ("RECOVER")
-    - au démarrage de l'app uniquement
+    - au dÃ©marrage de l'app uniquement
     -> wipe admin_email + admin_password_hash
     -> supprime le fichier (one-shot)
     """
@@ -124,8 +139,8 @@ def startup_admin_recover_if_requested(app: Flask):
     except Exception:
         marker = ""
 
-    if not marker:
-        app.logger.warning(f"password.reset detected at {RESET_FILE} but file is empty. Ignoring.")
+    if marker != RESET_MAGIC:
+        app.logger.warning(f"password.reset detected at {RESET_FILE} but marker is invalid. Ignoring.")
         return
 
     try:
@@ -136,6 +151,8 @@ def startup_admin_recover_if_requested(app: Flask):
             SET
               admin_email = NULL,
               admin_password_hash = NULL,
+              admin_totp_enabled = 0,
+              admin_totp_secret = NULL,
               auth_enabled = 1
             WHERE id = 1
             """
@@ -173,13 +190,13 @@ APP_VERSION = load_app_version(fallback="dev")
 
 def _reset_maintenance_on_startup(app: Flask):
     """
-    Si l'app a été laissée en maintenance après une restauration DB,
-    on remet un état propre au démarrage.
+    Si l'app a Ã©tÃ© laissÃ©e en maintenance aprÃ¨s une restauration DB,
+    on remet un Ã©tat propre au dÃ©marrage.
 
     - maintenance_mode -> 0
-    - enabled <- enabled_prev si présent
-    - status recalculé proprement
-    - enabled_prev vidé
+    - enabled <- enabled_prev si prÃ©sent
+    - status recalculÃ© proprement
+    - enabled_prev vidÃ©
     """
     try:
         db = DBManager(app.config["DATABASE"])
@@ -321,7 +338,7 @@ def create_app():
 
     @app.before_request
     def csrf_guard():
-        # Protège uniquement les méthodes qui modifient l'état
+        # ProtÃ¨ge uniquement les mÃ©thodes qui modifient l'Ã©tat
         if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
             return
 
@@ -338,12 +355,16 @@ def create_app():
 
         session_token = (session.get("_csrf_token") or "").strip()
 
-        if not sent_token or not session_token or sent_token != session_token:
+        if (
+            not sent_token
+            or not session_token
+            or not hmac.compare_digest(sent_token, session_token)
+        ):
             abort(403)
 
     # Trust proxy :
-    # - priorité à la variable d'environnement si elle existe
-    # - sinon fallback sur la valeur stockée en base/settings
+    # - prioritÃ© Ã  la variable d'environnement si elle existe
+    # - sinon fallback sur la valeur stockÃ©e en base/settings
     env_trust_proxy = _env_bool("VODUM_TRUST_PROXY")
     db_path = os.environ.get("DATABASE_PATH", "/appdata/database.db")
 
@@ -358,7 +379,7 @@ def create_app():
         "127.0.0.1/32,::1/128",
     )
 
-    # Middleware conditionnel : lit app.config à chaque requête
+    # Middleware conditionnel : lit app.config Ã  chaque requÃªte
     app.wsgi_app = ConditionalProxyFix(
         app.wsgi_app,
         lambda: bool(app.config.get("TRUST_PROXY_ENABLED", False)),
@@ -389,12 +410,92 @@ def create_app():
             g.update_pending_days = 0
 
     app.config.from_object(Config)
+    static_max_age = _env_int("VODUM_STATIC_MAX_AGE_SECONDS", 60 * 60 * 24 * 30, minimum=0)
+    app.config["SEND_FILE_MAX_AGE_DEFAULT"] = timedelta(seconds=max(0, static_max_age))
 
-    # Ne pas écraser la valeur déjà calculée depuis env / DB
+    # Ne pas Ã©craser la valeur dÃ©jÃ  calculÃ©e depuis env / DB
     app.config.setdefault("TRUST_PROXY_ENABLED", False)
 
     # Backup dir
     app.config.setdefault("BACKUP_DIR", os.environ.get("VODUM_BACKUP_DIR", "/appdata/backups"))
+
+    route_timing_enabled = _env_bool("VODUM_ROUTE_TIMING") is True
+    route_timing_threshold_ms = _env_int("VODUM_ROUTE_TIMING_THRESHOLD_MS", 300, minimum=0)
+
+    @app.before_request
+    def start_route_timing():
+        if route_timing_enabled:
+            g.route_started_at = time.perf_counter()
+
+    @app.after_request
+    def log_slow_route(response):
+        started_at = getattr(g, "route_started_at", None)
+        if started_at is None:
+            return response
+
+        duration_ms = int((time.perf_counter() - started_at) * 1000)
+        if duration_ms >= route_timing_threshold_ms and not request.path.startswith("/static"):
+            performance_logger.info(
+                "route_timing | duration_ms=%s | status=%s | method=%s | path=%s | endpoint=%s | content_length=%s | htmx=%s",
+                duration_ms,
+                response.status_code,
+                request.method,
+                request.path,
+                request.endpoint or "-",
+                response.calculate_content_length() or 0,
+                "1" if request.headers.get("HX-Request") else "0",
+            )
+        return response
+
+    gzip_enabled = _env_bool("VODUM_HTTP_GZIP") is not False
+    gzip_min_size = _env_int("VODUM_HTTP_GZIP_MIN_BYTES", 1024, minimum=0)
+    gzip_mimetypes = {
+        "application/javascript",
+        "application/json",
+        "application/xml",
+        "image/svg+xml",
+        "text/css",
+        "text/html",
+        "text/javascript",
+        "text/plain",
+        "text/xml",
+    }
+
+    @app.after_request
+    def gzip_text_response(response):
+        if not gzip_enabled:
+            return response
+        if request.method == "HEAD" or "gzip" not in request.headers.get("Accept-Encoding", "").lower():
+            return response
+        if response.status_code < 200 or response.status_code in (204, 304):
+            return response
+        if response.direct_passthrough or response.is_streamed:
+            return response
+        if response.headers.get("Content-Encoding") or response.headers.get("Content-Range"):
+            return response
+        if request.path.startswith("/static"):
+            return response
+        if response.mimetype not in gzip_mimetypes:
+            return response
+
+        content_length = response.calculate_content_length()
+        if content_length is not None and content_length < gzip_min_size:
+            return response
+
+        payload = response.get_data()
+        if len(payload) < gzip_min_size:
+            return response
+
+        compressed = gzip.compress(payload)
+        if len(compressed) >= len(payload):
+            return response
+
+        response.set_data(compressed)
+        response.headers["Content-Encoding"] = "gzip"
+        response.headers["Content-Length"] = str(len(compressed))
+        response.headers.add("Vary", "Accept-Encoding")
+        response.headers.pop("ETag", None)
+        return response
 
     # i18n (requires DB access)
     init_i18n(app, get_db)
@@ -418,7 +519,7 @@ def create_app():
     from routes import register_routes
     register_routes(app)
 
-    # Expose helpers pour d’éventuels scripts internes
+    # Expose helpers pour dâ€™Ã©ventuels scripts internes
     app.get_db = get_db
     app.table_exists = table_exists
     app.scheduler_db_provider = lambda: DBManager(app.config["DATABASE"])
@@ -426,3 +527,8 @@ def create_app():
     _run_application_startup(app)
 
     return app
+
+
+
+
+

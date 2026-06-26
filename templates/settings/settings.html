@@ -19,24 +19,77 @@
 
 </form>
 
-<script>
-  // Toggle admin password (même comportement que Mailing)
-  document.addEventListener("DOMContentLoaded", () => {
-    const input = document.getElementById("admin_password");
-    const btn   = document.getElementById("toggle_admin_password");
-    if (!input || !btn) return;
+<div id="admin-security-modal" class="hidden fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" aria-hidden="true">
+  <div class="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl p-6">
+    <div class="flex items-start justify-between mb-5">
+      <div>
+        <h3 class="text-lg font-semibold text-white">{{ t("app_security") }}</h3>
+        <p class="text-xs text-slate-400 mt-1">{{ t("app_security_help") }}</p>
+      </div>
+      <button type="button" data-vodum-modal-close
+              onclick="document.getElementById('admin-security-modal').classList.add('hidden')"
+              class="text-slate-400 hover:text-white text-xs leading-none">{{ t("common.close") }}</button>
+    </div>
 
-    btn.addEventListener("click", () => {
-      if (input.type === "password") {
-        input.type = "text";
-        btn.textContent = "🙈";
-      } else {
-        input.type = "password";
-        btn.textContent = "👁️";
-      }
-    });
-  });
-</script>
+    <form method="POST" action="{{ url_for('settings_security_save') }}" class="space-y-5">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="pending_totp_secret" value="{{ pending_totp_secret }}">
 
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm mb-1 text-slate-300">{{ t("auth.admin_email") }}</label>
+          <input type="email" name="admin_email" value="{{ settings.admin_email or '' }}" required class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm mb-1 text-slate-300">{{ t("current_password") }}</label>
+          <input type="password" name="current_password" required autocomplete="current-password" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+        </div>
+      </div>
 
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm mb-1 text-slate-300">{{ t("new_password") }}</label>
+          <input type="password" name="new_password" autocomplete="new-password" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm mb-1 text-slate-300">{{ t("confirm_password") }}</label>
+          <input type="password" name="confirm_password" autocomplete="new-password" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+        </div>
+      </div>
+
+      <div class="border-t border-slate-800 pt-4">
+        <label class="flex items-start gap-3 text-sm text-slate-300 cursor-pointer">
+          <input type="checkbox" name="admin_totp_enabled" value="1" {% if settings.admin_totp_enabled %}checked{% endif %} class="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-800">
+          <span>
+            <span class="block text-slate-200">{{ t("two_factor_auth") }}</span>
+            <span class="block text-xs text-slate-500 mt-1">{{ t("two_factor_auth_help") }}</span>
+          </span>
+        </label>
+
+        {% if not settings.admin_totp_enabled %}
+          <div class="mt-4 rounded-lg border border-slate-800 bg-slate-950 p-3 space-y-3">
+            <div>
+              <div class="text-xs text-slate-400 mb-1">{{ t("totp_secret") }}</div>
+              <code class="block text-sm text-emerald-300 break-all">{{ pending_totp_secret }}</code>
+            </div>
+            <div>
+              <div class="text-xs text-slate-400 mb-1">{{ t("totp_uri") }}</div>
+              <code class="block text-xs text-slate-300 break-all">{{ pending_totp_uri }}</code>
+            </div>
+            <div>
+              <label class="block text-sm mb-1 text-slate-300">{{ t("totp_code") }}</label>
+              <input type="text" name="totp_code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+            </div>
+          </div>
+        {% endif %}
+      </div>
+
+      <div class="flex justify-end gap-2 border-t border-slate-800 pt-4">
+        <button type="button" data-vodum-modal-close onclick="document.getElementById('admin-security-modal').classList.add('hidden')" class="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 text-sm">{{ t("common.close") }}</button>
+        <button type="submit" class="px-4 py-2 bg-primary hover:bg-primary-dark rounded text-white text-sm">{{ t("save") }}</button>
+      </div>
+    </form>
+  </div>
+</div>
 {% endblock %}
+

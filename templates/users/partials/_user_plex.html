@@ -17,11 +17,11 @@
       {% if first_plex.media_avatar %}
         <img src="{{ first_plex.media_avatar }}"
              alt="Plex avatar"
-             class="w-10 h-10 rounded-full border border-slate-700">
+             class="w-10 h-10 rounded-full border border-slate-700" loading="lazy" decoding="async">
       {% elif user.avatar %}
         <img src="{{ user.avatar }}"
              alt="Plex avatar"
-             class="w-10 h-10 rounded-full border border-slate-700">
+             class="w-10 h-10 rounded-full border border-slate-700" loading="lazy" decoding="async">
       {% endif %}
     </div>
 

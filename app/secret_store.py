@@ -166,7 +166,7 @@ def decrypt_secret(value: object) -> str | None:
 
 def decrypt_communication_settings(settings: dict | None) -> dict:
     result = dict(settings or {})
-    for key in ("smtp_pass", "discord_bot_token", "discord_bot_token_effective"):
+    for key in ("smtp_pass", "smtp_oauth_access_token", "discord_bot_token", "discord_bot_token_effective"):
         if key in result:
             result[key] = decrypt_secret(result.get(key))
     return result
@@ -249,19 +249,24 @@ def encrypt_communication_secrets(conn) -> int:
     updated = 0
 
     row = conn.execute(
-        "SELECT smtp_pass, discord_bot_token FROM settings WHERE id = 1"
+        "SELECT smtp_pass, smtp_oauth_access_token, discord_bot_token FROM settings WHERE id = 1"
     ).fetchone()
     if row:
         smtp_pass = encrypt_secret(row[0])
-        discord_token = encrypt_secret(row[1])
-        if smtp_pass != row[0] or discord_token != row[1]:
+        smtp_oauth_access_token = encrypt_secret(row[1])
+        discord_token = encrypt_secret(row[2])
+        if (
+            smtp_pass != row[0]
+            or smtp_oauth_access_token != row[1]
+            or discord_token != row[2]
+        ):
             conn.execute(
                 """
                 UPDATE settings
-                SET smtp_pass = ?, discord_bot_token = ?
+                SET smtp_pass = ?, smtp_oauth_access_token = ?, discord_bot_token = ?
                 WHERE id = 1
                 """,
-                (smtp_pass, discord_token),
+                (smtp_pass, smtp_oauth_access_token, discord_token),
             )
             updated += 1
 

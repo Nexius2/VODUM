@@ -135,12 +135,15 @@ def import_migration_plan(db, plan: dict, *, name_override: str = "") -> int:
     destination = _resolve_server(db, plan.get("destination") or {})
     if int(source["id"]) == int(destination["id"]):
         raise ValueError("A migration plan cannot target its source server.")
-    mappings = {}
+    mappings: dict[int, list[int]] = {}
     for item in plan.get("library_mappings") or []:
         source_library_id = _resolve_library(db, int(source["id"]), item.get("source"))
         if source_library_id is None:
             continue
-        mappings[source_library_id] = _resolve_library(db, int(destination["id"]), item.get("destination"))
+        destination_library_id = _resolve_library(db, int(destination["id"]), item.get("destination"))
+        source_mappings = mappings.setdefault(source_library_id, [])
+        if destination_library_id is not None and destination_library_id not in source_mappings:
+            source_mappings.append(destination_library_id)
     options = plan.get("options") if isinstance(plan.get("options"), dict) else {}
     return create_migration_draft(
         db,
