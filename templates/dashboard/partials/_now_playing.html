@@ -53,23 +53,25 @@
 {% if sessions and sessions|length > 0 %}
     <div class="space-y-2">
         {% for s in sessions %}
-            <div class="relative overflow-hidden rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2">
+            <div class="relative overflow-hidden rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-1.5">
                 {% if s.backdrop_url %}
                     <img
                         src="{{ s.backdrop_url }}"
                         alt=""
                         class="js-artwork-image absolute inset-0 h-full w-full object-cover opacity-30 pointer-events-none"
                         loading="lazy"
+                        decoding="async"
                     >
                     <div class="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/70 to-slate-950/90"></div>
                 {% endif %}
 
-                <div class="relative z-10 flex items-start gap-3">
+                <div class="relative z-10 flex items-center gap-3">
                     {% if s.poster_url %}
                         <img
                             src="{{ s.poster_url }}"
                             alt=""
-                            class="js-artwork-image w-10 h-14 rounded-lg object-cover border border-slate-700/70 shrink-0"
+                            class="js-artwork-image w-12 h-16 rounded-lg object-cover border border-slate-700/70 shrink-0"
+                            decoding="async"
                         />
                     {% endif %}
 
@@ -135,12 +137,14 @@
 
 {% elif idle_card %}
     <div class="rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2">
-        <div class="flex items-start gap-3">
+        <div class="flex items-center gap-3">
 
             <img
                 src="{{ idle_card.poster_url }}"
                 alt="{{ idle_card.title }}"
                 class="w-20 h-28 rounded-lg object-cover border border-slate-700/70 shrink-0"
+                loading="lazy"
+                decoding="async"
             />
 
             <div class="min-w-0 flex-1">

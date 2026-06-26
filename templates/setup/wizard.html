@@ -1,8 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="{{ active_lang or 'en' }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="preconnect" href="https://cdn.tailwindcss.com">
   <title>{{ copy.title }}</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
@@ -72,7 +73,26 @@
               <input name="confirm_password" type="password" required minlength="8" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
             </label>
           </div>
-          {% include "setup/_nav.html" %}
+          <input type="hidden" name="pending_totp_secret" value="{{ wizard_totp_secret }}">
+          <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-3">
+            <label class="flex items-start gap-3 text-sm cursor-pointer">
+              <input type="checkbox" name="admin_totp_enabled" value="1" class="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-800">
+              <span>
+                <span class="block text-slate-200">{{ t("two_factor_auth") }}</span>
+                <span class="block text-xs text-slate-500 mt-1">{{ t("wizard_totp_help") }}</span>
+              </span>
+            </label>
+            <div class="grid md:grid-cols-2 gap-3">
+              <div>
+                <div class="text-xs text-slate-400 mb-1">{{ t("totp_secret") }}</div>
+                <code class="block text-xs text-emerald-300 break-all">{{ wizard_totp_secret }}</code>
+              </div>
+              <label class="block text-sm">Code
+                <input name="totp_code" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
+              </label>
+            </div>
+            <code class="block text-[11px] text-slate-500 break-all">{{ wizard_totp_uri }}</code>
+          </div>          {% include "setup/_nav.html" %}
         </form>
 
       {% elif step == 3 %}
@@ -181,7 +201,15 @@
               <label class="text-sm">{{ t("smtp_server") }}<input name="smtp_host" value="{{ communication_settings.smtp_host or '' }}" placeholder="smtp.example.com" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
               <label class="text-sm">{{ t("smtp_port") }}<input name="smtp_port" type="number" value="{{ communication_settings.smtp_port or 587 }}" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
               <label class="text-sm">{{ t("username") }}<input name="smtp_user" value="{{ communication_settings.smtp_user or '' }}" autocomplete="off" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
+              <label class="text-sm">{{ t("smtp_auth_method") }}
+                {% set wizard_smtp_auth_method = communication_settings.smtp_auth_method or 'password' %}
+                <select name="smtp_auth_method" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
+                  <option value="password" {% if wizard_smtp_auth_method != 'oauth2' %}selected{% endif %}>{{ t("smtp_auth_password") }}</option>
+                  <option value="oauth2" {% if wizard_smtp_auth_method == 'oauth2' %}selected{% endif %}>{{ t("smtp_auth_oauth2") }}</option>
+                </select>
+              </label>
               <label class="text-sm">{{ t("auth.password") }}<input name="smtp_pass" type="password" autocomplete="new-password" placeholder="{% if communication_settings.smtp_pass_configured %}Already configured - leave blank to keep it{% endif %}" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
+              <label class="text-sm">{{ t("smtp_oauth_access_token") }}<input name="smtp_oauth_access_token" type="password" autocomplete="new-password" placeholder="{% if communication_settings.smtp_oauth_access_token_configured %}Already configured - leave blank to keep it{% endif %}" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
               <label class="text-sm md:col-span-2">{{ t("wizard.sender_address") }}<input name="mail_from" type="email" value="{{ communication_settings.mail_from or '' }}" placeholder="vodum@example.com" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
               <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="smtp_tls" value="1" {% if communication_settings.smtp_tls %}checked{% endif %}> {{ t("wizard.use_tls") }}</label>
             </div>
@@ -314,14 +342,14 @@
         </div>
         {% else %}
         <div class="space-y-2 my-6 text-sm">
-          <div>✓ {{ t("wizard.admin_created") }}</div>
-          <div>✓ {{ servers|length }} media server(s) configured</div>
-          <div>✓ {{ t("wizard.sync_started") }}</div>
-          <div>✓ Communications {{ state.get('communications', 'skipped') }}</div>
-          <div>✓ Message templates {{ state.get('messages', 'skipped') }}</div>
-          <div>✓ Subscriptions {{ state.get('subscriptions', 'skipped') }}</div>
-          <div>✓ Subscription settings {{ state.get('subscription_settings', 'skipped') }}</div>
-          <div>✓ Subscription assignment {{ state.get('assignment', 'skipped') }}</div>
+          <div>âœ“ {{ t("wizard.admin_created") }}</div>
+          <div>âœ“ {{ servers|length }} media server(s) configured</div>
+          <div>âœ“ {{ t("wizard.sync_started") }}</div>
+          <div>âœ“ Communications {{ state.get('communications', 'skipped') }}</div>
+          <div>âœ“ Message templates {{ state.get('messages', 'skipped') }}</div>
+          <div>âœ“ Subscriptions {{ state.get('subscriptions', 'skipped') }}</div>
+          <div>âœ“ Subscription settings {{ state.get('subscription_settings', 'skipped') }}</div>
+          <div>âœ“ Subscription assignment {{ state.get('assignment', 'skipped') }}</div>
         </div>
         {% endif %}
         <form method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token }}"><button class="w-full px-4 py-3 rounded-lg bg-indigo-700 hover:bg-indigo-600 font-semibold">{{ copy.finish }}</button></form>
@@ -330,3 +358,5 @@
   </main>
 </body>
 </html>
+
+

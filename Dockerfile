@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+﻿FROM python:3.12-slim
 
 # Utils
 RUN apt-get update && apt-get install -y sqlite3 curl && rm -rf /var/lib/apt/lists/*
@@ -16,7 +16,6 @@ COPY templates/ /app/templates/
 COPY static/ /app/static/
 COPY lang/ /app/lang/
 COPY migrations/ /app/migrations/
-COPY tools/ /app/tools/
 
 # SQL seeds
 COPY tables.sql /app/tables.sql
@@ -36,3 +35,4 @@ RUN chmod +x /app/entrypoint.sh
 EXPOSE 5000
 
 CMD ["/app/entrypoint.sh"]
+

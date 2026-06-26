@@ -10,7 +10,7 @@
       <select name="default_language"
               class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
         <option value="" {% if not settings.default_language %}selected{% endif %}>
-          🌐 {{ t("language_auto") }}
+          ðŸŒ {{ t("language_auto") }}
         </option>
         {% for code, name in available_languages.items() %}
           <option value="{{ code }}" {% if settings.default_language == code %}selected{% endif %}>
@@ -33,39 +33,13 @@
              placeholder="Europe/Paris">
     </div>
 
-    <!-- Admin Email -->
+    <!-- Contact Email -->
     <div>
-      <label class="block text-sm mb-1 text-slate-300">{{ t("admin_email") }}</label>
-      <input type="email" name="admin_email"
-             value="{{ settings.admin_email }}"
+      <label class="block text-sm mb-1 text-slate-300">{{ t("contact_email") }}</label>
+      <input type="email" name="contact_email"
+             value="{{ settings.contact_email or settings.admin_email or '' }}"
              class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
-    </div>
-
-    <!-- Admin Password -->
-    <div>
-      <label class="block text-sm mb-1 text-slate-300">{{ t("auth.admin_password") }}</label>
-      <div class="relative">
-		  <input
-			type="password"
-			id="admin_password"
-			name="admin_password"
-			value="{{ settings.admin_password or '' }}"
-			class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 pr-10"
-			autocomplete="off"
-			spellcheck="false"
-		  >
-
-		  <button
-			type="button"
-			id="toggle_admin_password"
-			class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 text-sm"
-			aria-label="Toggle password visibility"
-		  >
-			👁️
-		  </button>
-		</div>
-
-      <p class="text-xs text-slate-400 mt-1">{{ t("auth.password_min_8") }}</p>
+      <p class="text-xs text-slate-400 mt-1">{{ t("contact_email_help") }}</p>
     </div>
 
     <!-- Brand name -->
@@ -131,7 +105,7 @@
         onclick="document.getElementById('telemetry-modal').classList.add('hidden')"
         class="text-slate-400 hover:text-white"
       >
-        ✕
+        âœ•
       </button>
 
     </div>
@@ -178,3 +152,4 @@
 
   </div>
 </div>
+

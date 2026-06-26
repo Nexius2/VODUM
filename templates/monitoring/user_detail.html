@@ -6,6 +6,11 @@
 {% block header_title %}{{ t("monitoring") }}{% endblock %}
 {% block header_subtitle %}{{ t("monitoring_user_detail") }}{% endblock %}
 
+{% block head %}
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
+
 {% block content %}
 {% if not embed %}
   {% include "monitoring/partials/_tabs.html" %}

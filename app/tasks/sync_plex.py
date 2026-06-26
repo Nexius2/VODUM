@@ -1,4 +1,4 @@
-
+﻿
 import time
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Set, Tuple, Optional
@@ -20,7 +20,7 @@ from core.providers.plex_invitation_state import (
 )
 
 class TimeoutSession(requests.Session):
-    """Session requests qui force un timeout par défaut."""
+    """Session requests qui force un timeout par dÃ©faut."""
     def __init__(self, timeout=10, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._timeout = timeout
@@ -75,7 +75,7 @@ def _json_dict_or_empty(raw):
 
 def _is_pending_plex_invite_media_user(row) -> bool:
     """
-    True si le media_user Plex correspond à une invitation encore non acceptée.
+    True si le media_user Plex correspond Ã  une invitation encore non acceptÃ©e.
     """
     accepted_at = str(_row_value(row, "accepted_at") or "").strip()
     if accepted_at:
@@ -91,7 +91,7 @@ def _is_pending_plex_invite_media_user(row) -> bool:
     username = str(_row_value(row, "username") or "").strip()
 
     # Fallback robuste :
-    # user créé côté Vodum, mais pas encore réellement accepté/résolu côté Plex
+    # user crÃ©Ã© cÃ´tÃ© Vodum, mais pas encore rÃ©ellement acceptÃ©/rÃ©solu cÃ´tÃ© Plex
     return (not accepted_at) and (not external_user_id) and bool(email or username)
 
 def ensure_expiration_date_on_first_access(db, vodum_user_id):
@@ -130,7 +130,7 @@ def ensure_expiration_date_on_first_access(db, vodum_user_id):
     )
 
     log.info(
-        f"[SUBSCRIPTION] expiration_date initialized for vodum_user_id={vodum_user_id} → {expiration}"
+        f"[SUBSCRIPTION] expiration_date initialized for vodum_user_id={vodum_user_id} â†’ {expiration}"
     )
 
     return True
@@ -143,7 +143,7 @@ def ensure_expiration_date_on_first_access(db, vodum_user_id):
 # ---------------------------------------------------------------------------
 def choose_account_token(db) -> Optional[str]:
     """
-    Retourne un token Plex trouvé dans la table 'servers'.
+    Retourne un token Plex trouvÃ© dans la table 'servers'.
     On prend le premier serveur Plex avec un token non vide.
     """
     row = db.query_one(
@@ -187,9 +187,9 @@ def _find_working_plex_base_url(server, endpoint="/identity", accept="applicatio
 
 def _ensure_plex_server_identity(db, server) -> None:
     """
-    Force la récupération du vrai machineIdentifier Plex avant sync_users_from_api().
-    Sans ça, un serveur fraîchement ajouté garde l'UUID temporaire VODUM,
-    et les users Plex récupérés via /api/users ne peuvent pas être reliés au bon serveur.
+    Force la rÃ©cupÃ©ration du vrai machineIdentifier Plex avant sync_users_from_api().
+    Sans Ã§a, un serveur fraÃ®chement ajoutÃ© garde l'UUID temporaire VODUM,
+    et les users Plex rÃ©cupÃ©rÃ©s via /api/users ne peuvent pas Ãªtre reliÃ©s au bon serveur.
     """
     server_id = int(server["id"])
     base_url = _find_working_plex_base_url(server, endpoint="/identity", accept="application/xml")
@@ -248,11 +248,11 @@ def _ensure_plex_server_identity(db, server) -> None:
         )
 
 # ---------------------------------------------------------------------------
-# Récupération Owner Plex
+# RÃ©cupÃ©ration Owner Plex
 # ---------------------------------------------------------------------------
 def sync_plex_owner_for_server(db, server):
     """
-    Synchronise le OWNER du serveur Plex donné.
+    Synchronise le OWNER du serveur Plex donnÃ©.
     - 1 serveur = 1 owner
     - ne touche PAS aux users
     """
@@ -276,7 +276,7 @@ def sync_plex_owner_for_server(db, server):
     today = datetime.utcnow().date().isoformat()
 
     # -------------------------------------------------
-    # 1) Résoudre / créer le vodum_user (GLOBAL)
+    # 1) RÃ©soudre / crÃ©er le vodum_user (GLOBAL)
     # -------------------------------------------------
     row = db.query_one(
         """
@@ -319,7 +319,7 @@ def sync_plex_owner_for_server(db, server):
             (username, today),
         ).lastrowid
 
-    # identité plex globale
+    # identitÃ© plex globale
     db.execute(
         """
         INSERT OR IGNORE INTO user_identities(vodum_user_id, type, server_id, external_user_id)
@@ -342,8 +342,8 @@ def sync_plex_owner_for_server(db, server):
         (server["id"], plex_id),
     )
 
-    # ✅ Forcer options UI/logique pour l'owner
-    # (cochées dans l'UI, filtres vides par défaut)
+    # âœ… Forcer options UI/logique pour l'owner
+    # (cochÃ©es dans l'UI, filtres vides par dÃ©faut)
     owner_plex_share = {
         "allowSync": 1,
         "allowCameraUpload": 1,
@@ -354,7 +354,7 @@ def sync_plex_owner_for_server(db, server):
     }
 
     if row:
-        # Merge safe du JSON existant (ne pas casser d'autres clés)
+        # Merge safe du JSON existant (ne pas casser d'autres clÃ©s)
         try:
             details = json.loads(row["details_json"] or "{}")
         except Exception:
@@ -422,16 +422,16 @@ def sync_plex_owner_for_server(db, server):
 
 
 # ---------------------------------------------------------------------------
-# Récupération Libraries Plex (JSON local API)
+# RÃ©cupÃ©ration Libraries Plex (JSON local API)
 # ---------------------------------------------------------------------------
 def plex_get_user_access(db, plex, server_name, media_user_id: int):
     """
-    Retourne les bibliothèques réellement partagées
+    Retourne les bibliothÃ¨ques rÃ©ellement partagÃ©es
     avec un utilisateur Plex (media_users).
 
     Retour :
-    - list[dict] => accès récupéré correctement
-    - []         => accès récupéré correctement mais aucune bibliothèque
+    - list[dict] => accÃ¨s rÃ©cupÃ©rÃ© correctement
+    - []         => accÃ¨s rÃ©cupÃ©rÃ© correctement mais aucune bibliothÃ¨que
     - None       => erreur Plex/API, donc on ne doit rien supprimer en base
     """
 
@@ -564,7 +564,7 @@ def _plex_section_total_items(session, base_url: str, token: str, section_id: st
 
     root = ET.fromstring(r.text)
 
-    # Plex renvoie généralement <MediaContainer ...> en racine
+    # Plex renvoie gÃ©nÃ©ralement <MediaContainer ...> en racine
     mc = root if root.tag == "MediaContainer" else root.find("MediaContainer")
     if mc is None:
         return None
@@ -626,7 +626,7 @@ def sync_plex_user_library_access(db, plex, server):
     server_id = server["id"]
     server_name = server["name"]
 
-    # 1️⃣ Mapping libraries du serveur
+    # 1ï¸âƒ£ Mapping libraries du serveur
     libraries = db.query(
         """
         SELECT id, section_id
@@ -642,7 +642,7 @@ def sync_plex_user_library_access(db, plex, server):
         log.warning(f"[SYNC ACCESS] No library found in the database for server={server_name} (id={server_id})")
         return
 
-    # 2️⃣ Users liés à ce serveur
+    # 2ï¸âƒ£ Users liÃ©s Ã  ce serveur
     users = db.query(
         """
         SELECT
@@ -672,7 +672,7 @@ def sync_plex_user_library_access(db, plex, server):
     preserved_pending = 0
     skipped_pending_jobs = 0
 
-    # 3️⃣ Resync accès pour chaque user
+    # 3ï¸âƒ£ Resync accÃ¨s pour chaque user
     for u in users:
         email = u["email"]
         media_user_id = u["media_user_id"]
@@ -682,7 +682,7 @@ def sync_plex_user_library_access(db, plex, server):
 
         processed_users += 1
 
-        # ✅ Ignore users that should no longer exist on Plex
+        # âœ… Ignore users that should no longer exist on Plex
         vodum_user = db.query_one(
             """
             SELECT status
@@ -707,8 +707,8 @@ def sync_plex_user_library_access(db, plex, server):
             )
             continue
 
-        # ✅ Cas spécial : invitation Plex pas encore acceptée
-        # On NE TOUCHE PAS aux media_user_libraries déjà prévues en DB.
+        # âœ… Cas spÃ©cial : invitation Plex pas encore acceptÃ©e
+        # On NE TOUCHE PAS aux media_user_libraries dÃ©jÃ  prÃ©vues en DB.
         if role != "owner" and _is_pending_plex_invite_media_user(u):
             preserved_pending += 1
             log.info(
@@ -717,9 +717,9 @@ def sync_plex_user_library_access(db, plex, server):
             )
             continue
 
-        # ✅ Cas spécial : job Plex encore en attente / en cours
-        # On SKIP complètement cet utilisateur pour éviter qu'un DELETE brutal
-        # efface un état qui doit encore être appliqué par apply_plex_access_updates.
+        # âœ… Cas spÃ©cial : job Plex encore en attente / en cours
+        # On SKIP complÃ¨tement cet utilisateur pour Ã©viter qu'un DELETE brutal
+        # efface un Ã©tat qui doit encore Ãªtre appliquÃ© par apply_plex_access_updates.
         pending_job = db.query_one(
             """
             SELECT 1
@@ -745,20 +745,20 @@ def sync_plex_user_library_access(db, plex, server):
         desired_library_ids = set()
         has_access = False
 
-        # ✅ OWNER : toutes les libraries du serveur
+        # âœ… OWNER : toutes les libraries du serveur
         if role == "owner":
             desired_library_ids = {int(lib_id) for lib_id in lib_map.values()}
             has_access = bool(desired_library_ids)
 
         else:
-            # logique normale basée sur l'API Plex
+            # logique normale basÃ©e sur l'API Plex
             if not email:
                 skipped_no_email += 1
                 continue
 
             access = plex_get_user_access(db, plex, server_name, media_user_id)
 
-            # ⚠️ Si Plex répond mal / erreur API, on ne supprime rien
+            # âš ï¸ Si Plex rÃ©pond mal / erreur API, on ne supprime rien
             if access is None:
                 log.warning(
                     f"[SYNC SKIPPED] access fetch failed for "
@@ -790,12 +790,12 @@ def sync_plex_user_library_access(db, plex, server):
                 f"added={added_ids} removed={removed_ids}"
             )
 
-        # ✅ uniquement si accès réel trouvé
+        # âœ… uniquement si accÃ¨s rÃ©el trouvÃ©
         updated_users += 1
 
     log.info(
         f"[SYNC ACCESS] Access updated for server {server_name} "
-        f"(users en base={len(users)}, traités={processed_users}, maj={updated_users}, "
+        f"(users en base={len(users)}, traitÃ©s={processed_users}, maj={updated_users}, "
         f"sans_email={skipped_no_email}, pending_preserved={preserved_pending}, "
         f"sync_skipped_pending_jobs={skipped_pending_jobs})"
     )
@@ -807,7 +807,7 @@ def sync_plex_user_library_access(db, plex, server):
 
 def plex_get_libraries(server):
     """
-    Récupère la liste des libraries d’un serveur Plex.
+    RÃ©cupÃ¨re la liste des libraries dâ€™un serveur Plex.
     Retourne :
     [
         {"section_id": "1", "name": "Films", "type": "movie"},
@@ -851,9 +851,9 @@ def plex_get_libraries(server):
 
 def sync_plex_libraries(db, server, libraries):
     """
-    Synchronise les libraries Plex pour un serveur donné.
-    + met à jour item_count.
-    + réconcilie une library existante si le section_id a changé
+    Synchronise les libraries Plex pour un serveur donnÃ©.
+    + met Ã  jour item_count.
+    + rÃ©concilie une library existante si le section_id a changÃ©
       mais que server_id + name + type correspondent.
     """
     server_id = server["id"]
@@ -886,9 +886,9 @@ def sync_plex_libraries(db, server, libraries):
         if str(row.get("section_id") or "").strip()
     }
 
-    # Match de secours = même serveur + même nom + même type
-    # On ne garde qu'une seule entrée par clé ; si doublon déjà présent en base,
-    # on prend la première et on loggue.
+    # Match de secours = mÃªme serveur + mÃªme nom + mÃªme type
+    # On ne garde qu'une seule entrÃ©e par clÃ© ; si doublon dÃ©jÃ  prÃ©sent en base,
+    # on prend la premiÃ¨re et on loggue.
     existing_by_identity = {}
     for row in rows:
         key = (_norm(row.get("name")), _norm(row.get("type")))
@@ -933,7 +933,7 @@ def sync_plex_libraries(db, server, libraries):
             )
 
         else:
-            # 2) Cas de réconciliation : même name + même type sur le même serveur
+            # 2) Cas de rÃ©conciliation : mÃªme name + mÃªme type sur le mÃªme serveur
             candidate = existing_by_identity.get(identity_key)
 
             if candidate:
@@ -959,7 +959,7 @@ def sync_plex_libraries(db, server, libraries):
                     f"section_id {old_sid!r} -> {sid!r}"
                 )
 
-                # On met à jour les index en mémoire pour éviter toute confusion
+                # On met Ã  jour les index en mÃ©moire pour Ã©viter toute confusion
                 if old_sid and old_sid in existing_by_section:
                     existing_by_section.pop(old_sid, None)
                 existing_by_section[sid] = matched_row
@@ -1016,7 +1016,7 @@ def sync_plex_libraries(db, server, libraries):
                 )
 
     # Suppression des vraies libraries disparues :
-    # uniquement celles du serveur qui n'ont été ni revues ni réattachées.
+    # uniquement celles du serveur qui n'ont Ã©tÃ© ni revues ni rÃ©attachÃ©es.
     for row in rows:
         lib_id = int(row["id"])
         sid = str(row.get("section_id") or "").strip()
@@ -1076,7 +1076,7 @@ def fetch_xml(url: str, token: str) -> Optional[ET.Element]:
         return None
 
     if resp.status_code != 200:
-        log.error(f"[API] {url} → HTTP {resp.status_code}: {resp.text[:200]}")
+        log.error(f"[API] {url} â†’ HTTP {resp.status_code}: {resp.text[:200]}")
         return None
 
     try:
@@ -1088,8 +1088,8 @@ def fetch_xml(url: str, token: str) -> Optional[ET.Element]:
 
 def fetch_admin_account_from_token(token: str) -> Optional[Dict[str, Any]]:
     """
-    Récupère le compte Plex lié au token (owner/admin) via Plex.tv /users/account.
-    Renvoie un dict au même format que fetch_users_from_plex_api() (sans servers).
+    RÃ©cupÃ¨re le compte Plex liÃ© au token (owner/admin) via Plex.tv /users/account.
+    Renvoie un dict au mÃªme format que fetch_users_from_plex_api() (sans servers).
     """
     url = "https://plex.tv/users/account"
     root = fetch_xml(url, token)
@@ -1097,7 +1097,7 @@ def fetch_admin_account_from_token(token: str) -> Optional[Dict[str, Any]]:
         log.error("[API] Unable to retrieve /users/account")
         return None
 
-    # Selon les réponses Plex, ça peut être <user ...> ou autre, on prend les attribs
+    # Selon les rÃ©ponses Plex, Ã§a peut Ãªtre <user ...> ou autre, on prend les attribs
     plex_id = root.get("id")
     if not plex_id:
         log.error("[API] /users/account does not contain an ID")
@@ -1106,7 +1106,7 @@ def fetch_admin_account_from_token(token: str) -> Optional[Dict[str, Any]]:
     username = root.get("username") or root.get("title") or f"user_{plex_id}"
     email = (root.get("email") or "").strip() or None
 
-    # L’attribut le plus courant est "thumb"
+    # Lâ€™attribut le plus courant est "thumb"
     avatar = root.get("thumb") or root.get("avatar")
 
     return {
@@ -1115,10 +1115,10 @@ def fetch_admin_account_from_token(token: str) -> Optional[Dict[str, Any]]:
         "email": email,
         "avatar": avatar,
 
-        # On marque distinctement, tu trieras après
+        # On marque distinctement, tu trieras aprÃ¨s
         "plex_role": "owner",
 
-        # Flags inconnus ici, on met 0 par défaut
+        # Flags inconnus ici, on met 0 par dÃ©faut
         "home": 0,
         "protected": 0,
         "restricted": 0,
@@ -1160,19 +1160,10 @@ def fetch_users_from_plex_api(token: str, db=None) -> Dict[str, Dict[str, Any]]:
     root = fetch_xml(url, token)
 
     if root is None:
-        log.error("[API] Unable to retrieve /api/users → Aborted.")
+        log.error("[API] Unable to retrieve /api/users â†’ Aborted.")
         return {}
 
-    # ----------------------------------------------------
-    # Email admin (pour déterminer le rôle owner)
-    # ----------------------------------------------------
-    admin_email = None
-    if db is not None:
-        row = db.query_one("SELECT admin_email FROM settings LIMIT 1")
-        if row:
-            admin_email = (row["admin_email"] or "").strip().lower() or None
-
-    log.info("[API] /api/users Retrieved, parsing…")
+    log.info("[API] /api/users Retrieved, parsingâ€¦")
 
     users: Dict[str, Dict[str, Any]] = {}
 
@@ -1222,19 +1213,17 @@ def fetch_users_from_plex_api(token: str, db=None) -> Dict[str, Dict[str, Any]]:
             subscription_plan = sub_node.get("plan")
 
         # ------------------------
-        # Rôle Plex
+        # RÃ´le Plex
         # ------------------------
         email_lower = email.lower() if email else ""
 
-        if admin_email and email_lower == admin_email:
-            plex_role = "owner"
-        elif home_flag:
+        if home_flag:
             plex_role = "home"
         else:
             plex_role = "friend"
 
         # ------------------------
-        # Serveurs liés
+        # Serveurs liÃ©s
         # ------------------------
         servers: List[Dict[str, Any]] = []
 
@@ -1289,7 +1278,7 @@ def fetch_users_from_plex_api(token: str, db=None) -> Dict[str, Dict[str, Any]]:
                 f"role={plex_role}, servers={len(servers)}"
             )
 
-    log.info(f"[API] /api/users → {len(users)} User(s) retrieved.")
+    log.info(f"[API] /api/users â†’ {len(users)} User(s) retrieved.")
     return users
 
 
@@ -1403,7 +1392,7 @@ def fetch_shared_server_users(
 
 
 # ---------------------------------------------------------------------------
-# Sync USERS + user_servers (à partir de /api/users)
+# Sync USERS + user_servers (Ã  partir de /api/users)
 # ---------------------------------------------------------------------------
 def sync_users_from_api(db) -> None:
     log.info("=== [SYNC USERS] Starting Plex user synchronization (API Plex.tv) ===")
@@ -1420,8 +1409,8 @@ def sync_users_from_api(db) -> None:
     )
 
     # ----------------------------------------------------
-    # 1) Récupérer TOUS les serveurs Plex avec token
-    #    (PAS de dédupe par token : on exécute /api/users par serveur)
+    # 1) RÃ©cupÃ©rer TOUS les serveurs Plex avec token
+    #    (PAS de dÃ©dupe par token : on exÃ©cute /api/users par serveur)
     # ----------------------------------------------------
     server_rows = db.query(
         """
@@ -1437,7 +1426,7 @@ def sync_users_from_api(db) -> None:
         raise RuntimeError("[SYNC USERS] Aucun serveur Plex avec token en base.")
 
     # ----------------------------------------------------
-    # 2) Mapping serveurs Plex (machineIdentifier → id)
+    # 2) Mapping serveurs Plex (machineIdentifier â†’ id)
     # ----------------------------------------------------
     rows = db.query("SELECT id, server_identifier, name FROM servers WHERE type='plex'")
 
@@ -1456,7 +1445,7 @@ def sync_users_from_api(db) -> None:
     servers_ok = 0
 
     def merge_user(dst: Dict[str, Any], src: Dict[str, Any]) -> Dict[str, Any]:
-        # Identité : garder le plus complet
+        # IdentitÃ© : garder le plus complet
         for k in ("username", "email", "avatar"):
             if not (dst.get(k) or "").strip():
                 dst[k] = src.get(k)
@@ -1467,7 +1456,7 @@ def sync_users_from_api(db) -> None:
             if src.get(k) and not dst.get(k):
                 dst[k] = src.get(k)
 
-        # Rôle : home > friend > unknown (on ne force PAS owner ici)
+        # RÃ´le : home > friend > unknown (on ne force PAS owner ici)
         def rank(role: str) -> int:
             role = (role or "").lower()
             if role == "home":
@@ -1595,7 +1584,7 @@ def sync_users_from_api(db) -> None:
 
 
     # ----------------------------------------------------
-    # 4) Upsert vodum_users + media_users (IDENTIQUE à ton code)
+    # 4) Upsert vodum_users + media_users (IDENTIQUE Ã  ton code)
     #     + logs si machineIdentifier non mappable
     # ----------------------------------------------------
     today = datetime.utcnow().date()
@@ -1667,7 +1656,7 @@ def sync_users_from_api(db) -> None:
 
             server_id = server_id_by_machine.get(machine_id)
             if not server_id:
-                # 🔥 log crucial : tu verras immédiatement quel machineIdentifier ne matche pas ta DB
+                # ðŸ”¥ log crucial : tu verras immÃ©diatement quel machineIdentifier ne matche pas ta DB
                 log.warning(
                     f"[SYNC USERS] machineIdentifier not mapped in the database: {machine_id} "
                     f"(user plex_id={plex_id}, username={username!r})"
@@ -1676,7 +1665,7 @@ def sync_users_from_api(db) -> None:
 
             seen_media_pairs.add((plex_id, server_id))
 
-            # Rôle PAR SERVEUR (source de vérité)
+            # RÃ´le PAR SERVEUR (source de vÃ©ritÃ©)
             # - owner : uniquement si plex_id == owner du serveur (via /users/account du token serveur)
             # - home  : si user est home (ou srv.home)
             # - friend: sinon
@@ -1837,11 +1826,11 @@ def sync_users_from_api(db) -> None:
 
 def sync_all(task_id=None, db=None) -> None:
     """
-    Synchronisation complète Plex :
+    Synchronisation complÃ¨te Plex :
 
-      - Synchronise les utilisateurs Plex (création/MAJ media_users)
+      - Synchronise les utilisateurs Plex (crÃ©ation/MAJ media_users)
       - Synchronise les libraries Plex
-      - Synchronise les accès users → libraries
+      - Synchronise les accÃ¨s users â†’ libraries
 
     IMPORTANT :
       - DBManager uniquement
@@ -1855,14 +1844,14 @@ def sync_all(task_id=None, db=None) -> None:
     log.info("=== [SYNC ALL] Starting Plex synchronization ===")
 
     #
-    # 1) Récupération des serveurs Plex
+    # 1) RÃ©cupÃ©ration des serveurs Plex
     #
     servers = db.query(
         "SELECT * FROM servers WHERE type='plex'"
     )
 
     #
-    # 2) Rafraîchir les vrais machineIdentifier Plex AVANT sync_users_from_api()
+    # 2) RafraÃ®chir les vrais machineIdentifier Plex AVANT sync_users_from_api()
     #
     for server in servers:
         server = dict(server)
@@ -1887,10 +1876,10 @@ def sync_all(task_id=None, db=None) -> None:
     skipped_unreachable = 0
 
     #
-    # 3) Pour chaque serveur → sync libraries + accès users
+    # 3) Pour chaque serveur â†’ sync libraries + accÃ¨s users
     #
     for server in servers:
-        # IMPORTANT: sqlite3.Row -> dict, pour supporter .get() et éviter les crash
+        # IMPORTANT: sqlite3.Row -> dict, pour supporter .get() et Ã©viter les crash
         server = dict(server)
 
         server_name = server.get("name") or f"server_{server.get('id')}"
@@ -1917,27 +1906,27 @@ def sync_all(task_id=None, db=None) -> None:
             mark_server_unreachable(db, int(server["id"]), str(e), cooldown_seconds=300)
             continue
 
-        # --- Accès utilisateurs ---
+        # --- AccÃ¨s utilisateurs ---
         base_url = _find_working_plex_base_url(server, endpoint="/identity", accept="application/xml")
         token = (server.get("token") or "").strip()
 
         if not base_url or not token:
             reason = "No working Plex URL or missing token"
             log.warning(
-                f"[SYNC ACCESS] Server {server_name} {reason} → access ignored"
+                f"[SYNC ACCESS] Server {server_name} {reason} â†’ access ignored"
             )
             mark_server_unreachable(db, int(server["id"]), reason, cooldown_seconds=300)
             continue
 
         try:
-            # 🔎 logs ciblage + garde-fou réseau
-            log.info(f"[SYNC ACCESS] Attempting PlexAPI connection → {server_name} base_url={base_url}")
+            # ðŸ”Ž logs ciblage + garde-fou rÃ©seau
+            log.info(f"[SYNC ACCESS] Attempting PlexAPI connection â†’ {server_name} base_url={base_url}")
 
-            # ⏱️ timeout forcé pour plexapi
+            # â±ï¸ timeout forcÃ© pour plexapi
             session = plex_server_http_session(server, default_timeout=20)
             install_plex_rate_limit(session, base_url)
 
-            # petit ping très parlant (et timeout)
+            # petit ping trÃ¨s parlant (et timeout)
             try:
                 r = session.get(f"{base_url}/identity")
                 log.info(f"[SYNC ACCESS] /identity OK ({server_name}) HTTP={r.status_code}")
@@ -1947,7 +1936,7 @@ def sync_all(task_id=None, db=None) -> None:
 
             plex = PlexServer(base_url, token, session=session)
 
-            log.info(f"[SYNC ACCESS] PlexAPI connected ({server_name}) → Starting user access synchronization")
+            log.info(f"[SYNC ACCESS] PlexAPI connected ({server_name}) â†’ Starting user access synchronization")
 
             sync_plex_user_library_access(db, plex, server)
 
@@ -1991,14 +1980,14 @@ def sync_all(task_id=None, db=None) -> None:
 # ---------------------------------------------------------------------------
 def run(task_id: int, db):
     """
-    Point d'entrée pour le scheduler VODUM.
+    Point d'entrÃ©e pour le scheduler VODUM.
     """
 
     log.info("=== [SYNC_PLEX] sync_plex task started ===")
     if is_debug_mode_enabled():
         log.debug(f"[SYNC_PLEX] task_id={task_id}")
 
-    task_logs(task_id, "info", "Plex synchronization started…")
+    task_logs(task_id, "info", "Plex synchronization startedâ€¦")
 
     start = time.monotonic()
 
@@ -2008,11 +1997,11 @@ def run(task_id: int, db):
         duration = time.monotonic() - start
         log.info(f"=== [SYNC_PLEX] Completed successfully in {duration:.2f}s ===")
 
-        # 🔥 nouvelle vérification
+        # ðŸ”¥ nouvelle vÃ©rification
         if db.query_one("SELECT 1 FROM media_users LIMIT 1"):
             task_logs(task_id, "success", "Plex synchronization completed successfully.")
         else:
-            task_logs(task_id, "info", "Plex synchronization completed — no users found.")
+            task_logs(task_id, "info", "Plex synchronization completed â€” no users found.")
 
     except Exception as e:
         duration = time.monotonic() - start
@@ -2022,3 +2011,4 @@ def run(task_id: int, db):
         )
         task_logs(task_id, "error", f"Error during sync_plex : {e}")
         raise
+

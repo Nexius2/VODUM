@@ -19,6 +19,7 @@ from tasks_engine import (
 from web.helpers import get_db, table_exists, add_log
 from web.security import get_client_ip
 from secret_store import decrypt_communication_settings
+from notifications_utils import is_email_ready
 
 task_logger = get_logger("tasks_ui")
 security_logger = get_logger("security")
@@ -132,21 +133,7 @@ def register(app):
     # -----------------------------
     
     def is_smtp_ready(settings) -> bool:
-        settings = decrypt_communication_settings(dict(settings or {}))
-        if not settings:
-            return False
-
-        try:
-            return bool(
-                settings["mailing_enabled"]
-                and settings["smtp_host"]
-                and settings["smtp_port"]
-                and settings["smtp_user"]
-                and settings["smtp_pass"]
-                and settings["mail_from"]
-            )
-        except (KeyError, TypeError):
-            return False
+        return is_email_ready(settings)
 
 
     

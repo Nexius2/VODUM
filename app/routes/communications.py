@@ -229,7 +229,7 @@ def register(app):
                 settings = db.query_one("SELECT * FROM settings WHERE id = 1")
                 settings = dict(settings) if settings else {}
 
-                admin_email = (settings.get("admin_email") or "").strip()
+                admin_email = (settings.get("contact_email") or "").strip()
                 if not admin_email:
                     db.execute("UPDATE comm_campaigns SET status='error', updated_at=CURRENT_TIMESTAMP WHERE id=?", (cid,))
                     flash(t("comm_admin_email_missing"), "error")
@@ -998,12 +998,20 @@ def register(app):
             smtp_port = _as_int(request.form.get("smtp_port"), None)
             smtp_tls = 1 if request.form.get("smtp_tls") == "1" else 0
             smtp_user = (request.form.get("smtp_user") or "").strip() or None
+            smtp_auth_method = (request.form.get("smtp_auth_method") or "password").strip().lower()
+            if smtp_auth_method not in ("password", "oauth2"):
+                smtp_auth_method = "password"
 
             # Safety: do not wipe secrets on auto-save if input is empty
             smtp_pass_raw = request.form.get("smtp_pass")
             smtp_pass = encrypt_secret(smtp_pass_raw or "")
             if smtp_pass_raw is not None and smtp_pass_raw.strip() == "":
                 smtp_pass = settings.get("smtp_pass") or ""
+
+            smtp_oauth_token_raw = request.form.get("smtp_oauth_access_token")
+            smtp_oauth_access_token = encrypt_secret((smtp_oauth_token_raw or "").strip() or None)
+            if smtp_oauth_token_raw is not None and smtp_oauth_token_raw.strip() == "":
+                smtp_oauth_access_token = settings.get("smtp_oauth_access_token") or None
 
             # Discord
             discord_enabled = 1 if request.form.get("discord_enabled") == "1" else 0
@@ -1035,6 +1043,8 @@ def register(app):
                   smtp_tls=?,
                   smtp_user=?,
                   smtp_pass=?,
+                  smtp_auth_method=?,
+                  smtp_oauth_access_token=?,
                   discord_enabled=?,
                   discord_bot_token=?,
                   notifications_send_mode=?,
@@ -1051,6 +1061,8 @@ def register(app):
                     smtp_tls,
                     smtp_user,
                     smtp_pass,
+                    smtp_auth_method,
+                    smtp_oauth_access_token,
                     discord_enabled,
                     discord_bot_token,
                     send_mode,
@@ -1090,8 +1102,10 @@ def register(app):
         settings = db.query_one("SELECT * FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
         settings["smtp_pass_configured"] = bool(settings.get("smtp_pass"))
+        settings["smtp_oauth_access_token_configured"] = bool(settings.get("smtp_oauth_access_token"))
         settings["discord_bot_token_configured"] = bool(settings.get("discord_bot_token"))
         settings["smtp_pass"] = ""
+        settings["smtp_oauth_access_token"] = ""
         settings["discord_bot_token"] = ""
 
         recent_scheduled = db.query(
@@ -1130,5 +1144,6 @@ def register(app):
             recent_history=recent_history,
             current_subpage="configuration",
         )
+
 
 

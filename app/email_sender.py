@@ -8,6 +8,30 @@ from email_layout_utils import build_email_parts
 from secret_store import decrypt_communication_settings
 
 
+def smtp_auth_method(settings: Dict) -> str:
+    method = (settings.get("smtp_auth_method") or "password").strip().lower()
+    if method not in ("password", "oauth2"):
+        return "password"
+    return method
+
+
+def smtp_oauth2_string(smtp_user: str, access_token: str) -> str:
+    return f"user={smtp_user}\x01auth=Bearer {access_token}\x01\x01"
+
+
+def authenticate_smtp(server: smtplib.SMTP, settings: Dict) -> None:
+    smtp_user = (settings.get("smtp_user") or "").strip()
+    if not smtp_user:
+        return
+
+    if smtp_auth_method(settings) == "oauth2":
+        token = (settings.get("smtp_oauth_access_token") or "").strip()
+        server.auth("XOAUTH2", lambda _challenge=None: smtp_oauth2_string(smtp_user, token))
+        return
+
+    server.login(smtp_user, settings.get("smtp_pass") or "")
+
+
 def send_email(subject: str, body: str, to_email: str, smtp_settings: Dict, attachments: list[dict] | None = None) -> Tuple[bool, str | None]:
     """Send an email using current SMTP settings.
 
@@ -22,7 +46,6 @@ def send_email(subject: str, body: str, to_email: str, smtp_settings: Dict, atta
     smtp_port = smtp_settings.get("smtp_port") or 587
     smtp_tls  = bool(smtp_settings.get("smtp_tls"))
     smtp_user = (smtp_settings.get("smtp_user") or "").strip()
-    smtp_pass = smtp_settings.get("smtp_pass") or ""
     mail_from = (smtp_settings.get("mail_from") or smtp_user).strip()
 
     try:
@@ -61,8 +84,7 @@ def send_email(subject: str, body: str, to_email: str, smtp_settings: Dict, atta
         with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
             if smtp_tls:
                 server.starttls()
-            if smtp_user:
-                server.login(smtp_user, smtp_pass)
+            authenticate_smtp(server, smtp_settings)
             server.send_message(msg)
         return True, None
     except Exception as e:

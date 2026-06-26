@@ -1,4 +1,4 @@
-import sqlite3
+﻿import sqlite3
 import threading
 import logging
 from typing import Any, Iterable, Optional
@@ -7,14 +7,58 @@ import os
 from secret_store import decrypt_server_record
 
 
+def open_sqlite_connection(
+    db_path: str,
+    *,
+    uri: bool = False,
+    check_same_thread: bool = True,
+    timeout: float = 5.0,
+    read_only: bool = False,
+    row_factory=sqlite3.Row,
+    busy_timeout_ms: int = 5000,
+) -> sqlite3.Connection:
+    """
+    Open a consistently configured raw SQLite connection.
+
+    Use this for bootstrap, maintenance and read-only validation paths where a
+    shared DBManager instance would be too long-lived or unsafe.
+    """
+    connect_uri = uri
+    target = db_path
+
+    if read_only:
+        target = f"file:{os.path.abspath(db_path)}?mode=ro"
+        connect_uri = True
+
+    conn = sqlite3.connect(
+        target,
+        uri=connect_uri,
+        check_same_thread=check_same_thread,
+        timeout=timeout,
+    )
+    conn.row_factory = row_factory
+
+    cur = conn.cursor()
+    try:
+        cur.execute("PRAGMA foreign_keys = ON;")
+        if not read_only:
+            cur.execute("PRAGMA journal_mode = WAL;")
+            cur.execute("PRAGMA synchronous = NORMAL;")
+        cur.execute(f"PRAGMA busy_timeout = {int(busy_timeout_ms)};")
+    finally:
+        cur.close()
+
+    return conn
+
+
 class DBManager:
     """
     DBManager = 1 instance par chemin de base.
 
-    - même chemin DB => même instance
+    - mÃªme chemin DB => mÃªme instance
     - autre chemin DB => autre instance
-    - connexion SQLite partagée par chemin
-    - accès thread-safe
+    - connexion SQLite partagÃ©e par chemin
+    - accÃ¨s thread-safe
     """
 
     _instances: dict[str, "DBManager"] = {}
@@ -52,13 +96,10 @@ class DBManager:
         self.db_path = resolved_path
         self._lock = threading.Lock()
 
-        self.conn = sqlite3.connect(
+        self.conn = open_sqlite_connection(
             self.db_path,
-            check_same_thread=False
+            check_same_thread=False,
         )
-        self.conn.row_factory = sqlite3.Row
-
-        self._configure_connection()
 
         self._initialized = True
         logging.getLogger(__name__).info(
@@ -66,15 +107,6 @@ class DBManager:
             self.db_path,
         )
 
-    def _configure_connection(self) -> None:
-        cur = self.conn.cursor()
-        try:
-            cur.execute("PRAGMA foreign_keys = ON;")
-            cur.execute("PRAGMA journal_mode = WAL;")
-            cur.execute("PRAGMA synchronous = NORMAL;")
-            cur.execute("PRAGMA busy_timeout = 5000;")
-        finally:
-            cur.close()
 
     def execute(
         self,
@@ -145,8 +177,8 @@ class DBManager:
 
     def close(self) -> None:
         """
-        Ferme la connexion associée à CETTE base uniquement
-        puis enlève l'instance du cache.
+        Ferme la connexion associÃ©e Ã  CETTE base uniquement
+        puis enlÃ¨ve l'instance du cache.
         """
         with self._lock:
             try:
@@ -172,3 +204,5 @@ class DBManager:
             "DBManager connection closed + cache entry removed for %s",
             getattr(self, "db_path", "<unknown>"),
         )
+
+

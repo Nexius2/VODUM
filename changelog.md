@@ -1,32 +1,30 @@
-# Changelog
+﻿# Changelog
 
 All notable changes to Vodum will be documented in this file.
 
 ---
-- Split default communication templates and reusable campaign/template rules out of the Communications route into core modules, bringing `app/routes/communications.py` below the 1000-line threshold while preserving all registered routes.
-- Removed the unreachable legacy bulk grant/remove route bodies from the Servers route module after the access logic moved to `core.library_bulk_access`, reducing that route file by several hundred lines without changing the active endpoints.
-- Improved global library access grant/remove actions by moving their validation, access-link mutations and Plex sync/revoke job planning into a dedicated testable service with bounded library-id normalization and focused unit coverage.
-- Reorganized the Backup page into status diagnostics with database size on the SQLite integrity card, followed by four equal-height action cards for settings, restore, manual backup and Tautulli import.
-- Reduced visual noise in admin workflows by removing the duplicate draft migration start button and keeping referral bulk archive/restore actions hidden until at least one visible referral is selected; server deletion and communications deletion controls were intentionally left unchanged.
-- Added safe bulk archive and restore actions to the Referrals view, including visible-row selection, bounded and deduplicated IDs, reversible lifecycle reconstruction, cancelled-referral protection, five-language UI text and focused service tests.
-- Added a shared `--summary-only` CLI contract and enabled it for the Tautulli import command, producing one stable machine-readable JSON result without detailed CLI output.
-- Rebuilt the GitHub README around the current Docker paths, security model, configuration, backup workflow, validation suite and automation CLI, removing obsolete UID/GID and volume guidance.
-- Rebuilt the complete MkDocs site around the current application navigation and workflows, adding Communications, Migrations and deployment configuration, preserving legacy URLs, and validating all pages, internal links and environment variables with a strict site build.
-- Strengthened translation validation across all five catalogs with type, empty-value, placeholder and static-key checks; added 18 missing runtime keys and converted 124 hardcoded template occurrences to existing translations, plus a repeatable hardcoded-text audit for the remaining views.
-- Fully translated the installation wizard in English, French, German, Spanish and Italian with 34 dedicated keys, reducing the hardcoded visible-text audit from 264 occurrences in 31 views to 230 occurrences in 30 views.
-- Fully translated policy monitoring, including charts, grouped history, enforcement details and JavaScript-generated states, with 44 keys across all five languages; the remaining hardcoded visible-text audit now reports 189 occurrences in 29 views.
-- Fully translated the monitoring user-detail workflow across profile analytics, playback history and interactive IP intelligence, adding 55 keys across all five languages and reducing the remaining hardcoded-text audit to 150 occurrences in 28 views.
-- Fully translated Usage Risk filters, tables and evidence details with 42 keys across all five languages; risk scoring now also exposes structured reason codes so dynamic IP, device, stop and policy reasons render in the selected language while legacy notification text remains compatible.
-- Added focused unit coverage for the structured Usage Risk reason contract, preserving legacy notification text alongside translatable reason codes and parameters.
-- Fully translated the Users list creation workflow, including Plex/Jellyfin options, asynchronous library states and JavaScript errors, with 17 keys across all five languages; the remaining hardcoded-text audit now reports 100 occurrences in 26 views.
-- Fully translated server monitoring summaries, statuses, bitrate metrics and Chart.js labels with 17 keys across all five languages; the remaining hardcoded-text audit now reports 86 occurrences in 25 views.
-- Fully translated the Jellyfin user-account card, including policy/configuration fields, badges, links, image alternatives and boolean values, with 16 keys across all five languages; the remaining hardcoded-text audit now reports 74 occurrences in 24 views.
-- Fully translated Communications history pagination, empty state, detail modal and JavaScript fallback labels with four keys across all five languages while reusing existing common labels; the remaining hardcoded-text audit now reports 64 occurrences in 23 views.
-- Fully translated library monitoring tables, range filters, dynamic expansion controls and singular/plural card counters with 15 keys across all five languages; the remaining hardcoded-text audit now reports 56 occurrences in 22 views.
-- Fully translated live-session summaries and the Activity tab, including Chart.js datasets, tooltips and localized weekday abbreviations, with 12 keys across all five languages; the remaining hardcoded-text audit now reports 44 occurrences in 20 views.
-- Fully translated first-server onboarding and subscription-policy filtering/bulk deletion, including JavaScript pagination summaries and localized singular/plural labels, with 18 keys across all five languages; the remaining hardcoded-text audit now reports 36 occurrences in 18 views.
-- Completed the application-wide translation pass: all remaining dashboard, monitoring, subscription, backup and user fragments now use translation keys, technical identifiers are explicitly excluded from the visible-text audit, and the strict audit reports zero hardcoded candidates across all templates.
-- Introduced a shared, responsive and accessible server-rendered pagination component, migrated Monitoring, Communications history and subscription assignments to it, and added a validator preventing those views from reintroducing duplicate pagination markup.
-- Migrated both filtered Users paginations, including referrals and archive mode, to the shared component while preserving every query parameter.
-- Extended the shared pagination component with optional numbered-page windows and migrated Logs without losing level/search filters or direct page navigation.
-- Added a global modal lifecycle manager for all full-screen dialogs, standardizing dialog semantics, aria state, focus entry/restoration, Escape handling, body scroll locking and HTMX-injected content without replacing existing business-specific handlers.
+
+## Unreleased
+
+- Reduit les colonnes chargees par la page Settings pour eviter les `SELECT *` et ne plus transporter les secrets de communication sur ce rendu.
+- Remplace les icones Material Icons globales par un sprite SVG local et retire le chargement Google Fonts associe.
+- Corrige le mojibake dans les fichiers JSON de langue et ajoute une validation dediee pour prevenir les regressions.
+- Optimise l'UI admin: polling des taches adaptatif, rendu groupe des tableaux JS, chargement/decodage non bloquant des images, versionnement/cache des assets statiques, chargement de Chart.js limite aux vues avec graphiques, Flatpickr charge a la demande, preconnects pour les CDN restants, instrumentation optionnelle des routes lentes et compression gzip des reponses texte.
+- Ajoute un rollback destination de migration qui retire uniquement les acces bibliotheques ajoutes par la campagne, conserve les comptes et synchronise le provider.
+- Ajoute les mappings multiples de bibliotheques en migration, avec surcharges par utilisateur et prise en charge dans les brouillons, l execution et l import de plans.
+- Planifie automatiquement l'envoi des identifiants Jellyfin generes pendant les migrations via un template Communications actif de creation utilisateur Jellyfin.
+- Ajoute des strategies de mot de passe Jellyfin pour les migrations: generation automatique, mot de passe temporaire defini par l'admin et conservation des comptes existants quand possible.
+- Uniformise l'affichage des schedules des taches en humanisant les cron horaires avec minute fixe, listes regulieres de minutes et offsets horaires.
+- Corrige plusieurs points de securite/authentification: lecture du trust proxy au demarrage, comparaison CSRF en temps constant, validation TOTP robuste aux secrets invalides et rotation de session lors de la creation admin via wizard.
+- Envoie une alerte email admin lorsqu'un verrouillage anti-bruteforce est declenche sur la connexion, avec cooldown par IP/email.
+- Ajoute des tests unitaires pour l'authentification SMTP mot de passe/OAuth2, le format XOAUTH2, le dechiffrement du token et la readiness email.
+- Ajoute l'authentification SMTP OAuth2/XOAUTH2 avec token chiffre, choix du mode d'authentification dans Communications et support dans le wizard.
+- Sépare l email de connexion admin de l email de contact applicatif, ajoute un panneau sécurité dédié pour modifier login/mot de passe, et active la double authentification TOTP dans les settings et le wizard.
+- Extrait les regles pures de planification/retry dans `core.tasks.scheduler_rules` et retire `croniter` des imports globaux de `tasks_engine.py`.
+- Exclut les dossiers et fichiers non runtime (`tools/`, `tests/`, documentation, screenshots, caches et helpers locaux) des ignores Docker/Git, et retire la copie de `tools/` de l'image Docker.
+- Centralise les connexions SQLite internes non-DBManager avec `open_sqlite_connection` pour appliquer les memes PRAGMA, `row_factory` et timeouts sur le bootstrap, la configuration, les logs, la restauration et la suppression serveur.
+- Ajoute `tools/validate_db_access_unification.py` pour proteger cette unification et documenter les exceptions SQLite directes reservees aux bases externes ou aux helpers de typage.
+
+
+
+

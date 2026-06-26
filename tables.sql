@@ -1,4 +1,4 @@
-
+﻿
 -----------------------------------------------------------------------
 --  TABLE VODUM USERS 
 -----------------------------------------------------------------------
@@ -101,13 +101,13 @@ CREATE TABLE IF NOT EXISTS media_users (
     avatar TEXT,
 	stored_password TEXT DEFAULT NULL,
 
-    type TEXT,                            -- 'plex', 'jellyfin', …
+    type TEXT,                            -- 'plex', 'jellyfin', â€¦
 
     role TEXT,
     joined_at TEXT,
     accepted_at TEXT,
 
-    raw_json TEXT,                        -- on garde brut l'objet renvoyé par l'API
+    raw_json TEXT,                        -- on garde brut l'objet renvoyÃ© par l'API
 
 	details_json TEXT,
 
@@ -178,7 +178,7 @@ ON libraries(server_id);
 
 
 -----------------------------------------------------------------------
---  ACCESS : USER ↔ LIBRARY
+--  ACCESS : USER â†” LIBRARY
 -----------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS media_user_libraries (
     media_user_id INTEGER NOT NULL,
@@ -234,7 +234,7 @@ CREATE TABLE IF NOT EXISTS sent_emails (
 
     user_id INTEGER NOT NULL,
     template_type TEXT NOT NULL,          -- preavis / relance / fin
-    expiration_date DATE NOT NULL,        -- cycle d’abonnement
+    expiration_date DATE NOT NULL,        -- cycle dâ€™abonnement
 
     sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
@@ -271,6 +271,8 @@ CREATE TABLE IF NOT EXISTS settings (
     smtp_tls INTEGER,
     smtp_user TEXT,
     smtp_pass TEXT,
+    smtp_auth_method TEXT DEFAULT 'password',
+    smtp_oauth_access_token TEXT DEFAULT NULL,
     email_history_retention_years INTEGER DEFAULT 2,
 
     disable_on_expiry INTEGER DEFAULT 0,
@@ -282,8 +284,11 @@ CREATE TABLE IF NOT EXISTS settings (
     default_language TEXT DEFAULT NULL,
     timezone TEXT DEFAULT 'Europe/Paris',
     admin_email TEXT,
+    contact_email TEXT,
     admin_password_hash TEXT,
     auth_enabled INTEGER DEFAULT 1,
+    admin_totp_enabled INTEGER DEFAULT 0,
+    admin_totp_secret TEXT,
     wizard_active INTEGER DEFAULT 1,
     wizard_completed INTEGER DEFAULT 0,
     wizard_step INTEGER DEFAULT 1,
@@ -358,6 +363,8 @@ CREATE TABLE IF NOT EXISTS auth_login_attempts (
     first_failed_at TIMESTAMP DEFAULT NULL,
     last_failed_at TIMESTAMP DEFAULT NULL,
     locked_until TIMESTAMP DEFAULT NULL,
+    alert_sent_at TIMESTAMP DEFAULT NULL,
+    alert_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(scope, scope_value)
@@ -368,6 +375,9 @@ ON auth_login_attempts(scope, scope_value);
 
 CREATE INDEX IF NOT EXISTS idx_auth_login_attempts_locked_until
 ON auth_login_attempts(locked_until);
+
+CREATE INDEX IF NOT EXISTS idx_auth_login_attempts_alert_sent_at
+ON auth_login_attempts(alert_sent_at);
 
 -----------------------------------------------------------------------
 --  SUBSCRIPTION TEMPLATES
@@ -531,7 +541,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 );
 
 -- ------------------------------------------------------------
--- MEDIA JOBS (queue générique Plex/Jellyfin/Autre)
+-- MEDIA JOBS (queue gÃ©nÃ©rique Plex/Jellyfin/Autre)
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS media_jobs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -540,22 +550,22 @@ CREATE TABLE IF NOT EXISTS media_jobs (
     provider TEXT NOT NULL CHECK (provider IN ('plex', 'jellyfin')),   -- extensible plus tard
     action   TEXT NOT NULL CHECK (action IN ('grant', 'revoke', 'sync', 'refresh')),
 
-    -- Références CANONIQUES (internes)
+    -- RÃ©fÃ©rences CANONIQUES (internes)
     vodum_user_id INTEGER,      -- NULL si job global (ex: sync all users)
-    server_id     INTEGER,      -- souvent NOT NULL ; peut être NULL si provider global (rare)
-    library_id    INTEGER,      -- NULL = toutes les libs concernées
+    server_id     INTEGER,      -- souvent NOT NULL ; peut Ãªtre NULL si provider global (rare)
+    library_id    INTEGER,      -- NULL = toutes les libs concernÃ©es
 
-    -- Données libres (options, liste de sections, flags, etc.)
+    -- DonnÃ©es libres (options, liste de sections, flags, etc.)
     payload_json  TEXT,
 
-    -- Statut (remplace l’ancien couple processed/success dans la logique moderne)
+    -- Statut (remplace lâ€™ancien couple processed/success dans la logique moderne)
     status TEXT NOT NULL DEFAULT 'queued'
         CHECK (status IN ('queued','running','success','error','canceled')),
 
-    -- Priorité (plus petit = plus prioritaire)
+    -- PrioritÃ© (plus petit = plus prioritaire)
     priority INTEGER NOT NULL DEFAULT 100,
 
-    -- Backoff / planification (job exécutable après cette date)
+    -- Backoff / planification (job exÃ©cutable aprÃ¨s cette date)
     run_after TIMESTAMP,
 
     -- Lease / lock (anti double-execution multi-workers)
@@ -575,7 +585,7 @@ CREATE TABLE IF NOT EXISTS media_jobs (
     processed_at TIMESTAMP,
     executed_at  TIMESTAMP,
 
-    -- Optionnel mais très pratique : empêcher certains doublons en file
+    -- Optionnel mais trÃ¨s pratique : empÃªcher certains doublons en file
     -- Exemple: "plex:sync:server=1:user=12" ou "monitor:refresh:server=12"
     dedupe_key TEXT,
 
@@ -602,7 +612,7 @@ ON media_jobs(server_id, provider, action, status);
 
 
 -- ---------------------------------------------------------------------
--- Schema versioning (source de vérité)
+-- Schema versioning (source de vÃ©ritÃ©)
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS schema_migrations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -613,7 +623,7 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
   UNIQUE(name)
 );
 
--- Version courante du schéma (1 ligne)
+-- Version courante du schÃ©ma (1 ligne)
 CREATE TABLE IF NOT EXISTS schema_version (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   version INTEGER NOT NULL
@@ -622,7 +632,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
 -- Initialisation version V2 (idempotent)
 INSERT OR IGNORE INTO schema_version (id, version) VALUES (1, 2);
 
--- (optionnel mais utile) journaliser l'init si pas déjà présent
+-- (optionnel mais utile) journaliser l'init si pas dÃ©jÃ  prÃ©sent
 INSERT OR IGNORE INTO schema_migrations (version, name)
 VALUES (2, 'init_v2');
 
@@ -660,13 +670,13 @@ CREATE TABLE IF NOT EXISTS media_sessions (
   provider TEXT NOT NULL CHECK (provider IN ('plex','jellyfin')),
 
   session_key TEXT NOT NULL,                  -- id session natif (plex session key / jellyfin id)
-  media_user_id INTEGER,                      -- FK media_users si résolu
-  external_user_id TEXT,                      -- fallback si pas résolu
+  media_user_id INTEGER,                      -- FK media_users si rÃ©solu
+  external_user_id TEXT,                      -- fallback si pas rÃ©solu
 
   media_key TEXT,                             -- ratingKey (plex) / itemId (jellyfin) si dispo
   media_type TEXT,                            -- movie/episode/track/unknown
   title TEXT,
-  grandparent_title TEXT,                     -- série pour episode, album pour track
+  grandparent_title TEXT,                     -- sÃ©rie pour episode, album pour track
   parent_title TEXT,                          -- saison pour episode
 
   state TEXT,
@@ -744,7 +754,7 @@ ON media_events(event_type, ts);
 
 
 -- ------------------------------------------------------------
--- MONITORING (history / agrégations)
+-- MONITORING (history / agrÃ©gations)
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS media_session_history (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -824,7 +834,7 @@ CREATE TABLE IF NOT EXISTS stream_policies (
   scope_id INTEGER, -- NULL pour global ; servers.id pour server ; vodum_users.id pour user
 
   provider TEXT NULL CHECK (provider IN ('plex','jellyfin')), -- NULL => both
-  server_id INTEGER NULL,   -- optionnel (si tu veux cibler un serveur précis)
+  server_id INTEGER NULL,   -- optionnel (si tu veux cibler un serveur prÃ©cis)
   is_enabled INTEGER NOT NULL DEFAULT 1 CHECK (is_enabled IN (0,1)),
   priority INTEGER NOT NULL DEFAULT 100,
 
@@ -838,7 +848,7 @@ CREATE TABLE IF NOT EXISTS stream_policies (
     'device_allowlist'
   )),
 
-  rule_value_json TEXT NOT NULL, -- JSON (valeurs de règle + options)
+  rule_value_json TEXT NOT NULL, -- JSON (valeurs de rÃ¨gle + options)
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -859,7 +869,7 @@ CREATE TABLE IF NOT EXISTS stream_enforcement_state (
   policy_id INTEGER NOT NULL,
   server_id INTEGER NOT NULL,
 
-  actor_key TEXT NOT NULL,       -- ✅ clé normalisée (vodum:ID ou ext:XYZ)
+  actor_key TEXT NOT NULL,       -- âœ… clÃ© normalisÃ©e (vodum:ID ou ext:XYZ)
   vodum_user_id INTEGER,
   external_user_id TEXT,
 
@@ -1303,3 +1313,4 @@ CREATE TABLE IF NOT EXISTS migration_library_mappings (
   FOREIGN KEY(destination_library_id) REFERENCES libraries(id) ON DELETE RESTRICT
 );
 CREATE INDEX IF NOT EXISTS idx_migration_library_mappings_campaign ON migration_library_mappings(campaign_id, mapping_status);
+

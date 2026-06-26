@@ -13,6 +13,8 @@ from db_manager import DBManager
 from logging_utils import get_logger
 from mailing_utils import build_user_context, render_mail
 from email_layout_utils import build_email_parts
+from email_sender import authenticate_smtp
+from notifications_utils import is_email_ready
 
 from core.providers.jellyfin_users import (
     jellyfin_create_user,
@@ -49,30 +51,7 @@ def get_db() -> DBManager:
 
 
 def is_smtp_ready(settings_row) -> bool:
-    """Retourne True si l'envoi mail est correctement configuré.
-
-    Cette fonction est volontairement tolérante :
-    - accepte dict
-    - accepte sqlite3.Row (ou tout mapping) => conversion dict(...)
-    """
-    settings_row = decrypt_communication_settings(dict(settings_row or {}))
-    if not settings_row:
-        return False
-
-    if not isinstance(settings_row, dict):
-        try:
-            settings_row = dict(settings_row)
-        except Exception:
-            return False
-
-    if not settings_row.get("mailing_enabled"):
-        return False
-
-    if not (settings_row.get("smtp_host") and (settings_row.get("smtp_user") or settings_row.get("mail_from"))):
-        return False
-
-    return True
-
+    return is_email_ready(dict(settings_row or {}))
 
 def send_email_via_settings(settings: Dict[str, Any], to_email: str, subject: str, body: str) -> bool:
     settings = decrypt_communication_settings(settings)
@@ -80,7 +59,6 @@ def send_email_via_settings(settings: Dict[str, Any], to_email: str, subject: st
     smtp_port = settings.get("smtp_port") or 587
     smtp_tls = bool(settings.get("smtp_tls"))
     smtp_user = settings.get("smtp_user")
-    smtp_pass = settings.get("smtp_pass") or ""
     mail_from = settings.get("mail_from") or smtp_user
 
     if not smtp_host or not mail_from or not to_email:
@@ -104,8 +82,7 @@ def send_email_via_settings(settings: Dict[str, Any], to_email: str, subject: st
     with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
         if smtp_tls:
             server.starttls()
-        if smtp_user:
-            server.login(smtp_user, smtp_pass)
+        authenticate_smtp(server, settings)
         server.send_message(msg)
 
     return True

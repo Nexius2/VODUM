@@ -75,6 +75,42 @@ def safe_datetime(value):
     return value
 
 
+
+
+def _format_minute_list(minutes: list[int]) -> str:
+    formatted = [f":{minute:02d}" for minute in minutes]
+    if len(formatted) == 1:
+        return formatted[0]
+    if len(formatted) == 2:
+        return f"{formatted[0]} and {formatted[1]}"
+    return f"{', '.join(formatted[:-1])} and {formatted[-1]}"
+
+
+def _parse_minute_list(value: str) -> list[int] | None:
+    try:
+        minutes = [int(part) for part in value.split(",") if part.strip() != ""]
+    except ValueError:
+        return None
+
+    if not minutes or any(minute < 0 or minute > 59 for minute in minutes):
+        return None
+
+    if sorted(minutes) != minutes or len(set(minutes)) != len(minutes):
+        return None
+
+    return minutes
+
+
+def _regular_minute_step(minutes: list[int]) -> int | None:
+    if len(minutes) < 2:
+        return None
+
+    gaps = [b - a for a, b in zip(minutes, minutes[1:])]
+    gaps.append((minutes[0] + 60) - minutes[-1])
+    if len(set(gaps)) != 1:
+        return None
+    return gaps[0]
+
 def cron_human(expr, t=None):
     """
     Convertit une expression CRON en phrase lisible, multilingue via t().
@@ -90,14 +126,38 @@ def cron_human(expr, t=None):
 
     minute, hour, dom, month, dow = parts
 
+    minute_list = _parse_minute_list(minute) if "," in minute else None
+    if hour == "*" and dom == "*" and month == "*" and dow == "*" and minute_list:
+        step = _regular_minute_step(minute_list)
+        if step:
+            return t("cron_every_x_minutes_at_minutes").format(
+                x=step,
+                minutes=_format_minute_list(minute_list),
+            )
+        return t("cron_every_hour_at_minutes").format(minutes=_format_minute_list(minute_list))
+
+    if hour == "*" and dom == "*" and month == "*" and dow == "*" and minute.isdigit():
+        return t("cron_every_hour_at_minute").format(m=f":{int(minute):02d}")
+
     if hour == "*" and dom == "*" and month == "*" and dow == "*" and minute.startswith("*/"):
         return t("cron_every_x_minutes").format(x=minute[2:])
 
     if minute == "0" and hour == "*" and dom == "*" and month == "*" and dow == "*":
         return t("cron_every_hour_at").format(m="00")
 
-    if minute == "0" and dom == "*" and month == "*" and dow == "*" and hour.startswith("*/"):
-        return t("cron_every_x_hours").format(x=hour[2:])
+    if dom == "*" and month == "*" and dow == "*" and hour.startswith("*/"):
+        try:
+            minute_value = int(minute)
+        except Exception:
+            minute_value = None
+        if minute_value is not None and minute_value != 0:
+            return t("cron_every_x_hours_at_minute").format(
+                x=hour[2:],
+                m=f":{minute_value:02d}",
+            )
+        if minute_value == 0:
+            return t("cron_every_x_hours").format(x=hour[2:])
+
 
     if dom == "*" and month == "*" and dow == "*":
         try:

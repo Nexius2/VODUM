@@ -5,16 +5,67 @@ from __future__ import annotations
 import json
 
 from core.migrations.analysis import analyze_migration
+from secret_store import encrypt_secret
 
 
-def _clean_draft_values(analysis: dict, *, name: str, safety_delay_days: int, scheduled_at: str, batch_size: int, intent: str) -> dict:
+JELLYFIN_PASSWORD_STRATEGIES = {"generated", "admin_defined", "preserve_existing"}
+
+
+def _clean_jellyfin_password_options(
+    *,
+    strategy: str = "generated",
+    temp_password: str = "",
+    auto_deliver_credentials: bool = False,
+    existing_options: dict | None = None,
+) -> dict:
+    existing_options = existing_options or {}
+    clean_strategy = str(strategy or "generated").strip().lower()
+    if clean_strategy not in JELLYFIN_PASSWORD_STRATEGIES:
+        clean_strategy = "generated"
+
+    options = {
+        "jellyfin_password_strategy": clean_strategy,
+        "jellyfin_auto_deliver_credentials": 1 if auto_deliver_credentials else 0,
+    }
+    clean_password = str(temp_password or "").strip()
+    if clean_strategy == "admin_defined":
+        if clean_password:
+            options["jellyfin_temp_password"] = encrypt_secret(clean_password)
+        elif existing_options.get("jellyfin_temp_password"):
+            options["jellyfin_temp_password"] = existing_options.get("jellyfin_temp_password")
+        else:
+            raise ValueError("A temporary Jellyfin password is required for this strategy.")
+    return options
+
+
+def _clean_draft_values(
+    analysis: dict,
+    *,
+    name: str,
+    safety_delay_days: int,
+    scheduled_at: str,
+    batch_size: int,
+    intent: str,
+    jellyfin_password_strategy: str = "generated",
+    jellyfin_temp_password: str = "",
+    jellyfin_auto_deliver_credentials: bool = False,
+    existing_options: dict | None = None,
+) -> dict:
     clean_intent = str(intent or "copy").strip().lower()
     if clean_intent not in {"copy", "progressive", "move"}:
         raise ValueError("Unsupported migration intent.")
+    options = {"safety_delay_days": max(0, min(int(safety_delay_days), 365))}
+    if str((analysis.get("destination") or {}).get("type") or "").lower() == "jellyfin":
+        options.update(_clean_jellyfin_password_options(
+            strategy=jellyfin_password_strategy,
+            temp_password=jellyfin_temp_password,
+            auto_deliver_credentials=jellyfin_auto_deliver_credentials,
+            existing_options=existing_options,
+        ))
     return {
         "name": str(name or "").strip() or f"{analysis['source']['name']} to {analysis['destination']['name']}",
         "intent": clean_intent,
-        "options_json": json.dumps({"safety_delay_days": max(0, min(int(safety_delay_days), 365))}),
+        "options_json": json.dumps(options, sort_keys=True),
         "scheduled_at": str(scheduled_at or "").strip() or None,
         "batch_size": max(1, min(int(batch_size), 100)),
     }
@@ -25,21 +76,33 @@ def _replace_draft_snapshot(db, campaign_id: int, analysis: dict, source_server_
     db.execute("DELETE FROM migration_steps WHERE migration_user_id IN (SELECT id FROM migration_users WHERE campaign_id=?)", (campaign_id,), commit=False)
     db.execute("DELETE FROM migration_users WHERE campaign_id=?", (campaign_id,), commit=False)
     for item in analysis["library_mappings"]:
-        destination = item.get("suggested_destination")
-        db.execute(
-            """
-            INSERT INTO migration_library_mappings(
-              campaign_id, source_library_id, destination_library_id, mapping_status
-            ) VALUES (?, ?, ?, ?)
-            """,
-            (
-                campaign_id,
-                int(item["source"]["id"]),
-                int(destination["id"]) if destination else None,
-                "mapped" if destination else str(item.get("status") or "unmapped"),
-            ),
-            commit=False,
-        )
+        destinations = item.get("suggested_destinations") or []
+        if not destinations:
+            db.execute(
+                """
+                INSERT INTO migration_library_mappings(
+                  campaign_id, source_library_id, destination_library_id, mapping_status
+                ) VALUES (?, ?, ?, ?)
+                """,
+                (
+                    campaign_id,
+                    int(item["source"]["id"]),
+                    None,
+                    str(item.get("status") or "unmapped"),
+                ),
+                commit=False,
+            )
+            continue
+        for destination in destinations:
+            db.execute(
+                """
+                INSERT INTO migration_library_mappings(
+                  campaign_id, source_library_id, destination_library_id, mapping_status
+                ) VALUES (?, ?, ?, 'mapped')
+                """,
+                (campaign_id, int(item["source"]["id"]), int(destination["id"])),
+                commit=False,
+            )
 
     for user in analysis["users"]:
         source_access_rows = db.query(
@@ -90,11 +153,14 @@ def create_migration_draft(
     name: str,
     source_server_id: int,
     destination_server_id: int,
-    mapping_overrides: dict[int, int | None],
+    mapping_overrides: dict[int, list[int]],
     safety_delay_days: int = 7,
     scheduled_at: str = "",
     batch_size: int = 10,
     intent: str = "copy",
+    jellyfin_password_strategy: str = "generated",
+    jellyfin_temp_password: str = "",
+    jellyfin_auto_deliver_credentials: bool = False,
 ) -> int:
     analysis = analyze_migration(
         db,
@@ -111,13 +177,15 @@ def create_migration_draft(
         scheduled_at=scheduled_at,
         batch_size=batch_size,
         intent=intent,
+        jellyfin_password_strategy=jellyfin_password_strategy,
+        jellyfin_temp_password=jellyfin_temp_password,
+        jellyfin_auto_deliver_credentials=jellyfin_auto_deliver_credentials,
     )
     mapping_snapshot = {
-        str(item["source"]["id"]): (
-            int(item["suggested_destination"]["id"])
-            if item.get("suggested_destination")
-            else None
-        )
+        str(item["source"]["id"]): [
+            int(destination["id"])
+            for destination in (item.get("suggested_destinations") or [])
+        ]
         for item in analysis["library_mappings"]
     }
     analysis_summary = {
@@ -162,14 +230,17 @@ def update_migration_draft(
     campaign_id: int,
     *,
     name: str,
-    mapping_overrides: dict[int, int | None],
+    mapping_overrides: dict[int, list[int]],
     safety_delay_days: int = 7,
     scheduled_at: str = "",
     batch_size: int = 10,
     intent: str = "copy",
+    jellyfin_password_strategy: str = "generated",
+    jellyfin_temp_password: str = "",
+    jellyfin_auto_deliver_credentials: bool = False,
 ) -> None:
     campaign = db.query_one(
-        "SELECT id,status,source_server_id,destination_server_id FROM migration_campaigns WHERE id=?",
+        "SELECT id,status,source_server_id,destination_server_id,options_json FROM migration_campaigns WHERE id=?",
         (int(campaign_id),),
     )
     if not campaign:
@@ -182,6 +253,10 @@ def update_migration_draft(
         int(campaign["destination_server_id"]),
         mapping_overrides=mapping_overrides,
     )
+    try:
+        existing_options = json.loads(campaign["options_json"] or "{}")
+    except Exception:
+        existing_options = {}
     values = _clean_draft_values(
         analysis,
         name=name,
@@ -189,9 +264,16 @@ def update_migration_draft(
         scheduled_at=scheduled_at,
         batch_size=batch_size,
         intent=intent,
+        jellyfin_password_strategy=jellyfin_password_strategy,
+        jellyfin_temp_password=jellyfin_temp_password,
+        jellyfin_auto_deliver_credentials=jellyfin_auto_deliver_credentials,
+        existing_options=existing_options,
     )
     mapping_snapshot = {
-        str(item["source"]["id"]): int(item["suggested_destination"]["id"]) if item.get("suggested_destination") else None
+        str(item["source"]["id"]): [
+            int(destination["id"])
+            for destination in (item.get("suggested_destinations") or [])
+        ]
         for item in analysis["library_mappings"]
     }
     analysis_summary = {

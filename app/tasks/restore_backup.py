@@ -1,4 +1,4 @@
-import os
+﻿import os
 import shutil
 import sqlite3
 import threading
@@ -40,8 +40,7 @@ def _validate_sqlite_backup(candidate_path: Path) -> None:
 
     conn = None
     try:
-        conn = sqlite3.connect(f"file:{candidate_path}?mode=ro", uri=True)
-        conn.row_factory = sqlite3.Row
+        conn = open_sqlite_connection(str(candidate_path), read_only=True)
 
         row = conn.execute("PRAGMA integrity_check;").fetchone()
         integrity = row[0] if row else None
@@ -370,3 +369,4 @@ def run(task_id: int, db):
 
     task_logs(task_id, "success", f"restore_backup completed from {backup_path}")
     return {"status": "success", "backup_path": str(backup_path)}
+

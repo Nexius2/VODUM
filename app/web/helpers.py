@@ -12,6 +12,7 @@ from logging_utils import get_logger, is_debug_mode_enabled
 from core.i18n import init_i18n, get_translator
 from core.backup import BackupConfig
 from secret_store import decrypt_communication_settings
+from email_sender import authenticate_smtp
 
 
 # -----------------------------
@@ -242,7 +243,6 @@ def send_email_via_settings(
     smtp_host = settings.get("smtp_host")
     smtp_port = settings.get("smtp_port") or 587
     smtp_user = settings.get("smtp_user")
-    smtp_pass = settings.get("smtp_pass") or ""
     smtp_tls = bool(settings.get("smtp_tls"))
     mail_from = settings.get("mail_from") or smtp_user
 
@@ -295,8 +295,7 @@ def send_email_via_settings(
             if smtp_tls:
                 server.starttls()
 
-            if smtp_user:
-                server.login(smtp_user, smtp_pass)
+            authenticate_smtp(server, settings)
 
             server.send_message(msg, from_addr=mail_from, to_addrs=recipients)
 
