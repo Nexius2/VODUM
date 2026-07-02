@@ -3,7 +3,7 @@
 Ce fichier contient uniquement le travail restant. Les changements termines sont documentes dans
 `changelog.md`.
 
-Derniere mise a jour: 2026-07-01
+Derniere mise a jour: 2026-07-02
 
 ## Principes de suivi
 
@@ -41,6 +41,7 @@ Derniere mise a jour: 2026-07-01
   - Deja fait: Communications templates dans `static/js/pages/communications-templates.js`.
   - Deja fait: Subscriptions gifts dans `static/js/pages/subscriptions-gifts.js`.
   - Deja fait: Migrations list/detail dans `static/js/pages/migrations.js` et `static/js/pages/migration-campaign-detail.js`.
+  - Deja fait: Monitoring shell search/ticker dans `static/js/pages/monitoring.js`.
   - Restant: extraire progressivement les scripts metier lourds des pages
     users, monitoring, communications, subscriptions et migrations.
 

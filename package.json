@@ -1,6 +1,9 @@
 {
   "devDependencies": {
     "@tailwindcss/cli": "^4.3.2",
+    "chart.js": "^4.5.1",
+    "flatpickr": "^4.6.13",
+    "htmx.org": "1.9.12",
     "tailwindcss": "^4.3.2"
   },
   "scripts": {

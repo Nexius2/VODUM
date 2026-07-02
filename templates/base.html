@@ -5,14 +5,12 @@
   <title>{% block title %}VODUM{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="csrf-token" content="{{ csrf_token }}">
-  <link rel="preconnect" href="https://unpkg.com">
-
   <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icon.png', v=g.app_version|default('dev')) }}">
   <link rel="icon" type="image/png" sizes="96x96" href="{{ url_for('static', filename='icon.png', v=g.app_version|default('dev')) }}">
   <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icon.png', v=g.app_version|default('dev')) }}">
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/logo.svg', v=g.app_version|default('dev')) }}">
 
-  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <script src="{{ url_for('static', filename='vendor/htmx/htmx.min.js', v=g.app_version|default('dev')) }}"></script>
 
   <link rel="stylesheet" href="{{ url_for('static', filename='css/vodum.css', v=g.app_version|default('dev')) }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css', v=g.app_version|default('dev')) }}">

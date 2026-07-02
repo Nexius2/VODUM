@@ -1,4 +1,4 @@
-﻿import sqlite3
+import sqlite3
 import threading
 import logging
 from typing import Any, Iterable, Optional

@@ -419,6 +419,16 @@ document.body.addEventListener("htmx:afterSwap", function (event) {
 // -----------------------------------------------------------
 // Flash banners (client-side) - same style as server flash()
 // -----------------------------------------------------------
+const vodumStaticBaseUrl = (() => {
+  const script = document.currentScript;
+  if (!script || !script.src) return "/static/";
+  return new URL("../", script.src).href;
+})();
+
+function vodumStaticUrl(path) {
+  return new URL(path.replace(/^\/+/, ""), vodumStaticBaseUrl).href;
+}
+
 window.vodumFlash = function(category, message, autoHideMs = 4000) {
   const box = document.getElementById("clientFlash");
   if (!box) return;
@@ -450,8 +460,8 @@ window.vodumFlash = function(category, message, autoHideMs = 4000) {
 // ------------ DATE PICKERS (Flatpickr lazy loader) -----------------------
 // Loads Flatpickr only on pages/fragments that expose input.vodum-date.
 (function vodumDatePickers() {
-  const flatpickrCssUrl = "https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css";
-  const flatpickrJsUrl = "https://cdn.jsdelivr.net/npm/flatpickr";
+  const flatpickrCssUrl = vodumStaticUrl("vendor/flatpickr/flatpickr.min.css");
+  const flatpickrJsUrl = vodumStaticUrl("vendor/flatpickr/flatpickr.min.js");
   let flatpickrPromise = null;
   let localePromise = null;
 
@@ -509,7 +519,7 @@ window.vodumFlash = function(category, message, autoHideMs = 4000) {
       return Promise.resolve();
     }
     if (!localePromise) {
-      localePromise = loadScriptOnce("vodum-flatpickr-locale-" + base, `https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/${base}.js`)
+      localePromise = loadScriptOnce("vodum-flatpickr-locale-" + base, vodumStaticUrl(`vendor/flatpickr/l10n/${base}.js`))
         .catch(() => undefined);
     }
     return localePromise;

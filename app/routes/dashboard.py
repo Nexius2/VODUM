@@ -1,4 +1,4 @@
-﻿# Auto-split from app.py (keep URLs/endpoints intact)
+# Auto-split from app.py (keep URLs/endpoints intact)
 from core.monitoring.artwork import enrich_live_session_artwork
 from core.usage_risk import build_usage_risk_report
 from core.dashboard_servers import dashboard_server_preview

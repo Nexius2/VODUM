@@ -6,6 +6,14 @@ All notable changes to Vodum will be documented in this file.
 
 ## Unreleased
 
+- Move Monitoring page user search and Now Playing ticker behavior into `static/js/pages/monitoring.js`.
+
+- Vendor frontend runtime dependencies for HTMX, Chart.js, and Flatpickr so admin pages no longer depend on CDN browser access.
+
+- Remove UTF-8 BOM markers from Python sources so AST-based audits parse consistently.
+
+- Store and read update check status next to the configured database path instead of hardcoding `/appdata`.
+
 - Fix upgraded databases missing `user_referral_settings.pending_expire_days`, which broke referral reward and cleanup tasks.
 
 - Move Dashboard card navigation and subscription modal close behavior into `static/js/pages/dashboard.js`.

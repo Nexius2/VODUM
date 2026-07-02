@@ -18,6 +18,7 @@ from core.i18n import init_i18n
 from core.repair.plex_media_users_repair import run_repair_if_needed
 from core.monitoring.plex_websocket import PlexWebsocketClient
 from core.startup import StartupStep, run_startup_sequence
+from core.app_paths import update_status_path
 from utils.version import load_app_version
 
 from api.subscriptions import subscriptions_api
@@ -395,12 +396,12 @@ def create_app():
     def inject_version():
         g.app_version = APP_VERSION
 
-        # Update badge (sans BDD) -> lit /appdata/update_status.json
+        # Update badge (sans BDD) -> lit le status dans le data dir configure
         g.update_available = False
         try:
-            status_path = "/appdata/update_status.json"
-            if os.path.exists(status_path):
-                with open(status_path, "r", encoding="utf-8", errors="ignore") as f:
+            status_path = update_status_path()
+            if status_path.exists():
+                with status_path.open("r", encoding="utf-8", errors="ignore") as f:
                     data = json.load(f) or {}
                 g.update_available = bool(data.get("update_available"))
                 g.update_pending_days = int(data.get("update_pending_days") or 0)

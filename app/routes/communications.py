@@ -1,4 +1,4 @@
-﻿# Unified Communications UI (Email + Discord)
+# Unified Communications UI (Email + Discord)
 
 import json
 from flask import render_template, request, redirect, url_for, flash, jsonify

@@ -1,4 +1,4 @@
-﻿# Auto-split from app.py (keep URLs/endpoints intact)
+# Auto-split from app.py (keep URLs/endpoints intact)
 import json
 import re
 import math

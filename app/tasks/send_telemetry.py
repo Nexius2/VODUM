@@ -3,13 +3,13 @@ import json
 import platform
 import threading
 import uuid
-from pathlib import Path
 import requests
 from utils.platform_detection import detect_platform
 from db_manager import DBManager
 from logging_utils import get_logger
 from datetime import datetime, timedelta, timezone
 from utils.version import load_app_version
+from core.app_paths import update_status_path
 
 TELEMETRY_URL = "https://vodum-telemetry.vodum-project.workers.dev/api/ingest"
 
@@ -164,7 +164,7 @@ def run(task_id: int, db: DBManager):
 
         try:
 
-            status_file = Path("/appdata/update_status.json")
+            status_file = update_status_path()
 
             if status_file.exists():
 
