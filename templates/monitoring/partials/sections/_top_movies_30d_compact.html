@@ -1,4 +1,4 @@
-<div class="text-sm font-semibold mb-4">Top movies (30d)</div>
+<div class="text-sm font-semibold mb-4">{{ t("monitoring_top_movies_30d") }}</div>
 
 {% if top_movies_30d and top_movies_30d|length > 0 %}
   <div class="space-y-3">
@@ -13,6 +13,7 @@
                   alt="{{ c.title or '-' }}"
                   class="w-full h-full object-cover"
                   loading="lazy"
+                  decoding="async"
                 >
               {% endif %}
             </div>
@@ -35,5 +36,5 @@
     {% endfor %}
   </div>
 {% else %}
-  <div class="text-slate-500">No data yet.</div>
+  <div class="text-slate-500">{{ t("no_data") }}</div>
 {% endif %}

@@ -15,13 +15,105 @@ from .users_actions import _get_preferred_plex_media_user_id
 from core.media_jobs import insert_plex_media_job
 from api.subscriptions import update_user_expiration
 from notifications_utils import parse_notifications_order
-from core.providers.jellyfin_users import jellyfin_set_password
+from core.user_credentials import change_jellyfin_password
 from core.usage_risk import build_usage_risk_for_user
 from secret_store import find_plex_server_ids_by_token
 
 
 task_logger = get_logger("tasks_ui")
 logger = get_logger("users_detail")
+
+USER_DETAIL_COLUMNS = """
+    id,
+    username,
+    firstname,
+    lastname,
+    email,
+    second_email,
+    expiration_date,
+    renewal_method,
+    renewal_date,
+    created_at,
+    notes,
+    status,
+    last_status,
+    status_changed_at,
+    max_streams_override,
+    notifications_order_override,
+    expiration_date_override,
+    referrer_user_id,
+    subscription_template_id,
+    discord_user_id,
+    discord_name
+"""
+
+USER_DETAIL_SETTINGS_COLUMNS = """
+    user_notifications_can_override,
+    notifications_order,
+    debug_mode
+"""
+
+USER_DETAIL_REFERRAL_SETTINGS_COLUMNS = """
+    allow_referrer_change_before_qualification,
+    qualification_days,
+    reward_days
+"""
+
+USER_DETAIL_CURRENT_REFERRAL_COLUMNS = """
+    id,
+    referrer_user_id,
+    status
+"""
+
+USER_DETAIL_REFERRAL_DISPLAY_COLUMNS = """
+                r.id,
+                r.referrer_user_id,
+                r.referred_user_id,
+                r.status,
+                r.qualification_due_at,
+                r.reward_days_snapshot
+"""
+
+USER_DETAIL_ACTIVE_POLICY_COLUMNS = """
+                p.id,
+                p.rule_type,
+                p.scope_type,
+                p.scope_id,
+                p.provider,
+                p.server_id,
+                p.priority,
+                p.rule_value_json
+"""
+
+USER_DETAIL_SERVER_ACCESS_COLUMNS = """
+                s.id AS server_id,
+                s.name,
+                s.type,
+                s.url,
+                s.local_url,
+                s.public_url,
+                s.status
+"""
+
+USER_DETAIL_LIBRARY_ACCESS_COLUMNS = """
+                l.id,
+                l.server_id,
+                l.name,
+                l.type,
+                l.section_id
+"""
+
+USER_DETAIL_COMM_HISTORY_COLUMNS = """
+                h.id,
+                h.kind,
+                h.status,
+                h.sent_at,
+                h.error,
+                h.meta_json,
+                h.template_id,
+                h.campaign_id
+"""
+
 
 def _iso_date_or_none(raw: str):
     raw = (raw or "").strip()
@@ -55,6 +147,57 @@ def _parse_json_list(raw: str):
     except Exception:
         return []
 
+def _get_expiration_lock_for_user(db, user_id: int) -> dict:
+    rows = db.query(
+        """
+        SELECT
+            s.type AS server_type,
+            s.name AS server_name,
+            mu.role AS media_role,
+            mu.raw_json
+        FROM media_users mu
+        JOIN servers s ON s.id = mu.server_id
+        WHERE mu.vodum_user_id = ?
+        """,
+        (user_id,),
+    ) or []
+
+    reasons = []
+
+    for row in rows:
+        r = dict(row)
+        server_type = (r.get("server_type") or "").strip().lower()
+        media_role = (r.get("media_role") or "").strip().lower()
+        server_name = (r.get("server_name") or "").strip()
+
+        if server_type == "plex" and media_role == "owner":
+            reasons.append(f"Plex owner ({server_name})")
+
+        if server_type == "jellyfin":
+            is_admin = media_role == "admin"
+
+            try:
+                raw = json.loads(r.get("raw_json") or "{}")
+                policy = raw.get("Policy") if isinstance(raw, dict) else {}
+                if isinstance(policy, dict) and policy.get("IsAdministrator"):
+                    is_admin = True
+            except Exception:
+                pass
+
+            if is_admin:
+                reasons.append(f"Jellyfin admin ({server_name})")
+
+    role_label = ""
+    if any(r.startswith("Plex owner") for r in reasons):
+        role_label = "Owner"
+    elif any(r.startswith("Jellyfin admin") for r in reasons):
+        role_label = "Admin"
+
+    return {
+        "locked": bool(reasons),
+        "label": " / ".join(reasons),
+        "role_label": role_label,
+    }
 
 def _delete_locked_subscription_policies(db, vodum_user_id: int):
     rows = db.query(
@@ -149,91 +292,7 @@ def register(app):
                 if str(x).isdigit()
             }
 
-            jellyfin_accounts = db.query(
-                """
-                SELECT
-                    mu.id,
-                    mu.server_id,
-                    mu.external_user_id,
-                    mu.username,
-
-                    s.name AS server_name,
-                    s.url,
-                    s.local_url,
-                    s.public_url,
-                    s.token AS token
-
-                FROM media_users mu
-                JOIN servers s ON s.id = mu.server_id
-
-                WHERE mu.vodum_user_id = ?
-                  AND mu.type = 'jellyfin'
-                  AND s.type = 'jellyfin'
-                """,
-                (user_id,),
-            ) or []
-
-            # Filter selected servers
-            if selected_server_ids:
-                jellyfin_accounts = [
-                    x for x in jellyfin_accounts
-                    if int(x["server_id"]) in selected_server_ids
-                ]
-
-            updated = 0
-            errors = []
-
-            for account in jellyfin_accounts:
-
-                try:
-
-                    # THIS is what sends the password to Jellyfin
-                    jellyfin_set_password(
-                        dict(account),
-                        str(account["external_user_id"]),
-                        password,
-                    )
-
-                    # The admin token is enough for future password changes.
-                    # Clear legacy plaintext values instead of retaining the
-                    # newly submitted password in the Vodum database.
-                    db.execute(
-                        """
-                        UPDATE media_users
-                        SET stored_password = NULL
-                        WHERE id = ?
-                        """,
-                        (account["id"],),
-                    )
-
-                    updated += 1
-
-                    task_logger.info(
-                        f"[JELLYFIN PASSWORD] Updated password | "
-                        f"vodum_user_id={user_id} | "
-                        f"server_id={account['server_id']} | "
-                        f"username={account['username']}"
-                    )
-
-                except Exception as e:
-
-                    errors.append(
-                        f"{account['server_name']}: {e}"
-                    )
-
-                    task_logger.error(
-                        f"[JELLYFIN PASSWORD] Failed | "
-                        f"vodum_user_id={user_id} | "
-                        f"server_id={account['server_id']} | "
-                        f"username={account['username']} | "
-                        f"error={e}"
-                    )
-
-            return {
-                "ok": len(errors) == 0,
-                "updated": updated,
-                "errors": errors,
-            }
+            return change_jellyfin_password(db, user_id, password, selected_server_ids)
         except Exception as e:
 
             logger.exception(
@@ -251,7 +310,7 @@ def register(app):
         db = get_db()
 
         user = db.query_one(
-            "SELECT * FROM vodum_users WHERE id = ?",
+            f"SELECT {USER_DETAIL_COLUMNS} FROM vodum_users WHERE id = ?",
             (user_id,),
         )
         if not user:
@@ -259,8 +318,11 @@ def register(app):
             return redirect(url_for("users_list"))
 
         user = dict(user)
-
-        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        expiration_lock = _get_expiration_lock_for_user(db, user_id)
+        
+        settings = db.query_one(
+            f"SELECT {USER_DETAIL_SETTINGS_COLUMNS} FROM settings WHERE id = 1"
+        )
         settings = dict(settings) if settings else {}
 
         try:
@@ -284,7 +346,7 @@ def register(app):
 
         form = request.form
 
-        # Champs texte classiques (vide ou espaces → on garde l’ancienne valeur)
+        # Champs texte classiques (vide ou espaces ? on garde l’ancienne valeur)
         username        = (form.get("username") or "").strip() or user.get("username")
         firstname       = (form.get("firstname") or "").strip() or user.get("firstname")
         lastname        = (form.get("lastname") or "").strip() or user.get("lastname")
@@ -296,7 +358,9 @@ def register(app):
         expiration_date = user.get("expiration_date")
         renewal_date = user.get("renewal_date")
 
-        if raw_exp:
+        if expiration_lock["locked"]:
+            expiration_date = user.get("expiration_date")
+        elif raw_exp:
             parsed = _iso_date_or_none(raw_exp)
             if parsed is not None:
                 expiration_date = parsed
@@ -326,6 +390,9 @@ def register(app):
             else None
         )
 
+        if expiration_lock["locked"]:
+            requested_subscription_template_id = current_subscription_template_id
+
         # Notes : on autorise le vide volontaire
         if "notes" in form:
             notes = (form.get("notes") or "").strip()
@@ -336,14 +403,16 @@ def register(app):
         discord_user_id = (form.get("discord_user_id") or "").strip() or None
         discord_name    = (form.get("discord_name") or "").strip() or None
 
-        referral_settings = db.query_one("SELECT * FROM user_referral_settings WHERE id = 1")
+        referral_settings = db.query_one(
+            f"SELECT {USER_DETAIL_REFERRAL_SETTINGS_COLUMNS} FROM user_referral_settings WHERE id = 1"
+        )
         referral_settings = dict(referral_settings) if referral_settings else {}
 
         referrer_user_id_raw = (form.get("referrer_user_id") or "").strip()
         requested_referrer_user_id = int(referrer_user_id_raw) if referrer_user_id_raw.isdigit() else None
 
         current_referral = db.query_one(
-            "SELECT * FROM user_referrals WHERE referred_user_id = ? LIMIT 1",
+            f"SELECT {USER_DETAIL_CURRENT_REFERRAL_COLUMNS} FROM user_referrals WHERE referred_user_id = ? LIMIT 1",
             (user_id,),
         )
         current_referral = dict(current_referral) if current_referral else None
@@ -374,7 +443,9 @@ def register(app):
         # So when Lifetime is selected, we keep the real stored override value
         # instead of forcing it to 1. The checkbox is only displayed as checked
         # and disabled in the UI to make the behavior clear.
-        if selected_subscription_is_lifetime:
+        if expiration_lock["locked"]:
+            expiration_date_override = 1
+        elif selected_subscription_is_lifetime:
             expiration_date_override = int(user["expiration_date_override"] or 0)
         else:
             expiration_date_override = 1 if form.get("expiration_date_override") == "1" else 0
@@ -832,7 +903,7 @@ def register(app):
         rows = db.query(
             f"""
             SELECT
-                p.*,
+{USER_DETAIL_ACTIVE_POLICY_COLUMNS},
                 s.name AS policy_server_name
             FROM stream_policies p
             LEFT JOIN servers s ON s.id = p.server_id
@@ -932,7 +1003,7 @@ def register(app):
         # Charger l’utilisateur (VODUM)
         # --------------------------------------------------
         user = db.query_one(
-            "SELECT * FROM vodum_users WHERE id = ?",
+            f"SELECT {USER_DETAIL_COLUMNS} FROM vodum_users WHERE id = ?",
             (user_id,),
         )
 
@@ -984,7 +1055,9 @@ def register(app):
         # --------------------------------------------------
         # Settings (needed for per-user notification override)
         # --------------------------------------------------
-        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        settings = db.query_one(
+            f"SELECT {USER_DETAIL_SETTINGS_COLUMNS} FROM settings WHERE id = 1"
+        )
         settings = dict(settings) if settings else {}
 
         try:
@@ -1037,14 +1110,13 @@ def register(app):
 
 
         # ==================================================
-        # GET → Chargement infos complètes
+        # GET ? Chargement infos complètes
         # ==================================================
 
         servers = db.query(
-            """
+            f"""
             SELECT
-                s.*,
-                s.id AS server_id,
+{USER_DETAIL_SERVER_ACCESS_COLUMNS},
 
                 mu.id AS media_user_id,
                 mu.external_user_id,
@@ -1132,9 +1204,9 @@ def register(app):
         active_user_policies = _load_active_policies_for_user(db, user_id)
         
         libraries = db.query(
-            """
+            f"""
             SELECT
-                l.*,
+{USER_DETAIL_LIBRARY_ACCESS_COLUMNS},
                 s.name AS server_name,
                 CASE
                     WHEN EXISTS (
@@ -1276,7 +1348,7 @@ def register(app):
         sent_emails_rows = db.query(
             f"""
             SELECT
-                h.*,
+{USER_DETAIL_COMM_HISTORY_COLUMNS},
                 ct.key AS template_key,
                 ct.name AS template_name,
                 cc.name AS campaign_name
@@ -1294,7 +1366,7 @@ def register(app):
         sent_discord_rows = db.query(
             f"""
             SELECT
-                h.*,
+{USER_DETAIL_COMM_HISTORY_COLUMNS},
                 ct.key AS template_key,
                 ct.name AS template_name,
                 cc.name AS campaign_name
@@ -1322,9 +1394,9 @@ def register(app):
             sent_discord.append(item)
 
         referral = db.query_one(
-            """
+            f"""
             SELECT
-                r.*,
+{USER_DETAIL_REFERRAL_DISPLAY_COLUMNS},
                 referrer.username AS referrer_username,
                 referrer.email AS referrer_email
             FROM user_referrals r
@@ -1387,7 +1459,8 @@ def register(app):
         referred_users = [dict(x) for x in referred_users]
 
         usage_risk = build_usage_risk_for_user(db, user_id)
-
+        expiration_lock = _get_expiration_lock_for_user(db, user_id)
+        
         return render_template(
             "users/user_detail.html",
             user=user,
@@ -1398,6 +1471,7 @@ def register(app):
             sent_emails=sent_emails,
             sent_discord=sent_discord,
             allowed_types=allowed_types,
+            expiration_lock=expiration_lock,
             merge_suggestions=merge_suggestions,
             user_servers=servers,
             active_user_policies=active_user_policies,
@@ -1426,6 +1500,12 @@ def register(app):
             referral_stats=referral_stats,
             referred_users=referred_users,
         )
+
+
+
+
+
+
 
 
 

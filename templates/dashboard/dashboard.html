@@ -12,7 +12,7 @@
 
 {% if server_count <= 1 %}
 
-<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-6">
 
     <!-- Users -->
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
@@ -121,7 +121,7 @@
                     {% endif %}
 
                     <div class="text-[10px] text-slate-500 mt-2">
-                        {{ t("last_check") }} : {{ single_server.last_checked|browser_datetime if single_server.last_checked else '—' }}
+                        {{ t("last_check") }} : {{ single_server.last_checked|browser_datetime if single_server.last_checked else '-'  }}
                     </div>
                 </div>
             </div>
@@ -137,7 +137,12 @@
 <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
 
     <!-- Now Playing -->
-    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+	<section
+		role="link"
+		tabindex="0"
+		data-dashboard-link="{{ url_for('monitoring_page', tab='now_playing') }}"
+		class="bg-slate-900 border border-slate-800 rounded-2xl p-4 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/40"
+	>
 			<div id="dashboard-now-playing"
 				 hx-get="{{ url_for('dashboard_now_playing_partial') }}"
 				 hx-trigger="load, every 2500ms"
@@ -147,12 +152,17 @@
     </section>
 
     <!-- Latest logs -->
-    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+	<section
+		role="link"
+		tabindex="0"
+		data-dashboard-link="{{ url_for('logs_page') }}"
+		class="bg-slate-900 border border-slate-800 rounded-2xl p-4 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/40"
+	>
 		<div class="text-sm text-slate-300 mb-3">
 			<span class="font-semibold">{{ t("tasks") }}</span>
-			<span class="text-slate-500">·</span>
+			<span class="text-slate-500">&middot;</span>
 			{{ stats.active_tasks }} {{ t("active_tasks") }}
-			<span class="text-slate-500">·</span>
+			<span class="text-slate-500">&middot;</span>
 			{{ stats.error_tasks }} {{ t("in_error") }}
 		</div>
 
@@ -160,7 +170,7 @@
 
 		<div class="flex items-center justify-between mb-3">
 			<h2 class="text-sm font-semibold">{{ t("latest_logs") }}</h2>
-			<a href="{{ url_for('logs_page') }}" class="text-xs text-primary hover:text-primary-dark">{{ t("view_all") }}</a>
+			
 		</div>
 
         <div class="space-y-2 text-xs">
@@ -177,7 +187,7 @@
 
                 <div class="min-w-0 flex-1">
                     <div class="text-[11px] text-slate-400 truncate">
-                        {{ log.source }} · {{ log.created_at|browser_datetime if log.created_at else '—' }}
+                        {{ log.source }} · {{ log.created_at|browser_datetime if log.created_at else '-'  }}
                     </div>
                     <div class="text-[12px] text-slate-100 truncate">
                         {{ log.message }}
@@ -262,7 +272,12 @@
 <div class="grid grid-cols-1 2xl:grid-cols-[1.25fr_0.95fr_1fr] gap-6">
 
     <!-- Now Playing -->
-    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+	<section
+		role="link"
+		tabindex="0"
+		data-dashboard-link="{{ url_for('monitoring_page', tab='now_playing') }}"
+		class="bg-slate-900 border border-slate-800 rounded-2xl p-4 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/40"
+	>
 		<div id="dashboard-now-playing"
 			 hx-get="{{ url_for('dashboard_now_playing_partial') }}"
 			 hx-trigger="load, every 2500ms"
@@ -338,7 +353,7 @@
 							{{ t("last_check") }}
 						</div>
 						<div class="text-[10px] text-slate-400 whitespace-nowrap">
-							{{ s.last_checked|browser_datetime if s.last_checked else '—' }}
+							{{ s.last_checked|browser_datetime if s.last_checked else '-'  }}
 						</div>
 					</div>
 				</div>
@@ -353,31 +368,33 @@
 
 
     <!-- Usage Risk -->
-    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+	<section
+		role="link"
+		tabindex="0"
+		data-dashboard-link="{{ url_for('monitoring_page', tab='usage_risk') }}"
+		class="bg-slate-900 border border-slate-800 rounded-2xl p-4 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/40"
+	>
         <div class="flex items-center justify-between mb-3">
             <h2 class="text-sm font-semibold">
                 {{ t("usage_risk") if t("usage_risk") != "usage_risk" else "Usage risk" }}
             </h2>
 
-            <a href="{{ url_for('monitoring_page', tab='usage_risk') }}"
-               class="text-xs text-primary hover:text-primary-dark">
-                {{ t("view_all") }}
-            </a>
+
         </div>
 
         <div class="grid grid-cols-3 gap-2 mb-3 text-center">
             <div class="rounded-lg bg-slate-950/50 border border-slate-800 px-2 py-3">
-                <div class="text-xs text-rose-300">High</div>
+                <div class="text-xs text-rose-300">{{ t("high") }}</div>
                 <div class="text-2xl font-bold text-rose-400">{{ usage_risk_summary.high or 0 }}</div>
             </div>
 
             <div class="rounded-lg bg-slate-950/50 border border-slate-800 px-2 py-3">
-                <div class="text-xs text-amber-300">Medium</div>
+                <div class="text-xs text-amber-300">{{ t("medium") }}</div>
                 <div class="text-2xl font-bold text-amber-400">{{ usage_risk_summary.medium or 0 }}</div>
             </div>
 
             <div class="rounded-lg bg-slate-950/50 border border-slate-800 px-2 py-3">
-                <div class="text-xs text-emerald-300">Low</div>
+                <div class="text-xs text-emerald-300">{{ t("low") }}</div>
                 <div class="text-2xl font-bold text-emerald-400">{{ usage_risk_summary.low or 0 }}</div>
             </div>
         </div>
@@ -465,7 +482,12 @@
 <div class="grid grid-cols-1 2xl:grid-cols-[1fr_420px] gap-6 mt-6">
 
     <!-- Next tasks -->
-    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+	<section
+		role="link"
+		tabindex="0"
+		data-dashboard-link="{{ url_for('tasks_page') }}"
+		class="bg-slate-900 border border-slate-800 rounded-2xl p-4 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/40"
+	>
         <div id="dashboard-next-tasks"
              hx-get="{{ url_for('dashboard_next_tasks_partial') }}"
              hx-trigger="load, every 15000ms"
@@ -475,10 +497,15 @@
     </section>
 
     <!-- Latest logs -->
-    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+	<section
+		role="link"
+		tabindex="0"
+		data-dashboard-link="{{ url_for('logs_page') }}"
+		class="bg-slate-900 border border-slate-800 rounded-2xl p-4 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/40"
+	>
         <div class="flex items-center justify-between mb-3">
             <h2 class="text-sm font-semibold">{{ t("latest_logs") }}</h2>
-            <a href="{{ url_for('logs_page') }}" class="text-xs text-primary hover:text-primary-dark">{{ t("view_all") }}</a>
+            
         </div>
 
         <div class="space-y-2 text-xs">
@@ -494,7 +521,7 @@
 
                     <div class="min-w-0 flex-1">
                         <div class="text-[11px] text-slate-400 truncate">
-                            {{ log.source }} · {{ log.created_at|browser_datetime if log.created_at else '—' }}
+                            {{ log.source }} · {{ log.created_at|browser_datetime if log.created_at else '-'  }}
                         </div>
                         <div class="text-[12px] text-slate-100 truncate">
                             {{ log.message }}
@@ -514,12 +541,12 @@
      class="hidden fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
     <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
         <div class="flex items-center justify-between px-5 py-4 border-b border-slate-800">
-            <h3 class="text-sm font-semibold">Subscribers by subscription</h3>
+            <h3 class="text-sm font-semibold">{{ t("dashboard_subscribers_by_subscription") }}</h3>
 
             <button type="button"
-                    onclick="document.getElementById('subscriptions-summary-modal').classList.add('hidden')"
+                    data-dashboard-modal-close="subscriptions-summary-modal"
                     class="text-slate-400 hover:text-white">
-                ✕
+                &times;
             </button>
         </div>
 
@@ -530,9 +557,12 @@
                     <div class="text-sm text-slate-300 shrink-0">{{ sub.user_count }} subscribers</div>
                 </div>
             {% else %}
-                <div class="text-sm text-slate-400">No subscription configured.</div>
+                <div class="text-sm text-slate-400">{{ t("dashboard_no_subscription") }}</div>
             {% endfor %}
         </div>
     </div>
 </div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/pages/dashboard.js', v=g.app_version|default('dev')) }}"></script>
 {% endblock %}

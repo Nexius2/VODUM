@@ -1,8 +1,7 @@
-# Auto-split from app.py (keep URLs/endpoints intact)
+﻿# Auto-split from app.py (keep URLs/endpoints intact)
 import json
 import uuid
 import threading
-import sqlite3
 from tasks_engine import mark_auto_enable_dirty, force_task_run
 from flask import (
     render_template, request, redirect, url_for, flash, current_app,
@@ -12,7 +11,13 @@ from logging_utils import get_logger
 from tasks_engine import enqueue_server_discovery_sequence, enable_and_run_task_by_name, ensure_tasks_enabled
 from web.helpers import get_db
 from core.media_jobs import insert_plex_media_job
+from core.library_bulk_access import (
+    BulkAccessError,
+    grant_libraries_to_active_users,
+    remove_libraries_from_users,
+)
 from secret_store import encrypt_secret, encrypt_server_settings_json, keep_existing_secret
+from db_manager import open_sqlite_connection
 
 server_delete_logger = get_logger("server_delete")
 logger = get_logger("servers")
@@ -21,6 +26,43 @@ SERVER_DELETE_LOCK = threading.Lock()
 SERVER_DELETE_IN_PROGRESS = set()
 
 DELETE_BATCH_SIZE = 1000
+
+SERVERS_LIST_COLUMNS = """
+                s.id,
+                s.name,
+                s.type,
+                s.url,
+                s.local_url,
+                s.public_url,
+                s.status,
+                s.server_version
+"""
+
+LIBRARIES_LIST_COLUMNS = """
+                l.id,
+                l.server_id,
+                l.name,
+                l.type,
+                l.section_id
+"""
+
+SERVER_DETAIL_COLUMNS = """
+            id,
+            name,
+            type,
+            url,
+            local_url,
+            public_url,
+            status,
+            settings_json
+"""
+
+SERVER_DETAIL_LIBRARY_COLUMNS = """
+                l.id,
+                l.name,
+                l.type,
+                l.section_id
+"""
 
 def _get_preferred_plex_media_user_id(db, vodum_user_id: int, server_id: int):
     row = db.query_one(
@@ -68,14 +110,12 @@ def _background_delete_server(app, db_path, server_id, server_name):
     conn = None
 
     try:
-        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
-        conn.row_factory = sqlite3.Row
-
-        conn.execute("PRAGMA foreign_keys = ON;")
-        conn.execute("PRAGMA journal_mode = WAL;")
-        conn.execute("PRAGMA synchronous = NORMAL;")
-        conn.execute("PRAGMA busy_timeout = 30000;")
-
+        conn = open_sqlite_connection(
+            db_path,
+            check_same_thread=False,
+            timeout=30,
+            busy_timeout_ms=30000,
+        )
         server_delete_logger.info(
             f"[server_delete] Start background deletion for server_id={server_id} name={server_name}"
         )
@@ -397,9 +437,9 @@ def register(app):
         db = get_db()
 
         servers = db.query(
-            """
+            f"""
             SELECT
-                s.*,
+{SERVERS_LIST_COLUMNS},
 
                 -- nb bibliothèques
                 COUNT(DISTINCT l.id) AS libraries_count,
@@ -449,9 +489,9 @@ def register(app):
         db = get_db()
 
         libraries = db.query(
-            """
+            f"""
             SELECT
-                l.*,
+{LIBRARIES_LIST_COLUMNS},
                 s.name AS server_name,
 
                 -- nb d'utilisateurs Vodum ayant accès
@@ -698,7 +738,7 @@ def register(app):
         db = get_db()
 
         server = db.query_one(
-            "SELECT * FROM servers WHERE id = ?",
+            f"SELECT {SERVER_DETAIL_COLUMNS} FROM servers WHERE id = ?",
             (server_id,),
         )
 
@@ -706,9 +746,9 @@ def register(app):
             return "Serveur introuvable", 404
 
         libraries = db.query(
-            """
+            f"""
             SELECT
-                l.*,
+{SERVER_DETAIL_LIBRARY_COLUMNS},
                 COUNT(DISTINCT mu.vodum_user_id) AS users_count
             FROM libraries l
             LEFT JOIN media_user_libraries mul
@@ -856,191 +896,24 @@ def register(app):
     def bulk_grant_libraries():
         db = get_db()
 
-        server_id = request.form.get("server_id", type=int)
-        library_ids = request.form.getlist("library_ids")
-
-        if not server_id or not library_ids:
-            flash("no_server_or_library_selected", "error")
-            return redirect(url_for("libraries_list"))
-
-        # --------------------------------------------------
-        # Vérifier que c'est bien un serveur Plex
-        # --------------------------------------------------
-        server = db.query_one("SELECT id, name, type FROM servers WHERE id = ?", (server_id,))
-        if not server:
-            flash("server_not_found", "error")
-            return redirect(url_for("libraries_list"))
-
-        if server["type"] != "plex":
-            flash("sync_not_supported_for_server_type", "warning")
-            return redirect(url_for("libraries_list"))
-
-        # --------------------------------------------------
-        # Nettoyage + cast des lib ids
-        # --------------------------------------------------
         try:
-            library_ids_int = sorted({int(x) for x in library_ids})
-        except ValueError:
-            flash("invalid_library", "error")
-            return redirect(url_for("libraries_list"))
-
-        # --------------------------------------------------
-        # Validation : ne garder que les libraries appartenant au server_id
-        # --------------------------------------------------
-        placeholders = ",".join("?" * len(library_ids_int))
-        valid_rows = db.query(
-            f"""
-            SELECT id
-            FROM libraries
-            WHERE server_id = ?
-              AND id IN ({placeholders})
-            """,
-            (server_id, *library_ids_int),
-        )
-        valid_library_ids = [int(r["id"]) for r in valid_rows]
-
-        if not valid_library_ids:
-            flash("no_valid_libraries_for_server", "error")
-            return redirect(url_for("libraries_list"))
-
-        # --------------------------------------------------
-        # 1) Utilisateurs Vodum ACTIFS liés à ce serveur
-        #    - Plex uniquement
-        #    - hors owner
-        #    - vodum_user_id requis pour media_jobs
-        # --------------------------------------------------
-        users = db.query(
-            """
-            SELECT
-                mu.id AS media_user_id,
-                mu.vodum_user_id AS vodum_user_id,
-                mu.username,
-                mu.email,
-                mu.external_user_id,
-                mu.accepted_at,
-                mu.details_json,
-                mu.role
-            FROM media_users mu
-            JOIN vodum_users vu
-                ON vu.id = mu.vodum_user_id
-            WHERE mu.server_id = ?
-              AND mu.type = 'plex'
-              AND vu.status = 'active'
-              AND mu.vodum_user_id IS NOT NULL
-              AND LOWER(COALESCE(mu.role, '')) != 'owner'
-            ORDER BY mu.username
-            """,
-            (server_id,),
-        )
-
-        if not users:
-            flash("no_active_users_for_server", "warning")
-            return redirect(url_for("libraries_list"))
-
-        # --------------------------------------------------
-        # 2) Donner accès aux bibliothèques en DB
-        # --------------------------------------------------
-        inserted_links = 0
-
-        for lib_id in valid_library_ids:
-            for u in users:
-                cur = db.execute(
-                    """
-                    INSERT OR IGNORE INTO media_user_libraries(media_user_id, library_id)
-                    VALUES (?, ?)
-                    """,
-                    (u["media_user_id"], lib_id),
-                )
-                if getattr(cur, "rowcount", 0) and cur.rowcount > 0:
-                    inserted_links += cur.rowcount
-
-        # --------------------------------------------------
-        # 3) Compter pending / ready pour le message UI
-        # --------------------------------------------------
-        pending_count = 0
-        ready_count = 0
-
-        for u in users:
-            accepted_at = str(u["accepted_at"] or "").strip()
-
-            details_json = {}
-            try:
-                details_json = json.loads(u["details_json"]) if u["details_json"] else {}
-            except Exception:
-                details_json = {}
-
-            invite_state = (details_json.get("plex_invite_state") or {}) if isinstance(details_json, dict) else {}
-
-            is_pending = (
-                (not accepted_at)
-                and (
-                    bool(invite_state.get("is_pending"))
-                    or (
-                        not str(u["external_user_id"] or "").strip()
-                        and bool(str(u["email"] or "").strip() or str(u["username"] or "").strip())
-                    )
-                )
-            )
-
-            if is_pending:
-                pending_count += 1
-            else:
-                ready_count += 1
-
-        # --------------------------------------------------
-        # 4) Créer 1 job SYNC par vodum_user
-        # --------------------------------------------------
-        vodum_user_ids = sorted({
-            int(u["vodum_user_id"])
-            for u in users
-            if u["vodum_user_id"] is not None
-        })
-
-        for vodum_user_id in vodum_user_ids:
-            preferred_media_user_id = _get_preferred_plex_media_user_id(db, vodum_user_id, server_id)
-
-            dedupe_key = (
-                f"plex:sync:server={server_id}:"
-                f"media_user={preferred_media_user_id or 'none'}:bulk_grant"
-            )
-
-            payload = {
-                "reason": "bulk_grant",
-                "library_ids": valid_library_ids,
-                "preferred_media_user_id": preferred_media_user_id,
-            }
-
-            insert_plex_media_job(
+            result = grant_libraries_to_active_users(
                 db,
-                action="sync",
-                vodum_user_id=vodum_user_id,
-                server_id=server_id,
-                dedupe_key=dedupe_key,
-                payload=payload,
+                server_id=request.form.get("server_id", type=int),
+                library_ids=request.form.getlist("library_ids"),
             )
+        except BulkAccessError as exc:
+            flash(exc.flash_key, exc.category)
+            return redirect(url_for("libraries_list"))
 
-        # --------------------------------------------------
-        # 5) Activer + queue apply_plex_access_updates
-        # --------------------------------------------------
         try:
             enable_and_run_task_by_name("apply_plex_access_updates")
         except Exception:
             pass
-
-        # --------------------------------------------------
-        # Wakeup scheduler systems immediately
-        # --------------------------------------------------
         mark_auto_enable_dirty()
         force_task_run("apply_plex_access_updates")
 
-        flash(
-            f"Grant access done on {server['name']}: "
-            f"{len(valid_library_ids)} librar{'y' if len(valid_library_ids) == 1 else 'ies'}, "
-            f"{len(users)} active user(s), "
-            f"{inserted_links} DB link(s) added. "
-            f"Ready Plex sync: {ready_count}. Pending Plex invites: {pending_count}.",
-            "success",
-        )
+        flash(result["message"], "success")
         return redirect(url_for("libraries_list"))
 
 
@@ -1048,178 +921,24 @@ def register(app):
     def bulk_remove_libraries():
         db = get_db()
 
-        server_id = request.form.get("server_id", type=int)
-        library_ids = request.form.getlist("library_ids")
-
-        if not server_id or not library_ids:
-            flash("no_server_or_library_selected", "error")
-            return redirect(url_for("libraries_list"))
-
-        # --------------------------------------------------
-        # Vérifier que c'est bien un serveur Plex
-        # --------------------------------------------------
-        server = db.query_one("SELECT id, name, type FROM servers WHERE id = ?", (server_id,))
-        if not server:
-            flash("server_not_found", "error")
-            return redirect(url_for("libraries_list"))
-
-        if server["type"] != "plex":
-            flash("sync_not_supported_for_server_type", "warning")
-            return redirect(url_for("libraries_list"))
-
-        # --------------------------------------------------
-        # Nettoyage + cast des lib ids
-        # --------------------------------------------------
         try:
-            library_ids_int = sorted({int(x) for x in library_ids})
-        except ValueError:
-            flash("invalid_library", "error")
-            return redirect(url_for("libraries_list"))
-
-        # --------------------------------------------------
-        # Validation : ne garder que les libraries appartenant au server_id
-        # --------------------------------------------------
-        placeholders = ",".join("?" * len(library_ids_int))
-        valid_rows = db.query(
-            f"""
-            SELECT id
-            FROM libraries
-            WHERE server_id = ?
-              AND id IN ({placeholders})
-            """,
-            (server_id, *library_ids_int),
-        )
-        valid_library_ids = [int(r["id"]) for r in valid_rows]
-
-        if not valid_library_ids:
-            flash("no_valid_libraries_for_server", "error")
-            return redirect(url_for("libraries_list"))
-
-        # --------------------------------------------------
-        # 1) Tous les users Plex du serveur, sauf owner
-        #    -> on supprime l'accès pour tout le monde
-        # --------------------------------------------------
-        users = db.query(
-            """
-            SELECT
-                mu.id AS media_user_id,
-                mu.vodum_user_id AS vodum_user_id,
-                mu.username,
-                mu.role
-            FROM media_users mu
-            WHERE mu.server_id = ?
-              AND mu.type = 'plex'
-              AND LOWER(COALESCE(mu.role, '')) != 'owner'
-            ORDER BY mu.username
-            """,
-            (server_id,),
-        )
-
-        if not users:
-            flash("No removable Plex users found for this server.", "warning")
-            return redirect(url_for("libraries_list"))
-
-        media_user_ids = [int(u["media_user_id"]) for u in users]
-        media_placeholders = ",".join("?" * len(media_user_ids))
-        libs_placeholders = ",".join("?" * len(valid_library_ids))
-
-        # --------------------------------------------------
-        # 2) Suppression en DB des accès demandés
-        # --------------------------------------------------
-        cur = db.execute(
-            f"""
-            DELETE FROM media_user_libraries
-            WHERE media_user_id IN ({media_placeholders})
-              AND library_id IN ({libs_placeholders})
-            """,
-            (*media_user_ids, *valid_library_ids),
-        )
-        deleted_links = cur.rowcount if getattr(cur, "rowcount", None) is not None else 0
-
-        if deleted_links <= 0:
-            flash(
-                f"No existing DB access found to remove on {server['name']} for the selected librar"
-                f"{'y' if len(valid_library_ids) == 1 else 'ies'}.",
-                "warning",
-            )
-            return redirect(url_for("libraries_list"))
-
-        # --------------------------------------------------
-        # 3) Créer 1 job par vodum_user
-        #    - sync si l'user garde encore des libs sur ce serveur
-        #    - revoke si plus aucune lib sur ce serveur
-        # --------------------------------------------------
-        queued_sync = 0
-        queued_revoke = 0
-
-        vodum_user_ids = sorted({
-            int(u["vodum_user_id"])
-            for u in users
-            if u["vodum_user_id"] is not None
-        })
-
-        for vodum_user_id in vodum_user_ids:
-            preferred_media_user_id = _get_preferred_plex_media_user_id(db, vodum_user_id, server_id)
-            if not preferred_media_user_id:
-                continue
-
-            remaining = db.query_one(
-                """
-                SELECT COUNT(DISTINCT mul.library_id) AS c
-                FROM media_user_libraries mul
-                JOIN libraries l
-                    ON l.id = mul.library_id
-                WHERE mul.media_user_id = ?
-                  AND l.server_id = ?
-                """,
-                (preferred_media_user_id, server_id),
-            )
-            remaining_count = int(remaining["c"]) if remaining and remaining["c"] is not None else 0
-
-            if remaining_count == 0:
-                action = "revoke"
-                dedupe_key = f"plex:revoke:server={server_id}:media_user={preferred_media_user_id}:bulk_remove"
-                queued_revoke += 1
-            else:
-                action = "sync"
-                dedupe_key = f"plex:sync:server={server_id}:media_user={preferred_media_user_id}:bulk_remove"
-                queued_sync += 1
-
-            payload = {
-                "reason": "bulk_remove",
-                "library_ids": valid_library_ids,
-                "remaining_count": remaining_count,
-                "preferred_media_user_id": preferred_media_user_id,
-            }
-
-            insert_plex_media_job(
+            result = remove_libraries_from_users(
                 db,
-                action=action,
-                vodum_user_id=vodum_user_id,
-                server_id=server_id,
-                dedupe_key=dedupe_key,
-                payload=payload,
+                server_id=request.form.get("server_id", type=int),
+                library_ids=request.form.getlist("library_ids"),
             )
+        except BulkAccessError as exc:
+            flash(exc.flash_key, exc.category)
+            return redirect(url_for("libraries_list"))
 
-        # --------------------------------------------------
-        # 4) Activer + queue apply_plex_access_updates
-        # --------------------------------------------------
         try:
             enable_and_run_task_by_name("apply_plex_access_updates")
         except Exception:
             pass
-
-        # --------------------------------------------------
-        # Wakeup scheduler systems immediately
-        # --------------------------------------------------
         mark_auto_enable_dirty()
         force_task_run("apply_plex_access_updates")
 
-        flash(
-            f"Remove access done on {server['name']}: "
-            f"{len(valid_library_ids)} librar{'y' if len(valid_library_ids) == 1 else 'ies'}, "
-            f"{deleted_links} DB link(s) removed, "
-            f"{queued_sync} sync job(s), {queued_revoke} revoke job(s).",
-            "success",
-        )
+        flash(result["message"], "success")
         return redirect(url_for("libraries_list"))
+
+

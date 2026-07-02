@@ -2,13 +2,13 @@
 
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
     <div class="flex items-center justify-between mb-4">
-      <div class="text-sm font-semibold">Libraries</div>
-      <div class="text-xs text-slate-400">30 rows / page</div>
+      <div class="text-sm font-semibold">{{ t("libraries") }}</div>
+      <div class="text-xs text-slate-400">{{ t("monitoring_user_rows_page") }}</div>
     </div>
 
     {% if rows is not defined %}
       <div class="text-slate-500">
-        Backend not wired yet: variable <code class="text-slate-300">rows</code> missing.
+        {{ t("monitoring_libraries_backend_missing") }}
       </div>
     {% else %}
       <div class="overflow-x-auto">
@@ -42,14 +42,14 @@
             </th>
           {% endmacro %}
 
-          {{ th("Server", "server") }}
-          {{ th("Library", "library") }}
-          {{ th("Type", "type") }}
-          {{ th("Users", "users") }}
-          {{ th("Items", "items") }}
-          {{ th("Last stream", "last") }}
-          {{ th("Plays", "plays") }}
-          {{ th("Duration", "duration") }}
+          {{ th(t("server"), "server") }}
+          {{ th(t("monitoring_libraries_library"), "library") }}
+          {{ th(t("type"), "type") }}
+          {{ th(t("users"), "users") }}
+          {{ th(t("monitoring_libraries_items"), "items") }}
+          {{ th(t("monitoring_libraries_last_stream"), "last") }}
+          {{ th(t("monitoring_user_plays"), "plays") }}
+          {{ th(t("duration"), "duration") }}
 
           </tr>
           </thead>
@@ -70,7 +70,7 @@
 
             {% if rows|length == 0 %}
               <tr>
-                <td colspan="8" class="py-6 text-slate-500">No data yet.</td>
+                <td colspan="8" class="py-6 text-slate-500">{{ t("no_data") }}</td>
               </tr>
             {% endif %}
           </tbody>
@@ -97,12 +97,12 @@
                 });
 
                 btn.dataset.expanded = expanded ? '0' : '1';
-                btn.textContent = expanded ? 'View more' : 'View less';
+                btn.textContent = expanded ? {{ t("monitoring_libraries_view_more")|tojson }} : {{ t("monitoring_libraries_view_less")|tojson }};
               })(this)
             "
             data-expanded="0"
           >
-            View more
+            {{ t("monitoring_libraries_view_more") }}
           </button>
         </div>
       {% endif %}
@@ -116,9 +116,9 @@
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
     <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-5">
       <div>
-        <div class="text-sm font-semibold">Top played by library</div>
+        <div class="text-sm font-semibold">{{ t("monitoring_libraries_top_played") }}</div>
         <div class="text-xs text-slate-400 mt-1">
-          Only libraries with watched media in the selected period are shown.
+          {{ t("monitoring_libraries_top_help") }}
         </div>
       </div>
 
@@ -137,7 +137,7 @@
           onchange="this.form.submit()"
           class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200"
         >
-          <option value="all" {% if library_user == "all" %}selected{% endif %}>All users</option>
+          <option value="all" {% if library_user == "all" %}selected{% endif %}>{{ t("all_users") }}</option>
           {% for u in library_users %}
             <option value="{{ u.id }}" {% if library_user|string == u.id|string %}selected{% endif %}>
               {{ u.label }}
@@ -150,11 +150,11 @@
           onchange="this.form.submit()"
           class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200"
         >
-          <option value="7d"  {% if library_range == "7d" %}selected{% endif %}>Last 7 days</option>
-          <option value="30d" {% if library_range == "30d" %}selected{% endif %}>Last 30 days</option>
-          <option value="90d" {% if library_range == "90d" %}selected{% endif %}>Last 90 days</option>
-          <option value="1y"  {% if library_range == "1y" %}selected{% endif %}>Last year</option>
-          <option value="all" {% if library_range == "all" %}selected{% endif %}>All time</option>
+          <option value="7d"  {% if library_range == "7d" %}selected{% endif %}>{{ t("monitoring_libraries_last_7_days") }}</option>
+          <option value="30d" {% if library_range == "30d" %}selected{% endif %}>{{ t("monitoring_libraries_last_30_days") }}</option>
+          <option value="90d" {% if library_range == "90d" %}selected{% endif %}>{{ t("monitoring_libraries_last_90_days") }}</option>
+          <option value="1y"  {% if library_range == "1y" %}selected{% endif %}>{{ t("monitoring_libraries_last_year") }}</option>
+          <option value="all" {% if library_range == "all" %}selected{% endif %}>{{ t("monitoring_libraries_all_time") }}</option>
         </select>
       </form>
     </div>
@@ -172,6 +172,7 @@
                   alt="{{ top_item.display_title }}"
                   class="absolute inset-0 w-full h-full object-cover opacity-75"
                   loading="lazy"
+                  decoding="async"
                 >
               {% else %}
                 <div class="absolute inset-0 bg-slate-800"></div>
@@ -188,7 +189,7 @@
                       {{ card.server_name }}
                     </div>
                     <div class="text-[11px] text-slate-400 mt-1">
-                      {{ card.total_plays }} plays
+                      {{ card.total_plays }} {{ t("monitoring_libraries_play") if card.total_plays == 1 else t("monitoring_user_plays") }}
                     </div>
                   </div>
                 </div>
@@ -204,6 +205,7 @@
                       alt=""
                       class="absolute inset-0 h-full w-full object-cover opacity-20 pointer-events-none"
                       loading="lazy"
+                      decoding="async"
                     >
                     <div class="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-950/80 to-slate-950/95"></div>
                   {% endif %}
@@ -215,6 +217,7 @@
                         alt="{{ item.display_title }}"
                         class="w-full h-full object-cover"
                         loading="lazy"
+                        decoding="async"
                       >
                     {% endif %}
                   </div>
@@ -224,10 +227,10 @@
                       {{ item.display_title }}
                     </div>
                     <div class="text-xs text-slate-400 mt-1">
-                      {{ item.plays }} play{% if item.plays != 1 %}s{% endif %}
+                      {{ item.plays }} {{ t("monitoring_libraries_play") if item.plays == 1 else t("monitoring_user_plays") }}
                     </div>
                     <div class="text-xs text-slate-500">
-                      {{ item.user_count }} user{% if item.user_count != 1 %}s{% endif %}
+                      {{ item.user_count }} {{ t("user") if item.user_count == 1 else t("users") }}
                     </div>
                   </div>
                 </div>
@@ -238,7 +241,7 @@
       </div>
     {% else %}
       <div class="text-sm text-slate-500">
-        No watched media found for the selected filters.
+        {{ t("monitoring_libraries_no_watched") }}
       </div>
     {% endif %}
   </div>

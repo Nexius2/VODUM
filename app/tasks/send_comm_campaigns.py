@@ -8,6 +8,7 @@ from communications_engine import (
     record_history,
     available_channels,
 )
+from core.communications.campaign_recovery import recover_campaigns
 
 log = get_logger("send_comm_campaigns")
 
@@ -50,7 +51,7 @@ def _required_channels(db, settings: dict, user: dict) -> list[str]:
 
 
 def _send_test_campaign(db, settings: dict, campaign: dict) -> bool:
-    admin_email = (settings.get("admin_email") or "").strip()
+    admin_email = (settings.get("contact_email") or "").strip()
     campaign_id = int(campaign["id"])
 
     if not admin_email:
@@ -106,13 +107,13 @@ def _send_test_campaign(db, settings: dict, campaign: dict) -> bool:
 
     if mode == "all":
         sent_channels = {
-            (att.get("channel") or "").strip()
+            (att.channel or "").strip()
             for att in attempts
-            if att.get("ok")
+            if att.status == "sent"
         }
         ok = all(ch in sent_channels for ch in required_channels) if required_channels else True
     else:
-        ok = any(att.get("ok") for att in attempts)
+        ok = any(att.status == "sent" for att in attempts)
 
     db.execute(
         """
@@ -182,7 +183,12 @@ def run(task_id: int, db):
     log.debug("=== SEND COMM CAMPAIGNS : START ===")
 
     try:
-        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        recovery = recover_campaigns(db)
+        if any(recovery.values()):
+            log.warning("Recovered interrupted communication campaigns: %s", recovery)
+            task_logs(task_id, "warning", "Recovered interrupted communication campaigns", details=recovery)
+
+        settings = db.query_one("SELECT id, mail_from, smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_auth_method, smtp_oauth_access_token, email_history_retention_years, disable_on_expiry, delete_after_expiry_days, send_reminders, preavis_days, reminder_days, default_language, timezone, admin_email, contact_email, admin_password_hash, auth_enabled, admin_totp_enabled, admin_totp_secret, wizard_active, wizard_completed, wizard_step, wizard_state_json, web_secure_cookies, web_cookie_samesite, web_trust_proxy, enable_cron_jobs, default_expiration_days, default_subscription_days, maintenance_mode, debug_mode, backup_retention_days, backup_retention_count, data_retention_years, brand_name, notifications_order, user_notifications_can_override, notifications_send_mode, expiry_mode, warn_then_disable_days, discord_enabled, discord_bot_token, discord_bot_id, mailing_enabled, skip_never_used_accounts, plex_user_import_mode, enable_anonymous_telemetry, telemetry_instance_id, telemetry_last_sent_at, task_defaults_version, stream_enforcer_boost_until, usage_risk_enabled, usage_risk_send_upgrade_suggestions, usage_risk_send_stream_blocked_message, usage_risk_min_kills_before_suggestion, usage_risk_analysis_window_days, usage_risk_suggestion_cooldown_days, usage_risk_medium_threshold, usage_risk_high_threshold FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
 
         test_campaign_rows = db.query(
@@ -237,7 +243,7 @@ def run(task_id: int, db):
 
         if not test_campaigns and not due:
             task_logs(task_id, "debug", "No queued communication campaigns")
-            return {"status": "idle", "processed": 0}
+            return {"status": "idle", "processed": 0, "recovery": recovery}
 
         processed = 0
         success = 0
@@ -274,9 +280,23 @@ def run(task_id: int, db):
 
             user = db.query_one(
                 """
-                SELECT id, username, firstname, lastname, email, second_email, discord_user_id, notifications_order_override, expiration_date
-                FROM vodum_users
-                WHERE id = ?
+                SELECT
+                    u.id,
+                    u.username,
+                    u.firstname,
+                    u.lastname,
+                    u.email,
+                    u.second_email,
+                    u.discord_user_id,
+                    u.notifications_order_override,
+                    u.expiration_date,
+                    u.subscription_template_id,
+                    st.name AS subscription_name,
+                    st.duration_days AS subscription_duration_days,
+                    st.subscription_value AS subscription_value
+                FROM vodum_users u
+                LEFT JOIN subscription_templates st ON st.id = u.subscription_template_id
+                WHERE u.id = ?
                 """,
                 (user_id,),
             )
@@ -438,7 +458,7 @@ def run(task_id: int, db):
             log.info(msg)
         else:
             log.debug(msg)
-        return {"status": "ok", "processed": processed, "success": success, "failed": failed}
+        return {"status": "ok", "processed": processed, "success": success, "failed": failed, "recovery": recovery}
 
     except Exception as e:
         log.error("Error in send_comm_campaigns", exc_info=True)
@@ -446,3 +466,4 @@ def run(task_id: int, db):
         raise
     finally:
         log.debug("=== SEND COMM CAMPAIGNS : END ===")
+

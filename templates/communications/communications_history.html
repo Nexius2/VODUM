@@ -13,6 +13,29 @@
 {% set sort = sort or 'sent_at' %}
 {% set order = order or 'desc' %}
 
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-4">
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+    <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("comm_summary_email") }}</div>
+    <div class="mt-2 text-2xl font-semibold text-emerald-300">{{ communication_summary.email_sent }}</div>
+    <div class="mt-1 text-xs text-slate-400">{{ t("sent") }} · <span class="text-rose-300">{{ communication_summary.email_failed }} {{ t("failed") }}</span></div>
+  </div>
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+    <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("comm_summary_discord") }}</div>
+    <div class="mt-2 text-2xl font-semibold text-indigo-300">{{ communication_summary.discord_sent }}</div>
+    <div class="mt-1 text-xs text-slate-400">{{ t("sent") }} · <span class="text-rose-300">{{ communication_summary.discord_failed }} {{ t("failed") }}</span></div>
+  </div>
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+    <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("comm_summary_last_24h") }}</div>
+    <div class="mt-2 text-2xl font-semibold text-slate-100">{{ communication_summary.sent_24h }}</div>
+    <div class="mt-1 text-xs text-slate-400">{{ t("sent") }} · <span class="text-rose-300">{{ communication_summary.failed_24h }} {{ t("failed") }}</span></div>
+  </div>
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+    <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("comm_summary_queue") }}</div>
+    <div class="mt-2 text-2xl font-semibold text-amber-300">{{ communication_summary.pending }}</div>
+    <div class="mt-1 text-xs text-slate-400">{{ t("pending") }} · <span class="text-rose-300">{{ communication_summary.errors }} {{ t("in_error") }}</span></div>
+  </div>
+</div>
+
 {% macro sort_link(label, key) -%}
   {% set is_active = (sort == key) %}
   <a
@@ -132,7 +155,7 @@
       {% else %}
         <tr>
           <td colspan="6" class="px-4 py-8 text-center text-slate-500">
-            No history found.
+            {{ t("no_history") }}
           </td>
         </tr>
       {% endfor %}
@@ -141,166 +164,89 @@
   </div>
 </div>
 
-{% if total_pages > 1 %}
-<div class="flex items-center justify-between mt-4">
-  <div class="text-xs text-slate-500">
-    Page {{ page }} / {{ total_pages }} ({{ total_rows }} rows)
-  </div>
-
-  <div class="flex gap-2">
-    {% if page > 1 %}
-      <a
-        class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
-        href="{{ url_for('communications_history_page', page=1, sort=sort, order=order) }}"
-      >First</a>
-
-      <a
-        class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
-        href="{{ url_for('communications_history_page', page=page-1, sort=sort, order=order) }}"
-      >Prev</a>
-    {% endif %}
-
-    {% if page < total_pages %}
-      <a
-        class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
-        href="{{ url_for('communications_history_page', page=page+1, sort=sort, order=order) }}"
-      >Next</a>
-
-      <a
-        class="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-sm"
-        href="{{ url_for('communications_history_page', page=total_pages, sort=sort, order=order) }}"
-      >Last</a>
-    {% endif %}
-  </div>
+{% set pagination = {
+  "page": page,
+  "total_pages": total_pages,
+  "total_rows": total_rows,
+  "unit_label": t("comm_history_rows"),
+  "first_url": url_for("communications_history_page", page=1, sort=sort, order=order),
+  "prev_url": url_for("communications_history_page", page=page-1, sort=sort, order=order),
+  "next_url": url_for("communications_history_page", page=page+1, sort=sort, order=order),
+  "last_url": url_for("communications_history_page", page=total_pages, sort=sort, order=order)
+} %}
+<div class="mt-4">
+  {% include "partials/_pagination.html" %}
 </div>
-{% endif %}
 
 <p class="mt-3 text-[11px] text-slate-500">{{ t('comm_history_note') }}</p>
 
 <div
   id="commHistoryModal"
   class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 px-4"
-  onclick="closeCommHistoryModal(event)"
+  data-comm-history-modal
 >
   <div
     class="w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"
-    onclick="event.stopPropagation()"
+    data-comm-history-panel
   >
     <div class="flex items-center justify-between px-5 py-4 border-b border-slate-800">
       <div>
-        <div id="commHistoryModalTitle" class="text-lg font-semibold text-slate-100">History details</div>
+        <div id="commHistoryModalTitle" class="text-lg font-semibold text-slate-100">{{ t("comm_history_details") }}</div>
         <div id="commHistoryModalSubtitle" class="text-xs text-slate-400 mt-1"></div>
       </div>
       <button
         type="button"
         class="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-950 hover:bg-slate-800 text-slate-200"
-        onclick="closeCommHistoryModal()"
+        data-comm-history-close
       >
-        Close
+        {{ t("close") }}
       </button>
     </div>
 
     <div class="p-5 overflow-y-auto max-h-[calc(90vh-72px)] space-y-5">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
-          <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">General</div>
+          <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">{{ t("general") }}</div>
           <div class="space-y-2 text-sm">
-            <div><span class="text-slate-400">Type:</span> <span id="commHistoryModalKind" class="text-slate-100"></span></div>
-            <div><span class="text-slate-400">Name:</span> <span id="commHistoryModalName" class="text-slate-100"></span></div>
-            <div><span class="text-slate-400">User:</span> <span id="commHistoryModalUser" class="text-slate-100"></span></div>
-            <div><span class="text-slate-400">Channel:</span> <span id="commHistoryModalChannel" class="text-slate-100"></span></div>
-            <div><span class="text-slate-400">Status:</span> <span id="commHistoryModalStatus" class="text-slate-100"></span></div>
-            <div><span class="text-slate-400">Sent at:</span> <span id="commHistoryModalSentAt" class="text-slate-100"></span></div>
+            <div><span class="text-slate-400">{{ t("type") }}:</span> <span id="commHistoryModalKind" class="text-slate-100"></span></div>
+            <div><span class="text-slate-400">{{ t("name") }}:</span> <span id="commHistoryModalName" class="text-slate-100"></span></div>
+            <div><span class="text-slate-400">{{ t("user") }}:</span> <span id="commHistoryModalUser" class="text-slate-100"></span></div>
+            <div><span class="text-slate-400">{{ t("communications.channel") }}:</span> <span id="commHistoryModalChannel" class="text-slate-100"></span></div>
+            <div><span class="text-slate-400">{{ t("status") }}:</span> <span id="commHistoryModalStatus" class="text-slate-100"></span></div>
+            <div><span class="text-slate-400">{{ t("sent_at") }}:</span> <span id="commHistoryModalSentAt" class="text-slate-100"></span></div>
           </div>
         </div>
 
         <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
-          <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Error</div>
+          <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">{{ t("error") }}</div>
           <pre id="commHistoryModalError" class="whitespace-pre-wrap break-words text-sm text-slate-200 min-h-[80px]"></pre>
         </div>
       </div>
 
       <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
-        <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Subject</div>
+        <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">{{ t("subject") }}</div>
         <pre id="commHistoryModalSubject" class="whitespace-pre-wrap break-words text-sm text-slate-100"></pre>
       </div>
 
       <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
-        <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Body</div>
+        <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">{{ t("body") }}</div>
         <pre id="commHistoryModalBody" class="whitespace-pre-wrap break-words text-sm text-slate-100"></pre>
       </div>
 
       <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
-        <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Meta JSON</div>
+        <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">{{ t("comm_history_meta_json") }}</div>
         <pre id="commHistoryModalMeta" class="whitespace-pre-wrap break-words text-xs text-slate-300"></pre>
       </div>
     </div>
   </div>
 </div>
 
-<script>
-function openCommHistoryModal(raw) {
-  let data = {};
-  try {
-    data = JSON.parse(raw || "{}");
-  } catch (e) {
-    data = {};
+<script type="application/json" id="comm-history-config">
+  {
+    "detailsLabel": {{ t("comm_history_details")|tojson }},
+    "entryLabel": {{ t("comm_history_entry")|tojson }}
   }
-
-  document.getElementById("commHistoryModalTitle").textContent = "History details";
-  document.getElementById("commHistoryModalSubtitle").textContent =
-    ((data.kind_label || "Entry") + (data.name ? " · " + data.name : ""));
-
-  document.getElementById("commHistoryModalKind").textContent = data.kind_label || "-";
-  document.getElementById("commHistoryModalName").textContent = data.name || "-";
-  document.getElementById("commHistoryModalUser").textContent = data.user || "-";
-  document.getElementById("commHistoryModalChannel").textContent = data.channel_used || "-";
-  document.getElementById("commHistoryModalStatus").textContent = data.status || "-";
-  document.getElementById("commHistoryModalSentAt").textContent = vodumFormatDateTime(data.sent_at || "-");
-  document.getElementById("commHistoryModalError").textContent = data.error || "-";
-  document.getElementById("commHistoryModalSubject").textContent = data.subject || "-";
-  document.getElementById("commHistoryModalBody").textContent = data.body || "-";
-  document.getElementById("commHistoryModalMeta").textContent = data.meta_json || "{}";
-
-  const modal = document.getElementById("commHistoryModal");
-  modal.classList.remove("hidden");
-  modal.classList.add("flex");
-  document.body.classList.add("overflow-hidden");
-}
-
-function closeCommHistoryModal(event) {
-  if (event && event.target && event.target.id !== "commHistoryModal") {
-    return;
-  }
-  const modal = document.getElementById("commHistoryModal");
-  modal.classList.add("hidden");
-  modal.classList.remove("flex");
-  document.body.classList.remove("overflow-hidden");
-}
-
-document.querySelectorAll('tr[data-history]').forEach(function (row) {
-  if (row.dataset.boundCommHistory === "1") {
-    return;
-  }
-  row.dataset.boundCommHistory = "1";
-
-  row.addEventListener("click", function () {
-    openCommHistoryModal(row.dataset.history);
-  });
-
-  row.addEventListener("keydown", function (event) {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      openCommHistoryModal(row.dataset.history);
-    }
-  });
-});
-
-document.addEventListener("keydown", function (event) {
-  if (event.key === "Escape") {
-    closeCommHistoryModal();
-  }
-});
 </script>
+<script src="{{ url_for('static', filename='js/pages/communications-history.js', v=g.app_version|default('dev')) }}"></script>
 
 {% endblock %}

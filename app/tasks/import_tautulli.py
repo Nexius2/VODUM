@@ -27,14 +27,23 @@ from __future__ import annotations
 import os
 import sqlite3
 import json
-from dataclasses import dataclass
+import sys
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
+
+# Support direct execution from either the repository or the container.
+APP_DIR = Path(__file__).resolve().parents[1]
+if str(APP_DIR) not in sys.path:
+    sys.path.insert(0, str(APP_DIR))
+
 from db_manager import DBManager
 import argparse
 from logging_utils import get_logger
 from email_sender import send_email
 from core.monitoring.artwork import extract_artwork_refs
+from core.cli_output import add_summary_only_argument, emit_task_result
 
 # -------------------------
 # CONFIG (override via env)
@@ -934,8 +943,7 @@ def run(task_id, db):
     while True:
         job = db.query_one(
             """
-            SELECT *
-            FROM tautulli_import_jobs
+            SELECT id, server_id, file_path, keep_all_users, keep_all_libraries, import_only_available_libraries, target_server_id, status, stats_json, last_error, created_at, started_at, finished_at FROM tautulli_import_jobs
             WHERE status='queued'
             ORDER BY created_at ASC
             LIMIT 1
@@ -1041,11 +1049,11 @@ def run(task_id, db):
 
             # optional admin email...
             try:
-                settings = db.query_one("SELECT * FROM settings WHERE id=1")
+                settings = db.query_one("SELECT id, mail_from, smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_auth_method, smtp_oauth_access_token, email_history_retention_years, disable_on_expiry, delete_after_expiry_days, send_reminders, preavis_days, reminder_days, default_language, timezone, admin_email, contact_email, admin_password_hash, auth_enabled, admin_totp_enabled, admin_totp_secret, wizard_active, wizard_completed, wizard_step, wizard_state_json, web_secure_cookies, web_cookie_samesite, web_trust_proxy, enable_cron_jobs, default_expiration_days, default_subscription_days, maintenance_mode, debug_mode, backup_retention_days, backup_retention_count, data_retention_years, brand_name, notifications_order, user_notifications_can_override, notifications_send_mode, expiry_mode, warn_then_disable_days, discord_enabled, discord_bot_token, discord_bot_id, mailing_enabled, skip_never_used_accounts, plex_user_import_mode, enable_anonymous_telemetry, telemetry_instance_id, telemetry_last_sent_at, task_defaults_version, stream_enforcer_boost_until, usage_risk_enabled, usage_risk_send_upgrade_suggestions, usage_risk_send_stream_blocked_message, usage_risk_min_kills_before_suggestion, usage_risk_analysis_window_days, usage_risk_suggestion_cooldown_days, usage_risk_medium_threshold, usage_risk_high_threshold FROM settings WHERE id=1")
                 if settings:
                     settings_d = dict(settings)
                     if int(settings_d.get("mailing_enabled") or 0) == 1:
-                        to_email = (settings_d.get("admin_email") or "").strip()
+                        to_email = (settings_d.get("contact_email") or "").strip()
                         if to_email:
                             subject = "VODUM - Tautulli import completed"
                             body = "Import completed successfully.\n\n" + json.dumps(payload, indent=2, ensure_ascii=False)
@@ -1090,16 +1098,20 @@ def run(task_id, db):
 
 
 
-def main():
+def build_cli_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Import Tautulli database into VODUM.")
+    parser.add_argument("--tautulli-db", required=True)
+    parser.add_argument("--keep-all-users", action="store_true")
+    parser.add_argument("--keep-all-libraries", action="store_true")
+    parser.add_argument("--target-server-id", type=int, default=0)
+    add_summary_only_argument(parser)
+    return parser
+
+
+def main(argv=None):
 
     logger = get_logger("task_import_tautulli_cli")
-
-    p = argparse.ArgumentParser(description="Import Tautulli database into VODUM.")
-    p.add_argument("--tautulli-db", required=True)
-    p.add_argument("--keep-all-users", action="store_true")
-    p.add_argument("--keep-all-libraries", action="store_true")
-    p.add_argument("--target-server-id", type=int, default=0)
-    args = p.parse_args()
+    args = build_cli_parser().parse_args(argv)
 
     db = DBManager()
 
@@ -1112,16 +1124,26 @@ def main():
         target_server_id=int(args.target_server_id or 0),
     )
 
-    logger.info("=== Tautulli import completed ===")
-    logger.info(f"Scanned: {stats.scanned}")
-    logger.info(f"Inserted: {stats.inserted}")
-    logger.info(f"Skipped (duplicates): {stats.skipped_duplicates}")
-    logger.info(f"Skipped (unknown user): {stats.skipped_unknown_user}")
-    logger.info(f"Skipped (unknown lib): {stats.skipped_unknown_library}")
-    logger.info(f"Skipped (invalid row): {stats.skipped_missing_required}")
+    emit_task_result(
+        logger,
+        task_name="import_tautulli",
+        status="success",
+        summary=asdict(stats),
+        summary_only=bool(args.summary_only),
+        detail_lines=(
+            "=== Tautulli import completed ===",
+            f"Scanned: {stats.scanned}",
+            f"Inserted: {stats.inserted}",
+            f"Skipped (duplicates): {stats.skipped_duplicates}",
+            f"Skipped (unknown user): {stats.skipped_unknown_user}",
+            f"Skipped (unknown lib): {stats.skipped_unknown_library}",
+            f"Skipped (invalid row): {stats.skipped_missing_required}",
+        ),
+    )
 
 
 
 
 if __name__ == "__main__":
     main()
+

@@ -44,7 +44,12 @@ def is_email_ready(settings: Dict) -> bool:
             and (settings.get("smtp_host") or "").strip()
             and (settings.get("smtp_port") or 0)
             and (settings.get("smtp_user") or "").strip()
-            and (settings.get("smtp_pass") or "") != ""
+            and (
+                ((settings.get("smtp_auth_method") or "password").strip().lower() == "oauth2"
+                 and (settings.get("smtp_oauth_access_token") or "").strip())
+                or ((settings.get("smtp_auth_method") or "password").strip().lower() != "oauth2"
+                    and (settings.get("smtp_pass") or "") != "")
+            )
             and (settings.get("mail_from") or "").strip()
         )
     except Exception:

@@ -9,10 +9,17 @@ from logging_utils import get_logger
 from tasks_engine import enable_and_run_task_by_name
 from core.i18n import get_translator
 from core.backup import list_backups
+from core.app_paths import imports_dir as get_imports_dir
 
 from web.helpers import get_db, get_backup_cfg
 
 settings_logger = get_logger("settings")
+
+BACKUP_SETTINGS_COLUMNS = """
+    backup_retention_days,
+    backup_retention_count,
+    data_retention_years
+"""
 
 
 
@@ -111,7 +118,7 @@ def register(app):
         backup_cfg = get_backup_cfg()
         db = get_db()
 
-        settings = db.query_one("SELECT * FROM settings LIMIT 1")
+        settings = db.query_one(f"SELECT {BACKUP_SETTINGS_COLUMNS} FROM settings LIMIT 1")
         plex_servers = db.query("SELECT id, name FROM servers WHERE type='plex' ORDER BY name ASC")
         db_size_bytes = get_sqlite_db_size_bytes(app.config["DATABASE"])
         backups = list_backups(backup_cfg)
@@ -208,7 +215,7 @@ def register(app):
         # ───────────────────────────────
         elif action == "restore":
             selected = request.form.get("selected_backup")
-            imports_dir = Path("/appdata/imports")
+            imports_dir = get_imports_dir()
             imports_dir.mkdir(parents=True, exist_ok=True)
             request_path_file = imports_dir / "restore_request_path.txt"
 
@@ -273,16 +280,19 @@ def register(app):
         elif action == "save_settings":
             try:
                 days = int(request.form.get("backup_retention_days", "30"))
+                count = int(request.form.get("backup_retention_count", "10"))
                 years = int(request.form.get("data_retention_years", "0"))
 
                 if days < 1:
                     days = 30
+                if count < 1:
+                    count = 10
                 if years < 0:
                     years = 0
 
                 db.execute(
-                    "UPDATE settings SET backup_retention_days = ?, data_retention_years = ?",
-                    (days, years),
+                    "UPDATE settings SET backup_retention_days = ?, backup_retention_count = ?, data_retention_years = ?",
+                    (days, count, years),
                 )
                 flash(t("backup_settings_saved"), "success")
             except Exception as e:
@@ -308,7 +318,7 @@ def register(app):
                 if not file or file.filename == "":
                     flash("No file provided.", "error")
                 else:
-                    imports_dir = Path("/appdata/imports")
+                    imports_dir = get_imports_dir()
                     imports_dir.mkdir(parents=True, exist_ok=True)
 
                     ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")

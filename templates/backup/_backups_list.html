@@ -1,4 +1,4 @@
-<form action="{{ url_for('backup_action') }}" method="post" id="restore-existing-form">
+﻿<form action="{{ url_for('backup_action') }}" method="post" id="restore-existing-form">
   <input type="hidden" name="action" value="restore">
   <input type="hidden" name="selected_backup" id="selected-backup-input">
 
@@ -40,7 +40,7 @@
 
 			  <button
 				type="button"
-				onclick="toggleBackupMenu('{{ loop.index }}')"
+				data-backup-menu-toggle="{{ loop.index }}"
 				class="inline-flex items-center justify-center
 					   w-8 h-8 rounded-lg
 					   hover:bg-slate-800/80
@@ -70,28 +70,25 @@
 				  class="flex items-center gap-2
 						 px-4 py-2.5 text-xs
 						 text-slate-300 hover:bg-slate-800 transition">
-				  <span>⬇</span>
-				  <span>{{ t("download") if t("download") else "Download" }}</span>
+				  <span aria-hidden="true">&darr;</span>`r`n`t`t`t`t  <span>{{ t("download") if t("download") else "Download" }}</span>
 				</a>
 
 				<button
 				  type="button"
-				  onclick="restoreBackup('{{ b.name }}')"
+				  data-backup-restore="{{ b.name }}"
 				  class="w-full flex items-center gap-2
 						 px-4 py-2.5 text-xs text-left
 						 text-amber-300 hover:bg-slate-800 transition">
-				  <span>♻</span>
-				  <span>{{ t("restore_btn") }}</span>
+				  <span aria-hidden="true">&#8635;</span>`r`n`t`t`t`t  <span>{{ t("restore_btn") }}</span>
 				</button>
 
 				<button
 				  type="button"
-				  onclick="openDeleteBackupModal('{{ b.name }}')"
+				  data-backup-delete="{{ b.name }}"
 				  class="w-full flex items-center gap-2
 						 px-4 py-2.5 text-xs text-left
 						 text-rose-300 hover:bg-slate-800 transition">
-				  <span>🗑</span>
-				  <span>{{ t("delete") if t("delete") else "Delete" }}</span>
+				  <span aria-hidden="true">&times;</span>`r`n`t`t`t`t  <span>{{ t("delete") if t("delete") else "Delete" }}</span>
 				</button>
 
 			  </div>
@@ -160,14 +157,14 @@
 
       <button
         type="button"
-        onclick="closeDeleteBackupModal()"
+        data-backup-delete-cancel
         class="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 transition">
         {{ t("cancel") }}
       </button>
 
       <button
         type="button"
-        onclick="confirmDeleteBackup()"
+        data-backup-delete-confirm
         class="rounded-lg bg-rose-600 px-4 py-2 text-sm text-white hover:bg-rose-500 transition">
         {{ t("delete") if t("delete") else "Delete" }}
       </button>
@@ -176,166 +173,3 @@
 
   </div>
 </div>
-<script>
-  const confirmRestoreText = "{{ t('confirm_restore') }}";
-
-  
-  
-  const hiddenInput = document.getElementById('selected-backup-input');
-
-  // Modal elements
-  const restoreForm = document.getElementById("restore-existing-form");
-  const modal = document.getElementById("restoreConfirmModal");
-  const modalText = document.getElementById("restoreConfirmModalText");
-  const btnCancel = document.getElementById("restoreConfirmCancel");
-  const btnOk = document.getElementById("restoreConfirmOk");
-
-  let pendingSubmit = false;
-
-	function toggleBackupMenu(index) {
-	  document.querySelectorAll('[id^="backup-menu-"]').forEach(menu => {
-		if (menu.id !== `backup-menu-${index}`) {
-		  menu.classList.add('hidden');
-		}
-	  });
-
-	  const menu = document.getElementById(`backup-menu-${index}`);
-
-	  if (menu) {
-		menu.classList.toggle('hidden');
-	  }
-	}
-
-	function closeBackupMenus() {
-	  document.querySelectorAll('[id^="backup-menu-"]').forEach(menu => {
-		menu.classList.add('hidden');
-	  });
-	}
-
-	function restoreBackup(filename) {
-	  hiddenInput.value = filename;
-	  closeBackupMenus();
-	  openRestoreConfirm();
-	}
-
-
-
-  function openRestoreConfirm() {
-    modalText.textContent = confirmRestoreText;
-    modal.classList.remove("hidden");
-    modal.setAttribute("aria-hidden", "false");
-  }
-
-  function closeRestoreConfirm() {
-    modal.classList.add("hidden");
-    modal.setAttribute("aria-hidden", "true");
-  }
-
-
-
-
-
-  btnCancel.addEventListener("click", () => {
-    pendingSubmit = false;
-    closeRestoreConfirm();
-  });
-
-	btnOk.addEventListener("click", () => {
-	  pendingSubmit = true;
-	  closeRestoreConfirm();
-
-	  if (typeof window.showRestoreWaitingModal === "function") {
-		window.showRestoreWaitingModal();
-	  }
-
-	  restoreForm.submit();
-	});
-
-  // Close modal on backdrop click
-  modal.addEventListener("click", (e) => {
-    if (e.target === modal || (e.target.classList && e.target.classList.contains("bg-black/70"))) {
-      pendingSubmit = false;
-      closeRestoreConfirm();
-    }
-  });
-
-  // Close modal on ESC
-	window.addEventListener('click', (e) => {
-	  if (!e.target.closest('[onclick^="toggleBackupMenu"]') &&
-		  !e.target.closest('[id^="backup-menu-"]')) {
-
-		closeBackupMenus();
-	  }
-	});
-	document.addEventListener("keydown", (e) => {
-
-	  if (e.key !== "Escape") {
-		return;
-	  }
-
-	  if (!modal.classList.contains("hidden")) {
-		pendingSubmit = false;
-		closeRestoreConfirm();
-	  }
-
-	  const deleteModal = document.getElementById('delete-backup-modal');
-
-	  if (deleteModal && !deleteModal.classList.contains("hidden")) {
-		closeDeleteBackupModal();
-	  }
-	});
-
-let deleteBackupFilename = null;
-function openDeleteBackupModal(filename) {
-  deleteBackupFilename = filename;
-
-  document.getElementById('delete-backup-name').textContent = filename;
-
-  document
-    .getElementById('delete-backup-modal')
-    .classList.remove('hidden');
-
-  document
-    .getElementById('delete-backup-modal')
-    .classList.add('flex');
-}
-
-function closeDeleteBackupModal() {
-  document
-    .getElementById('delete-backup-modal')
-    .classList.add('hidden');
-
-  document
-    .getElementById('delete-backup-modal')
-    .classList.remove('flex');
-
-  deleteBackupFilename = null;
-}
-
-document
-  .getElementById('delete-backup-modal')
-  .addEventListener('click', (e) => {
-
-    if (e.target.id === 'delete-backup-modal') {
-      closeDeleteBackupModal();
-    }
-  });
-
-function confirmDeleteBackup() {
-  if (!deleteBackupFilename) {
-    return;
-  }
-  closeDeleteBackupModal();
-  fetch('/backup/delete', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      filename: deleteBackupFilename
-    })
-  }).then(() => {
-    window.location.reload();
-  });
-}
-</script>

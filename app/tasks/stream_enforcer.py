@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 
 from core.providers.registry import get_provider
+from core.policy_transition_grace import should_defer_stream_violation
 from logging_utils import get_logger, is_debug_mode_enabled
 from communications_engine import schedule_template_notification, enqueue_named_task
 
@@ -753,8 +754,7 @@ def _is_vip_override(vodum_user_id: Optional[int]) -> bool:
 
 def _load_enabled_policies() -> List[dict]:
     rows = _db.query("""
-        SELECT *
-        FROM stream_policies
+        SELECT id, scope_type, scope_id, provider, server_id, is_enabled, priority, rule_type, rule_value_json, created_at, updated_at FROM stream_policies
         WHERE is_enabled=1
         ORDER BY priority ASC, id ASC
     """)
@@ -1036,7 +1036,26 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
             if allow_local_ip:
                 counted_sessions = [s for s in user_sessions if not _is_local_ip((s.get('ip') or '').strip())]
 
+            defer_probable_switch = should_defer_stream_violation(
+                policy_id=int(policy.get("id") or 0),
+                user_key=user_key,
+                sessions=counted_sessions,
+                limit=eff_max,
+                current_count=len(counted_sessions),
+            )
+
             if len(counted_sessions) <= eff_max:
+                continue
+
+            if defer_probable_switch:
+                logger.info(
+                    "[max_streams_grace] probable device switch | policy=%s | user=%s | streams=%s | max=%s | grace=%ss",
+                    policy.get("id"),
+                    user_key,
+                    len(counted_sessions),
+                    eff_max,
+                    HOUSEHOLD_MEDIA_GRACE_SECONDS,
+                )
                 continue
 
             # ✅ On choisit la session à tuer globalement (tous serveurs confondus)
@@ -1172,14 +1191,16 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
             by_key.setdefault(key, []).append(s)
 
         for key, ip_sessions in by_key.items():
-            if len(ip_sessions) <= max_streams:
+            counted_ip_sessions = _deduplicate_household_sessions(ip_sessions)
+
+            if len(counted_ip_sessions) <= max_streams:
                 continue
 
             ip_value = key.split("|", 1)[1] if ("|" in key) else key
-            reason = f"max_streams_per_ip({ip_value}): {len(ip_sessions)} > {max_streams}"
+            reason = f"max_streams_per_ip({ip_value}): {len(counted_ip_sessions)} > {max_streams}"
 
             # IMPORTANT: choisir la cible ICI pour garantir server_id/provider cohérents
-            target = _pick_kill_target(ip_sessions, selector)
+            target = _pick_kill_target(counted_ip_sessions, selector)
             if not target:
                 continue
 
@@ -1194,7 +1215,7 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
                 "server_id": server_id,
                 "provider": provider,
                 "target_user": _normalize_user_key(target),
-                "sessions": ip_sessions,
+                "sessions": counted_ip_sessions,
                 "reason": reason,
                 "selector": selector,
                 "warn_title": warn_title,
@@ -1441,6 +1462,226 @@ def _policy_display_name(policy: dict) -> str:
         return "Policy"
 
 
+def _notification_policy_context(policy: dict, target: dict, related_sessions: list[dict] | None) -> dict:
+    try:
+        rule = json.loads(policy.get("rule_value_json") or "{}")
+    except Exception:
+        rule = {}
+    if not isinstance(rule, dict):
+        rule = {}
+
+    rule_type = str(policy.get("rule_type") or "").strip()
+
+    try:
+        limit = int(rule.get("max") or rule.get("max_kbps") or 0)
+    except (TypeError, ValueError):
+        limit = 0
+
+    target_key = _normalize_user_key(target)
+    target_session_key = str(target.get("session_key") or "")
+    target_ip = str(target.get("ip") or "").strip()
+    target_server_id = target.get("server_id")
+
+    all_related = list(related_sessions or [])
+
+    if not any(str(s.get("session_key") or "") == target_session_key for s in all_related):
+        all_related.append(target)
+
+    # Sessions réellement utiles pour expliquer le blocage.
+    if rule_type == "max_ips_per_user":
+        involved = [
+            s for s in all_related
+            if _normalize_user_key(s) == target_key
+        ]
+
+    elif rule_type == "max_streams_per_user":
+        involved = [
+            s for s in all_related
+            if _normalize_user_key(s) == target_key
+        ]
+
+    elif rule_type == "max_streams_per_ip":
+        involved = [
+            s for s in all_related
+            if str(s.get("ip") or "").strip() == target_ip
+        ]
+
+    elif rule_type in {
+        "max_streams_per_server",
+        "max_transcodes_per_server",
+        "max_transcodes_global",
+        "max_bitrate_kbps",
+        "ban_4k_transcode",
+    }:
+        involved = [
+            s for s in all_related
+            if s.get("server_id") == target_server_id
+        ]
+
+    else:
+        involved = [
+            s for s in all_related
+            if _normalize_user_key(s) == target_key
+        ]
+
+    if not involved:
+        involved = [target]
+
+    def session_media(session: dict) -> str:
+        return _media_title_from_session(session) or "Unknown media"
+
+    def session_device(session: dict) -> str:
+        return (
+            str(session.get("device") or "").strip()
+            or str(session.get("client_product") or "").strip()
+            or str(session.get("client_name") or "").strip()
+            or "Unknown device"
+        )
+
+    def summary(session: dict) -> str:
+        parts = [session_media(session)]
+
+        device = session_device(session)
+        if device:
+            parts.append(device)
+
+        ip = str(session.get("ip") or "").strip()
+        if ip:
+            parts.append(ip)
+
+        server_name = str(session.get("server_name") or "").strip()
+        if server_name:
+            parts.append(server_name)
+
+        return " - ".join(parts)
+
+    def device_summary(session: dict) -> str:
+        parts = [session_device(session)]
+
+        ip = str(session.get("ip") or "").strip()
+        if ip:
+            parts.append(ip)
+
+        server_name = str(session.get("server_name") or "").strip()
+        if server_name:
+            parts.append(server_name)
+
+        media = session_media(session)
+        if media:
+            parts.append(media)
+
+        return " - ".join(parts)
+
+    unique_ips = sorted({
+        str(s.get("ip") or "").strip()
+        for s in involved
+        if str(s.get("ip") or "").strip()
+    })
+
+    unique_devices = []
+    seen_devices = set()
+    for s in involved:
+        line = device_summary(s)
+        key = line.lower()
+        if key in seen_devices:
+            continue
+        seen_devices.add(key)
+        unique_devices.append(line)
+
+    if rule_type == "max_ips_per_user":
+        observed = len(unique_ips)
+        limit_label = "maximum public IPs"
+        explanation = (
+            f"Your subscription allows up to {limit} public IP(s) at the same time. "
+            f"VODUM detected {observed} public IP(s) being used simultaneously."
+        )
+
+    elif rule_type == "max_streams_per_user":
+        observed = len(involved)
+        limit_label = "maximum simultaneous streams"
+        explanation = (
+            f"Your subscription allows up to {limit} simultaneous stream(s). "
+            f"VODUM detected {observed} active stream(s) at the same time."
+        )
+
+    elif rule_type == "max_streams_per_ip":
+        observed = len(involved)
+        limit_label = "maximum simultaneous streams per IP"
+        explanation = (
+            f"The policy allows up to {limit} simultaneous stream(s) from the same public IP. "
+            f"VODUM detected {observed} active stream(s) from IP {target_ip or 'unknown'}."
+        )
+
+    elif rule_type in {"max_streams_per_server"}:
+        observed = len(involved)
+        limit_label = "maximum simultaneous streams on this server"
+        explanation = (
+            f"The server limit is {limit} simultaneous stream(s). "
+            f"VODUM detected {observed} active stream(s) on this server."
+        )
+
+    elif rule_type in {"max_transcodes_per_server", "max_transcodes_global"}:
+        observed = sum(int(s.get("is_transcode") or 0) for s in involved)
+        limit_label = "maximum simultaneous transcodes"
+        explanation = (
+            f"The transcode limit is {limit}. "
+            f"VODUM detected {observed} active transcode(s)."
+        )
+
+    elif rule_type == "max_bitrate_kbps":
+        observed = ""
+        limit_label = "maximum bitrate"
+        explanation = (
+            f"The maximum allowed bitrate is {limit} kbps. "
+            f"This stream was above the allowed bitrate."
+        )
+
+    elif rule_type == "ban_4k_transcode":
+        observed = ""
+        limit_label = "4K transcode blocked"
+        explanation = "This playback was stopped because 4K transcoding is not allowed."
+
+    else:
+        observed = len(involved)
+        limit_label = "policy limit"
+        explanation = (
+            f"This playback was stopped because it matched policy {rule_type or 'unknown'}."
+        )
+
+    others = [
+        s for s in involved
+        if str(s.get("session_key") or "") != target_session_key
+    ]
+
+    return {
+        "policy_rule_type": rule_type,
+        "policy_limit": limit,
+        "policy_limit_label": limit_label,
+        "policy_observed": observed,
+        "policy_explanation": explanation,
+
+        "maximum_streams": limit if "streams" in rule_type else "",
+        "maximum_ips": limit if "ips" in rule_type else "",
+
+        "stream_count": len(involved),
+        "ip_count": len(unique_ips),
+
+        "active_streams_count": len(involved),
+        "active_streams": "\n".join(f"- {summary(s)}" for s in involved) or "None",
+
+        "active_ips_count": len(unique_ips),
+        "active_ips": "\n".join(f"- {ip}" for ip in unique_ips) or "None",
+
+        "active_devices_count": len(unique_devices),
+        "active_devices": "\n".join(f"- {device}" for device in unique_devices) or "None",
+
+        "stream_killed": summary(target),
+        "other_streams_count": len(others),
+        "other_streams": "\n".join(f"- {summary(s)}" for s in others) or "None",
+        "all_streams": "\n".join(f"- {summary(s)}" for s in involved) or "None",
+    }
+
+
 def _queue_stream_blocked_notification(
     *,
     task_id: int,
@@ -1449,6 +1690,7 @@ def _queue_stream_blocked_notification(
     target: dict,
     reason: str,
     kill_reason_for_client: str,
+    related_sessions: list[dict] | None = None,
 ) -> None:
     vodum_user_id = target.get("vodum_user_id")
     if vodum_user_id is None:
@@ -1480,6 +1722,7 @@ def _queue_stream_blocked_notification(
     media_title = _media_title_from_session(target)
     blocked_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     policy_reason = kill_reason_for_client or reason or "Policy violation"
+    policy_context = _notification_policy_context(policy, target, related_sessions)
 
     payload = {
         "trigger_event": "stream_blocked",
@@ -1495,6 +1738,7 @@ def _queue_stream_blocked_notification(
         "session_key": target.get("session_key") or "",
         "server_id": server_id,
         "provider": provider,
+        **policy_context,
     }
 
     dedupe_key = (
@@ -1848,6 +2092,7 @@ def run(task_id: int, db):
                         target=target,
                         reason=reason,
                         kill_reason_for_client=kill_reason_for_client,
+                        related_sessions=sessions,
                     )
 
                 _log_enforcement(
@@ -1984,6 +2229,7 @@ def run(task_id: int, db):
                     target=target,
                     reason=reason,
                     kill_reason_for_client=kill_reason_for_client,
+                    related_sessions=sessions,
                 )
 
             _log_enforcement(

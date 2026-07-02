@@ -4,6 +4,15 @@
 // + compat HTMX (Monitoring tabs)
 // ===========================================================
 
+// Artwork is also injected by HTMX, so handle failures at document level.
+// This prevents broken-image icons or alt text from shifting a media card.
+document.addEventListener("error", (event) => {
+  const image = event.target;
+  if (image instanceof HTMLImageElement && image.classList.contains("js-artwork-image")) {
+    image.remove();
+  }
+}, true);
+
 // ------------ UTILITAIRES ---------------------------------
 
 async function apiGet(url) {
@@ -199,19 +208,15 @@ async function refreshUsers() {
   if (!tbody) return;
 
   const data = await apiGet("/api/users");
-  tbody.innerHTML = "";
-
-  data.forEach(u => {
-    tbody.innerHTML += `
-      <tr>
-        <td>${htmlEscape(u.title || u.username)}</td>
-        <td>${htmlEscape(u.email || "")}</td>
-        <td>${Number(u.libraries_count ?? 0)}</td>
-        <td>${Number(u.servers_count ?? 0)}</td>
-        <td>${htmlEscape(u.status ?? "")}</td>
-      </tr>
-    `;
-  });
+  tbody.innerHTML = data.map(u => `
+    <tr>
+      <td>${htmlEscape(u.title || u.username)}</td>
+      <td>${htmlEscape(u.email || "")}</td>
+      <td>${Number(u.libraries_count ?? 0)}</td>
+      <td>${Number(u.servers_count ?? 0)}</td>
+      <td>${htmlEscape(u.status ?? "")}</td>
+    </tr>
+  `).join("");
 }
 
 async function refreshServers() {
@@ -219,18 +224,14 @@ async function refreshServers() {
   if (!tbody) return;
 
   const data = await apiGet("/api/servers");
-  tbody.innerHTML = "";
-
-  data.forEach(s => {
-    tbody.innerHTML += `
-      <tr>
-        <td>${htmlEscape(s.name ?? "")}</td>
-        <td>${htmlEscape(s.type ?? "")}</td>
-        <td>${htmlEscape(s.status ?? "")}</td>
-        <td>${htmlEscape(s.libraries ?? "")}</td>
-      </tr>
-    `;
-  });
+  tbody.innerHTML = data.map(s => `
+    <tr>
+      <td>${htmlEscape(s.name ?? "")}</td>
+      <td>${htmlEscape(s.type ?? "")}</td>
+      <td>${htmlEscape(s.status ?? "")}</td>
+      <td>${htmlEscape(s.libraries ?? "")}</td>
+    </tr>
+  `).join("");
 }
 
 async function refreshLibraries() {
@@ -238,18 +239,14 @@ async function refreshLibraries() {
   if (!tbody) return;
 
   const data = await apiGet("/api/libraries");
-  tbody.innerHTML = "";
-
-  data.forEach(lib => {
-    tbody.innerHTML += `
-      <tr>
-        <td>${htmlEscape(lib.title ?? "")}</td>
-        <td>${htmlEscape(lib.type ?? "")}</td>
-        <td>${htmlEscape(lib.server_name ?? "")}</td>
-        <td>${Number(lib.user_count ?? 0)}</td>
-      </tr>
-    `;
-  });
+  tbody.innerHTML = data.map(lib => `
+    <tr>
+      <td>${htmlEscape(lib.title ?? "")}</td>
+      <td>${htmlEscape(lib.type ?? "")}</td>
+      <td>${htmlEscape(lib.server_name ?? "")}</td>
+      <td>${Number(lib.user_count ?? 0)}</td>
+    </tr>
+  `).join("");
 }
 
 async function refreshTasks() {
@@ -257,21 +254,17 @@ async function refreshTasks() {
   if (!tbody) return;
 
   const data = await apiGet("/api/tasks");
-  tbody.innerHTML = "";
-
-  data.forEach(t => {
-    tbody.innerHTML += `
-      <tr>
-        <td>${htmlEscape(t.name ?? "")}</td>
-        <td>${htmlEscape(t.status ?? "")}</td>
-		<td>${htmlEscape(vodumFormatDateTime(t.last_run || "-"))}</td>
-		<td>${htmlEscape(vodumFormatDateTime(t.next_run || "-"))}</td>
-        <td>
-          <button onclick="runTask(${Number(t.id)})">Run</button>
-        </td>
-      </tr>
-    `;
-  });
+  tbody.innerHTML = data.map(t => `
+    <tr>
+      <td>${htmlEscape(t.name ?? "")}</td>
+      <td>${htmlEscape(t.status ?? "")}</td>
+      <td>${htmlEscape(vodumFormatDateTime(t.last_run || "-"))}</td>
+      <td>${htmlEscape(vodumFormatDateTime(t.next_run || "-"))}</td>
+      <td>
+        <button onclick="runTask(${Number(t.id)})">Run</button>
+      </td>
+    </tr>
+  `).join("");
 }
 
 async function refreshLogs() {
@@ -279,17 +272,13 @@ async function refreshLogs() {
   if (!tbody) return;
 
   const data = await apiGet("/api/logs?limit=200");
-  tbody.innerHTML = "";
-
-  data.forEach(log => {
-    tbody.innerHTML += `
-      <tr>
-        <td>${htmlEscape(vodumFormatDateTime(log.date ?? log.created_at ?? ""))}</td>
-        <td>${htmlEscape(log.level ?? "")}</td>
-        <td>${htmlEscape(log.message ?? "")}</td>
-      </tr>
-    `;
-  });
+  tbody.innerHTML = data.map(log => `
+    <tr>
+      <td>${htmlEscape(vodumFormatDateTime(log.date ?? log.created_at ?? ""))}</td>
+      <td>${htmlEscape(log.level ?? "")}</td>
+      <td>${htmlEscape(log.message ?? "")}</td>
+    </tr>
+  `).join("");
 }
 
 // ------------ ACTIONS ---------------------------------------
@@ -371,29 +360,57 @@ document.body.addEventListener("htmx:afterSwap", function (event) {
 
 (function taskActivityIndicator() {
   const box = document.getElementById("taskActivity");
-  const countEl = document.getElementById("taskActivityCount");
-  if (!box || !countEl) return;
+  const textEl = document.getElementById("taskActivityText");
+  if (!box || !textEl) return;
+
+  const idleDelayMs = 15000;
+  const activeDelayMs = 2500;
+  let timer = null;
+  let lastHadActivity = false;
+
+  function schedule(delayMs) {
+    if (timer) window.clearTimeout(timer);
+    timer = window.setTimeout(refresh, delayMs);
+  }
 
   async function refresh() {
+    if (document.hidden) {
+      schedule(idleDelayMs);
+      return;
+    }
+
     try {
       const r = await fetch("/api/tasks/activity", { cache: "no-store" });
       if (!r.ok) throw new Error("bad status");
       const data = await r.json();
-      const n = Number(data.active || 0);
+      const running = Number(data.running || 0);
+      const queued = Number(data.queued || 0);
+      const n = running + queued;
+      lastHadActivity = n > 0;
 
-      if (n > 0) {
-        countEl.textContent = n;
+      if (lastHadActivity) {
+        const parts = [];
+        if (running > 0) parts.push(`${running} running`);
+        if (queued > 0) parts.push(`${queued} queued`);
+        const label = textEl.dataset.label || "Tasks";
+        textEl.textContent = `${label}: ${parts.join(" - ")}`;
         box.classList.remove("hidden");
       } else {
         box.classList.add("hidden");
       }
     } catch {
+      lastHadActivity = false;
       box.classList.add("hidden");
     }
+
+    schedule(lastHadActivity ? activeDelayMs : idleDelayMs);
   }
 
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) refresh();
+  });
+
   refresh();
-  setInterval(refresh, 2500);
 })();
 
 
@@ -429,3 +446,139 @@ window.vodumFlash = function(category, message, autoHideMs = 4000) {
     }, autoHideMs);
   }
 };
+
+// ------------ DATE PICKERS (Flatpickr lazy loader) -----------------------
+// Loads Flatpickr only on pages/fragments that expose input.vodum-date.
+(function vodumDatePickers() {
+  const flatpickrCssUrl = "https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css";
+  const flatpickrJsUrl = "https://cdn.jsdelivr.net/npm/flatpickr";
+  let flatpickrPromise = null;
+  let localePromise = null;
+
+  function loadStyleOnce(id, href) {
+    if (document.getElementById(id)) return;
+    const link = document.createElement("link");
+    link.id = id;
+    link.rel = "stylesheet";
+    link.href = href;
+    document.head.appendChild(link);
+  }
+
+  function loadScriptOnce(id, src) {
+    const existing = document.getElementById(id);
+    if (existing) {
+      return existing.dataset.loaded === "1"
+        ? Promise.resolve()
+        : new Promise((resolve, reject) => {
+            existing.addEventListener("load", resolve, { once: true });
+            existing.addEventListener("error", reject, { once: true });
+          });
+    }
+
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.id = id;
+      script.src = src;
+      script.async = true;
+      script.onload = () => {
+        script.dataset.loaded = "1";
+        resolve();
+      };
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+  }
+
+  function getBaseLang() {
+    const raw = (document.documentElement.getAttribute("lang") || "en").toLowerCase();
+    return raw.split("-", 1)[0] || "en";
+  }
+
+  function ensureFlatpickr() {
+    if (window.flatpickr) return Promise.resolve();
+    if (!flatpickrPromise) {
+      loadStyleOnce("vodum-flatpickr-css", flatpickrCssUrl);
+      flatpickrPromise = loadScriptOnce("vodum-flatpickr-js", flatpickrJsUrl);
+    }
+    return flatpickrPromise;
+  }
+
+  function ensureLocale(base) {
+    if (base === "en") return Promise.resolve();
+    if (window.flatpickr && window.flatpickr.l10ns && window.flatpickr.l10ns[base]) {
+      return Promise.resolve();
+    }
+    if (!localePromise) {
+      localePromise = loadScriptOnce("vodum-flatpickr-locale-" + base, `https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/${base}.js`)
+        .catch(() => undefined);
+    }
+    return localePromise;
+  }
+
+  async function initVodumDatePickers(root) {
+    const scope = root && root.querySelectorAll ? root : document;
+    const inputs = Array.from(scope.querySelectorAll("input.vodum-date"));
+    if (!inputs.length) return;
+
+    await ensureFlatpickr();
+    if (!window.flatpickr) return;
+
+    const base = getBaseLang();
+    await ensureLocale(base);
+
+    const locale =
+      (window.flatpickr.l10ns && window.flatpickr.l10ns[base])
+        ? window.flatpickr.l10ns[base]
+        : window.flatpickr.l10ns.default;
+
+    inputs.forEach((el) => {
+      if (el._vodumFlatpickr) return;
+      el._vodumFlatpickr = flatpickr(el, {
+        allowInput: true,
+        dateFormat: "Y-m-d",
+        locale: locale,
+        disableMobile: true
+      });
+    });
+  }
+
+  window.vodumInitDatePickers = initVodumDatePickers;
+
+  document.addEventListener("DOMContentLoaded", () => initVodumDatePickers(document));
+  document.addEventListener("htmx:load", (event) => initVodumDatePickers(event.target));
+})();
+
+// ------------ CSRF FOR DYNAMIC POST FORMS / HTMX -------------------------
+(function vodumCsrf() {
+  const meta = document.querySelector('meta[name="csrf-token"]');
+  const csrfToken = meta ? meta.getAttribute("content") : "";
+  if (!csrfToken) return;
+
+  function ensureCsrfField(form) {
+    if (!form || form.querySelector('input[name="_csrf_token"]')) return;
+
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = "_csrf_token";
+    input.value = csrfToken;
+    form.appendChild(input);
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll('form[method="post"], form[method="POST"]').forEach(ensureCsrfField);
+  });
+
+  document.addEventListener("submit", function (event) {
+    const form = event.target;
+    if (form && form.tagName === "FORM") {
+      const method = (form.getAttribute("method") || "get").toLowerCase();
+      if (method === "post") {
+        ensureCsrfField(form);
+      }
+    }
+  });
+
+  document.body.addEventListener("htmx:configRequest", function (event) {
+    event.detail.headers["X-CSRF-Token"] = csrfToken;
+  });
+})();

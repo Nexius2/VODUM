@@ -6,7 +6,7 @@
 
     <div class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-3">
-        <h2 class="text-sm font-semibold">Plex</h2>
+        <h2 class="text-sm font-semibold">{{ t("plex") }}</h2>
 
         <span class="px-2 py-0.5 text-[11px] rounded-full bg-slate-800 text-slate-200">
           {{ plex_accounts|length }} server{{ '' if plex_accounts|length == 1 else 's' }}
@@ -17,11 +17,11 @@
       {% if first_plex.media_avatar %}
         <img src="{{ first_plex.media_avatar }}"
              alt="Plex avatar"
-             class="w-10 h-10 rounded-full border border-slate-700">
+             class="w-10 h-10 rounded-full border border-slate-700" loading="lazy" decoding="async">
       {% elif user.avatar %}
         <img src="{{ user.avatar }}"
              alt="Plex avatar"
-             class="w-10 h-10 rounded-full border border-slate-700">
+             class="w-10 h-10 rounded-full border border-slate-700" loading="lazy" decoding="async">
       {% endif %}
     </div>
 

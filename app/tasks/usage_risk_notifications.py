@@ -1,11 +1,9 @@
 import json
-from string import Formatter
 
 from communications_engine import (
-    send_to_user,
-    record_history,
     select_comm_template_for_user,
-    fetch_template_attachments,
+    schedule_template_notification,
+    enqueue_named_task,
 )
 from core.usage_risk import build_usage_risk_report
 from logging_utils import get_logger
@@ -37,14 +35,6 @@ def _safe_int(value, default=0):
         return default
 
 
-def _safe_format(text, values):
-    class SafeDict(dict):
-        def __missing__(self, key):
-            return "{" + key + "}"
-
-    return Formatter().vformat(text or "", (), SafeDict(values))
-
-
 def _load_user(db, user_id):
     row = db.query_one(
         """
@@ -73,7 +63,7 @@ def _load_user(db, user_id):
 
 
 def run(task_id=None, db=None):
-    settings = dict(db.query_one("SELECT * FROM settings WHERE id = 1") or {})
+    settings = dict(db.query_one("SELECT id, mail_from, smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_auth_method, smtp_oauth_access_token, email_history_retention_years, disable_on_expiry, delete_after_expiry_days, send_reminders, preavis_days, reminder_days, default_language, timezone, admin_email, contact_email, admin_password_hash, auth_enabled, admin_totp_enabled, admin_totp_secret, wizard_active, wizard_completed, wizard_step, wizard_state_json, web_secure_cookies, web_cookie_samesite, web_trust_proxy, enable_cron_jobs, default_expiration_days, default_subscription_days, maintenance_mode, debug_mode, backup_retention_days, backup_retention_count, data_retention_years, brand_name, notifications_order, user_notifications_can_override, notifications_send_mode, expiry_mode, warn_then_disable_days, discord_enabled, discord_bot_token, discord_bot_id, mailing_enabled, skip_never_used_accounts, plex_user_import_mode, enable_anonymous_telemetry, telemetry_instance_id, telemetry_last_sent_at, task_defaults_version, stream_enforcer_boost_until, usage_risk_enabled, usage_risk_send_upgrade_suggestions, usage_risk_send_stream_blocked_message, usage_risk_min_kills_before_suggestion, usage_risk_analysis_window_days, usage_risk_suggestion_cooldown_days, usage_risk_medium_threshold, usage_risk_high_threshold FROM settings WHERE id = 1") or {})
 
     if _safe_int(settings.get("usage_risk_enabled"), 1) != 1:
         return {"status": "success", "message": "Usage risk disabled"}
@@ -107,8 +97,7 @@ def run(task_id=None, db=None):
 
     rows = db.query(
         """
-        SELECT *
-        FROM usage_risk_recommendations
+        SELECT id, vodum_user_id, risk_level, risk_score, current_subscription, suggested_subscription, first_detected_at, last_detected_at, last_notification_at, cooldown_until, status, meta_json FROM usage_risk_recommendations
         WHERE status IN ('detected', 'notified')
           AND suggested_subscription IS NOT NULL
           AND TRIM(suggested_subscription) <> ''
@@ -123,8 +112,7 @@ def run(task_id=None, db=None):
         (f"-{analysis_window_days} days",),
     ) or []
 
-    sent = 0
-    failed = 0
+    queued = 0
     skipped = 0
 
     for rec in rows:
@@ -179,71 +167,34 @@ def run(task_id=None, db=None):
             user_id=user_id,
         )
 
-        template_id = int(template["id"]) if template else None
-        attachments = fetch_template_attachments(db, template_id) if template_id else []
-
         if not template:
             skipped += 1
             continue
 
-        subject = _safe_format(template.get("subject"), values)
-        body = _safe_format(template.get("body"), values)
-
-        attempts = send_to_user(
+        template_id = int(template["id"])
+        values.update({
+            "template_key": "usage_risk_upgrade_suggestion",
+            "recommendation_id": int(rec["id"]),
+            "suggestion_cooldown_days": cooldown_days,
+        })
+        delivery_cycle = rec.get("last_notification_at") or "initial"
+        schedule_template_notification(
             db=db,
-            settings=settings,
-            user=user,
-            subject=subject,
-            body=body,
-            attachments=attachments,
-            forced_channels=None,
-            bypass_skip_never_used_accounts=True,
+            template_id=template_id,
+            user_id=int(user_id),
+            provider="all",
+            server_id=None,
+            send_at_modifier=None,
+            payload=values,
+            dedupe_key=f"usage_risk_upgrade:{int(rec['id'])}:{delivery_cycle}",
+            max_attempts=10,
         )
+        queued += 1
 
-        has_success = False
-
-        for attempt in attempts:
-            record_history(
-                db=db,
-                kind="template",
-                template_id=template_id,
-                campaign_id=None,
-                user_id=user_id,
-                attempt=attempt,
-                meta={
-                    "template_key": "usage_risk_upgrade_suggestion",
-                    "trigger_event": "usage_risk_upgrade_suggestion",
-                    "recommendation_id": rec.get("id"),
-                    "risk_level": rec.get("risk_level"),
-                    "risk_score": rec.get("risk_score"),
-                    "current_subscription": rec.get("current_subscription"),
-                    "suggested_subscription": rec.get("suggested_subscription"),
-                    "kills_30d": kills_30d,
-                },
-            )
-
-            if attempt.status == "sent":
-                has_success = True
-
-        if has_success:
-            db.execute(
-                """
-                UPDATE usage_risk_recommendations
-                SET status = 'notified',
-                    last_notification_at = CURRENT_TIMESTAMP,
-                    cooldown_until = datetime('now', ?)
-                WHERE id = ?
-                """,
-                (
-                    f"+{cooldown_days} days",
-                    rec["id"],
-                ),
-            )
-            sent += 1
-        else:
-            failed += 1
+    if queued:
+        enqueue_named_task(db, "send_expiration_emails")
 
     return {
         "status": "success",
-        "message": f"Usage risk upgrade suggestions sent={sent}, failed={failed}, skipped={skipped}",
+        "message": f"Usage risk upgrade suggestions queued={queued}, skipped={skipped}",
     }

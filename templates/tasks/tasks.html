@@ -17,7 +17,7 @@
         <thead>
             <tr class="border-b border-slate-800">
 				{% if (settings.debug_mode|default(0)|int) == 1 %}
-				  <th class="p-2">ID</th>
+				  <th class="p-2">{{ t("id") }}</th>
 				{% endif %}
                 <th class="p-2">{{ t("name") }}</th>
                 <th class="p-2">{{ t("description") }}</th>
@@ -114,110 +114,23 @@
     {% endif %}
 </div>
 
-<script>
-const DEBUG_MODE = {{ 1 if (settings.debug_mode|default(0)|int) == 1 else 0 }};
-
-const I18N = {
-  run_now: {{ t("run_now")|tojson }},
-  running: {{ t("running")|tojson }},
-  disabled: {{ t("disabled")|tojson }},
-  idle: {{ t("idle")|tojson }},
-  done: {{ t("done")|tojson }},
-  error: {{ t("error")|tojson }},
-};
+<script type="application/json" id="vodum-tasks-config">
+{
+  "debugMode": {{ 1 if (settings.debug_mode|default(0)|int) == 1 else 0 }},
+  "pollIntervalMs": 3000,
+  "actionUrl": {{ url_for('tasks_action')|tojson }},
+  "i18n": {
+    "run_now": {{ t("run_now")|tojson }},
+    "running": {{ t("running")|tojson }},
+    "disabled": {{ t("disabled")|tojson }},
+    "idle": {{ t("idle")|tojson }},
+    "done": {{ t("done")|tojson }},
+    "error": {{ t("error")|tojson }}
+  }
+}
 </script>
+{% endblock %}
 
-<script>
-let TASKS_POLL_INTERVAL = 3000; // 3 secondes (comme le menu)
-
-async function refreshTasksTable() {
-    try {
-        const res = await fetch("/api/tasks/list");
-        if (!res.ok) return;
-
-        const data = await res.json();
-        const tbody = document.getElementById("tasks-tbody");
-        if (!tbody) return;
-
-        let html = "";
-
-        for (const task of data.tasks) {
-            html += `
-            <tr class="border-b border-slate-800">
-                ${DEBUG_MODE ? `<td class="p-2">${task.id}</td>` : ""}
-                <td class="p-2">${task.name_label}</td>
-                <td class="p-2">${task.description_label || "-"}</td>
-                <td class="p-2">${task.schedule_human || "-"}</td>
-                <td class="p-2">
-                    ${renderStatus(task)}
-                </td>
-                <td class="p-2">${task.last_run_human || "-"}</td>
-                <td class="p-2">${task.next_run_human || "-"}</td>
-                <td class="p-2 text-center">
-                    ${renderAction(task)}
-                </td>
-            </tr>
-            `;
-        }
-
-        tbody.innerHTML = html;
-
-    } catch (e) {
-        console.error("refreshTasksTable failed", e);
-    }
-}
-
-function renderStatus(task) {
-  if (!task.enabled) {
-    return `<span class="px-2 py-1 rounded bg-gray-700 text-gray-300 text-xs">${I18N.disabled}</span>`;
-  }
-
-  switch (task.status) {
-    case "running":
-      return `<span class="px-2 py-1 rounded bg-blue-700 text-blue-100 text-xs">${I18N.running}</span>`;
-    case "done":
-      return `<span class="px-2 py-1 rounded bg-green-700 text-green-100 text-xs">${I18N.done}</span>`;
-    case "error":
-      return `<span class="px-2 py-1 rounded bg-red-700 text-red-100 text-xs">${I18N.error}</span>`;
-    default:
-      return `<span class="px-2 py-1 rounded bg-gray-600 text-gray-200 text-xs">${I18N.idle}</span>`;
-  }
-}
-
-function renderAction(task) {
-  if (!task.enabled) {
-    return `
-      <button disabled
-              class="px-3 py-1 rounded bg-gray-700 text-gray-400 opacity-50 cursor-not-allowed">
-        ${I18N.disabled}
-      </button>
-    `;
-  }
-
-  if (task.status === "running" || task.status === "queued") {
-    return `
-      <button disabled
-              class="px-3 py-1 rounded bg-slate-600 text-slate-300 opacity-50 cursor-wait">
-        ${I18N.running}
-      </button>
-    `;
-  }
-
-	return `
-	  <form action="/tasks/action" method="post">
-		<input type="hidden" name="task_id" value="${task.id}">
-		<input type="hidden" name="action" value="run_now">
-		<button class="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white">
-		  ${I18N.run_now}
-		</button>
-	  </form>
-	`;
-}
-
-
-// démarrage auto
-setInterval(refreshTasksTable, TASKS_POLL_INTERVAL);
-</script>
-
-
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/pages/tasks.js', v=g.app_version|default('dev')) }}"></script>
 {% endblock %}

@@ -14,6 +14,10 @@ from core.plex_rate_limit import install_plex_rate_limit, wait_for_plex_slot
 from core.plex_connection import plex_candidate_base_urls, find_working_plex_base_url
 from core.server_cooldown import should_skip_unreachable_server, mark_server_unreachable, clear_server_cooldown
 from core.http_security import ConfiguredHostSession, plex_server_http_session, url_origin
+from core.providers.plex_invitation_state import (
+    merge_accepted_plex_media_user,
+    plex_invite_state_payload,
+)
 
 class TimeoutSession(requests.Session):
     """Session requests qui force un timeout par défaut."""
@@ -622,7 +626,7 @@ def sync_plex_user_library_access(db, plex, server):
     server_id = server["id"]
     server_name = server["name"]
 
-    # 1️⃣ Mapping libraries du serveur
+    # 1ï¸âƒ£ Mapping libraries du serveur
     libraries = db.query(
         """
         SELECT id, section_id
@@ -787,9 +791,6 @@ def sync_plex_user_library_access(db, plex, server):
             )
 
         # ✅ uniquement si accès réel trouvé
-        if has_access:
-            ensure_expiration_date_on_first_access(db, vodum_user_id)
-
         updated_users += 1
 
     log.info(
@@ -1162,15 +1163,6 @@ def fetch_users_from_plex_api(token: str, db=None) -> Dict[str, Dict[str, Any]]:
         log.error("[API] Unable to retrieve /api/users → Aborted.")
         return {}
 
-    # ----------------------------------------------------
-    # Email admin (pour déterminer le rôle owner)
-    # ----------------------------------------------------
-    admin_email = None
-    if db is not None:
-        row = db.query_one("SELECT admin_email FROM settings LIMIT 1")
-        if row:
-            admin_email = (row["admin_email"] or "").strip().lower() or None
-
     log.info("[API] /api/users Retrieved, parsing…")
 
     users: Dict[str, Dict[str, Any]] = {}
@@ -1225,9 +1217,7 @@ def fetch_users_from_plex_api(token: str, db=None) -> Dict[str, Dict[str, Any]]:
         # ------------------------
         email_lower = email.lower() if email else ""
 
-        if admin_email and email_lower == admin_email:
-            plex_role = "owner"
-        elif home_flag:
+        if home_flag:
             plex_role = "home"
         else:
             plex_role = "friend"
@@ -1712,6 +1702,7 @@ def sync_users_from_api(db) -> None:
                         "email": data.get("email"),
                         "avatar": data.get("avatar"),
                     },
+                    "plex_invite_state": plex_invite_state_payload("friend"),
                 },
                 ensure_ascii=False
             )
@@ -1727,7 +1718,41 @@ def sync_users_from_api(db) -> None:
                 (server_id, plex_id),
             )
 
+            pending_mu = db.query_one(
+                """
+                SELECT id
+                FROM media_users
+                WHERE server_id = ?
+                  AND type = 'plex'
+                  AND COALESCE(NULLIF(TRIM(external_user_id), ''), '') = ''
+                  AND COALESCE(NULLIF(TRIM(accepted_at), ''), '') = ''
+                  AND (
+                    vodum_user_id = ?
+                    OR (? <> '' AND lower(COALESCE(email, '')) = lower(?))
+                    OR (? <> '' AND lower(COALESCE(username, '')) = lower(?))
+                  )
+                ORDER BY id ASC
+                LIMIT 1
+                """,
+                (server_id, vodum_user_id, email or "", email or "", username or "", username or ""),
+            )
 
+            if row_mu and pending_mu and int(row_mu["id"]) != int(pending_mu["id"]):
+                merge_accepted_plex_media_user(
+                    db,
+                    accepted_id=row_mu["id"],
+                    pending_id=pending_mu["id"],
+                )
+                log.info(
+                    f"[SYNC USERS] Removed accepted Plex invite duplicate id={pending_mu['id']} "
+                    f"in favor of media_user id={row_mu['id']}"
+                )
+            elif not row_mu and pending_mu:
+                row_mu = pending_mu
+                log.info(
+                    f"[SYNC USERS] Reconciled pending Plex invite media_user id={row_mu['id']} "
+                    f"with accepted plex_id={plex_id}"
+                )
 
             if row_mu:
                 db.execute(
@@ -1822,7 +1847,7 @@ def sync_all(task_id=None, db=None) -> None:
     # 1) Récupération des serveurs Plex
     #
     servers = db.query(
-        "SELECT * FROM servers WHERE type='plex'"
+        "SELECT id, name, server_identifier, type, url, local_url, public_url, token, settings_json, server_version, unavailable_since, cooldown_until, last_failure, last_checked, status FROM servers WHERE type='plex'"
     )
 
     #
@@ -1986,3 +2011,4 @@ def run(task_id: int, db):
         )
         task_logs(task_id, "error", f"Error during sync_plex : {e}")
         raise
+

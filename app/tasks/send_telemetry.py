@@ -1,3 +1,4 @@
+import hashlib
 import json
 import platform
 import threading
@@ -45,12 +46,33 @@ def _parse_utc_timestamp(value):
     return parsed.astimezone(timezone.utc)
 
 
-def _is_due(last_sent_at, now=None):
+TELEMETRY_MIN_INTERVAL = timedelta(days=2)
+TELEMETRY_MAX_INTERVAL = timedelta(days=7)
+
+
+def _telemetry_random_interval(last_sent_at, instance_id):
+    seed = f"{instance_id or ''}|{last_sent_at or ''}".encode("utf-8")
+    digest = hashlib.sha256(seed).digest()
+
+    span_seconds = int((TELEMETRY_MAX_INTERVAL - TELEMETRY_MIN_INTERVAL).total_seconds())
+    jitter_seconds = int.from_bytes(digest[:8], "big") % (span_seconds + 1)
+
+    return TELEMETRY_MIN_INTERVAL + timedelta(seconds=jitter_seconds)
+
+
+def _is_due(last_sent_at, instance_id=None, now=None):
     last_sent = _parse_utc_timestamp(last_sent_at)
+
     if not last_sent:
         return True
+
     now = now or datetime.now(timezone.utc)
-    return now >= last_sent + timedelta(days=7)
+
+    # Safety net: never wait more than 7 days.
+    if now >= last_sent + TELEMETRY_MAX_INTERVAL:
+        return True
+
+    return now >= last_sent + _telemetry_random_interval(last_sent_at, instance_id)
 
 
 def _task_enabled(db):
@@ -63,7 +85,7 @@ def run(task_id: int, db: DBManager):
         return {"success": True, "skipped": True, "reason": "already_running"}
 
     try:
-        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        settings = db.query_one("SELECT id, mail_from, smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_auth_method, smtp_oauth_access_token, email_history_retention_years, disable_on_expiry, delete_after_expiry_days, send_reminders, preavis_days, reminder_days, default_language, timezone, admin_email, contact_email, admin_password_hash, auth_enabled, admin_totp_enabled, admin_totp_secret, wizard_active, wizard_completed, wizard_step, wizard_state_json, web_secure_cookies, web_cookie_samesite, web_trust_proxy, enable_cron_jobs, default_expiration_days, default_subscription_days, maintenance_mode, debug_mode, backup_retention_days, backup_retention_count, data_retention_years, brand_name, notifications_order, user_notifications_can_override, notifications_send_mode, expiry_mode, warn_then_disable_days, discord_enabled, discord_bot_token, discord_bot_id, mailing_enabled, skip_never_used_accounts, plex_user_import_mode, enable_anonymous_telemetry, telemetry_instance_id, telemetry_last_sent_at, task_defaults_version, stream_enforcer_boost_until, usage_risk_enabled, usage_risk_send_upgrade_suggestions, usage_risk_send_stream_blocked_message, usage_risk_min_kills_before_suggestion, usage_risk_analysis_window_days, usage_risk_suggestion_cooldown_days, usage_risk_medium_threshold, usage_risk_high_threshold FROM settings WHERE id = 1")
 
         if not settings:
             log.warning("Telemetry aborted: settings row not found")
@@ -76,9 +98,10 @@ def run(task_id: int, db: DBManager):
             return {"success": True, "skipped": True, "reason": "task_disabled"}
 
         debug_mode = int(settings["debug_mode"] or 0) == 1
+        instance_id = get_or_create_instance_id(db)
 
         try:
-            if not debug_mode and not _is_due(settings["telemetry_last_sent_at"]):
+            if not debug_mode and not _is_due(settings["telemetry_last_sent_at"], instance_id):
                 return {"success": True, "skipped": True, "reason": "rate_limited"}
         except (TypeError, ValueError):
             log.warning("Invalid telemetry_last_sent_at ignored")
@@ -132,6 +155,9 @@ def run(task_id: int, db: DBManager):
             WHERE is_enabled  = 1
             """
         )
+        automatic_backups = db.query_one(
+            "SELECT enabled FROM tasks WHERE name='auto_backup'"
+        )
         
         version = load_app_version()
         update_pending_days = 0
@@ -167,7 +193,7 @@ def run(task_id: int, db: DBManager):
         platform_info = detect_platform()
 
         payload = {
-            "instance_id": get_or_create_instance_id(db),
+            "instance_id": instance_id,
             "schema_version": 1,
             "version": version,
             "platform": platform.system().lower(),
@@ -183,6 +209,10 @@ def run(task_id: int, db: DBManager):
             "discord_enabled": 1 if settings["discord_enabled"] else 0,
             "mail_enabled": 1 if settings["mailing_enabled"] else 0,
             "policies_enabled": 1 if active_policies and active_policies["total"] > 0 else 0,
+            "debug_enabled": 1 if debug_mode else 0,
+            "automatic_backups_enabled": 1 if automatic_backups and automatic_backups["enabled"] else 0,
+            "usage_risk_enabled": 1 if settings["usage_risk_enabled"] else 0,
+            "auth_enabled": 1 if settings["auth_enabled"] else 0,
             "update_pending_days": update_pending_days,
         }
         log.info(

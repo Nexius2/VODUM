@@ -2,12 +2,15 @@ import threading
 import time
 import importlib
 import random
-from datetime import datetime, timedelta
-from croniter import croniter
+from datetime import datetime
 import os
 
 from db_manager import DBManager
 from logging_utils import get_logger, is_debug_mode_enabled
+from core.tasks.scheduler_rules import (
+    compute_next_task_run as _compute_next_task_run,
+    retry_modifier_for_attempt as _retry_modifier_for_attempt,
+)
 
 # -------------------------------------------------------------------
 # DB / LOGGER
@@ -155,25 +158,11 @@ TASK_MAX_DURATION = {
     "monitor_collect_sessions": 60,        # 1 min
     "monitor_enqueue_refresh": 60,         # 1 min
     "media_jobs_worker": 120,              # 2 min
+    "migration_worker": 30 * 60,
 }
 
 DEFAULT_TASK_MAX_DURATION = 30 * 60
 
-def _retry_modifier_for_attempt(next_attempt_number: int) -> str:
-    """
-    Backoff simple et standard pour les tâches scheduler :
-    1 -> +1 minute
-    2 -> +5 minutes
-    3 -> +15 minutes
-    4+ -> +30 minutes
-    """
-    if next_attempt_number <= 1:
-        return "+1 minute"
-    if next_attempt_number == 2:
-        return "+5 minutes"
-    if next_attempt_number == 3:
-        return "+15 minutes"
-    return "+30 minutes"
 
 
 def _mark_task_retry_or_error(task_id: int, task_name: str, error_message: str):
@@ -627,6 +616,11 @@ def prepare_restored_database(restored_db):
 
 
 def recover_stuck_tasks(max_minutes=30):
+    # A live worker may legitimately own a long-running task. Resetting its DB
+    # state here would allow the scheduler to enqueue a duplicate execution.
+    if worker_running:
+        return
+
     try:
         row = db.query_one(
             """
@@ -786,7 +780,10 @@ def enqueue_task(task_id: int):
     db.execute(
         """
         UPDATE tasks
-        SET queued_count = queued_count + 1,
+        SET queued_count = CASE
+                WHEN queued_count > 0 THEN queued_count
+                ELSE 1
+            END,
             status = CASE
                 WHEN status = 'running' THEN 'running'
                 ELSE 'queued'
@@ -917,29 +914,15 @@ def _load_task_run_callable(task_name: str):
 
 
 def _execute_task_run_callable(run_func, task_id: int, task_name: str, max_duration: int):
-    result_box = {"value": None, "exc": None}
+    """
+    Execute the task inside the single scheduler worker.
 
-    def _runner():
-        try:
-            result_box["value"] = run_func(task_id, db)
-        except Exception as e:
-            result_box["exc"] = e
-
-    t = threading.Thread(
-        target=_runner,
-        name=f"vodum-task-{task_name}-{task_id}",
-        daemon=True
-    )
-    t.start()
-    t.join(timeout=max_duration)
-
-    if t.is_alive():
-        raise TimeoutError(f"Task {task_name} exceeded maximum duration ({max_duration}s)")
-
-    if result_box["exc"] is not None:
-        raise result_box["exc"]
-
-    return result_box["value"]
+    Python cannot safely stop a timed-out thread. The previous helper allowed
+    that thread to continue while the worker started following tasks, creating
+    hidden concurrency. Duration is still checked after return by
+    _process_task_result(), without allowing scheduler tasks to overlap.
+    """
+    return run_func(task_id, db)
 
 
 def _handle_task_success(task_id: int, task_name: str, schedule):
@@ -1015,28 +998,12 @@ def _handle_task_success(task_id: int, task_name: str, schedule):
 
             now = datetime.now()
 
-            # -------------------------------------------------
-            # INTERVAL MODE
-            # -------------------------------------------------
-
-            if (
-                schedule_mode == "interval"
-                and interval_seconds
-                and int(interval_seconds) > 0
-            ):
-
-                next_exec = now + timedelta(
-                    seconds=int(interval_seconds)
-                )
-
-            # -------------------------------------------------
-            # CRON MODE
-            # -------------------------------------------------
-
-            else:
-
-                itr = croniter(schedule, now)
-                next_exec = itr.get_next(datetime)
+            next_exec = _compute_next_task_run(
+                schedule,
+                schedule_mode,
+                interval_seconds,
+                now,
+            )
 
             db.execute(
                 "UPDATE tasks SET next_run=? WHERE id=?",
@@ -1444,12 +1411,19 @@ def auto_enable_monitoring_tasks():
 
 
 def auto_enable_sync_tasks():
+    """
+    Active les tâches de sync si au moins un serveur du type existe.
+
+    Important:
+    On ne dépend PAS de status='up' ici.
+    Au boot, un serveur peut être unknown/down avant check_servers.
+    Si sync_plex/sync_jellyfin reste désactivée, les utilisateurs ne sont jamais importés.
+    """
     plex_count = db.query_one(
         """
         SELECT COUNT(*) AS cnt
         FROM servers
         WHERE LOWER(TRIM(type)) = 'plex'
-          AND LOWER(TRIM(COALESCE(status, 'unknown'))) = 'up'
         """
     )["cnt"]
 
@@ -1467,7 +1441,6 @@ def auto_enable_sync_tasks():
         SELECT COUNT(*) AS cnt
         FROM servers
         WHERE LOWER(TRIM(type)) = 'jellyfin'
-          AND LOWER(TRIM(COALESCE(status, 'unknown'))) = 'up'
         """
     )["cnt"]
 
@@ -1669,24 +1642,6 @@ def _recover_scheduler_state_at_boot():
     except Exception as e:
         logger.warning(f"Recovery tasks failed: {e}", exc_info=True)
 
-def _compute_next_task_run(schedule, schedule_mode, interval_seconds, base_time):
-    """
-    Calcule le prochain run d'une tâche.
-    Supporte :
-    - schedule_mode = 'interval' avec interval_seconds
-    - schedule_mode = 'cron' avec schedule
-    """
-    schedule_mode = (schedule_mode or "cron").strip().lower()
-
-    try:
-        interval_seconds = int(interval_seconds or 0)
-    except Exception:
-        interval_seconds = 0
-
-    if schedule_mode == "interval" and interval_seconds > 0:
-        return base_time + timedelta(seconds=interval_seconds)
-
-    return croniter(schedule, base_time).get_next(datetime)
 
 
 def _run_scheduler_tick(now, run_auto_enable=True):
@@ -1955,7 +1910,7 @@ def force_check_update_at_startup():
 
         if enqueued:
             try:
-                next_future = croniter("0 4 * * *", datetime.now()).get_next(datetime)
+                next_future = _compute_next_task_run("0 4 * * *", "cron", None, datetime.now())
 
                 db.execute(
                     """
@@ -2052,3 +2007,5 @@ def start_scheduler():
     scheduler_thread.start()
 
     logger.info("Scheduler started")
+
+

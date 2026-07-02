@@ -1,5 +1,5 @@
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-  <div class="text-sm font-semibold mb-4">Latest events</div>
+  <div class="text-sm font-semibold mb-4">{{ t("monitoring.section.events") }}</div>
 
   {% if events and events|length > 0 %}
     <div class="space-y-4">
@@ -31,6 +31,6 @@
       {% endfor %}
     </div>
   {% else %}
-    <div class="text-slate-500">No events yet.</div>
+    <div class="text-slate-500">{{ t("no_events") }}</div>
   {% endif %}
 </div>

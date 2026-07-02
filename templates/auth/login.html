@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <title>{{ t("auth.title_login") }}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/vodum.css', v=g.app_version|default('dev')) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css', v=g.app_version|default('dev')) }}">
 </head>
 <body class="bg-slate-950 text-slate-100">
   <div class="min-h-screen flex items-center justify-center p-4">
@@ -27,6 +28,7 @@
 
       <form method="POST" action="{{ url_for('login_submit') }}" class="space-y-4">
         <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="next" value="{{ next_url or '' }}">
         <div>
           <label class="block text-sm mb-1 text-slate-300">{{ t("auth.admin_email") }}</label>
           <input type="email" name="email" autocomplete="email"
@@ -56,6 +58,15 @@
 		  </div>
 		</div>
 
+
+        {% if totp_enabled %}
+          <div>
+            <label class="block text-sm mb-1 text-slate-300">{{ t("totp_code") }}</label>
+            <input type="text" name="totp_code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code"
+                   class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm"
+                   required>
+          </div>
+        {% endif %}
         <button class="w-full px-4 py-2 bg-indigo-500 hover:bg-indigo-600 rounded text-white text-sm">
           {{ t("common.login") }}
         </button>
@@ -142,49 +153,7 @@
       </div>
     </div>
   </div>
-
-<script>
-  const modal = document.getElementById("resetModal");
-  const openBtn = document.getElementById("openResetModal");
-  const closeBtn = document.getElementById("closeResetModal");
-  const closeBtn2 = document.getElementById("closeResetModal2");
-  const togglePasswordBtn = document.getElementById("togglePassword");
-  const passwordInput = document.getElementById("password");
-
-  function openModal() {
-    modal.classList.remove("hidden");
-    modal.setAttribute("aria-hidden", "false");
-  }
-
-  function closeModal() {
-    modal.classList.add("hidden");
-    modal.setAttribute("aria-hidden", "true");
-  }
-
-  function togglePasswordVisibility() {
-    if (!passwordInput) return;
-    passwordInput.type = passwordInput.type === "password" ? "text" : "password";
-  }
-
-  openBtn.addEventListener("click", openModal);
-  closeBtn.addEventListener("click", closeModal);
-  closeBtn2.addEventListener("click", closeModal);
-
-  if (togglePasswordBtn) {
-    togglePasswordBtn.addEventListener("click", togglePasswordVisibility);
-  }
-
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !modal.classList.contains("hidden")) {
-      closeModal();
-    }
-  });
-
-  modal.addEventListener("click", (e) => {
-    if (e.target === modal || e.target.classList.contains("bg-black/70")) {
-      closeModal();
-    }
-  });
-</script>
+<script src="{{ url_for('static', filename='js/pages/login.js', v=g.app_version|default('dev')) }}"></script>
 </body>
 </html>
+

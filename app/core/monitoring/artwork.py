@@ -1,8 +1,9 @@
 import json
+import re
 
 from flask import url_for
 
-ARTWORK_CACHE_RESOLVER = "canonical_v12"
+ARTWORK_CACHE_RESOLVER = "canonical_v13"
 
 
 
@@ -57,6 +58,12 @@ def _normalize_media_id(value):
     return value or None
 
 
+def _plex_media_id_from_path(value):
+    value = str(value or "").strip()
+    match = re.search(r"/library/metadata/([^/?]+)", value, flags=re.IGNORECASE)
+    return _normalize_media_id(match.group(1)) if match else None
+
+
 def _get_plex_target_media_id(row):
     row = dict(row or {})
     raw = _load_json(row.get("raw_json"))
@@ -68,6 +75,9 @@ def _get_plex_target_media_id(row):
             attrs.get("grandparentRatingKey")
             or row.get("grandparent_rating_key")
             or row.get("media_key")
+            or _plex_media_id_from_path(attrs.get("grandparentThumb"))
+            or _plex_media_id_from_path(attrs.get("grandparentArt"))
+            or _plex_media_id_from_path(attrs.get("key"))
         )
 
 
@@ -77,7 +87,12 @@ def _get_plex_target_media_id(row):
     if row_media_key:
         return row_media_key
 
-    return raw_rating_key
+    return (
+        raw_rating_key
+        or _plex_media_id_from_path(attrs.get("key"))
+        or _plex_media_id_from_path(attrs.get("thumb"))
+        or _plex_media_id_from_path(attrs.get("art"))
+    )
 
 def _plex_raw_matches_row_target(row) -> bool:
     row = dict(row or {})
@@ -235,9 +250,6 @@ def _extract_plex_canonical_refs_from_raw(row):
     scope = _artwork_scope(row)
     target_id = _get_plex_target_media_id(row)
 
-    if not target_id:
-        return (None, None)
-
     poster_path = None
     backdrop_path = None
     raw_matches = _plex_raw_matches_row_target(row)
@@ -250,26 +262,25 @@ def _extract_plex_canonical_refs_from_raw(row):
             poster_path = attrs.get("thumb")
             backdrop_path = attrs.get("art")
 
-    if not poster_path:
+    if not target_id and not poster_path and not backdrop_path:
+        return (None, None)
+
+    if not poster_path and target_id:
         poster_path = f"/library/metadata/{target_id}/thumb"
 
-    if not backdrop_path:
+    if not backdrop_path and target_id:
         backdrop_path = f"/library/metadata/{target_id}/art"
 
-    poster_ref = _make_ref(
-        "plex",
-        scope,
-        path=str(poster_path),
-        target_id=str(target_id),
-        image_kind="poster",
+    common = {"target_id": str(target_id)} if target_id else {}
+    poster_ref = (
+        _make_ref("plex", scope, path=str(poster_path), image_kind="poster", **common)
+        if poster_path
+        else None
     )
-
-    backdrop_ref = _make_ref(
-        "plex",
-        scope,
-        path=str(backdrop_path),
-        target_id=str(target_id),
-        image_kind="backdrop",
+    backdrop_ref = (
+        _make_ref("plex", scope, path=str(backdrop_path), image_kind="backdrop", **common)
+        if backdrop_path
+        else None
     )
 
     return poster_ref, backdrop_ref

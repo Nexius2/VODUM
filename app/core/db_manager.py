@@ -1,6 +1,6 @@
 """Compatibility shim (refactor)
 
-Some modules under app.core.* historically imported sibling helpers like:
+Some modules under app.core modules historically imported sibling helpers like:
   from ..logging_utils import get_logger
 which resolves to app.core.logging_utils.
 

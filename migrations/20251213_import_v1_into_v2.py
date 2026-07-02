@@ -120,7 +120,7 @@ def main() -> None:
         log("INFO", "Import servers")
         v1_server_identifier_to_v2_id: dict[str, int] = {}
 
-        cur.execute("SELECT * FROM v1.servers")
+        cur.execute("SELECT server_id, name, type, server_type, url, plex_url, token, plex_token, local_url, public_url, last_checked, server_status, plex_status, tautulli_url, tautulli_api_key, tautulli_status FROM v1.servers")
         for s in cur.fetchall():
             server_identifier = nz_str(s["server_id"])
             if not server_identifier:
@@ -161,7 +161,7 @@ def main() -> None:
         log("INFO", "Import users -> vodum_users + user_identities")
         v1_user_id_to_v2_vodum_user_id: dict[int, int] = {}
 
-        cur.execute("SELECT * FROM v1.users")
+        cur.execute("SELECT id, plex_id, username, email, firstname, lastname, second_email, expiration_date, status_changed_at, status, last_status FROM v1.users")
         for u in cur.fetchall():
             v1_uid = int(u["id"])
             plex_id = nz_str(u["plex_id"])
@@ -212,7 +212,7 @@ def main() -> None:
         log("INFO", "Import libraries")
         v1_library_id_to_v2_library_id: dict[int, int] = {}
 
-        cur.execute("SELECT * FROM v1.libraries")
+        cur.execute("SELECT id, section_id, name, server_id FROM v1.libraries")
         for l in cur.fetchall():
             v1_lid = int(l["id"])
             section_id = nz_str(l["section_id"])
@@ -244,7 +244,7 @@ def main() -> None:
         log("INFO", "Import media_users (user_servers)")
         vodum_server_to_media_user_id: dict[tuple[int, int], int] = {}
 
-        cur.execute("SELECT * FROM v1.user_servers")
+        cur.execute("SELECT user_id, server_id, source, allow_sync, allow_camera_upload, allow_channels, filter_movies, filter_television, filter_music FROM v1.user_servers")
         for us in cur.fetchall():
             v1_uid = int(us["user_id"])
             v1_server_identifier = nz_str(us["server_id"])
@@ -298,7 +298,7 @@ def main() -> None:
         log("INFO", "Import media_user_libraries (shared_libraries)")
         inserted = 0
 
-        cur.execute("SELECT * FROM v1.shared_libraries")
+        cur.execute("SELECT user_id, library_id FROM v1.shared_libraries")
         for sl in cur.fetchall():
             v1_uid = int(sl["user_id"])
             v1_lid = int(sl["library_id"])
@@ -360,7 +360,7 @@ def main() -> None:
         # ------------------------------------------------------------------
         log("INFO", "Import settings + email_templates")
 
-        cur.execute("SELECT * FROM v1.settings WHERE id=1")
+        cur.execute("SELECT id, mail_from, smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, disable_on_expiry, delete_after_expiry_days, send_reminders, default_language, timezone, admin_email, enable_cron_jobs, default_expiration_days, maintenance_mode, debug_mode FROM v1.settings WHERE id=1")
         s = cur.fetchone()
         if s:
             cur.execute(
@@ -400,7 +400,7 @@ def main() -> None:
                 ),
             )
 
-        cur.execute("SELECT * FROM v1.email_templates")
+        cur.execute("SELECT type, subject, days_before, body FROM v1.email_templates")
         for t in cur.fetchall():
             cur.execute(
                 """

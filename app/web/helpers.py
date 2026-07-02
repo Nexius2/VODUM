@@ -12,6 +12,7 @@ from logging_utils import get_logger, is_debug_mode_enabled
 from core.i18n import init_i18n, get_translator
 from core.backup import BackupConfig
 from secret_store import decrypt_communication_settings
+from email_sender import authenticate_smtp
 
 
 # -----------------------------
@@ -228,7 +229,7 @@ def send_email_via_settings(
 
     db = get_db()
 
-    settings_row = db.query_one("SELECT * FROM settings LIMIT 1")
+    settings_row = db.query_one("SELECT id, mail_from, smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_auth_method, smtp_oauth_access_token, email_history_retention_years, disable_on_expiry, delete_after_expiry_days, send_reminders, preavis_days, reminder_days, default_language, timezone, admin_email, contact_email, admin_password_hash, auth_enabled, admin_totp_enabled, admin_totp_secret, wizard_active, wizard_completed, wizard_step, wizard_state_json, web_secure_cookies, web_cookie_samesite, web_trust_proxy, enable_cron_jobs, default_expiration_days, default_subscription_days, maintenance_mode, debug_mode, backup_retention_days, backup_retention_count, data_retention_years, brand_name, notifications_order, user_notifications_can_override, notifications_send_mode, expiry_mode, warn_then_disable_days, discord_enabled, discord_bot_token, discord_bot_id, mailing_enabled, skip_never_used_accounts, plex_user_import_mode, enable_anonymous_telemetry, telemetry_instance_id, telemetry_last_sent_at, task_defaults_version, stream_enforcer_boost_until, usage_risk_enabled, usage_risk_send_upgrade_suggestions, usage_risk_send_stream_blocked_message, usage_risk_min_kills_before_suggestion, usage_risk_analysis_window_days, usage_risk_suggestion_cooldown_days, usage_risk_medium_threshold, usage_risk_high_threshold FROM settings LIMIT 1")
     if not settings_row:
         logger.error("[MAIL] Aucun paramètre mail trouvé en base")
         return False
@@ -242,7 +243,6 @@ def send_email_via_settings(
     smtp_host = settings.get("smtp_host")
     smtp_port = settings.get("smtp_port") or 587
     smtp_user = settings.get("smtp_user")
-    smtp_pass = settings.get("smtp_pass") or ""
     smtp_tls = bool(settings.get("smtp_tls"))
     mail_from = settings.get("mail_from") or smtp_user
 
@@ -295,8 +295,7 @@ def send_email_via_settings(
             if smtp_tls:
                 server.starttls()
 
-            if smtp_user:
-                server.login(smtp_user, smtp_pass)
+            authenticate_smtp(server, settings)
 
             server.send_message(msg, from_addr=mail_from, to_addrs=recipients)
 

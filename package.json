@@ -1,0 +1,9 @@
+{
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.2",
+    "tailwindcss": "^4.3.2"
+  },
+  "scripts": {
+    "build:css": "node ./node_modules/@tailwindcss/cli/dist/index.mjs -i ./static/css/tailwind.css -o ./static/css/vodum.css --minify"
+  }
+}

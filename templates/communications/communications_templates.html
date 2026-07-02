@@ -92,8 +92,8 @@
 						class="w-full border rounded-lg px-2 py-1 text-xs {% if stream_blocked_locked %}bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed opacity-70{% else %}bg-slate-950 border-slate-800{% endif %}"
 						{% if stream_blocked_locked %}disabled title="{{ t('comm_stream_blocked_template_notice') }}"{% endif %}>
 				  <option value="all" {% if pv == 'all' %}selected{% endif %}>{{ t('comm_provider_all') }}</option>
-				  <option value="plex" {% if pv == 'plex' %}selected{% endif %}>Plex</option>
-				  <option value="jellyfin" {% if pv == 'jellyfin' %}selected{% endif %}>Jellyfin</option>
+				  <option value="plex" {% if pv == 'plex' %}selected{% endif %}>{{ t("plex") }}</option>
+				  <option value="jellyfin" {% if pv == 'jellyfin' %}selected{% endif %}>{{ t("jellyfin") }}</option>
 				</select>
 			  </div>
 
@@ -289,6 +289,24 @@
                     <div><code class="break-all text-primary">{client_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_client_name_desc") }}</div></div>
                     <div><code class="break-all text-primary">{device_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_device_name_desc") }}</div></div>
                     <div><code class="break-all text-primary">{blocked_at}</code><div class="text-slate-400 mt-1">{{ t("comm_var_blocked_at_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{stream_killed}</code><div class="text-slate-400 mt-1">{{ t("comm_var_stream_killed_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{other_streams}</code><div class="text-slate-400 mt-1">{{ t("comm_var_other_streams_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{other_streams_count}</code><div class="text-slate-400 mt-1">{{ t("comm_var_other_streams_count_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{all_streams}</code><div class="text-slate-400 mt-1">{{ t("comm_var_all_streams_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{stream_count}</code><div class="text-slate-400 mt-1">{{ t("comm_var_stream_count_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{ip_count}</code><div class="text-slate-400 mt-1">{{ t("comm_var_ip_count_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{policy_limit}</code><div class="text-slate-400 mt-1">{{ t("comm_var_policy_limit_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{policy_observed}</code><div class="text-slate-400 mt-1">{{ t("comm_var_policy_observed_desc") }}</div></div>
+					<div><code class="break-all text-primary">{policy_explanation}</code><div class="text-slate-400 mt-1">{{ t("comm_var_policy_explanation_desc") }}</div></div>
+					<div><code class="break-all text-primary">{policy_limit_label}</code><div class="text-slate-400 mt-1">{{ t("comm_var_policy_limit_label_desc") }}</div></div>
+					<div><code class="break-all text-primary">{active_streams_count}</code><div class="text-slate-400 mt-1">{{ t("comm_var_active_streams_count_desc") }}</div></div>
+					<div><code class="break-all text-primary">{active_streams}</code><div class="text-slate-400 mt-1">{{ t("comm_var_active_streams_desc") }}</div></div>
+					<div><code class="break-all text-primary">{active_devices_count}</code><div class="text-slate-400 mt-1">{{ t("comm_var_active_devices_count_desc") }}</div></div>
+					<div><code class="break-all text-primary">{active_devices}</code><div class="text-slate-400 mt-1">{{ t("comm_var_active_devices_desc") }}</div></div>
+					<div><code class="break-all text-primary">{active_ips_count}</code><div class="text-slate-400 mt-1">{{ t("comm_var_active_ips_count_desc") }}</div></div>
+					<div><code class="break-all text-primary">{active_ips}</code><div class="text-slate-400 mt-1">{{ t("comm_var_active_ips_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{maximum_streams}</code><div class="text-slate-400 mt-1">{{ t("comm_var_maximum_streams_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{maximum_ips}</code><div class="text-slate-400 mt-1">{{ t("comm_var_maximum_ips_desc") }}</div></div>
                   </div>
                 </div>
 
@@ -500,230 +518,10 @@
 </div>
 {% endif %}
 
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-  const sw = document.getElementById('template_enabled_switch');
-  const hidden = document.getElementById('template_enabled');
-  const streamBlockedEnabledLocked = {{ 'true' if stream_blocked_enabled_locked else 'false' }};
-
-  if (sw && hidden) {
-    if (streamBlockedEnabledLocked) {
-      hidden.value = '1';
-    } else {
-      sw.addEventListener('change', () => hidden.value = sw.checked ? '1' : '0');
-    }
+<script type="application/json" id="comm-templates-config">
+  {
+    "streamBlockedEnabledLocked": {{ 'true' if stream_blocked_enabled_locked else 'false' }}
   }
-
-const triggerSel = document.getElementById('trigger_event');
-
-const blockExpiration = document.getElementById('delay_block_expiration');
-const blockUserCreation = document.getElementById('delay_block_user_creation');
-const blockExpirationChangeDirection = document.getElementById('expiration_change_direction_block');
-
-const daysOffset = document.getElementById('days_offset');
-const dirSelect = document.getElementById('delay_direction_select');
-const hiddenBefore = document.getElementById('days_before_hidden');
-const hiddenAfter = document.getElementById('days_after_hidden');
-
-function setBlockDisabled(blockEl, disabled) {
-  if (!blockEl) return;
-  const els = blockEl.querySelectorAll('input, select, textarea, button');
-  els.forEach(el => {
-    if (disabled) el.setAttribute('disabled', 'disabled');
-    else el.removeAttribute('disabled');
-  });
-}
-
-function syncHiddenDelayValues() {
-  if (!daysOffset || !dirSelect || !hiddenBefore || !hiddenAfter) return;
-
-  const raw = (daysOffset.value || '').trim();
-  const n = raw === '' ? 0 : parseInt(raw, 10);
-  const offset = Number.isFinite(n) && n >= 0 ? n : 0;
-  const dir = (dirSelect.value || 'before');
-
-  if (dir === 'after') {
-    hiddenBefore.value = '';
-    hiddenAfter.value = String(offset);
-  } else {
-    hiddenAfter.value = '';
-    hiddenBefore.value = String(offset);
-  }
-}
-
-function refreshDelayUI() {
-  const ev = triggerSel ? (triggerSel.value || 'expiration') : 'expiration';
-
-  if (ev === 'user_creation' || ev === 'pending_invite_reminder') {
-    blockExpiration && blockExpiration.classList.add('hidden');
-    blockUserCreation && blockUserCreation.classList.remove('hidden');
-    blockExpirationChangeDirection && blockExpirationChangeDirection.classList.add('hidden');
-
-    setBlockDisabled(blockExpiration, true);
-    setBlockDisabled(blockUserCreation, false);
-    setBlockDisabled(blockExpirationChangeDirection, true);
-    return;
-  }
-
-  if (ev === 'referral_reward') {
-    blockExpiration && blockExpiration.classList.add('hidden');
-    blockUserCreation && blockUserCreation.classList.add('hidden');
-    blockExpirationChangeDirection && blockExpirationChangeDirection.classList.add('hidden');
-
-    setBlockDisabled(blockExpiration, true);
-    setBlockDisabled(blockUserCreation, true);
-    setBlockDisabled(blockExpirationChangeDirection, true);
-
-    if (hiddenBefore) hiddenBefore.value = '';
-    if (hiddenAfter) hiddenAfter.value = '0';
-    return;
-  }
-
-  if (ev === 'expiration_change') {
-    blockExpiration && blockExpiration.classList.add('hidden');
-    blockUserCreation && blockUserCreation.classList.add('hidden');
-    blockExpirationChangeDirection && blockExpirationChangeDirection.classList.remove('hidden');
-
-    setBlockDisabled(blockExpiration, true);
-    setBlockDisabled(blockUserCreation, true);
-    setBlockDisabled(blockExpirationChangeDirection, false);
-
-    if (hiddenBefore) hiddenBefore.value = '';
-    if (hiddenAfter) hiddenAfter.value = '0';
-    return;
-  }
-
-  blockUserCreation && blockUserCreation.classList.add('hidden');
-  blockExpiration && blockExpiration.classList.remove('hidden');
-  blockExpirationChangeDirection && blockExpirationChangeDirection.classList.add('hidden');
-
-  setBlockDisabled(blockUserCreation, true);
-  setBlockDisabled(blockExpiration, false);
-  setBlockDisabled(blockExpirationChangeDirection, true);
-
-  syncHiddenDelayValues();
-}
-
-triggerSel && triggerSel.addEventListener('change', refreshDelayUI);
-daysOffset && daysOffset.addEventListener('input', syncHiddenDelayValues);
-dirSelect && dirSelect.addEventListener('change', syncHiddenDelayValues);
-
-refreshDelayUI();
-
-const commVarsHelpBtn = document.getElementById('commVarsHelpBtn');
-const commVarsHelpModal = document.getElementById('commVarsHelpModal');
-const commVarsHelpCloseTop = document.getElementById('commVarsHelpCloseTop');
-const commVarsHelpCloseBottom = document.getElementById('commVarsHelpCloseBottom');
-const duplicateDisabledModal = document.getElementById('duplicateDisabledModal');
-const duplicateDisabledCloseTop = document.getElementById('duplicateDisabledCloseTop');
-const duplicateDisabledCloseBottom = document.getElementById('duplicateDisabledCloseBottom');
-
-function openCommVarsHelpModal() {
-  if (!commVarsHelpModal) return;
-  commVarsHelpModal.classList.remove('hidden');
-  commVarsHelpModal.setAttribute('aria-hidden', 'false');
-}
-
-function closeCommVarsHelpModal() {
-  if (!commVarsHelpModal) return;
-  commVarsHelpModal.classList.add('hidden');
-  commVarsHelpModal.setAttribute('aria-hidden', 'true');
-}
-
-function closeDuplicateDisabledModal() {
-  if (!duplicateDisabledModal) return;
-  duplicateDisabledModal.classList.add('hidden');
-  duplicateDisabledModal.setAttribute('aria-hidden', 'true');
-}
-
-commVarsHelpBtn && commVarsHelpBtn.addEventListener('click', openCommVarsHelpModal);
-commVarsHelpCloseTop && commVarsHelpCloseTop.addEventListener('click', closeCommVarsHelpModal);
-commVarsHelpCloseBottom && commVarsHelpCloseBottom.addEventListener('click', closeCommVarsHelpModal);
-duplicateDisabledCloseTop && duplicateDisabledCloseTop.addEventListener('click', closeDuplicateDisabledModal);
-duplicateDisabledCloseBottom && duplicateDisabledCloseBottom.addEventListener('click', closeDuplicateDisabledModal);
-
-commVarsHelpModal && commVarsHelpModal.addEventListener('click', (e) => {
-  if (e.target === commVarsHelpModal || e.target.classList.contains('absolute')) {
-    closeCommVarsHelpModal();
-  }
-});
-
-duplicateDisabledModal && duplicateDisabledModal.addEventListener('click', (e) => {
-  if (e.target === duplicateDisabledModal || e.target.classList.contains('absolute')) {
-    closeDuplicateDisabledModal();
-  }
-});
-
-document.querySelectorAll('tr[data-href]').forEach((row) => {
-  if (row.dataset.boundRowClick === '1') {
-    return;
-  }
-
-  row.dataset.boundRowClick = '1';
-
-  row.addEventListener('click', () => {
-    window.location.href = row.dataset.href;
-  });
-
-  row.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      window.location.href = row.dataset.href;
-    }
-  });
-});
-
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    closeCommVarsHelpModal();
-    closeDuplicateDisabledModal();
-  }
-});
-});
 </script>
-<script>
-  document.addEventListener("DOMContentLoaded", () => {
-    const deleteBtn = document.getElementById("commTemplateDeleteBtn");
-    const modal = document.getElementById("commTemplateDeleteModal");
-    const cancelBtn = document.getElementById("commTemplateDeleteCancel");
-    const confirmBtn = document.getElementById("commTemplateDeleteConfirm");
-    const actionInput = document.getElementById("commTemplateFormAction");
-
-    if (!deleteBtn || !modal || !cancelBtn || !confirmBtn || !actionInput) {
-      return;
-    }
-
-    const form = deleteBtn.closest("form");
-
-    function openModal() {
-      modal.classList.remove("hidden");
-      modal.setAttribute("aria-hidden", "false");
-    }
-
-    function closeModal() {
-      modal.classList.add("hidden");
-      modal.setAttribute("aria-hidden", "true");
-    }
-
-    deleteBtn.addEventListener("click", openModal);
-    cancelBtn.addEventListener("click", closeModal);
-
-    confirmBtn.addEventListener("click", () => {
-      actionInput.value = "delete";
-      form.submit();
-    });
-
-    modal.addEventListener("click", (e) => {
-      if (e.target === modal || e.target.classList.contains("bg-black/70")) {
-        closeModal();
-      }
-    });
-
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !modal.classList.contains("hidden")) {
-        closeModal();
-      }
-    });
-  });
-</script>
+<script src="{{ url_for('static', filename='js/pages/communications-templates.js', v=g.app_version|default('dev')) }}"></script>
 {% endblock %}

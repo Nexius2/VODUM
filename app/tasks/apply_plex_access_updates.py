@@ -340,7 +340,7 @@ def resolve_or_repair_plex_user(db, server_row, user_row, sections_for_repair):
         plex_user = resolve_plex_user(account, user_row)
         sync_media_user_identity_from_plex(db, user_row, plex_user)
         refreshed = db.query_one(
-            "SELECT * FROM media_users WHERE id = ?",
+            "SELECT id, server_id, vodum_user_id, external_user_id, username, email, avatar, stored_password, type, role, joined_at, accepted_at, raw_json, details_json FROM media_users WHERE id = ?",
             (row_get(user_row, "id"),),
         )
         return plex, account, refreshed or user_row, plex_user
@@ -873,8 +873,7 @@ def resolve_media_user(db, vodum_user_id: int, server_id: int, job=None):
     if preferred_media_user_id:
         row = db.query_one(
             """
-            SELECT *
-            FROM media_users
+            SELECT id, server_id, vodum_user_id, external_user_id, username, email, avatar, stored_password, type, role, joined_at, accepted_at, raw_json, details_json FROM media_users
             WHERE id = ?
               AND server_id = ?
             """,
@@ -888,8 +887,7 @@ def resolve_media_user(db, vodum_user_id: int, server_id: int, job=None):
 
     rows = db.query(
         """
-        SELECT *
-        FROM media_users
+        SELECT id, server_id, vodum_user_id, external_user_id, username, email, avatar, stored_password, type, role, joined_at, accepted_at, raw_json, details_json FROM media_users
         WHERE vodum_user_id = ?
           AND server_id = ?
         ORDER BY
@@ -1007,8 +1005,8 @@ def apply_grant_job(db, job):
         )
         return
 
-    server = db.query_one("SELECT * FROM servers WHERE id=?", (server_id,))
-    library = db.query_one("SELECT * FROM libraries WHERE id=?", (lib_id,))
+    server = db.query_one("SELECT id, name, server_identifier, type, url, local_url, public_url, token, settings_json, server_version, unavailable_since, cooldown_until, last_failure, last_checked, status FROM servers WHERE id=?", (server_id,))
+    library = db.query_one("SELECT id, server_id, section_id, name, type, item_count FROM libraries WHERE id=?", (lib_id,))
 
     if not server:
         raise RuntimeError(f"Server not found (id={server_id})")
@@ -1143,7 +1141,7 @@ def apply_sync_job(db, job):
         logger.info(f"Skip SYNC (owner) : username={user['username']} server_id={server_id}")
         return
 
-    server = db.query_one("SELECT * FROM servers WHERE id=?", (server_id,))
+    server = db.query_one("SELECT id, name, server_identifier, type, url, local_url, public_url, token, settings_json, server_version, unavailable_since, cooldown_until, last_failure, last_checked, status FROM servers WHERE id=?", (server_id,))
     if not server:
         raise RuntimeError("Server not found (sync)")
 
@@ -1280,7 +1278,7 @@ def apply_revoke_job(db, job):
         logger.info(f"Skip REVOKE (owner) : username={user['username']} server_id={server_id}")
         return
 
-    server = db.query_one("SELECT * FROM servers WHERE id=?", (server_id,))
+    server = db.query_one("SELECT id, name, server_identifier, type, url, local_url, public_url, token, settings_json, server_version, unavailable_since, cooldown_until, last_failure, last_checked, status FROM servers WHERE id=?", (server_id,))
     if not server:
         raise RuntimeError("Server not found (revoke)")
 
@@ -1345,8 +1343,7 @@ def run(task_id: int, db):
 
     jobs = db.query(
         """
-        SELECT *
-        FROM media_jobs
+        SELECT id, provider, action, vodum_user_id, server_id, library_id, payload_json, status, priority, run_after, locked_by, locked_until, attempts, max_attempts, last_error, processed, success, created_at, processed_at, executed_at, dedupe_key FROM media_jobs
         WHERE provider = 'plex'
           AND status = 'queued'
           AND processed = 0
@@ -1369,7 +1366,7 @@ def run(task_id: int, db):
 
     for job in jobs:
         job_id = job["id"]
-        server = db.query_one("SELECT * FROM servers WHERE id=?", (job["server_id"],))
+        server = db.query_one("SELECT id, name, server_identifier, type, url, local_url, public_url, token, settings_json, server_version, unavailable_since, cooldown_until, last_failure, last_checked, status FROM servers WHERE id=?", (job["server_id"],))
         if server and should_skip_unreachable_server(server):
             logger.info(
                 f"Skipping Plex job id={job_id}: server_id={job['server_id']} is in cooldown"
@@ -1398,7 +1395,7 @@ def run(task_id: int, db):
             logger.info(f"Job {job_id} already claimed by another worker, skipped.")
             continue
 
-        job = db.query_one("SELECT * FROM media_jobs WHERE id = ?", (job_id,))
+        job = db.query_one("SELECT id, provider, action, vodum_user_id, server_id, library_id, payload_json, status, priority, run_after, locked_by, locked_until, attempts, max_attempts, last_error, processed, success, created_at, processed_at, executed_at, dedupe_key FROM media_jobs WHERE id = ?", (job_id,))
         if not job:
             logger.warning(f"Job {job_id} disappeared after claim, skipped.")
             continue

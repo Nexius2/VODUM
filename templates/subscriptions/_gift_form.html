@@ -13,7 +13,7 @@
              value="all"
              checked
              class="hidden"
-             onchange="toggleGiftTarget('all')">
+             data-gift-target-option="all">
 
       <div id="card-all"
            class="p-4 rounded-xl border border-primary bg-primary/10">
@@ -28,7 +28,7 @@
              name="target_type"
              value="server"
              class="hidden"
-             onchange="toggleGiftTarget('server')">
+             data-gift-target-option="server">
 
       <div id="card-server"
            class="p-4 rounded-xl border border-slate-800">
@@ -43,12 +43,12 @@
              name="target_type"
              value="user"
              class="hidden"
-             onchange="toggleGiftTarget('user')">
+             data-gift-target-option="user">
 
       <div id="card-user"
            class="p-4 rounded-xl border border-slate-800">
-        <div class="font-medium mb-1">Single user</div>
-        <div class="text-sm text-slate-400">Gift the subscription to one user only</div>
+        <div class="font-medium mb-1">{{ t("subscription_gift_single_user") }}</div>
+        <div class="text-sm text-slate-400">{{ t("subscription_gift_single_help") }}</div>
       </div>
     </label>
   </div>
@@ -106,7 +106,7 @@
                value="{{ value }}"
                class="hidden"
                {% if loop.first %}checked{% endif %}
-               onchange="selectDuration(this)">
+               data-gift-duration-option>
 
         <div class="duration-card text-center p-3 rounded-xl border
           {% if loop.first %}

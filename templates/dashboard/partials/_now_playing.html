@@ -1,4 +1,4 @@
-{% set live = total_live|default(0) %}
+﻿{% set live = total_live|default(0) %}
 {% set transcode = total_transcode|default(0) %}
 {% set direct = live - transcode %}
 
@@ -14,16 +14,18 @@
 			{% endif %}
 		</h2>
 
-		<a href="{{ url_for('monitoring_page', tab='now_playing') }}"
-		   class="text-xs text-primary hover:text-primary-dark">
-			{{ t("view_all") }}
-		</a>
+
+
+		{% if now_playing_stale %}
+		<span class="rounded-full border border-amber-800 bg-amber-950/40 px-2 py-0.5 text-[10px] text-amber-300"
+		      title="{{ t('now_playing_delayed_help') }}">{{ t("now_playing_delayed") }}</span>
+		{% endif %}
     </div>
 
     <span class="text-[11px] whitespace-nowrap">
 
         {% if live == 0 %}
-            <span class="text-slate-500 font-medium">0 live</span>
+            <span class="text-slate-500 font-medium">0 {{ t("monitoring_servers_live") }}</span>
         {% else %}
 
 			<span class="text-[14px]">
@@ -31,7 +33,7 @@
 			</span>
 
             {% if direct > 0 %}
-                · <span class="text-emerald-300 font-medium">{{ direct }}</span> direct play
+                · <span class="text-emerald-300 font-medium">{{ direct }}</span> {{ t("monitoring_live_direct_play") }}
             {% endif %}
 
             {% if transcode > 0 %}
@@ -48,23 +50,25 @@
 {% if sessions and sessions|length > 0 %}
     <div class="space-y-2">
         {% for s in sessions %}
-            <div class="relative overflow-hidden rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2">
+            <div class="relative overflow-hidden rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-1.5">
                 {% if s.backdrop_url %}
                     <img
                         src="{{ s.backdrop_url }}"
                         alt=""
-                        class="absolute inset-0 h-full w-full object-cover opacity-30 pointer-events-none"
+                        class="js-artwork-image absolute inset-0 h-full w-full object-cover opacity-30 pointer-events-none"
                         loading="lazy"
+                        decoding="async"
                     >
                     <div class="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/70 to-slate-950/90"></div>
                 {% endif %}
 
-                <div class="relative z-10 flex items-start gap-3">
+                <div class="relative z-10 flex items-center gap-3">
                     {% if s.poster_url %}
                         <img
                             src="{{ s.poster_url }}"
-                            alt="{{ s.title or s.grandparent_title or 'Poster' }}"
-                            class="w-10 h-14 rounded-lg object-cover border border-slate-700/70 shrink-0"
+                            alt=""
+                            class="js-artwork-image w-12 h-16 rounded-lg object-cover border border-slate-700/70 shrink-0"
+                            decoding="async"
                         />
                     {% endif %}
 
@@ -86,9 +90,9 @@
                                     </span>
 
                                     {% if s.is_transcode %}
-                                        <span class="text-[10px] px-2 py-0.5 rounded-full border border-orange-500 text-orange-300">Transcoding</span>
+                                        <span class="text-[10px] px-2 py-0.5 rounded-full border border-orange-500 text-orange-300">{{ t("transcoding") }}</span>
                                     {% else %}
-                                        <span class="text-[10px] px-2 py-0.5 rounded-full border border-emerald-600 text-emerald-300">Direct Play</span>
+                                        <span class="text-[10px] px-2 py-0.5 rounded-full border border-emerald-600 text-emerald-300">{{ t("monitoring_direct_play") }}</span>
                                     {% endif %}
 
                                     <span class="text-[10px] px-2 py-0.5 rounded-full border border-slate-700 text-slate-200">
@@ -130,27 +134,38 @@
 
 {% elif idle_card %}
     <div class="rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2">
-        <div class="flex items-start gap-3">
+        <div class="flex items-center gap-3">
 
-            <img
-                src="{{ idle_card.poster_url }}"
-                alt="{{ idle_card.title }}"
-                class="w-20 h-28 rounded-lg object-cover border border-slate-700/70 shrink-0"
-            />
+            {% if idle_card.poster_url %}
+                <img
+                    src="{{ idle_card.poster_url }}"
+                    alt="{{ idle_card.title or '' }}"
+                    class="w-20 h-28 rounded-lg object-cover border border-slate-700/70 shrink-0"
+                    loading="lazy"
+                    decoding="async"
+                />
+            {% else %}
+                <div class="w-20 h-28 rounded-lg border border-slate-700/70 bg-slate-900/80 shrink-0 flex items-center justify-center text-3xl text-slate-500">
+                    &ldquo;
+                </div>
+            {% endif %}
 
             <div class="min-w-0 flex-1">
                 <div class="text-sm italic leading-5 text-slate-100">
                     "{{ idle_card.phrase }}"
                 </div>
 
-                <div class="text-xs text-slate-500 mt-1">
-                    {{ idle_card.title }} ({{ idle_card.year }})
-                </div>
+                {% if idle_card.title %}
+                    <div class="text-xs text-slate-500 mt-1">
+                        {{ idle_card.title }}{% if idle_card.year %} ({{ idle_card.year }}){% endif %}
+                    </div>
+                {% endif %}
             </div>
 
         </div>
     </div>
 
 {% else %}
-    <p class="text-xs text-slate-500">No active session.</p>
+    <p class="text-xs text-slate-500">{{ t("monitoring_no_active_session") }}</p>
 {% endif %}
+

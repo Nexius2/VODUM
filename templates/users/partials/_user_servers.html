@@ -14,7 +14,7 @@
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-6">
     <div class="flex items-center justify-between gap-4">
       <div>
-        <div class="text-sm font-semibold text-slate-200">No servers linked</div>
+        <div class="text-sm font-semibold text-slate-200">{{ t("user_no_linked_servers") }}</div>
         <div class="text-xs text-slate-400 mt-1">
           This user has no Plex/Jellyfin server associations yet. You can still merge users to regroup identities.
         </div>
@@ -551,7 +551,7 @@
                     <div class="text-sm font-semibold text-slate-200">
                       {{ t("merge_preview_title") if t("merge_preview_title") else "Résultat après fusion" }}
                     </div>
-                    <div id="mergePreviewLoading" class="text-xs text-slate-500 hidden">Loading…</div>
+                    <div id="mergePreviewLoading" class="text-xs text-slate-500 hidden">{{ t("subscription_loading") }}…</div>
                   </div>
 
                   <div id="mergePreviewError" class="hidden text-xs text-rose-300"></div>

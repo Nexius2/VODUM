@@ -1,8 +1,9 @@
-import os
-import sqlite3
+﻿import os
 import secrets
 from datetime import timedelta
 from pathlib import Path
+
+from db_manager import open_sqlite_connection
 
 
 def _get_secret_key() -> str:
@@ -44,9 +45,9 @@ def _get_secret_key() -> str:
 
 
 def _read_settings_from_db(db_path: str) -> dict:
+    conn = None
     try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
+        conn = open_sqlite_connection(db_path, read_only=True)
         row = conn.execute(
             """
             SELECT web_secure_cookies, web_cookie_samesite
@@ -54,10 +55,12 @@ def _read_settings_from_db(db_path: str) -> dict:
             WHERE id = 1
             """
         ).fetchone()
-        conn.close()
         return dict(row) if row else {}
     except Exception:
         return {}
+    finally:
+        if conn is not None:
+            conn.close()
 
 
 def _get_session_cookie_secure(db_path: str) -> bool:
@@ -119,3 +122,5 @@ class Config:
         hours=max(1, int(os.environ.get("VODUM_SESSION_LIFETIME_HOURS", "12")))
     )
     SESSION_REFRESH_EACH_REQUEST = True
+
+

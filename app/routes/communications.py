@@ -1,9 +1,19 @@
-# Unified Communications UI (Email + Discord)
+﻿# Unified Communications UI (Email + Discord)
 
 import json
 from flask import render_template, request, redirect, url_for, flash, jsonify
 
 from core.i18n import get_translator
+from core.communications_recovery import retry_failed_scheduled_communications
+from core.communications.default_templates import (
+    is_stream_blocked_template,
+    restore_default_comm_templates,
+    subscription_expired_warning_requires_stream_blocked,
+)
+from core.communications.rules import (
+    find_enabled_template_duplicate,
+    normalize_campaign_targets,
+)
 from web.helpers import get_db, add_log, send_email_via_settings
 from discord_utils import validate_discord_bot_token
 from notifications_utils import parse_notifications_order
@@ -13,7 +23,6 @@ from communications_engine import (
     store_uploads,
     fetch_template_attachments,
     fetch_campaign_attachments,
-    available_channels,
     queue_campaign_delivery,
 )
 from tasks_engine import enable_and_run_task_by_name
@@ -45,346 +54,95 @@ def _sanitize_notifications_order(raw: str) -> str:
     return ",".join(parts)
 
 
+COMM_TRANSLATION_SETTINGS_COLUMNS = "default_language"
+COMM_TEST_CAMPAIGN_SETTINGS_COLUMNS = "contact_email"
+COMM_CAMPAIGN_EDITOR_COLUMNS = """
+    id,
+    name,
+    subject,
+    body,
+    server_id,
+    trigger_provider,
+    subscription_scope,
+    subscription_template_id,
+    status,
+    is_test,
+    created_at,
+    updated_at,
+    sent_at
+"""
 
-
-def _find_enabled_template_duplicate(
-    db,
-    *,
-    trigger_event: str,
-    trigger_provider: str,
-    subscription_scope: str,
+COMM_CAMPAIGN_LIST_COLUMNS = """
+                c.id,
+                c.name,
+                c.subject,
+                c.server_id,
+                c.trigger_provider,
+                c.subscription_scope,
+                c.subscription_template_id,
+                c.is_test,
+                c.status,
+                c.created_at,
+                c.sent_at
+"""
+COMM_TEMPLATE_EDITOR_COLUMNS = """
+    id,
+    key,
+    name,
+    enabled,
+    trigger_event,
+    trigger_provider,
+    expiration_change_direction,
+    subscription_scope,
     subscription_template_id,
     days_before,
     days_after,
-    expiration_change_direction: str = "all",
-    exclude_id: int | None = None,
-):
-    """
-    Detect only true logical duplicates among ENABLED templates.
+    subject,
+    body,
+    created_at,
+    updated_at
+"""
 
-    Allowed:
-    - same trigger/provider/subscription target with different delay slots
-      (ex: J-30 / J-7 / J-0 for expiration)
-    - all + plex/jellyfin fallback combinations
-    - disabled duplicates
-
-    Blocked:
-    - another ENABLED template with the exact same logical slot
-    """
-    normalized_sub_id = subscription_template_id if subscription_scope == "specific" else None
-    normalized_exp_dir = expiration_change_direction if trigger_event == "expiration_change" else "all"
-
-    sql = """
-        SELECT id, name
-        FROM comm_templates
-        WHERE enabled = 1
-          AND trigger_event = ?
-          AND trigger_provider = ?
-          AND COALESCE(subscription_scope, 'none') = ?
-          AND COALESCE(subscription_template_id, 0) = COALESCE(?, 0)
-          AND COALESCE(expiration_change_direction, 'all') = ?
-          AND (
-                (days_before IS NULL AND ? IS NULL)
-                OR days_before = ?
-              )
-          AND (
-                (days_after IS NULL AND ? IS NULL)
-                OR days_after = ?
-              )
-    """
-    params = [
-        trigger_event,
-        trigger_provider,
-        subscription_scope,
-        normalized_sub_id,
-        normalized_exp_dir,
-        days_before, days_before,
-        days_after, days_after,
-    ]
-
-    if exclude_id is not None:
-        sql += " AND id <> ?"
-        params.append(exclude_id)
-
-    sql += " LIMIT 1"
-
-    row = db.query_one(sql, tuple(params))
-    return dict(row) if row else None
-
-def _normalize_send_mode(settings: dict) -> str:
-    mode = (settings or {}).get("notifications_send_mode")
-    mode = (mode or "first").strip().lower()
-    return mode if mode in ("first", "all") else "first"
-
-def _normalize_campaign_targets(db, request_form) -> tuple[str, str, int | None]:
-    trigger_provider = (request_form.get("trigger_provider") or "all").strip().lower()
-    if trigger_provider not in ("all", "plex", "jellyfin"):
-        trigger_provider = "all"
-
-    subscription_scope_raw = (request_form.get("subscription_scope_value") or "none").strip()
-    subscription_scope = "none"
-    subscription_template_id = None
-
-    if subscription_scope_raw == "all":
-        subscription_scope = "all"
-
-    elif subscription_scope_raw.startswith("subscription:"):
-        sub_id_raw = subscription_scope_raw.split(":", 1)[1].strip()
-
-        try:
-            subscription_template_id = int(sub_id_raw)
-        except Exception:
-            subscription_template_id = None
-
-        if subscription_template_id:
-            sub_exists = db.query_one(
-                """
-                SELECT id
-                FROM subscription_templates
-                WHERE id = ?
-                  AND COALESCE(is_enabled, 1) = 1
-                """,
-                (subscription_template_id,),
-            )
-
-            if sub_exists:
-                subscription_scope = "specific"
-            else:
-                subscription_scope = "none"
-                subscription_template_id = None
-
-    return trigger_provider, subscription_scope, subscription_template_id
-
-def _campaign_attempts_satisfy_mode(db, settings: dict, user: dict, attempts: list) -> bool:
-    """
-    Campaign success rule:
-    - FIRST: at least one successful channel
-    - ALL  : all available channels for this user must succeed
-    - skipped_only: treated as OK to stay aligned with unified comm engine behavior
-    """
-    mode = _normalize_send_mode(settings)
-    avail = available_channels(db, settings, user)
-    attempts = attempts or []
-
-    sent_channels = {a.channel for a in attempts if getattr(a, "status", None) == "sent"}
-    skipped_only = bool(attempts) and all(getattr(a, "status", None) == "skipped" for a in attempts)
-
-    if skipped_only:
-        return True
-
-    if mode == "all":
-        required = []
-        if avail.get("email"):
-            required.append("email")
-        if avail.get("discord"):
-            required.append("discord")
-
-        if not required:
-            return False
-
-        return all(ch in sent_channels for ch in required)
-
-    return any(getattr(a, "status", None) == "sent" for a in attempts)
-
-DEFAULT_COMM_TEMPLATES = [
-    {
-        "key": "stream_blocked",
-        "name": "Stream blocked",
-        "enabled": 0,
-        "trigger_event": "stream_blocked",
-        "trigger_provider": "all",
-        "subscription_scope": "all",
-        "subscription_template_id": None,
-        "expiration_change_direction": "all",
-        "days_before": None,
-        "days_after": 0,
-        "subject": "Playback blocked",
-        "body": "Hello {firstusername},\n\nYour playback has been stopped by VODUM.\n\nReason: {policy_reason}\nMedia: {media_title}\nServer: {server_name}\nDevice: {device_name}\nClient: {client_name}\nTime: {blocked_at}\n\nIf you think this is a mistake, please contact the administrator.\n\nBest regards,\n{brand_name}\n",
-    },
-    {
-        "key": "default_expiration_date_change",
-        "name": "Expiration date change",
-        "enabled": 0,
-        "trigger_event": "expiration_change",
-        "trigger_provider": "all",
-        "subscription_scope": "all",
-        "subscription_template_id": None,
-        "expiration_change_direction": "all",
-        "days_before": None,
-        "days_after": 0,
-        "subject": "Your subscription date has been updated",
-        "body": "Hello {username},\n\nYour subscription expiration date has been updated.\n\nPrevious expiration date: {old_expiration_date}\nNew expiration date: {new_expiration_date}\nChange: {expiration_change_signed_days} day(s)\nReason: {expiration_change_reason}\n\nBest regards,\n{brand_name}\n",
-    },
-    {
-        "key": "default_fin",
-        "name": "Expired subscription",
-        "enabled": 0,
-        "trigger_event": "expiration",
-        "trigger_provider": "all",
-        "subscription_scope": "all",
-        "subscription_template_id": None,
-        "expiration_change_direction": "all",
-        "days_before": 0,
-        "days_after": None,
-        "subject": "Your subscription has expired",
-        "body": "Hello {username},\n\nYour subscription expired on {expiration_date}.\nYour access may now be suspended.\n\nIf you wish to continue using the service, please renew your subscription.\n\nBest regards,\n{brand_name}\n",
-    },
-    {
-        "key": "default_pending_invite_reminder",
-        "name": "Pending invite reminder",
-        "enabled": 0,
-        "trigger_event": "pending_invite_reminder",
-        "trigger_provider": "all",
-        "subscription_scope": "all",
-        "subscription_template_id": None,
-        "expiration_change_direction": "all",
-        "days_before": None,
-        "days_after": 3,
-        "subject": "Reminder - please accept your invitation",
-        "body": "Hello {username},\n\nYour invitation is still waiting for acceptance.\n\nTo start using your account:\n- Open Plex or Jellyfin\n- Sign in with your account\n- Accept the library share invitation if prompted\n\nYour subscription expiration is currently set to: {expiration_date}\n\nBest regards,\n{brand_name}\n",
-    },
-    {
-        "key": "default_preavis",
-        "name": "Expiration notice",
-        "enabled": 0,
-        "trigger_event": "expiration",
-        "trigger_provider": "all",
-        "subscription_scope": "all",
-        "subscription_template_id": None,
-        "expiration_change_direction": "all",
-        "days_before": 30,
-        "days_after": None,
-        "subject": "Your subscription will expire in {days_left} days",
-        "body": "Hello {username},\n\nYour subscription will expire in {days_left} days.\n\nExpiration date: {expiration_date}\n\nPlease renew it to avoid any service interruption.\n\nBest regards,\n{brand_name}\n",
-    },
-    {
-        "key": "default_parrainage",
-        "name": "Referral reward",
-        "enabled": 0,
-        "trigger_event": "referral_reward",
-        "trigger_provider": "all",
-        "subscription_scope": "all",
-        "subscription_template_id": None,
-        "expiration_change_direction": "all",
-        "days_before": None,
-        "days_after": 0,
-        "subject": "Referral reward granted",
-        "body": "Hello {username},\n\nGood news: you earned {referral_reward_days} bonus day(s) thanks to {referred_username}.\n\nPrevious expiration date: {referrer_old_expiration_date}\nNew expiration date: {referrer_new_expiration_date}\n\nThank you for your referral.\n\nBest regards,\n{brand_name}\n",
-    },
-    {
-        "key": "default_relance",
-        "name": "Expiration reminder",
-        "enabled": 0,
-        "trigger_event": "expiration",
-        "trigger_provider": "all",
-        "subscription_scope": "all",
-        "subscription_template_id": None,
-        "expiration_change_direction": "all",
-        "days_before": 7,
-        "days_after": None,
-        "subject": "Reminder - your subscription will expire soon",
-        "body": "Hello {username},\n\nThis is a friendly reminder that your subscription will expire in {days_left} days.\n\nExpiration date: {expiration_date}\n\nPlease renew it in time to avoid any service interruption.\n\nBest regards,\n{brand_name}\n",
-    },
-    {
-        "key": "default_user_creation",
-        "name": "User creation",
-        "enabled": 0,
-        "trigger_event": "user_creation",
-        "trigger_provider": "all",
-        "subscription_scope": "all",
-        "subscription_template_id": None,
-        "expiration_change_direction": "all",
-        "days_before": None,
-        "days_after": 0,
-        "subject": "Welcome - your account is ready",
-        "body": "Hello {username},\n\nYour account has been created successfully.\n\nLogin email: {email}\n\nHow to get started:\n- Open Plex or Jellyfin\n- Sign in with your account\n- Accept the library share invitation if prompted\n\nSubscription expiration date: {expiration_date}\n\nBest regards,\n{brand_name}\n",
-    },
-]
+COMM_TEMPLATE_LIST_COLUMNS = """
+              ct.id,
+              ct.key,
+              ct.name,
+              ct.enabled,
+              ct.trigger_event,
+              ct.trigger_provider,
+              ct.subscription_scope,
+              ct.subscription_template_id,
+              ct.days_before,
+              ct.days_after,
+              ct.subject
+"""
+COMM_HISTORY_COLUMNS = """
+                h.kind,
+                h.channel_used,
+                h.status,
+                h.error,
+                h.sent_at,
+                h.meta_json
+"""
+COMM_CONFIG_SETTINGS_COLUMNS = """
+    mailing_enabled,
+    skip_never_used_accounts,
+    mail_from,
+    smtp_host,
+    smtp_port,
+    smtp_tls,
+    smtp_user,
+    smtp_pass,
+    smtp_auth_method,
+    smtp_oauth_access_token,
+    discord_enabled,
+    discord_bot_token,
+    notifications_send_mode,
+    notifications_order,
+    user_notifications_can_override
+"""
 
 
-def _restore_default_comm_templates(db) -> int:
-    restored = 0
-
-    for tpl in DEFAULT_COMM_TEMPLATES:
-        restore_key = f"{tpl['key']}_restore_default"
-        restore_name = f"{tpl['name']} - Default"
-
-        existing = db.query_one(
-            "SELECT id FROM comm_templates WHERE key = ?",
-            (restore_key,),
-        )
-
-        if existing:
-            continue
-
-        db.execute(
-            """
-            INSERT INTO comm_templates(
-                key,
-                name,
-                enabled,
-                trigger_event,
-                trigger_provider,
-                expiration_change_direction,
-                subscription_scope,
-                subscription_template_id,
-                days_before,
-                days_after,
-                subject,
-                body,
-                created_at,
-                updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            """,
-            (
-                restore_key,
-                restore_name,
-                0,
-                tpl["trigger_event"],
-                tpl["trigger_provider"],
-                tpl["expiration_change_direction"],
-                tpl["subscription_scope"],
-                tpl["subscription_template_id"],
-                tpl["days_before"],
-                tpl["days_after"],
-                tpl["subject"],
-                tpl["body"],
-            ),
-        )
-
-        restored += 1
-
-    return restored
-
-
-def _is_stream_blocked_template(row: dict | None) -> bool:
-    if not row:
-        return False
-
-    return (row.get("key") or "").strip().lower() == "stream_blocked"
-
-
-def _subscription_expired_warning_requires_stream_blocked(settings: dict | None) -> bool:
-    mode = ((settings or {}).get("expiry_mode") or "none").strip().lower()
-    return mode in ("warn_only", "warn_then_disable")
-
-
-def _force_stream_blocked_template_values(template: dict, *, enabled: int | None = None) -> dict:
-    forced = dict(template or {})
-    forced["key"] = "stream_blocked"
-    forced["trigger_event"] = "stream_blocked"
-    forced["trigger_provider"] = "all"
-    forced["subscription_scope"] = "all"
-    forced["subscription_template_id"] = None
-    forced["expiration_change_direction"] = "all"
-    forced["days_before"] = None
-    forced["days_after"] = 0
-
-    if enabled is not None:
-        forced["enabled"] = int(enabled)
-
-    return forced
 
 
 def register(app):
@@ -413,7 +171,7 @@ def register(app):
             raw_server_id = (request.form.get("server_id") or "").strip()
             server_id = _as_int(raw_server_id, None) if raw_server_id else None
             is_test = 1 if request.form.get("is_test") == "1" else 0
-            trigger_provider, subscription_scope, subscription_template_id = _normalize_campaign_targets(db, request.form)
+            trigger_provider, subscription_scope, subscription_template_id = normalize_campaign_targets(db, request.form)
 
             if not name or not subject or not body:
                 flash(t("comm_missing_fields"), "error")
@@ -474,7 +232,7 @@ def register(app):
             raw_server_id = (request.form.get("server_id") or "").strip()
             server_id = _as_int(raw_server_id, None) if raw_server_id else None
             is_test = 1 if request.form.get("is_test") == "1" else 0
-            trigger_provider, subscription_scope, subscription_template_id = _normalize_campaign_targets(db, request.form)
+            trigger_provider, subscription_scope, subscription_template_id = normalize_campaign_targets(db, request.form)
 
             if not cid:
                 flash(t("comm_not_found"), "error")
@@ -548,7 +306,7 @@ def register(app):
 
         if action == "send":
             cid = request.form.get("campaign_id", type=int)
-            campaign = db.query_one("SELECT * FROM comm_campaigns WHERE id = ?", (cid,))
+            campaign = db.query_one(f"SELECT {COMM_CAMPAIGN_EDITOR_COLUMNS} FROM comm_campaigns WHERE id = ?", (cid,))
             if not campaign:
                 flash(t("comm_not_found"), "error")
                 return redirect(url_for("communications_campaigns_page"))
@@ -557,10 +315,10 @@ def register(app):
             attachments = fetch_campaign_attachments(db, cid)
 
             if int(campaign.get("is_test") or 0) == 1:
-                settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+                settings = db.query_one(f"SELECT {COMM_TEST_CAMPAIGN_SETTINGS_COLUMNS} FROM settings WHERE id = 1")
                 settings = dict(settings) if settings else {}
 
-                admin_email = (settings.get("admin_email") or "").strip()
+                admin_email = (settings.get("contact_email") or "").strip()
                 if not admin_email:
                     db.execute("UPDATE comm_campaigns SET status='error', updated_at=CURRENT_TIMESTAMP WHERE id=?", (cid,))
                     flash(t("comm_admin_email_missing"), "error")
@@ -643,15 +401,15 @@ def register(app):
         load_id = request.args.get("load", type=int)
         loaded = None
         if load_id:
-            loaded = db.query_one("SELECT * FROM comm_campaigns WHERE id = ?", (load_id,))
+            loaded = db.query_one(f"SELECT {COMM_CAMPAIGN_EDITOR_COLUMNS} FROM comm_campaigns WHERE id = ?", (load_id,))
             loaded = dict(loaded) if loaded else None
             if loaded:
                 loaded["attachments"] = fetch_campaign_attachments(db, int(loaded["id"]))
 
         campaigns = db.query(
-            """
+            f"""
             SELECT
-                c.*,
+                {COMM_CAMPAIGN_LIST_COLUMNS},
                 st.name AS subscription_template_name
             FROM comm_campaigns c
             LEFT JOIN subscription_templates st ON st.id = c.subscription_template_id
@@ -678,7 +436,7 @@ def register(app):
     def communications_templates_action():
         db = get_db()
 
-        settings_row = db.query_one("SELECT * FROM settings WHERE id = 1")
+        settings_row = db.query_one(f"SELECT {COMM_TRANSLATION_SETTINGS_COLUMNS} FROM settings WHERE id = 1")
         settings = dict(settings_row) if settings_row else {}
         t = get_translator(settings)
 
@@ -804,7 +562,7 @@ def register(app):
 
 
             if enabled:
-                duplicate = _find_enabled_template_duplicate(
+                duplicate = find_enabled_template_duplicate(
                     db,
                     trigger_event=trigger_event,
                     trigger_provider=trigger_provider,
@@ -876,7 +634,7 @@ def register(app):
                 flash(t("comm_not_found"), "error")
                 return redirect(url_for("communications_templates_page"))
 
-            existing = db.query_one("SELECT * FROM comm_templates WHERE id = ?", (tid,))
+            existing = db.query_one(f"SELECT {COMM_TEMPLATE_EDITOR_COLUMNS} FROM comm_templates WHERE id = ?", (tid,))
             if not existing:
                 flash(t("comm_not_found"), "error")
                 return redirect(url_for("communications_templates_page"))
@@ -886,10 +644,10 @@ def register(app):
             settings = db.query_one("SELECT expiry_mode FROM settings WHERE id = 1")
             settings = dict(settings) if settings else {}
 
-            is_stream_blocked = _is_stream_blocked_template(existing)
+            is_stream_blocked = is_stream_blocked_template(existing)
             stream_blocked_required = (
                 is_stream_blocked
-                and _subscription_expired_warning_requires_stream_blocked(settings)
+                and subscription_expired_warning_requires_stream_blocked(settings)
             )
 
             name = (request.form.get("name") or "").strip()
@@ -1021,7 +779,7 @@ def register(app):
          
 
             if enabled:
-                duplicate = _find_enabled_template_duplicate(
+                duplicate = find_enabled_template_duplicate(
                     db,
                     trigger_event=trigger_event,
                     trigger_provider=trigger_provider,
@@ -1095,7 +853,7 @@ def register(app):
             existing = db.query_one("SELECT key FROM comm_templates WHERE id = ?", (tid,))
             existing = dict(existing) if existing else None
 
-            if _is_stream_blocked_template(existing):
+            if is_stream_blocked_template(existing):
                 flash(t("comm_stream_blocked_template_locked"), "error")
                 return redirect(url_for("communications_templates_page", load=tid))
 
@@ -1112,11 +870,11 @@ def register(app):
     def communications_templates_restore_defaults():
         db = get_db()
 
-        settings_row = db.query_one("SELECT * FROM settings WHERE id = 1")
+        settings_row = db.query_one(f"SELECT {COMM_TRANSLATION_SETTINGS_COLUMNS} FROM settings WHERE id = 1")
         settings = dict(settings_row) if settings_row else {}
         t = get_translator(settings)
 
-        restored = _restore_default_comm_templates(db)
+        restored = restore_default_comm_templates(db)
 
         add_log("info", "communications", "Default communication templates restored", {"restored": restored})
         flash(t("comm_templates_defaults_restored"), "success")
@@ -1136,18 +894,18 @@ def register(app):
 
         loaded = None
         loaded_is_stream_blocked = False
-        stream_blocked_required = _subscription_expired_warning_requires_stream_blocked(settings)
+        stream_blocked_required = subscription_expired_warning_requires_stream_blocked(settings)
 
         if load_id:
-            loaded = db.query_one("SELECT * FROM comm_templates WHERE id = ?", (load_id,))
+            loaded = db.query_one(f"SELECT {COMM_TEMPLATE_EDITOR_COLUMNS} FROM comm_templates WHERE id = ?", (load_id,))
             loaded = dict(loaded) if loaded else None
             if loaded:
                 loaded["attachments"] = fetch_template_attachments(db, int(loaded["id"]))
-                loaded_is_stream_blocked = _is_stream_blocked_template(loaded)
+                loaded_is_stream_blocked = is_stream_blocked_template(loaded)
 
-        templates = db.query("""
+        templates = db.query(f"""
             SELECT
-              ct.*,
+              {COMM_TEMPLATE_LIST_COLUMNS},
               st.name AS subscription_template_name
             FROM comm_templates ct
             LEFT JOIN subscription_templates st ON st.id = ct.subscription_template_id
@@ -1231,6 +989,33 @@ def register(app):
         total_rows = int(total_row["total"]) if total_row and total_row["total"] is not None else 0
         total_pages = max((total_rows + per_page - 1) // per_page, 1)
 
+        summary_row = db.query_one(
+            """
+            SELECT
+              SUM(CASE WHEN channel_used='email' AND status='sent' THEN 1 ELSE 0 END) AS email_sent,
+              SUM(CASE WHEN channel_used='email' AND status='failed' THEN 1 ELSE 0 END) AS email_failed,
+              SUM(CASE WHEN channel_used='discord' AND status='sent' THEN 1 ELSE 0 END) AS discord_sent,
+              SUM(CASE WHEN channel_used='discord' AND status='failed' THEN 1 ELSE 0 END) AS discord_failed,
+              SUM(CASE WHEN status='sent' AND datetime(sent_at) >= datetime('now', '-24 hours') THEN 1 ELSE 0 END) AS sent_24h,
+              SUM(CASE WHEN status='failed' AND datetime(sent_at) >= datetime('now', '-24 hours') THEN 1 ELSE 0 END) AS failed_24h
+            FROM comm_history
+            """
+        ) or {}
+        communication_summary = dict(summary_row)
+        queue_row = db.query_one(
+            """
+            SELECT
+              SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending,
+              SUM(CASE WHEN status='error' THEN 1 ELSE 0 END) AS errors
+            FROM comm_scheduled
+            """
+        ) or {}
+        communication_summary.update(dict(queue_row))
+        communication_summary = {
+            key: int(value or 0)
+            for key, value in communication_summary.items()
+        }
+
         if page > total_pages:
             page = total_pages
 
@@ -1239,7 +1024,7 @@ def register(app):
         rows = db.query(
             f"""
             SELECT
-                h.*,
+                {COMM_HISTORY_COLUMNS},
                 u.username AS user_username,
                 t.key AS template_key,
                 t.subject AS template_subject,
@@ -1258,13 +1043,6 @@ def register(app):
         )
 
         history = [dict(r) for r in (rows or [])]
-
-        for h in history:
-            try:
-                h["meta"] = json.loads(h.get("meta_json") or "{}")
-            except Exception:
-                h["meta"] = {}
-
         return render_template(
             "communications/communications_history.html",
             history=history,
@@ -1275,6 +1053,7 @@ def register(app):
             total_pages=total_pages,
             sort=sort,
             order=order,
+            communication_summary=communication_summary,
         )
 
 
@@ -1286,7 +1065,7 @@ def register(app):
         db = get_db()
         t = get_translator()
 
-        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        settings = db.query_one(f"SELECT {COMM_CONFIG_SETTINGS_COLUMNS} FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
 
         action = (request.form.get("action") or "").strip()
@@ -1301,12 +1080,20 @@ def register(app):
             smtp_port = _as_int(request.form.get("smtp_port"), None)
             smtp_tls = 1 if request.form.get("smtp_tls") == "1" else 0
             smtp_user = (request.form.get("smtp_user") or "").strip() or None
+            smtp_auth_method = (request.form.get("smtp_auth_method") or "password").strip().lower()
+            if smtp_auth_method not in ("password", "oauth2"):
+                smtp_auth_method = "password"
 
             # Safety: do not wipe secrets on auto-save if input is empty
             smtp_pass_raw = request.form.get("smtp_pass")
             smtp_pass = encrypt_secret(smtp_pass_raw or "")
             if smtp_pass_raw is not None and smtp_pass_raw.strip() == "":
                 smtp_pass = settings.get("smtp_pass") or ""
+
+            smtp_oauth_token_raw = request.form.get("smtp_oauth_access_token")
+            smtp_oauth_access_token = encrypt_secret((smtp_oauth_token_raw or "").strip() or None)
+            if smtp_oauth_token_raw is not None and smtp_oauth_token_raw.strip() == "":
+                smtp_oauth_access_token = settings.get("smtp_oauth_access_token") or None
 
             # Discord
             discord_enabled = 1 if request.form.get("discord_enabled") == "1" else 0
@@ -1338,6 +1125,8 @@ def register(app):
                   smtp_tls=?,
                   smtp_user=?,
                   smtp_pass=?,
+                  smtp_auth_method=?,
+                  smtp_oauth_access_token=?,
                   discord_enabled=?,
                   discord_bot_token=?,
                   notifications_send_mode=?,
@@ -1354,6 +1143,8 @@ def register(app):
                     smtp_tls,
                     smtp_user,
                     smtp_pass,
+                    smtp_auth_method,
+                    smtp_oauth_access_token,
                     discord_enabled,
                     discord_bot_token,
                     send_mode,
@@ -1369,21 +1160,13 @@ def register(app):
         # Queue retry of failed scheduled communications
         if action == "retry_scheduled_errors":
             try:
-                db.execute(
-                    """
-                    UPDATE comm_scheduled
-                    SET status = 'pending',
-                        last_error = NULL,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE status = 'error'
-                    """
-                )
+                retried = retry_failed_scheduled_communications(db)
                 try:
                     enable_and_run_task_by_name("send_expiration_emails")
                 except Exception:
                     pass
 
-                add_log("info", "communications", "Scheduled communication errors requeued")
+                add_log("info", "communications", f"{retried} scheduled communication error(s) requeued")
                 flash(t("comm_retry_scheduled_success"), "success")
             except Exception as e:
                 flash(f"{t('comm_retry_scheduled_error')}: {e}", "error")
@@ -1398,46 +1181,28 @@ def register(app):
     def communications_configuration_page():
         db = get_db()
 
-        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        settings = db.query_one(f"SELECT {COMM_CONFIG_SETTINGS_COLUMNS} FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
         settings["smtp_pass_configured"] = bool(settings.get("smtp_pass"))
+        settings["smtp_oauth_access_token_configured"] = bool(settings.get("smtp_oauth_access_token"))
         settings["discord_bot_token_configured"] = bool(settings.get("discord_bot_token"))
         settings["smtp_pass"] = ""
+        settings["smtp_oauth_access_token"] = ""
         settings["discord_bot_token"] = ""
-
-        recent_scheduled = db.query(
-            """
-            SELECT *
-            FROM comm_scheduled
-            ORDER BY created_at DESC, id DESC
-            LIMIT 50
-            """
-        ) or []
-        recent_scheduled = [dict(r) for r in recent_scheduled]
-
-        recent_history = db.query(
-            """
-            SELECT
-                h.*,
-                u.username AS user_username
-            FROM comm_history h
-            LEFT JOIN vodum_users u ON u.id = h.user_id
-            ORDER BY h.id DESC
-            LIMIT 50
-            """
-        ) or []
-        recent_history = [dict(r) for r in recent_history]
-
-        for row in recent_history:
-            try:
-                row["meta"] = json.loads(row.get("meta_json") or "{}")
-            except Exception:
-                row["meta"] = {}
-
         return render_template(
             "communications/communications_configuration.html",
             settings=settings,
-            recent_scheduled=recent_scheduled,
-            recent_history=recent_history,
             current_subpage="configuration",
         )
+
+
+
+
+
+
+
+
+
+
+
+

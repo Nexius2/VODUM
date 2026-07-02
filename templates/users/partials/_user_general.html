@@ -63,11 +63,14 @@
 		</button>
 		{% endif %}
 
+		{% if not expiration_lock or expiration_lock.role_label != 'Owner' %}
 		<button type="button"
 				id="openDeleteUserModalBtn"
-				class="px-4 py-2 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-sm transition-colors">
+				{% if expiration_lock and expiration_lock.role_label == 'Admin' %}disabled title="{{ t('remove_admin_to_delete') }}"{% endif %}
+				class="px-4 py-2 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-rose-700">
 		  {{ t("delete_user") if t("delete_user") != "delete_user" else "Delete user" }}
 		</button>
+		{% endif %}
 
 		<button type="submit"
 				class="px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-sm transition-colors">
@@ -285,23 +288,36 @@
         <div class="min-w-0">
       <div class="space-y-5">
 
-        <label class="text-sm block">
-          <div class="text-slate-400 mb-1">{{ t("subscription_template") }}</div>
+		<label class="text-sm block">
+		  <div class="text-slate-400 mb-1">{{ t("subscription_template") }}</div>
+
+		  {% if expiration_lock and expiration_lock.locked %}
+			<input type="text"
+				   id="subscription_template_id"
+				   value="{{ expiration_lock.role_label or expiration_lock.label }}"
+				   readonly
+				   class="mt-1 max-w-md w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60 cursor-not-allowed text-amber-300">
+
+			<div class="text-xs text-slate-500 mt-1">
+			  {{ expiration_lock.label }}
+			</div>
+		  {% else %}
 			<select name="subscription_template_id"
 					id="subscription_template_id"
-                    class="mt-1 max-w-md w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-            <option value="" {% if user.subscription_template_id is none %}selected{% endif %}>
-              {{ t("subscription_none") }}
-            </option>
-            {% for tpl in subscription_templates %}
+					class="mt-1 max-w-md w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+			  <option value="" {% if user.subscription_template_id is none %}selected{% endif %}>
+				{{ t("subscription_none") }}
+			  </option>
+			  {% for tpl in subscription_templates %}
 				<option value="{{ tpl.id }}"
 						data-lifetime="{{ tpl.is_lifetime or 0 }}"
 						{% if user.subscription_template_id == tpl.id %}selected{% endif %}>
 				  {{ tpl.name }}
 				</option>
-            {% endfor %}
-          </select>
-        </label>
+			  {% endfor %}
+			</select>
+		  {% endif %}
+		</label>
 
 		{% set ns = namespace(is_media_admin=false) %}
 
@@ -358,8 +374,8 @@
 						 name="expiration_date_override"
 						 value="1"
 						 data-original="{% if user.expiration_date_override == 1 %}1{% else %}0{% endif %}"
-						 {% if user.expiration_date_override == 1 or ns.is_media_admin %}checked{% endif %}
-						 {% if ns.is_media_admin %}disabled{% endif %}
+						 {% if user.expiration_date_override == 1 or (expiration_lock and expiration_lock.locked) %}checked{% endif %}
+						 {% if expiration_lock and expiration_lock.locked %}disabled{% endif %}
 						 class="rounded border-slate-700 bg-slate-950 text-indigo-500">
 
 				  <span class="text-slate-300">
@@ -473,14 +489,27 @@
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-        <label class="text-sm">
-          {{ t("expiration") }}
-          <input type="text" name="expiration_date"
-                 value="{{ user.expiration_date or '' }}"
-                 placeholder="YYYY-MM-DD"
-                 autocomplete="off"
-                 class="vodum-date mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-        </label>
+		<label class="text-sm">
+		  {{ t("expiration") }}
+
+		  {% if expiration_lock and expiration_lock.locked %}
+			<input type="text"
+				   value="{{ expiration_lock.role_label or expiration_lock.label }}"
+				   readonly
+				   class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60 cursor-not-allowed text-amber-300">
+
+			<div class="text-xs text-slate-500 mt-1">
+			  Expiration locked because this account is owner/admin.
+			</div>
+		  {% else %}
+			<input type="text"
+				   name="expiration_date"
+				   value="{{ user.expiration_date or '' }}"
+				   placeholder="YYYY-MM-DD"
+				   autocomplete="off"
+				   class="vodum-date mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+		  {% endif %}
+		</label>
 
         <label class="text-sm">
           {{ t("renewal_date") }}
@@ -796,7 +825,7 @@
     const list = document.getElementById('referrer_candidates');
     const hidden = document.getElementById('referrer_user_id');
     const display = document.getElementById('referrer_display');
-
+    
     if (!modal || !openBtn || !closeBtn || !input || !list || !hidden || !display) return;
 
     async function loadCandidates(q='') {
@@ -993,12 +1022,25 @@
   const subscriptionSelect = document.getElementById("subscription_template_id");
   const overrideCheckbox = document.getElementById("expiration_date_override_cb");
   const notice = document.getElementById("lifetime_override_notice");
+  const serverExpirationLocked = {{ 'true' if expiration_lock and expiration_lock.locked else 'false' }};
 
   if (!subscriptionSelect || !overrideCheckbox) {
     return;
   }
 
   function updateLifetimeOverride() {
+
+    if (serverExpirationLocked) {
+      overrideCheckbox.checked = true;
+      overrideCheckbox.disabled = true;
+
+      if (notice) {
+        notice.classList.remove("hidden");
+        notice.textContent = "{{ expiration_lock.label if expiration_lock and expiration_lock.locked else '' }}";
+      }
+
+      return;
+    }
 
     const selected =
       subscriptionSelect.options[subscriptionSelect.selectedIndex];
@@ -1289,6 +1331,5 @@
 
 })();
 </script>
-
 
 

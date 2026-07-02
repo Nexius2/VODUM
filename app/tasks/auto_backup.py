@@ -1,6 +1,5 @@
 import json
 import os
-import shutil
 import time
 import zipfile
 from datetime import datetime
@@ -9,6 +8,7 @@ from pathlib import Path
 from logging_utils import get_logger, is_debug_mode_enabled
 from tasks_engine import task_logs
 from config import Config
+from core.backup_retention import prune_backups, safe_positive_int
 from secret_store import encryption_key_bytes
 
 log = get_logger("auto_backup")
@@ -51,15 +51,13 @@ def run(task_id: int, db):
     task_logs(task_id, "info", "Auto-backup started")
 
     try:
-        row = db.query_one("SELECT backup_retention_days FROM settings WHERE id = 1")
+        row = db.query_one(
+            "SELECT backup_retention_days, backup_retention_count FROM settings WHERE id = 1"
+        )
         retention_days = _row_value(row, "backup_retention_days", 30)
-
-        try:
-            retention_days = int(retention_days)
-            if retention_days < 1:
-                retention_days = 30
-        except Exception:
-            retention_days = 30
+        retention_count = _row_value(row, "backup_retention_count", 10)
+        retention_days = safe_positive_int(retention_days, 30)
+        retention_count = safe_positive_int(retention_count, 10)
 
         database_path = Path(Config.DATABASE)
         backup_dir = Path(os.environ.get("VODUM_BACKUP_DIR", "/appdata/backups"))
@@ -106,27 +104,18 @@ def run(task_id: int, db):
 
         os.replace(tmp_backup_path, backup_path)
 
-        cutoff_ts = time.time() - retention_days * 86400
-        deleted = 0
-        scanned = 0
-
-        for pat in (
-            "backup_*.zip",
-            "backup_*.sqlite",
-            "pre_restore_*.sqlite",
-            "vodum-*.db",
-            "database_v1_*.db",
-        ):
-            for f in backup_dir.glob(pat):
-                scanned += 1
-                try:
-                    if f.stat().st_mtime < cutoff_ts:
-                        f.unlink()
-                        deleted += 1
-                except Exception as e:
-                    log.error(f"Error deleting {f}: {e}", exc_info=True)
-
-        log.info(f"{deleted} backup(s) deleted (scanned {scanned})")
+        stats = prune_backups(
+            backup_dir,
+            retention_days,
+            retention_count,
+            on_error=lambda path, exc: log.error(
+                f"Error deleting {path}: {exc}", exc_info=True
+            ),
+        )
+        log.info(
+            f"{stats['deleted']} backup(s) deleted (scanned {stats['scanned']}, "
+            f"retention {retention_days} days / {retention_count} files)"
+        )
         task_logs(task_id, "success", f"Backup created: {backup_name}")
 
         duration = time.monotonic() - start

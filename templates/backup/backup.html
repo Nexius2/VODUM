@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 {% set active_page = 'backup' %}
 
 {% block title %}{{ t("backup") }} - VODUM{% endblock %}
@@ -18,8 +18,27 @@
     </div>
     <div class="text-xs text-slate-400 mt-2">
       {{ t("last_run") }}:
-      {{ diagnostic.last_run|browser_datetime if diagnostic.last_run else '—' }}
+      {{ diagnostic.last_run|browser_datetime if diagnostic.last_run else '-' }}
     </div>
+    {% if title == t("sqlite_integrity") %}
+    <div class="text-xs text-slate-400 mt-2">
+      {{ t("db_size") }}:
+      {% if db_size_bytes is defined and db_size_bytes %}
+        {% set mb = db_size_bytes / 1024 / 1024 %}
+        {% set gb = mb / 1024 %}
+        <span class="font-semibold text-slate-100">
+          {% if gb >= 1 %}
+            {{ gb|round(2) }} GB
+          {% else %}
+            {{ mb|round(2) }} MB
+          {% endif %}
+        </span>
+        <span class="ml-1 text-[11px] text-slate-500">({{ db_size_bytes }} bytes)</span>
+      {% else %}
+        <span class="text-slate-500">{{ t("not_available") }}</span>
+      {% endif %}
+    </div>
+    {% endif %}
     {% if diagnostic.last_error %}
     <div class="text-xs text-rose-300 mt-2 break-words">{{ diagnostic.last_error }}</div>
     {% endif %}
@@ -27,17 +46,23 @@
   {% endfor %}
 </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 items-stretch">
 
-  <!-- Création backup -->
-	<div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
-	{% include "backup/_retention_settings.html" %}
-	{% include "backup/_manual_backup.html" %}
+  <!-- Creation backup -->
+	<div>
+	  {% include "backup/_retention_settings.html" %}
 	</div>
 
   <!-- Restore & import -->
-	<div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+	<div>
 	  {% include "backup/_restore_upload.html" %}
+	</div>
+
+	<div>
+	  {% include "backup/_manual_backup.html" %}
+	</div>
+
+	<div>
 	  {% include "backup/_tautulli_import.html" %}
 	</div>
 
@@ -67,177 +92,19 @@
   </div>
 </div>
 
-<script>
-  window.showRestoreWaitingModal = function () {
-    const modal = document.getElementById("restore-waiting-modal");
-
-    if (!modal) {
-      return;
-    }
-
-    modal.classList.remove("hidden");
-    modal.classList.add("flex");
-  };
-
-  document.addEventListener("DOMContentLoaded", function () {
-    document.querySelectorAll(".js-restore-backup-form").forEach(function (form) {
-      form.addEventListener("submit", function () {
-        window.showRestoreWaitingModal();
-      });
-    });
-  });
+<script type="application/json" id="vodum-backup-config">
+{
+  "autoRefreshBackups": {{ "true" if request.args.get("refresh_backups") == "1" else "false" }},
+  "i18n": {
+    "download": {{ (t("download") if t("download") else "Download")|tojson }},
+    "restore": {{ t("restore_btn")|tojson }},
+    "delete": {{ (t("delete") if t("delete") else "Delete")|tojson }},
+    "confirmRestore": {{ t("confirm_restore")|tojson }}
+  }
+}
 </script>
-<script>
-  const shouldAutoRefreshBackups = {{ "true" if request.args.get("refresh_backups") == "1" else "false" }};
+{% endblock %}
 
-  function escapeBackupHtml(value) {
-    return String(value ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
-
-  function formatBackupSize(bytes) {
-    const mb = Number(bytes || 0) / 1024 / 1024;
-    return `${mb.toFixed(2)} MB`;
-  }
-
-  function renderBackupRows(backups) {
-    const tbody = document.getElementById("backups-table-body");
-
-    if (!tbody) {
-      return;
-    }
-
-    tbody.innerHTML = backups.map((backup, index) => {
-      const safeName = escapeBackupHtml(backup.name);
-      const filenameJs = JSON.stringify(backup.name);
-      const menuId = `api-${index}`;
-
-      return `
-        <tr class="border-t border-slate-800 overflow-visible">
-          <td class="px-3 py-2 font-mono text-[11px]">
-            <a href="/backup/download/${encodeURIComponent(backup.name)}"
-               class="hover:text-primary transition-colors">
-              ${safeName}
-            </a>
-          </td>
-
-          <td class="px-3 py-2 text-slate-300">
-            ${formatBackupSize(backup.size)}
-          </td>
-
-          <td class="px-3 py-2 text-slate-400">
-            ${escapeBackupHtml(backup.mtime)}
-          </td>
-
-          <td class="px-3 py-2 text-center relative z-[200]">
-            <button
-              type="button"
-              onclick="toggleBackupMenu('${menuId}')"
-              class="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-slate-800/80 text-slate-400 hover:text-slate-200 transition">
-              <svg xmlns="http://www.w3.org/2000/svg"
-                   class="w-4 h-4"
-                   fill="currentColor"
-                   viewBox="0 0 24 24">
-                <circle cx="12" cy="5" r="2"></circle>
-                <circle cx="12" cy="12" r="2"></circle>
-                <circle cx="12" cy="19" r="2"></circle>
-              </svg>
-            </button>
-
-            <div
-              id="backup-menu-${menuId}"
-              class="hidden absolute right-3 bottom-10 z-[9999] w-44 overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl">
-
-              <a href="/backup/download/${encodeURIComponent(backup.name)}"
-                 class="flex items-center gap-2 px-4 py-2.5 text-xs text-slate-300 hover:bg-slate-800 transition">
-                <span>⬇</span>
-                <span>{{ t("download") if t("download") else "Download" }}</span>
-              </a>
-
-              <button
-                type="button"
-                onclick='restoreBackup(${filenameJs})'
-                class="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-left text-amber-300 hover:bg-slate-800 transition">
-                <span>♻</span>
-                <span>{{ t("restore_btn") }}</span>
-              </button>
-
-              <button
-                type="button"
-                onclick='openDeleteBackupModal(${filenameJs})'
-                class="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-left text-rose-300 hover:bg-slate-800 transition">
-                <span>🗑</span>
-                <span>{{ t("delete") if t("delete") else "Delete" }}</span>
-              </button>
-            </div>
-          </td>
-        </tr>
-      `;
-    }).join("");
-  }
-
-  async function refreshBackupListOnce() {
-    const response = await fetch("/api/backup/list", {
-      cache: "no-store",
-      headers: {
-        "Accept": "application/json"
-      }
-    });
-
-    if (!response.ok) {
-      return;
-    }
-
-    const data = await response.json();
-    renderBackupRows(data.backups || []);
-  }
-
-  async function isAutoBackupStillActive() {
-    try {
-      const response = await fetch("/api/tasks/list", {
-        cache: "no-store",
-        headers: {
-          "Accept": "application/json"
-        }
-      });
-
-      if (!response.ok) {
-        return false;
-      }
-
-      const data = await response.json();
-      const task = (data.tasks || []).find(t => t.name === "auto_backup");
-
-      return task && ["queued", "running"].includes(task.status);
-    } catch (e) {
-      return false;
-    }
-  }
-
-  document.addEventListener("DOMContentLoaded", function () {
-    if (!shouldAutoRefreshBackups) {
-      return;
-    }
-
-    let attempts = 0;
-    const maxAttempts = 45;
-
-    const timer = setInterval(async function () {
-      attempts += 1;
-
-      await refreshBackupListOnce();
-
-      const active = await isAutoBackupStillActive();
-
-      if (!active || attempts >= maxAttempts) {
-        clearInterval(timer);
-        await refreshBackupListOnce();
-      }
-    }, 2000);
-  });
-</script>
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/pages/backup.js', v=g.app_version|default('dev')) }}"></script>
 {% endblock %}

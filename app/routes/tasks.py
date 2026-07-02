@@ -19,9 +19,22 @@ from tasks_engine import (
 from web.helpers import get_db, table_exists, add_log
 from web.security import get_client_ip
 from secret_store import decrypt_communication_settings
+from notifications_utils import is_email_ready
 
 task_logger = get_logger("tasks_ui")
 security_logger = get_logger("security")
+
+TASKS_PAGE_COLUMNS = """
+    id,
+    name,
+    description,
+    schedule,
+    status,
+    enabled,
+    last_run,
+    next_run
+"""
+
 
 def register(app):
     @app.route("/tasks", methods=["GET"])
@@ -34,16 +47,16 @@ def register(app):
         if table_exists(db, "tasks"):
             if debug_mode:
                 tasks = db.query(
-                    """
-                    SELECT *
+                    f"""
+                    SELECT {TASKS_PAGE_COLUMNS}
                     FROM tasks
                     ORDER BY name
                     """
                 )
             else:
                 tasks = db.query(
-                    """
-                    SELECT *
+                    f"""
+                    SELECT {TASKS_PAGE_COLUMNS}
                     FROM tasks
                     WHERE enabled = 1
                     ORDER BY name
@@ -76,7 +89,7 @@ def register(app):
             task_logger.error("POST /tasks/action → task_id manquant")
             return redirect(url_for("tasks_page"))
 
-        task = db.query_one("SELECT * FROM tasks WHERE id = ?", (task_id,))
+        task = db.query_one("SELECT id, enabled FROM tasks WHERE id = ?", (task_id,))
         if not task:
             flash("invalid_task", "error")
             task_logger.error(f"POST /tasks/action → task_id introuvable: {task_id}")
@@ -132,21 +145,7 @@ def register(app):
     # -----------------------------
     
     def is_smtp_ready(settings) -> bool:
-        settings = decrypt_communication_settings(dict(settings or {}))
-        if not settings:
-            return False
-
-        try:
-            return bool(
-                settings["mailing_enabled"]
-                and settings["smtp_host"]
-                and settings["smtp_port"]
-                and settings["smtp_user"]
-                and settings["smtp_pass"]
-                and settings["mail_from"]
-            )
-        except (KeyError, TypeError):
-            return False
+        return is_email_ready(settings)
 
 
     
@@ -166,7 +165,7 @@ def register(app):
 
             # Activer / désactiver les tâches liées au mailing (WRITE)
             set_tasks_enabled_by_names(
-                ["send_expiration_emails", "send_mail_campaigns", "send_comm_campaigns"],
+                ["send_expiration_emails", "send_comm_campaigns"],
                 enabled,
             )
 

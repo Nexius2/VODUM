@@ -99,9 +99,10 @@ def register(app):
             """
             SELECT
               SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) AS running,
-              SUM(CASE WHEN status = 'queued'  THEN 1 ELSE 0 END) AS queued
+              SUM(CASE WHEN COALESCE(queued_count, 0) > 0 THEN 1 ELSE 0 END) AS queued
             FROM tasks
-            WHERE status IN ('running', 'queued')
+            WHERE status = 'running'
+               OR COALESCE(queued_count, 0) > 0
             """
         )
 
@@ -127,5 +128,4 @@ def register(app):
     # -----------------------------
     # ROUTES
     # -----------------------------
-
 

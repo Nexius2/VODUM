@@ -1,4 +1,4 @@
-# Auto-split from app.py (keep URLs/endpoints intact)
+﻿# Auto-split from app.py (keep URLs/endpoints intact)
 import json
 import re
 import math
@@ -12,8 +12,56 @@ from flask import (
 from logging_utils import get_logger
 
 from web.helpers import get_db
+from core.referral_bulk import bulk_update_referrals, normalize_referral_ids
 
 task_logger = get_logger("tasks_ui")
+USER_LIST_COLUMNS = """
+                    u.id,
+                    u.username,
+                    u.email,
+                    u.status,
+                    u.expiration_date
+"""
+
+USER_REFERRAL_SETTINGS_COLUMNS = """
+            enabled,
+            reward_enabled,
+            qualification_days,
+            reward_days,
+            allow_referrer_change_before_qualification,
+            auto_notify_reward,
+            auto_expire_pending,
+            auto_archive_rewarded,
+            auto_archive_expired,
+            rewarded_archive_days,
+            expired_archive_days,
+            eligible_statuses
+"""
+
+USER_MERGE_COLUMNS = """
+    id,
+    username,
+    firstname,
+    lastname,
+    email,
+    second_email,
+    expiration_date,
+    renewal_method,
+    renewal_date,
+    status,
+    created_at,
+    notes
+"""
+
+USER_REFERRAL_LIST_COLUMNS = """
+                    r.id,
+                    r.referrer_user_id,
+                    r.referred_user_id,
+                    r.status,
+                    r.start_at,
+                    r.qualification_due_at,
+                    r.reward_days_snapshot
+"""
 
 def register(app):
     @app.route("/users", methods=["GET"])
@@ -139,7 +187,7 @@ def register(app):
         ) or []
 
         referral_settings = db.query_one(
-            "SELECT * FROM user_referral_settings WHERE id = 1"
+            f"SELECT {USER_REFERRAL_SETTINGS_COLUMNS} FROM user_referral_settings WHERE id = 1"
         )
         referral_settings = dict(referral_settings) if referral_settings else {
             "enabled": 0,
@@ -148,6 +196,11 @@ def register(app):
             "reward_days": 60,
             "allow_referrer_change_before_qualification": 1,
             "auto_notify_reward": 1,
+            "auto_expire_pending": 1,
+            "auto_archive_rewarded": 1,
+            "auto_archive_expired": 1,
+            "rewarded_archive_days": 90,
+            "expired_archive_days": 30,
             "eligible_statuses": "active",
         }
 
@@ -191,21 +244,58 @@ def register(app):
                 "username": "u.username",
                 "email": "u.email",
                 "status": "u.status",
+                "subscription": "subscription_sort_label",
                 "expiration_date": "u.expiration_date",
                 "servers_count": "servers_count",
                 "libraries_count": "libraries_count",
             }
             sort_column = sort_map.get(sort, "u.username")
 
-            query = """
+            query = f"""
                 SELECT
-                    u.*,
+                    {USER_LIST_COLUMNS},
+                    st.name AS subscription_name,
+                    CASE
+                        WHEN MAX(CASE WHEN LOWER(COALESCE(s.type, '')) = 'plex'
+                                       AND LOWER(COALESCE(mu.role, '')) = 'owner'
+                                      THEN 1 ELSE 0 END) = 1
+                            THEN 'Owner'
+                        WHEN MAX(CASE WHEN LOWER(COALESCE(s.type, '')) = 'jellyfin'
+                                       AND (
+                                            LOWER(COALESCE(mu.role, '')) = 'admin'
+                                            OR COALESCE(mu.raw_json, '') LIKE '%"IsAdministrator":true%'
+                                            OR COALESCE(mu.raw_json, '') LIKE '%"IsAdministrator": true%'
+                                       )
+                                      THEN 1 ELSE 0 END) = 1
+                            THEN 'Admin'
+                        ELSE NULL
+                    END AS subscription_role_label,
+                    COALESCE(
+                        CASE
+                            WHEN MAX(CASE WHEN LOWER(COALESCE(s.type, '')) = 'plex'
+                                           AND LOWER(COALESCE(mu.role, '')) = 'owner'
+                                          THEN 1 ELSE 0 END) = 1
+                                THEN 'Owner'
+                            WHEN MAX(CASE WHEN LOWER(COALESCE(s.type, '')) = 'jellyfin'
+                                           AND (
+                                                LOWER(COALESCE(mu.role, '')) = 'admin'
+                                                OR COALESCE(mu.raw_json, '') LIKE '%"IsAdministrator":true%'
+                                                OR COALESCE(mu.raw_json, '') LIKE '%"IsAdministrator": true%'
+                                           )
+                                          THEN 1 ELSE 0 END) = 1
+                                THEN 'Admin'
+                            ELSE NULL
+                        END,
+                        st.name
+                    ) AS subscription_sort_label,
                     COUNT(DISTINCT mu.server_id) AS servers_count,
                     COUNT(DISTINCT mul.library_id) AS libraries_count
-                FROM vodum_users u
-                LEFT JOIN media_users mu ON mu.vodum_user_id = u.id
-                LEFT JOIN media_user_libraries mul ON mul.media_user_id = mu.id
-            """
+                                    FROM vodum_users u
+                                    LEFT JOIN subscription_templates st ON st.id = u.subscription_template_id
+                                    LEFT JOIN media_users mu ON mu.vodum_user_id = u.id
+                                    LEFT JOIN servers s ON s.id = mu.server_id
+                                    LEFT JOIN media_user_libraries mul ON mul.media_user_id = mu.id
+                                """
 
             conditions = []
             params = []
@@ -306,9 +396,9 @@ def register(app):
             }
             sort_column = sort_map.get(sort, "r.start_at")
 
-            query = """
+            query = f"""
                 SELECT
-                    r.*,
+{USER_REFERRAL_LIST_COLUMNS},
                     referrer.username AS referrer_username,
                     referrer.email AS referrer_email,
                     referred.username AS referred_username,
@@ -393,7 +483,7 @@ def register(app):
 
             referrals = db.query(query, params) or []
 
-        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        settings = db.query_one("SELECT default_subscription_days FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
 
         resp = make_response(render_template(
@@ -424,6 +514,45 @@ def register(app):
             resp.set_cookie("users_list_statuses", json.dumps(selected_statuses), max_age=60 * 60 * 24 * 365)
 
         return resp
+
+    @app.route("/users/referrals/bulk-status", methods=["POST"])
+    def referrals_bulk_status():
+        action = (request.form.get("action") or "").strip().lower()
+        referral_ids = normalize_referral_ids(request.form.getlist("referral_ids"))
+
+        if not referral_ids:
+            flash("referral_bulk_no_selection", "warning")
+        else:
+            try:
+                affected = bulk_update_referrals(get_db(), referral_ids, action)
+            except ValueError:
+                flash("referral_bulk_invalid_action", "error")
+            else:
+                message = (
+                    "referral_bulk_archived"
+                    if action == "archive"
+                    else "referral_bulk_restored"
+                )
+                flash(message, "success" if affected else "warning")
+
+        archive_mode = (request.form.get("return_archive_mode") or "active").strip()
+        if archive_mode not in {"active", "archived", "all"}:
+            archive_mode = "active"
+        page = max(request.form.get("return_page", 1, type=int), 1)
+        search = " ".join((request.form.get("return_q") or "").split()).strip()
+        sort = (request.form.get("return_sort") or "created_at").strip()
+        order = (request.form.get("return_order") or "desc").strip().lower()
+        selected_statuses = request.form.getlist("return_status")
+        return redirect(url_for(
+            "users_list",
+            tab="referrals",
+            archive_mode=archive_mode,
+            page=page,
+            q=search,
+            status=selected_statuses,
+            sort=sort,
+            order=order,
+        ))
         
     @app.route("/users/referral-settings", methods=["POST"])
     def users_referral_settings_save():
@@ -519,8 +648,8 @@ def register(app):
         if not other_id:
             return Response(json.dumps({"error": "missing_other_id"}), status=400, mimetype="application/json")
 
-        master = db.query_one("SELECT * FROM vodum_users WHERE id=?", (user_id,))
-        other = db.query_one("SELECT * FROM vodum_users WHERE id=?", (other_id,))
+        master = db.query_one(f"SELECT {USER_MERGE_COLUMNS} FROM vodum_users WHERE id=?", (user_id,))
+        other = db.query_one(f"SELECT {USER_MERGE_COLUMNS} FROM vodum_users WHERE id=?", (other_id,))
         if not master or not other:
             return Response(json.dumps({"error": "user_not_found"}), status=404, mimetype="application/json")
 
@@ -671,7 +800,7 @@ def score_candidate(u: dict, c: dict) -> int:
 
 
 def get_merge_suggestions(db, user_id: int, limit: int | None = None):
-    u = db.query_one("SELECT * FROM vodum_users WHERE id=?", (user_id,))
+    u = db.query_one(f"SELECT {USER_MERGE_COLUMNS} FROM vodum_users WHERE id=?", (user_id,))
     if not u:
         return []
     u = dict(u)
@@ -709,8 +838,8 @@ def merge_vodum_users(db, master_id: int, other_id: int) -> None:
     if master_id == other_id:
         return
 
-    master = db.query_one("SELECT * FROM vodum_users WHERE id=?", (master_id,))
-    other = db.query_one("SELECT * FROM vodum_users WHERE id=?", (other_id,))
+    master = db.query_one(f"SELECT {USER_MERGE_COLUMNS} FROM vodum_users WHERE id=?", (master_id,))
+    other = db.query_one(f"SELECT {USER_MERGE_COLUMNS} FROM vodum_users WHERE id=?", (other_id,))
     if not master or not other:
         raise ValueError("user not found")
 
@@ -1053,6 +1182,8 @@ def build_merge_preview(master: dict, other: dict) -> dict:
         sources.setdefault(k, "master")
 
     return {"result": result, "sources": sources}
+
+
 
 
 

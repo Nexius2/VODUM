@@ -4,14 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ copy.title }}</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/vodum.css', v=g.app_version|default('dev')) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css', v=g.app_version|default('dev')) }}">
 </head>
 <body class="min-h-screen bg-slate-950 text-slate-100">
   <main class="max-w-4xl mx-auto px-4 py-10">
     <header class="mb-8">
       <div class="flex items-center justify-between gap-4 mb-3">
         <div>
-          <div class="text-xs uppercase tracking-[0.25em] text-indigo-400">VODUM</div>
+          <div class="text-xs uppercase tracking-[0.25em] text-indigo-400">{{ t("app_name") }}</div>
           <h1 class="text-2xl font-bold">{{ copy.title }}</h1>
         </div>
         <form method="post" action="{{ url_for('set_language') }}">
@@ -42,12 +43,12 @@
     <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 shadow-2xl">
       {% if step == 1 %}
         <h2 class="text-xl font-semibold mb-2">{{ copy.new }} / {{ copy.restore }}</h2>
-        <p class="text-sm text-slate-400 mb-6">Choose whether to configure a fresh instance or restore a complete VODUM backup.</p>
+        <p class="text-sm text-slate-400 mb-6">{{ t("wizard.mode_intro") }}</p>
         <form method="post" enctype="multipart/form-data" class="grid md:grid-cols-2 gap-4">
           <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
           <button name="action" value="continue" class="rounded-xl border border-indigo-700 bg-indigo-950/30 hover:bg-indigo-900/40 p-6 text-left">
             <span class="block font-semibold">{{ copy.new }}</span>
-            <span class="block text-xs text-slate-400 mt-2">Guided configuration in a few minutes.</span>
+            <span class="block text-xs text-slate-400 mt-2">{{ t("wizard.fresh_hint") }}</span>
           </button>
           <div class="rounded-xl border border-slate-700 p-6">
             <div class="font-semibold mb-3">{{ copy.restore }}</div>
@@ -58,7 +59,7 @@
 
       {% elif step == 2 %}
         <h2 class="text-xl font-semibold mb-2">{{ copy.admin }}</h2>
-        <p class="text-sm text-slate-400 mb-6">Create the account used to administer this VODUM instance.</p>
+        <p class="text-sm text-slate-400 mb-6">{{ t("wizard.admin_intro") }}</p>
         <form method="post" class="space-y-4">
           <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
           <label class="block text-sm">Administrator email
@@ -72,12 +73,31 @@
               <input name="confirm_password" type="password" required minlength="8" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
             </label>
           </div>
-          {% include "setup/_nav.html" %}
+          <input type="hidden" name="pending_totp_secret" value="{{ wizard_totp_secret }}">
+          <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-3">
+            <label class="flex items-start gap-3 text-sm cursor-pointer">
+              <input type="checkbox" name="admin_totp_enabled" value="1" class="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-800">
+              <span>
+                <span class="block text-slate-200">{{ t("two_factor_auth") }}</span>
+                <span class="block text-xs text-slate-500 mt-1">{{ t("wizard_totp_help") }}</span>
+              </span>
+            </label>
+            <div class="grid md:grid-cols-2 gap-3">
+              <div>
+                <div class="text-xs text-slate-400 mb-1">{{ t("totp_secret") }}</div>
+                <code class="block text-xs text-emerald-300 break-all">{{ wizard_totp_secret }}</code>
+              </div>
+              <label class="block text-sm">Code
+                <input name="totp_code" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
+              </label>
+            </div>
+            <code class="block text-[11px] text-slate-500 break-all">{{ wizard_totp_uri }}</code>
+          </div>          {% include "setup/_nav.html" %}
         </form>
 
       {% elif step == 3 %}
         <h2 class="text-xl font-semibold mb-2">{{ copy.localization }}</h2>
-        <p class="text-sm text-slate-400 mb-6">These settings affect the interface, emails, dates and scheduled tasks.</p>
+        <p class="text-sm text-slate-400 mb-6">{{ t("wizard.general_intro") }}</p>
         <form method="post" class="space-y-4">
           <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
           <label class="block text-sm">Language
@@ -100,7 +120,7 @@
           <input type="text" name="wizard_fake_username" autocomplete="username" tabindex="-1" aria-hidden="true" class="hidden">
           <input type="password" name="wizard_fake_password" autocomplete="current-password" tabindex="-1" aria-hidden="true" class="hidden">
           <label class="text-sm md:col-span-2">Provider
-            <select id="wizard_server_type" name="server_type" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"><option value="plex">Plex</option><option value="jellyfin">Jellyfin</option></select>
+            <select id="wizard_server_type" name="server_type" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"><option value="plex">{{ t("plex") }}</option><option value="jellyfin">{{ t("jellyfin") }}</option></select>
           </label>
           <label class="text-sm">URL
             <input id="wizard_server_url" name="media_server_base_address" type="url" required value="" readonly
@@ -115,9 +135,9 @@
                    autocomplete="one-time-code" autocapitalize="none" spellcheck="false"
                    data-lpignore="true" data-1p-ignore="true"
                    class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
-            <span class="block text-xs text-slate-500 mt-1">Use the Plex X-Plex-Token or Jellyfin API key, not the account password.</span>
+            <span class="block text-xs text-slate-500 mt-1">{{ t("wizard.token_help") }}</span>
           </label>
-          <button name="action" value="add_server" class="md:col-span-2 px-4 py-2 rounded-lg bg-indigo-700 hover:bg-indigo-600 text-sm">Test connection and add server</button>
+          <button name="action" value="add_server" class="md:col-span-2 px-4 py-2 rounded-lg bg-indigo-700 hover:bg-indigo-600 text-sm">{{ t("wizard.test_add_server") }}</button>
         </form>
         <div class="space-y-2 mb-6">
           {% for server in servers %}
@@ -126,51 +146,16 @@
               {% if server.wizard_validated %}
                 <span class="text-emerald-300">OK</span>
               {% else %}
-                <span class="text-amber-300">Not validated</span>
+                <span class="text-amber-300">{{ t("wizard.not_validated") }}</span>
               {% endif %}
             </div>
           {% endfor %}
         </div>
         <form method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token }}">{% include "setup/_nav.html" %}</form>
-        <script>
-          (() => {
-            const provider = document.getElementById("wizard_server_type");
-            const url = document.getElementById("wizard_server_url");
-            const token = document.getElementById("wizard_server_token");
-            if (!provider || !url || !token) return;
-            const unlock = (field) => {
-              field.readOnly = false;
-              if (field === url && field.value.includes("@")) {
-                field.value = "";
-                token.value = "";
-              }
-            };
-            [url, token].forEach((field) => {
-              field.addEventListener("pointerdown", () => unlock(field), {once: true});
-              field.addEventListener("focus", () => unlock(field), {once: true});
-            });
-            const clearCredentialAutofill = () => {
-              if (url.value.includes("@") || (
-                url.value && !url.value.startsWith("http://") && !url.value.startsWith("https://")
-              )) {
-                url.value = "";
-                token.value = "";
-              }
-            };
-            [50, 250, 750, 1500].forEach((delay) => setTimeout(clearCredentialAutofill, delay));
-            const updateExample = () => {
-              url.placeholder = provider.value === "jellyfin"
-                ? "http://192.168.1.100:8096"
-                : "http://192.168.1.100:32400";
-            };
-            provider.addEventListener("change", updateExample);
-            updateExample();
-          })();
-        </script>
 
       {% elif step == 5 %}
         <h2 class="text-xl font-semibold mb-2">{{ copy.communications }}</h2>
-        <p class="text-sm text-slate-400 mb-6">Choose Email, Discord, or both. These settings can be changed later.</p>
+        <p class="text-sm text-slate-400 mb-6">{{ t("wizard.communications_intro") }}</p>
         <form method="post" autocomplete="off" class="space-y-5">
           <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
           <div class="rounded-xl border border-slate-700 p-5">
@@ -178,12 +163,20 @@
               <input type="checkbox" name="mailing_enabled" value="1" {% if communication_settings.mailing_enabled %}checked{% endif %}> Email
             </label>
             <div class="grid md:grid-cols-2 gap-4">
-              <label class="text-sm">SMTP server<input name="smtp_host" value="{{ communication_settings.smtp_host or '' }}" placeholder="smtp.example.com" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
-              <label class="text-sm">SMTP port<input name="smtp_port" type="number" value="{{ communication_settings.smtp_port or 587 }}" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
-              <label class="text-sm">Username<input name="smtp_user" value="{{ communication_settings.smtp_user or '' }}" autocomplete="off" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
-              <label class="text-sm">Password<input name="smtp_pass" type="password" autocomplete="new-password" placeholder="{% if communication_settings.smtp_pass_configured %}Already configured - leave blank to keep it{% endif %}" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
-              <label class="text-sm md:col-span-2">Sender address<input name="mail_from" type="email" value="{{ communication_settings.mail_from or '' }}" placeholder="vodum@example.com" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
-              <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="smtp_tls" value="1" {% if communication_settings.smtp_tls %}checked{% endif %}> Use TLS</label>
+              <label class="text-sm">{{ t("smtp_server") }}<input name="smtp_host" value="{{ communication_settings.smtp_host or '' }}" placeholder="smtp.example.com" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
+              <label class="text-sm">{{ t("smtp_port") }}<input name="smtp_port" type="number" value="{{ communication_settings.smtp_port or 587 }}" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
+              <label class="text-sm">{{ t("username") }}<input name="smtp_user" value="{{ communication_settings.smtp_user or '' }}" autocomplete="off" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
+              <label class="text-sm">{{ t("smtp_auth_method") }}
+                {% set wizard_smtp_auth_method = communication_settings.smtp_auth_method or 'password' %}
+                <select name="smtp_auth_method" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
+                  <option value="password" {% if wizard_smtp_auth_method != 'oauth2' %}selected{% endif %}>{{ t("smtp_auth_password") }}</option>
+                  <option value="oauth2" {% if wizard_smtp_auth_method == 'oauth2' %}selected{% endif %}>{{ t("smtp_auth_oauth2") }}</option>
+                </select>
+              </label>
+              <label class="text-sm">{{ t("auth.password") }}<input name="smtp_pass" type="password" autocomplete="new-password" placeholder="{% if communication_settings.smtp_pass_configured %}Already configured - leave blank to keep it{% endif %}" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
+              <label class="text-sm">{{ t("smtp_oauth_access_token") }}<input name="smtp_oauth_access_token" type="password" autocomplete="new-password" placeholder="{% if communication_settings.smtp_oauth_access_token_configured %}Already configured - leave blank to keep it{% endif %}" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
+              <label class="text-sm md:col-span-2">{{ t("wizard.sender_address") }}<input name="mail_from" type="email" value="{{ communication_settings.mail_from or '' }}" placeholder="vodum@example.com" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
+              <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="smtp_tls" value="1" {% if communication_settings.smtp_tls %}checked{% endif %}> {{ t("wizard.use_tls") }}</label>
             </div>
           </div>
           <div class="rounded-xl border border-slate-700 p-5">
@@ -196,11 +189,11 @@
           </div>
           <label class="block text-sm">When both channels are available
             <select name="notifications_send_mode" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
-              <option value="first" {% if communication_settings.notifications_send_mode != 'all' %}selected{% endif %}>Use the first available channel</option>
-              <option value="all" {% if communication_settings.notifications_send_mode == 'all' %}selected{% endif %}>Send through Email and Discord</option>
+              <option value="first" {% if communication_settings.notifications_send_mode != 'all' %}selected{% endif %}>{{ t("wizard.channel_first") }}</option>
+              <option value="all" {% if communication_settings.notifications_send_mode == 'all' %}selected{% endif %}>{{ t("wizard.channel_all") }}</option>
             </select>
           </label>
-          <button name="action" value="save_communications" class="w-full px-4 py-2 rounded-lg bg-indigo-700 hover:bg-indigo-600 text-sm">Save communication settings</button>
+          <button name="action" value="save_communications" class="w-full px-4 py-2 rounded-lg bg-indigo-700 hover:bg-indigo-600 text-sm">{{ t("wizard.save_communications") }}</button>
         </form>
         <form method="post">
           <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
@@ -215,7 +208,7 @@
 
       {% elif step == 6 %}
         <h2 class="text-xl font-semibold mb-2">{{ copy.messages }}</h2>
-        <p class="text-sm text-slate-400 mb-6">Review the essential automatic messages. Open a panel to edit it without leaving the wizard.</p>
+        <p class="text-sm text-slate-400 mb-6">{{ t("wizard.templates_intro") }}</p>
         <div class="space-y-3">
           {% for template in wizard_templates %}
             <details class="rounded-xl border border-slate-700 bg-slate-950/40">
@@ -226,14 +219,14 @@
               <form method="post" class="p-4 pt-0 space-y-3">
                 <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
                 <input type="hidden" name="template_id" value="{{ template.id }}">
-                <label class="flex gap-2 text-sm"><input type="checkbox" name="enabled" value="1" {% if template.enabled %}checked{% endif %}> Enable this message</label>
-                <label class="block text-sm">Subject<input name="subject" required value="{{ template.subject }}" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
-                <label class="block text-sm">Message<textarea name="body" required rows="9" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">{{ template.body }}</textarea></label>
-                <button name="action" value="save_template" class="px-4 py-2 rounded-lg bg-indigo-700 text-sm">Save this message</button>
+                <label class="flex gap-2 text-sm"><input type="checkbox" name="enabled" value="1" {% if template.enabled %}checked{% endif %}> {{ t("wizard.enable_message") }}</label>
+                <label class="block text-sm">{{ t("subject") }}<input name="subject" required value="{{ template.subject }}" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
+                <label class="block text-sm">{{ t("message") }}<textarea name="body" required rows="9" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">{{ template.body }}</textarea></label>
+                <button name="action" value="save_template" class="px-4 py-2 rounded-lg bg-indigo-700 text-sm">{{ t("wizard.save_message") }}</button>
               </form>
             </details>
           {% else %}
-            <div class="rounded-lg border border-amber-700 bg-amber-950/30 p-4 text-sm text-amber-200">Message templates are not available yet. You can continue and configure them later.</div>
+            <div class="rounded-lg border border-amber-700 bg-amber-950/30 p-4 text-sm text-amber-200">{{ t("wizard.templates_unavailable") }}</div>
           {% endfor %}
         </div>
         <form method="post">
@@ -246,14 +239,14 @@
 
       {% elif step == 7 %}
         <h2 class="text-xl font-semibold mb-2">{{ copy.subscriptions }}</h2>
-        <p class="text-sm text-slate-400 mb-6">Create the plans that will be assigned to imported users.</p>
+        <p class="text-sm text-slate-400 mb-6">{{ t("wizard.plans_intro") }}</p>
         <form method="post" class="rounded-xl border border-slate-700 p-5 grid md:grid-cols-2 gap-4 mb-6">
           <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
-          <label class="text-sm">Plan name<input name="name" required placeholder="Standard" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
-          <label class="text-sm">Duration in days<input name="duration_days" type="number" min="1" value="30" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
-          <label class="text-sm md:col-span-2">Notes<input name="notes" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
-          <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="is_lifetime" value="1"> Lifetime subscription</label>
-          <button name="action" value="add_subscription" class="md:col-span-2 px-4 py-2 rounded-lg bg-indigo-700 text-sm">Create subscription</button>
+          <label class="text-sm">{{ t("wizard.plan_name") }}<input name="name" required placeholder="Standard" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
+          <label class="text-sm">{{ t("wizard.duration_days") }}<input name="duration_days" type="number" min="1" value="30" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
+          <label class="text-sm md:col-span-2">{{ t("notes") }}<input name="notes" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
+          <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="is_lifetime" value="1"> {{ t("lifetime_subscription") }}</label>
+          <button name="action" value="add_subscription" class="md:col-span-2 px-4 py-2 rounded-lg bg-indigo-700 text-sm">{{ t("wizard.create_subscription") }}</button>
         </form>
         <div class="space-y-2">
           {% for template in subscription_templates %}
@@ -264,33 +257,33 @@
 
       {% elif step == 8 %}
         <h2 class="text-xl font-semibold mb-2">{{ copy.subscription_settings }}</h2>
-        <p class="text-sm text-slate-400 mb-6">Only the essential expiration and usage-risk settings are shown here.</p>
+        <p class="text-sm text-slate-400 mb-6">{{ t("wizard.expiration_intro") }}</p>
         <form method="post" class="space-y-4">
           <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
           <div class="grid md:grid-cols-2 gap-4">
-            <label class="text-sm">Reminder delay<input name="reminder_days" type="number" min="0" value="{{ settings.reminder_days or 7 }}" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
-            <label class="text-sm">Pre-expired delay<input name="preavis_days" type="number" min="0" value="{{ settings.preavis_days or 30 }}" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
-            <label class="text-sm">Expiration behavior<select name="expiry_mode" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"><option value="disable">Disable expired users</option><option value="warn_only">Warn only</option><option value="none">No action</option></select></label>
+            <label class="text-sm">{{ t("wizard.reminder_delay") }}<input name="reminder_days" type="number" min="0" value="{{ settings.reminder_days or 7 }}" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
+            <label class="text-sm">{{ t("wizard.pre_expired_delay") }}<input name="preavis_days" type="number" min="0" value="{{ settings.preavis_days or 30 }}" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
+            <label class="text-sm">{{ t("subscription_expiration_behavior") }}<select name="expiry_mode" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"><option value="disable">{{ t("task.disable_expired_users") }}</option><option value="warn_only">{{ t("wizard.warn_only") }}</option><option value="none">{{ t("wizard.no_action") }}</option></select></label>
             {% if communications_available %}
-              <label class="text-sm">Minimum kills before suggestion<input name="min_kills" type="number" min="1" value="{{ settings.usage_risk_min_kills_before_suggestion or 3 }}" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
+              <label class="text-sm">{{ t("usage_risk_min_kills_before_suggestion") }}<input name="min_kills" type="number" min="1" value="{{ settings.usage_risk_min_kills_before_suggestion or 3 }}" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
             {% endif %}
           </div>
-          <label class="flex gap-2 text-sm"><input type="checkbox" name="usage_risk_enabled" value="1" {% if settings.usage_risk_enabled %}checked{% endif %}> Enable Usage Risk</label>
+          <label class="flex gap-2 text-sm"><input type="checkbox" name="usage_risk_enabled" value="1" {% if settings.usage_risk_enabled %}checked{% endif %}> {{ t("wizard.enable_usage_risk") }}</label>
           {% if communications_available %}
-            <label class="flex gap-2 text-sm"><input type="checkbox" name="upgrade_suggestions" value="1" {% if settings.usage_risk_send_upgrade_suggestions %}checked{% endif %}> Enable Upgrade Suggestions</label>
+            <label class="flex gap-2 text-sm"><input type="checkbox" name="upgrade_suggestions" value="1" {% if settings.usage_risk_send_upgrade_suggestions %}checked{% endif %}> {{ t("wizard.enable_upgrade_suggestions") }}</label>
           {% endif %}
           {% include "setup/_nav.html" %}
         </form>
 
       {% elif step == 9 %}
         <h2 class="text-xl font-semibold mb-2">{{ copy.assignment }}</h2>
-        {% if sync_running %}<div class="rounded-lg border border-amber-700 bg-amber-950/30 p-4 text-sm text-amber-200 mb-5">User import is still running. Refresh this step to see newly imported users.</div>{% endif %}
+        {% if sync_running %}<div class="rounded-lg border border-amber-700 bg-amber-950/30 p-4 text-sm text-amber-200 mb-5">{{ t("wizard.sync_running") }}</div>{% endif %}
         <p class="text-sm text-slate-400 mb-5">{{ user_count }} imported user(s) are available.</p>
         <form method="post" class="space-y-4">
           <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
           <label class="block text-sm">Subscription
             <select name="template_id" required class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
-              <option value="">Choose a subscription</option>
+              <option value="">{{ t("wizard.choose_subscription") }}</option>
               {% for template in subscription_templates if template.is_enabled %}<option value="{{ template.id }}">{{ template.name }}</option>{% endfor %}
             </select>
           </label>
@@ -300,9 +293,9 @@
                 <span class="flex items-center gap-3"><input type="checkbox" name="user_ids" value="{{ user.id }}"><span>{{ user.username or user.email or ('User #' ~ user.id) }}</span></span>
                 <span class="text-xs text-slate-500">{{ user.subscription_name or 'No subscription' }}</span>
               </label>
-            {% else %}<div class="p-4 text-sm text-slate-400">No users imported yet.</div>{% endfor %}
+            {% else %}<div class="p-4 text-sm text-slate-400">{{ t("wizard.no_users") }}</div>{% endfor %}
           </div>
-          <button name="action" value="assign_subscriptions" class="w-full px-4 py-2 rounded-lg bg-indigo-700 text-sm" {% if not wizard_users %}disabled{% endif %}>Assign selected users</button>
+          <button name="action" value="assign_subscriptions" class="w-full px-4 py-2 rounded-lg bg-indigo-700 text-sm" {% if not wizard_users %}disabled{% endif %}>{{ t("wizard.assign_selected_users") }}</button>
         </form>
         <form method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token }}"><div class="flex justify-between gap-3 mt-6"><button name="action" value="back" class="px-4 py-2 rounded-lg bg-slate-800 text-sm">{{ copy.back }}</button><div class="flex gap-3"><button name="action" value="skip" class="px-4 py-2 rounded-lg bg-slate-700 text-sm">{{ copy.skip }}</button><button name="action" value="continue" class="px-4 py-2 rounded-lg bg-indigo-700 text-sm">{{ copy.continue }}</button></div></div></form>
 
@@ -314,9 +307,9 @@
         </div>
         {% else %}
         <div class="space-y-2 my-6 text-sm">
-          <div>✓ Administrator account created</div>
+          <div>✓ {{ t("wizard.admin_created") }}</div>
           <div>✓ {{ servers|length }} media server(s) configured</div>
-          <div>✓ Background synchronization started</div>
+          <div>✓ {{ t("wizard.sync_started") }}</div>
           <div>✓ Communications {{ state.get('communications', 'skipped') }}</div>
           <div>✓ Message templates {{ state.get('messages', 'skipped') }}</div>
           <div>✓ Subscriptions {{ state.get('subscriptions', 'skipped') }}</div>
@@ -328,5 +321,8 @@
       {% endif %}
     </section>
   </main>
+  <script src="{{ url_for('static', filename='js/pages/setup-wizard.js', v=g.app_version|default('dev')) }}"></script>
 </body>
 </html>
+
+

@@ -3,7 +3,7 @@
 "key":"scarface_little_friend",
 "media_type":"movie",
 "ids":{"imdb":"tt0086250","tmdb":"111"},
-"quotes":{"en":"Say hello to my little friend!","fr":"Dis bonjour à mon petit ami !"}
+"quotes":{"en":"Say hello to my little friend!","fr":"Dis bonjour Ã  mon petit ami !"}
 },
 {
 "key":"jaws_bigger_boat",
@@ -15,7 +15,7 @@
 "key":"apollo13_problem",
 "media_type":"movie",
 "ids":{"imdb":"tt0112384","tmdb":"568"},
-"quotes":{"en":"Houston, we have a problem.","fr":"Houston, nous avons un problème."}
+"quotes":{"en":"Houston, we have a problem.","fr":"Houston, nous avons un problÃ¨me."}
 },
 {
 "key":"shining_heres_johnny",
@@ -27,7 +27,7 @@
 "key":"taxi_driver_talkin_me",
 "media_type":"movie",
 "ids":{"imdb":"tt0075314","tmdb":"103"},
-"quotes":{"en":"You talkin' to me?","fr":"C'est à moi que tu parles ?"}
+"quotes":{"en":"You talkin' to me?","fr":"C'est Ã  moi que tu parles ?"}
 },
 {
 "key":"godfather_offer",
@@ -45,7 +45,7 @@
 "key":"gladiator_entertained",
 "media_type":"movie",
 "ids":{"imdb":"tt0172495","tmdb":"98"},
-"quotes":{"en":"Are you not entertained?","fr":"Vous n'êtes pas divertis ?"}
+"quotes":{"en":"Are you not entertained?","fr":"Vous n'Ãªtes pas divertis ?"}
 },
 {
 "key":"sixth_sense_dead_people",
@@ -75,7 +75,7 @@
 "key":"matrix_spoon",
 "media_type":"movie",
 "ids":{"imdb":"tt0133093","tmdb":"603"},
-"quotes":{"en":"There is no spoon.","fr":"Il n'y a pas de cuillère."}
+"quotes":{"en":"There is no spoon.","fr":"Il n'y a pas de cuillÃ¨re."}
 },
 {
 "key":"lotr_one_ring",
@@ -87,7 +87,7 @@
 "key":"dark_knight_why_serious",
 "media_type":"movie",
 "ids":{"imdb":"tt0468569","tmdb":"155"},
-"quotes":{"en":"Why so serious?","fr":"Pourquoi si sérieux ?"}
+"quotes":{"en":"Why so serious?","fr":"Pourquoi si sÃ©rieux ?"}
 },
 {
 "key":"starwars_force",
@@ -99,25 +99,25 @@
 "key":"starwars_father",
 "media_type":"movie",
 "ids":{"imdb":"tt0080684","tmdb":"1891"},
-"quotes":{"en":"No. I am your father.","fr":"Non. Je suis ton père."}
+"quotes":{"en":"No. I am your father.","fr":"Non. Je suis ton pÃ¨re."}
 },
 {
 "key":"lotr_precious",
 "media_type":"movie",
 "ids":{"imdb":"tt0167260","tmdb":"122"},
-"quotes":{"en":"My precious.","fr":"Mon précieux."}
+"quotes":{"en":"My precious.","fr":"Mon prÃ©cieux."}
 },
 {
 "key":"pulpfiction_royale",
 "media_type":"movie",
 "ids":{"imdb":"tt0110912","tmdb":"680"},
-"quotes":{"en":"They call it a Royale with cheese.","fr":"Ils appellent ça un Royal with cheese."}
+"quotes":{"en":"They call it a Royale with cheese.","fr":"Ils appellent Ã§a un Royal with cheese."}
 },
 {
 "key":"fightclub_first_rule",
 "media_type":"movie",
 "ids":{"imdb":"tt0137523","tmdb":"550"},
-"quotes":{"en":"The first rule of Fight Club is: you do not talk about Fight Club.","fr":"La première règle du Fight Club : il est interdit de parler du Fight Club."}
+"quotes":{"en":"The first rule of Fight Club is: you do not talk about Fight Club.","fr":"La premiÃ¨re rÃ¨gle du Fight Club : il est interdit de parler du Fight Club."}
 },
 {
 "key":"forrest_run",
@@ -129,13 +129,13 @@
 "key":"forrest_life_box",
 "media_type":"movie",
 "ids":{"imdb":"tt0109830","tmdb":"13"},
-"quotes":{"en":"Life is like a box of chocolates.","fr":"La vie c'est comme une boîte de chocolats."}
+"quotes":{"en":"Life is like a box of chocolates.","fr":"La vie c'est comme une boÃ®te de chocolats."}
 },
 {
 "key":"back_future_roads",
 "media_type":"movie",
 "ids":{"imdb":"tt0088763","tmdb":"105"},
-"quotes":{"en":"Roads? Where we're going, we don't need roads.","fr":"Des routes ? Là où on va, on n'a pas besoin de routes."}
+"quotes":{"en":"Roads? Where we're going, we don't need roads.","fr":"Des routes ? LÃ  oÃ¹ on va, on n'a pas besoin de routes."}
 },
 {
 "key":"indiana_snakes",
@@ -183,7 +183,7 @@
 "key":"spiderman_power",
 "media_type":"movie",
 "ids":{"imdb":"tt0145487","tmdb":"557"},
-"quotes":{"en":"With great power comes great responsibility.","fr":"Un grand pouvoir implique de grandes responsabilités."}
+"quotes":{"en":"With great power comes great responsibility.","fr":"Un grand pouvoir implique de grandes responsabilitÃ©s."}
 },
 {
 "key":"harry_potter_always",
@@ -201,7 +201,7 @@
 "key":"lotr_second_breakfast",
 "media_type":"movie",
 "ids":{"imdb":"tt0167261","tmdb":"121"},
-"quotes":{"en":"What about second breakfast?","fr":"Et le deuxième petit déjeuner ?"}
+"quotes":{"en":"What about second breakfast?","fr":"Et le deuxiÃ¨me petit dÃ©jeuner ?"}
 },
 {
 "key":"godfather_leave_gun",
@@ -213,7 +213,7 @@
 "key":"goodfellas_funny",
 "media_type":"movie",
 "ids":{"imdb":"tt0099685","tmdb":"769"},
-"quotes":{"en":"Funny how?","fr":"Drôle comment ?"}
+"quotes":{"en":"Funny how?","fr":"DrÃ´le comment ?"}
 },
 {
 "key":"diehard_yippee",
@@ -225,13 +225,13 @@
 "key":"braveheart_freedom",
 "media_type":"movie",
 "ids":{"imdb":"tt0112573","tmdb":"197"},
-"quotes":{"en":"Freedom!","fr":"Liberté !"}
+"quotes":{"en":"Freedom!","fr":"LibertÃ© !"}
 },
 {
 "key": "matrix_red_pill",
 "media_type": "movie",
 "ids": {"imdb": "tt0133093","tmdb": "603"},
-"quotes": {"en": "This is your last chance. After this, there is no turning back.","fr": "C'est ta dernière chance. Après ça, il n'y aura pas de retour en arrière."}
+"quotes": {"en": "This is your last chance. After this, there is no turning back.","fr": "C'est ta derniÃ¨re chance. AprÃ¨s Ã§a, il n'y aura pas de retour en arriÃ¨re."}
 },
 {
 "key": "americanpie_pie",
@@ -244,7 +244,7 @@
 "key": "a_team_plan",
 "media_type": "show",
 "ids": {"imdb": "tt0084967","tmdb": "1932"},
-"quotes": {"en": "I love it when a plan comes together.","fr": "J'aime bien quand un plan se déroule sans accroc."}
+"quotes": {"en": "I love it when a plan comes together.","fr": "J'aime bien quand un plan se dÃ©roule sans accroc."}
 },
 {
 	"key": "alien_space_scream",
@@ -267,7 +267,7 @@
 	},
 	"quotes": {
 		"en": "I admire its purity.",
-		"fr": "J'admire sa pureté."
+		"fr": "J'admire sa puretÃ©."
 	}
 },
 {
@@ -315,7 +315,7 @@
 	},
 	"quotes": {
 		"en": "Never tell me the odds!",
-		"fr": "Ne me dites jamais les probabilités !"
+		"fr": "Ne me dites jamais les probabilitÃ©s !"
 	}
 },
 {
@@ -327,7 +327,7 @@
 	},
 	"quotes": {
 		"en": "I'm sorry Dave, I'm afraid I can't do that.",
-		"fr": "Je suis désolé Dave, j'ai bien peur de ne pas pouvoir faire ça."
+		"fr": "Je suis dÃ©solÃ© Dave, j'ai bien peur de ne pas pouvoir faire Ã§a."
 	}
 },
 {
@@ -339,7 +339,7 @@
 	},
 	"quotes": {
 		"en": "I am inevitable.",
-		"fr": "Je suis inévitable."
+		"fr": "Je suis inÃ©vitable."
 	}
 },
 {
@@ -351,7 +351,7 @@
 	},
 	"quotes": {
 		"en": "Failure is not an option.",
-		"fr": "L'échec n'est pas une option."
+		"fr": "L'Ã©chec n'est pas une option."
 	}
 },
 {
@@ -375,7 +375,7 @@
 	},
 	"quotes": {
 		"en": "You are one ugly motherf***er.",
-		"fr": "Tu es vraiment un sale enfoiré."
+		"fr": "Tu es vraiment un sale enfoirÃ©."
 	}
 },
 {
@@ -399,7 +399,7 @@
 	},
 	"quotes": {
 		"en": "The world is yours.",
-		"fr": "Le monde est à toi."
+		"fr": "Le monde est Ã  toi."
 	}
 },
 {
@@ -435,7 +435,7 @@
 	},
 	"quotes": {
 		"en": "Control is an illusion.",
-		"fr": "Le contrôle est une illusion."
+		"fr": "Le contrÃ´le est une illusion."
 	}
 },
 {
@@ -447,7 +447,7 @@
 	},
 	"quotes": {
 		"en": "I served in a company of heroes.",
-		"fr": "J'ai servi dans une compagnie de héros."
+		"fr": "J'ai servi dans une compagnie de hÃ©ros."
 	}
 },
 {
@@ -471,7 +471,7 @@
   },
   "quotes": {
     "en": "I hope you got your shittin' pants on... because you are about to shit your pants.",
-    "fr": "J'espère que vous avez mis votre pantalon pour faire caca... parce que vous allez vous faire dessus."
+    "fr": "J'espÃ¨re que vous avez mis votre pantalon pour faire caca... parce que vous allez vous faire dessus."
   }
 },
 {
@@ -508,7 +508,7 @@
 "key":"got_chaos",
 "media_type":"tv",
 "ids":{"imdb":"tt0944947","tmdb":"1399"},
-"quotes":{"en":"Chaos is a ladder.","fr":"Le chaos est une échelle."}
+"quotes":{"en":"Chaos is a ladder.","fr":"Le chaos est une Ã©chelle."}
 },
 {
 "key":"office_thats",
@@ -520,13 +520,13 @@
 "key":"office_bankrupt",
 "media_type":"tv",
 "ids":{"imdb":"tt0386676","tmdb":"2316"},
-"quotes":{"en":"I declare bankruptcy!","fr":"Je déclare faillite !"}
+"quotes":{"en":"I declare bankruptcy!","fr":"Je dÃ©clare faillite !"}
 },
 {
 "key":"friends_howyou",
 "media_type":"tv",
 "ids":{"imdb":"tt0108778","tmdb":"1668"},
-"quotes":{"en":"How you doin'?","fr":"Alors, ça va ?"}
+"quotes":{"en":"How you doin'?","fr":"Alors, Ã§a va ?"}
 },
 {
 "key":"friends_break",
@@ -556,7 +556,7 @@
 "key":"mandalorian_baby",
 "media_type":"tv",
 "ids":{"imdb":"tt8111088","tmdb":"82856"},
-"quotes":{"en":"I have spoken.","fr":"J'ai parlé."}
+"quotes":{"en":"I have spoken.","fr":"J'ai parlÃ©."}
 },
 {
 "key":"lost_notboat",
@@ -603,7 +603,7 @@
   },
   "quotes": {
     "en": "By the power of Grayskull, I have the power!",
-    "fr": "Par le pouvoir du crâne ancestral, je détiens la force toute-puissante !"
+    "fr": "Par le pouvoir du crÃ¢ne ancestral, je dÃ©tiens la force toute-puissante !"
   }
 },
 {
@@ -615,7 +615,7 @@
   },
   "quotes": {
     "en": "I have the power!",
-    "fr": "Je détiens la force toute-puissante !"
+    "fr": "Je dÃ©tiens la force toute-puissante !"
   }
 },
 {
@@ -634,7 +634,7 @@
 "key":"stranger_things_mornings",
 "media_type":"tv",
 "ids":{"imdb":"tt4574334","tmdb":"66732"},
-"quotes":{"en":"Mornings are for coffee and contemplation.","fr":"Le matin c'est pour le café et la réflexion."}
+"quotes":{"en":"Mornings are for coffee and contemplation.","fr":"Le matin c'est pour le cafÃ© et la rÃ©flexion."}
 },
 {
 "key":"bigbang_bazinga",
@@ -646,13 +646,13 @@
 "key":"bigbang_roommate",
 "media_type":"tv",
 "ids":{"imdb":"tt0898266","tmdb":"1418"},
-"quotes":{"en":"Our babies will be smart and beautiful.","fr":"Nos bébés seront intelligents et beaux."}
+"quotes":{"en":"Our babies will be smart and beautiful.","fr":"Nos bÃ©bÃ©s seront intelligents et beaux."}
 },
 {
 "key":"brooklyn_noice",
 "media_type":"tv",
 "ids":{"imdb":"tt2467372","tmdb":"48891"},
-"quotes":{"en":"Noice.","fr":"Stylé."}
+"quotes":{"en":"Noice.","fr":"StylÃ©."}
 },
 {
 "key":"brooklyn_coolcool",
@@ -664,13 +664,13 @@
 "key":"southpark_theykilled",
 "media_type":"tv",
 "ids":{"imdb":"tt0121955","tmdb":"2190"},
-"quotes":{"en":"Oh my God, they killed Kenny!","fr":"Oh mon Dieu, ils ont tué Kenny !"}
+"quotes":{"en":"Oh my God, they killed Kenny!","fr":"Oh mon Dieu, ils ont tuÃ© Kenny !"}
 },
 {
 "key":"southpark_bastards",
 "media_type":"tv",
 "ids":{"imdb":"tt0121955","tmdb":"2190"},
-"quotes":{"en":"You bastards!","fr":"Espèces d'enfoirés !"}
+"quotes":{"en":"You bastards!","fr":"EspÃ¨ces d'enfoirÃ©s !"}
 },
 {
 "key":"doctorwho_allonsy",
@@ -718,7 +718,7 @@
 "key":"sherlock_game",
 "media_type":"tv",
 "ids":{"imdb":"tt1475582","tmdb":"19885"},
-"quotes":{"en":"The game is on.","fr":"La partie est lancée."}
+"quotes":{"en":"The game is on.","fr":"La partie est lancÃ©e."}
 },
 {
 "key":"westworld_choice",
@@ -741,7 +741,13 @@
   },
   "quotes": {
     "en": "By the Power of Grayskull! I have the power!",
-    "fr": "Par le pouvoir du Crâne Ancestral ! Je détiens la force toute-puissante !"
+    "fr": "Par le pouvoir du CrÃ¢ne Ancestral ! Je dÃ©tiens la force toute-puissante !"
   }
+},
+{
+"key":"lion_king_hakuna_matata",
+"media_type":"movie",
+"ids":{"imdb":"tt0110357","tmdb":"8587"},
+"quotes":{"en":"Hakuna Matata!","fr":"Hakuna Matata !"}
 }
 ]

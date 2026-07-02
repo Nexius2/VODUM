@@ -10,11 +10,59 @@ from core.monitoring.artwork import (
     build_history_backdrop_url,
     enrich_live_session_artwork,
 )
+from core.monitoring.snapshots import get_live_session_stats
+from core.monitoring.overview_aggregates import build_monitoring_overview_aggregates
 from core.usage_risk import build_usage_risk_report
 from logging_utils import get_logger
 from web.helpers import get_db
 
 monitoring_logger = get_logger("monitoring_overview")
+
+MONITORING_LIVE_SESSION_COLUMNS = """
+                  ms.id,
+                  ms.server_id,
+                  ms.provider,
+                  ms.session_key,
+                  ms.media_user_id,
+                  ms.external_user_id,
+                  ms.media_key,
+                  ms.media_type,
+                  ms.title,
+                  ms.grandparent_title,
+                  ms.parent_title,
+                  ms.state,
+                  ms.progress_ms,
+                  ms.duration_ms,
+                  ms.is_transcode,
+                  ms.bitrate,
+                  ms.video_codec,
+                  ms.audio_codec,
+                  ms.client_name,
+                  ms.client_product,
+                  ms.device,
+                  ms.ip,
+                  ms.started_at,
+                  ms.last_seen_at,
+                  ms.raw_json,
+                  ms.poster_ref_json,
+                  ms.backdrop_ref_json,
+                  ms.library_section_id,
+                  ms.missing_count
+""".strip()
+
+STREAM_POLICY_COLUMNS = """
+                  p.id,
+                  p.scope_type,
+                  p.scope_id,
+                  p.provider,
+                  p.server_id,
+                  p.is_enabled,
+                  p.priority,
+                  p.rule_type,
+                  p.rule_value_json,
+                  p.created_at,
+                  p.updated_at
+""".strip()
 
 def _empty_server_resource_stats(note=None):
     return {
@@ -93,10 +141,6 @@ def _build_history_poster_url(row, db=None):
 def _build_history_backdrop_url(row, db=None):
     return build_history_backdrop_url(row, db)
 
-
-def _build_overview_movie_poster_url(row, db=None):
-
-    return build_history_poster_url(row, db)
 
 def register(app):
     @app.route("/monitoring/policies/enforcements/by-user")
@@ -243,23 +287,10 @@ def register(app):
         # Données "live" uniquement pour overview / now_playing
         # --------------------------
         if tab in ("overview", "now_playing"):
-            sessions_stats = db.query_one(
-                """
-                SELECT
-                  COUNT(*) AS live_sessions,
-                  SUM(CASE WHEN is_transcode = 1 THEN 1 ELSE 0 END) AS transcodes
-                FROM media_sessions
-                WHERE datetime(last_seen_at) >= datetime('now', ?)
-                """,
-                (live_window_sql,),
-            ) or {"live_sessions": 0, "transcodes": 0}
-            sessions_stats = dict(sessions_stats) if sessions_stats else {"live_sessions": 0, "transcodes": 0}
-
-            sessions_stats["live_sessions"] = int(sessions_stats.get("live_sessions") or 0)
-            sessions_stats["transcodes"] = int(sessions_stats.get("transcodes") or 0)
-            sessions_stats["direct_plays"] = max(
-                0,
-                sessions_stats["live_sessions"] - sessions_stats["transcodes"]
+            sessions_stats = get_live_session_stats(
+                db,
+                live_window_seconds=live_window_seconds,
+                fallback_max_age_seconds=600,
             )
 
             live_servers = db.query(
@@ -290,9 +321,9 @@ def register(app):
             _apply_server_resource_stats(live_servers, server_resource_stats)
 
             sessions = db.query(
-                """
+                f"""
                 SELECT
-                  ms.*,
+                  {MONITORING_LIVE_SESSION_COLUMNS},
                   s.name AS server_name,
                   s.type AS provider,
                   mu.username AS username
@@ -403,367 +434,12 @@ def register(app):
         # Données overview uniquement
         # --------------------------
         if tab == "overview":
-
-            stats_7d = db.query_one(
-                """
-                WITH base AS (
-                  SELECT
-                    h.server_id,
-                    h.started_at,
-                    h.stopped_at,
-                    h.media_key,
-                    h.watch_ms,
-                    h.duration_ms,
-                    COALESCE(
-                      CAST(mu.vodum_user_id AS TEXT),
-                      'media:' || CAST(mu.id AS TEXT)
-                    ) AS viewer_id,
-                    MIN(
-                      COALESCE(h.watch_ms, 0),
-                      CASE
-                        WHEN COALESCE(h.duration_ms, 0) > 0 THEN h.duration_ms
-                        ELSE COALESCE(h.watch_ms, 0)
-                      END
-                    ) AS watch_ms_capped,
-                    (CAST(h.server_id AS TEXT) || '|' ||
-                     COALESCE(CAST(mu.vodum_user_id AS TEXT), 'media:' || CAST(mu.id AS TEXT)) || '|' ||
-                     COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                     strftime('%Y-%m-%d %H:%M', h.started_at)
-                    ) AS play_key
-                  FROM media_session_history h
-                  LEFT JOIN media_users mu ON mu.id = h.media_user_id
-                  WHERE h.stopped_at >= datetime('now', '-7 days')
-                ),
-                plays AS (
-                  SELECT
-                    play_key,
-                    MAX(viewer_id) AS viewer_id,
-                    MAX(watch_ms_capped) AS watch_ms
-                  FROM base
-                  GROUP BY play_key
-                )
-                SELECT
-                  COUNT(*) AS sessions,
-                  COUNT(DISTINCT viewer_id) AS active_users,
-                  COALESCE(SUM(watch_ms), 0) AS total_watch_ms,
-                  AVG(NULLIF(watch_ms, 0)) AS avg_watch_ms
-                FROM plays
-                """
-            ) or {"sessions": 0, "active_users": 0, "total_watch_ms": 0, "avg_watch_ms": 0}
-            stats_7d = dict(stats_7d) if stats_7d else {"sessions": 0, "active_users": 0, "total_watch_ms": 0, "avg_watch_ms": 0}
-
-            top_users_30d = db.query(
-                """
-                WITH base AS (
-                  SELECT
-                    h.server_id,
-                    h.started_at,
-                    h.stopped_at,
-                    h.media_key,
-                    COALESCE(vu.username, mu.username, '-') AS username,
-                    COALESCE(CAST(vu.id AS TEXT), 'media:' || CAST(mu.id AS TEXT)) AS viewer_id,
-                    MIN(
-                      COALESCE(h.watch_ms, 0),
-                      CASE
-                        WHEN COALESCE(h.duration_ms, 0) > 0 THEN h.duration_ms
-                        ELSE COALESCE(h.watch_ms, 0)
-                      END
-                    ) AS watch_ms_capped,
-                    (CAST(h.server_id AS TEXT) || '|' ||
-                     COALESCE(CAST(vu.id AS TEXT), 'media:' || CAST(mu.id AS TEXT)) || '|' ||
-                     COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                     strftime('%Y-%m-%d %H:%M', h.started_at)
-                    ) AS play_key
-                  FROM media_session_history h
-                  LEFT JOIN media_users mu ON mu.id = h.media_user_id
-                  LEFT JOIN vodum_users vu ON vu.id = mu.vodum_user_id
-                  WHERE h.stopped_at >= datetime('now', '-30 days')
-                ),
-                plays AS (
-                  SELECT
-                    viewer_id,
-                    MAX(username) AS username,
-                    play_key,
-                    MAX(watch_ms_capped) AS watch_ms
-                  FROM base
-                  GROUP BY play_key
-                )
-                SELECT
-                  username,
-                  COUNT(*) AS sessions,
-                  COALESCE(SUM(watch_ms), 0) AS watch_ms
-                FROM plays
-                GROUP BY viewer_id
-                ORDER BY watch_ms DESC
-                LIMIT 10
-                """
-            )
-
-            top_content_30d = db.query(
-                """
-                WITH base AS (
-                  SELECT
-                    h.id AS hist_id,
-                    h.server_id,
-                    s.type AS provider,
-                    h.started_at,
-                    h.stopped_at,
-                    CASE
-                      WHEN COALESCE(NULLIF(TRIM(json_extract(h.raw_json, '$.VideoOrTrack.grandparentTitle')), ''), '') <> ''
-                        THEN TRIM(json_extract(h.raw_json, '$.VideoOrTrack.grandparentTitle'))
-                      ELSE TRIM(h.grandparent_title)
-                    END AS series_title,
-                    h.media_key,
-                    h.media_type,
-                    h.raw_json,
-                    h.poster_ref_json,
-                    h.backdrop_ref_json,
-                    CASE
-                      WHEN TRIM(COALESCE(h.grandparent_title, '')) <> ''
-                           AND COALESCE(NULLIF(TRIM(json_extract(h.raw_json, '$.VideoOrTrack.grandparentRatingKey')), ''), '') <> ''
-                        THEN 2
-                      WHEN COALESCE(NULLIF(TRIM(h.poster_ref_json), ''), '') <> ''
-                        THEN 1
-                      ELSE 0
-                    END AS artwork_rank,
-                    COALESCE(
-                      CAST(mu.vodum_user_id AS TEXT),
-                      'media:' || CAST(mu.id AS TEXT)
-                    ) AS viewer_id,
-                    MIN(
-                      COALESCE(h.watch_ms, 0),
-                      CASE
-                        WHEN COALESCE(h.duration_ms, 0) > 0 THEN h.duration_ms
-                        ELSE COALESCE(h.watch_ms, 0)
-                      END
-                    ) AS watch_ms_capped,
-                    (CAST(h.server_id AS TEXT) || '|' ||
-                     COALESCE(CAST(mu.vodum_user_id AS TEXT), 'media:' || CAST(mu.id AS TEXT)) || '|' ||
-                     COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                     strftime('%Y-%m-%d %H:%M', h.started_at)
-                    ) AS play_key
-                  FROM media_session_history h
-                  LEFT JOIN media_users mu ON mu.id = h.media_user_id
-                  LEFT JOIN servers s ON s.id = h.server_id
-                  WHERE h.stopped_at >= datetime('now', '-30 days')
-                    AND TRIM(COALESCE(h.grandparent_title, '')) <> ''
-                ),
-                plays_ranked AS (
-                  SELECT
-                    b.*,
-                    ROW_NUMBER() OVER (
-                      PARTITION BY b.play_key
-                      ORDER BY b.stopped_at DESC, b.hist_id DESC
-                    ) AS rn
-                  FROM base b
-                ),
-                plays AS (
-                  SELECT
-                    hist_id,
-                    server_id,
-                    provider,
-                    series_title,
-                    media_key,
-                    media_type,
-                    raw_json,
-                    poster_ref_json,
-                    backdrop_ref_json,
-                    artwork_rank,
-                    viewer_id,
-                    watch_ms_capped AS watch_ms,
-                    stopped_at
-                  FROM plays_ranked
-                  WHERE rn = 1
-                ),
-                agg AS (
-                  SELECT
-                    series_title AS title,
-                    COUNT(DISTINCT viewer_id) AS viewers,
-                    COUNT(*) AS plays,
-                    COALESCE(SUM(watch_ms), 0) AS watch_ms
-                  FROM plays
-                  GROUP BY series_title
-                ),
-                latest AS (
-                  SELECT
-                    hist_id,
-                    series_title AS title,
-                    server_id,
-                    provider,
-                    media_key,
-                    media_type,
-                    raw_json,
-                    poster_ref_json,
-                    backdrop_ref_json,
-                    artwork_rank,
-                    ROW_NUMBER() OVER (
-                      PARTITION BY series_title
-                      ORDER BY artwork_rank DESC, stopped_at DESC, hist_id DESC
-                    ) AS rn
-                  FROM plays
-                )
-                SELECT
-                  a.title,
-                  a.viewers,
-                  a.plays,
-                  a.watch_ms,
-                  l.hist_id AS hist_id,
-                  l.server_id,
-                  l.provider,
-                  l.media_key,
-                  l.media_type,
-                  l.raw_json,
-                  l.poster_ref_json,
-                  l.backdrop_ref_json,
-                  ('series:' || LOWER(TRIM(a.title))) AS media_group_key
-                FROM agg a
-                LEFT JOIN latest l
-                  ON l.title = a.title
-                 AND l.rn = 1
-                ORDER BY a.viewers DESC, a.watch_ms DESC
-                LIMIT 10
-                """
-            )
-
-            top_movies_30d = db.query(
-                """
-                WITH base AS (
-                  SELECT
-                    h.id AS hist_id,
-                    h.server_id,
-                    s.type AS provider,
-                    h.started_at,
-                    h.stopped_at,
-                    TRIM(COALESCE(NULLIF(h.title, ''), '-')) AS movie_title,
-                    h.media_key,
-                    h.media_type,
-                    h.raw_json,
-                    h.poster_ref_json,
-                    h.backdrop_ref_json,
-                    COALESCE(
-                      CAST(mu.vodum_user_id AS TEXT),
-                      'media:' || CAST(mu.id AS TEXT)
-                    ) AS viewer_id,
-                    ('server:' || CAST(h.server_id AS TEXT) || '|movie:' || TRIM(h.media_key)) AS media_group_key,
-                    MIN(
-                      COALESCE(h.watch_ms, 0),
-                      CASE
-                        WHEN COALESCE(h.duration_ms, 0) > 0 THEN h.duration_ms
-                        ELSE COALESCE(h.watch_ms, 0)
-                      END
-                    ) AS watch_ms_capped,
-                    (CAST(h.server_id AS TEXT) || '|' ||
-                     COALESCE(CAST(mu.vodum_user_id AS TEXT), 'media:' || CAST(mu.id AS TEXT)) || '|' ||
-                     TRIM(h.media_key) || '|' ||
-                     strftime('%Y-%m-%d %H:%M', h.started_at)
-                    ) AS play_key
-                  FROM media_session_history h
-                  LEFT JOIN media_users mu ON mu.id = h.media_user_id
-                  LEFT JOIN servers s ON s.id = h.server_id
-                  WHERE h.stopped_at >= datetime('now', '-30 days')
-                    AND TRIM(COALESCE(h.grandparent_title, '')) = ''
-                    AND COALESCE(NULLIF(TRIM(h.media_key), ''), '') <> ''
-                ),
-                plays_ranked AS (
-                  SELECT
-                    b.*,
-                    ROW_NUMBER() OVER (
-                      PARTITION BY b.play_key
-                      ORDER BY b.stopped_at DESC, b.hist_id DESC
-                    ) AS rn
-                  FROM base b
-                ),
-                plays AS (
-                  SELECT
-                    hist_id,
-                    server_id,
-                    provider,
-                    movie_title,
-                    media_group_key,
-                    media_key,
-                    media_type,
-                    raw_json,
-                    poster_ref_json,
-                    backdrop_ref_json,
-                    viewer_id,
-                    watch_ms_capped AS watch_ms,
-                    stopped_at
-                  FROM plays_ranked
-                  WHERE rn = 1
-                ),
-                agg AS (
-                  SELECT
-                    media_group_key,
-                    COUNT(DISTINCT viewer_id) AS viewers,
-                    COUNT(*) AS plays,
-                    COALESCE(SUM(watch_ms), 0) AS watch_ms
-                  FROM plays
-                  GROUP BY media_group_key
-                ),
-                latest AS (
-                  SELECT
-                    hist_id,
-                    media_group_key,
-                    movie_title AS title,
-                    server_id,
-                    provider,
-                    media_key,
-                    media_type,
-                    raw_json,
-                    poster_ref_json,
-                    backdrop_ref_json,
-                    ROW_NUMBER() OVER (
-                      PARTITION BY media_group_key
-                      ORDER BY stopped_at DESC, hist_id DESC
-                    ) AS rn
-                  FROM plays
-                )
-                SELECT
-                  COALESCE(l.title, '-') AS title,
-                  a.viewers,
-                  a.plays,
-                  a.watch_ms,
-                  l.hist_id AS hist_id,
-                  l.server_id,
-                  l.provider,
-                  l.media_key,
-                  l.media_type,
-                  l.raw_json,
-                  l.poster_ref_json,
-                  l.backdrop_ref_json,
-                  a.media_group_key
-                FROM agg a
-                LEFT JOIN latest l
-                  ON l.media_group_key = a.media_group_key
-                 AND l.rn = 1
-                ORDER BY a.viewers DESC, a.watch_ms DESC
-                LIMIT 10
-                """
-            )
-
-            top_content_30d = [dict(r) for r in (top_content_30d or [])]
-            for item in top_content_30d:
-                item["poster_url"] = _build_history_poster_url(item, db)
-                item["backdrop_url"] = item["poster_url"]
-
-            top_movies_30d = [dict(r) for r in (top_movies_30d or [])]
-            for item in top_movies_30d:
-                item["poster_url"] = _build_overview_movie_poster_url(item, db)
-                item["backdrop_url"] = item["poster_url"]
-
-            concurrent_7d = db.query_one(
-                """
-                SELECT COALESCE(MAX(live_sessions), 0) AS peak_streams
-                FROM monitoring_snapshots
-                WHERE ts >= datetime('now', '-7 days')
-                """
-            ) or {"peak_streams": 0}
-            concurrent_7d = dict(concurrent_7d) if concurrent_7d else {"peak_streams": 0}
-
-            live_now = int(sessions_stats.get("live_sessions") or 0)
-            peak = int(concurrent_7d.get("peak_streams") or 0)
-            concurrent_7d["peak_streams"] = max(peak, live_now)
-
+            overview_aggregates = build_monitoring_overview_aggregates(db, sessions_stats)
+            stats_7d = overview_aggregates["stats_7d"]
+            top_users_30d = overview_aggregates["top_users_30d"]
+            top_content_30d = overview_aggregates["top_content_30d"]
+            top_movies_30d = overview_aggregates["top_movies_30d"]
+            concurrent_7d = overview_aggregates["concurrent_7d"]
 
         sort_key = None
         sort_dir = None
@@ -789,6 +465,9 @@ def register(app):
         policy_scope_breakdown = {}
         policy_top_users_30d = []
         policy_recent_enforcements = []
+        policy_enforcement_page = 1
+        policy_enforcement_total_pages = 1
+        policy_enforcement_total = 0
         policy_grouped_enforcements = []
         policy_tracked_state = {}
 
@@ -1107,7 +786,7 @@ def register(app):
                   OR COALESCE(vu.discord_name,'') LIKE ?
                   OR COALESCE(n.media_search,'') LIKE ?
                 )
-                """
+                f"""
 
                 params.extend([like, like, like, like, like, like, like, like, like])
 
@@ -1260,9 +939,22 @@ ranked AS (
             }
 
         elif tab == "policies":
-            policies = db.query("""
+            policy_enforcement_page = max(request.args.get("enforcement_page", 1, type=int), 1)
+            policy_enforcement_per_page = 12
+            policy_enforcement_count = db.query_one(
+                "SELECT COUNT(*) AS total FROM stream_enforcements"
+            ) or {"total": 0}
+            policy_enforcement_total = int(policy_enforcement_count["total"] or 0)
+            policy_enforcement_total_pages = max(
+                (policy_enforcement_total + policy_enforcement_per_page - 1) // policy_enforcement_per_page,
+                1,
+            )
+            policy_enforcement_page = min(policy_enforcement_page, policy_enforcement_total_pages)
+            policy_enforcement_offset = (policy_enforcement_page - 1) * policy_enforcement_per_page
+
+            policies = db.query(f"""
                 SELECT
-                  p.*,
+                  {STREAM_POLICY_COLUMNS},
                   s.name AS server_name,
                   vu.username AS scope_username
                 FROM stream_policies p
@@ -1300,7 +992,7 @@ ranked AS (
             edit_policy = None
             edit_policy_id = request.args.get("edit_policy_id", type=int)
             if edit_policy_id:
-                ep = db.query_one("SELECT * FROM stream_policies WHERE id = ?", (edit_policy_id,))
+                ep = db.query_one(f"SELECT {STREAM_POLICY_COLUMNS} FROM stream_policies p WHERE p.id = ?", (edit_policy_id,))
                 if ep:
                     ep = dict(ep)
                     try:
@@ -1510,8 +1202,8 @@ ranked AS (
                   ON mu_acc.server_id = e.server_id
                  AND mu_acc.external_user_id = e.external_user_id
                 ORDER BY e.created_at DESC
-                LIMIT 12
-            """) or []
+                LIMIT ? OFFSET ?
+            """, (policy_enforcement_per_page, policy_enforcement_offset)) or []
             policy_recent_enforcements = [dict(r) for r in policy_recent_enforcements]
             policy_grouped_raw = db.query("""
                 SELECT
@@ -1796,9 +1488,6 @@ ranked AS (
             rows = [dict(r) for r in rows]
             hidden_libraries_count = 0
 
-            rows = [dict(r) for r in rows]
-            hidden_libraries_count = 0
-
             for r in rows:
                 ms = r.get("played_ms") or 0
                 r["played_duration"] = f"{ms // 3600000}h {((ms % 3600000) // 60000)}m"
@@ -1879,6 +1568,12 @@ ranked AS (
                     s.name AS server_name,
                     s.type AS provider,
                     vu_ref.id AS vodum_user_id,
+                    COALESCE(
+                      CAST(vu_ref.id AS TEXT),
+                      'media:' || CAST(h.media_user_id AS TEXT),
+                      'external:' || NULLIF(TRIM(h.external_user_id), ''),
+                      'unknown'
+                    ) AS viewer_key,
                     h.media_user_id,
                     h.media_key,
                     h.raw_json,
@@ -1918,20 +1613,33 @@ ranked AS (
 
                     CASE
                       WHEN LOWER(TRIM(COALESCE(h.media_type, ''))) IN ('serie', 'series', 'show', 'episode', 'tv', 'season')
+                           AND s.type = 'plex'
+                           AND COALESCE(NULLIF(TRIM(json_extract(h.raw_json, '$.VideoOrTrack.grandparentRatingKey')), ''), '') <> ''
+                        THEN 'server:' || CAST(h.server_id AS TEXT) || '|series-id:' ||
+                             TRIM(json_extract(h.raw_json, '$.VideoOrTrack.grandparentRatingKey'))
+                      WHEN LOWER(TRIM(COALESCE(h.media_type, ''))) IN ('serie', 'series', 'show', 'episode', 'tv', 'season')
+                           AND s.type = 'jellyfin'
+                           AND COALESCE(NULLIF(TRIM(json_extract(h.raw_json, '$.NowPlayingItem.SeriesId')), ''), '') <> ''
+                        THEN 'server:' || CAST(h.server_id AS TEXT) || '|series-id:' ||
+                             TRIM(json_extract(h.raw_json, '$.NowPlayingItem.SeriesId'))
+                      WHEN LOWER(TRIM(COALESCE(h.media_type, ''))) IN ('serie', 'series', 'show', 'episode', 'tv', 'season')
                            AND TRIM(COALESCE(h.grandparent_title, '')) <> ''
-                        THEN 'server:' || CAST(h.server_id AS TEXT) || '|series:' || LOWER(TRIM(h.grandparent_title))
+                        THEN 'server:' || CAST(h.server_id AS TEXT) || '|series-title:' || LOWER(TRIM(h.grandparent_title))
                       WHEN NULLIF(TRIM(h.media_key), '') IS NOT NULL
                         THEN 'server:' || CAST(h.server_id AS TEXT) || '|media:' || TRIM(h.media_key)
                       ELSE 'server:' || CAST(h.server_id AS TEXT) || '|title:' || LOWER(TRIM(COALESCE(h.title, 'Unknown')))
                     END AS media_group_key,
 
-                    (
-                      CAST(h.server_id AS TEXT) || '|' ||
-                      CAST(h.library_section_id AS TEXT) || '|' ||
-                      CAST(vu_ref.id AS TEXT) || '|' ||
-                      COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                      strftime('%Y-%m-%d %H:%M', h.started_at)
-                    ) AS play_key
+                    CASE
+                      WHEN COALESCE(NULLIF(TRIM(h.session_key), ''), '') <> ''
+                        THEN CAST(h.server_id AS TEXT) || '|session:' || TRIM(h.session_key) ||
+                             '|started:' || COALESCE(h.started_at, '')
+                      ELSE CAST(h.server_id AS TEXT) || '|viewer:' ||
+                           COALESCE(CAST(h.media_user_id AS TEXT), NULLIF(TRIM(h.external_user_id), ''), 'unknown') ||
+                           '|media:' || COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') ||
+                           '|started:' || COALESCE(h.started_at, '') ||
+                           '|client:' || LOWER(TRIM(COALESCE(h.client_name, '')))
+                    END AS play_key
 
                   FROM media_session_history h
                   JOIN libraries l
@@ -1939,16 +1647,33 @@ ranked AS (
                    AND CAST(l.section_id AS TEXT) = CAST(h.library_section_id AS TEXT)
                   JOIN servers s
                     ON s.id = l.server_id
-                  JOIN media_users mu_ref
+                  LEFT JOIN media_users mu_ref
                     ON mu_ref.id = h.media_user_id
-                  JOIN vodum_users vu_ref
+                  LEFT JOIN vodum_users vu_ref
                     ON vu_ref.id = mu_ref.vodum_user_id
                   WHERE {where_hist_sql}
                     AND COALESCE(NULLIF(TRIM(h.library_section_id), ''), '') <> ''
                 ),
                 plays_ranked AS (
                   SELECT
-                    h.*,
+                    h.hist_id,
+                    h.library_id,
+                    h.library_name,
+                    h.media_type,
+                    h.server_id,
+                    h.server_name,
+                    h.provider,
+                    h.vodum_user_id,
+                    h.viewer_key,
+                    h.media_key,
+                    h.raw_json,
+                    h.poster_ref_json,
+                    h.backdrop_ref_json,
+                    h.artwork_rank,
+                    h.stopped_at,
+                    h.display_title,
+                    h.media_group_key,
+                    h.play_key,
                     ROW_NUMBER() OVER (
                       PARTITION BY h.play_key
                       ORDER BY h.stopped_at DESC, h.hist_id DESC
@@ -1965,6 +1690,7 @@ ranked AS (
                     server_name,
                     provider,
                     vodum_user_id,
+                    viewer_key,
                     media_key,
                     raw_json,
                     poster_ref_json,
@@ -1986,7 +1712,7 @@ ranked AS (
                     provider,
                     media_group_key,
                     COUNT(*) AS plays,
-                    COUNT(DISTINCT vodum_user_id) AS user_count,
+                    COUNT(DISTINCT viewer_key) AS user_count,
                     MAX(stopped_at) AS last_play_at
                   FROM plays
                   GROUP BY
@@ -2247,7 +1973,7 @@ ranked AS (
                 f"""
                 WITH {source_cte},
                 live AS (
-                  SELECT *
+                  SELECT server_id, is_transcode
                   FROM media_sessions
                   WHERE datetime(last_seen_at) >= datetime('now', ?)
                 )
@@ -2476,6 +2202,9 @@ ranked AS (
                 policy_scope_breakdown=policy_scope_breakdown,
                 policy_top_users_30d=policy_top_users_30d,
                 policy_recent_enforcements=policy_recent_enforcements,
+                policy_enforcement_page=policy_enforcement_page,
+                policy_enforcement_total_pages=policy_enforcement_total_pages,
+                policy_enforcement_total=policy_enforcement_total,
                 policy_grouped_enforcements=policy_grouped_enforcements,
                 policy_tracked_state=policy_tracked_state,
                 usage_risk_report=usage_risk_report,
@@ -2535,6 +2264,9 @@ ranked AS (
             policy_scope_breakdown=policy_scope_breakdown,
             policy_top_users_30d=policy_top_users_30d,
             policy_recent_enforcements=policy_recent_enforcements,
+            policy_enforcement_page=policy_enforcement_page,
+            policy_enforcement_total_pages=policy_enforcement_total_pages,
+            policy_enforcement_total=policy_enforcement_total,
             policy_grouped_enforcements=policy_grouped_enforcements,
             policy_tracked_state=policy_tracked_state,
             usage_risk_report=usage_risk_report,
@@ -2547,6 +2279,3 @@ ranked AS (
             resp.set_cookie(f"monitoring_{tab}_sort", str(sort_key), max_age=60*60*24*365)
             resp.set_cookie(f"monitoring_{tab}_dir",  str(sort_dir),  max_age=60*60*24*365)
         return resp
-
-
-

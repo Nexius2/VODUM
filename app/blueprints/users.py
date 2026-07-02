@@ -13,6 +13,8 @@ from db_manager import DBManager
 from logging_utils import get_logger
 from mailing_utils import build_user_context, render_mail
 from email_layout_utils import build_email_parts
+from email_sender import authenticate_smtp
+from notifications_utils import is_email_ready
 
 from core.providers.jellyfin_users import (
     jellyfin_create_user,
@@ -28,6 +30,8 @@ from communications_engine import (
     select_comm_template_for_user,
 )
 from core.providers.plex_users import plex_invite_and_share
+from core.providers.plex_invitation_state import plex_invite_state_payload
+from core.media_jobs import insert_jellyfin_media_job, insert_plex_media_job
 from tasks_engine import auto_enable_stream_enforcer
 from secret_store import (
     decrypt_communication_settings,
@@ -47,30 +51,7 @@ def get_db() -> DBManager:
 
 
 def is_smtp_ready(settings_row) -> bool:
-    """Retourne True si l'envoi mail est correctement configuré.
-
-    Cette fonction est volontairement tolérante :
-    - accepte dict
-    - accepte sqlite3.Row (ou tout mapping) => conversion dict(...)
-    """
-    settings_row = decrypt_communication_settings(dict(settings_row or {}))
-    if not settings_row:
-        return False
-
-    if not isinstance(settings_row, dict):
-        try:
-            settings_row = dict(settings_row)
-        except Exception:
-            return False
-
-    if not settings_row.get("mailing_enabled"):
-        return False
-
-    if not (settings_row.get("smtp_host") and (settings_row.get("smtp_user") or settings_row.get("mail_from"))):
-        return False
-
-    return True
-
+    return is_email_ready(dict(settings_row or {}))
 
 def send_email_via_settings(settings: Dict[str, Any], to_email: str, subject: str, body: str) -> bool:
     settings = decrypt_communication_settings(settings)
@@ -78,7 +59,6 @@ def send_email_via_settings(settings: Dict[str, Any], to_email: str, subject: st
     smtp_port = settings.get("smtp_port") or 587
     smtp_tls = bool(settings.get("smtp_tls"))
     smtp_user = settings.get("smtp_user")
-    smtp_pass = settings.get("smtp_pass") or ""
     mail_from = settings.get("mail_from") or smtp_user
 
     if not smtp_host or not mail_from or not to_email:
@@ -102,8 +82,7 @@ def send_email_via_settings(settings: Dict[str, Any], to_email: str, subject: st
     with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
         if smtp_tls:
             server.starttls()
-        if smtp_user:
-            server.login(smtp_user, smtp_pass)
+        authenticate_smtp(server, settings)
         server.send_message(msg)
 
     return True
@@ -112,7 +91,7 @@ def send_email_via_settings(settings: Dict[str, Any], to_email: str, subject: st
 def get_welcome_template(db: DBManager, provider: str, server_id: int) -> Optional[Dict[str, Any]]:
     row = db.query_one(
         """
-        SELECT * FROM welcome_email_templates
+        SELECT id, provider, server_id, subject, body, created_at, updated_at FROM welcome_email_templates
         WHERE provider = ? AND server_id = ?
         LIMIT 1
         """,
@@ -123,7 +102,7 @@ def get_welcome_template(db: DBManager, provider: str, server_id: int) -> Option
 
     row = db.query_one(
         """
-        SELECT * FROM welcome_email_templates
+        SELECT id, provider, server_id, subject, body, created_at, updated_at FROM welcome_email_templates
         WHERE provider = ? AND server_id IS NULL
         LIMIT 1
         """,
@@ -409,7 +388,7 @@ def api_users_create():
     notes = (payload.get("notes") or "").strip()
 
     # Fallback: if expiration date is empty, use today + default_subscription_days
-    settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+    settings = db.query_one("SELECT id, mail_from, smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_auth_method, smtp_oauth_access_token, email_history_retention_years, disable_on_expiry, delete_after_expiry_days, send_reminders, preavis_days, reminder_days, default_language, timezone, admin_email, contact_email, admin_password_hash, auth_enabled, admin_totp_enabled, admin_totp_secret, wizard_active, wizard_completed, wizard_step, wizard_state_json, web_secure_cookies, web_cookie_samesite, web_trust_proxy, enable_cron_jobs, default_expiration_days, default_subscription_days, maintenance_mode, debug_mode, backup_retention_days, backup_retention_count, data_retention_years, brand_name, notifications_order, user_notifications_can_override, notifications_send_mode, expiry_mode, warn_then_disable_days, discord_enabled, discord_bot_token, discord_bot_id, mailing_enabled, skip_never_used_accounts, plex_user_import_mode, enable_anonymous_telemetry, telemetry_instance_id, telemetry_last_sent_at, task_defaults_version, stream_enforcer_boost_until, usage_risk_enabled, usage_risk_send_upgrade_suggestions, usage_risk_send_stream_blocked_message, usage_risk_min_kills_before_suggestion, usage_risk_analysis_window_days, usage_risk_suggestion_cooldown_days, usage_risk_medium_threshold, usage_risk_high_threshold FROM settings WHERE id = 1")
     settings = dict(settings) if settings else {}
 
     if not expiration_date:
@@ -477,7 +456,7 @@ def api_users_create():
         except Exception:
             return jsonify({"ok": False, "error": "Invalid server_id"}), 400
 
-        srv = db.query_one("SELECT * FROM servers WHERE id = ?", (sid,))
+        srv = db.query_one("SELECT id, name, server_identifier, type, url, local_url, public_url, token, settings_json, server_version, unavailable_since, cooldown_until, last_failure, last_checked, status FROM servers WHERE id = ?", (sid,))
         if not srv:
             return jsonify({"ok": False, "error": f"Server not found (id={sid})"}), 400
         servers_by_id[sid] = dict(srv)
@@ -555,7 +534,7 @@ def api_users_create():
         pass
 
     if referrer_user_id is not None:
-        referral_settings = db.query_one("SELECT * FROM user_referral_settings WHERE id = 1")
+        referral_settings = db.query_one("SELECT id, enabled, reward_enabled, qualification_days, reward_days, allow_referrer_change_before_qualification, auto_notify_reward, eligible_statuses, created_at, updated_at, auto_expire_pending, auto_archive_rewarded, auto_archive_expired, pending_expire_days, rewarded_archive_days, expired_archive_days FROM user_referral_settings WHERE id = 1")
         referral_settings = dict(referral_settings) if referral_settings else {}
 
         qualification_days = int(referral_settings.get("qualification_days") or 60)
@@ -627,7 +606,7 @@ def api_users_create():
     mailing_errors: List[str] = []
     provider_errors: List[str] = []
 
-    settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+    settings = db.query_one("SELECT id, mail_from, smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_auth_method, smtp_oauth_access_token, email_history_retention_years, disable_on_expiry, delete_after_expiry_days, send_reminders, preavis_days, reminder_days, default_language, timezone, admin_email, contact_email, admin_password_hash, auth_enabled, admin_totp_enabled, admin_totp_secret, wizard_active, wizard_completed, wizard_step, wizard_state_json, web_secure_cookies, web_cookie_samesite, web_trust_proxy, enable_cron_jobs, default_expiration_days, default_subscription_days, maintenance_mode, debug_mode, backup_retention_days, backup_retention_count, data_retention_years, brand_name, notifications_order, user_notifications_can_override, notifications_send_mode, expiry_mode, warn_then_disable_days, discord_enabled, discord_bot_token, discord_bot_id, mailing_enabled, skip_never_used_accounts, plex_user_import_mode, enable_anonymous_telemetry, telemetry_instance_id, telemetry_last_sent_at, task_defaults_version, stream_enforcer_boost_until, usage_risk_enabled, usage_risk_send_upgrade_suggestions, usage_risk_send_stream_blocked_message, usage_risk_min_kills_before_suggestion, usage_risk_analysis_window_days, usage_risk_suggestion_cooldown_days, usage_risk_medium_threshold, usage_risk_high_threshold FROM settings WHERE id = 1")
     settings = dict(settings) if settings else {}
     smtp_ok = is_smtp_ready(settings)
 
@@ -794,11 +773,15 @@ def api_users_create():
                         if not server_username and st2.get("username"):
                             server_username = st2.get("username")
 
-                details_json["plex_invite_state"] = {
-                    "is_friend": bool(invite_state.get("is_friend")),
-                    "is_pending": bool(invite_state.get("is_pending")),
-                    "primary_server_id": int(primary_sid),
-                }
+                resolved_invite_state = (
+                    "friend" if invite_state.get("is_friend")
+                    else "pending" if invite_state.get("is_pending")
+                    else "unknown"
+                )
+                details_json["plex_invite_state"] = plex_invite_state_payload(
+                    resolved_invite_state,
+                    primary_server_id=int(primary_sid),
+                )
 
                 details_json["plex_linked_servers"] = [{"id": int(s["id"]), "name": s.get("name")} for s in group_servers]
 
@@ -862,12 +845,13 @@ def api_users_create():
                     [(media_user_id, lid) for lid in library_ids],
                 )
 
-            db.execute(
-                """
-                INSERT INTO media_jobs(provider, action, vodum_user_id, server_id, library_id, payload_json)
-                VALUES ('jellyfin','grant', ?, ?, NULL, ?)
-                """,
-                (vodum_user_id, server_id, json.dumps({"source": "create_user"})),
+            insert_jellyfin_media_job(
+                db,
+                action="sync",
+                vodum_user_id=vodum_user_id,
+                server_id=server_id,
+                dedupe_key=f"jellyfin:sync:server={server_id}:user={vodum_user_id}:create_user",
+                payload={"source": "create_user"},
             )
 
             created_accounts.append({
@@ -1017,14 +1001,14 @@ def api_users_create():
                     )
 
                     if enqueue_jobs:
-                        for lid in selected_lib_ids:
-                            db.execute(
-                                """
-                                INSERT INTO media_jobs(provider, action, vodum_user_id, server_id, library_id, payload_json)
-                                VALUES ('plex','grant', ?, ?, ?, ?)
-                                """,
-                                (vodum_user_id, sid2, lid, json.dumps({"source": "create_user"})),
-                            )
+                        insert_plex_media_job(
+                            db,
+                            action="sync",
+                            vodum_user_id=vodum_user_id,
+                            server_id=sid2,
+                            dedupe_key=f"plex:sync:server={sid2}:user={vodum_user_id}:create_user",
+                            payload={"source": "create_user", "library_ids": selected_lib_ids},
+                        )
 
                     created_accounts.append({
                         "server_id": sid2,

@@ -12,6 +12,8 @@ import xml.etree.ElementTree as ET
 from core.monitoring.diff import compute_session_events
 from core.monitoring.mappers import resolve_media_user_id
 from core.monitoring.artwork import extract_artwork_refs
+from core.subscription_activation import activate_subscription_on_playback
+from core.monitoring.library_media import repair_unambiguous_library_associations
 from core.providers.registry import get_provider
 from logging_utils import get_logger, is_debug_mode_enabled
 from core.server_cooldown import mark_server_unreachable, clear_server_cooldown, should_skip_unreachable_server
@@ -714,6 +716,9 @@ def collect_sessions_for_server(
                 ),
             )
 
+            if media_user_id is not None:
+                activate_subscription_on_playback(db, int(media_user_id))
+
             for ev in events:
                 db.execute(
                     """
@@ -765,8 +770,7 @@ def collect_sessions_for_server(
 
             live = db.query_one(
                 """
-                SELECT *
-                FROM media_sessions
+                SELECT id, server_id, provider, session_key, media_user_id, external_user_id, media_key, media_type, title, grandparent_title, parent_title, state, progress_ms, duration_ms, is_transcode, bitrate, video_codec, audio_codec, client_name, client_product, device, ip, started_at, last_seen_at, raw_json, poster_ref_json, backdrop_ref_json, library_section_id, missing_count FROM media_sessions
                 WHERE server_id=? AND session_key=?
                 """,
                 (server_id, sk),
@@ -1049,6 +1053,13 @@ def collect_sessions_for_server(
 
 
             db.execute("DELETE FROM media_sessions WHERE server_id=? AND session_key=?", (server_id, sk))
+
+        repaired = repair_unambiguous_library_associations(db, server_id)
+        if repaired["live"] or repaired["history"]:
+            logger.info(
+                "Repaired unambiguous library associations "
+                f"(server_id={server_id}, live={repaired['live']}, history={repaired['history']})"
+            )
 
         # OK:
         # - si sessions actives => UP

@@ -28,6 +28,7 @@ from communications_engine import (
     available_channels,
     schedule_template_notification,
 )
+from core.communications_recovery import recover_missed_scheduled_emails
 #from email_sender import send_email
 from mailing_utils import build_user_context, render_mail
 
@@ -322,6 +323,7 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
                     "expiration_change",
                     "pending_invite_reminder",
                     "stream_blocked",
+                    "usage_risk_upgrade_suggestion",
                 )
             ),
         )
@@ -435,6 +437,19 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
                     ),
                 )
 
+            if trigger_event == "usage_risk_upgrade_suggestion" and payload.get("recommendation_id"):
+                cooldown_days = max(1, int(payload.get("suggestion_cooldown_days") or 30))
+                db.execute(
+                    """
+                    UPDATE usage_risk_recommendations
+                    SET status='notified',
+                        last_notification_at=CURRENT_TIMESTAMP,
+                        cooldown_until=datetime('now', ?)
+                    WHERE id=?
+                    """,
+                    (f"+{cooldown_days} days", int(payload["recommendation_id"])),
+                )
+
             sent += 1
         else:
             next_attempt = int(q.get("attempt_count") or 0) + 1
@@ -497,8 +512,7 @@ def _parse_date_iso(d: str | None) -> date | None:
 def _get_expiration_templates(db):
     rows = db.query(
         """
-        SELECT *
-        FROM comm_templates
+        SELECT id, key, name, enabled, trigger_event, trigger_provider, expiration_change_direction, subscription_scope, subscription_template_id, days_before, days_after, subject, body, created_at, updated_at FROM comm_templates
         WHERE enabled = 1
           AND trigger_event = 'expiration'
         ORDER BY id ASC
@@ -918,7 +932,7 @@ def run(task_id: int | None = None, db=None):
     try:
         task_logs(task_id, "info", "Task send_expiration_emails (unified) started")
 
-        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        settings = db.query_one("SELECT id, mail_from, smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_auth_method, smtp_oauth_access_token, email_history_retention_years, disable_on_expiry, delete_after_expiry_days, send_reminders, preavis_days, reminder_days, default_language, timezone, admin_email, contact_email, admin_password_hash, auth_enabled, admin_totp_enabled, admin_totp_secret, wizard_active, wizard_completed, wizard_step, wizard_state_json, web_secure_cookies, web_cookie_samesite, web_trust_proxy, enable_cron_jobs, default_expiration_days, default_subscription_days, maintenance_mode, debug_mode, backup_retention_days, backup_retention_count, data_retention_years, brand_name, notifications_order, user_notifications_can_override, notifications_send_mode, expiry_mode, warn_then_disable_days, discord_enabled, discord_bot_token, discord_bot_id, mailing_enabled, skip_never_used_accounts, plex_user_import_mode, enable_anonymous_telemetry, telemetry_instance_id, telemetry_last_sent_at, task_defaults_version, stream_enforcer_boost_until, usage_risk_enabled, usage_risk_send_upgrade_suggestions, usage_risk_send_stream_blocked_message, usage_risk_min_kills_before_suggestion, usage_risk_analysis_window_days, usage_risk_suggestion_cooldown_days, usage_risk_medium_threshold, usage_risk_high_threshold FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
         
         # If no channel is ready, do nothing (avoid pointless DB work and errors)
@@ -932,6 +946,15 @@ def run(task_id: int | None = None, db=None):
             log.warning(msg)
             return
         
+        catchup = recover_missed_scheduled_emails(db, settings)
+        if catchup.get("requeued"):
+            log.warning("Recovered %s missed scheduled email(s)", catchup["requeued"])
+            task_logs(
+                task_id,
+                "warning",
+                f"Recovered {catchup['requeued']} missed scheduled email(s)",
+            )
+
         # Flush scheduled notifications (user_creation days_after etc.)
         _flush_comm_scheduled(db, settings, task_id)
 

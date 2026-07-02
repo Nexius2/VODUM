@@ -1,10 +1,11 @@
 import logging
 import os
 import re
-import sqlite3
 import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+
+from db_manager import open_sqlite_connection
 
 # -------------------------------------------------------------------
 # CONFIG
@@ -65,17 +66,18 @@ def is_debug_mode_enabled() -> bool:
         return _DEBUG_CACHE["value"]
 
     # Rafraîchissement DB
+    conn = None
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cur = conn.cursor()
-        cur.execute("SELECT debug_mode FROM settings WHERE id = 1")
-        row = cur.fetchone()
-        conn.close()
+        conn = open_sqlite_connection(DB_PATH, read_only=True)
+        row = conn.execute("SELECT debug_mode FROM settings WHERE id = 1").fetchone()
 
         value = bool(row and row[0] == 1)
 
     except Exception:
         value = False  # fail-safe
+    finally:
+        if conn is not None:
+            conn.close()
 
     _DEBUG_CACHE["value"] = value
     _DEBUG_CACHE["last_check"] = now
@@ -192,3 +194,5 @@ def get_logger(name: str):
     ex: vodum.sync_plex, vodum.tasks_engine
     """
     return logger.getChild(name)
+
+

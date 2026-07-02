@@ -2,9 +2,14 @@
 {% extends "base_embed.html" if embed else "base.html" %}
 
 
-{% block title %}Monitoring · User{% endblock %}
-{% block header_title %}Monitoring{% endblock %}
-{% block header_subtitle %}User detail{% endblock %}
+{% block title %}{{ t("monitoring") }} · {{ t("user") }}{% endblock %}
+{% block header_title %}{{ t("monitoring") }}{% endblock %}
+{% block header_subtitle %}{{ t("monitoring_user_detail") }}{% endblock %}
+
+{% block head %}
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
 
 {% block content %}
 {% if not embed %}
@@ -16,7 +21,7 @@
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-6">
   <div class="flex items-center justify-between gap-6">
     <div>
-      <div class="text-sm text-slate-400">User</div>
+      <div class="text-sm text-slate-400">{{ t("user") }}</div>
       <div class="text-xl font-semibold">{{ user.username or "-" }}</div>
 
       <div class="text-xs text-slate-500 mt-1">
@@ -32,9 +37,9 @@
     </div>
 
     <div class="text-right text-xs text-slate-400">
-      <div>Total plays: <span class="text-slate-200">{{ user.total_plays or 0 }}</span></div>
-      <div>Watch time: <span class="text-slate-200">{{ user.watch_time or "0h 0m" }}</span></div>
-      <div>Last watch: <span class="text-slate-200">{{ user.last_watch_at or "-" }}</span></div>
+      <div>{{ t("monitoring_user_total_plays") }}: <span class="text-slate-200">{{ user.total_plays or 0 }}</span></div>
+      <div>{{ t("monitoring_user_watch_time") }}: <span class="text-slate-200">{{ user.watch_time or "0h 0m" }}</span></div>
+      <div>{{ t("monitoring_user_last_watch") }}: <span class="text-slate-200">{{ user.last_watch_at or "-" }}</span></div>
     </div>
   </div>
 </div>
@@ -50,19 +55,19 @@
     <a class="px-4 py-2 text-sm rounded-t-xl border border-b-0
               {{ 'bg-slate-900 border-slate-800 text-emerald-400 font-semibold' if view=='profile' else 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200' }}"
        href="{{ url_for('monitoring_user_detail', user_id=user.id, view='profile', embed='1') if embed else url_for('monitoring_user_detail', user_id=user.id, view='profile') }}">
-      Profile
+      {{ t("monitoring_user_profile") }}
     </a>
 
     <a class="px-4 py-2 text-sm rounded-t-xl border border-b-0
               {{ 'bg-slate-900 border-slate-800 text-emerald-400 font-semibold' if view=='history' else 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200' }}"
        href="{{ url_for('monitoring_user_detail', user_id=user.id, view='history', embed='1') if embed else url_for('monitoring_user_detail', user_id=user.id, view='history') }}">
-      History
+       {{ t("history") }}
     </a>
 
     <a class="px-4 py-2 text-sm rounded-t-xl border border-b-0
               {{ 'bg-slate-900 border-slate-800 text-emerald-400 font-semibold' if view=='ip' else 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200' }}"
        href="{{ url_for('monitoring_user_detail', user_id=user.id, view='ip', embed='1') if embed else url_for('monitoring_user_detail', user_id=user.id, view='ip') }}">
-      IP Addresses
+       {{ t("monitoring_user_ip_addresses") }}
     </a>
   </div>
 </div>
@@ -88,35 +93,35 @@
     {# Grande bulle résumé #}
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
       <div class="text-xs uppercase tracking-wide text-slate-400 mb-4">
-        User activity 
-		<span class="text-xs text-slate-500 font-normal lowercase">Number of plays and total watch time over different periods</span>
+        {{ t("monitoring_user_activity") }}
+		<span class="text-xs text-slate-500 font-normal lowercase">{{ t("monitoring_user_activity_help") }}</span>
       </div>
 
 
 
       <div class="grid grid-cols-2 xl:grid-cols-4 gap-3">
         <div class="rounded-xl border border-slate-800/80 bg-slate-950/40 px-3 py-3">
-          <div class="text-[11px] tracking-wide text-slate-500">24h plays:</div>
+          <div class="text-[11px] tracking-wide text-slate-500">{{ t("monitoring_user_plays_24h") }}:</div>
           <div class="mt-2 text-2xl font-semibold text-white">{{ s24.plays }}</div>
-          <div class="mt-1 text-xs text-slate-500">watch time:<br>{{ s24.watch_time }}</div>
+          <div class="mt-1 text-xs text-slate-500">{{ t("monitoring_user_watch_time") }}:<br>{{ s24.watch_time }}</div>
         </div>
 
         <div class="rounded-xl border border-slate-800/80 bg-slate-950/40 px-3 py-3">
-          <div class="text-[11px] tracking-wide text-slate-500">7d plays:</div>
+          <div class="text-[11px] tracking-wide text-slate-500">{{ t("monitoring_user_plays_7d") }}:</div>
           <div class="mt-2 text-2xl font-semibold text-white">{{ s7.plays }}</div>
-          <div class="mt-1 text-xs text-slate-500">watch time:<br>{{ s7.watch_time }}</div>
+          <div class="mt-1 text-xs text-slate-500">{{ t("monitoring_user_watch_time") }}:<br>{{ s7.watch_time }}</div>
         </div>
 
         <div class="rounded-xl border border-slate-800/80 bg-slate-950/40 px-3 py-3">
-          <div class="text-[11px] tracking-wide text-slate-500">30d plays:</div>
+          <div class="text-[11px] tracking-wide text-slate-500">{{ t("monitoring_user_plays_30d") }}:</div>
           <div class="mt-2 text-2xl font-semibold text-white">{{ s30.plays }}</div>
-          <div class="mt-1 text-xs text-slate-500">watch time:<br>{{ s30.watch_time }}</div>
+          <div class="mt-1 text-xs text-slate-500">{{ t("monitoring_user_watch_time") }}:<br>{{ s30.watch_time }}</div>
         </div>
 
         <div class="rounded-xl border border-slate-800/80 bg-slate-950/40 px-3 py-3">
-          <div class="text-[11px] tracking-wide text-slate-500">All time plays:</div>
+          <div class="text-[11px] tracking-wide text-slate-500">{{ t("monitoring_user_plays_all") }}:</div>
           <div class="mt-2 text-2xl font-semibold text-white">{{ sa.plays }}</div>
-          <div class="mt-1 text-xs text-slate-500">watch time:<br>{{ sa.watch_time }}</div>
+          <div class="mt-1 text-xs text-slate-500">{{ t("monitoring_user_watch_time") }}:<br>{{ sa.watch_time }}</div>
         </div>
       </div>
     </div>
@@ -125,25 +130,25 @@
     <div class="grid grid-cols-2 gap-4">
 
       <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-        <div class="text-xs uppercase tracking-wide text-slate-400">Policy cuts</div>
+        <div class="text-xs uppercase tracking-wide text-slate-400">{{ t("monitoring_user_policy_stops") }}</div>
         <div class="mt-2 text-3xl font-semibold text-rose-300">
           {{ policy_hits.get('kills', 0) }}
         </div>
         <div class="mt-1 text-xs text-slate-500">
-          warns: {{ policy_hits.get('warns', 0) }}
+          {{ t("monitoring_user_warnings") }}: {{ policy_hits.get('warns', 0) }}
         </div>
         <div class="mt-2 text-[11px] text-slate-600 truncate">
-          last: {{ policy_hits.get('last_hit_at', '-') }}
+          {{ t("monitoring_user_last") }}: {{ policy_hits.get('last_hit_at', '-') }}
         </div>
       </div>
 
       <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-        <div class="text-xs uppercase tracking-wide text-slate-400">Max simultaneous</div>
+        <div class="text-xs uppercase tracking-wide text-slate-400">{{ t("monitoring_user_max_simultaneous") }}</div>
         <div class="mt-2 text-3xl font-semibold text-emerald-300">
           {{ peak_streams or 0 }}
         </div>
         <div class="mt-1 text-xs text-slate-500">
-          peak concurrent streams
+          {{ t("monitoring_user_peak_streams") }}
         </div>
       </div>
 
@@ -152,7 +157,7 @@
 
   {# RIGHT: Insights big card (2 donuts if server_usage_30d_show) #}
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 lg:col-span-2">
-    <div class="text-sm font-semibold mb-4">Insights (30d)</div>
+    <div class="text-sm font-semibold mb-4">{{ t("monitoring_user_insights_30d") }}</div>
 
     {% if user.server_usage_30d_show %}
       <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -163,11 +168,11 @@
             <canvas id="chartMediaTypes"></canvas>
           </div>
           <div class="min-w-0">
-            <div class="text-sm font-semibold mb-2">Media types</div>
+            <div class="text-sm font-semibold mb-2">{{ t("monitoring_user_media_types") }}</div>
             {% if user.media_types_30d_show %}
               <div id="legendMediaTypes" class="space-y-1 text-xs text-slate-400"></div>
             {% else %}
-              <div class="text-xs text-slate-500">No data (30d).</div>
+              <div class="text-xs text-slate-500">{{ t("monitoring_user_no_data_30d") }}</div>
             {% endif %}
           </div>
         </div>
@@ -178,7 +183,7 @@
             <canvas id="chartServerUsage"></canvas>
           </div>
           <div class="min-w-0">
-            <div class="text-sm font-semibold mb-2">Per server</div>
+            <div class="text-sm font-semibold mb-2">{{ t("monitoring_user_per_server") }}</div>
             <div id="legendPerServer" class="space-y-1 text-xs text-slate-400"></div>
           </div>
         </div>
@@ -193,11 +198,11 @@
             <canvas id="chartMediaTypes"></canvas>
           </div>
           <div class="min-w-0">
-            <div class="text-sm font-semibold mb-2">Media types</div>
+            <div class="text-sm font-semibold mb-2">{{ t("monitoring_user_media_types") }}</div>
             {% if user.media_types_30d_show %}
               <div id="legendMediaTypes" class="space-y-1 text-xs text-slate-400"></div>
             {% else %}
-              <div class="text-xs text-slate-500">No data (30d).</div>
+              <div class="text-xs text-slate-500">{{ t("monitoring_user_no_data_30d") }}</div>
             {% endif %}
           </div>
         </div>
@@ -214,14 +219,14 @@
   {# Courbes du dessous #}
   <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-      <div class="text-sm font-semibold mb-3">Plays / day (30d)</div>
+      <div class="text-sm font-semibold mb-3">{{ t("monitoring_user_plays_day_30d") }}</div>
       <div class="relative w-full h-[320px]">
         <canvas id="chartUserPlays" class="w-full h-full"></canvas>
       </div>
     </div>
 
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-      <div class="text-sm font-semibold mb-3">Watch time / day (30d)</div>
+      <div class="text-sm font-semibold mb-3">{{ t("monitoring_user_watch_day_30d") }}</div>
       <div class="relative w-full h-[320px]">
         <canvas id="chartUserWatch" class="w-full h-full"></canvas>
       </div>
@@ -229,18 +234,18 @@
   </div>
 
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-    <div class="text-sm font-semibold mb-4">Top players</div>
+    <div class="text-sm font-semibold mb-4">{{ t("monitoring_user_top_players") }}</div>
 
     <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
       {% for p in profile.top_players %}
         <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
           <div class="text-xs text-slate-400 truncate">{{ p.player }}</div>
           <div class="mt-2 text-xl font-semibold text-amber-300">{{ p.plays }}</div>
-          <div class="text-xs text-slate-500">plays</div>
+          <div class="text-xs text-slate-500">{{ t("monitoring_user_plays") }}</div>
         </div>
       {% endfor %}
       {% if (profile.top_players|length) == 0 %}
-        <div class="text-slate-500">No player stats.</div>
+        <div class="text-slate-500">{{ t("monitoring_user_no_player_stats") }}</div>
       {% endif %}
     </div>
   </div>
@@ -444,7 +449,7 @@
         data: {
           labels,
           datasets: [{
-            label: "Plays",
+            label: {{ t("monitoring_user_plays")|tojson }},
             data: plays,
             tension: 0.4,
             fill: true,
@@ -462,7 +467,7 @@
         data: {
           labels,
           datasets: [{
-            label: "Hours",
+            label: {{ t("monitoring_user_hours")|tojson }},
             data: watch,
             tension: 0.4,
             fill: true,
@@ -486,17 +491,17 @@
 {% if view == "history" %}
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
     <div class="flex items-center justify-between mb-4">
-      <div class="text-sm font-semibold">History</div>
-      <div class="text-xs text-slate-400">30 rows / page</div>
+      <div class="text-sm font-semibold">{{ t("history") }}</div>
+      <div class="text-xs text-slate-400">{{ t("monitoring_user_rows_page") }}</div>
     </div>
 
     <form method="get" class="flex flex-wrap gap-3 mb-4">
       <input type="hidden" name="view" value="history">
       <input type="hidden" name="page" value="1">
-      <input name="q" value="{{ q or '' }}" placeholder="Search title..."
+      <input name="q" value="{{ q or '' }}" placeholder="{{ t('monitoring_user_search_title') }}"
              class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm w-full md:w-96">
       <button class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl px-4 py-2 text-sm">
-        Filter
+        {{ t("filter") }}
       </button>
     </form>
 
@@ -504,14 +509,14 @@
       <table class="w-full text-sm">
         <thead>
           <tr class="text-left text-slate-400 border-b border-slate-800">
-            <th class="py-2 pr-4">Date</th>
-            <th class="py-2 pr-4">Server</th>
-            <th class="py-2 pr-4">Media</th>
-            <th class="py-2 pr-4">Type</th>
-            <th class="py-2 pr-4">Playback</th>
-            <th class="py-2 pr-4">Device</th>
+            <th class="py-2 pr-4">{{ t("date") }}</th>
+            <th class="py-2 pr-4">{{ t("server") }}</th>
+            <th class="py-2 pr-4">{{ t("monitoring_user_media") }}</th>
+            <th class="py-2 pr-4">{{ t("type") }}</th>
+            <th class="py-2 pr-4">{{ t("monitoring_user_playback") }}</th>
+            <th class="py-2 pr-4">{{ t("device") }}</th>
             <th class="py-2 pr-4">IP</th>
-            <th class="py-2 pr-4">Duration</th>
+            <th class="py-2 pr-4">{{ t("duration") }}</th>
           </tr>
         </thead>
         <tbody>
@@ -536,7 +541,7 @@
             </tr>
           {% endfor %}
           {% if rows|length == 0 %}
-            <tr><td colspan="8" class="py-6 text-slate-500">No results.</td></tr>
+            <tr><td colspan="8" class="py-6 text-slate-500">{{ t("monitoring_user_no_results") }}</td></tr>
           {% endif %}
         </tbody>
       </table>
@@ -554,8 +559,8 @@
 {% if view == "ip" %}
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
     <div class="flex items-center justify-between mb-4">
-      <div class="text-sm font-semibold">IP Addresses</div>
-      <div class="text-xs text-slate-400">All time</div>
+      <div class="text-sm font-semibold">{{ t("monitoring_user_ip_addresses") }}</div>
+      <div class="text-xs text-slate-400">{{ t("monitoring_user_all_time") }}</div>
     </div>
 
     <div class="overflow-x-auto">
@@ -584,13 +589,13 @@
 
           <tr class="text-left border-b border-slate-800">
             {{ th("IP", "ip") }}
-            {{ th("Last streamed", "last_seen") }}
-            {{ th("First streamed", "first_seen") }}
-            {{ th("Last platform", "last_platform") }}
-            {{ th("Last player", "last_player") }}
-            {{ th("Last played", "last_played") }}
-            {{ th("Play count", "plays") }}
-            {{ th("Watch time", "watch") }}
+            {{ th(t("monitoring_user_last_streamed"), "last_seen") }}
+            {{ th(t("monitoring_user_first_streamed"), "first_seen") }}
+            {{ th(t("monitoring_user_last_platform"), "last_platform") }}
+            {{ th(t("monitoring_user_last_player"), "last_player") }}
+            {{ th(t("monitoring_user_last_played"), "last_played") }}
+            {{ th(t("monitoring_user_play_count"), "plays") }}
+            {{ th(t("monitoring_user_watch_time"), "watch") }}
           </tr>
         </thead>
 
@@ -616,7 +621,7 @@
             </tr>
           {% endfor %}
           {% if ip_rows|length == 0 %}
-            <tr><td colspan="8" class="py-6 text-slate-500">No IP history.</td></tr>
+            <tr><td colspan="8" class="py-6 text-slate-500">{{ t("monitoring_user_no_ip_history") }}</td></tr>
           {% endif %}
         </tbody>
       </table>
@@ -632,13 +637,13 @@
       <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
         <div class="flex items-start justify-between gap-4 px-5 py-4 border-b border-slate-800">
           <div>
-            <div class="text-lg font-semibold text-white">IP details</div>
+            <div class="text-lg font-semibold text-white">{{ t("monitoring_user_ip_details") }}</div>
             <div id="ipLookupModalSubtitle" class="text-sm text-slate-400 mt-1">—</div>
           </div>
           <button type="button"
                   id="ipLookupModalClose"
                   class="px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800">
-            Close
+             {{ t("close") }}
           </button>
         </div>
 
@@ -649,12 +654,12 @@
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
               </svg>
-              <span>Loading IP information…</span>
+              <span>{{ t("monitoring_user_loading_ip") }}</span>
             </div>
           </div>
 
           <div id="ipLookupError" class="hidden rounded-xl border border-rose-800 bg-rose-950/40 px-4 py-3 text-sm text-rose-300">
-            Unable to load IP information.
+            {{ t("monitoring_user_unable_ip") }}
           </div>
 
           <div id="ipLookupContent" class="hidden space-y-5">
@@ -665,17 +670,17 @@
               </div>
 
               <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
-                <div class="text-xs text-slate-400">Location</div>
+                <div class="text-xs text-slate-400">{{ t("monitoring_user_location") }}</div>
                 <div id="ipLookupLocation" class="mt-1 font-semibold">—</div>
               </div>
 
               <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
-                <div class="text-xs text-slate-400">ISP</div>
+                <div class="text-xs text-slate-400">{{ t("monitoring_user_isp") }}</div>
                 <div id="ipLookupIsp" class="mt-1 font-semibold break-words">—</div>
               </div>
 
               <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
-                <div class="text-xs text-slate-400">Timezone</div>
+                <div class="text-xs text-slate-400">{{ t("timezone") }}</div>
                 <div id="ipLookupTimezone" class="mt-1 font-semibold break-words">—</div>
               </div>
             </div>
@@ -684,10 +689,10 @@
 
             <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
               <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
-                <div class="text-sm font-semibold mb-3">Network details</div>
+                <div class="text-sm font-semibold mb-3">{{ t("monitoring_user_network_details") }}</div>
                 <dl class="space-y-3 text-sm">
                   <div class="flex items-start justify-between gap-4">
-                    <dt class="text-slate-400">Organization</dt>
+                    <dt class="text-slate-400">{{ t("monitoring_user_organization") }}</dt>
                     <dd id="ipLookupOrg" class="text-right text-slate-200 break-words">—</dd>
                   </div>
                   <div class="flex items-start justify-between gap-4">
@@ -695,7 +700,7 @@
                     <dd id="ipLookupAsn" class="text-right text-slate-200 break-words">—</dd>
                   </div>
                   <div class="flex items-start justify-between gap-4">
-                    <dt class="text-slate-400">Coordinates</dt>
+                    <dt class="text-slate-400">{{ t("monitoring_user_coordinates") }}</dt>
                     <dd id="ipLookupCoords" class="text-right text-slate-200 break-words">—</dd>
                   </div>
                 </dl>
@@ -705,7 +710,7 @@
                 <div id="ipLookupMapWrap" class="hidden">
                   <iframe
                     id="ipLookupMap"
-                    title="IP location map"
+                    title="{{ t('monitoring_user_map_title') }}"
                     class="w-full h-[320px] rounded-xl border-0"
                     loading="lazy"
                     referrerpolicy="no-referrer-when-downgrade"
@@ -714,7 +719,7 @@
                 </div>
                 <div id="ipLookupNoMap"
                      class="h-[320px] flex items-center justify-center rounded-xl border border-dashed border-slate-800 text-sm text-slate-500">
-                  No map available for this IP.
+                  {{ t("monitoring_user_no_map") }}
                 </div>
               </div>
             </div>
@@ -783,7 +788,7 @@
     function showError(message) {
       loadingBox.classList.add("hidden");
       contentBox.classList.add("hidden");
-      errorBox.textContent = message || "Unable to load IP information.";
+      errorBox.textContent = message || {{ t("monitoring_user_unable_ip")|tojson }};
       errorBox.classList.remove("hidden");
     }
 
@@ -840,14 +845,14 @@
         }
 
         if (data.is_private) {
-          addBadge("Private / local IP", "amber");
+          addBadge({{ t("monitoring_user_private_ip")|tojson }}, "amber");
         } else {
-          addBadge("Public IP", "emerald");
+          addBadge({{ t("monitoring_user_public_ip")|tojson }}, "emerald");
         }
 
-        if (data.mobile) addBadge("Mobile network", "sky");
-        if (data.proxy) addBadge("Proxy / VPN", "rose");
-        if (data.hosting) addBadge("Hosting / Datacenter", "amber");
+        if (data.mobile) addBadge({{ t("monitoring_user_mobile_network")|tojson }}, "sky");
+        if (data.proxy) addBadge({{ t("monitoring_user_proxy_vpn")|tojson }}, "rose");
+        if (data.hosting) addBadge({{ t("monitoring_user_hosting")|tojson }}, "amber");
 
         if (data.map_url) {
           mapFrame.src = data.map_url;
@@ -858,7 +863,7 @@
           noMap.classList.remove("hidden");
         }
       } catch (err) {
-        showError("Unable to load IP information for this address.");
+        showError({{ t("monitoring_user_unable_ip")|tojson }});
       }
     }
 

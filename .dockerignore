@@ -1,43 +1,76 @@
-# Git
-.git
+﻿# Git / repository metadata
+.git/
+.github/
 .gitignore
-README.md
+.gitattributes
 
-# Python
-__pycache__
-*.pyc
+# Documentation and project-only files
+README.md
+LICENSE
+TODO.md
+changelog.md
+vodum-docs/
+screenshots/
+
+# Python caches
+__pycache__/
+**/__pycache__/
+*.py[cod]
 *.pyo
 *.pyd
 
-# Virtual env
-venv
-.venv
+# Virtual env / local env
+venv/
+.venv/
 .env
-.env.local
+.env.*
+!.env.example
 
-# Databases
+# Runtime data / local databases
 *.db
 *.sqlite
 *.sqlite3
-
-# Logs
-*.log
-logs/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# IDE
-.vscode
-.idea
-
-# Local docker / dev
+*.db-wal
+*.db-shm
+*.sqlite-wal
+*.sqlite-shm
 docker-data/
+instance/
+logs/
+*.log
 
-# Local scripts (not needed in container)
+# Test, validation and dev tooling
+test/
+tests/
+tools/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+
+# Optional side projects / deployment helpers
+worker_telemetry/
+docker-compose.yml
+docker-publish.yml
+create-container.sh
 create-container-test.sh
 get-container.sh
 
-# Tests
-tests/
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Temp
+.cache/
+.tmp/
+*.tmp

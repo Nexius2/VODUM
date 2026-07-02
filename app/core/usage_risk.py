@@ -225,22 +225,35 @@ def _score_usage_item(item, min_kills):
     kills_30d = item["kills_30d"] or item["kills"]
     kills_90d = item["kills_90d"]
 
+    repeated_max_ips = _safe_int(item["rules"].get("max_ips_per_user"), 0)
+    repeated_max_streams_user = _safe_int(item["rules"].get("max_streams_per_user"), 0)
+    repeated_high_rules = repeated_max_ips + repeated_max_streams_user
+
     score = 0
     reasons = []
+    reason_items = []
+
+    def add_reason(text, code, **params):
+        reasons.append(text)
+        reason_items.append({"code": code, **params})
 
     if distinct_ips >= 2:
         pts = min(30, 8 + (distinct_ips * 7))
         score += pts
-        reasons.append(f"{distinct_ips} public IPs")
+        add_reason(f"{distinct_ips} public IPs", "public_ips", count=distinct_ips)
 
     if fixed_devices >= 1:
         pts = min(24, fixed_devices * 10)
         score += pts
-        reasons.append(f"{fixed_devices} fixed device{'s' if fixed_devices > 1 else ''}")
+        add_reason(
+            f"{fixed_devices} fixed device{'s' if fixed_devices > 1 else ''}",
+            "fixed_devices",
+            count=fixed_devices,
+        )
 
     if fixed_devices >= 2:
         score += 20
-        reasons.append("multiple fixed devices")
+        add_reason("multiple fixed devices", "multiple_fixed_devices")
 
     fixed_ip_pairs = item["fixed_device_ip_pairs"]
     if len(fixed_ip_pairs) >= 2:
@@ -249,59 +262,90 @@ def _score_usage_item(item, min_kills):
 
         if len(unique_pair_ips) >= 2 and len(unique_pair_devices) >= 2:
             score += 40
-            reasons.append("fixed devices linked to different public IPs")
+            add_reason(
+                "fixed devices linked to different public IPs",
+                "fixed_devices_different_ips",
+            )
 
     if distinct_ips >= 2 and fixed_devices >= 2:
         score += 22
-        reasons.append("multi-household pattern likely")
+        add_reason("multi-household pattern likely", "multi_household")
 
     if kills_7d >= 2:
         pts = min(20, kills_7d * 4)
         score += pts
-        reasons.append(f"{kills_7d} kills in 7 days")
+        add_reason(f"{kills_7d} kills in 7 days", "stops_7d", count=kills_7d)
 
     if kills_30d >= min_kills:
         pts = min(24, kills_30d * 3)
         score += pts
-        reasons.append(f"{kills_30d} kills in 30 days")
+        add_reason(f"{kills_30d} kills in 30 days", "stops_30d", count=kills_30d)
 
     if kills_90d >= max(min_kills * 2, 6):
         pts = min(16, kills_90d)
         score += pts
-        reasons.append(f"{kills_90d} kills in 90 days")
+        add_reason(f"{kills_90d} kills in 90 days", "stops_90d", count=kills_90d)
 
     for rule_type, count in item["rules"].items():
         if count < 2:
             continue
 
         if rule_type in HIGH_RISK_RULES:
-            pts = min(22, count * 4)
+            pts = min(40, 12 + (count * 2))
             score += pts
-            reasons.append(f"repeated {rule_type}")
+            add_reason(f"repeated {rule_type}", "repeated_rule", rule=rule_type)
         elif rule_type in LOW_RISK_RULES:
             pts = min(10, count * 2)
             score += pts
-            reasons.append(f"repeated {rule_type}")
+            add_reason(f"repeated {rule_type}", "repeated_rule", rule=rule_type)
         else:
             pts = min(14, count * 3)
             score += pts
-            reasons.append(f"repeated {rule_type}")
+            add_reason(f"repeated {rule_type}", "repeated_rule", rule=rule_type)
 
-    # Cas normal : TV fixe + téléphone/tablette/navigateur sur 2 IP.
-    # Ce n'est pas forcément un partage de compte.
-    if distinct_ips <= 2 and fixed_devices <= 1 and (mobile_devices or browser_devices):
-        score = min(score, 35)
-        reasons.append("TV/mobile usage pattern reduces risk")
+    normal_tv_mobile_pattern = (
+        distinct_ips <= 2
+        and fixed_devices <= 1
+        and (mobile_devices or browser_devices)
+    )
 
-    # Cas encore plus faible : aucun appareil fixe identifié.
-    if distinct_ips <= 2 and fixed_devices == 0 and (mobile_devices or browser_devices):
-        score = min(score, 28)
-        reasons.append("mobile/browser usage reduces risk")
+    normal_mobile_browser_pattern = (
+        distinct_ips <= 2
+        and fixed_devices == 0
+        and (mobile_devices or browser_devices)
+    )
 
+    has_repeated_blocks = (
+        kills_7d >= 6
+        or kills_30d >= max(min_kills * 3, 9)
+        or repeated_high_rules >= max(min_kills * 3, 9)
+    )
+
+    # Usage normal : TV fixe + téléphone/tablette/navigateur sur 1 ou 2 IP.
+    # On plafonne seulement si l'utilisateur n'a PAS beaucoup de blocages.
+    if normal_tv_mobile_pattern:
+        if not has_repeated_blocks:
+            score = min(score, 35)
+            add_reason("TV/mobile usage pattern reduces risk", "tv_mobile_reduces")
+        else:
+            score = max(0, score - 15)
+            add_reason("TV/mobile usage pattern softens risk", "tv_mobile_softens")
+
+    # Usage mobile/browser sans appareil fixe.
+    # Même logique : réduction forte seulement si les blocages restent faibles.
+    if normal_mobile_browser_pattern:
+        if not has_repeated_blocks:
+            score = min(score, 28)
+            add_reason("mobile/browser usage reduces risk", "mobile_browser_reduces")
+        else:
+            score = max(0, score - 15)
+            add_reason("mobile/browser usage softens risk", "mobile_browser_softens")
+
+    # Usage très simple : 1 IP, 1 appareil fixe max, peu de blocages.
     if distinct_ips <= 1 and fixed_devices <= 1 and kills_30d < min_kills:
         score = max(0, score - 25)
 
-    return score, reasons
+    return score, reasons, reason_items
 
 def _upsert_recommendation_history(db, item_out, cooldown_days):
     vodum_user_id = item_out.get("vodum_user_id")
@@ -385,7 +429,7 @@ def _upsert_recommendation_history(db, item_out, cooldown_days):
 def build_usage_risk_report(db, filters=None, persist_history=True):
     filters = filters or {}
 
-    settings = dict(db.query_one("SELECT * FROM settings WHERE id = 1") or {})
+    settings = dict(db.query_one("SELECT id, mail_from, smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_auth_method, smtp_oauth_access_token, email_history_retention_years, disable_on_expiry, delete_after_expiry_days, send_reminders, preavis_days, reminder_days, default_language, timezone, admin_email, contact_email, admin_password_hash, auth_enabled, admin_totp_enabled, admin_totp_secret, wizard_active, wizard_completed, wizard_step, wizard_state_json, web_secure_cookies, web_cookie_samesite, web_trust_proxy, enable_cron_jobs, default_expiration_days, default_subscription_days, maintenance_mode, debug_mode, backup_retention_days, backup_retention_count, data_retention_years, brand_name, notifications_order, user_notifications_can_override, notifications_send_mode, expiry_mode, warn_then_disable_days, discord_enabled, discord_bot_token, discord_bot_id, mailing_enabled, skip_never_used_accounts, plex_user_import_mode, enable_anonymous_telemetry, telemetry_instance_id, telemetry_last_sent_at, task_defaults_version, stream_enforcer_boost_until, usage_risk_enabled, usage_risk_send_upgrade_suggestions, usage_risk_send_stream_blocked_message, usage_risk_min_kills_before_suggestion, usage_risk_analysis_window_days, usage_risk_suggestion_cooldown_days, usage_risk_medium_threshold, usage_risk_high_threshold FROM settings WHERE id = 1") or {})
 
     enabled = _safe_int(settings.get("usage_risk_enabled"), 1) == 1
     window_days = _safe_int(settings.get("usage_risk_analysis_window_days"), 30)
@@ -590,7 +634,12 @@ def build_usage_risk_report(db, filters=None, persist_history=True):
         fixed_devices = len(item["fixed_devices"])
         kills_30d = item["kills_30d"] or item["kills"]
 
-        score, reasons = _score_usage_item(item, min_kills)
+        score, reasons, reason_items = _score_usage_item(item, min_kills)
+
+        # Hide false positives neutralized by scoring.
+        if score <= 0 and not risk_level:
+            continue
+
         level = _risk_level(score, medium_threshold, high_threshold)
 
         needed_streams = max(1, fixed_devices)
@@ -619,6 +668,7 @@ def build_usage_risk_report(db, filters=None, persist_history=True):
             "risk_score": score,
             "main_reason": main_reason,
             "reasons": reasons,
+            "reason_items": reason_items,
             "evidence": {
                 "ips": sorted(item["ips"]),
                 "fixed_devices": sorted(item["fixed_devices"]),
@@ -701,6 +751,7 @@ def build_usage_risk_for_user(db, vodum_user_id):
         "risk_score": 0,
         "main_reason": "No suspicious usage detected",
         "reasons": [],
+        "reason_items": [],
         "evidence": {
             "ips": [],
             "fixed_devices": [],

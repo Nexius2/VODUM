@@ -1,4 +1,4 @@
-import os
+﻿import os
 import shutil
 import sqlite3
 import threading
@@ -12,6 +12,7 @@ from db_manager import DBManager
 from logging_utils import get_logger
 from tasks_engine import prepare_restored_database, task_logs
 from core.archive_safety import validate_zip_limits
+from core.app_paths import imports_dir as get_imports_dir
 from secret_store import (
     encryption_key_file_path,
     install_encryption_key,
@@ -20,7 +21,7 @@ from secret_store import (
 
 log = get_logger("restore_backup")
 
-RESTORE_REQUEST_FILE = Path("/appdata/imports/restore_request_path.txt")
+RESTORE_REQUEST_FILE = get_imports_dir() / "restore_request_path.txt"
 
 
 def _reset_tasks_engine_db_instance():
@@ -39,8 +40,7 @@ def _validate_sqlite_backup(candidate_path: Path) -> None:
 
     conn = None
     try:
-        conn = sqlite3.connect(f"file:{candidate_path}?mode=ro", uri=True)
-        conn.row_factory = sqlite3.Row
+        conn = open_sqlite_connection(str(candidate_path), read_only=True)
 
         row = conn.execute("PRAGMA integrity_check;").fetchone()
         integrity = row[0] if row else None
@@ -369,3 +369,4 @@ def run(task_id: int, db):
 
     task_logs(task_id, "success", f"restore_backup completed from {backup_path}")
     return {"status": "success", "backup_path": str(backup_path)}
+

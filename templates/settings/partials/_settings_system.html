@@ -19,6 +19,22 @@
       </div>
     </div>
 
+
+    <div class="rounded-lg border border-slate-700 bg-slate-950/40 p-3">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <div class="text-sm text-slate-200">{{ t("app_security") }}</div>
+          <div class="text-xs text-slate-400 mt-1">
+            {{ t("app_security_status") }}: {{ t("enabled") if settings.admin_totp_enabled else t("disabled") }}
+          </div>
+        </div>
+        <button type="button"
+                onclick="document.getElementById('admin-security-modal').classList.remove('hidden')"
+                class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-xs text-white">
+          {{ t("manage") }}
+        </button>
+      </div>
+    </div>
     <div class="rounded-lg border {% if encryption_key_status.ok %}border-emerald-800/60 bg-emerald-950/20{% else %}border-rose-800/60 bg-rose-950/20{% endif %} p-3">
       <div class="flex items-center justify-between gap-3">
         <span class="text-sm text-slate-200">{{ t("encryption_key_status") }}</span>
@@ -124,7 +140,7 @@
                   class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
             <option value="Lax" {% if (settings.web_cookie_samesite or 'Lax') == 'Lax' %}selected{% endif %}>Lax</option>
             <option value="Strict" {% if settings.web_cookie_samesite == 'Strict' %}selected{% endif %}>Strict</option>
-            <option value="None" {% if settings.web_cookie_samesite == 'None' %}selected{% endif %}>None</option>
+            <option value="None" {% if settings.web_cookie_samesite == 'None' %}selected{% endif %}>{{ t("subscription_none") }}</option>
           </select>
           <p class="text-xs text-slate-500 mt-1">
             {{ t("cookie_samesite_help") }}
@@ -136,3 +152,4 @@
 
   </div>
 </div>
+

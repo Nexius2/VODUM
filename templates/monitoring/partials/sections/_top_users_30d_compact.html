@@ -1,4 +1,4 @@
-<div class="text-sm font-semibold mb-4">Most active users (30d)</div>
+<div class="text-sm font-semibold mb-4">{{ t("monitoring_top_users_30d") }}</div>
 
 {% if top_users_30d and top_users_30d|length > 0 %}
   <div class="space-y-3">
@@ -17,5 +17,5 @@
     {% endfor %}
   </div>
 {% else %}
-  <div class="text-slate-500">No data yet.</div>
+  <div class="text-slate-500">{{ t("no_data") }}</div>
 {% endif %}

@@ -7,13 +7,39 @@ from flask import (
 
 from logging_utils import get_logger
 from core.i18n import get_translator, get_available_languages
-from werkzeug.security import generate_password_hash
+from werkzeug.security import generate_password_hash, check_password_hash
 
 from tasks_engine import apply_cron_master_switch, sync_expiry_tasks_from_settings, force_task_run, mark_auto_enable_dirty
 from web.helpers import get_db, add_log
-from secret_store import encryption_key_status
+from secret_store import encryption_key_status, encrypt_secret
+from core.auth_totp import generate_totp_secret, provisioning_uri, verify_totp_code
 
 settings_logger = get_logger("settings")
+
+SETTINGS_PAGE_COLUMNS = """
+    id,
+    default_language,
+    timezone,
+    admin_email,
+    contact_email,
+    brand_name,
+    default_subscription_days,
+    delete_after_expiry_days,
+    expiry_mode,
+    warn_then_disable_days,
+    preavis_days,
+    reminder_days,
+    enable_cron_jobs,
+    maintenance_mode,
+    debug_mode,
+    web_secure_cookies,
+    web_cookie_samesite,
+    web_trust_proxy,
+    plex_user_import_mode,
+    enable_anonymous_telemetry,
+    admin_totp_enabled
+"""
+
 
 def register(app):
     @app.route("/settings", methods=["GET"])
@@ -24,13 +50,16 @@ def register(app):
         # Charger settings (source unique)
         # ------------------------------
         settings = db.query_one(
-            "SELECT * FROM settings WHERE id = 1"
+            f"SELECT {SETTINGS_PAGE_COLUMNS} FROM settings WHERE id = 1"
         )
         if not settings:
             flash("Settings row missing in DB", "error")
             return redirect("/")
 
         settings = dict(settings)
+        totp_enabled = int(settings.get("admin_totp_enabled") or 0) == 1
+        pending_totp_secret = "" if totp_enabled else generate_totp_secret()
+        pending_totp_uri = provisioning_uri(pending_totp_secret, settings.get("admin_email") or "admin") if pending_totp_secret else ""
 
         return render_template(
             "settings/settings.html",
@@ -40,6 +69,8 @@ def register(app):
             available_languages=get_available_languages(),
             app_version=g.get("app_version", "dev"),
             encryption_key_status=encryption_key_status(),
+            pending_totp_secret=pending_totp_secret,
+            pending_totp_uri=pending_totp_uri,
         )
 
     @app.route("/settings/save", methods=["POST"])
@@ -60,7 +91,7 @@ def register(app):
         # Charger settings (source unique)
         # ------------------------------
         settings = db.query_one(
-            "SELECT * FROM settings WHERE id = 1"
+            f"SELECT {SETTINGS_PAGE_COLUMNS} FROM settings WHERE id = 1"
         )
         if not settings:
             flash("Settings row missing in DB", "error")
@@ -115,8 +146,8 @@ def register(app):
             "timezone": request.form.get(
                 "timezone", settings["timezone"]
             ),
-            "admin_email": request.form.get(
-                "admin_email", settings["admin_email"]
+            "contact_email": request.form.get(
+                "contact_email", settings.get("contact_email") or settings.get("admin_email") or ""
             ),
             "default_subscription_days": request.form.get(
                 "default_expiration_days",
@@ -184,7 +215,7 @@ def register(app):
             UPDATE settings SET
                 default_language = :default_language,
                 timezone = :timezone,
-                admin_email = :admin_email,
+                contact_email = :contact_email,
                 brand_name = :brand_name,
                 default_subscription_days = :default_subscription_days,
                 delete_after_expiry_days = :delete_after_expiry_days,
@@ -222,8 +253,7 @@ def register(app):
             db.execute(
                 """
                 UPDATE settings
-                SET telemetry_instance_id=NULL,
-                    telemetry_last_sent_at=NULL
+                SET telemetry_last_sent_at=NULL
                 WHERE id=1
                 """
             )
@@ -263,21 +293,6 @@ def register(app):
             except Exception:
                 settings_logger.error("Failed to purge expired_subscription policies after settings change", exc_info=True)
 
-        # --------------------------------------------------
-        # Update admin password (optional)
-        # --------------------------------------------------
-        new_pwd = request.form.get("admin_password") or ""
-        new_pwd = new_pwd.strip()
-        if new_pwd:
-            if len(new_pwd) < 8:
-                flash("Mot de passe admin trop court (8 caractères minimum).", "error")
-                return redirect(url_for("settings_page"))
-
-            db.execute(
-                "UPDATE settings SET admin_password_hash = ? WHERE id = 1",
-                (generate_password_hash(new_pwd),),
-            )
-            flash("Mot de passe admin mis à jour.", "success")
 
         # --------------------------------------------------
         # Wakeup tasks impacted by settings changes
@@ -323,38 +338,92 @@ def register(app):
 
 
 
-    @app.route("/settings/<section>", methods=["GET"])
-    def settings_section_page(section: str):
-        db = get_db()
 
-        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+    @app.route("/settings/security", methods=["POST"])
+    def settings_security_save():
+        db = get_db()
+        settings = db.query_one(
+            """
+            SELECT admin_email, admin_password_hash, admin_totp_enabled, admin_totp_secret
+            FROM settings
+            WHERE id = 1
+            """
+        )
         if not settings:
             flash("Settings row missing in DB", "error")
-            return redirect("/")
-
-        settings = dict(settings)
-
-        # Map section -> template
-        template_map = {
-            "general": "settings/settings_general.html",
-            "subscription": "settings/settings_subscription.html",
-            "notifications": "settings/settings_notifications.html",
-            "system": "settings/settings_system.html",
-        }
-
-        tpl = template_map.get(section)
-        if not tpl:
             return redirect(url_for("settings_page"))
 
-        return render_template(
-            tpl,
-            settings=settings,
-            active_page="settings",
-            current_lang=session.get("lang", settings.get("default_language")),
-            available_languages=get_available_languages(),
-            app_version=g.get("app_version", "dev"),
-            encryption_key_status=encryption_key_status(),
+        settings = dict(settings)
+        current_password = request.form.get("current_password") or ""
+        password_hash = settings.get("admin_password_hash") or ""
+        if not password_hash or not check_password_hash(password_hash, current_password):
+            flash("Mot de passe actuel incorrect.", "error")
+            return redirect(url_for("settings_page"))
+
+        admin_email = (request.form.get("admin_email") or "").strip().lower()
+        if (
+            not admin_email
+            or " " in admin_email
+            or admin_email.count("@") != 1
+            or "." not in admin_email.split("@", 1)[1]
+        ):
+            flash("Email de connexion invalide.", "error")
+            return redirect(url_for("settings_page"))
+
+        new_password = (request.form.get("new_password") or "").strip()
+        confirm_password = (request.form.get("confirm_password") or "").strip()
+        password_update_sql = ""
+        params = {
+            "admin_email": admin_email,
+            "admin_totp_enabled": int(settings.get("admin_totp_enabled") or 0),
+            "admin_totp_secret": settings.get("admin_totp_secret"),
+        }
+
+        if new_password or confirm_password:
+            if len(new_password) < 8:
+                flash("Mot de passe admin trop court (8 caracteres minimum).", "error")
+                return redirect(url_for("settings_page"))
+            if new_password != confirm_password:
+                flash("La confirmation du mot de passe ne correspond pas.", "error")
+                return redirect(url_for("settings_page"))
+            password_update_sql = ", admin_password_hash = :admin_password_hash"
+            params["admin_password_hash"] = generate_password_hash(new_password)
+
+        requested_totp = request.form.get("admin_totp_enabled") == "1"
+        current_totp = int(settings.get("admin_totp_enabled") or 0) == 1
+
+        if requested_totp and not current_totp:
+            pending_secret = (request.form.get("pending_totp_secret") or "").strip()
+            totp_code = request.form.get("totp_code") or ""
+            if not pending_secret or not verify_totp_code(pending_secret, totp_code):
+                flash("Code double authentification invalide.", "error")
+                return redirect(url_for("settings_page"))
+            params["admin_totp_enabled"] = 1
+            params["admin_totp_secret"] = encrypt_secret(pending_secret)
+        elif not requested_totp and current_totp:
+            params["admin_totp_enabled"] = 0
+            params["admin_totp_secret"] = None
+
+        db.execute(
+            f"""
+            UPDATE settings
+            SET admin_email = :admin_email,
+                admin_totp_enabled = :admin_totp_enabled,
+                admin_totp_secret = :admin_totp_secret
+                {password_update_sql}
+            WHERE id = 1
+            """,
+            params,
         )
+
+        session["vodum_admin_email"] = admin_email
+        flash("Securite de l'application mise a jour.", "success")
+        return redirect(url_for("settings_page"))
+    @app.route("/settings/<section>", methods=["GET"])
+    def settings_section_page(section: str):
+        # Legacy section URLs predate the unified settings page. Keeping them as
+        # redirects avoids rendering templates that no longer exist.
+        return redirect(url_for("settings_page"))
 
 
     # -----------------------------
@@ -368,3 +437,7 @@ def register(app):
         return logs[start:end], total_pages
 
     
+
+
+
+

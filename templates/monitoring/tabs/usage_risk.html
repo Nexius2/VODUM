@@ -1,23 +1,38 @@
+{% macro usage_reason(item) -%}
+  {% if item.code == "public_ips" %}{{ t("usage_risk_reason_public_ips").format(count=item.count) }}
+  {% elif item.code == "fixed_devices" %}{{ t("usage_risk_reason_fixed_devices").format(count=item.count) }}
+  {% elif item.code == "multiple_fixed_devices" %}{{ t("usage_risk_reason_multiple_fixed_devices") }}
+  {% elif item.code == "fixed_devices_different_ips" %}{{ t("usage_risk_reason_fixed_devices_different_ips") }}
+  {% elif item.code == "multi_household" %}{{ t("usage_risk_reason_multi_household") }}
+  {% elif item.code == "stops_7d" %}{{ t("usage_risk_reason_stops_7d").format(count=item.count) }}
+  {% elif item.code == "stops_30d" %}{{ t("usage_risk_reason_stops_30d").format(count=item.count) }}
+  {% elif item.code == "stops_90d" %}{{ t("usage_risk_reason_stops_90d").format(count=item.count) }}
+  {% elif item.code == "repeated_rule" %}{{ t("usage_risk_reason_repeated_rule").format(rule=item.rule) }}
+  {% elif item.code == "tv_mobile_reduces" %}{{ t("usage_risk_reason_tv_mobile_reduces") }}
+  {% elif item.code == "mobile_browser_reduces" %}{{ t("usage_risk_reason_mobile_browser_reduces") }}
+  {% else %}{{ t("usage_risk_no_suspicious_reason") }}{% endif %}
+{%- endmacro %}
+
 <div class="space-y-6">
 
   <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
     <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
-      <div class="text-xs uppercase tracking-wide text-slate-500">High Risk</div>
+      <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("usage_risk_high_risk") }}</div>
       <div class="mt-2 text-3xl font-bold text-rose-400">{{ usage_risk_report.summary.high or 0 }}</div>
     </div>
 
     <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
-      <div class="text-xs uppercase tracking-wide text-slate-500">Medium Risk</div>
+      <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("usage_risk_medium_risk") }}</div>
       <div class="mt-2 text-3xl font-bold text-amber-400">{{ usage_risk_report.summary.medium or 0 }}</div>
     </div>
 
     <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
-      <div class="text-xs uppercase tracking-wide text-slate-500">Low Risk</div>
+      <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("usage_risk_low_risk") }}</div>
       <div class="mt-2 text-3xl font-bold text-emerald-400">{{ usage_risk_report.summary.low or 0 }}</div>
     </div>
 
     <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
-      <div class="text-xs uppercase tracking-wide text-slate-500">Suggested Upgrades</div>
+      <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("usage_risk_suggested_upgrades") }}</div>
       <div class="mt-2 text-3xl font-bold text-primary">{{ usage_risk_report.summary.suggested or 0 }}</div>
     </div>
   </div>
@@ -30,48 +45,48 @@
         type="text"
         name="q"
         value="{{ usage_risk_filters.q or '' }}"
-        placeholder="Search username, email, IP, device, policy..."
+        placeholder="{{ t('usage_risk_search') }}"
         class="xl:col-span-2 rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100"
       >
 
       <select name="risk_level" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100">
-        <option value="">All risks</option>
-        <option value="high" {% if usage_risk_filters.risk_level == 'high' %}selected{% endif %}>High</option>
-        <option value="medium" {% if usage_risk_filters.risk_level == 'medium' %}selected{% endif %}>Medium</option>
-        <option value="low" {% if usage_risk_filters.risk_level == 'low' %}selected{% endif %}>Low</option>
+        <option value="">{{ t("usage_risk_all_risks") }}</option>
+        <option value="high" {% if usage_risk_filters.risk_level == 'high' %}selected{% endif %}>{{ t("high") }}</option>
+        <option value="medium" {% if usage_risk_filters.risk_level == 'medium' %}selected{% endif %}>{{ t("medium") }}</option>
+        <option value="low" {% if usage_risk_filters.risk_level == 'low' %}selected{% endif %}>{{ t("low") }}</option>
       </select>
 
       <select name="subscription_id" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100">
-        <option value="0">All subscriptions</option>
+        <option value="0">{{ t("comm_subscription_all") }}</option>
         {% for tpl in subscription_templates %}
           <option value="{{ tpl.id }}" {% if usage_risk_filters.subscription_id == tpl.id %}selected{% endif %}>{{ tpl.name }}</option>
         {% endfor %}
       </select>
 
       <select name="server_id" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100">
-        <option value="0">All servers</option>
+        <option value="0">{{ t("all_servers") }}</option>
         {% for srv in servers %}
           <option value="{{ srv.id }}" {% if usage_risk_filters.server_id == srv.id %}selected{% endif %}>{{ srv.name }}</option>
         {% endfor %}
       </select>
 
       <select name="policy" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100">
-        <option value="">All policies</option>
+        <option value="">{{ t("usage_risk_all_policies") }}</option>
         {% for p in stream_policy_types %}
           <option value="{{ p.rule_type }}" {% if usage_risk_filters.policy == p.rule_type %}selected{% endif %}>{{ p.rule_type }}</option>
         {% endfor %}
       </select>
 
       <select name="period_days" class="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100">
-        <option value="7" {% if usage_risk_filters.period_days == 7 %}selected{% endif %}>7 days</option>
-        <option value="30" {% if usage_risk_filters.period_days == 30 %}selected{% endif %}>30 days</option>
-        <option value="90" {% if usage_risk_filters.period_days == 90 %}selected{% endif %}>90 days</option>
+        <option value="7" {% if usage_risk_filters.period_days == 7 %}selected{% endif %}>{{ t("seven_days") }}</option>
+        <option value="30" {% if usage_risk_filters.period_days == 30 %}selected{% endif %}>{{ t("usage_risk_30_days") }}</option>
+        <option value="90" {% if usage_risk_filters.period_days == 90 %}selected{% endif %}>{{ t("usage_risk_90_days") }}</option>
       </select>
     </div>
 
     <div class="mt-4 flex justify-end">
       <button type="submit" class="px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:opacity-90">
-        Apply filters
+        {{ t("usage_risk_apply_filters") }}
       </button>
     </div>
   </form>
@@ -81,29 +96,33 @@
       <table class="min-w-full text-sm">
         <thead class="bg-slate-950 text-slate-400">
           <tr>
-            <th class="text-left px-4 py-3">Risk</th>
-            <th class="text-left px-4 py-3">User</th>
-            <th class="text-left px-4 py-3">Main reason</th>
-            <th class="text-left px-4 py-3">Evidence</th>
-            <th class="text-left px-4 py-3">Kills</th>
-            <th class="text-left px-4 py-3">Suggested Subscription</th>
-            <th class="text-left px-4 py-3">Last Activity</th>
-            <th class="text-right px-4 py-3">Details</th>
+            <th class="text-left px-4 py-3">{{ t("usage_risk_risk") }}</th>
+            <th class="text-left px-4 py-3">{{ t("user") }}</th>
+            <th class="text-left px-4 py-3">{{ t("usage_risk_main_reason") }}</th>
+            <th class="text-left px-4 py-3">{{ t("usage_risk_evidence") }}</th>
+            <th class="text-left px-4 py-3 whitespace-nowrap min-w-[90px]">
+			  {{ t("usage_risk_stops") }}
+			</th>
+            <th class="text-left px-4 py-3">{{ t("usage_risk_suggested_subscription") }}</th>
+            <th class="text-left px-4 py-3">{{ t("usage_risk_last_activity") }}</th>
+            <th class="text-right px-4 py-3">{{ t("details") }}</th>
           </tr>
         </thead>
 
         <tbody class="divide-y divide-slate-800">
           {% for row in usage_risk_report.rows %}
             <tr class="hover:bg-slate-800/40">
-              <td class="px-4 py-3">
+              <td class="px-4 py-3 whitespace-nowrap min-w-[90px]">
                 {% if row.risk_level == 'high' %}
-                  <span class="inline-flex items-center gap-2 text-rose-400 font-semibold">● High</span>
+                  <span class="inline-flex items-center gap-2 text-rose-400 font-semibold">● {{ t("high") }}</span>
                 {% elif row.risk_level == 'medium' %}
-                  <span class="inline-flex items-center gap-2 text-amber-400 font-semibold">● Medium</span>
+                  <span class="inline-flex items-center gap-2 text-amber-400 font-semibold">● {{ t("medium") }}</span>
                 {% else %}
-                  <span class="inline-flex items-center gap-2 text-emerald-400 font-semibold">● Low</span>
+                  <span class="inline-flex items-center gap-2 text-emerald-400 font-semibold">● {{ t("low") }}</span>
                 {% endif %}
-                <div class="text-xs text-slate-500 mt-1">Score {{ row.risk_score }}</div>
+                <div class="text-xs text-slate-500 mt-1 whitespace-nowrap">
+				  {{ t("usage_risk_score") }} {{ row.risk_score }}
+				</div>
               </td>
 
               <td class="px-4 py-3">
@@ -111,16 +130,16 @@
                 <div class="text-xs text-slate-500">{{ row.email or row.subscription_name }}</div>
               </td>
 
-              <td class="px-4 py-3 text-slate-200">
-                {{ row.main_reason }}
-                {% if row.reasons %}
-                  <div class="text-xs text-slate-500 mt-1">{{ row.reasons | join(" · ") }}</div>
+              <td class="px-4 py-3 text-slate-200 max-w-xl whitespace-normal break-words">
+                {{ usage_reason(row.reason_items[0]) if row.reason_items else t("usage_risk_no_suspicious_reason") }}
+                {% if row.reason_items %}
+                  <div class="text-xs text-slate-500 mt-1">{% for reason in row.reason_items %}{{ usage_reason(reason) }}{% if not loop.last %} · {% endif %}{% endfor %}</div>
                 {% endif %}
               </td>
 
               <td class="px-4 py-3 text-slate-300">
-                <div>{{ row.evidence.ips | length }} IPs</div>
-                <div>{{ row.evidence.fixed_devices | length }} fixed devices</div>
+                <div>{{ t("usage_risk_ip_count").format(count=row.evidence.ips | length) }}</div>
+                <div>{{ t("usage_risk_fixed_device_count").format(count=row.evidence.fixed_devices | length) }}</div>
                 <div class="text-xs text-slate-500">
                   {% for rule, count in row.evidence.rules.items() %}
                     {{ rule }} ×{{ count }}{% if not loop.last %}, {% endif %}
@@ -128,10 +147,10 @@
                 </div>
               </td>
 
-              <td class="px-4 py-3 text-slate-200">
-                <div>{{ row.kills_7d }} / 7d</div>
-                <div>{{ row.kills_30d }} / 30d</div>
-                <div>{{ row.kills_90d }} / 90d</div>
+              <td class="px-4 py-3 text-slate-200 whitespace-nowrap min-w-[90px]">
+				<div><span class="font-medium">7d</span> : {{ row.kills_7d }}</div>
+				<div><span class="font-medium">30d</span> : {{ row.kills_30d }}</div>
+				<div><span class="font-medium">90d</span> : {{ row.kills_90d }}</div>
               </td>
 
               <td class="px-4 py-3">
@@ -153,7 +172,7 @@
                   type="button"
                   onclick="document.getElementById('usage-risk-detail-{{ loop.index }}').classList.toggle('hidden')"
                   class="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-950 hover:bg-slate-800 text-xs text-slate-200">
-                  View details
+                  {{ t("usage_risk_view_details") }}
                 </button>
               </td>
             </tr>
@@ -163,42 +182,42 @@
                 <div class="grid grid-cols-1 xl:grid-cols-4 gap-4">
 
                   <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
-                    <div class="text-xs uppercase tracking-wide text-slate-500 mb-3">Risk</div>
+                    <div class="text-xs uppercase tracking-wide text-slate-500 mb-3">{{ t("usage_risk_risk") }}</div>
 
                     <div class="text-sm text-slate-300">
                       <div class="flex justify-between gap-3">
-                        <span>Level</span>
-                        <span class="font-semibold text-slate-100">{{ row.risk_level|capitalize }}</span>
+                        <span>{{ t("level") }}</span>
+                        <span class="font-semibold text-slate-100">{{ t(row.risk_level) }}</span>
                       </div>
 
                       <div class="flex justify-between gap-3 mt-2">
-                        <span>Score</span>
+                        <span>{{ t("usage_risk_score") }}</span>
                         <span class="font-semibold text-slate-100">{{ row.risk_score }}</span>
                       </div>
 
                       <div class="flex justify-between gap-3 mt-2">
-                        <span>Subscription</span>
+                        <span>{{ t("subscription") }}</span>
                         <span class="font-semibold text-slate-100">{{ row.subscription_name }}</span>
                       </div>
 
                       <div class="flex justify-between gap-3 mt-2">
-                        <span>Suggested</span>
+                        <span>{{ t("usage_risk_suggested") }}</span>
                         <span class="font-semibold text-slate-100">{{ row.suggested_subscription or "—" }}</span>
                       </div>
                     </div>
                   </div>
 
                   <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
-                    <div class="text-xs uppercase tracking-wide text-slate-500 mb-3">Reasons</div>
+                    <div class="text-xs uppercase tracking-wide text-slate-500 mb-3">{{ t("usage_risk_reasons") }}</div>
 
                     {% if row.reasons %}
                       <ul class="space-y-2 text-sm text-slate-300">
-                        {% for reason in row.reasons %}
-                          <li>✓ {{ reason }}</li>
+                        {% for reason in row.reason_items %}
+                          <li>✓ {{ usage_reason(reason) }}</li>
                         {% endfor %}
                       </ul>
                     {% else %}
-                      <div class="text-sm text-slate-500">No suspicious reason detected.</div>
+                      <div class="text-sm text-slate-500">{{ t("usage_risk_no_suspicious_reason") }}</div>
                     {% endif %}
                   </div>
 
@@ -212,27 +231,27 @@
                         {% endfor %}
                       </div>
                     {% else %}
-                      <div class="text-sm text-slate-500">No public IP detected.</div>
+                      <div class="text-sm text-slate-500">{{ t("usage_risk_no_public_ip") }}</div>
                     {% endif %}
                   </div>
 
                   <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
-                    <div class="text-xs uppercase tracking-wide text-slate-500 mb-3">Kills</div>
+                    <div class="text-xs uppercase tracking-wide text-slate-500 mb-3">{{ t("usage_risk_stops") }}</div>
 
                     <div class="grid grid-cols-3 gap-3 text-center">
                       <div class="rounded-lg bg-slate-950 border border-slate-800 p-3">
                         <div class="text-xl font-bold text-slate-100">{{ row.kills_7d }}</div>
-                        <div class="text-xs text-slate-500">7d</div>
+                        <div class="text-xs text-slate-500">{{ t("seven_days") }}</div>
                       </div>
 
                       <div class="rounded-lg bg-slate-950 border border-slate-800 p-3">
                         <div class="text-xl font-bold text-slate-100">{{ row.kills_30d }}</div>
-                        <div class="text-xs text-slate-500">30d</div>
+                        <div class="text-xs text-slate-500">{{ t("usage_risk_30_days") }}</div>
                       </div>
 
                       <div class="rounded-lg bg-slate-950 border border-slate-800 p-3">
                         <div class="text-xl font-bold text-slate-100">{{ row.kills_90d }}</div>
-                        <div class="text-xs text-slate-500">90d</div>
+                        <div class="text-xs text-slate-500">{{ t("usage_risk_90_days") }}</div>
                       </div>
                     </div>
                   </div>
@@ -242,7 +261,7 @@
                 <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mt-4">
 
                   <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
-                    <div class="text-xs uppercase tracking-wide text-slate-500 mb-3">Fixed devices</div>
+                    <div class="text-xs uppercase tracking-wide text-slate-500 mb-3">{{ t("usage_risk_fixed_devices") }}</div>
 
                     {% if row.evidence.fixed_devices %}
                       <ul class="space-y-2 text-sm text-slate-300">
@@ -251,12 +270,12 @@
                         {% endfor %}
                       </ul>
                     {% else %}
-                      <div class="text-sm text-slate-500">No fixed device detected.</div>
+                      <div class="text-sm text-slate-500">{{ t("usage_risk_no_fixed_device") }}</div>
                     {% endif %}
                   </div>
 
                   <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
-                    <div class="text-xs uppercase tracking-wide text-slate-500 mb-3">Mobile / browser devices</div>
+                    <div class="text-xs uppercase tracking-wide text-slate-500 mb-3">{{ t("usage_risk_mobile_browser_devices") }}</div>
 
 					{% set mobile_browser_devices = (row.evidence.mobile_devices or []) + (row.evidence.browser_devices or []) %}
 
@@ -267,12 +286,12 @@
 						{% endfor %}
 					  </ul>
 					{% else %}
-					  <div class="text-sm text-slate-500">No mobile or browser device detected.</div>
+					  <div class="text-sm text-slate-500">{{ t("usage_risk_no_mobile_browser") }}</div>
 					{% endif %}
                   </div>
 
                   <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
-                    <div class="text-xs uppercase tracking-wide text-slate-500 mb-3">Triggered policies</div>
+                    <div class="text-xs uppercase tracking-wide text-slate-500 mb-3">{{ t("usage_risk_triggered_policies") }}</div>
 
                     {% if row.evidence.rules %}
                       <ul class="space-y-2 text-sm text-slate-300">
@@ -284,7 +303,7 @@
                         {% endfor %}
                       </ul>
                     {% else %}
-                      <div class="text-sm text-slate-500">No triggered policy detected.</div>
+                      <div class="text-sm text-slate-500">{{ t("usage_risk_no_triggered_policy") }}</div>
                     {% endif %}
                   </div>
 
@@ -294,7 +313,7 @@
           {% else %}
             <tr>
               <td colspan="8" class="px-4 py-8 text-center text-slate-500">
-                No usage risk case detected for the selected filters.
+                {{ t("usage_risk_no_cases") }}
               </td>
             </tr>
           {% endfor %}

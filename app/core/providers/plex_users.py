@@ -4,6 +4,11 @@ from core.plex_rate_limit import install_plex_rate_limit
 from logging_utils import get_logger
 from core.plex_connection import find_working_plex_base_url
 from core.http_security import plex_server_http_session
+from core.providers.plex_invitation_state import (
+    classify_plex_invite_error,
+    matches_plex_identity,
+    plex_invite_state_payload,
+)
 
 log = get_logger("plex_users")
 
@@ -39,6 +44,7 @@ def plex_invite_and_share(
     filter_movies: str = "",
     filter_television: str = "",
     filter_music: str = "",
+    raise_on_update_error: bool = False,
 ) -> Dict[str, Any]:
     """Invite a Plex account (by email) and share selected libraries.
 
@@ -82,20 +88,6 @@ def plex_invite_and_share(
     is_friend = False
     is_pending = False
 
-    def _match_pending(inv) -> bool:
-        """Best-effort match across plexapi versions."""
-        try:
-            v = (
-                getattr(inv, "email", None)
-                or getattr(inv, "user", None)
-                or getattr(inv, "username", None)
-                or getattr(inv, "title", None)
-                or ""
-            )
-            return str(v).strip().lower() == email.lower()
-        except Exception:
-            return False
-
     # 0) already friend?
     plex_user_obj = None
     try:
@@ -112,7 +104,7 @@ def plex_invite_and_share(
             pending_fn = getattr(account, "pendingInvites", None)
             if callable(pending_fn):
                 for inv in (pending_fn() or []):
-                    if _match_pending(inv):
+                    if matches_plex_identity(inv, email=email):
                         is_pending = True
                         break
         except Exception:
@@ -144,7 +136,15 @@ def plex_invite_and_share(
             is_pending = True
             log.info(f"Plex inviteFriend OK: email={email} server={plex.friendlyName} sections={sections}")
         except Exception as e:
-            log.warning(f"Plex inviteFriend failed/ignored: email={email} err={e}")
+            classified = classify_plex_invite_error(e)
+            if classified == "pending":
+                is_pending = True
+                log.info(f"Plex invite already pending: email={email} server={plex.friendlyName}")
+            elif classified == "friend":
+                is_friend = True
+                log.info(f"Plex account already shared: email={email} server={plex.friendlyName}")
+            else:
+                raise RuntimeError(f"Plex inviteFriend failed: {e}") from e
 
     # 2) updateFriend ONLY if already friend
     if is_friend:
@@ -173,12 +173,17 @@ def plex_invite_and_share(
 
             log.info(f"Plex updateFriend OK: user={invited_username or email} server={plex.friendlyName}")
         except Exception as e:
+            if raise_on_update_error:
+                raise RuntimeError(f"Plex updateFriend failed: {e}") from e
             log.warning(f"Plex updateFriend failed: email={email} err={e}")
 
+    state = "friend" if is_friend else ("pending" if is_pending else "unknown")
     return {
         "invited": bool(invited),
         "is_friend": bool(is_friend),
         "is_pending": bool(is_pending),
+        "state": state,
+        "state_details": plex_invite_state_payload(state),
         "username": invited_username,
         "external_user_id": str(external_user_id) if external_user_id else None,
     }
