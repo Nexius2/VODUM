@@ -1,7 +1,4 @@
 # <p align="center">
-<img src="screenshots/logo.png" width="140">
-</p>
-
 <h1 align="center">
 VODUM
 </h1>
