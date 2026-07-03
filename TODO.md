@@ -3,7 +3,7 @@
 Ce fichier contient uniquement le travail restant. Les changements termines sont documentes dans
 `changelog.md`.
 
-Derniere mise a jour: 2026-07-02
+Derniere mise a jour: 2026-07-03
 
 ## Principes de suivi
 
@@ -35,6 +35,7 @@ Derniere mise a jour: 2026-07-02
   - Deja fait: Dashboard card navigation dans `static/js/pages/dashboard.js`.
   - Deja fait: Login dans `static/js/pages/login.js`.
   - Deja fait: Setup Wizard dans `static/js/pages/setup-wizard.js`.
+  - Deja fait: Settings modales securite/telemetrie dans `static/js/pages/settings.js`.
   - Deja fait: Communications campaigns dans `static/js/pages/communications-campaigns.js`.
   - Deja fait: Communications history dans `static/js/pages/communications-history.js`.
   - Deja fait: Communications configuration dans `static/js/pages/communications-configuration.js`.
@@ -42,6 +43,11 @@ Derniere mise a jour: 2026-07-02
   - Deja fait: Subscriptions gifts dans `static/js/pages/subscriptions-gifts.js`.
   - Deja fait: Migrations list/detail dans `static/js/pages/migrations.js` et `static/js/pages/migration-campaign-detail.js`.
   - Deja fait: Monitoring shell search/ticker dans `static/js/pages/monitoring.js`.
+  - Deja fait: Monitoring user detail IP lookup dans `static/js/pages/monitoring-user-detail.js`.
+  - Deja fait: Monitoring user detail profile charts dans `static/js/pages/monitoring-user-detail.js`.
+  - Deja fait: Monitoring activity charts dans `static/js/pages/monitoring-activity.js`.
+  - Deja fait: Monitoring servers charts dans `static/js/pages/monitoring-servers.js`.
+  - Deja fait: Monitoring policies charts/modals dans `static/js/pages/monitoring-policies.js`.
   - Restant: extraire progressivement les scripts metier lourds des pages
     users, monitoring, communications, subscriptions et migrations.
 

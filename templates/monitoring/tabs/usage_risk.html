@@ -170,7 +170,7 @@
               <td class="px-4 py-3 text-right">
                 <button
                   type="button"
-                  onclick="document.getElementById('usage-risk-detail-{{ loop.index }}').classList.toggle('hidden')"
+                  data-usage-risk-toggle="usage-risk-detail-{{ loop.index }}"
                   class="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-950 hover:bg-slate-800 text-xs text-slate-200">
                   {{ t("usage_risk_view_details") }}
                 </button>

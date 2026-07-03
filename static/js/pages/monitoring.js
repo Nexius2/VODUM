@@ -157,15 +157,56 @@
     });
   }
 
-  function initAll() {
+  function initUsageRiskToggles(root) {
+    const scope = root && root.querySelectorAll ? root : document;
+    scope.querySelectorAll("[data-usage-risk-toggle]").forEach((button) => {
+      if (button.dataset.vodumBound === "1") return;
+      button.dataset.vodumBound = "1";
+      button.addEventListener("click", () => {
+        const target = document.getElementById(button.dataset.usageRiskToggle || "");
+        if (target) target.classList.toggle("hidden");
+      });
+    });
+  }
+
+  function initMonitoringLibrariesControls(root) {
+    const scope = root && root.querySelectorAll ? root : document;
+
+    scope.querySelectorAll("[data-auto-submit]").forEach((field) => {
+      if (field.dataset.vodumBound === "1") return;
+      field.dataset.vodumBound = "1";
+      field.addEventListener("change", () => {
+        if (field.form) field.form.requestSubmit ? field.form.requestSubmit() : field.form.submit();
+      });
+    });
+
+    scope.querySelectorAll("[data-library-view-more-toggle]").forEach((button) => {
+      if (button.dataset.vodumBound === "1") return;
+      button.dataset.vodumBound = "1";
+      button.addEventListener("click", () => {
+        const expanded = button.dataset.expanded === "1";
+        document.querySelectorAll(".library-extra-row").forEach((row) => {
+          row.classList.toggle("hidden", expanded);
+        });
+        button.dataset.expanded = expanded ? "0" : "1";
+        button.textContent = expanded
+          ? button.dataset.labelMore || button.textContent
+          : button.dataset.labelLess || button.textContent;
+      });
+    });
+  }
+
+  function initAll(root) {
     initMonitoringUsersSearch();
+    initUsageRiskToggles(root);
+    initMonitoringLibrariesControls(root);
     ensureNowPlayingTicker();
     installHtmxNowPlayingGuards();
   }
 
   // 1) chargement normal
-  document.addEventListener("DOMContentLoaded", initAll);
+  document.addEventListener("DOMContentLoaded", () => initAll(document));
 
   // 2) chargement via HTMX (tabs swap)
-  document.addEventListener("htmx:load", initAll);
+  document.addEventListener("htmx:load", (event) => initAll(event.target));
 })();

@@ -83,24 +83,10 @@
             type="button"
             id="libraries-view-more-toggle"
             class="text-xs text-slate-400 hover:text-slate-200 transition-colors"
-            onclick="
-              (function(btn){
-                var expanded = btn.dataset.expanded === '1';
-                var rows = document.querySelectorAll('.library-extra-row');
-
-                rows.forEach(function(el){
-                  if (expanded) {
-                    el.classList.add('hidden');
-                  } else {
-                    el.classList.remove('hidden');
-                  }
-                });
-
-                btn.dataset.expanded = expanded ? '0' : '1';
-                btn.textContent = expanded ? {{ t("monitoring_libraries_view_more")|tojson }} : {{ t("monitoring_libraries_view_less")|tojson }};
-              })(this)
-            "
+            data-library-view-more-toggle
             data-expanded="0"
+            data-label-more={{ t("monitoring_libraries_view_more")|tojson }}
+            data-label-less={{ t("monitoring_libraries_view_less")|tojson }}
           >
             {{ t("monitoring_libraries_view_more") }}
           </button>
@@ -134,7 +120,7 @@
 
         <select
           name="lib_user"
-          onchange="this.form.submit()"
+          data-auto-submit
           class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200"
         >
           <option value="all" {% if library_user == "all" %}selected{% endif %}>{{ t("all_users") }}</option>
@@ -147,7 +133,7 @@
 
         <select
           name="lib_range"
-          onchange="this.form.submit()"
+          data-auto-submit
           class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200"
         >
           <option value="7d"  {% if library_range == "7d" %}selected{% endif %}>{{ t("monitoring_libraries_last_7_days") }}</option>

@@ -19,15 +19,16 @@
 
 </form>
 
-<div id="admin-security-modal" class="hidden fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" aria-hidden="true">
+<div id="admin-security-modal" data-settings-modal-backdrop class="hidden fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" aria-hidden="true">
   <div class="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl p-6">
     <div class="flex items-start justify-between mb-5">
       <div>
         <h3 class="text-lg font-semibold text-white">{{ t("app_security") }}</h3>
         <p class="text-xs text-slate-400 mt-1">{{ t("app_security_help") }}</p>
       </div>
-      <button type="button" data-vodum-modal-close
-              onclick="document.getElementById('admin-security-modal').classList.add('hidden')"
+      <button type="button"
+              data-vodum-modal-close
+              data-settings-modal-close="admin-security-modal"
               class="text-slate-400 hover:text-white text-xs leading-none">{{ t("common.close") }}</button>
     </div>
 
@@ -85,7 +86,7 @@
       </div>
 
       <div class="flex justify-end gap-2 border-t border-slate-800 pt-4">
-        <button type="button" data-vodum-modal-close onclick="document.getElementById('admin-security-modal').classList.add('hidden')" class="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 text-sm">{{ t("common.close") }}</button>
+        <button type="button" data-vodum-modal-close data-settings-modal-close="admin-security-modal" class="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 text-sm">{{ t("common.close") }}</button>
         <button type="submit" class="px-4 py-2 bg-primary hover:bg-primary-dark rounded text-white text-sm">{{ t("save") }}</button>
       </div>
     </form>
@@ -93,3 +94,7 @@
 </div>
 {% endblock %}
 
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('static', filename='js/pages/settings.js', v=g.app_version|default('dev')) }}"></script>
+{% endblock %}

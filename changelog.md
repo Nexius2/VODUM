@@ -6,6 +6,22 @@ All notable changes to Vodum will be documented in this file.
 
 ## Unreleased
 
+- Move Settings security and telemetry modal handlers into `static/js/pages/settings.js`.
+
+- Move Monitoring Policies chart and enforcement modal behavior into `static/js/pages/monitoring-policies.js`.
+
+- Move Monitoring Servers chart behavior into `static/js/pages/monitoring-servers.js`.
+
+- Move Monitoring Activity chart behavior into `static/js/pages/monitoring-activity.js`.
+
+- Move Monitoring libraries inline view-more and filter submit handlers into `static/js/pages/monitoring.js`.
+
+- Move Monitoring usage risk detail toggles out of inline `onclick` handlers.
+
+- Move Monitoring user detail profile chart behavior into `static/js/pages/monitoring-user-detail.js`.
+
+- Move Monitoring user detail IP lookup modal behavior into `static/js/pages/monitoring-user-detail.js`.
+
 - Move Monitoring page user search and Now Playing ticker behavior into `static/js/pages/monitoring.js`.
 
 - Vendor frontend runtime dependencies for HTMX, Chart.js, and Flatpickr so admin pages no longer depend on CDN browser access.

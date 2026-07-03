@@ -72,7 +72,7 @@
 
     <button
       type="button"
-      onclick="document.getElementById('telemetry-modal').classList.remove('hidden')"
+      data-settings-modal-open="telemetry-modal"
       class="w-5 h-5 rounded-full bg-slate-700 hover:bg-slate-600 text-xs text-white"
     >
       ?
@@ -89,6 +89,7 @@
 <!-- Telemetry modal -->
 <div
   id="telemetry-modal"
+  data-settings-modal-backdrop
   class="hidden fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
 >
 
@@ -102,7 +103,7 @@
 
       <button
         type="button"
-        onclick="document.getElementById('telemetry-modal').classList.add('hidden')"
+        data-settings-modal-close="telemetry-modal"
         class="text-slate-400 hover:text-white"
       >
         ✕
