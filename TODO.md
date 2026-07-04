@@ -22,6 +22,7 @@ Derniere mise a jour: 2026-07-03
 - [~] Valider les campagnes Migrations sur de grandes instances reelles Plex et
   Jellyfin avant d'activer davantage d'automatisations destructives.
 
+
 ## P1 - Performance UI et experience percue
 
 ### Scripts par page

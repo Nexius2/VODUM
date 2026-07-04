@@ -2,6 +2,7 @@
 
 import json
 from flask import render_template, request, redirect, url_for, flash, jsonify
+from mailing_utils import build_user_context, render_mail
 
 from core.i18n import get_translator
 from core.communications_recovery import retry_failed_scheduled_communications
@@ -1021,11 +1022,24 @@ def register(app):
 
         offset = (page - 1) * per_page
 
+        settings_row = db.query_one("SELECT brand_name FROM settings WHERE id = 1")
+        settings = dict(settings_row) if settings_row else {}
+        brand_name = settings.get("brand_name") or "VODUM"
+
         rows = db.query(
             f"""
             SELECT
                 {COMM_HISTORY_COLUMNS},
+                u.id AS user_id,
                 u.username AS user_username,
+                u.firstname AS user_firstname,
+                u.lastname AS user_lastname,
+                u.email AS user_email,
+                u.expiration_date AS user_expiration_date,
+                u.subscription_template_id AS user_subscription_template_id,
+                st.name AS subscription_name,
+                st.duration_days AS subscription_duration_days,
+                st.subscription_value AS subscription_value,
                 t.key AS template_key,
                 t.subject AS template_subject,
                 t.body AS template_body,
@@ -1034,6 +1048,7 @@ def register(app):
                 c.body AS campaign_body
             FROM comm_history h
             LEFT JOIN vodum_users u ON u.id = h.user_id
+            LEFT JOIN subscription_templates st ON st.id = u.subscription_template_id
             LEFT JOIN comm_templates t ON t.id = h.template_id
             LEFT JOIN comm_campaigns c ON c.id = h.campaign_id
             ORDER BY {order_by_sql}
@@ -1042,7 +1057,53 @@ def register(app):
             (per_page, offset),
         )
 
-        history = [dict(r) for r in (rows or [])]
+        def _render_history_message(row):
+            meta = {}
+            try:
+                meta = json.loads(row.get("meta_json") or "{}")
+            except Exception:
+                meta = {}
+
+            if meta.get("rendered_subject") or meta.get("rendered_body"):
+                row["rendered_subject"] = meta.get("rendered_subject") or ""
+                row["rendered_body"] = meta.get("rendered_body") or ""
+                return row
+
+            payload = meta.get("payload") or {}
+
+            context_input = {
+                "id": row.get("user_id"),
+                "username": row.get("user_username") or "",
+                "firstname": row.get("user_firstname") or "",
+                "lastname": row.get("user_lastname") or "",
+                "email": row.get("user_email") or "",
+                "expiration_date": row.get("user_expiration_date") or "",
+                "subscription_template_id": row.get("user_subscription_template_id"),
+                "subscription_name": row.get("subscription_name") or "",
+                "subscription_duration_days": row.get("subscription_duration_days") or "",
+                "subscription_value": row.get("subscription_value") or "",
+                "brand_name": brand_name,
+            }
+
+            context_input.update(meta)
+            context_input.update(payload)
+            context_input["brand_name"] = meta.get("brand_name") or payload.get("brand_name") or brand_name
+
+            context = build_user_context(context_input)
+
+            for key, value in context_input.items():
+                if value not in (None, ""):
+                    context[key] = str(value)
+
+            subject = row.get("template_subject") if row.get("kind") == "template" else row.get("campaign_subject")
+            body = row.get("template_body") if row.get("kind") == "template" else row.get("campaign_body")
+
+            row["rendered_subject"] = render_mail(subject or "", context)
+            row["rendered_body"] = render_mail(body or "", context)
+
+            return row
+
+        history = [_render_history_message(dict(r)) for r in (rows or [])]
         return render_template(
             "communications/communications_history.html",
             history=history,
