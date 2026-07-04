@@ -64,7 +64,7 @@
       </div>
       <span class="px-3 py-1 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 text-xs">{{ t("migration_read_only") }}</span>
     </div>
-    <form method="get" action="{{ url_for('migrations_page') }}" class="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr_auto] gap-4 items-end">
+    <form id="migration-dry-run-form" method="get" action="{{ url_for('migrations_page') }}" novalidate class="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr_auto] gap-4 items-end">
       <label class="text-sm">
         <span class="block mb-2 text-slate-300">{{ t("migration_source_server") }}</span>
         <select id="migration-source-server" name="source_server_id" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
@@ -85,6 +85,7 @@
         </select>
       </label>
       <button class="px-5 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white">{{ t("migration_analyze") }}</button>
+      <div id="migration-dry-run-validation" class="hidden md:col-span-4 px-4 py-3 rounded-lg bg-amber-950 border border-amber-800 text-amber-200 text-sm"></div>
     </form>
     {% if analysis_error %}
       <div class="mt-4 px-4 py-3 rounded-lg bg-red-950 border border-red-800 text-red-200 text-sm">{{ analysis_error }}</div>
@@ -279,23 +280,16 @@
     </div>
   {% endif %}
 </div>
-<script>
-(() => {
-  const source = document.getElementById("migration-source-server");
-  const destination = document.getElementById("migration-destination-server");
-  if (!source || !destination) return;
-  const incompatible = {{ incompatible_servers|tojson }};
-  const refreshDestinations = () => {
-    const blocked = new Set((incompatible[source.value] || []).map(String));
-    Array.from(destination.options).forEach(option => {
-      if (!option.value) return;
-      option.disabled = blocked.has(option.value);
-    });
-    if (blocked.has(destination.value)) destination.value = "";
-  };
-  source.addEventListener("change", refreshDestinations);
-  refreshDestinations();
-})();
+<script type="application/json" id="migration-incompatible-servers">
+  {{ incompatible_servers|tojson }}
 </script>
+<script type="application/json" id="migration-validation-messages">
+  {
+    "serversRequired": {{ t("migration_validation_servers_required")|tojson }},
+    "sourceRequired": {{ t("migration_validation_source_required")|tojson }},
+    "destinationRequired": {{ t("migration_validation_destination_required")|tojson }}
+  }
+</script>
+<script src="{{ url_for('static', filename='js/pages/migrations.js', v=g.app_version|default('dev')) }}"></script>
 {% endif %}
 {% endblock %}

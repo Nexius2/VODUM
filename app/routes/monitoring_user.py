@@ -6,6 +6,20 @@ from flask import render_template, request, redirect, url_for, flash
 from tasks_engine import auto_enable_stream_enforcer
 from web.helpers import get_db
 
+MONITORING_SESSION_DETAIL_COLUMNS = """
+              ms.id,
+              ms.server_id,
+              ms.media_user_id,
+              ms.session_key,
+              ms.title,
+              ms.state,
+              ms.client_name,
+              ms.device,
+              ms.is_transcode,
+              ms.last_seen_at,
+              ms.raw_json
+"""
+
 def register(app):
     @app.route("/monitoring/user/<int:user_id>")
     def monitoring_user_detail(user_id: int):
@@ -651,9 +665,9 @@ def register(app):
         db = get_db()
 
         sess = db.query_one(
-            """
+            f"""
             SELECT
-              ms.*,
+{MONITORING_SESSION_DETAIL_COLUMNS},
               s.name AS server_name,
               s.type AS provider,
               mu.username AS username
@@ -895,6 +909,7 @@ def register(app):
     @app.get("/monitoring/policies/<int:policy_id>/edit")
     def stream_policy_edit(policy_id: int):
         return redirect(url_for("monitoring_page", tab="policies", edit_policy_id=policy_id))
+
 
 
 

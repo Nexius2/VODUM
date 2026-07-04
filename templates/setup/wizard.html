@@ -1,11 +1,11 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="{{ active_lang or 'en' }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="preconnect" href="https://cdn.tailwindcss.com">
   <title>{{ copy.title }}</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/vodum.css', v=g.app_version|default('dev')) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css', v=g.app_version|default('dev')) }}">
 </head>
 <body class="min-h-screen bg-slate-950 text-slate-100">
   <main class="max-w-4xl mx-auto px-4 py-10">
@@ -152,41 +152,6 @@
           {% endfor %}
         </div>
         <form method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token }}">{% include "setup/_nav.html" %}</form>
-        <script>
-          (() => {
-            const provider = document.getElementById("wizard_server_type");
-            const url = document.getElementById("wizard_server_url");
-            const token = document.getElementById("wizard_server_token");
-            if (!provider || !url || !token) return;
-            const unlock = (field) => {
-              field.readOnly = false;
-              if (field === url && field.value.includes("@")) {
-                field.value = "";
-                token.value = "";
-              }
-            };
-            [url, token].forEach((field) => {
-              field.addEventListener("pointerdown", () => unlock(field), {once: true});
-              field.addEventListener("focus", () => unlock(field), {once: true});
-            });
-            const clearCredentialAutofill = () => {
-              if (url.value.includes("@") || (
-                url.value && !url.value.startsWith("http://") && !url.value.startsWith("https://")
-              )) {
-                url.value = "";
-                token.value = "";
-              }
-            };
-            [50, 250, 750, 1500].forEach((delay) => setTimeout(clearCredentialAutofill, delay));
-            const updateExample = () => {
-              url.placeholder = provider.value === "jellyfin"
-                ? "http://192.168.1.100:8096"
-                : "http://192.168.1.100:32400";
-            };
-            provider.addEventListener("change", updateExample);
-            updateExample();
-          })();
-        </script>
 
       {% elif step == 5 %}
         <h2 class="text-xl font-semibold mb-2">{{ copy.communications }}</h2>
@@ -342,20 +307,21 @@
         </div>
         {% else %}
         <div class="space-y-2 my-6 text-sm">
-          <div>âœ“ {{ t("wizard.admin_created") }}</div>
-          <div>âœ“ {{ servers|length }} media server(s) configured</div>
-          <div>âœ“ {{ t("wizard.sync_started") }}</div>
-          <div>âœ“ Communications {{ state.get('communications', 'skipped') }}</div>
-          <div>âœ“ Message templates {{ state.get('messages', 'skipped') }}</div>
-          <div>âœ“ Subscriptions {{ state.get('subscriptions', 'skipped') }}</div>
-          <div>âœ“ Subscription settings {{ state.get('subscription_settings', 'skipped') }}</div>
-          <div>âœ“ Subscription assignment {{ state.get('assignment', 'skipped') }}</div>
+          <div>✓ {{ t("wizard.admin_created") }}</div>
+          <div>✓ {{ servers|length }} media server(s) configured</div>
+          <div>✓ {{ t("wizard.sync_started") }}</div>
+          <div>✓ Communications {{ state.get('communications', 'skipped') }}</div>
+          <div>✓ Message templates {{ state.get('messages', 'skipped') }}</div>
+          <div>✓ Subscriptions {{ state.get('subscriptions', 'skipped') }}</div>
+          <div>✓ Subscription settings {{ state.get('subscription_settings', 'skipped') }}</div>
+          <div>✓ Subscription assignment {{ state.get('assignment', 'skipped') }}</div>
         </div>
         {% endif %}
         <form method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token }}"><button class="w-full px-4 py-3 rounded-lg bg-indigo-700 hover:bg-indigo-600 font-semibold">{{ copy.finish }}</button></form>
       {% endif %}
     </section>
   </main>
+  <script src="{{ url_for('static', filename='js/pages/setup-wizard.js', v=g.app_version|default('dev')) }}"></script>
 </body>
 </html>
 

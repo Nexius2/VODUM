@@ -1,0 +1,71 @@
+/* Shared VODUM UI helpers extracted from base.html. */
+.log-update {
+      background: linear-gradient(
+        90deg,
+        rgba(99,102,241,0.12),
+        rgba(99,102,241,0.02)
+      );
+      border-left: 3px solid rgba(99,102,241,0.6);
+    }
+
+    /* Flatpickr dark-ish theme to match VODUM */
+    .flatpickr-calendar {
+      background: #0b1220 !important;
+      border: 1px solid rgba(148,163,184,0.18) !important;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.45) !important;
+    }
+    .flatpickr-months .flatpickr-month,
+    .flatpickr-current-month,
+    .flatpickr-weekdays,
+    .flatpickr-day {
+      color: #e2e8f0 !important;
+    }
+    .flatpickr-weekday {
+      color: rgba(226,232,240,0.7) !important;
+    }
+    .flatpickr-day:hover {
+      background: rgba(99,102,241,0.18) !important;
+    }
+    .flatpickr-day.selected,
+    .flatpickr-day.startRange,
+    .flatpickr-day.endRange {
+      background: rgba(99,102,241,0.75) !important;
+      border-color: rgba(99,102,241,0.75) !important;
+    }
+    .flatpickr-day.today {
+      border-color: rgba(99,102,241,0.6) !important;
+    }
+    .flatpickr-time input,
+    .flatpickr-am-pm {
+      color: #e2e8f0 !important;
+      background: transparent !important;
+    }
+
+    /* Flatpickr month/year dropdowns */
+    .flatpickr-current-month .flatpickr-monthDropdown-months,
+    .flatpickr-current-month input.cur-year {
+      color: #e2e8f0 !important;
+      background: #0b1220 !important;
+      border: 1px solid rgba(148,163,184,0.18) !important;
+      border-radius: 0.5rem !important;
+    }
+
+    .flatpickr-current-month .flatpickr-monthDropdown-months {
+      -webkit-appearance: auto !important;
+      -moz-appearance: auto !important;
+      appearance: auto !important;
+      color-scheme: dark !important;
+    }
+
+    .flatpickr-current-month .flatpickr-monthDropdown-months option {
+      background: #0b1220 !important;
+      color: #e2e8f0 !important;
+    }
+
+    .flatpickr-current-month .numInputWrapper span.arrowUp:after {
+      border-bottom-color: #94a3b8 !important;
+    }
+
+    .flatpickr-current-month .numInputWrapper span.arrowDown:after {
+      border-top-color: #94a3b8 !important;
+    }

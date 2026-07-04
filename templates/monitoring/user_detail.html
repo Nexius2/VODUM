@@ -7,8 +7,7 @@
 {% block header_subtitle %}{{ t("monitoring_user_detail") }}{% endblock %}
 
 {% block head %}
-  <link rel="preconnect" href="https://cdn.jsdelivr.net">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="{{ url_for('static', filename='vendor/chart.js/chart.umd.min.js', v=g.app_version|default('dev')) }}"></script>
 {% endblock %}
 
 {% block content %}
@@ -250,238 +249,17 @@
     </div>
   </div>
 
-  <script>
-  (() => {
-    // -----------------------
-    // Helpers
-    // -----------------------
-    function waitForChart(maxMs = 8000) {
-      const start = Date.now();
-      return new Promise((resolve, reject) => {
-        const tick = () => {
-          if (window.Chart) return resolve();
-          if (Date.now() - start > maxMs) return reject(new Error("Chart.js not loaded"));
-          setTimeout(tick, 50);
-        };
-        tick();
-      });
+  <script type="application/json" id="monitoring-user-chart-config">
+    {
+      "mediaTypes30d": {{ (user.media_types_30d or []) | tojson }},
+      "serverUsage30d": {{ (user.server_usage_30d or []) | tojson }},
+      "dailyUrl": {{ (url_for('api_monitoring_user_daily', user_id=user.id) ~ '?range=30d') | tojson }},
+      "playsLabel": {{ t("monitoring_user_plays")|tojson }},
+      "hoursLabel": {{ t("monitoring_user_hours")|tojson }}
     }
-
-    async function fetchJSON(url) {
-      const res = await fetch(url, { cache: "no-cache" });
-      if (!res.ok) throw new Error(`HTTP ${res.status} on ${url}`);
-      return res.json();
-    }
-
-    function hoursFromMs(ms) { return (Number(ms || 0) / 3600000); }
-
-    function baseLineOpts() {
-      return {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: false,
-        normalized: true,
-        plugins: {
-          legend: { labels: { color: "#94a3b8" } }
-        },
-        scales: {
-          x: { ticks: { color: "#64748b" }, grid: { color: "rgba(148,163,184,0.08)" } },
-          y: { ticks: { color: "#64748b" }, grid: { color: "rgba(148,163,184,0.08)" }, beginAtZero: true }
-        }
-      };
-    }
-
-    function doughnutOpts() {
-      return {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: false,
-        cutout: "70%",
-        plugins: {
-          legend: { display: false },
-          tooltip: { enabled: true }
-        }
-      };
-    }
-
-    function makeLegend(container, labels, values, colors) {
-      if (!container) return;
-      const total = values.reduce((a, b) => a + (Number(b) || 0), 0) || 0;
-
-      container.innerHTML = "";
-      labels.forEach((label, i) => {
-        const v = Number(values[i] || 0);
-        if (!v) return;
-        const pct = total ? Math.round((v / total) * 100) : 0;
-
-        const row = document.createElement("div");
-        row.className = "flex items-center justify-between gap-3";
-
-        const left = document.createElement("div");
-        left.className = "flex items-center gap-2 min-w-0";
-
-        const dot = document.createElement("span");
-        dot.className = "inline-block w-2.5 h-2.5 rounded-full shrink-0";
-        dot.style.backgroundColor = colors[i] || "rgba(148,163,184,0.7)";
-
-        const text = document.createElement("span");
-        text.className = "truncate";
-        text.textContent = label;
-
-        left.appendChild(dot);
-        left.appendChild(text);
-
-        const right = document.createElement("div");
-        right.className = "shrink-0 text-slate-500";
-        right.textContent = `${pct}%`;
-
-        row.appendChild(left);
-        row.appendChild(right);
-
-        container.appendChild(row);
-      });
-    }
-
-    function hashColor(str) {
-      const s = String(str || "unknown").toLowerCase();
-      let h = 0;
-      for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-      const r = 80 + (h & 0x7F);
-      const g = 80 + ((h >> 7) & 0x7F);
-      const b = 80 + ((h >> 14) & 0x7F);
-      return `rgb(${r}, ${g}, ${b})`;
-    }
-
-    function mediaColor(label) {
-      const k = String(label || "unknown").toLowerCase().trim();
-      const MAP = {
-        movie:  "#3B82F6",
-        serie:  "#10B981",
-        episode:"#10B981",
-        show:   "#10B981",
-        other:  "#EF4444",
-        unknown:"#94A3B8"
-      };
-      if (MAP[k]) return MAP[k];
-      if (k.includes("serie") || k.includes("episode") || k.includes("show")) return MAP.serie;
-      if (k.includes("movie") || k.includes("film")) return MAP.movie;
-      return hashColor(k);
-    }
-
-    // -----------------------
-    // Init
-    // -----------------------
-    (async () => {
-      await waitForChart();
-
-      // -------- Donuts (Insights 30d) --------
-      const mt = {{ (user.media_types_30d or []) | tojson }};
-      const su = {{ (user.server_usage_30d or []) | tojson }};
-
-      const mtEl = document.getElementById("chartMediaTypes");
-      if (mtEl && Array.isArray(mt) && mt.length) {
-        const mtLabels = mt.map(x => x.label);
-        const mtValues = mt.map(x => Number(x.plays || 0));
-        const mtColors = mtLabels.map(mediaColor);
-
-        new Chart(mtEl.getContext("2d"), {
-          type: "doughnut",
-          data: {
-            labels: mtLabels,
-            datasets: [{
-              data: mtValues,
-              backgroundColor: mtColors,
-              borderColor: "rgba(255,255,255,0.06)",
-              borderWidth: 1
-            }]
-          },
-          options: doughnutOpts()
-        });
-
-        makeLegend(
-          document.getElementById("legendMediaTypes"),
-          mtLabels,
-          mtValues,
-          mtColors
-        );
-      }
-
-      const suEl = document.getElementById("chartServerUsage");
-      if (suEl && Array.isArray(su) && su.length) {
-        const suLabels = su.map(x => x.label);
-        const suValues = su.map(x => Number(x.plays || 0));
-        const suColors = suLabels.map(hashColor);
-
-        new Chart(suEl.getContext("2d"), {
-          type: "doughnut",
-          data: {
-            labels: suLabels,
-            datasets: [{
-              data: suValues,
-              backgroundColor: suColors,
-              borderColor: "rgba(255,255,255,0.06)",
-              borderWidth: 1
-            }]
-          },
-          options: doughnutOpts()
-        });
-
-        makeLegend(
-          document.getElementById("legendPerServer"),
-          suLabels,
-          suValues,
-          suColors
-        );
-      }
-
-      // -------- Line charts (30d) --------
-      const data = await fetchJSON("{{ url_for('api_monitoring_user_daily', user_id=user.id) }}?range=30d");
-      const labels = (data || []).map(x => x.day);
-      const plays  = (data || []).map(x => Number(x.plays || 0));
-      const watch  = (data || []).map(x => hoursFromMs(x.watch_ms));
-
-      const elPlays = document.getElementById("chartUserPlays");
-      const elWatch = document.getElementById("chartUserWatch");
-      if (!elPlays || !elWatch) return;
-
-      new Chart(elPlays.getContext("2d"), {
-        type: "line",
-        data: {
-          labels,
-          datasets: [{
-            label: {{ t("monitoring_user_plays")|tojson }},
-            data: plays,
-            tension: 0.4,
-            fill: true,
-            borderWidth: 2,
-            pointRadius: 3,
-            backgroundColor: "rgba(16,185,129,0.08)",
-            borderColor: "rgba(16,185,129,1)"
-          }]
-        },
-        options: baseLineOpts()
-      });
-
-      new Chart(elWatch.getContext("2d"), {
-        type: "line",
-        data: {
-          labels,
-          datasets: [{
-            label: {{ t("monitoring_user_hours")|tojson }},
-            data: watch,
-            tension: 0.4,
-            fill: true,
-            borderWidth: 2,
-            pointRadius: 3,
-            backgroundColor: "rgba(59,130,246,0.08)",
-            borderColor: "rgba(59,130,246,1)"
-          }]
-        },
-        options: baseLineOpts()
-      });
-    })().catch(console.error);
-  })();
   </script>
+  <script src="{{ url_for('static', filename='js/pages/monitoring-user-detail.js', v=g.app_version|default('dev')) }}"></script>
+
 
 {% endif %}
 
@@ -729,167 +507,18 @@
     </div>
   </div>
 
-  <script>
-  (() => {
-    const modal = document.getElementById("ipLookupModal");
-    const modalClose = document.getElementById("ipLookupModalClose");
-    const modalSubtitle = document.getElementById("ipLookupModalSubtitle");
-
-    const loadingBox = document.getElementById("ipLookupLoading");
-    const errorBox = document.getElementById("ipLookupError");
-    const contentBox = document.getElementById("ipLookupContent");
-
-    const elIp = document.getElementById("ipLookupIp");
-    const elLocation = document.getElementById("ipLookupLocation");
-    const elIsp = document.getElementById("ipLookupIsp");
-    const elTimezone = document.getElementById("ipLookupTimezone");
-    const elOrg = document.getElementById("ipLookupOrg");
-    const elAsn = document.getElementById("ipLookupAsn");
-    const elCoords = document.getElementById("ipLookupCoords");
-    const badges = document.getElementById("ipLookupBadges");
-
-    const mapWrap = document.getElementById("ipLookupMapWrap");
-    const noMap = document.getElementById("ipLookupNoMap");
-    const mapFrame = document.getElementById("ipLookupMap");
-
-    const triggerButtons = document.querySelectorAll(".js-ip-lookup");
-
-    function openModal() {
-      modal.classList.remove("hidden");
-      modal.setAttribute("aria-hidden", "false");
+  <script type="application/json" id="monitoring-user-detail-config">
+    {
+      "unableIp": {{ t("monitoring_user_unable_ip")|tojson }},
+      "privateIp": {{ t("monitoring_user_private_ip")|tojson }},
+      "publicIp": {{ t("monitoring_user_public_ip")|tojson }},
+      "mobileNetwork": {{ t("monitoring_user_mobile_network")|tojson }},
+      "proxyVpn": {{ t("monitoring_user_proxy_vpn")|tojson }},
+      "hosting": {{ t("monitoring_user_hosting")|tojson }}
     }
-
-    function closeModal() {
-      modal.classList.add("hidden");
-      modal.setAttribute("aria-hidden", "true");
-      mapFrame.src = "";
-    }
-
-    function resetState(ip) {
-      modalSubtitle.textContent = ip || "—";
-      loadingBox.classList.remove("hidden");
-      errorBox.classList.add("hidden");
-      contentBox.classList.add("hidden");
-
-      elIp.textContent = "—";
-      elLocation.textContent = "—";
-      elIsp.textContent = "—";
-      elTimezone.textContent = "—";
-      elOrg.textContent = "—";
-      elAsn.textContent = "—";
-      elCoords.textContent = "—";
-      badges.innerHTML = "";
-
-      mapWrap.classList.add("hidden");
-      noMap.classList.remove("hidden");
-      mapFrame.src = "";
-    }
-
-    function showError(message) {
-      loadingBox.classList.add("hidden");
-      contentBox.classList.add("hidden");
-      errorBox.textContent = message || {{ t("monitoring_user_unable_ip")|tojson }};
-      errorBox.classList.remove("hidden");
-    }
-
-    function setText(el, value, fallback = "—") {
-      el.textContent = (value === null || value === undefined || value === "") ? fallback : value;
-    }
-
-    function addBadge(label, tone = "slate") {
-      const palette = {
-        slate: "border-slate-700 bg-slate-800 text-slate-200",
-        emerald: "border-emerald-800 bg-emerald-950/50 text-emerald-300",
-        amber: "border-amber-800 bg-amber-950/50 text-amber-300",
-        rose: "border-rose-800 bg-rose-950/50 text-rose-300",
-        sky: "border-sky-800 bg-sky-950/50 text-sky-300",
-      };
-
-      const span = document.createElement("span");
-      span.className = "inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium " + (palette[tone] || palette.slate);
-      span.textContent = label;
-      badges.appendChild(span);
-    }
-
-    async function loadIpDetails(ip) {
-      resetState(ip);
-      openModal();
-
-      try {
-        const res = await fetch(`/api/monitoring/ip_lookup?ip=${encodeURIComponent(ip)}`, {
-          cache: "no-cache",
-          headers: { "X-Requested-With": "XMLHttpRequest" }
-        });
-
-        const data = await res.json();
-
-        if (!res.ok || !data.ok) {
-          throw new Error(data.error || `HTTP ${res.status}`);
-        }
-
-        loadingBox.classList.add("hidden");
-        errorBox.classList.add("hidden");
-        contentBox.classList.remove("hidden");
-
-        setText(elIp, data.ip);
-        setText(elLocation, data.display_name);
-        setText(elIsp, data.isp);
-        setText(elTimezone, data.timezone);
-        setText(elOrg, data.org);
-        setText(elAsn, data.asn || data.asname);
-
-        if (data.lat !== null && data.lat !== undefined && data.lon !== null && data.lon !== undefined) {
-          setText(elCoords, `${data.lat}, ${data.lon}`);
-        } else {
-          setText(elCoords, null);
-        }
-
-        if (data.is_private) {
-          addBadge({{ t("monitoring_user_private_ip")|tojson }}, "amber");
-        } else {
-          addBadge({{ t("monitoring_user_public_ip")|tojson }}, "emerald");
-        }
-
-        if (data.mobile) addBadge({{ t("monitoring_user_mobile_network")|tojson }}, "sky");
-        if (data.proxy) addBadge({{ t("monitoring_user_proxy_vpn")|tojson }}, "rose");
-        if (data.hosting) addBadge({{ t("monitoring_user_hosting")|tojson }}, "amber");
-
-        if (data.map_url) {
-          mapFrame.src = data.map_url;
-          mapWrap.classList.remove("hidden");
-          noMap.classList.add("hidden");
-        } else {
-          mapWrap.classList.add("hidden");
-          noMap.classList.remove("hidden");
-        }
-      } catch (err) {
-        showError({{ t("monitoring_user_unable_ip")|tojson }});
-      }
-    }
-
-    triggerButtons.forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const ip = btn.dataset.ip || "";
-        if (!ip) return;
-        loadIpDetails(ip);
-      });
-    });
-
-    modalClose.addEventListener("click", closeModal);
-
-    modal.addEventListener("click", (e) => {
-      if (e.target === modal || (e.target.classList && e.target.classList.contains("bg-black/70"))) {
-        closeModal();
-      }
-    });
-
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !modal.classList.contains("hidden")) {
-        closeModal();
-      }
-    });
-  })();
   </script>
+  <script src="{{ url_for('static', filename='js/pages/monitoring-user-detail.js', v=g.app_version|default('dev')) }}"></script>
+
 {% endif %}
 
 {% endblock %}

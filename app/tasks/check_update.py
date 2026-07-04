@@ -3,6 +3,7 @@ import json
 from datetime import datetime, timezone
 import requests
 from logging_utils import get_logger
+from core.app_paths import update_status_path
 import re
 
 
@@ -12,7 +13,6 @@ GITHUB_REPO = "Nexius2/VODUM"
 GITHUB_BRANCH = "main"       
 
 LOCAL_INFO_PATH = "/app/INFO"
-STATUS_FILE = "/appdata/update_status.json"
 
 
 def _read_version_from_info_text(text: str) -> str:
@@ -76,11 +76,12 @@ def _raw_info_url() -> str:
 
 def _write_status(payload: dict):
     try:
-        os.makedirs(os.path.dirname(STATUS_FILE), exist_ok=True)
-        with open(STATUS_FILE, "w", encoding="utf-8") as f:
+        status_file = update_status_path()
+        status_file.parent.mkdir(parents=True, exist_ok=True)
+        with status_file.open("w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        logger.error(f"Failed writing {STATUS_FILE}: {e}")
+        logger.error(f"Failed writing {update_status_path()}: {e}")
 
 
 # ✅ IMPORTANT : le moteur appelle run(task_id, db) => il faut accepter 2 args
@@ -114,9 +115,10 @@ def run(task_id: int = None, db=None):
         "source": url,
     }
 
-    if os.path.exists(STATUS_FILE):
+    status_file = update_status_path()
+    if status_file.exists():
         try:
-            with open(STATUS_FILE, "r", encoding="utf-8") as f:
+            with status_file.open("r", encoding="utf-8") as f:
                 previous = json.load(f) or {}
 
             payload["update_available_since"] = previous.get("update_available_since")

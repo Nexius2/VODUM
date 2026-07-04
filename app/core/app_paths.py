@@ -14,3 +14,7 @@ def data_dir() -> Path:
 def imports_dir() -> Path:
     override = (os.environ.get("VODUM_IMPORTS_DIR") or "").strip()
     return Path(override).expanduser().resolve() if override else data_dir() / "imports"
+
+
+def update_status_path() -> Path:
+    return data_dir() / "update_status.json"

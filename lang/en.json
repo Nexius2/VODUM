@@ -59,6 +59,9 @@
   "migration_draft_created": "Migration draft created",
   "migration_not_available": "No useful migration path is available.",
   "migration_servers_required": "Source and destination servers are required.",
+  "migration_validation_servers_required": "Please choose a source server and a destination server.",
+  "migration_validation_source_required": "Please choose a source server.",
+  "migration_validation_destination_required": "Please choose a destination server.",
   "migration_shared_plex_not_needed": "These Plex servers already share their users.",
   "migration_campaign_audit": "Read-only audit of the saved migration plan",
   "migration_saved_users": "Saved users",
@@ -1901,5 +1904,13 @@
   "migration_destination_rollback_available_count": "Users eligible for destination rollback",
   "migration_rollback_destination_access": "Rollback destination access",
   "migration_destination_rollback_requested": "Destination rollback requested",
-  "migration_destination_rolled_back": "Destination rolled back"
+  "migration_destination_rolled_back": "Destination rolled back",
+  "comm_var_policy_explanation_desc": "Human-readable explanation of why playback was blocked.",
+"comm_var_policy_limit_label_desc": "Type of enforced limit: public IPs, simultaneous streams, bitrate, transcoding...",
+"comm_var_active_streams_count_desc": "Number of simultaneous streams involved in the block.",
+"comm_var_active_streams_desc": "Multiline list of active streams involved in the block.",
+"comm_var_active_devices_count_desc": "Number of detected devices.",
+"comm_var_active_devices_desc": "Multiline list of detected devices.",
+"comm_var_active_ips_count_desc": "Number of detected public IP addresses.",
+"comm_var_active_ips_desc": "Multiline list of detected public IP addresses."
 }

@@ -48,7 +48,7 @@ def _client_ip() -> str:
     """
     request.remote_addr suffit :
     - sans trust proxy => IP directe du client
-    - avec trust proxy => ProxyFix l'a dÃ©jÃ  corrigÃ©e
+    - avec trust proxy => ProxyFix l'a déjà corrigée
     """
     return (request.remote_addr or "unknown").strip()
 
@@ -197,7 +197,7 @@ def _send_bruteforce_alert(db, email: str, client_ip: str, reason: str, rows: li
     if not alert_rows:
         return
 
-    settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+    settings = db.query_one("SELECT contact_email, admin_email, mail_from FROM settings WHERE id = 1")
     settings = dict(settings) if settings else {}
     to_email = _admin_alert_email(settings)
     if not to_email:
@@ -262,7 +262,7 @@ def _login_failed(db, email: str, client_ip: str, reason: str) -> None:
 def _login_locked_response(email: str, client_ip: str, remaining_seconds: int):
     remaining_minutes = max(1, math.ceil(remaining_seconds / 60))
     flash(
-        f"Trop de tentatives de connexion. RÃ©essayez dans {remaining_minutes} minute(s).",
+        f"Trop de tentatives de connexion. Réessayez dans {remaining_minutes} minute(s).",
         "error",
     )
     auth_logger.warning(
@@ -285,7 +285,7 @@ def register(app):
         s = db.query_one("SELECT admin_email, admin_password_hash, admin_totp_enabled, admin_totp_secret, wizard_active FROM settings WHERE id = 1")
         s = dict(s) if s else {"admin_email": "", "admin_password_hash": None}
 
-        # dÃ©jÃ  configurÃ© => go login/home
+        # déjà configuré => go login/home
         if (s.get("admin_password_hash") or "").strip():
             return redirect(url_for("login"))
 
@@ -303,16 +303,16 @@ def register(app):
         s = db.query_one("SELECT admin_email, admin_password_hash, admin_totp_enabled FROM settings WHERE id = 1")
         s = dict(s) if s else {"admin_email": "", "admin_password_hash": None}
 
-        # dÃ©jÃ  configurÃ© => go login/home
+        # déjà configuré => go login/home
         if (s.get("admin_password_hash") or "").strip():
             return redirect(url_for("login"))
 
-        # RÃ©cupÃ©ration + normalisation (ne plante jamais)
+        # Récupération + normalisation (ne plante jamais)
         email_input = (request.form.get("email") or "").strip().lower()
         password = (request.form.get("password") or "")
 
         # Stricte: email obligatoire.
-        # Si l'utilisateur laisse vide MAIS qu'un email existe dÃ©jÃ  en DB, on le reprend.
+        # Si l'utilisateur laisse vide MAIS qu'un email existe déjà en DB, on le reprend.
         email = email_input or (s.get("admin_email") or "").strip().lower()
 
         # Validation stricte (pas seulement "@")
@@ -331,7 +331,7 @@ def register(app):
 
         # Mot de passe strict
         if len(password) < 8:
-            flash("Mot de passe trop court (8 caractÃ¨res minimum).", "error")
+            flash("Mot de passe trop court (8 caractères minimum).", "error")
             return redirect(url_for("setup_admin"))
 
         pwd_hash = generate_password_hash(password)
@@ -453,13 +453,13 @@ def register(app):
         return redirect(url_for("login"))
 
     # -----------------------------
-    # SETTINGS / PARAMÃˆTRES
+    # SETTINGS / PARAMÈTRES
     # -----------------------------
     @app.before_request
     def setup_guard_no_servers():
         """
-        Mode "setup" : si aucun serveur n'est configurÃ©, on force l'accÃ¨s
-        uniquement Ã  la page serveurs pour permettre l'initialisation.
+        Mode "setup" : si aucun serveur n'est configuré, on force l'accès
+        uniquement à la page serveurs pour permettre l'initialisation.
         """
         allowed_prefixes = (
             "/static",

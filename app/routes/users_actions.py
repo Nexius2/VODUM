@@ -76,12 +76,12 @@ def _queue_plex_share_settings_sync(db, user_id: int, server_id: int, reason: st
 
 def _force_queue_full_plex_sync_for_user(db, user_id: int, reason: str = "admin_force_resync"):
     """
-    RecrÃ©e un job 'sync' complet par serveur Plex liÃ©.
+    Recrée un job 'sync' complet par serveur Plex lié.
 
     Important :
     on passe par _insert_plex_media_job() pour annuler proprement
-    les anciens jobs actifs du mÃªme user/server, au lieu de supprimer
-    brutalement des jobs Ã©ventuellement en cours.
+    les anciens jobs actifs du même user/server, au lieu de supprimer
+    brutalement des jobs éventuellement en cours.
     """
     rows = db.query(
         """
@@ -204,7 +204,7 @@ def _delete_vodum_user_everywhere(db, user_id: int) -> bool:
     """
     Suppression LOCALE uniquement.
     Si le compte existe encore sur une plateforme active,
-    un prochain sync peut le recrÃ©er.
+    un prochain sync peut le recréer.
     """
     with db._lock:
         cur = db.conn.cursor()
@@ -235,7 +235,7 @@ def _delete_vodum_user_everywhere(db, user_id: int) -> bool:
                 (user_id,),
             )
 
-            # media_users doit Ãªtre supprimÃ© avant vodum_users
+            # media_users doit être supprimé avant vodum_users
             cur.execute(
                 "DELETE FROM media_users WHERE vodum_user_id = ?",
                 (user_id,),
@@ -337,7 +337,7 @@ def register(app):
             flash("invalid_field", "error")
             return redirect(url_for("user_detail", user_id=user_id))
 
-        # sÃ©curitÃ©: s'assurer que ce media_user appartient bien au user_id + server_id
+        # sécurité: s'assurer que ce media_user appartient bien au user_id + server_id
         mu = db.query_one(
             """
             SELECT mu.id, mu.details_json
@@ -482,7 +482,7 @@ def register(app):
             return redirect(url_for("user_detail", user_id=user_id, tab="access"))
 
         # --------------------------------------------------
-        # RÃ©cup library + server (pour savoir sur quel serveur on agit)
+        # Récup library + server (pour savoir sur quel serveur on agit)
         # --------------------------------------------------
         lib = db.query_one(
             "SELECT id, server_id, name FROM libraries WHERE id = ?",
@@ -502,7 +502,7 @@ def register(app):
 
         # --------------------------------------------------
         # IMPORTANT : on ne doit toggler QUE les media_users
-        # de CE serveur (sinon tu peux lier une lib Plex Ã  un compte Jellyfin)
+        # de CE serveur (sinon tu peux lier une lib Plex à un compte Jellyfin)
         # --------------------------------------------------
         media_users = db.query(
             """
@@ -521,7 +521,7 @@ def register(app):
         placeholders = ",".join("?" * len(media_user_ids))
 
         # --------------------------------------------------
-        # VÃ©rifier si l'accÃ¨s existe dÃ©jÃ 
+        # Vérifier si l'accès existe déjà
         # --------------------------------------------------
         exists = db.query_one(
             f"""
@@ -562,7 +562,7 @@ def register(app):
             flash("library_access_added", "success")
 
         # --------------------------------------------------
-        # CrÃ©ation d'un job pour apply_plex_access_updates
+        # Création d'un job pour apply_plex_access_updates
         # -> uniquement si serveur Plex (pour Jellyfin on fera plus tard)
         # --------------------------------------------------
         if server["type"] == "plex":
@@ -587,8 +587,8 @@ def register(app):
 
             # --------------------------------------------------
             # Choix de l'action:
-            # - Ajout d'une bibliothÃ¨que => grant (Ã©quivalent plex_api_share.py --add --libraries X)
-            # - Retrait d'une bibliothÃ¨que => sync (rÃ©applique la liste DB), ou revoke si plus rien
+            # - Ajout d'une bibliothèque => grant (équivalent plex_api_share.py --add --libraries X)
+            # - Retrait d'une bibliothèque => sync (réapplique la liste DB), ou revoke si plus rien
             # --------------------------------------------------
             if removed and remaining_count == 0:
                 action = "revoke"
@@ -629,11 +629,11 @@ def register(app):
                     f"library_id={job_library_id} preferred_media_user_id={preferred_media_user_id}"
                 )
 
-            # Activer + queue la tÃ¢che apply_plex_access_updates
+            # Activer + queue la tâche apply_plex_access_updates
             try:
                 enable_and_run_task_by_name("apply_plex_access_updates")
             except Exception:
-                # pas bloquant si enqueue Ã©choue, le scheduler le prendra plus tard
+                # pas bloquant si enqueue échoue, le scheduler le prendra plus tard
                 pass
 
         elif server["type"] == "jellyfin":

@@ -20,7 +20,39 @@ def _task_queue_busy(db) -> bool:
 def _sessions(db, window_sql: str, limit: int = 6) -> list[dict]:
     rows = db.query(
         """
-        SELECT ms.*, s.name AS server_name, s.type AS provider, mu.username AS username
+        SELECT
+          ms.id,
+          ms.server_id,
+          ms.provider,
+          ms.session_key,
+          ms.media_user_id,
+          ms.external_user_id,
+          ms.media_key,
+          ms.media_type,
+          ms.title,
+          ms.grandparent_title,
+          ms.parent_title,
+          ms.state,
+          ms.progress_ms,
+          ms.duration_ms,
+          ms.is_transcode,
+          ms.bitrate,
+          ms.video_codec,
+          ms.audio_codec,
+          ms.client_name,
+          ms.client_product,
+          ms.device,
+          ms.ip,
+          ms.started_at,
+          ms.last_seen_at,
+          ms.raw_json,
+          ms.poster_ref_json,
+          ms.backdrop_ref_json,
+          ms.library_section_id,
+          ms.missing_count,
+          s.name AS server_name,
+          s.type AS provider,
+          mu.username AS username
         FROM media_sessions ms
         JOIN servers s ON s.id = ms.server_id
         LEFT JOIN media_users mu ON mu.id = ms.media_user_id

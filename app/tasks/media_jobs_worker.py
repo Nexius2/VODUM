@@ -90,8 +90,7 @@ def _claim_one(db):
     lock_owner = _new_lock_owner()
 
     job = db.query_one("""
-        SELECT *
-        FROM media_jobs
+        SELECT id, provider, action, vodum_user_id, server_id, library_id, payload_json, status, priority, run_after, locked_by, locked_until, attempts, max_attempts, last_error, processed, success, created_at, processed_at, executed_at, dedupe_key FROM media_jobs
         WHERE status='queued'
           AND action='refresh'
           AND (run_after IS NULL OR run_after <= CURRENT_TIMESTAMP)
@@ -119,7 +118,7 @@ def _claim_one(db):
     if int(getattr(cur, "rowcount", 0) or 0) != 1:
         return None
 
-    claimed = db.query_one("SELECT * FROM media_jobs WHERE id=?", (job["id"],))
+    claimed = db.query_one("SELECT id, provider, action, vodum_user_id, server_id, library_id, payload_json, status, priority, run_after, locked_by, locked_until, attempts, max_attempts, last_error, processed, success, created_at, processed_at, executed_at, dedupe_key FROM media_jobs WHERE id=?", (job["id"],))
     if not claimed:
         return None
 

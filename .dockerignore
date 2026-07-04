@@ -48,6 +48,8 @@ tools/
 .ruff_cache/
 .coverage
 htmlcov/
+node_modules/
+.pnpm-store/
 
 # Build outputs
 dist/

@@ -1,4 +1,4 @@
-﻿from datetime import datetime, timedelta
+from datetime import datetime, timedelta
 
 
 def retry_modifier_for_attempt(next_attempt_number: int) -> str:

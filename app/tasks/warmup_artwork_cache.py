@@ -291,7 +291,19 @@ def _load_candidates(db):
         ),
         latest_snapshot AS (
           SELECT
-            h.*,
+            h.id,
+            h.server_id,
+            h.provider,
+            h.media_key,
+            h.media_type,
+            h.title,
+            h.grandparent_title,
+            h.raw_json,
+            h.poster_ref_json,
+            h.backdrop_ref_json,
+            h.stopped_at,
+            h.library_id,
+            h.media_group_key,
             ROW_NUMBER() OVER (
               PARTITION BY h.library_id, h.media_group_key
               ORDER BY datetime(h.stopped_at) DESC, h.id DESC
@@ -300,7 +312,20 @@ def _load_candidates(db):
         ),
         ranked AS (
           SELECT
-            ls.*,
+            ls.id,
+            ls.server_id,
+            ls.provider,
+            ls.media_key,
+            ls.media_type,
+            ls.title,
+            ls.grandparent_title,
+            ls.raw_json,
+            ls.poster_ref_json,
+            ls.backdrop_ref_json,
+            ls.stopped_at,
+            ls.library_id,
+            ls.media_group_key,
+            ls.snapshot_rank,
             ma.plays,
             ROW_NUMBER() OVER (
               PARTITION BY ls.library_id

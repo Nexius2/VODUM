@@ -157,7 +157,7 @@ def run(task_id: int, db):
     log.info("=== CHECK SERVERS : STARTING ===")
 
     try:
-        servers = db.query("SELECT * FROM servers")
+        servers = db.query("SELECT id, name, server_identifier, type, url, local_url, public_url, token, settings_json, server_version, unavailable_since, cooldown_until, last_failure, last_checked, status FROM servers")
 
         if not servers:
             log.warning("No server found in the database.")

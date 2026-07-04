@@ -9,8 +9,7 @@ def run(task_id, db):
 
     settings = db.query_one(
         """
-        SELECT *
-        FROM user_referral_settings
+        SELECT id, enabled, reward_enabled, qualification_days, reward_days, allow_referrer_change_before_qualification, auto_notify_reward, eligible_statuses, created_at, updated_at, auto_expire_pending, auto_archive_rewarded, auto_archive_expired, pending_expire_days, rewarded_archive_days, expired_archive_days FROM user_referral_settings
         WHERE id = 1
         """
     )

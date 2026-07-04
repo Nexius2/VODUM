@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from core.plex_rate_limit import wait_for_plex_slot
 import requests
-from flask import current_app, url_for
+from flask import current_app, request, session, url_for
 
 from db_manager import DBManager
 from logging_utils import get_logger
@@ -37,8 +37,22 @@ def _today_str():
     return datetime.now().strftime("%Y-%m-%d")
 
 
+def _get_quotes_path():
+    here = Path(__file__).resolve()
+    candidates = [
+        here.parent.parent / "static" / "easter_eggs" / CONFIG_FILE,
+        here.parent.parent.parent / "static" / "easter_eggs" / CONFIG_FILE,
+    ]
+
+    for path in candidates:
+        if path.exists():
+            return path
+
+    return candidates[0]
+
+
 def _load_quotes():
-    path = Path(__file__).resolve().parent.parent / "static" / "easter_eggs" / CONFIG_FILE
+    path = _get_quotes_path()
 
     if not path.exists():
         logger.warning(f"Quotes file not found: {path}")
@@ -147,17 +161,37 @@ def _get_servers():
     return servers
 
 
-def _pick_quote_text(entry):
+def _quote_text_for_language(entry, language="en"):
     quotes = entry.get("quotes") or {}
     if not isinstance(quotes, dict):
         return None
 
-    text = quotes.get("en")
-    if text is None:
-        return None
+    candidates = []
+    lang = (language or "").strip().lower()
+    if lang:
+        candidates.append(lang)
+        if "-" in lang:
+            candidates.append(lang.split("-", 1)[0])
+    candidates.extend(["en", "fr"])
 
-    text = str(text).strip()
-    return text or None
+    for code in candidates:
+        text = quotes.get(code)
+        if text is None:
+            continue
+        text = str(text).strip()
+        if text:
+            return text
+
+    for text in quotes.values():
+        text = str(text).strip()
+        if text:
+            return text
+
+    return None
+
+
+def _pick_quote_text(entry):
+    return _quote_text_for_language(entry, "en")
 
 
 def _match_plex_guids(guid_nodes, imdb, tmdb):
@@ -489,19 +523,63 @@ def refresh_dashboard_quote_cache(force=False):
     return payload
 
 
+
+def _active_quote_language():
+    try:
+        lang = session.get("lang")
+        if lang:
+            return str(lang)
+    except Exception:
+        pass
+
+    try:
+        best = request.accept_languages.best_match(["fr", "en", "de", "es", "it"])
+        if best:
+            return str(best)
+    except Exception:
+        pass
+
+    return "en"
+
+
+def _build_local_quote_fallback():
+    quotes = _load_quotes()
+    language = _active_quote_language()
+
+    candidates = []
+    for entry in quotes:
+        phrase = _quote_text_for_language(entry, language)
+        if phrase:
+            candidates.append((entry, phrase))
+
+    if not candidates:
+        return None
+
+    rnd = random.Random(_today_str())
+    entry, phrase = candidates[rnd.randrange(len(candidates))]
+
+    return {
+        "phrase": phrase,
+        "poster_url": None,
+        "title": None,
+        "year": None,
+        "fallback": True,
+        "quote_key": entry.get("key"),
+    }
+
 def build_dashboard_quote_card():
     payload = _load_cache()
     if not payload:
-        logger.info("Dashboard quote cache missing -> returning None (no request-time lookup)")
-        return None
+        logger.info("Dashboard quote cache missing -> using local quote fallback")
+        return _build_local_quote_fallback()
 
     if payload.get("day") != _today_str():
-        logger.info("Dashboard quote cache is outdated -> returning None (no request-time lookup)")
-        return None
+        logger.info("Dashboard quote cache is outdated -> using local quote fallback")
+        return _build_local_quote_fallback()
 
     if payload.get("none") is True:
-        logger.info("Dashboard quote cache says no valid entry for today")
-        return None
+        logger.info("Dashboard quote cache says no matching media for today -> using local quote fallback")
+        return _build_local_quote_fallback()
 
     server_id = payload.get("server_id")
     poster_mode = payload.get("poster_mode")
@@ -531,8 +609,8 @@ def build_dashboard_quote_card():
         poster_url = None
 
     if not poster_url:
-        logger.warning("Dashboard quote cache exists but poster_url could not be built")
-        return None
+        logger.warning("Dashboard quote cache exists but poster_url could not be built -> using local quote fallback")
+        return _build_local_quote_fallback()
 
     return {
         "phrase": payload.get("phrase"),
@@ -540,3 +618,4 @@ def build_dashboard_quote_card():
         "title": payload.get("title"),
         "year": payload.get("year"),
     }
+

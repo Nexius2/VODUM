@@ -39,7 +39,7 @@ def resolve_discord_bot(db, settings: dict) -> dict:
 
     if bot_id and db is not None:
         try:
-            row = db.query_one("SELECT * FROM discord_bots WHERE id = ?", (bot_id,))
+            row = db.query_one("SELECT id, name, token, bot_user_id, bot_username, bot_type, created_at, updated_at FROM discord_bots WHERE id = ?", (bot_id,))
             if row:
                 b = dict(row)
                 b['token'] = (decrypt_secret(b.get('token')) or '').strip()

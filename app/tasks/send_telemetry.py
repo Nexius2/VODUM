@@ -3,13 +3,13 @@ import json
 import platform
 import threading
 import uuid
-from pathlib import Path
 import requests
 from utils.platform_detection import detect_platform
 from db_manager import DBManager
 from logging_utils import get_logger
 from datetime import datetime, timedelta, timezone
 from utils.version import load_app_version
+from core.app_paths import update_status_path
 
 TELEMETRY_URL = "https://vodum-telemetry.vodum-project.workers.dev/api/ingest"
 
@@ -85,7 +85,7 @@ def run(task_id: int, db: DBManager):
         return {"success": True, "skipped": True, "reason": "already_running"}
 
     try:
-        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        settings = db.query_one("SELECT id, mail_from, smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_auth_method, smtp_oauth_access_token, email_history_retention_years, disable_on_expiry, delete_after_expiry_days, send_reminders, preavis_days, reminder_days, default_language, timezone, admin_email, contact_email, admin_password_hash, auth_enabled, admin_totp_enabled, admin_totp_secret, wizard_active, wizard_completed, wizard_step, wizard_state_json, web_secure_cookies, web_cookie_samesite, web_trust_proxy, enable_cron_jobs, default_expiration_days, default_subscription_days, maintenance_mode, debug_mode, backup_retention_days, backup_retention_count, data_retention_years, brand_name, notifications_order, user_notifications_can_override, notifications_send_mode, expiry_mode, warn_then_disable_days, discord_enabled, discord_bot_token, discord_bot_id, mailing_enabled, skip_never_used_accounts, plex_user_import_mode, enable_anonymous_telemetry, telemetry_instance_id, telemetry_last_sent_at, task_defaults_version, stream_enforcer_boost_until, usage_risk_enabled, usage_risk_send_upgrade_suggestions, usage_risk_send_stream_blocked_message, usage_risk_min_kills_before_suggestion, usage_risk_analysis_window_days, usage_risk_suggestion_cooldown_days, usage_risk_medium_threshold, usage_risk_high_threshold FROM settings WHERE id = 1")
 
         if not settings:
             log.warning("Telemetry aborted: settings row not found")
@@ -164,7 +164,7 @@ def run(task_id: int, db: DBManager):
 
         try:
 
-            status_file = Path("/appdata/update_status.json")
+            status_file = update_status_path()
 
             if status_file.exists():
 

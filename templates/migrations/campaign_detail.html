@@ -281,8 +281,7 @@
   <div class="bg-red-950/30 border border-red-900 rounded-xl p-5">
     <h2 class="font-semibold text-red-200">{{ t("migration_delete_draft") }}</h2>
     <p class="mt-2 text-sm text-slate-400">{{ t("migration_delete_draft_hint") }}</p>
-    <form method="post" action="{{ url_for('migration_draft_delete', campaign_id=campaign.id) }}" class="mt-4"
-          onsubmit="return confirm({{ t('migration_delete_draft_confirm')|tojson }});">
+    <form method="post" action="{{ url_for('migration_draft_delete', campaign_id=campaign.id) }}" class="mt-4" data-confirm="{{ t('migration_delete_draft_confirm') }}">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="confirm_delete" value="1">
       <button class="px-4 py-2 rounded-lg bg-red-800 hover:bg-red-700 text-white text-sm">{{ t("migration_delete_draft") }}</button>
@@ -304,42 +303,5 @@
   </div>
 </div>
 
-<script>
-(() => {
-  const modal = document.getElementById("migration-credentials-modal");
-  const username = document.getElementById("migration-credential-username");
-  const password = document.getElementById("migration-credential-password");
-  const error = document.getElementById("migration-credentials-error");
-  const close = () => {
-    modal.classList.add("hidden");
-    modal.classList.remove("flex");
-    username.textContent = "";
-    password.textContent = "";
-    error.classList.add("hidden");
-  };
-  document.getElementById("migration-credentials-close").addEventListener("click", close);
-  modal.addEventListener("click", event => { if (event.target === modal) close(); });
-  document.querySelectorAll(".migration-reveal-credentials").forEach(button => {
-    button.addEventListener("click", async () => {
-      username.textContent = "";
-      password.textContent = "";
-      error.classList.add("hidden");
-      modal.classList.remove("hidden");
-      modal.classList.add("flex");
-      try {
-        const response = await fetch(button.dataset.url, {
-          method: "POST",
-          headers: {"X-CSRF-Token": "{{ csrf_token }}"}
-        });
-        const data = await response.json();
-        if (!response.ok || !data.ok) throw new Error(data.error || "request_failed");
-        username.textContent = data.username || "";
-        password.textContent = data.password || "";
-      } catch (_error) {
-        error.classList.remove("hidden");
-      }
-    });
-  });
-})();
-</script>
+<script src="{{ url_for('static', filename='js/pages/migration-campaign-detail.js', v=g.app_version|default('dev')) }}"></script>
 {% endblock %}

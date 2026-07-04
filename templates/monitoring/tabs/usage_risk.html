@@ -100,7 +100,9 @@
             <th class="text-left px-4 py-3">{{ t("user") }}</th>
             <th class="text-left px-4 py-3">{{ t("usage_risk_main_reason") }}</th>
             <th class="text-left px-4 py-3">{{ t("usage_risk_evidence") }}</th>
-            <th class="text-left px-4 py-3">{{ t("usage_risk_stops") }}</th>
+            <th class="text-left px-4 py-3 whitespace-nowrap min-w-[90px]">
+			  {{ t("usage_risk_stops") }}
+			</th>
             <th class="text-left px-4 py-3">{{ t("usage_risk_suggested_subscription") }}</th>
             <th class="text-left px-4 py-3">{{ t("usage_risk_last_activity") }}</th>
             <th class="text-right px-4 py-3">{{ t("details") }}</th>
@@ -110,7 +112,7 @@
         <tbody class="divide-y divide-slate-800">
           {% for row in usage_risk_report.rows %}
             <tr class="hover:bg-slate-800/40">
-              <td class="px-4 py-3">
+              <td class="px-4 py-3 whitespace-nowrap min-w-[90px]">
                 {% if row.risk_level == 'high' %}
                   <span class="inline-flex items-center gap-2 text-rose-400 font-semibold">● {{ t("high") }}</span>
                 {% elif row.risk_level == 'medium' %}
@@ -118,7 +120,9 @@
                 {% else %}
                   <span class="inline-flex items-center gap-2 text-emerald-400 font-semibold">● {{ t("low") }}</span>
                 {% endif %}
-                <div class="text-xs text-slate-500 mt-1">{{ t("usage_risk_score") }} {{ row.risk_score }}</div>
+                <div class="text-xs text-slate-500 mt-1 whitespace-nowrap">
+				  {{ t("usage_risk_score") }} {{ row.risk_score }}
+				</div>
               </td>
 
               <td class="px-4 py-3">
@@ -126,7 +130,7 @@
                 <div class="text-xs text-slate-500">{{ row.email or row.subscription_name }}</div>
               </td>
 
-              <td class="px-4 py-3 text-slate-200">
+              <td class="px-4 py-3 text-slate-200 max-w-xl whitespace-normal break-words">
                 {{ usage_reason(row.reason_items[0]) if row.reason_items else t("usage_risk_no_suspicious_reason") }}
                 {% if row.reason_items %}
                   <div class="text-xs text-slate-500 mt-1">{% for reason in row.reason_items %}{{ usage_reason(reason) }}{% if not loop.last %} · {% endif %}{% endfor %}</div>
@@ -143,10 +147,10 @@
                 </div>
               </td>
 
-              <td class="px-4 py-3 text-slate-200">
-                <div>{{ row.kills_7d }} / 7d</div>
-                <div>{{ row.kills_30d }} / 30d</div>
-                <div>{{ row.kills_90d }} / 90d</div>
+              <td class="px-4 py-3 text-slate-200 whitespace-nowrap min-w-[90px]">
+				<div><span class="font-medium">7d</span> : {{ row.kills_7d }}</div>
+				<div><span class="font-medium">30d</span> : {{ row.kills_30d }}</div>
+				<div><span class="font-medium">90d</span> : {{ row.kills_90d }}</div>
               </td>
 
               <td class="px-4 py-3">
@@ -166,7 +170,7 @@
               <td class="px-4 py-3 text-right">
                 <button
                   type="button"
-                  onclick="document.getElementById('usage-risk-detail-{{ loop.index }}').classList.toggle('hidden')"
+                  data-usage-risk-toggle="usage-risk-detail-{{ loop.index }}"
                   class="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-950 hover:bg-slate-800 text-xs text-slate-200">
                   {{ t("usage_risk_view_details") }}
                 </button>

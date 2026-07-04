@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 """
@@ -351,7 +351,7 @@ def _detect_pms_identifier(tconn: sqlite3.Connection) -> str | None:
         # Plex machineIdentifier is typically 40 hex chars
         if re.fullmatch(r"[0-9a-fA-F]{40}", v):
             return True
-        # fallback: accept other non-empty identifiers that look â€œid-likeâ€
+        # fallback: accept other non-empty identifiers that look “id-like”
         return len(v) >= 12
 
     tables = [r[0] for r in tconn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
@@ -943,8 +943,7 @@ def run(task_id, db):
     while True:
         job = db.query_one(
             """
-            SELECT *
-            FROM tautulli_import_jobs
+            SELECT id, server_id, file_path, keep_all_users, keep_all_libraries, import_only_available_libraries, target_server_id, status, stats_json, last_error, created_at, started_at, finished_at FROM tautulli_import_jobs
             WHERE status='queued'
             ORDER BY created_at ASC
             LIMIT 1
@@ -1050,7 +1049,7 @@ def run(task_id, db):
 
             # optional admin email...
             try:
-                settings = db.query_one("SELECT * FROM settings WHERE id=1")
+                settings = db.query_one("SELECT id, mail_from, smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_auth_method, smtp_oauth_access_token, email_history_retention_years, disable_on_expiry, delete_after_expiry_days, send_reminders, preavis_days, reminder_days, default_language, timezone, admin_email, contact_email, admin_password_hash, auth_enabled, admin_totp_enabled, admin_totp_secret, wizard_active, wizard_completed, wizard_step, wizard_state_json, web_secure_cookies, web_cookie_samesite, web_trust_proxy, enable_cron_jobs, default_expiration_days, default_subscription_days, maintenance_mode, debug_mode, backup_retention_days, backup_retention_count, data_retention_years, brand_name, notifications_order, user_notifications_can_override, notifications_send_mode, expiry_mode, warn_then_disable_days, discord_enabled, discord_bot_token, discord_bot_id, mailing_enabled, skip_never_used_accounts, plex_user_import_mode, enable_anonymous_telemetry, telemetry_instance_id, telemetry_last_sent_at, task_defaults_version, stream_enforcer_boost_until, usage_risk_enabled, usage_risk_send_upgrade_suggestions, usage_risk_send_stream_blocked_message, usage_risk_min_kills_before_suggestion, usage_risk_analysis_window_days, usage_risk_suggestion_cooldown_days, usage_risk_medium_threshold, usage_risk_high_threshold FROM settings WHERE id=1")
                 if settings:
                     settings_d = dict(settings)
                     if int(settings_d.get("mailing_enabled") or 0) == 1:

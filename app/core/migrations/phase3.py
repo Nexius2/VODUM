@@ -231,7 +231,7 @@ def reconcile_source_jobs(db) -> int:
 
 
 def remove_validated_source_access(db, campaign_id: int) -> dict:
-    campaign = dict(db.query_one("SELECT * FROM migration_campaigns WHERE id=?", (campaign_id,)) or {})
+    campaign = dict(db.query_one("SELECT id, name, source_server_id, destination_server_id, migration_type, migration_mode, intent, status, options_json, library_mapping_json, analysis_json, scheduled_at, batch_size, created_at, updated_at, started_at, completed_at FROM migration_campaigns WHERE id=?", (campaign_id,)) or {})
     if not campaign:
         raise ValueError("Migration campaign not found.")
     if str(campaign.get("intent") or "copy").lower() == "copy":
@@ -245,8 +245,7 @@ def remove_validated_source_access(db, campaign_id: int) -> dict:
 
     rows = db.query(
         """
-        SELECT *
-        FROM migration_users
+        SELECT id, campaign_id, vodum_user_id, source_media_user_id, destination_media_user_id, status, eligibility, blockers_json, options_json, source_snapshot_json, result_json, attempts, last_error, created_at, updated_at, started_at, completed_at FROM migration_users
         WHERE campaign_id=? AND status='completed'
         ORDER BY id
         """,
@@ -321,7 +320,7 @@ def _current_destination_library_ids(db, media_user_id: int, destination_server_
 
 
 def rollback_destination_access(db, campaign_id: int) -> dict:
-    campaign = dict(db.query_one("SELECT * FROM migration_campaigns WHERE id=?", (campaign_id,)) or {})
+    campaign = dict(db.query_one("SELECT id, name, source_server_id, destination_server_id, migration_type, migration_mode, intent, status, options_json, library_mapping_json, analysis_json, scheduled_at, batch_size, created_at, updated_at, started_at, completed_at FROM migration_campaigns WHERE id=?", (campaign_id,)) or {})
     if not campaign:
         raise ValueError("Migration campaign not found.")
     destination = dict(db.query_one("SELECT id, type, status FROM servers WHERE id=?", (campaign["destination_server_id"],)) or {})
@@ -331,7 +330,7 @@ def rollback_destination_access(db, campaign_id: int) -> dict:
         raise ValueError("Destination server must be online.")
 
     rolled_back = queued = skipped = 0
-    for raw in db.query("SELECT * FROM migration_users WHERE campaign_id=? ORDER BY id", (campaign_id,)):
+    for raw in db.query("SELECT id, campaign_id, vodum_user_id, source_media_user_id, destination_media_user_id, status, eligibility, blockers_json, options_json, source_snapshot_json, result_json, attempts, last_error, created_at, updated_at, started_at, completed_at FROM migration_users WHERE campaign_id=? ORDER BY id", (campaign_id,)):
         user = dict(raw)
         result = _json_dict(user.get("result_json"))
         media_user_id = result.get("destination_media_user_id") or user.get("destination_media_user_id")
@@ -388,7 +387,7 @@ def rollback_destination_access(db, campaign_id: int) -> dict:
 
 
 def rollback_source_access(db, campaign_id: int) -> dict:
-    campaign = dict(db.query_one("SELECT * FROM migration_campaigns WHERE id=?", (campaign_id,)) or {})
+    campaign = dict(db.query_one("SELECT id, name, source_server_id, destination_server_id, migration_type, migration_mode, intent, status, options_json, library_mapping_json, analysis_json, scheduled_at, batch_size, created_at, updated_at, started_at, completed_at FROM migration_campaigns WHERE id=?", (campaign_id,)) or {})
     if not campaign:
         raise ValueError("Migration campaign not found.")
     source = dict(db.query_one("SELECT id, type, status FROM servers WHERE id=?", (campaign["source_server_id"],)) or {})
@@ -397,7 +396,7 @@ def rollback_source_access(db, campaign_id: int) -> dict:
     if not is_server_online(source.get("status")):
         raise ValueError("Source server must be online.")
     restored = queued = skipped = 0
-    for raw in db.query("SELECT * FROM migration_users WHERE campaign_id=? ORDER BY id", (campaign_id,)):
+    for raw in db.query("SELECT id, campaign_id, vodum_user_id, source_media_user_id, destination_media_user_id, status, eligibility, blockers_json, options_json, source_snapshot_json, result_json, attempts, last_error, created_at, updated_at, started_at, completed_at FROM migration_users WHERE campaign_id=? ORDER BY id", (campaign_id,)):
         user = dict(raw)
         result = _json_dict(user.get("result_json"))
         snapshot = _json_dict(user.get("source_snapshot_json"))

@@ -18,6 +18,7 @@ from core.i18n import init_i18n
 from core.repair.plex_media_users_repair import run_repair_if_needed
 from core.monitoring.plex_websocket import PlexWebsocketClient
 from core.startup import StartupStep, run_startup_sequence
+from core.app_paths import update_status_path
 from utils.version import load_app_version
 
 from api.subscriptions import subscriptions_api
@@ -40,7 +41,7 @@ _I18N_CACHE: dict[str, dict] = {}
 class ConditionalProxyFix:
     """
     Applique ProxyFix uniquement si enabled_getter() retourne True.
-    Permet d'activer/dÃ©sactiver dynamiquement le trust proxy via les settings.
+    Permet d'activer/désactiver dynamiquement le trust proxy via les settings.
     """
     def __init__(self, wsgi_app, enabled_getter, trusted_networks_getter):
         self._raw_app = wsgi_app
@@ -126,7 +127,7 @@ def startup_admin_recover_if_requested(app: Flask):
     """
     Reset LOCAL (Unraid/Docker) :
     - si RESET_FILE existe et contient RESET_MAGIC ("RECOVER")
-    - au dÃ©marrage de l'app uniquement
+    - au démarrage de l'app uniquement
     -> wipe admin_email + admin_password_hash
     -> supprime le fichier (one-shot)
     """
@@ -190,13 +191,13 @@ APP_VERSION = load_app_version(fallback="dev")
 
 def _reset_maintenance_on_startup(app: Flask):
     """
-    Si l'app a Ã©tÃ© laissÃ©e en maintenance aprÃ¨s une restauration DB,
-    on remet un Ã©tat propre au dÃ©marrage.
+    Si l'app a été laissée en maintenance après une restauration DB,
+    on remet un état propre au démarrage.
 
     - maintenance_mode -> 0
-    - enabled <- enabled_prev si prÃ©sent
-    - status recalculÃ© proprement
-    - enabled_prev vidÃ©
+    - enabled <- enabled_prev si présent
+    - status recalculé proprement
+    - enabled_prev vidé
     """
     try:
         db = DBManager(app.config["DATABASE"])
@@ -268,8 +269,7 @@ def _start_plex_websocket_engine(app: Flask):
     db = DBManager(app.config["DATABASE"])
     plex_servers = db.query(
         """
-        SELECT *
-        FROM servers
+        SELECT id, name, server_identifier, type, url, local_url, public_url, token, settings_json, server_version, unavailable_since, cooldown_until, last_failure, last_checked, status FROM servers
         WHERE LOWER(TRIM(type)) = 'plex'
           AND token IS NOT NULL
           AND TRIM(token) != ''
@@ -338,7 +338,7 @@ def create_app():
 
     @app.before_request
     def csrf_guard():
-        # ProtÃ¨ge uniquement les mÃ©thodes qui modifient l'Ã©tat
+        # Protège uniquement les méthodes qui modifient l'état
         if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
             return
 
@@ -363,8 +363,8 @@ def create_app():
             abort(403)
 
     # Trust proxy :
-    # - prioritÃ© Ã  la variable d'environnement si elle existe
-    # - sinon fallback sur la valeur stockÃ©e en base/settings
+    # - priorité à la variable d'environnement si elle existe
+    # - sinon fallback sur la valeur stockée en base/settings
     env_trust_proxy = _env_bool("VODUM_TRUST_PROXY")
     db_path = os.environ.get("DATABASE_PATH", "/appdata/database.db")
 
@@ -379,7 +379,7 @@ def create_app():
         "127.0.0.1/32,::1/128",
     )
 
-    # Middleware conditionnel : lit app.config Ã  chaque requÃªte
+    # Middleware conditionnel : lit app.config à chaque requête
     app.wsgi_app = ConditionalProxyFix(
         app.wsgi_app,
         lambda: bool(app.config.get("TRUST_PROXY_ENABLED", False)),
@@ -396,12 +396,12 @@ def create_app():
     def inject_version():
         g.app_version = APP_VERSION
 
-        # Update badge (sans BDD) -> lit /appdata/update_status.json
+        # Update badge (sans BDD) -> lit le status dans le data dir configure
         g.update_available = False
         try:
-            status_path = "/appdata/update_status.json"
-            if os.path.exists(status_path):
-                with open(status_path, "r", encoding="utf-8", errors="ignore") as f:
+            status_path = update_status_path()
+            if status_path.exists():
+                with status_path.open("r", encoding="utf-8", errors="ignore") as f:
                     data = json.load(f) or {}
                 g.update_available = bool(data.get("update_available"))
                 g.update_pending_days = int(data.get("update_pending_days") or 0)
@@ -413,7 +413,7 @@ def create_app():
     static_max_age = _env_int("VODUM_STATIC_MAX_AGE_SECONDS", 60 * 60 * 24 * 30, minimum=0)
     app.config["SEND_FILE_MAX_AGE_DEFAULT"] = timedelta(seconds=max(0, static_max_age))
 
-    # Ne pas Ã©craser la valeur dÃ©jÃ  calculÃ©e depuis env / DB
+    # Ne pas écraser la valeur déjà calculée depuis env / DB
     app.config.setdefault("TRUST_PROXY_ENABLED", False)
 
     # Backup dir
@@ -519,7 +519,7 @@ def create_app():
     from routes import register_routes
     register_routes(app)
 
-    # Expose helpers pour dâ€™Ã©ventuels scripts internes
+    # Expose helpers pour d’éventuels scripts internes
     app.get_db = get_db
     app.table_exists = table_exists
     app.scheduler_db_provider = lambda: DBManager(app.config["DATABASE"])

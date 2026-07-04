@@ -26,7 +26,7 @@ def _today_iso():
 
 
 def _get_settings(db):
-    row = db.query_one("SELECT * FROM user_referral_settings WHERE id = 1")
+    row = db.query_one("SELECT id, enabled, reward_enabled, qualification_days, reward_days, allow_referrer_change_before_qualification, auto_notify_reward, eligible_statuses, created_at, updated_at, auto_expire_pending, auto_archive_rewarded, auto_archive_expired, pending_expire_days, rewarded_archive_days, expired_archive_days FROM user_referral_settings WHERE id = 1")
     return dict(row) if row else {
         "enabled": 0,
         "reward_enabled": 1,
@@ -108,7 +108,26 @@ def run(task_id=None, db=None):
     rows = db.query(
         """
         SELECT
-            r.*,
+            r.id,
+            r.referrer_user_id,
+            r.referred_user_id,
+            r.status,
+            r.referral_source,
+            r.start_at,
+            r.qualification_due_at,
+            r.qualified_at,
+            r.qualification_days_snapshot,
+            r.reward_days_snapshot,
+            r.reward_granted_at,
+            r.reward_expiration_before,
+            r.reward_expiration_after,
+            r.expired_at,
+            r.archived_at,
+            r.notification_sent_at,
+            r.notification_template_id,
+            r.last_error,
+            r.created_at,
+            r.updated_at,
             referred.username AS referred_username,
             referred.status AS referred_status,
             referred.expiration_date AS referred_expiration_date,
@@ -127,7 +146,7 @@ def run(task_id=None, db=None):
     ) or []
 
     tpl = None
-    global_settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+    global_settings = db.query_one("SELECT id, mail_from, smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_auth_method, smtp_oauth_access_token, email_history_retention_years, disable_on_expiry, delete_after_expiry_days, send_reminders, preavis_days, reminder_days, default_language, timezone, admin_email, contact_email, admin_password_hash, auth_enabled, admin_totp_enabled, admin_totp_secret, wizard_active, wizard_completed, wizard_step, wizard_state_json, web_secure_cookies, web_cookie_samesite, web_trust_proxy, enable_cron_jobs, default_expiration_days, default_subscription_days, maintenance_mode, debug_mode, backup_retention_days, backup_retention_count, data_retention_years, brand_name, notifications_order, user_notifications_can_override, notifications_send_mode, expiry_mode, warn_then_disable_days, discord_enabled, discord_bot_token, discord_bot_id, mailing_enabled, skip_never_used_accounts, plex_user_import_mode, enable_anonymous_telemetry, telemetry_instance_id, telemetry_last_sent_at, task_defaults_version, stream_enforcer_boost_until, usage_risk_enabled, usage_risk_send_upgrade_suggestions, usage_risk_send_stream_blocked_message, usage_risk_min_kills_before_suggestion, usage_risk_analysis_window_days, usage_risk_suggestion_cooldown_days, usage_risk_medium_threshold, usage_risk_high_threshold FROM settings WHERE id = 1")
     global_settings = dict(global_settings) if global_settings else {}
 
     for row in rows:

@@ -232,7 +232,7 @@ def find_plex_servers_by_token(db, token: object) -> list[dict]:
 
     matches = []
     for row in db.query(
-        "SELECT * FROM servers WHERE type='plex' ORDER BY name ASC"
+        "SELECT id, name, server_identifier, type, url, local_url, public_url, token, settings_json, server_version, unavailable_since, cooldown_until, last_failure, last_checked, status FROM servers WHERE type='plex' ORDER BY name ASC"
     ):
         server = decrypt_server_record(row)
         candidate = str(server.get("token") or "")

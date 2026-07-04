@@ -770,8 +770,7 @@ def collect_sessions_for_server(
 
             live = db.query_one(
                 """
-                SELECT *
-                FROM media_sessions
+                SELECT id, server_id, provider, session_key, media_user_id, external_user_id, media_key, media_type, title, grandparent_title, parent_title, state, progress_ms, duration_ms, is_transcode, bitrate, video_codec, audio_codec, client_name, client_product, device, ip, started_at, last_seen_at, raw_json, poster_ref_json, backdrop_ref_json, library_section_id, missing_count FROM media_sessions
                 WHERE server_id=? AND session_key=?
                 """,
                 (server_id, sk),

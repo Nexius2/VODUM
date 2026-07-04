@@ -14,6 +14,26 @@ from external.dashboard_quote_easter_egg import build_dashboard_quote_card
 
 from web.helpers import get_db, table_exists
 
+DASHBOARD_ACCESS_SERVER_COLUMNS = """
+                s.id,
+                s.name,
+                s.type,
+                s.url,
+                s.local_url,
+                s.public_url,
+                s.status,
+                s.last_checked
+"""
+
+DASHBOARD_ACCESS_LIBRARY_COLUMNS = """
+                    l.id,
+                    l.server_id,
+                    l.name,
+                    l.type,
+                    l.section_id,
+                    l.item_count
+"""
+
 def _no_store_response(html):
 	response = make_response(html)
 	response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
@@ -51,7 +71,7 @@ def _get_dashboard_next_tasks(db):
           CASE WHEN next_run IS NULL THEN 1 ELSE 0 END,
           datetime(next_run) ASC,
           LOWER(name) ASC
-        LIMIT 4
+        LIMIT 8
         """
     ) or []
 
@@ -497,8 +517,9 @@ def register(app):
         # 1) Serveurs sur lesquels l'utilisateur possède un media_user
         # --------------------------------------------------
         servers = db.query(
-            """
-            SELECT DISTINCT s.*
+            f"""
+            SELECT DISTINCT
+{DASHBOARD_ACCESS_SERVER_COLUMNS}
             FROM servers s
             JOIN media_users mu ON mu.server_id = s.id
             WHERE mu.vodum_user_id = ?
@@ -513,8 +534,9 @@ def register(app):
             # 2) Bibliothèques accessibles via ses comptes media
             # --------------------------------------------------
             libraries = db.query(
-                """
-                SELECT DISTINCT l.*
+                f"""
+                SELECT DISTINCT
+{DASHBOARD_ACCESS_LIBRARY_COLUMNS}
                 FROM libraries l
                 JOIN media_user_libraries mul ON mul.library_id = l.id
                 JOIN media_users mu ON mu.id = mul.media_user_id
@@ -535,3 +557,4 @@ def register(app):
 
 
             
+

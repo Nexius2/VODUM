@@ -33,7 +33,7 @@ def _library_ref(library: dict) -> dict:
 
 
 def export_migration_plan(db, campaign_id: int) -> dict:
-    campaign = _dict(db.query_one("SELECT * FROM migration_campaigns WHERE id=?", (int(campaign_id),)))
+    campaign = _dict(db.query_one("SELECT id, name, source_server_id, destination_server_id, migration_type, migration_mode, intent, status, options_json, library_mapping_json, analysis_json, scheduled_at, batch_size, created_at, updated_at, started_at, completed_at FROM migration_campaigns WHERE id=?", (int(campaign_id),)))
     if not campaign:
         raise ValueError("Migration campaign not found.")
     source = _dict(db.query_one("SELECT id,name,type,server_identifier FROM servers WHERE id=?", (campaign["source_server_id"],)))
@@ -93,13 +93,13 @@ def _resolve_server(db, ref: dict) -> dict:
     name = str(ref.get("name") or "").strip()
     if identifier:
         rows = db.query(
-            "SELECT * FROM servers WHERE lower(trim(type))=? AND trim(COALESCE(server_identifier,''))=?",
+            "SELECT id, name, server_identifier, type, url, local_url, public_url, token, settings_json, server_version, unavailable_since, cooldown_until, last_failure, last_checked, status FROM servers WHERE lower(trim(type))=? AND trim(COALESCE(server_identifier,''))=?",
             (provider, identifier),
         )
         if len(rows) == 1:
             return _dict(rows[0])
     rows = db.query(
-        "SELECT * FROM servers WHERE lower(trim(type))=? AND lower(trim(name))=lower(trim(?))",
+        "SELECT id, name, server_identifier, type, url, local_url, public_url, token, settings_json, server_version, unavailable_since, cooldown_until, last_failure, last_checked, status FROM servers WHERE lower(trim(type))=? AND lower(trim(name))=lower(trim(?))",
         (provider, name),
     )
     if len(rows) != 1:

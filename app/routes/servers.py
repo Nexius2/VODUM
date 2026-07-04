@@ -1,4 +1,4 @@
-﻿# Auto-split from app.py (keep URLs/endpoints intact)
+# Auto-split from app.py (keep URLs/endpoints intact)
 import json
 import uuid
 import threading
@@ -26,6 +26,43 @@ SERVER_DELETE_LOCK = threading.Lock()
 SERVER_DELETE_IN_PROGRESS = set()
 
 DELETE_BATCH_SIZE = 1000
+
+SERVERS_LIST_COLUMNS = """
+                s.id,
+                s.name,
+                s.type,
+                s.url,
+                s.local_url,
+                s.public_url,
+                s.status,
+                s.server_version
+"""
+
+LIBRARIES_LIST_COLUMNS = """
+                l.id,
+                l.server_id,
+                l.name,
+                l.type,
+                l.section_id
+"""
+
+SERVER_DETAIL_COLUMNS = """
+            id,
+            name,
+            type,
+            url,
+            local_url,
+            public_url,
+            status,
+            settings_json
+"""
+
+SERVER_DETAIL_LIBRARY_COLUMNS = """
+                l.id,
+                l.name,
+                l.type,
+                l.section_id
+"""
 
 def _get_preferred_plex_media_user_id(db, vodum_user_id: int, server_id: int):
     row = db.query_one(
@@ -83,7 +120,7 @@ def _background_delete_server(app, db_path, server_id, server_name):
             f"[server_delete] Start background deletion for server_id={server_id} name={server_name}"
         )
 
-        # 1) TrÃ¨s grosses tables monitoring / jobs
+        # 1) Très grosses tables monitoring / jobs
         deleted_sessions = _delete_in_chunks(
             conn,
             """
@@ -302,7 +339,7 @@ def register(app):
         db = get_db()
 
         # --------------------------------------------------
-        # VÃ©rifier que le serveur existe
+        # Vérifier que le serveur existe
         # --------------------------------------------------
         server = db.query_one(
             "SELECT id, type FROM servers WHERE id = ?",
@@ -314,15 +351,15 @@ def register(app):
             return redirect(url_for("servers_list"))
 
         # --------------------------------------------------
-        # Si ce n'est pas un serveur Plex, ne pas crÃ©er de job Plex
+        # Si ce n'est pas un serveur Plex, ne pas créer de job Plex
         # --------------------------------------------------
         if server["type"] != "plex":
             flash("sync_not_supported_for_server_type", "warning")
             return redirect(url_for("server_detail", server_id=server_id))
 
         # --------------------------------------------------
-        # Cibler les vodum_users qui ont AU MOINS 1 accÃ¨s sur ce serveur
-        # (Ã©vite le cas oÃ¹ apply_sync_job bloque quand sections == [])
+        # Cibler les vodum_users qui ont AU MOINS 1 accès sur ce serveur
+        # (évite le cas où apply_sync_job bloque quand sections == [])
         # --------------------------------------------------
         vodum_users = db.query(
             """
@@ -346,7 +383,7 @@ def register(app):
             return redirect(url_for("server_detail", server_id=server_id))
 
         # --------------------------------------------------
-        # CrÃ©er 1 job sync par vodum_user (dans media_jobs)
+        # Créer 1 job sync par vodum_user (dans media_jobs)
         # --------------------------------------------------
         created = 0
         for r in vodum_users:
@@ -400,11 +437,11 @@ def register(app):
         db = get_db()
 
         servers = db.query(
-            """
+            f"""
             SELECT
-                s.*,
+{SERVERS_LIST_COLUMNS},
 
-                -- nb bibliothÃ¨ques
+                -- nb bibliothèques
                 COUNT(DISTINCT l.id) AS libraries_count,
 
                 -- nb d'utilisateurs Vodum ayant au moins un compte sur ce serveur
@@ -452,12 +489,12 @@ def register(app):
         db = get_db()
 
         libraries = db.query(
-            """
+            f"""
             SELECT
-                l.*,
+{LIBRARIES_LIST_COLUMNS},
                 s.name AS server_name,
 
-                -- nb d'utilisateurs Vodum ayant accÃ¨s
+                -- nb d'utilisateurs Vodum ayant accès
                 COUNT(DISTINCT mu.vodum_user_id) AS users_count
 
             FROM libraries l
@@ -541,13 +578,13 @@ def register(app):
         public_url = request.form.get("public_url") or None
         token = request.form.get("token") or None
 
-        # Options spÃ©cifiques (stockÃ©es dans settings_json)
+        # Options spécifiques (stockées dans settings_json)
         tautulli_url = request.form.get("tautulli_url") or None
         tautulli_api_key = request.form.get("tautulli_api_key") or None
 
         server_identifier = str(uuid.uuid4())
 
-        # settings_json (clÃ©/valeurs extensibles)
+        # settings_json (clé/valeurs extensibles)
         settings = {}
         if tautulli_url or tautulli_api_key:
             settings["tautulli"] = {"url": tautulli_url, "api_key": tautulli_api_key}
@@ -590,18 +627,18 @@ def register(app):
             server_id = getattr(cur, "lastrowid", None)
 
             # --------------------------------------------------
-            # 2) Activation des tÃ¢ches systÃ¨me
+            # 2) Activation des tâches système
             # --------------------------------------------------
             ensure_tasks_enabled(["check_servers", "update_user_status"])
 
 
             # --------------------------------------------------
-            # 3) Commit avant enqueue (Ã©vite des incohÃ©rences + locks)
+            # 3) Commit avant enqueue (évite des incohérences + locks)
             # --------------------------------------------------
             try:
                 db.commit()
             except Exception:
-                # Si ton get_db() auto-commit dÃ©jÃ , ce commit peut ne pas exister
+                # Si ton get_db() auto-commit déjà, ce commit peut ne pas exister
                 # ou lever selon ton wrapper. Dans ce cas, on ignore.
                 pass
 
@@ -616,7 +653,7 @@ def register(app):
             force_task_run("check_servers")
 
             # --------------------------------------------------
-            # 4) EnchaÃ®ner check + sync (FIFO, jamais perdu)
+            # 4) Enchaîner check + sync (FIFO, jamais perdu)
             # --------------------------------------------------
             try:
                 enqueue_server_discovery_sequence(server_type)
@@ -625,7 +662,7 @@ def register(app):
 
 
         except Exception as e:
-            # Si l'insert serveur ou l'update tasks a plantÃ©
+            # Si l'insert serveur ou l'update tasks a planté
             app.logger.exception(f"Server creation failed: {e}")
             flash("server_create_failed", "error")
             return redirect(url_for("servers_list"))
@@ -701,7 +738,7 @@ def register(app):
         db = get_db()
 
         server = db.query_one(
-            "SELECT * FROM servers WHERE id = ?",
+            f"SELECT {SERVER_DETAIL_COLUMNS} FROM servers WHERE id = ?",
             (server_id,),
         )
 
@@ -709,9 +746,9 @@ def register(app):
             return "Serveur introuvable", 404
 
         libraries = db.query(
-            """
+            f"""
             SELECT
-                l.*,
+{SERVER_DETAIL_LIBRARY_COLUMNS},
                 COUNT(DISTINCT mu.vodum_user_id) AS users_count
             FROM libraries l
             LEFT JOIN media_user_libraries mul
@@ -903,4 +940,5 @@ def register(app):
 
         flash(result["message"], "success")
         return redirect(url_for("libraries_list"))
+
 

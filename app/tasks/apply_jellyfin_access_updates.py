@@ -104,8 +104,7 @@ def _apply_policy_enabled_folders(
 def _fetch_pending_jobs(db, limit: int = 50):
     return db.query(
         """
-        SELECT *
-        FROM media_jobs
+        SELECT id, provider, action, vodum_user_id, server_id, library_id, payload_json, status, priority, run_after, locked_by, locked_until, attempts, max_attempts, last_error, processed, success, created_at, processed_at, executed_at, dedupe_key FROM media_jobs
         WHERE processed = 0
           AND provider = 'jellyfin'
           AND action IN ('grant','revoke','sync')
@@ -161,7 +160,7 @@ def _mark_failure(db, job_id: int, err: str) -> None:
 
 
 def _get_server(db, server_id: int) -> Optional[Dict[str, Any]]:
-    row = db.query_one("SELECT * FROM servers WHERE id = ?", (server_id,))
+    row = db.query_one("SELECT id, name, server_identifier, type, url, local_url, public_url, token, settings_json, server_version, unavailable_since, cooldown_until, last_failure, last_checked, status FROM servers WHERE id = ?", (server_id,))
     return dict(row) if row else None
 
 

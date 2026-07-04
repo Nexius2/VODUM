@@ -283,8 +283,7 @@ def _mapping_for_user(db, campaign_id: int, source_server_id: int, vodum_user_id
 def _destination_account(db, vodum_user_id: int, server_id: int) -> dict | None:
     row = db.query_one(
         """
-        SELECT *
-        FROM media_users
+        SELECT id, server_id, vodum_user_id, external_user_id, username, email, avatar, stored_password, type, role, joined_at, accepted_at, raw_json, details_json FROM media_users
         WHERE vodum_user_id = ? AND server_id = ?
         ORDER BY id ASC LIMIT 1
         """,
@@ -326,7 +325,7 @@ def _ensure_library_links(db, media_user_id: int, destination_library_ids: list[
 
 
 def _ensure_plex_destination(db, campaign: dict, migration_user: dict, vodum_user: dict, mappings: list[dict]) -> str:
-    server = _dict(db.query_one("SELECT * FROM servers WHERE id = ?", (campaign["destination_server_id"],)))
+    server = _dict(db.query_one("SELECT id, name, server_identifier, type, url, local_url, public_url, token, settings_json, server_version, unavailable_since, cooldown_until, last_failure, last_checked, status FROM servers WHERE id = ?", (campaign["destination_server_id"],)))
     account = _destination_account(db, int(vodum_user["id"]), int(server["id"]))
     email = str(vodum_user.get("email") or (account or {}).get("email") or "").strip()
     if not email:
@@ -424,7 +423,7 @@ def _ensure_plex_destination(db, campaign: dict, migration_user: dict, vodum_use
 
 
 def _ensure_jellyfin_destination(db, campaign: dict, migration_user: dict, vodum_user: dict, mappings: list[dict]) -> str:
-    server = _dict(db.query_one("SELECT * FROM servers WHERE id = ?", (campaign["destination_server_id"],)))
+    server = _dict(db.query_one("SELECT id, name, server_identifier, type, url, local_url, public_url, token, settings_json, server_version, unavailable_since, cooldown_until, last_failure, last_checked, status FROM servers WHERE id = ?", (campaign["destination_server_id"],)))
     destination_library_ids = [int(item["destination_library_id"]) for item in mappings if item.get("destination_library_id")]
     enabled_folders = [str(item["destination_section_id"]) for item in mappings if item.get("destination_section_id")]
     if not destination_library_ids:

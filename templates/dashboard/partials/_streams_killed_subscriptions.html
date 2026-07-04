@@ -1,40 +1,43 @@
 <!-- Streams killed / Subscription plans -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
     <div class="h-full grid grid-cols-1 items-center gap-4 2xl:grid-cols-[150px_1px_minmax(0,1fr)] 2xl:gap-6">
-        <a href="{{ url_for('monitoring_page', tab='policies') }}"
-           title="Streams terminated by VODUM policies during the last 7 days. Click to open Monitoring Policies."
-           class="rounded-xl px-2 py-1 -mx-2 -my-1 hover:bg-slate-800/40 transition-colors cursor-pointer group">
+		<a href="{{ url_for('monitoring_page', tab='policies') }}"
+		   title="Streams terminated by VODUM policies during the last 7 days. Click to open Monitoring Policies."
+		   class="rounded-xl px-3 py-2 -mx-3 -my-2 cursor-pointer transition-all duration-200 hover:bg-slate-800/40 hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/10 border border-transparent focus:outline-none focus:ring-2 focus:ring-primary/40 group">
 
-            <div class="text-4xl font-bold text-rose-400 leading-none group-hover:text-rose-300">
+            <div class="text-4xl font-bold text-rose-400 leading-none transition-colors group-hover:text-rose-300">
                 {{ stats.kills_7d }}
             </div>
 
-            <div class="text-xs text-slate-400 mt-1 group-hover:text-slate-300">
+            <div class="text-xs text-slate-400 mt-1 transition-colors group-hover:text-slate-300">
                 {{ t("streams_killed") }}
             </div>
 
-            <div class="text-xs text-slate-500 group-hover:text-slate-400">
+            <div class="text-xs text-slate-500 transition-colors group-hover:text-slate-400">
                 {{ t("last_7_days") }}
             </div>
         </a>
 
         <div class="h-px w-full border-t border-slate-800 2xl:h-20 2xl:w-auto 2xl:border-l 2xl:border-t-0"></div>
 
-        <div class="min-w-0 flex flex-wrap items-center justify-start gap-4 2xl:justify-end 2xl:gap-7">
+		<a href="{{ url_for('subscriptions') }}"
+		   title="Open subscriptions"
+		   class="min-w-0 flex flex-wrap items-center justify-start gap-4 2xl:justify-end 2xl:gap-7 rounded-xl px-3 py-2 -mx-3 -my-2 cursor-pointer transition-all duration-200 hover:bg-slate-800/40 hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/10 border border-transparent focus:outline-none focus:ring-2 focus:ring-primary/40 group">
+
             <div class="shrink-0 text-center w-24">
-                <div class="text-3xl font-bold text-primary leading-none">
+                <div class="text-3xl font-bold text-primary leading-none group-hover:text-primary">
                     {{ subscription_plan_count }}
                 </div>
 
-                <div class="text-xs text-slate-400 mt-1 leading-tight">
+                <div class="text-xs text-slate-400 mt-1 leading-tight group-hover:text-slate-300">
                     Subscription plans
                 </div>
             </div>
 
-            <div class="shrink-0 w-20 h-20 rounded-full"
+            <div class="shrink-0 w-20 h-20 rounded-full transition-transform duration-200 group-hover:scale-105"
                  style="background: conic-gradient({{ subscription_donut }});">
                 <div class="w-full h-full rounded-full p-3">
-                    <div class="w-full h-full rounded-full bg-slate-900 border border-slate-800"></div>
+                    <div class="w-full h-full rounded-full bg-slate-900 border border-slate-800 group-hover:border-primary/40"></div>
                 </div>
             </div>
 
@@ -44,7 +47,7 @@
                         <span class="w-2.5 h-2.5 rounded-full shrink-0"
                               style="background-color: {{ sub.color }};"></span>
 
-                        <span class="text-slate-300 truncate">
+                        <span class="text-slate-300 truncate group-hover:text-slate-200">
                             {{ sub.name }}
                         </span>
 
@@ -52,24 +55,22 @@
                             {{ sub.user_count }}
                         </span>
 
-                        <span class="text-slate-500 shrink-0">
+                        <span class="text-slate-500 shrink-0 group-hover:text-slate-400">
                             ({{ sub.percent }}%)
                         </span>
                     </div>
                 {% else %}
-                    <div class="text-xs text-slate-500">
+                    <div class="text-xs text-slate-500 group-hover:text-slate-400">
                         No active subscription configured.
                     </div>
                 {% endfor %}
 
                 {% if subscription_stats_more %}
-                    <button type="button"
-                            onclick="document.getElementById('subscriptions-summary-modal').classList.remove('hidden')"
-                            class="text-xs text-primary hover:text-primary-dark">
+                    <div class="text-xs text-primary group-hover:text-primary">
                         More...
-                    </button>
+                    </div>
                 {% endif %}
             </div>
-        </div>
+        </a>
     </div>
 </div>

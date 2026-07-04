@@ -53,45 +53,7 @@
 			autocomplete="off"
 		>
 	</form>
-
-	<script>
-	(function () {
-	  const form = document.getElementById("logsFilterForm");
-	  const searchInput = document.getElementById("searchInput");
-	  const levelSelect = document.getElementById("levelSelect");
-	  const pageInput = document.getElementById("pageInput");
-
-	  if (!form || !searchInput || !levelSelect || !pageInput) return;
-
-	  // Petit debounce pour éviter un GET à chaque touche instantanément
-	  let t = null;
-	  const DEBOUNCE_MS = 350;
-
-	  function submitAndResetPage() {
-		pageInput.value = "1";
-		form.submit();
-	  }
-
-	  searchInput.addEventListener("input", () => {
-		clearTimeout(t);
-		t = setTimeout(submitAndResetPage, DEBOUNCE_MS);
-	  });
-
-	  levelSelect.addEventListener("change", submitAndResetPage);
-
-	  // Optionnel : ENTER submit direct (sans attendre le debounce)
-	  searchInput.addEventListener("keydown", (e) => {
-		if (e.key === "Enter") {
-		  e.preventDefault();
-		  clearTimeout(t);
-		  submitAndResetPage();
-		}
-	  });
-	})();
-	</script>
-
-
-    <!-- Table logs -->
+<!-- Table logs -->
     <div class="bg-slate-900 rounded-lg border border-slate-700 overflow-hidden">
         <table class="w-full text-sm">
             <thead class="bg-slate-800 text-slate-300">
@@ -142,4 +104,8 @@
     </div>
 
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/pages/logs.js', v=g.app_version|default('dev')) }}"></script>
 {% endblock %}

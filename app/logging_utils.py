@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 import os
 import re
 import time
@@ -55,9 +55,9 @@ logger.propagate = False  # Pas de duplication stdout
 
 def is_debug_mode_enabled() -> bool:
     """
-    Retourne settings.debug_mode avec cache mÃ©moire TTL.
-    SÃ©curitÃ© maximale par dÃ©faut : False.
-    Fonctionne sans UI, sans Flask, en tÃ¢che de fond.
+    Retourne settings.debug_mode avec cache mémoire TTL.
+    Sécurité maximale par défaut : False.
+    Fonctionne sans UI, sans Flask, en tâche de fond.
     """
     now = time.time()
 
@@ -65,7 +65,7 @@ def is_debug_mode_enabled() -> bool:
     if now - _DEBUG_CACHE["last_check"] < DEBUG_CACHE_TTL:
         return _DEBUG_CACHE["value"]
 
-    # RafraÃ®chissement DB
+    # Rafraîchissement DB
     conn = None
     try:
         conn = open_sqlite_connection(DB_PATH, read_only=True)
@@ -93,7 +93,7 @@ class AnonymizeFilter(logging.Filter):
     """
     - Masque la partie locale des emails (avant @)
     - Masque tous les tokens / Authorization / Bearer
-    - DÃ©sactivÃ© automatiquement si debug_mode = 1
+    - Désactivé automatiquement si debug_mode = 1
     """
 
     EMAIL_REGEX = re.compile(
@@ -117,19 +117,19 @@ class AnonymizeFilter(logging.Filter):
     )
 
     def filter(self, record: logging.LogRecord) -> bool:
-        # ðŸ§ª Debug actif â†’ logs NON anonymisÃ©s
+        # 🧪 Debug actif → logs NON anonymisés
         if is_debug_mode_enabled():
             return True
 
         msg = record.getMessage()
 
-        # ðŸ“§ Email â†’ masquer uniquement avant @
+        # 📧 Email → masquer uniquement avant @
         msg = self.EMAIL_REGEX.sub(
             lambda m: f"{m.group(1)}{'*' * len(m.group(2))}{m.group(3)}",
             msg
         )
 
-        # ðŸ”‘ Tokens â†’ REDACTED
+        # 🔑 Tokens → REDACTED
         msg = self.TOKEN_REGEX.sub(
             lambda m: f"{m.group(1)}=***REDACTED***",
             msg
@@ -160,8 +160,8 @@ class AnonymizeFilter(logging.Filter):
 
 def read_last_logs(limit=10):
     """
-    Retourne les N derniÃ¨res lignes du fichier de log.
-    CentralisÃ© ici pour Ã©viter toute duplication.
+    Retourne les N dernières lignes du fichier de log.
+    Centralisé ici pour éviter toute duplication.
     """
     try:
         with open(LOG_FILE, "r", encoding="utf-8") as f:

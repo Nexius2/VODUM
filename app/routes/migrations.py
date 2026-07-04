@@ -25,6 +25,55 @@ from tasks_engine import enable_and_run_task_by_name
 from secret_store import decrypt_secret
 from web.helpers import add_log, get_db, table_exists
 
+MIGRATION_CAMPAIGN_DETAIL_COLUMNS = """
+              mc.id,
+              mc.name,
+              mc.source_server_id,
+              mc.destination_server_id,
+              mc.migration_type,
+              mc.migration_mode,
+              mc.intent,
+              mc.status,
+              mc.options_json,
+              mc.library_mapping_json,
+              mc.analysis_json,
+              mc.scheduled_at,
+              mc.batch_size,
+              mc.created_at,
+              mc.updated_at,
+              mc.started_at,
+              mc.completed_at
+"""
+
+MIGRATION_USER_DETAIL_COLUMNS = """
+                  mu.id,
+                  mu.campaign_id,
+                  mu.vodum_user_id,
+                  mu.source_media_user_id,
+                  mu.destination_media_user_id,
+                  mu.status,
+                  mu.eligibility,
+                  mu.blockers_json,
+                  mu.options_json,
+                  mu.source_snapshot_json,
+                  mu.result_json,
+                  mu.attempts,
+                  mu.last_error,
+                  mu.created_at,
+                  mu.updated_at,
+                  mu.started_at,
+                  mu.completed_at
+"""
+
+MIGRATION_LIBRARY_MAPPING_COLUMNS = """
+                  mlm.id,
+                  mlm.campaign_id,
+                  mlm.source_library_id,
+                  mlm.destination_library_id,
+                  mlm.mapping_status,
+                  mlm.created_at,
+                  mlm.updated_at
+"""
 
 def _online_migration_servers(db) -> list[dict]:
     return [
@@ -294,9 +343,9 @@ def register(app):
     def migration_campaign_detail(campaign_id: int):
         db = get_db()
         campaign_row = db.query_one(
-            """
+            f"""
             SELECT
-              mc.*,
+{MIGRATION_CAMPAIGN_DETAIL_COLUMNS},
               source.name AS source_name,
               source.type AS source_type,
               destination.name AS destination_name,
@@ -330,9 +379,9 @@ def register(app):
         users = [
             dict(row)
             for row in db.query(
-                """
+                f"""
                 SELECT
-                  mu.*, vu.username, vu.email, vu.status AS vodum_status
+{MIGRATION_USER_DETAIL_COLUMNS}, vu.username, vu.email, vu.status AS vodum_status
                 FROM migration_users mu
                 JOIN vodum_users vu ON vu.id = mu.vodum_user_id
                 WHERE mu.campaign_id = ?
@@ -351,9 +400,9 @@ def register(app):
         mappings = [
             dict(row)
             for row in db.query(
-                """
+                f"""
                 SELECT
-                  mlm.*,
+{MIGRATION_LIBRARY_MAPPING_COLUMNS},
                   source.name AS source_name,
                   source.type AS source_type,
                   destination.name AS destination_name,
@@ -870,7 +919,15 @@ def register(app):
     @app.get("/migrations/<int:campaign_id>/report")
     def migration_campaign_report(campaign_id: int):
         db = get_db()
-        campaign = db.query_one("SELECT * FROM migration_campaigns WHERE id=?", (campaign_id,))
+        campaign = db.query_one(
+            f"""
+            SELECT
+{MIGRATION_CAMPAIGN_DETAIL_COLUMNS}
+            FROM migration_campaigns mc
+            WHERE mc.id = ?
+            """,
+            (campaign_id,),
+        )
         if not campaign:
             return jsonify({"ok": False, "error": "not_found"}), 404
         users = [dict(row) for row in db.query(

@@ -7,13 +7,10 @@
         {{ dashboard_tasks.error }} {{ t("in_error") }}
     </div>
 
-    <a href="{{ url_for('tasks_page') }}"
-       class="text-xs text-primary hover:text-primary-dark">
-        {{ t("view_all") }}
-    </a>
+
 </div>
 
-<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 auto-rows-fr">
     {% for task in dashboard_tasks["items"] %}
         <div class="rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3 min-w-0">
             <div class="flex items-center justify-between gap-3">
