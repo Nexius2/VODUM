@@ -91,7 +91,7 @@ def send_email_via_settings(settings: Dict[str, Any], to_email: str, subject: st
 def get_welcome_template(db: DBManager, provider: str, server_id: int) -> Optional[Dict[str, Any]]:
     row = db.query_one(
         """
-        SELECT * FROM welcome_email_templates
+        SELECT id, provider, server_id, subject, body, created_at, updated_at FROM welcome_email_templates
         WHERE provider = ? AND server_id = ?
         LIMIT 1
         """,
@@ -102,7 +102,7 @@ def get_welcome_template(db: DBManager, provider: str, server_id: int) -> Option
 
     row = db.query_one(
         """
-        SELECT * FROM welcome_email_templates
+        SELECT id, provider, server_id, subject, body, created_at, updated_at FROM welcome_email_templates
         WHERE provider = ? AND server_id IS NULL
         LIMIT 1
         """,
@@ -388,7 +388,7 @@ def api_users_create():
     notes = (payload.get("notes") or "").strip()
 
     # Fallback: if expiration date is empty, use today + default_subscription_days
-    settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+    settings = db.query_one("SELECT id, mail_from, smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_auth_method, smtp_oauth_access_token, email_history_retention_years, disable_on_expiry, delete_after_expiry_days, send_reminders, preavis_days, reminder_days, default_language, timezone, admin_email, contact_email, admin_password_hash, auth_enabled, admin_totp_enabled, admin_totp_secret, wizard_active, wizard_completed, wizard_step, wizard_state_json, web_secure_cookies, web_cookie_samesite, web_trust_proxy, enable_cron_jobs, default_expiration_days, default_subscription_days, maintenance_mode, debug_mode, backup_retention_days, backup_retention_count, data_retention_years, brand_name, notifications_order, user_notifications_can_override, notifications_send_mode, expiry_mode, warn_then_disable_days, discord_enabled, discord_bot_token, discord_bot_id, mailing_enabled, skip_never_used_accounts, plex_user_import_mode, enable_anonymous_telemetry, telemetry_instance_id, telemetry_last_sent_at, task_defaults_version, stream_enforcer_boost_until, usage_risk_enabled, usage_risk_send_upgrade_suggestions, usage_risk_send_stream_blocked_message, usage_risk_min_kills_before_suggestion, usage_risk_analysis_window_days, usage_risk_suggestion_cooldown_days, usage_risk_medium_threshold, usage_risk_high_threshold FROM settings WHERE id = 1")
     settings = dict(settings) if settings else {}
 
     if not expiration_date:
@@ -456,7 +456,7 @@ def api_users_create():
         except Exception:
             return jsonify({"ok": False, "error": "Invalid server_id"}), 400
 
-        srv = db.query_one("SELECT * FROM servers WHERE id = ?", (sid,))
+        srv = db.query_one("SELECT id, name, server_identifier, type, url, local_url, public_url, token, settings_json, server_version, unavailable_since, cooldown_until, last_failure, last_checked, status FROM servers WHERE id = ?", (sid,))
         if not srv:
             return jsonify({"ok": False, "error": f"Server not found (id={sid})"}), 400
         servers_by_id[sid] = dict(srv)
@@ -534,7 +534,7 @@ def api_users_create():
         pass
 
     if referrer_user_id is not None:
-        referral_settings = db.query_one("SELECT * FROM user_referral_settings WHERE id = 1")
+        referral_settings = db.query_one("SELECT id, enabled, reward_enabled, qualification_days, reward_days, allow_referrer_change_before_qualification, auto_notify_reward, eligible_statuses, created_at, updated_at, auto_expire_pending, auto_archive_rewarded, auto_archive_expired, pending_expire_days, rewarded_archive_days, expired_archive_days FROM user_referral_settings WHERE id = 1")
         referral_settings = dict(referral_settings) if referral_settings else {}
 
         qualification_days = int(referral_settings.get("qualification_days") or 60)
@@ -606,7 +606,7 @@ def api_users_create():
     mailing_errors: List[str] = []
     provider_errors: List[str] = []
 
-    settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+    settings = db.query_one("SELECT id, mail_from, smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_auth_method, smtp_oauth_access_token, email_history_retention_years, disable_on_expiry, delete_after_expiry_days, send_reminders, preavis_days, reminder_days, default_language, timezone, admin_email, contact_email, admin_password_hash, auth_enabled, admin_totp_enabled, admin_totp_secret, wizard_active, wizard_completed, wizard_step, wizard_state_json, web_secure_cookies, web_cookie_samesite, web_trust_proxy, enable_cron_jobs, default_expiration_days, default_subscription_days, maintenance_mode, debug_mode, backup_retention_days, backup_retention_count, data_retention_years, brand_name, notifications_order, user_notifications_can_override, notifications_send_mode, expiry_mode, warn_then_disable_days, discord_enabled, discord_bot_token, discord_bot_id, mailing_enabled, skip_never_used_accounts, plex_user_import_mode, enable_anonymous_telemetry, telemetry_instance_id, telemetry_last_sent_at, task_defaults_version, stream_enforcer_boost_until, usage_risk_enabled, usage_risk_send_upgrade_suggestions, usage_risk_send_stream_blocked_message, usage_risk_min_kills_before_suggestion, usage_risk_analysis_window_days, usage_risk_suggestion_cooldown_days, usage_risk_medium_threshold, usage_risk_high_threshold FROM settings WHERE id = 1")
     settings = dict(settings) if settings else {}
     smtp_ok = is_smtp_ready(settings)
 

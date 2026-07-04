@@ -1,4 +1,4 @@
-﻿import sqlite3
+import sqlite3
 import threading
 import logging
 from typing import Any, Iterable, Optional
@@ -55,10 +55,10 @@ class DBManager:
     """
     DBManager = 1 instance par chemin de base.
 
-    - mÃªme chemin DB => mÃªme instance
+    - même chemin DB => même instance
     - autre chemin DB => autre instance
-    - connexion SQLite partagÃ©e par chemin
-    - accÃ¨s thread-safe
+    - connexion SQLite partagée par chemin
+    - accès thread-safe
     """
 
     _instances: dict[str, "DBManager"] = {}
@@ -177,8 +177,8 @@ class DBManager:
 
     def close(self) -> None:
         """
-        Ferme la connexion associÃ©e Ã  CETTE base uniquement
-        puis enlÃ¨ve l'instance du cache.
+        Ferme la connexion associée à CETTE base uniquement
+        puis enlève l'instance du cache.
         """
         with self._lock:
             try:

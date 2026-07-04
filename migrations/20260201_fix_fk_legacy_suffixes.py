@@ -147,7 +147,9 @@ def rebuild_table_shadow(conn, table: str, dry_run: bool) -> bool:
     conn.execute(fixed_create_new)
 
     # Copy data (mêmes colonnes / même ordre)
-    conn.execute(f'INSERT INTO "{new_table}" SELECT * FROM "{table}"')
+    copy_columns = [row[1] for row in conn.execute(f'PRAGMA table_info("{table}")').fetchall()]
+    quoted_columns = ', '.join(f'"{col}"' for col in copy_columns)
+    conn.execute(f'INSERT INTO "{new_table}" ({quoted_columns}) SELECT {quoted_columns} FROM "{table}"')
 
     # Drop old table (les FK checks sont OFF pendant la migration)
     conn.execute(f'DROP TABLE "{table}"')

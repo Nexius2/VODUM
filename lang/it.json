@@ -59,6 +59,9 @@
   "migration_draft_created": "Bozza migrazione creata",
   "migration_not_available": "Non e disponibile alcuna migrazione utile.",
   "migration_servers_required": "I server sorgente e destinazione sono obbligatori.",
+  "migration_validation_servers_required": "Seleziona un server di origine e un server di destinazione.",
+  "migration_validation_source_required": "Seleziona un server di origine.",
+  "migration_validation_destination_required": "Seleziona un server di destinazione.",
   "migration_shared_plex_not_needed": "Questi server Plex condividono gia gli utenti.",
   "migration_campaign_audit": "Verifica in sola lettura del piano di migrazione salvato",
   "migration_saved_users": "Utenti salvati",
@@ -1901,5 +1904,13 @@
   "migration_destination_rollback_available_count": "Utenti idonei al rollback destinazione",
   "migration_rollback_destination_access": "Rollback accessi destinazione",
   "migration_destination_rollback_requested": "Rollback destinazione richiesto",
-  "migration_destination_rolled_back": "Destinazione ripristinata"
+  "migration_destination_rolled_back": "Destinazione ripristinata",
+  "comm_var_policy_explanation_desc": "Spiegazione chiara del motivo per cui la riproduzione è stata bloccata.",
+"comm_var_policy_limit_label_desc": "Tipo di limite applicato: IP pubblici, riproduzioni simultanee, bitrate, transcodifica...",
+"comm_var_active_streams_count_desc": "Numero di riproduzioni simultanee coinvolte nel blocco.",
+"comm_var_active_streams_desc": "Elenco su più righe delle riproduzioni attive coinvolte nel blocco.",
+"comm_var_active_devices_count_desc": "Numero di dispositivi rilevati.",
+"comm_var_active_devices_desc": "Elenco su più righe dei dispositivi rilevati.",
+"comm_var_active_ips_count_desc": "Numero di indirizzi IP pubblici rilevati.",
+"comm_var_active_ips_desc": "Elenco su più righe degli indirizzi IP pubblici rilevati."
 }

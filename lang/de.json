@@ -59,6 +59,9 @@
   "migration_draft_created": "Migrationsentwurf erstellt",
   "migration_not_available": "Keine sinnvolle Migration ist verfuegbar.",
   "migration_servers_required": "Quell- und Zielserver sind erforderlich.",
+  "migration_validation_servers_required": "Bitte waehle einen Quellserver und einen Zielserver aus.",
+  "migration_validation_source_required": "Bitte waehle einen Quellserver aus.",
+  "migration_validation_destination_required": "Bitte waehle einen Zielserver aus.",
   "migration_shared_plex_not_needed": "Diese Plex-Server teilen bereits ihre Benutzer.",
   "migration_campaign_audit": "Schreibgeschuetzte Pruefung des gespeicherten Migrationsplans",
   "migration_saved_users": "Gespeicherte Benutzer",
@@ -1901,5 +1904,13 @@
   "migration_destination_rollback_available_count": "Benutzer mit moglichem Ziel-Rollback",
   "migration_rollback_destination_access": "Zielzugriffe zuruckrollen",
   "migration_destination_rollback_requested": "Ziel-Rollback angefordert",
-  "migration_destination_rolled_back": "Ziel zuruckgerollt"
+  "migration_destination_rolled_back": "Ziel zuruckgerollt",
+  "comm_var_policy_explanation_desc": "Verständliche Erklärung, warum die Wiedergabe blockiert wurde.",
+"comm_var_policy_limit_label_desc": "Art des angewendeten Limits: öffentliche IP-Adressen, gleichzeitige Streams, Bitrate, Transkodierung...",
+"comm_var_active_streams_count_desc": "Anzahl der gleichzeitigen Streams, die zur Sperrung geführt haben.",
+"comm_var_active_streams_desc": "Mehrzeilige Liste der aktiven Streams, die zur Sperrung geführt haben.",
+"comm_var_active_devices_count_desc": "Anzahl der erkannten Geräte.",
+"comm_var_active_devices_desc": "Mehrzeilige Liste der erkannten Geräte.",
+"comm_var_active_ips_count_desc": "Anzahl der erkannten öffentlichen IP-Adressen.",
+"comm_var_active_ips_desc": "Mehrzeilige Liste der erkannten öffentlichen IP-Adressen."
 }

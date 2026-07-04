@@ -38,6 +38,59 @@ DEFAULT_SUBSCRIPTION_TEMPLATES = [
 ]
 
 
+SUBSCRIPTION_SETTINGS_COLUMNS = """
+    default_subscription_days,
+    delete_after_expiry_days,
+    expiry_mode,
+    warn_then_disable_days,
+    usage_risk_enabled,
+    usage_risk_send_upgrade_suggestions,
+    usage_risk_send_stream_blocked_message,
+    usage_risk_min_kills_before_suggestion,
+    usage_risk_analysis_window_days,
+    usage_risk_suggestion_cooldown_days,
+    usage_risk_medium_threshold,
+    usage_risk_high_threshold,
+    subscription_plans_enabled_only,
+    enable_cron_jobs
+"""
+
+STREAM_POLICY_PAGE_COLUMNS = """
+                  p.id,
+                  p.rule_type,
+                  p.scope_type,
+                  p.scope_id,
+                  p.provider,
+                  p.server_id,
+                  p.priority,
+                  p.is_enabled,
+                  p.rule_value_json
+"""
+
+STREAM_POLICY_EDITOR_COLUMNS = """
+            id,
+            rule_type,
+            scope_type,
+            scope_id,
+            provider,
+            server_id,
+            priority,
+            is_enabled,
+            rule_value_json
+"""
+
+SUBSCRIPTION_TEMPLATE_DUPLICATE_COLUMNS = """
+            id,
+            name,
+            notes,
+            duration_days,
+            subscription_value,
+            is_enabled,
+            is_lifetime,
+            policies_json
+"""
+
+
 def _restore_default_subscription_templates(db) -> int:
     restored = 0
 
@@ -84,7 +137,7 @@ def register(app):
         if tab not in ("templates", "applications", "policies", "gifts", "settings"):
             tab = "templates"
 
-        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        settings = db.query_one(f"SELECT {SUBSCRIPTION_SETTINGS_COLUMNS} FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
 
         servers = db.query("SELECT id, name, type FROM servers ORDER BY name") or []
@@ -255,9 +308,9 @@ def register(app):
         edit_policy = None
 
         if tab == "policies":
-            policies = db.query("""
+            policies = db.query(f"""
                 SELECT
-                  p.*,
+{STREAM_POLICY_PAGE_COLUMNS},
                   s.name AS server_name,
                   vu.username AS scope_username,
                   vu.firstname AS scope_firstname,
@@ -294,7 +347,7 @@ def register(app):
 
             edit_policy_id = request.args.get("edit_policy_id", type=int)
             if edit_policy_id:
-                ep = db.query_one("SELECT * FROM stream_policies WHERE id = ?", (edit_policy_id,))
+                ep = db.query_one(f"SELECT {STREAM_POLICY_EDITOR_COLUMNS} FROM stream_policies WHERE id = ?", (edit_policy_id,))
                 if ep:
                     ep = dict(ep)
                     try:
@@ -335,7 +388,7 @@ def register(app):
     def subscriptions_settings_save():
         db = get_db()
 
-        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        settings = db.query_one(f"SELECT {SUBSCRIPTION_SETTINGS_COLUMNS} FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
 
         expiry_mode = (request.form.get("expiry_mode") or settings.get("expiry_mode") or "none").strip()
@@ -806,7 +859,7 @@ def register(app):
     @app.post("/subscriptions/templates/<int:template_id>/duplicate")
     def subscription_templates_duplicate(template_id: int):
         db = get_db()
-        tpl = db.query_one("SELECT * FROM subscription_templates WHERE id=?", (template_id,))
+        tpl = db.query_one(f"SELECT {SUBSCRIPTION_TEMPLATE_DUPLICATE_COLUMNS} FROM subscription_templates WHERE id=?", (template_id,))
         if not tpl:
             flash("subscription_template_not_found", "error")
             return redirect(url_for("subscriptions", tab="templates"))
@@ -1100,4 +1153,5 @@ def register(app):
         except Exception:
             flash("subscription_apply_failed", "error")
             return redirect(url_for("subscriptions", tab="applications"))
+
 

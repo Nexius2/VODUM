@@ -225,6 +225,10 @@ def _score_usage_item(item, min_kills):
     kills_30d = item["kills_30d"] or item["kills"]
     kills_90d = item["kills_90d"]
 
+    repeated_max_ips = _safe_int(item["rules"].get("max_ips_per_user"), 0)
+    repeated_max_streams_user = _safe_int(item["rules"].get("max_streams_per_user"), 0)
+    repeated_high_rules = repeated_max_ips + repeated_max_streams_user
+
     score = 0
     reasons = []
     reason_items = []
@@ -287,7 +291,7 @@ def _score_usage_item(item, min_kills):
             continue
 
         if rule_type in HIGH_RISK_RULES:
-            pts = min(22, count * 4)
+            pts = min(40, 12 + (count * 2))
             score += pts
             add_reason(f"repeated {rule_type}", "repeated_rule", rule=rule_type)
         elif rule_type in LOW_RISK_RULES:
@@ -299,17 +303,45 @@ def _score_usage_item(item, min_kills):
             score += pts
             add_reason(f"repeated {rule_type}", "repeated_rule", rule=rule_type)
 
-    # Cas normal : TV fixe + téléphone/tablette/navigateur sur 2 IP.
-    # Ce n'est pas forcément un partage de compte.
-    if distinct_ips <= 2 and fixed_devices <= 1 and (mobile_devices or browser_devices):
-        score = min(score, 35)
-        add_reason("TV/mobile usage pattern reduces risk", "tv_mobile_reduces")
+    normal_tv_mobile_pattern = (
+        distinct_ips <= 2
+        and fixed_devices <= 1
+        and (mobile_devices or browser_devices)
+    )
 
-    # Cas encore plus faible : aucun appareil fixe identifié.
-    if distinct_ips <= 2 and fixed_devices == 0 and (mobile_devices or browser_devices):
-        score = min(score, 28)
-        add_reason("mobile/browser usage reduces risk", "mobile_browser_reduces")
+    normal_mobile_browser_pattern = (
+        distinct_ips <= 2
+        and fixed_devices == 0
+        and (mobile_devices or browser_devices)
+    )
 
+    has_repeated_blocks = (
+        kills_7d >= 6
+        or kills_30d >= max(min_kills * 3, 9)
+        or repeated_high_rules >= max(min_kills * 3, 9)
+    )
+
+    # Usage normal : TV fixe + téléphone/tablette/navigateur sur 1 ou 2 IP.
+    # On plafonne seulement si l'utilisateur n'a PAS beaucoup de blocages.
+    if normal_tv_mobile_pattern:
+        if not has_repeated_blocks:
+            score = min(score, 35)
+            add_reason("TV/mobile usage pattern reduces risk", "tv_mobile_reduces")
+        else:
+            score = max(0, score - 15)
+            add_reason("TV/mobile usage pattern softens risk", "tv_mobile_softens")
+
+    # Usage mobile/browser sans appareil fixe.
+    # Même logique : réduction forte seulement si les blocages restent faibles.
+    if normal_mobile_browser_pattern:
+        if not has_repeated_blocks:
+            score = min(score, 28)
+            add_reason("mobile/browser usage reduces risk", "mobile_browser_reduces")
+        else:
+            score = max(0, score - 15)
+            add_reason("mobile/browser usage softens risk", "mobile_browser_softens")
+
+    # Usage très simple : 1 IP, 1 appareil fixe max, peu de blocages.
     if distinct_ips <= 1 and fixed_devices <= 1 and kills_30d < min_kills:
         score = max(0, score - 25)
 
@@ -397,7 +429,7 @@ def _upsert_recommendation_history(db, item_out, cooldown_days):
 def build_usage_risk_report(db, filters=None, persist_history=True):
     filters = filters or {}
 
-    settings = dict(db.query_one("SELECT * FROM settings WHERE id = 1") or {})
+    settings = dict(db.query_one("SELECT id, mail_from, smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_auth_method, smtp_oauth_access_token, email_history_retention_years, disable_on_expiry, delete_after_expiry_days, send_reminders, preavis_days, reminder_days, default_language, timezone, admin_email, contact_email, admin_password_hash, auth_enabled, admin_totp_enabled, admin_totp_secret, wizard_active, wizard_completed, wizard_step, wizard_state_json, web_secure_cookies, web_cookie_samesite, web_trust_proxy, enable_cron_jobs, default_expiration_days, default_subscription_days, maintenance_mode, debug_mode, backup_retention_days, backup_retention_count, data_retention_years, brand_name, notifications_order, user_notifications_can_override, notifications_send_mode, expiry_mode, warn_then_disable_days, discord_enabled, discord_bot_token, discord_bot_id, mailing_enabled, skip_never_used_accounts, plex_user_import_mode, enable_anonymous_telemetry, telemetry_instance_id, telemetry_last_sent_at, task_defaults_version, stream_enforcer_boost_until, usage_risk_enabled, usage_risk_send_upgrade_suggestions, usage_risk_send_stream_blocked_message, usage_risk_min_kills_before_suggestion, usage_risk_analysis_window_days, usage_risk_suggestion_cooldown_days, usage_risk_medium_threshold, usage_risk_high_threshold FROM settings WHERE id = 1") or {})
 
     enabled = _safe_int(settings.get("usage_risk_enabled"), 1) == 1
     window_days = _safe_int(settings.get("usage_risk_analysis_window_days"), 30)

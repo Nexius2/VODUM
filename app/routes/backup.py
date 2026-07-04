@@ -15,6 +15,12 @@ from web.helpers import get_db, get_backup_cfg
 
 settings_logger = get_logger("settings")
 
+BACKUP_SETTINGS_COLUMNS = """
+    backup_retention_days,
+    backup_retention_count,
+    data_retention_years
+"""
+
 
 
 def get_sqlite_db_size_bytes(db_path: str) -> int | None:
@@ -112,7 +118,7 @@ def register(app):
         backup_cfg = get_backup_cfg()
         db = get_db()
 
-        settings = db.query_one("SELECT * FROM settings LIMIT 1")
+        settings = db.query_one(f"SELECT {BACKUP_SETTINGS_COLUMNS} FROM settings LIMIT 1")
         plex_servers = db.query("SELECT id, name FROM servers WHERE type='plex' ORDER BY name ASC")
         db_size_bytes = get_sqlite_db_size_bytes(app.config["DATABASE"])
         backups = list_backups(backup_cfg)

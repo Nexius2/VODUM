@@ -1,4 +1,4 @@
-﻿import os
+import os
 import secrets
 from datetime import timedelta
 from pathlib import Path
@@ -8,10 +8,10 @@ from db_manager import open_sqlite_connection
 
 def _get_secret_key() -> str:
     """
-    Ordre de prioritÃ© :
+    Ordre de priorité :
     1. VODUM_SECRET_KEY (env)
-    2. fichier local persistant Ã  cÃ´tÃ© de la BDD
-    3. gÃ©nÃ©ration auto + Ã©criture dans le fichier
+    2. fichier local persistant à côté de la BDD
+    3. génération auto + écriture dans le fichier
     """
     env_key = (os.environ.get("VODUM_SECRET_KEY") or "").strip()
     if env_key:
@@ -94,7 +94,7 @@ class Config:
     DATABASE = os.environ.get("DATABASE_PATH", "/appdata/database.db")
     DATABASE_PATH = DATABASE
 
-    # Secret key auto-gÃ©nÃ©rÃ©e/persistÃ©e
+    # Secret key auto-générée/persistée
     SECRET_KEY = _get_secret_key()
 
     # Mode debug (0/1)
@@ -106,7 +106,7 @@ class Config:
         int(os.environ.get("VODUM_MAX_UPLOAD_MB", "4096")),
     ) * 1024 * 1024
 
-    # Ã©vite les collisions avec d'autres applis
+    # évite les collisions avec d'autres applis
     SESSION_COOKIE_NAME = os.environ.get("VODUM_SESSION_COOKIE_NAME", "vodum_session")
 
     # session cookie
@@ -114,7 +114,7 @@ class Config:
     _SESSION_COOKIE_SAMESITE = _get_session_cookie_samesite(DATABASE)
     SESSION_COOKIE_SAMESITE = _SESSION_COOKIE_SAMESITE
 
-    # Si SameSite=None, Secure doit Ãªtre forcÃ© sinon le cookie sera rejetÃ© par les navigateurs modernes
+    # Si SameSite=None, Secure doit être forcé sinon le cookie sera rejeté par les navigateurs modernes
     SESSION_COOKIE_SECURE = _get_session_cookie_secure(DATABASE) or _SESSION_COOKIE_SAMESITE == "None"
 
     # session admin

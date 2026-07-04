@@ -1,4 +1,4 @@
-{% set live = total_live|default(0) %}
+﻿{% set live = total_live|default(0) %}
 {% set transcode = total_transcode|default(0) %}
 {% set direct = live - transcode %}
 
@@ -14,10 +14,7 @@
 			{% endif %}
 		</h2>
 
-		<a href="{{ url_for('monitoring_page', tab='now_playing') }}"
-		   class="text-xs text-primary hover:text-primary-dark">
-			{{ t("view_all") }}
-		</a>
+
 
 		{% if now_playing_stale %}
 		<span class="rounded-full border border-amber-800 bg-amber-950/40 px-2 py-0.5 text-[10px] text-amber-300"
@@ -139,22 +136,30 @@
     <div class="rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2">
         <div class="flex items-center gap-3">
 
-            <img
-                src="{{ idle_card.poster_url }}"
-                alt="{{ idle_card.title }}"
-                class="w-20 h-28 rounded-lg object-cover border border-slate-700/70 shrink-0"
-                loading="lazy"
-                decoding="async"
-            />
+            {% if idle_card.poster_url %}
+                <img
+                    src="{{ idle_card.poster_url }}"
+                    alt="{{ idle_card.title or '' }}"
+                    class="w-20 h-28 rounded-lg object-cover border border-slate-700/70 shrink-0"
+                    loading="lazy"
+                    decoding="async"
+                />
+            {% else %}
+                <div class="w-20 h-28 rounded-lg border border-slate-700/70 bg-slate-900/80 shrink-0 flex items-center justify-center text-3xl text-slate-500">
+                    &ldquo;
+                </div>
+            {% endif %}
 
             <div class="min-w-0 flex-1">
                 <div class="text-sm italic leading-5 text-slate-100">
                     "{{ idle_card.phrase }}"
                 </div>
 
-                <div class="text-xs text-slate-500 mt-1">
-                    {{ idle_card.title }} ({{ idle_card.year }})
-                </div>
+                {% if idle_card.title %}
+                    <div class="text-xs text-slate-500 mt-1">
+                        {{ idle_card.title }}{% if idle_card.year %} ({{ idle_card.year }}){% endif %}
+                    </div>
+                {% endif %}
             </div>
 
         </div>
@@ -163,3 +168,4 @@
 {% else %}
     <p class="text-xs text-slate-500">{{ t("monitoring_no_active_session") }}</p>
 {% endif %}
+

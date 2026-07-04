@@ -59,6 +59,9 @@
   "migration_draft_created": "Brouillon de migration cree",
   "migration_not_available": "Aucune migration utile n'est disponible.",
   "migration_servers_required": "Les serveurs source et destination sont obligatoires.",
+  "migration_validation_servers_required": "Choisissez un serveur source et un serveur de destination.",
+  "migration_validation_source_required": "Choisissez un serveur source.",
+  "migration_validation_destination_required": "Choisissez un serveur de destination.",
   "migration_shared_plex_not_needed": "Ces serveurs Plex partagent deja leurs utilisateurs.",
   "migration_campaign_audit": "Audit en lecture seule du plan de migration enregistre",
   "migration_saved_users": "Utilisateurs enregistres",
@@ -1901,5 +1904,13 @@
   "migration_destination_rollback_available_count": "Utilisateurs eligibles au rollback destination",
   "migration_rollback_destination_access": "Rollback des acces destination",
   "migration_destination_rollback_requested": "Rollback destination demande",
-  "migration_destination_rolled_back": "Destination restauree"
+  "migration_destination_rolled_back": "Destination restauree",
+  "comm_var_policy_explanation_desc": "Explication lisible de la raison du blocage.",
+"comm_var_policy_limit_label_desc": "Type de limite appliquée : IP publiques, lectures simultanées, débit, transcodage...",
+"comm_var_active_streams_count_desc": "Nombre de lectures simultanées impliquées dans le blocage.",
+"comm_var_active_streams_desc": "Liste sur plusieurs lignes des lectures actives impliquées dans le blocage.",
+"comm_var_active_devices_count_desc": "Nombre d’appareils détectés.",
+"comm_var_active_devices_desc": "Liste sur plusieurs lignes des appareils détectés.",
+"comm_var_active_ips_count_desc": "Nombre d’adresses IP publiques détectées.",
+"comm_var_active_ips_desc": "Liste sur plusieurs lignes des adresses IP publiques détectées."
 }

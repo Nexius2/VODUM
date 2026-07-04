@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import uuid
@@ -21,6 +21,34 @@ from web.helpers import get_db
 TOTAL_STEPS = 10
 SUPPORTED_LANGUAGES = {"en", "fr", "es", "de", "it"}
 
+SETUP_WIZARD_SETTINGS_COLUMNS = """
+    wizard_step,
+    wizard_state_json,
+    wizard_active,
+    wizard_completed,
+    admin_email,
+    default_language,
+    timezone,
+    mailing_enabled,
+    mail_from,
+    smtp_host,
+    smtp_port,
+    smtp_tls,
+    smtp_user,
+    smtp_pass,
+    smtp_auth_method,
+    smtp_oauth_access_token,
+    discord_enabled,
+    discord_bot_token,
+    notifications_send_mode,
+    reminder_days,
+    preavis_days,
+    expiry_mode,
+    usage_risk_enabled,
+    usage_risk_send_upgrade_suggestions,
+    usage_risk_min_kills_before_suggestion
+"""
+
 COPY = {
     "en": {
         "title": "VODUM installation", "step": "Step", "continue": "Continue",
@@ -35,52 +63,52 @@ COPY = {
         "saved": "Progress is saved automatically after every step.",
     },
     "fr": {
-        "title": "Installation de VODUM", "step": "Ã‰tape", "continue": "Continuer",
-        "back": "Retour", "skip": "Configurer plus tard", "finish": "Commencer Ã  utiliser VODUM",
-        "configure": "Configurer maintenant", "new": "CrÃ©er une nouvelle instance", "restore": "Restaurer une sauvegarde",
+        "title": "Installation de VODUM", "step": "Étape", "continue": "Continuer",
+        "back": "Retour", "skip": "Configurer plus tard", "finish": "Commencer à utiliser VODUM",
+        "configure": "Configurer maintenant", "new": "Créer une nouvelle instance", "restore": "Restaurer une sauvegarde",
         "admin": "Compte administrateur", "localization": "Localisation",
-        "servers": "Serveurs multimÃ©dias", "communications": "Communications",
-        "messages": "ModÃ¨les de messages", "subscriptions": "Abonnements",
-        "subscription_settings": "ParamÃ¨tres des abonnements", "assignment": "Attribution des abonnements",
-        "summary": "Installation terminÃ©e", "required": "Au moins un serveur Plex ou Jellyfin validÃ© est obligatoire.",
-        "sync": "La synchronisation dÃ©marre en arriÃ¨re-plan et ne bloque pas lâ€™installation.",
-        "saved": "La progression est enregistrÃ©e automatiquement aprÃ¨s chaque Ã©tape.",
+        "servers": "Serveurs multimédias", "communications": "Communications",
+        "messages": "Modèles de messages", "subscriptions": "Abonnements",
+        "subscription_settings": "Paramètres des abonnements", "assignment": "Attribution des abonnements",
+        "summary": "Installation terminée", "required": "Au moins un serveur Plex ou Jellyfin validé est obligatoire.",
+        "sync": "La synchronisation démarre en arrière-plan et ne bloque pas l’installation.",
+        "saved": "La progression est enregistrée automatiquement après chaque étape.",
     },
     "es": {
-        "title": "InstalaciÃ³n de VODUM", "step": "Paso", "continue": "Continuar", "back": "AtrÃ¡s",
-        "skip": "Configurar mÃ¡s tarde", "finish": "Empezar a usar VODUM", "configure": "Configurar ahora",
+        "title": "Instalación de VODUM", "step": "Paso", "continue": "Continuar", "back": "Atrás",
+        "skip": "Configurar más tarde", "finish": "Empezar a usar VODUM", "configure": "Configurar ahora",
         "new": "Crear nueva instancia", "restore": "Restaurar copia", "admin": "Cuenta administradora",
-        "localization": "LocalizaciÃ³n", "servers": "Servidores multimedia", "communications": "Comunicaciones",
+        "localization": "Localización", "servers": "Servidores multimedia", "communications": "Comunicaciones",
         "messages": "Plantillas de mensajes", "subscriptions": "Suscripciones",
-        "subscription_settings": "Ajustes de suscripciÃ³n", "assignment": "AsignaciÃ³n de suscripciones",
-        "summary": "InstalaciÃ³n terminada", "required": "Se requiere al menos un servidor Plex o Jellyfin validado.",
-        "sync": "La sincronizaciÃ³n continÃºa en segundo plano.", "saved": "El progreso se guarda automÃ¡ticamente.",
+        "subscription_settings": "Ajustes de suscripción", "assignment": "Asignación de suscripciones",
+        "summary": "Instalación terminada", "required": "Se requiere al menos un servidor Plex o Jellyfin validado.",
+        "sync": "La sincronización continúa en segundo plano.", "saved": "El progreso se guarda automáticamente.",
     },
     "de": {
-        "title": "VODUM-Installation", "step": "Schritt", "continue": "Weiter", "back": "ZurÃ¼ck",
-        "skip": "SpÃ¤ter konfigurieren", "finish": "VODUM verwenden", "configure": "Jetzt konfigurieren",
+        "title": "VODUM-Installation", "step": "Schritt", "continue": "Weiter", "back": "Zurück",
+        "skip": "Später konfigurieren", "finish": "VODUM verwenden", "configure": "Jetzt konfigurieren",
         "new": "Neue Instanz erstellen", "restore": "Sicherung wiederherstellen", "admin": "Administratorkonto",
         "localization": "Lokalisierung", "servers": "Medienserver", "communications": "Kommunikation",
         "messages": "Nachrichtenvorlagen", "subscriptions": "Abonnements",
         "subscription_settings": "Abonnementeinstellungen", "assignment": "Abonnements zuweisen",
         "summary": "Installation abgeschlossen", "required": "Mindestens ein validierter Plex- oder Jellyfin-Server ist erforderlich.",
-        "sync": "Die Synchronisierung lÃ¤uft im Hintergrund.", "saved": "Der Fortschritt wird automatisch gespeichert.",
+        "sync": "Die Synchronisierung läuft im Hintergrund.", "saved": "Der Fortschritt wird automatisch gespeichert.",
     },
     "it": {
         "title": "Installazione VODUM", "step": "Passaggio", "continue": "Continua", "back": "Indietro",
-        "skip": "Configura piÃ¹ tardi", "finish": "Inizia a usare VODUM", "configure": "Configura ora",
+        "skip": "Configura più tardi", "finish": "Inizia a usare VODUM", "configure": "Configura ora",
         "new": "Crea nuova istanza", "restore": "Ripristina backup", "admin": "Account amministratore",
         "localization": "Localizzazione", "servers": "Server multimediali", "communications": "Comunicazioni",
         "messages": "Modelli messaggio", "subscriptions": "Abbonamenti",
         "subscription_settings": "Impostazioni abbonamento", "assignment": "Assegnazione abbonamenti",
-        "summary": "Installazione completata", "required": "Ãˆ richiesto almeno un server Plex o Jellyfin convalidato.",
+        "summary": "Installazione completata", "required": "È richiesto almeno un server Plex o Jellyfin convalidato.",
         "sync": "La sincronizzazione continua in background.", "saved": "I progressi vengono salvati automaticamente.",
     },
 }
 
 
 def _settings(db) -> dict:
-    return dict(db.query_one("SELECT * FROM settings WHERE id = 1") or {})
+    return dict(db.query_one(f"SELECT {SETUP_WIZARD_SETTINGS_COLUMNS} FROM settings WHERE id = 1") or {})
 
 
 def _state(settings: dict) -> dict:
@@ -548,4 +576,5 @@ def register(app):
         db = get_db()
         _save(db, step=1, state={}, active=1, completed=0)
         return redirect(url_for("setup_wizard"))
+
 

@@ -21,7 +21,7 @@ def run_repair_if_needed(db, logger):
     )
 
     row = db.query_one(
-        "SELECT * FROM app_repairs WHERE key = ?",
+        "SELECT key, status, started_at, finished_at, details_json FROM app_repairs WHERE key = ?",
         (REPAIR_KEY,),
     )
 

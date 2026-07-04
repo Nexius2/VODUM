@@ -1,4 +1,4 @@
-﻿# Auto-split from app.py (keep URLs/endpoints intact)
+# Auto-split from app.py (keep URLs/endpoints intact)
 import json
 
 from flask import (
@@ -159,7 +159,7 @@ def register(app):
             ),
             "plex_user_import_mode": plex_user_import_mode,
             "enable_anonymous_telemetry": 1 if request.form.get("enable_anonymous_telemetry") == "on" else 0,
-            # âœ… dÃ©lais statut (settings ONLY)
+            # ✅ délais statut (settings ONLY)
             "preavis_days": request.form.get(
                 "preavis_days",
                 settings["preavis_days"],
@@ -258,7 +258,7 @@ def register(app):
                 """
             )
 
-        # Appliquer immÃ©diatement au process Flask courant
+        # Appliquer immédiatement au process Flask courant
         current_app.config["SESSION_COOKIE_SAMESITE"] = new_values["web_cookie_samesite"]
         current_app.config["SESSION_COOKIE_SECURE"] = bool(new_values["web_secure_cookies"]) or (
             new_values["web_cookie_samesite"] == "None"
@@ -272,8 +272,8 @@ def register(app):
             apply_cron_master_switch(new_values["enable_cron_jobs"])
 
         # --------------------------------------------------
-        # Purge immÃ©diate des policies systÃ¨me si on n'est plus en warn_then_disable
-        # (Ã©vite d'attendre la prochaine exÃ©cution d'une tÃ¢che)
+        # Purge immédiate des policies système si on n'est plus en warn_then_disable
+        # (évite d'attendre la prochaine exécution d'une tâche)
         # --------------------------------------------------
         if expiry_mode not in ("warn_then_disable", "warn_only"):
             try:
@@ -313,7 +313,7 @@ def register(app):
         )
 
         # --------------------------------------------------
-        # Log cohÃ©rent
+        # Log cohérent
         # --------------------------------------------------
         add_log(
             "info",

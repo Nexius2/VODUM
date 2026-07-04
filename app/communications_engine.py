@@ -245,7 +245,7 @@ def queue_campaign_delivery(db, campaign_id: int, *, rebuild_queue: bool = True)
         "reason": str|None,
     }
     """
-    campaign = db.query_one("SELECT * FROM comm_campaigns WHERE id = ?", (campaign_id,))
+    campaign = db.query_one("SELECT id, name, subject, body, server_id, status, is_test, created_at, updated_at, sent_at FROM comm_campaigns WHERE id = ?", (campaign_id,))
     campaign = dict(campaign) if campaign else None
     if not campaign:
         return {
@@ -447,8 +447,7 @@ def select_comm_templates_for_user(
 
     rows = db.query(
         """
-        SELECT *
-        FROM comm_templates
+        SELECT id, key, name, enabled, trigger_event, trigger_provider, expiration_change_direction, subscription_scope, subscription_template_id, days_before, days_after, subject, body, created_at, updated_at FROM comm_templates
         WHERE enabled = 1
           AND trigger_event = ?
           AND trigger_provider IN ('all', ?)

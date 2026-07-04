@@ -1,4 +1,4 @@
-﻿# Unified Communications UI (Email + Discord)
+# Unified Communications UI (Email + Discord)
 
 import json
 from flask import render_template, request, redirect, url_for, flash, jsonify
@@ -52,6 +52,95 @@ def _sanitize_notifications_order(raw: str) -> str:
     if not parts:
         return "email"
     return ",".join(parts)
+
+
+COMM_TRANSLATION_SETTINGS_COLUMNS = "default_language"
+COMM_TEST_CAMPAIGN_SETTINGS_COLUMNS = "contact_email"
+COMM_CAMPAIGN_EDITOR_COLUMNS = """
+    id,
+    name,
+    subject,
+    body,
+    server_id,
+    trigger_provider,
+    subscription_scope,
+    subscription_template_id,
+    status,
+    is_test,
+    created_at,
+    updated_at,
+    sent_at
+"""
+
+COMM_CAMPAIGN_LIST_COLUMNS = """
+                c.id,
+                c.name,
+                c.subject,
+                c.server_id,
+                c.trigger_provider,
+                c.subscription_scope,
+                c.subscription_template_id,
+                c.is_test,
+                c.status,
+                c.created_at,
+                c.sent_at
+"""
+COMM_TEMPLATE_EDITOR_COLUMNS = """
+    id,
+    key,
+    name,
+    enabled,
+    trigger_event,
+    trigger_provider,
+    expiration_change_direction,
+    subscription_scope,
+    subscription_template_id,
+    days_before,
+    days_after,
+    subject,
+    body,
+    created_at,
+    updated_at
+"""
+
+COMM_TEMPLATE_LIST_COLUMNS = """
+              ct.id,
+              ct.key,
+              ct.name,
+              ct.enabled,
+              ct.trigger_event,
+              ct.trigger_provider,
+              ct.subscription_scope,
+              ct.subscription_template_id,
+              ct.days_before,
+              ct.days_after,
+              ct.subject
+"""
+COMM_HISTORY_COLUMNS = """
+                h.kind,
+                h.channel_used,
+                h.status,
+                h.error,
+                h.sent_at,
+                h.meta_json
+"""
+COMM_CONFIG_SETTINGS_COLUMNS = """
+    mailing_enabled,
+    skip_never_used_accounts,
+    mail_from,
+    smtp_host,
+    smtp_port,
+    smtp_tls,
+    smtp_user,
+    smtp_pass,
+    smtp_auth_method,
+    smtp_oauth_access_token,
+    discord_enabled,
+    discord_bot_token,
+    notifications_send_mode,
+    notifications_order,
+    user_notifications_can_override
+"""
 
 
 
@@ -217,7 +306,7 @@ def register(app):
 
         if action == "send":
             cid = request.form.get("campaign_id", type=int)
-            campaign = db.query_one("SELECT * FROM comm_campaigns WHERE id = ?", (cid,))
+            campaign = db.query_one(f"SELECT {COMM_CAMPAIGN_EDITOR_COLUMNS} FROM comm_campaigns WHERE id = ?", (cid,))
             if not campaign:
                 flash(t("comm_not_found"), "error")
                 return redirect(url_for("communications_campaigns_page"))
@@ -226,7 +315,7 @@ def register(app):
             attachments = fetch_campaign_attachments(db, cid)
 
             if int(campaign.get("is_test") or 0) == 1:
-                settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+                settings = db.query_one(f"SELECT {COMM_TEST_CAMPAIGN_SETTINGS_COLUMNS} FROM settings WHERE id = 1")
                 settings = dict(settings) if settings else {}
 
                 admin_email = (settings.get("contact_email") or "").strip()
@@ -312,15 +401,15 @@ def register(app):
         load_id = request.args.get("load", type=int)
         loaded = None
         if load_id:
-            loaded = db.query_one("SELECT * FROM comm_campaigns WHERE id = ?", (load_id,))
+            loaded = db.query_one(f"SELECT {COMM_CAMPAIGN_EDITOR_COLUMNS} FROM comm_campaigns WHERE id = ?", (load_id,))
             loaded = dict(loaded) if loaded else None
             if loaded:
                 loaded["attachments"] = fetch_campaign_attachments(db, int(loaded["id"]))
 
         campaigns = db.query(
-            """
+            f"""
             SELECT
-                c.*,
+                {COMM_CAMPAIGN_LIST_COLUMNS},
                 st.name AS subscription_template_name
             FROM comm_campaigns c
             LEFT JOIN subscription_templates st ON st.id = c.subscription_template_id
@@ -347,7 +436,7 @@ def register(app):
     def communications_templates_action():
         db = get_db()
 
-        settings_row = db.query_one("SELECT * FROM settings WHERE id = 1")
+        settings_row = db.query_one(f"SELECT {COMM_TRANSLATION_SETTINGS_COLUMNS} FROM settings WHERE id = 1")
         settings = dict(settings_row) if settings_row else {}
         t = get_translator(settings)
 
@@ -545,7 +634,7 @@ def register(app):
                 flash(t("comm_not_found"), "error")
                 return redirect(url_for("communications_templates_page"))
 
-            existing = db.query_one("SELECT * FROM comm_templates WHERE id = ?", (tid,))
+            existing = db.query_one(f"SELECT {COMM_TEMPLATE_EDITOR_COLUMNS} FROM comm_templates WHERE id = ?", (tid,))
             if not existing:
                 flash(t("comm_not_found"), "error")
                 return redirect(url_for("communications_templates_page"))
@@ -781,7 +870,7 @@ def register(app):
     def communications_templates_restore_defaults():
         db = get_db()
 
-        settings_row = db.query_one("SELECT * FROM settings WHERE id = 1")
+        settings_row = db.query_one(f"SELECT {COMM_TRANSLATION_SETTINGS_COLUMNS} FROM settings WHERE id = 1")
         settings = dict(settings_row) if settings_row else {}
         t = get_translator(settings)
 
@@ -808,15 +897,15 @@ def register(app):
         stream_blocked_required = subscription_expired_warning_requires_stream_blocked(settings)
 
         if load_id:
-            loaded = db.query_one("SELECT * FROM comm_templates WHERE id = ?", (load_id,))
+            loaded = db.query_one(f"SELECT {COMM_TEMPLATE_EDITOR_COLUMNS} FROM comm_templates WHERE id = ?", (load_id,))
             loaded = dict(loaded) if loaded else None
             if loaded:
                 loaded["attachments"] = fetch_template_attachments(db, int(loaded["id"]))
                 loaded_is_stream_blocked = is_stream_blocked_template(loaded)
 
-        templates = db.query("""
+        templates = db.query(f"""
             SELECT
-              ct.*,
+              {COMM_TEMPLATE_LIST_COLUMNS},
               st.name AS subscription_template_name
             FROM comm_templates ct
             LEFT JOIN subscription_templates st ON st.id = ct.subscription_template_id
@@ -935,7 +1024,7 @@ def register(app):
         rows = db.query(
             f"""
             SELECT
-                h.*,
+                {COMM_HISTORY_COLUMNS},
                 u.username AS user_username,
                 t.key AS template_key,
                 t.subject AS template_subject,
@@ -954,13 +1043,6 @@ def register(app):
         )
 
         history = [dict(r) for r in (rows or [])]
-
-        for h in history:
-            try:
-                h["meta"] = json.loads(h.get("meta_json") or "{}")
-            except Exception:
-                h["meta"] = {}
-
         return render_template(
             "communications/communications_history.html",
             history=history,
@@ -983,7 +1065,7 @@ def register(app):
         db = get_db()
         t = get_translator()
 
-        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        settings = db.query_one(f"SELECT {COMM_CONFIG_SETTINGS_COLUMNS} FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
 
         action = (request.form.get("action") or "").strip()
@@ -1099,7 +1181,7 @@ def register(app):
     def communications_configuration_page():
         db = get_db()
 
-        settings = db.query_one("SELECT * FROM settings WHERE id = 1")
+        settings = db.query_one(f"SELECT {COMM_CONFIG_SETTINGS_COLUMNS} FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
         settings["smtp_pass_configured"] = bool(settings.get("smtp_pass"))
         settings["smtp_oauth_access_token_configured"] = bool(settings.get("smtp_oauth_access_token"))
@@ -1107,43 +1189,20 @@ def register(app):
         settings["smtp_pass"] = ""
         settings["smtp_oauth_access_token"] = ""
         settings["discord_bot_token"] = ""
-
-        recent_scheduled = db.query(
-            """
-            SELECT *
-            FROM comm_scheduled
-            ORDER BY created_at DESC, id DESC
-            LIMIT 50
-            """
-        ) or []
-        recent_scheduled = [dict(r) for r in recent_scheduled]
-
-        recent_history = db.query(
-            """
-            SELECT
-                h.*,
-                u.username AS user_username
-            FROM comm_history h
-            LEFT JOIN vodum_users u ON u.id = h.user_id
-            ORDER BY h.id DESC
-            LIMIT 50
-            """
-        ) or []
-        recent_history = [dict(r) for r in recent_history]
-
-        for row in recent_history:
-            try:
-                row["meta"] = json.loads(row.get("meta_json") or "{}")
-            except Exception:
-                row["meta"] = {}
-
         return render_template(
             "communications/communications_configuration.html",
             settings=settings,
-            recent_scheduled=recent_scheduled,
-            recent_history=recent_history,
             current_subpage="configuration",
         )
+
+
+
+
+
+
+
+
+
 
 
 

@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <title>{{ t("auth.title_setup_admin") }}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="preconnect" href="https://cdn.tailwindcss.com">
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/vodum.css', v=g.app_version|default('dev')) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css', v=g.app_version|default('dev')) }}">
 </head>
 <body class="bg-slate-950 text-slate-100">
   <div class="min-h-screen flex items-center justify-center p-4">

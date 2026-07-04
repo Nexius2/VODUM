@@ -58,7 +58,7 @@
   <form id="gift-form"
         action="{{ url_for('subscriptions_api.api_gift_subscription') }}"
         method="post"
-        onsubmit="event.preventDefault(); submitGift();">
+        data-gift-form>
 
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
       {% include "subscriptions/_gift_form.html" %}

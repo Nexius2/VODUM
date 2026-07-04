@@ -18,6 +18,52 @@ from web.helpers import get_db
 
 monitoring_logger = get_logger("monitoring_overview")
 
+MONITORING_LIVE_SESSION_COLUMNS = """
+                  ms.id,
+                  ms.server_id,
+                  ms.provider,
+                  ms.session_key,
+                  ms.media_user_id,
+                  ms.external_user_id,
+                  ms.media_key,
+                  ms.media_type,
+                  ms.title,
+                  ms.grandparent_title,
+                  ms.parent_title,
+                  ms.state,
+                  ms.progress_ms,
+                  ms.duration_ms,
+                  ms.is_transcode,
+                  ms.bitrate,
+                  ms.video_codec,
+                  ms.audio_codec,
+                  ms.client_name,
+                  ms.client_product,
+                  ms.device,
+                  ms.ip,
+                  ms.started_at,
+                  ms.last_seen_at,
+                  ms.raw_json,
+                  ms.poster_ref_json,
+                  ms.backdrop_ref_json,
+                  ms.library_section_id,
+                  ms.missing_count
+""".strip()
+
+STREAM_POLICY_COLUMNS = """
+                  p.id,
+                  p.scope_type,
+                  p.scope_id,
+                  p.provider,
+                  p.server_id,
+                  p.is_enabled,
+                  p.priority,
+                  p.rule_type,
+                  p.rule_value_json,
+                  p.created_at,
+                  p.updated_at
+""".strip()
+
 def _empty_server_resource_stats(note=None):
     return {
         "server_cpu_pct": None,
@@ -275,9 +321,9 @@ def register(app):
             _apply_server_resource_stats(live_servers, server_resource_stats)
 
             sessions = db.query(
-                """
+                f"""
                 SELECT
-                  ms.*,
+                  {MONITORING_LIVE_SESSION_COLUMNS},
                   s.name AS server_name,
                   s.type AS provider,
                   mu.username AS username
@@ -740,7 +786,7 @@ def register(app):
                   OR COALESCE(vu.discord_name,'') LIKE ?
                   OR COALESCE(n.media_search,'') LIKE ?
                 )
-                """
+                f"""
 
                 params.extend([like, like, like, like, like, like, like, like, like])
 
@@ -906,9 +952,9 @@ ranked AS (
             policy_enforcement_page = min(policy_enforcement_page, policy_enforcement_total_pages)
             policy_enforcement_offset = (policy_enforcement_page - 1) * policy_enforcement_per_page
 
-            policies = db.query("""
+            policies = db.query(f"""
                 SELECT
-                  p.*,
+                  {STREAM_POLICY_COLUMNS},
                   s.name AS server_name,
                   vu.username AS scope_username
                 FROM stream_policies p
@@ -946,7 +992,7 @@ ranked AS (
             edit_policy = None
             edit_policy_id = request.args.get("edit_policy_id", type=int)
             if edit_policy_id:
-                ep = db.query_one("SELECT * FROM stream_policies WHERE id = ?", (edit_policy_id,))
+                ep = db.query_one(f"SELECT {STREAM_POLICY_COLUMNS} FROM stream_policies p WHERE p.id = ?", (edit_policy_id,))
                 if ep:
                     ep = dict(ep)
                     try:
@@ -1610,7 +1656,24 @@ ranked AS (
                 ),
                 plays_ranked AS (
                   SELECT
-                    h.*,
+                    h.hist_id,
+                    h.library_id,
+                    h.library_name,
+                    h.media_type,
+                    h.server_id,
+                    h.server_name,
+                    h.provider,
+                    h.vodum_user_id,
+                    h.viewer_key,
+                    h.media_key,
+                    h.raw_json,
+                    h.poster_ref_json,
+                    h.backdrop_ref_json,
+                    h.artwork_rank,
+                    h.stopped_at,
+                    h.display_title,
+                    h.media_group_key,
+                    h.play_key,
                     ROW_NUMBER() OVER (
                       PARTITION BY h.play_key
                       ORDER BY h.stopped_at DESC, h.hist_id DESC
@@ -1910,7 +1973,7 @@ ranked AS (
                 f"""
                 WITH {source_cte},
                 live AS (
-                  SELECT *
+                  SELECT server_id, is_transcode
                   FROM media_sessions
                   WHERE datetime(last_seen_at) >= datetime('now', ?)
                 )

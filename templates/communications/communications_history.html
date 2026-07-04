@@ -183,11 +183,11 @@
 <div
   id="commHistoryModal"
   class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 px-4"
-  onclick="closeCommHistoryModal(event)"
+  data-comm-history-modal
 >
   <div
     class="w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"
-    onclick="event.stopPropagation()"
+    data-comm-history-panel
   >
     <div class="flex items-center justify-between px-5 py-4 border-b border-slate-800">
       <div>
@@ -197,7 +197,7 @@
       <button
         type="button"
         class="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-950 hover:bg-slate-800 text-slate-200"
-        onclick="closeCommHistoryModal()"
+        data-comm-history-close
       >
         {{ t("close") }}
       </button>
@@ -241,69 +241,12 @@
   </div>
 </div>
 
-<script>
-function openCommHistoryModal(raw) {
-  let data = {};
-  try {
-    data = JSON.parse(raw || "{}");
-  } catch (e) {
-    data = {};
+<script type="application/json" id="comm-history-config">
+  {
+    "detailsLabel": {{ t("comm_history_details")|tojson }},
+    "entryLabel": {{ t("comm_history_entry")|tojson }}
   }
-
-  document.getElementById("commHistoryModalTitle").textContent = {{ t("comm_history_details")|tojson }};
-  document.getElementById("commHistoryModalSubtitle").textContent =
-    ((data.kind_label || {{ t("comm_history_entry")|tojson }}) + (data.name ? " · " + data.name : ""));
-
-  document.getElementById("commHistoryModalKind").textContent = data.kind_label || "-";
-  document.getElementById("commHistoryModalName").textContent = data.name || "-";
-  document.getElementById("commHistoryModalUser").textContent = data.user || "-";
-  document.getElementById("commHistoryModalChannel").textContent = data.channel_used || "-";
-  document.getElementById("commHistoryModalStatus").textContent = data.status || "-";
-  document.getElementById("commHistoryModalSentAt").textContent = vodumFormatDateTime(data.sent_at || "-");
-  document.getElementById("commHistoryModalError").textContent = data.error || "-";
-  document.getElementById("commHistoryModalSubject").textContent = data.subject || "-";
-  document.getElementById("commHistoryModalBody").textContent = data.body || "-";
-  document.getElementById("commHistoryModalMeta").textContent = data.meta_json || "{}";
-
-  const modal = document.getElementById("commHistoryModal");
-  modal.classList.remove("hidden");
-  modal.classList.add("flex");
-  document.body.classList.add("overflow-hidden");
-}
-
-function closeCommHistoryModal(event) {
-  if (event && event.target && event.target.id !== "commHistoryModal") {
-    return;
-  }
-  const modal = document.getElementById("commHistoryModal");
-  modal.classList.add("hidden");
-  modal.classList.remove("flex");
-  document.body.classList.remove("overflow-hidden");
-}
-
-document.querySelectorAll('tr[data-history]').forEach(function (row) {
-  if (row.dataset.boundCommHistory === "1") {
-    return;
-  }
-  row.dataset.boundCommHistory = "1";
-
-  row.addEventListener("click", function () {
-    openCommHistoryModal(row.dataset.history);
-  });
-
-  row.addEventListener("keydown", function (event) {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      openCommHistoryModal(row.dataset.history);
-    }
-  });
-});
-
-document.addEventListener("keydown", function (event) {
-  if (event.key === "Escape") {
-    closeCommHistoryModal();
-  }
-});
 </script>
+<script src="{{ url_for('static', filename='js/pages/communications-history.js', v=g.app_version|default('dev')) }}"></script>
 
 {% endblock %}

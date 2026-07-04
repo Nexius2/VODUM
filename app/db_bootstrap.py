@@ -26,7 +26,7 @@ def column_exists(cursor, table, column):
 
 def ensure_column(cursor, table, column, definition):
     if not column_exists(cursor, table, column):
-        print(f"ðŸ›  Ajout de la colonne manquante : {table}.{column}")
+        print(f"🛠 Ajout de la colonne manquante : {table}.{column}")
         cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 def ensure_row(cursor, table, where_clause, values):
@@ -45,16 +45,16 @@ def ensure_row(cursor, table, where_clause, values):
 # ---------------------------------------------------------
 
 def run_migrations():
-    print("ðŸ”§ Running DB migrationsâ€¦")
+    print("🔧 Running DB migrations…")
 
     conn = open_sqlite_connection(DB_PATH)
     cursor = conn.cursor()
 
     # -------------------------------------------------
-    # 0. Nettoyage legacy : suppression table logs (dÃ©sormais obsolÃ¨te)
+    # 0. Nettoyage legacy : suppression table logs (désormais obsolète)
     # -------------------------------------------------
     if table_exists(cursor, "logs"):
-        print("ðŸ§¹ Dropping legacy table: logs")
+        print("🧹 Dropping legacy table: logs")
         cursor.execute("DROP TABLE IF EXISTS logs")
         conn.commit()
 
@@ -62,7 +62,7 @@ def run_migrations():
     # 0.1 Welcome email templates table (NEW)
     # -------------------------------------------------
     if not table_exists(cursor, "welcome_email_templates"):
-        print("ðŸ›  Creating table: welcome_email_templates")
+        print("🛠 Creating table: welcome_email_templates")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS welcome_email_templates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,7 +82,7 @@ def run_migrations():
     # 0.2 Stream policies tables (NEW)
     # -------------------------------------------------
     if not table_exists(cursor, "stream_policies"):
-        print("ðŸ›  Creating table: stream_policies")
+        print("🛠 Creating table: stream_policies")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS stream_policies (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -111,7 +111,7 @@ def run_migrations():
         conn.commit()
 
     if not table_exists(cursor, "stream_enforcement_state"):
-        print("ðŸ›  Creating table: stream_enforcement_state")
+        print("🛠 Creating table: stream_enforcement_state")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS stream_enforcement_state (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -133,7 +133,7 @@ def run_migrations():
         conn.commit()
 
     if not table_exists(cursor, "stream_enforcements"):
-        print("ðŸ›  Creating table: stream_enforcements")
+        print("🛠 Creating table: stream_enforcements")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS stream_enforcements (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -156,7 +156,7 @@ def run_migrations():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_stream_enforcements_time ON stream_enforcements(created_at);")
         conn.commit()
 
-    # âœ… IMPORTANT : migrations mÃªme si la table existe dÃ©jÃ 
+    # ✅ IMPORTANT : migrations même si la table existe déjà
     ensure_column(cursor, "stream_enforcements", "account_username", "TEXT")
     ensure_column(cursor, "stream_enforcements", "ips_json", "TEXT")
     ensure_column(cursor, "stream_enforcements", "details_json", "TEXT")
@@ -165,7 +165,7 @@ def run_migrations():
     # 0.3 Tautulli import jobs
     # -------------------------------------------------
     if not table_exists(cursor, "tautulli_import_jobs"):
-        print("ðŸ›  Creating table: tautulli_import_jobs")
+        print("🛠 Creating table: tautulli_import_jobs")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS tautulli_import_jobs (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -188,7 +188,7 @@ def run_migrations():
         """)
         conn.commit()
 
-    # âœ… IMPORTANT : ces migrations doivent Ãªtre exÃ©cutÃ©es mÃªme si la table existe dÃ©jÃ 
+    # ✅ IMPORTANT : ces migrations doivent être exécutées même si la table existe déjà
    
     
     ensure_column(cursor, "tautulli_import_jobs", "keep_all_libraries", "INTEGER NOT NULL DEFAULT 0")
@@ -205,7 +205,7 @@ def run_migrations():
     # 0.4 Monitoring snapshots table (NEW)
     # -------------------------------------------------
     if not table_exists(cursor, "monitoring_snapshots"):
-        print("ðŸ›  Creating table: monitoring_snapshots")
+        print("🛠 Creating table: monitoring_snapshots")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS monitoring_snapshots (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -223,7 +223,7 @@ def run_migrations():
     # 0.5 Monitoring server resources table (NEW)
     # -------------------------------------------------
     if not table_exists(cursor, "monitoring_server_resources"):
-        print("ðŸ›  Creating table: monitoring_server_resources")
+        print("🛠 Creating table: monitoring_server_resources")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS monitoring_server_resources (
           server_id INTEGER PRIMARY KEY,
@@ -385,7 +385,7 @@ def run_migrations():
     conn.commit()
 
     # -------------------------------------------------
-    # 1. VÃ©rifier que toutes les tables existent
+    # 1. Vérifier que toutes les tables existent
     # -------------------------------------------------
 
     REQUIRED_TABLES = {
@@ -410,7 +410,7 @@ def run_migrations():
 
     for table in REQUIRED_TABLES:
         if not table_exists(cursor, table):
-            raise RuntimeError(f"âŒ ERROR: table '{table}' does not exist ! "
+            raise RuntimeError(f"❌ ERROR: table '{table}' does not exist ! "
                                f"-> Check that tables.sql has been imported correctly.")
 
     ensure_column(cursor, "servers", "server_version", "TEXT DEFAULT NULL")
@@ -458,7 +458,7 @@ def run_migrations():
     # Usage risk recommendation history
     # -------------------------------------------------
     if not table_exists(cursor, "usage_risk_recommendations"):
-        print("ðŸ›  Creating table: usage_risk_recommendations")
+        print("🛠 Creating table: usage_risk_recommendations")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS usage_risk_recommendations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -499,7 +499,7 @@ def run_migrations():
     # USER REFERRAL SETTINGS
     # -------------------------------------------------
     if not table_exists(cursor, "user_referral_settings"):
-        print("ðŸ›  Creating table: user_referral_settings")
+        print("🛠 Creating table: user_referral_settings")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_referral_settings (
             id INTEGER PRIMARY KEY CHECK(id = 1),
@@ -536,7 +536,7 @@ def run_migrations():
     # USER REFERRALS
     # -------------------------------------------------
     if not table_exists(cursor, "user_referrals"):
-        print("ðŸ›  Creating table: user_referrals")
+        print("🛠 Creating table: user_referrals")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_referrals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -612,7 +612,7 @@ def run_migrations():
             or "'archived'" not in table_sql
         ):
 
-            print("ðŸ›  Migrating user_referrals CHECK constraint...")
+            print("🛠 Migrating user_referrals CHECK constraint...")
 
             cursor.execute("""
                 ALTER TABLE user_referrals
@@ -730,15 +730,16 @@ def run_migrations():
 
             conn.commit()
 
-            print("âœ… user_referrals CHECK constraint migrated")
+            print("✅ user_referrals CHECK constraint migrated")
 
     except Exception as e:
-        print(f"âŒ Failed migrating user_referrals constraint: {e}")
+        print(f"❌ Failed migrating user_referrals constraint: {e}")
 
     ensure_column(cursor, "user_referral_settings", "auto_expire_pending", "INTEGER NOT NULL DEFAULT 1")
     ensure_column(cursor, "user_referral_settings", "auto_archive_rewarded", "INTEGER NOT NULL DEFAULT 1")
     ensure_column(cursor, "user_referral_settings", "auto_archive_expired", "INTEGER NOT NULL DEFAULT 1")
 
+    ensure_column(cursor, "user_referral_settings", "pending_expire_days", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(cursor, "user_referral_settings", "rewarded_archive_days", "INTEGER NOT NULL DEFAULT 90")
     ensure_column(cursor, "user_referral_settings", "expired_archive_days", "INTEGER NOT NULL DEFAULT 30")
 
@@ -748,7 +749,7 @@ def run_migrations():
     # USER REFERRAL EVENTS
     # -------------------------------------------------
     if not table_exists(cursor, "user_referral_events"):
-        print("ðŸ›  Creating table: user_referral_events")
+        print("🛠 Creating table: user_referral_events")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_referral_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -779,7 +780,7 @@ def run_migrations():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_referral_events_referral_id ON user_referral_events(referral_id);")
         conn.commit()
 
-    print("âœ” All tables exist.")
+    print("✔ All tables exist.")
 
     # -------------------------------------------------
     # 1.1 Upgrade vodum_users.status CHECK constraint (NEW statuses)
@@ -793,7 +794,7 @@ def run_migrations():
         return ("'invited'" in sql) and ("'unknown'" in sql)
 
     if table_exists(cursor, "vodum_users") and not vodum_users_has_new_statuses():
-        print("ðŸ›  Upgrading vodum_users.status CHECK (add invited/unfriended/suspended/unknown)")
+        print("🛠 Upgrading vodum_users.status CHECK (add invited/unfriended/suspended/unknown)")
         cursor.execute("ALTER TABLE vodum_users RENAME TO vodum_users_old")
 
         cursor.execute("""
@@ -838,7 +839,7 @@ def run_migrations():
 
         cursor.execute("DROP TABLE vodum_users_old")
         conn.commit()
-        print("âœ” vodum_users.status constraint upgraded.")
+        print("✔ vodum_users.status constraint upgraded.")
 
     # 1.2 vodum_users per-user stream override 
     ensure_column(cursor, "vodum_users", "max_streams_override", "INTEGER DEFAULT NULL")
@@ -862,7 +863,7 @@ def run_migrations():
     # 1.3 Subscription templates (NEW)
     # -------------------------------------------------
     if not table_exists(cursor, "subscription_templates"):
-        print("ðŸ›  Creating table: subscription_templates")
+        print("🛠 Creating table: subscription_templates")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS subscription_templates (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -935,7 +936,7 @@ def run_migrations():
         templates_count = int(cursor.fetchone()[0] or 0)
 
         if templates_count == 0:
-            print("ðŸ›  Creating bundled default subscription templates")
+            print("🛠 Creating bundled default subscription templates")
             for name, notes, duration_days, subscription_value, is_default, is_enabled, policies_json in bundled_templates:
                 cursor.execute(
                     """
@@ -970,7 +971,7 @@ def run_migrations():
 
 
     # -------------------------------------------------
-    # 2. VÃ©rifier que toutes les colonnes obligatoires existent
+    # 2. Vérifier que toutes les colonnes obligatoires existent
     # -------------------------------------------------
 
     TASK_COLUMNS = {
@@ -994,10 +995,10 @@ def run_migrations():
     for col, definition in TASK_COLUMNS.items():
         ensure_column(cursor, "tasks", col, definition)
 
-    print("âœ” Task columns verified.")
+    print("✔ Task columns verified.")
 
     # -------------------------------------------------
-    # 2.1 VÃ©rifier colonnes SETTINGS (migrations lÃ©gÃ¨res)
+    # 2.1 Vérifier colonnes SETTINGS (migrations légères)
     # -------------------------------------------------
     ensure_column(cursor, "settings", "brand_name", "TEXT DEFAULT NULL")
     ensure_column(cursor, "settings", "email_history_retention_years", "INTEGER DEFAULT 2")
@@ -1026,12 +1027,12 @@ def run_migrations():
     ensure_column(cursor, "settings", "web_secure_cookies", "INTEGER DEFAULT 0")
     ensure_column(cursor, "settings", "web_cookie_samesite", "TEXT DEFAULT 'Lax'")
     ensure_column(cursor, "settings", "web_trust_proxy", "INTEGER DEFAULT 0")
-    print("âœ” Settings columns verified (brand_name).")
+    print("✔ Settings columns verified (brand_name).")
     # -------------------------------------------------
     # Anti brute-force login
     # -------------------------------------------------
     if not table_exists(cursor, "auth_login_attempts"):
-        print("ðŸ›  Creating table: auth_login_attempts")
+        print("🛠 Creating table: auth_login_attempts")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS auth_login_attempts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1073,7 +1074,7 @@ def run_migrations():
 
     # Table to store one or multiple Discord bot configurations
     if not table_exists(cursor, "discord_bots"):
-        print("ðŸ›  Creating table: discord_bots")
+        print("🛠 Creating table: discord_bots")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS discord_bots (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1105,10 +1106,10 @@ def run_migrations():
             new_id = cursor.lastrowid
             cursor.execute("UPDATE settings SET discord_bot_id = ? WHERE id = 1", (new_id,))
             conn.commit()
-            print("âž• Migrated legacy discord_bot_token into discord_bots (Primary bot)")
+            print("➕ Migrated legacy discord_bot_token into discord_bots (Primary bot)")
     except Exception as e:
         # non-fatal
-        print(f"âš ï¸ Discord bots migration skipped: {e}")
+        print(f"⚠️ Discord bots migration skipped: {e}")
     ensure_column(cursor, "settings", "notifications_order", "TEXT DEFAULT 'email'")
     ensure_column(cursor, "settings", "user_notifications_can_override", "INTEGER DEFAULT 0")
     ensure_column(cursor, "settings", "notifications_send_mode", "TEXT DEFAULT 'first'")
@@ -1124,7 +1125,7 @@ def run_migrations():
 
     # Tables Discord (templates + history + campaigns)
     if not table_exists(cursor, "discord_templates"):
-        print("ðŸ›  Creating table: discord_templates")
+        print("🛠 Creating table: discord_templates")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS discord_templates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1136,7 +1137,7 @@ def run_migrations():
         conn.commit()
 
     if not table_exists(cursor, "sent_discord"):
-        print("ðŸ›  Creating table: sent_discord")
+        print("🛠 Creating table: sent_discord")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS sent_discord (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1151,7 +1152,7 @@ def run_migrations():
         conn.commit()
 
     if not table_exists(cursor, "discord_campaigns"):
-        print("ðŸ›  Creating table: discord_campaigns")
+        print("🛠 Creating table: discord_campaigns")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS discord_campaigns (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1171,15 +1172,15 @@ def run_migrations():
     # Seed default discord templates (only if missing)
     defaults = {
         "preavis": (
-            "â³ Subscription expiring soon",
+            "⏳ Subscription expiring soon",
             "Hi {username}! You have {days_left} day(s) left. Your subscription expires on {expiration_date}."
         ),
         "relance": (
-            "ðŸ”” Subscription reminder",
-            "Hello {username} ðŸ™‚ Just a reminder: your subscription expires on {expiration_date} ({days_left} day(s) left)."
+            "🔔 Subscription reminder",
+            "Hello {username} 🙂 Just a reminder: your subscription expires on {expiration_date} ({days_left} day(s) left)."
         ),
         "fin": (
-            "âš ï¸ Subscription expired",
+            "⚠️ Subscription expired",
             "Hi {username}. Your subscription expired on {expiration_date}. Please contact me to renew it."
         ),
     }
@@ -1191,7 +1192,7 @@ def run_migrations():
                 "INSERT INTO discord_templates(type, title, body) VALUES(?,?,?)",
                 (k, title, body),
             )
-            print(f"âž• Default discord template inserted: {k}")
+            print(f"➕ Default discord template inserted: {k}")
     conn.commit()
 
 
@@ -1200,7 +1201,7 @@ def run_migrations():
     # 2.1.2 Communications (Unified) tables + migration (NEW)
     # -------------------------------------------------
     if not table_exists(cursor, "comm_templates"):
-        print("ðŸ›  Creating table: comm_templates")
+        print("🛠 Creating table: comm_templates")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS comm_templates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1270,7 +1271,7 @@ def run_migrations():
         return False
 
     if table_exists(cursor, "comm_templates") and comm_templates_schema_needs_upgrade():
-        print("ðŸ›  Upgrading comm_templates schema (add expiration_change trigger + direction)")
+        print("🛠 Upgrading comm_templates schema (add expiration_change trigger + direction)")
         cursor.execute("PRAGMA legacy_alter_table=ON")
         cursor.execute("ALTER TABLE comm_templates RENAME TO comm_templates_old")
 
@@ -1315,7 +1316,7 @@ def run_migrations():
         cursor.execute("DROP TABLE comm_templates_old")
         cursor.execute("PRAGMA legacy_alter_table=OFF")
         conn.commit()
-        print("âœ” comm_templates schema upgraded.")
+        print("✔ comm_templates schema upgraded.")
 
     # -------------------------------------------------
     # System communication template: stream blocked
@@ -1346,7 +1347,7 @@ def run_migrations():
     )
 
     if not row:
-        print("âž• Default communication template inserted: stream_blocked")
+        print("➕ Default communication template inserted: stream_blocked")
         cursor.execute(
             """
             INSERT INTO comm_templates(
@@ -1440,7 +1441,7 @@ def run_migrations():
     # Communications scheduled queue (NEW)
     # -------------------------------------------------
     if not table_exists(cursor, "comm_scheduled"):
-        print("ðŸ›  Creating table: comm_scheduled")
+        print("🛠 Creating table: comm_scheduled")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS comm_scheduled (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1481,7 +1482,7 @@ def run_migrations():
     conn.commit()
 
     if not table_exists(cursor, "comm_template_attachments"):
-        print("ðŸ›  Creating table: comm_template_attachments")
+        print("🛠 Creating table: comm_template_attachments")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS comm_template_attachments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1497,7 +1498,7 @@ def run_migrations():
         conn.commit()
 
     if not table_exists(cursor, "comm_campaigns"):
-        print("ðŸ›  Creating table: comm_campaigns")
+        print("🛠 Creating table: comm_campaigns")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS comm_campaigns (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1534,7 +1535,7 @@ def run_migrations():
     """)
 
     if not table_exists(cursor, "comm_campaign_attachments"):
-        print("ðŸ›  Creating table: comm_campaign_attachments")
+        print("🛠 Creating table: comm_campaign_attachments")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS comm_campaign_attachments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1550,7 +1551,7 @@ def run_migrations():
         conn.commit()
 
     if not table_exists(cursor, "comm_campaign_targets"):
-        print("ðŸ›  Creating table: comm_campaign_targets")
+        print("🛠 Creating table: comm_campaign_targets")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS comm_campaign_targets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1589,7 +1590,7 @@ def run_migrations():
     conn.commit()
 
     if not table_exists(cursor, "comm_history"):
-        print("ðŸ›  Creating table: comm_history")
+        print("🛠 Creating table: comm_history")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS comm_history (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1629,7 +1630,7 @@ def run_migrations():
         if not _table_references_comm_templates_old("comm_scheduled"):
             return
 
-        print("ðŸ›  Repairing comm_scheduled foreign key: comm_templates_old -> comm_templates")
+        print("🛠 Repairing comm_scheduled foreign key: comm_templates_old -> comm_templates")
 
         cursor.execute("ALTER TABLE comm_scheduled RENAME TO comm_scheduled_old")
 
@@ -1694,7 +1695,7 @@ def run_migrations():
         if not _table_references_comm_templates_old("comm_template_attachments"):
             return
 
-        print("ðŸ›  Repairing comm_template_attachments foreign key: comm_templates_old -> comm_templates")
+        print("🛠 Repairing comm_template_attachments foreign key: comm_templates_old -> comm_templates")
 
         cursor.execute("ALTER TABLE comm_template_attachments RENAME TO comm_template_attachments_old")
 
@@ -1726,7 +1727,7 @@ def run_migrations():
         if not _table_references_comm_templates_old("comm_history"):
             return
 
-        print("ðŸ›  Repairing comm_history foreign key: comm_templates_old -> comm_templates")
+        print("🛠 Repairing comm_history foreign key: comm_templates_old -> comm_templates")
 
         cursor.execute("ALTER TABLE comm_history RENAME TO comm_history_old")
 
@@ -1768,7 +1769,7 @@ def run_migrations():
     _repair_comm_history_fk()
     conn.commit()
 
-    # One-time migration (best effort, no data loss): old â†’ unified
+    # One-time migration (best effort, no data loss): old → unified
     try:
         cursor.execute("SELECT COUNT(*) FROM comm_templates")
         comm_tpl_count = int(cursor.fetchone()[0] or 0)
@@ -1776,7 +1777,7 @@ def run_migrations():
         # Migrate templates only once (when comm_templates is empty)
         if comm_tpl_count == 0 and (table_exists(cursor, "email_templates") or table_exists(cursor, "discord_templates")):
             import json as _json
-            print("ðŸ” Migrating templates: email_templates + discord_templates â†’ comm_templates")
+            print("🔁 Migrating templates: email_templates + discord_templates → comm_templates")
 
             # Read current global delays (legacy) as a starting point for days_before
             preavis_days = None
@@ -1842,13 +1843,13 @@ def run_migrations():
                 )
 
             conn.commit()
-            print("âœ… Templates migrated into comm_templates")
+            print("✅ Templates migrated into comm_templates")
 
-        # Campaigns (mail + discord) â†’ comm_campaigns (one-time when comm_campaigns is empty)
+        # Campaigns (mail + discord) → comm_campaigns (one-time when comm_campaigns is empty)
         cursor.execute("SELECT COUNT(*) FROM comm_campaigns")
         comm_c_count = int(cursor.fetchone()[0] or 0)
         if comm_c_count == 0 and (table_exists(cursor, "mail_campaigns") or table_exists(cursor, "discord_campaigns")):
-            print("ðŸ” Migrating campaigns: mail_campaigns + discord_campaigns â†’ comm_campaigns")
+            print("🔁 Migrating campaigns: mail_campaigns + discord_campaigns → comm_campaigns")
 
             if table_exists(cursor, "mail_campaigns"):
                 cursor.execute("SELECT id, subject, body, server_id, status, is_test, created_at, finished_at FROM mail_campaigns ORDER BY id")
@@ -1878,9 +1879,9 @@ def run_migrations():
                     )
 
             conn.commit()
-            print("âœ… Campaigns migrated into comm_campaigns")
+            print("✅ Campaigns migrated into comm_campaigns")
 
-        # History (sent_emails + sent_discord) â†’ comm_history (one-time when comm_history is empty)
+        # History (sent_emails + sent_discord) → comm_history (one-time when comm_history is empty)
         cursor.execute("SELECT COUNT(*) FROM comm_history")
         comm_h_count = int(cursor.fetchone()[0] or 0)
         if comm_h_count == 0:
@@ -1894,7 +1895,7 @@ def run_migrations():
                 tpl_map = {}
 
             if table_exists(cursor, "sent_emails"):
-                print("ðŸ” Migrating history: sent_emails â†’ comm_history")
+                print("🔁 Migrating history: sent_emails → comm_history")
                 cursor.execute("SELECT user_id, template_type, expiration_date, sent_at FROM sent_emails ORDER BY id")
                 for user_id, template_type, expiration_date, sent_at in cursor.fetchall() or []:
                     tid = tpl_map.get(template_type)
@@ -1921,7 +1922,7 @@ def run_migrations():
                         )
 
             if table_exists(cursor, "sent_discord"):
-                print("ðŸ” Migrating history: sent_discord â†’ comm_history")
+                print("🔁 Migrating history: sent_discord → comm_history")
                 cursor.execute("SELECT user_id, template_type, expiration_date, sent_at FROM sent_discord ORDER BY id")
                 for user_id, template_type, expiration_date, sent_at in cursor.fetchall() or []:
                     tid = tpl_map.get(template_type)
@@ -1947,7 +1948,7 @@ def run_migrations():
                         )
 
             conn.commit()
-            print("âœ… History migrated into comm_history")
+            print("✅ History migrated into comm_history")
             # Best effort normalization: convert digit-only sent_at to datetime
             try:
                 cursor.execute("""
@@ -1961,7 +1962,7 @@ def run_migrations():
             except Exception:
                 pass
     except Exception as e:
-        print(f"âš ï¸ Communications migration skipped: {e}")
+        print(f"⚠️ Communications migration skipped: {e}")
 
 
 
@@ -2074,12 +2075,12 @@ def run_migrations():
         conn.commit()
 
     # -------------------------------------------------
-    # Monitoring: garantir l'unicitÃ© requise pour
+    # Monitoring: garantir l'unicité requise pour
     # ON CONFLICT(server_id, session_key)
     # -------------------------------------------------
 
     if table_exists(cursor, "media_sessions"):
-        # Nettoyage d'Ã©ventuels doublons historiques avant crÃ©ation de l'index unique
+        # Nettoyage d'éventuels doublons historiques avant création de l'index unique
         cursor.execute("""
         DELETE FROM media_sessions
         WHERE id NOT IN (
@@ -2108,7 +2109,7 @@ def run_migrations():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_events_type_ts ON media_events(event_type, ts)")
     conn.commit()
 
-    print("âœ” Monitoring tables verified (media_sessions, media_events).")
+    print("✔ Monitoring tables verified (media_sessions, media_events).")
 
     # -------------------------------------------------
     # 2.4 Monitoring history table (aggregations)
@@ -2126,10 +2127,10 @@ def run_migrations():
           media_key TEXT,
           external_user_id TEXT,
 
-          -- RÃ©fÃ©rences internes (si rÃ©solues)
+          -- Références internes (si résolues)
           media_user_id INTEGER,
 
-          -- Infos mÃ©dia (snapshot)
+          -- Infos média (snapshot)
           media_type TEXT,               -- movie/episode/track/unknown
           title TEXT,
           grandparent_title TEXT,
@@ -2139,7 +2140,7 @@ def run_migrations():
           started_at TIMESTAMP NOT NULL,
           stopped_at TIMESTAMP NOT NULL,
           duration_ms INTEGER NOT NULL DEFAULT 0,
-          watch_ms INTEGER NOT NULL DEFAULT 0,        -- progression estimÃ©e
+          watch_ms INTEGER NOT NULL DEFAULT 0,        -- progression estimée
           peak_bitrate INTEGER,
           was_transcode INTEGER NOT NULL DEFAULT 0,
 
@@ -2157,7 +2158,7 @@ def run_migrations():
         )
         """)
     else:
-        # Upgrade-safe : si la table existe dÃ©jÃ , on s'assure que les colonnes attendues existent.
+        # Upgrade-safe : si la table existe déjà, on s'assure que les colonnes attendues existent.
         # (pratique si tu ajoutes des champs plus tard sans casser les DB existantes)
         ensure_column(cursor, "media_session_history", "peak_bitrate", "INTEGER")
         ensure_column(cursor, "media_session_history", "was_transcode", "INTEGER NOT NULL DEFAULT 0")
@@ -2180,7 +2181,7 @@ def run_migrations():
         """)
     except sqlite3.IntegrityError:
         # Existing DB may already contain duplicates -> dedupe once then retry
-        print("ðŸ§¹ Detected duplicates in media_session_history. Deduplicating before creating UNIQUE indexâ€¦")
+        print("🧹 Detected duplicates in media_session_history. Deduplicating before creating UNIQUE index…")
 
         # Keep the oldest row (MIN(id)) for each dedupe key
         cursor.execute("""
@@ -2201,11 +2202,11 @@ def run_migrations():
 
 
     conn.commit()
-    print("âœ” Monitoring history table verified (media_session_history).")
+    print("✔ Monitoring history table verified (media_session_history).")
 
 
     conn.commit()
-    print("âœ” Monitoring history table verified (media_session_history).")
+    print("✔ Monitoring history table verified (media_session_history).")
 
     # -------------------------------------------------
     # 2.4+ Media jobs: queue robuste (status/lease/backoff/priority)
@@ -2220,7 +2221,7 @@ def run_migrations():
         ensure_column(cursor, "media_jobs", "locked_until", "TIMESTAMP")
         ensure_column(cursor, "media_jobs", "max_attempts", "INTEGER NOT NULL DEFAULT 10")
 
-        # Compat (certaines DB anciennes peuvent ne pas avoir Ã§a)
+        # Compat (certaines DB anciennes peuvent ne pas avoir ça)
         ensure_column(cursor, "media_jobs", "processed", "INTEGER NOT NULL DEFAULT 0 CHECK (processed IN (0,1))")
         ensure_column(cursor, "media_jobs", "success", "INTEGER NOT NULL DEFAULT 0 CHECK (success IN (0,1))")
         ensure_column(cursor, "media_jobs", "attempts", "INTEGER NOT NULL DEFAULT 0")
@@ -2277,7 +2278,7 @@ def run_migrations():
         ON media_jobs(server_id, provider, action, status)
         """)
 
-        # DÃ©doublonnage (unique partiel)
+        # Dédoublonnage (unique partiel)
         cursor.execute("""
         CREATE UNIQUE INDEX IF NOT EXISTS uq_media_jobs_dedupe_active
         ON media_jobs(dedupe_key)
@@ -2285,66 +2286,66 @@ def run_migrations():
         """)
 
         conn.commit()
-        print("âœ” Media jobs queue columns + indexes verified.")
+        print("✔ Media jobs queue columns + indexes verified.")
     else:
-        # Si jamais media_jobs n'existe pas, c'est que tables.sql n'a pas Ã©tÃ© importÃ©.
-        # Dans Vodum, on prÃ©fÃ¨re Ã©chouer proprement plutÃ´t que crÃ©er une version incomplÃ¨te.
-        print("âš  media_jobs table not found (tables.sql not imported yet). Skipping media_jobs upgrade.")
+        # Si jamais media_jobs n'existe pas, c'est que tables.sql n'a pas été importé.
+        # Dans Vodum, on préfère échouer proprement plutôt que créer une version incomplète.
+        print("⚠ media_jobs table not found (tables.sql not imported yet). Skipping media_jobs upgrade.")
 
     # libraries.item_count
     if table_exists(cursor, "libraries") and not column_exists(cursor, "libraries", "item_count"):
         cursor.execute("ALTER TABLE libraries ADD COLUMN item_count INTEGER")
         conn.commit()
-        print("âœ” libraries.item_count added")
+        print("✔ libraries.item_count added")
 
     # media_sessions.library_section_id (pour relier session -> library)
     if table_exists(cursor, "media_sessions") and not column_exists(cursor, "media_sessions", "library_section_id"):
         cursor.execute("ALTER TABLE media_sessions ADD COLUMN library_section_id TEXT")
         conn.commit()
-        print("âœ” media_sessions.library_section_id added")
+        print("✔ media_sessions.library_section_id added")
 
     if table_exists(cursor, "media_sessions") and not column_exists(cursor, "media_sessions", "poster_ref_json"):
         cursor.execute("ALTER TABLE media_sessions ADD COLUMN poster_ref_json TEXT")
         conn.commit()
-        print("âœ” media_sessions.poster_ref_json added")
+        print("✔ media_sessions.poster_ref_json added")
 
     if table_exists(cursor, "media_sessions") and not column_exists(cursor, "media_sessions", "backdrop_ref_json"):
         cursor.execute("ALTER TABLE media_sessions ADD COLUMN backdrop_ref_json TEXT")
         conn.commit()
-        print("âœ” media_sessions.backdrop_ref_json added")
+        print("✔ media_sessions.backdrop_ref_json added")
 
     if table_exists(cursor, "media_sessions") and not column_exists(cursor, "media_sessions", "missing_count"):
         cursor.execute("ALTER TABLE media_sessions ADD COLUMN missing_count INTEGER DEFAULT 0")
         conn.commit()
-        print("âœ” media_sessions.missing_count added")
+        print("✔ media_sessions.missing_count added")
 
     # media_session_history.library_section_id
     if table_exists(cursor, "media_session_history") and not column_exists(cursor, "media_session_history", "library_section_id"):
         cursor.execute("ALTER TABLE media_session_history ADD COLUMN library_section_id TEXT")
         conn.commit()
-        print("âœ” media_session_history.library_section_id added")
+        print("✔ media_session_history.library_section_id added")
 
     if table_exists(cursor, "media_session_history") and not column_exists(cursor, "media_session_history", "poster_ref_json"):
         cursor.execute("ALTER TABLE media_session_history ADD COLUMN poster_ref_json TEXT")
         conn.commit()
-        print("âœ” media_session_history.poster_ref_json added")
+        print("✔ media_session_history.poster_ref_json added")
 
     if table_exists(cursor, "media_session_history") and not column_exists(cursor, "media_session_history", "backdrop_ref_json"):
         cursor.execute("ALTER TABLE media_session_history ADD COLUMN backdrop_ref_json TEXT")
         conn.commit()
-        print("âœ” media_session_history.backdrop_ref_json added")
+        print("✔ media_session_history.backdrop_ref_json added")
 
     # -------------------------------------------------
     # 2.5 Normalize monitoring media_type values (idempotent)
     # -------------------------------------------------
-    print("ðŸ”§ Normalizing monitoring media_type valuesâ€¦")
+    print("🔧 Normalizing monitoring media_type values…")
 
-    # Harmonise les anciens labels (si tu as dÃ©jÃ  stockÃ© series/music/video/etc.)
+    # Harmonise les anciens labels (si tu as déjà stocké series/music/video/etc.)
     # History
     cursor.execute("UPDATE media_session_history SET media_type='serie'  WHERE media_type IN ('series')")
     cursor.execute("UPDATE media_session_history SET media_type='music' WHERE media_type IN ('tracks','track')")
 
-    # "video" historique : on tranche via grandparent_title (Ã©pisode si grandparent existe, sinon film)
+    # "video" historique : on tranche via grandparent_title (épisode si grandparent existe, sinon film)
     cursor.execute("""
         UPDATE media_session_history
         SET media_type='serie'
@@ -2359,7 +2360,7 @@ def run_migrations():
           AND (grandparent_title IS NULL OR TRIM(grandparent_title) = '')
     """)
 
-    # Live sessions (optionnel mais conseillÃ© pour cohÃ©rence UI)
+    # Live sessions (optionnel mais conseillé pour cohérence UI)
     cursor.execute("UPDATE media_sessions SET media_type='serie'  WHERE media_type IN ('series')")
     cursor.execute("UPDATE media_sessions SET media_type='tracks' WHERE media_type IN ('music','track')")
     cursor.execute("""
@@ -2377,7 +2378,7 @@ def run_migrations():
     """)
 
     conn.commit()
-    print("âœ” Monitoring media_type normalized.")
+    print("✔ Monitoring media_type normalized.")
 
     # -------------------------------------------------
     # 2.6 Server deletion performance indexes
@@ -2404,44 +2405,44 @@ def run_migrations():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_library_top_played ON media_session_history(server_id, library_section_id, media_key, started_at, stopped_at)")
     conn.commit()
 
-    print("âœ” Server deletion performance indexes verified.")
+    print("✔ Server deletion performance indexes verified.")
 
 
     # -------------------------------------------------
-    # 3. Injecter les donnÃ©es par dÃ©faut
+    # 3. Injecter les données par défaut
     # -------------------------------------------------
 
-    # TÃ¢che sync_plex
+    # Tâche sync_plex
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "sync_plex",
         "description": "task_description.sync_plex",
-        "schedule": "7 */6 * * *",  # toutes les 6h, dÃ©cale les tÃ¢ches lourdes
+        "schedule": "7 */6 * * *",  # toutes les 6h, décale les tâches lourdes
         "enabled": 0,
         "status": "disabled"
     })
 
 
 
-    # TÃ¢che cleanup_logs (suppression logs > 7 jours)
+    # Tâche cleanup_logs (suppression logs > 7 jours)
     #ensure_row(cursor, "tasks", "name = :name", {
     #    "name": "cleanup_logs",
     #    "description": "Suppression automatique des logs de plus de 7 jours",
-    #    "schedule": "0 2 * * *",  # tous les jours Ã  02h00
+    #    "schedule": "0 2 * * *",  # tous les jours à 02h00
     #    "enabled": 1,
     #    "status": "idle"
     #})
 
-    # TÃ¢che check_update (tous les jours)
+    # Tâche check_update (tous les jours)
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "check_update",
         "description": "task_description.check_update",
-        "schedule": "0 4 * * *",  # tous les jours Ã  04:00
+        "schedule": "0 4 * * *",  # tous les jours à 04:00
         "enabled": 1,
         "status": "idle"
     })
 
 
-    # TÃ¢che backup automatique (tous les 3 jours Ã  03:00)
+    # Tâche backup automatique (tous les 3 jours à 03:00)
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "auto_backup",
         "description": "task_description.auto_backup",
@@ -2459,43 +2460,43 @@ def run_migrations():
         "status": "idle"
     })
 
-    # TÃ¢che cleanup des backups (supprime backups > 30 jours)
+    # Tâche cleanup des backups (supprime backups > 30 jours)
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "cleanup_backups",
         "description": "task_description.cleanup_backups",
-        "schedule": "30 3 * * *",  # tous les jours Ã  03:30
+        "schedule": "30 3 * * *",  # tous les jours à 03:30
         "enabled": 1,
         "status": "idle"
     })
 
-    # TÃ¢che cleanup des donnÃ©es (purge des historiques selon data_retention_years)
+    # Tâche cleanup des données (purge des historiques selon data_retention_years)
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "cleanup_data_retention",
         "description": "task_description.cleanup_data_retention",
-        "schedule": "0 4 * * 0",  # chaque dimanche Ã  04:00
+        "schedule": "0 4 * * 0",  # chaque dimanche à 04:00
         "enabled": 1,
         "status": "idle"
     })
 
-    # TÃ¢che vÃ©rification intÃ©gritÃ© DB
+    # Tâche vérification intégrité DB
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "db_integrity_check",
         "description": "task_description.db_integrity_check",
-        "schedule": "15 4 * * 0",  # chaque dimanche Ã  04:15
+        "schedule": "15 4 * * 0",  # chaque dimanche à 04:15
         "enabled": 1,
         "status": "idle"
     })
 
-    # TÃ¢che cleanup du cache artwork (posters/backdrops monitoring)
+    # Tâche cleanup du cache artwork (posters/backdrops monitoring)
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "cleanup_artwork_cache",
         "description": "task_description.cleanup_artwork_cache",
-        "schedule": "30 4 * * 0",  # chaque dimanche Ã  04:30
+        "schedule": "30 4 * * 0",  # chaque dimanche à 04:30
         "enabled": 1,
         "status": "idle"
     })
 
-    # TÃ¢che warmup du cache artwork (posters/backdrops monitoring)
+    # Tâche warmup du cache artwork (posters/backdrops monitoring)
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "warmup_artwork_cache",
         "description": "task_description.warmup_artwork_cache",
@@ -2520,7 +2521,7 @@ def run_migrations():
         "status": "idle"
     })
 
-    # TÃ¢che update_user_status
+    # Tâche update_user_status
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "update_user_status",
         "description": "task_description.update_user_status",
@@ -2529,20 +2530,20 @@ def run_migrations():
         "status": "idle"
     })
 
-    # TÃ¢che check_servers (ping lÃ©ger des serveurs toutes les 10 minutes)
+    # Tâche check_servers (ping léger des serveurs toutes les 10 minutes)
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "check_servers",
         "description": "task_description.check_servers",
-        "schedule": "7,37 * * * *",  # toutes les 30 minutes, Ã©talÃ©
+        "schedule": "7,37 * * * *",  # toutes les 30 minutes, étalé
         "enabled": 1,
         "status": "idle"
     })
 
-    # TÃ¢che daily_unfriend_cleanup
+    # Tâche daily_unfriend_cleanup
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "cleanup_unfriended",
         "description": "task_description.cleanup_unfriended",
-        "schedule": "0 4 * * *",  # tous les jours Ã  04h00
+        "schedule": "0 4 * * *",  # tous les jours à 04h00
         "enabled": 1,
         "status": "idle"
     })
@@ -2602,7 +2603,7 @@ def run_migrations():
     """)
     conn.commit()
 
-    # Ajouter la tÃ¢che send_expiration_emails si absente
+    # Ajouter la tâche send_expiration_emails si absente
     cursor.execute("""
         SELECT 1 FROM tasks WHERE name = 'send_expiration_emails'
     """)
@@ -2613,7 +2614,7 @@ def run_migrations():
             INSERT INTO tasks (name, schedule, enabled, status)
             VALUES ('send_expiration_emails', '27 * * * *', 0, 'disabled')
         """)
-        print("âž• Task send_expiration_emails added.")
+        print("➕ Task send_expiration_emails added.")
 
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "send_pending_invite_reminders",
@@ -2690,7 +2691,7 @@ def run_migrations():
             '''
         )
         conn.commit()
-        print("âœ” Cron disabled: all tasks forced to disabled (state remembered).")
+        print("✔ Cron disabled: all tasks forced to disabled (state remembered).")
 
 
     # -------------------------------------------------
@@ -2709,7 +2710,7 @@ def run_migrations():
                 """,
                 (provider, server_id, subject, body),
             )
-            print(f"âž• Default welcome template inserted: {provider} / server_id={server_id}")
+            print(f"➕ Default welcome template inserted: {provider} / server_id={server_id}")
 
     plex_subject = "Welcome to Plex - {server_name}"
     plex_body = """Hi {firstname} {lastname},
@@ -2934,7 +2935,7 @@ def run_migrations():
     default_comm_templates_already_seeded = cursor.fetchone() is not None
 
     if not default_comm_templates_already_seeded:
-        print("ðŸ›  Checking bundled default communication templates")
+        print("🛠 Checking bundled default communication templates")
 
         inserted_defaults = 0
 
@@ -2990,10 +2991,10 @@ def run_migrations():
         )
         conn.commit()
 
-        print(f"âœ” Bundled default communication templates inserted: {inserted_defaults}")
+        print(f"✔ Bundled default communication templates inserted: {inserted_defaults}")
 
     # -------------------------------------------------
-    # 4. Templates email par dÃ©faut 
+    # 4. Templates email par défaut 
     # -------------------------------------------------
 
     DEFAULT_TEMPLATES = {
@@ -3034,16 +3035,16 @@ def run_migrations():
 
     for tpl_type, tpl_data in DEFAULT_TEMPLATES.items():
 
-        # VÃ©rifier existence du template
+        # Vérifier existence du template
         cursor.execute(
             "SELECT COUNT(*) FROM email_templates WHERE type = ?",
             (tpl_type,)
         )
         exists = cursor.fetchone()[0]
 
-        # Si inexistant â†’ crÃ©er avec valeurs par dÃ©faut
+        # Si inexistant → créer avec valeurs par défaut
         if exists == 0:
-            print(f"âž• Ajout du template email par dÃ©faut : {tpl_type}")
+            print(f"➕ Ajout du template email par défaut : {tpl_type}")
 
             cursor.execute(
                 """
@@ -3062,19 +3063,19 @@ def run_migrations():
             )
 
         else:
-            # Si existant â†’ vÃ©rifier s'il manque subject / body
+            # Si existant → vérifier s'il manque subject / body
             cursor.execute(
                 "SELECT subject, body FROM email_templates WHERE type = ?",
                 (tpl_type,)
             )
             row = cursor.fetchone()
 
-            # row est un tuple, pas un Row â†’ utiliser indices
+            # row est un tuple, pas un Row → utiliser indices
             subject = row[0] if row else ""
             body = row[1] if row else ""
 
             if not subject or not body:
-                print(f"ðŸ›  Updating empty email template : {tpl_type}")
+                print(f"🛠 Updating empty email template : {tpl_type}")
                 cursor.execute(
                     """
                     UPDATE email_templates
@@ -3089,7 +3090,7 @@ def run_migrations():
                     )
                 )
 
-    # TÃ¢che check_mailing_status : active/dÃ©sactive automatiquement les tÃ¢ches Email/Discord
+    # Tâche check_mailing_status : active/désactive automatiquement les tâches Email/Discord
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "check_mailing_status",
         "description": "task_description.check_mailing_status",
@@ -3099,7 +3100,7 @@ def run_migrations():
     })
 
 
-    # TÃ¢che stream_enforcer 
+    # Tâche stream_enforcer 
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "stream_enforcer",
         "description": "task_description.stream_enforcer",
@@ -3108,44 +3109,44 @@ def run_migrations():
         "status": "disabled"
     })
 
-    # TÃ¢che apply_plex_access_updates (pour appliquer les jobs Plex)
+    # Tâche apply_plex_access_updates (pour appliquer les jobs Plex)
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "apply_plex_access_updates",
         "description": "task_description.apply_plex_access_updates",
         "schedule": "*/5 * * * *",   # toutes les 5 minutes
-        "enabled": 0,                # activÃ©e uniquement quand un job est ajoutÃ©
+        "enabled": 0,                # activée uniquement quand un job est ajouté
         "status": "idle"
     })
 
-    # TÃ¢che sync_Jellyfin
+    # Tâche sync_Jellyfin
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "sync_jellyfin",
         "description": "task_description.sync_jellyfin",
-        "schedule": "17 */6 * * *",  # toutes les 6 heures, aprÃ¨s Plex
+        "schedule": "17 */6 * * *",  # toutes les 6 heures, après Plex
         "enabled": 0,
         "status": "disabled"
     })
 
-    # TÃ¢che disable_expired_users (dÃ©sactivation des accÃ¨s Plex Ã  l'expiration)
+    # Tâche disable_expired_users (désactivation des accès Plex à l'expiration)
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "disable_expired_users",
         "description": "task_description.disable_expired_users",
         "schedule": "0 */12 * * *",  # toutes les 12 heures
-        "enabled": 0,                # pilotÃ©e par settings.disable_on_expiry
+        "enabled": 0,                # pilotée par settings.disable_on_expiry
         "status": "idle"
     })
-    # TÃ¢che expired_subscription_manager (policy "abonnement expirÃ©" + disable diffÃ©rÃ©)
+    # Tâche expired_subscription_manager (policy "abonnement expiré" + disable différé)
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "expired_subscription_manager",
         "description": "task_description.expired_subscription_manager",
         "schedule": "13 * * * *",  # toutes les heures, hors minute de pointe
-        "enabled": 0,               # pilotÃ©e par settings.expiry_mode
+        "enabled": 0,               # pilotée par settings.expiry_mode
         "status": "disabled"
     })
 
 
 
-    # TÃ¢che apply_jellyfin_access_updates (dÃ©sactivation des accÃ¨s Jellyfin Ã  l'expiration)
+    # Tâche apply_jellyfin_access_updates (désactivation des accès Jellyfin à l'expiration)
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "apply_jellyfin_access_updates",
         "description": "task_description.apply_jellyfin_access_updates",
@@ -3154,9 +3155,9 @@ def run_migrations():
         "status": "idle"
     })
 
-    # TÃ¢che legacy monitor_collect_sessions
+    # Tâche legacy monitor_collect_sessions
     #
-    # Cette ancienne tÃ¢che collecte tous les serveurs en direct.
+    # Cette ancienne tâche collecte tous les serveurs en direct.
     # Elle ne doit plus tourner avec le nouveau pipeline :
     # monitor_enqueue_refresh -> media_jobs_worker -> collect_sessions_for_server.
     ensure_row(cursor, "tasks", "name = :name", {
@@ -3185,18 +3186,18 @@ def run_migrations():
         WHERE name = 'monitor_collect_sessions'
     """)
 
-    # TÃ¢che refresh_dashboard_quote_cache (quote du jour du dashboard)
+    # Tâche refresh_dashboard_quote_cache (quote du jour du dashboard)
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "refresh_dashboard_quote_cache",
         "description": "task_description.refresh_dashboard_quote_cache",
-        "schedule": "*/3 * * * *",   # vÃ©rifie toutes les 3h, mais ne recalcule qu'une fois par jour
+        "schedule": "*/3 * * * *",   # vérifie toutes les 3h, mais ne recalcule qu'une fois par jour
         "enabled": 1,
         "status": "idle"
     })
 
-    # Auto-rÃ©paration :
-    # si la tÃ¢che existe dÃ©jÃ  mais est restÃ©e dÃ©sactivÃ©e sur une ancienne base,
-    # on la remet ON uniquement si elle n'a encore jamais tournÃ©.
+    # Auto-réparation :
+    # si la tâche existe déjà mais est restée désactivée sur une ancienne base,
+    # on la remet ON uniquement si elle n'a encore jamais tourné.
     cursor.execute(
         """
         UPDATE tasks
@@ -3210,7 +3211,7 @@ def run_migrations():
         """
     )
 
-    # TÃ¢che referral rewards
+    # Tâche referral rewards
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "process_referral_rewards",
         "description": "task_description.process_referral_rewards",
@@ -3218,7 +3219,7 @@ def run_migrations():
         "enabled": 1,
         "status": "idle",
     })
-    # TÃ¢che referral_cleanup
+    # Tâche referral_cleanup
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "referral_cleanup",
         "description": "task_description.referral_cleanup",
@@ -3229,7 +3230,7 @@ def run_migrations():
     conn.commit()
 
     # -------------------------------------------------
-    # ParamÃ¨tres de base (settings)
+    # Paramètres de base (settings)
     # -------------------------------------------------
 
     ensure_row(cursor, "settings", "id = :id", {
@@ -3359,7 +3360,7 @@ def run_migrations():
     current_task_defaults_version = int(row[0]) if row and row[0] is not None else 0
 
     if current_task_defaults_version < TASK_DEFAULTS_VERSION:
-        print(f"ðŸ”§ Applying task schedule defaults migration v{TASK_DEFAULTS_VERSION}â€¦")
+        print(f"🔧 Applying task schedule defaults migration v{TASK_DEFAULTS_VERSION}…")
 
         for task_name, new_schedule in TASK_SCHEDULE_DEFAULTS.items():
             cursor.execute(
@@ -3385,9 +3386,9 @@ def run_migrations():
                     """,
                     (new_schedule, task_name),
                 )
-                print(f"âœ” Task schedule updated: {task_name} -> {new_schedule}")
+                print(f"✔ Task schedule updated: {task_name} -> {new_schedule}")
             else:
-                print(f"â†ª Task schedule kept unchanged (custom): {task_name} -> {current_schedule}")
+                print(f"↪ Task schedule kept unchanged (custom): {task_name} -> {current_schedule}")
 
         cursor.execute(
             """
@@ -3568,7 +3569,7 @@ def run_migrations():
     conn.commit()
     conn.close()
 
-    print("âœ” Migrations completed successfully !")
+    print("✔ Migrations completed successfully !")
 
 
 

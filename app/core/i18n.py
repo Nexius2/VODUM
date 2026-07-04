@@ -14,6 +14,53 @@ from web.security import safe_redirect_target
 _I18N_CACHE: Dict[str, Dict] = {}
 _AVAILABLE_LANGUAGES_CACHE: Optional[Dict[str, str]] = None
 
+GLOBAL_TEMPLATE_SETTINGS_COLUMNS = """
+    admin_email,
+    admin_totp_enabled,
+    backup_retention_count,
+    backup_retention_days,
+    brand_name,
+    contact_email,
+    data_retention_years,
+    debug_mode,
+    default_language,
+    default_subscription_days,
+    delete_after_expiry_days,
+    discord_enabled,
+    enable_anonymous_telemetry,
+    enable_cron_jobs,
+    expiry_mode,
+    mail_from,
+    mailing_enabled,
+    maintenance_mode,
+    notifications_order,
+    notifications_send_mode,
+    plex_user_import_mode,
+    preavis_days,
+    reminder_days,
+    skip_never_used_accounts,
+    smtp_auth_method,
+    smtp_host,
+    smtp_port,
+    smtp_tls,
+    smtp_user,
+    subscription_plans_enabled_only,
+    timezone,
+    usage_risk_analysis_window_days,
+    usage_risk_enabled,
+    usage_risk_high_threshold,
+    usage_risk_medium_threshold,
+    usage_risk_min_kills_before_suggestion,
+    usage_risk_send_stream_blocked_message,
+    usage_risk_send_upgrade_suggestions,
+    usage_risk_suggestion_cooldown_days,
+    user_notifications_can_override,
+    warn_then_disable_days,
+    web_cookie_samesite,
+    web_secure_cookies,
+    web_trust_proxy
+"""
+
 
 # ======================
 #   MULTILINGUAL SYSTEM
@@ -173,7 +220,7 @@ def init_i18n(app, get_db: Callable[[], object]) -> None:
         """
         db = get_db()
 
-        row = db.query_one("SELECT * FROM settings WHERE id = 1")
+        row = db.query_one(f"SELECT {GLOBAL_TEMPLATE_SETTINGS_COLUMNS} FROM settings WHERE id = 1")
         settings = dict(row) if row else {}
 
         lang = _resolve_active_language(settings)

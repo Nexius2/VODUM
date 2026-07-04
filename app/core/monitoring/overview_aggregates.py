@@ -188,7 +188,22 @@ def build_monitoring_overview_aggregates(db, sessions_stats):
         ),
         plays_ranked AS (
           SELECT
-            b.*,
+            b.hist_id,
+            b.server_id,
+            b.provider,
+            b.started_at,
+            b.stopped_at,
+            b.series_title,
+            b.media_key,
+            b.media_type,
+            b.raw_json,
+            b.poster_ref_json,
+            b.backdrop_ref_json,
+            b.artwork_rank,
+            b.viewer_id,
+            b.media_group_key,
+            b.watch_ms_capped,
+            b.play_key,
             ROW_NUMBER() OVER (
               PARTITION BY b.play_key
               ORDER BY b.stopped_at DESC, b.hist_id DESC
@@ -320,7 +335,21 @@ def build_monitoring_overview_aggregates(db, sessions_stats):
         ),
         plays_ranked AS (
           SELECT
-            b.*,
+            b.hist_id,
+            b.server_id,
+            b.provider,
+            b.started_at,
+            b.stopped_at,
+            b.movie_title,
+            b.media_key,
+            b.media_type,
+            b.raw_json,
+            b.poster_ref_json,
+            b.backdrop_ref_json,
+            b.viewer_id,
+            b.media_group_key,
+            b.watch_ms_capped,
+            b.play_key,
             ROW_NUMBER() OVER (
               PARTITION BY b.play_key
               ORDER BY b.stopped_at DESC, b.hist_id DESC

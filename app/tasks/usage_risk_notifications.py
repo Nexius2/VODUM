@@ -63,7 +63,7 @@ def _load_user(db, user_id):
 
 
 def run(task_id=None, db=None):
-    settings = dict(db.query_one("SELECT * FROM settings WHERE id = 1") or {})
+    settings = dict(db.query_one("SELECT id, mail_from, smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_auth_method, smtp_oauth_access_token, email_history_retention_years, disable_on_expiry, delete_after_expiry_days, send_reminders, preavis_days, reminder_days, default_language, timezone, admin_email, contact_email, admin_password_hash, auth_enabled, admin_totp_enabled, admin_totp_secret, wizard_active, wizard_completed, wizard_step, wizard_state_json, web_secure_cookies, web_cookie_samesite, web_trust_proxy, enable_cron_jobs, default_expiration_days, default_subscription_days, maintenance_mode, debug_mode, backup_retention_days, backup_retention_count, data_retention_years, brand_name, notifications_order, user_notifications_can_override, notifications_send_mode, expiry_mode, warn_then_disable_days, discord_enabled, discord_bot_token, discord_bot_id, mailing_enabled, skip_never_used_accounts, plex_user_import_mode, enable_anonymous_telemetry, telemetry_instance_id, telemetry_last_sent_at, task_defaults_version, stream_enforcer_boost_until, usage_risk_enabled, usage_risk_send_upgrade_suggestions, usage_risk_send_stream_blocked_message, usage_risk_min_kills_before_suggestion, usage_risk_analysis_window_days, usage_risk_suggestion_cooldown_days, usage_risk_medium_threshold, usage_risk_high_threshold FROM settings WHERE id = 1") or {})
 
     if _safe_int(settings.get("usage_risk_enabled"), 1) != 1:
         return {"status": "success", "message": "Usage risk disabled"}
@@ -97,8 +97,7 @@ def run(task_id=None, db=None):
 
     rows = db.query(
         """
-        SELECT *
-        FROM usage_risk_recommendations
+        SELECT id, vodum_user_id, risk_level, risk_score, current_subscription, suggested_subscription, first_detected_at, last_detected_at, last_notification_at, cooldown_until, status, meta_json FROM usage_risk_recommendations
         WHERE status IN ('detected', 'notified')
           AND suggested_subscription IS NOT NULL
           AND TRIM(suggested_subscription) <> ''

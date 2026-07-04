@@ -16,7 +16,7 @@ DEFAULT_COMM_TEMPLATES = [
         "days_before": None,
         "days_after": 0,
         "subject": "Playback blocked",
-        "body": "Hello {firstusername},\n\nYour playback has been stopped by VODUM.\n\nReason: {policy_reason}\nStream killed: {stream_killed}\nRule usage: {policy_observed} / {policy_limit}\nOther active streams ({other_streams_count}):\n{other_streams}\nTime: {blocked_at}\n\nIf you think this is a mistake, please contact the administrator.\n\nBest regards,\n{brand_name}\n",
+        "body": "Hello {firstusername},\n\nYour playback has been stopped by VODUM.\n\n{policy_explanation}\n\nPolicy: {policy_rule_type}\nLimit: {policy_limit} ({policy_limit_label})\nObserved: {policy_observed}\n\nStopped playback:\n{stream_killed}\n\nActive streams involved ({active_streams_count}):\n{active_streams}\n\nPublic IPs detected ({active_ips_count}):\n{active_ips}\n\nDevices detected ({active_devices_count}):\n{active_devices}\n\nTime: {blocked_at}\n\nIf you think this is a mistake, please contact the administrator.\n\nBest regards,\n{brand_name}\n",
     },
     {
         "key": "default_expiration_date_change",

@@ -1,4 +1,4 @@
-﻿# Python caches
+# Python caches
 __pycache__/
 **/__pycache__/
 *.py[cod]
@@ -34,6 +34,8 @@ tools/
 .ruff_cache/
 .coverage
 htmlcov/
+node_modules/
+.pnpm-store/
 
 # Documentation / non-application assets
 vodum-docs/
@@ -46,6 +48,8 @@ create-container-test.sh
 get-container.sh
 
 # Build outputs
+node_modules/
+.pnpm-store/
 dist/
 build/
 *.egg-info/
