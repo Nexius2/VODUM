@@ -6,6 +6,10 @@ All notable changes to Vodum will be documented in this file.
 
 ## Unreleased
 
+- Move UI translation loading and validation to `translations/ui`, document the split in `translations/README.md`, and remove the legacy `lang/` catalogs from the repo.
+
+- Add a dedicated communication-language layer with `translations/communication`, localized generated policy text, per-template language storage, a Communications > Configuration default, and future per-user language support.
+
 - Move Settings security and telemetry modal handlers into `static/js/pages/settings.js`.
 
 - Move Monitoring Policies chart and enforcement modal behavior into `static/js/pages/monitoring-policies.js`.

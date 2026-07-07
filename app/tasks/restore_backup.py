@@ -8,7 +8,7 @@ from pathlib import Path
 
 import tasks_engine
 from config import Config
-from db_manager import DBManager
+from db_manager import DBManager, open_sqlite_connection
 from logging_utils import get_logger
 from tasks_engine import prepare_restored_database, task_logs
 from core.archive_safety import validate_zip_limits

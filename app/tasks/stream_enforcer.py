@@ -1,4 +1,5 @@
 import json
+import os
 import time
 import ipaddress
 from datetime import datetime, timedelta
@@ -15,6 +16,55 @@ logger = get_logger("stream_enforcer")
 # DBManager injected by tasks_engine (do not instantiate DBManager in task modules)
 _db = None
 _USER_STREAM_OVERRIDES: Dict[int, int] = {}
+
+_POLICY_I18N_CACHE: Dict[str, dict] = {}
+
+
+def _policy_lang() -> str:
+    try:
+        row = _db.query_one("SELECT default_language FROM settings WHERE id = 1")
+        lang = str((dict(row) if row else {}).get("default_language") or "en").strip().lower()
+        return lang if lang else "en"
+    except Exception:
+        return "en"
+
+
+def _load_policy_lang(lang: str) -> dict:
+    lang = (lang or "en").strip().lower()
+
+    if lang in _POLICY_I18N_CACHE:
+        return _POLICY_I18N_CACHE[lang]
+
+    paths = [
+        os.path.join("/app", "translations", "ui", f"{lang}.json"),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "translations", "ui", f"{lang}.json")),
+    ]
+
+    data = {}
+    for path in paths:
+        try:
+            if os.path.exists(path):
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f) or {}
+                break
+        except Exception:
+            data = {}
+
+    _POLICY_I18N_CACHE[lang] = data
+    return data
+
+
+def _policy_t(key: str, **kwargs) -> str:
+    lang = _policy_lang()
+    data = _load_policy_lang(lang)
+    fallback = _load_policy_lang("en")
+
+    text = data.get(key) or fallback.get(key) or key
+
+    try:
+        return str(text).format(**kwargs)
+    except Exception:
+        return str(text)
 
 def _set_db(db):
     global _db
@@ -974,7 +1024,7 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
     # Nothing in scope
     if not scoped:
         return violations
-    
+
     # Visibilité : combien de sessions sont réellement dans le scope de cette policy
     try:
         # Only log policies that actually match sessions
@@ -1084,7 +1134,7 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
             })
 
 
-    
+
 
 
     elif rule_type == "max_ips_per_user":
@@ -1163,7 +1213,7 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
             })
 
 
-    
+
 
 
     elif rule_type == "max_streams_per_ip":
@@ -1178,7 +1228,7 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
             # VIP users should not be limited by per-IP stream policies
             if _is_vip_override(s.get("vodum_user_id")):
                 continue
-        
+
             ip = (s.get("ip") or "").strip() or "unknown"
 
             if ip == "unknown" and ignore_unknown:
@@ -1224,7 +1274,7 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
 
 
 
-    
+
 
 
     elif rule_type == "max_transcodes_global":
@@ -1590,63 +1640,82 @@ def _notification_policy_context(policy: dict, target: dict, related_sessions: l
 
     if rule_type == "max_ips_per_user":
         observed = len(unique_ips)
-        limit_label = "maximum public IPs"
-        explanation = (
-            f"Your subscription allows up to {limit} public IP(s) at the same time. "
-            f"VODUM detected {observed} public IP(s) being used simultaneously."
+        limit_label = _policy_t("policy_limit_label_max_ips_per_user")
+        explanation = _policy_t(
+            "policy_explanation_max_ips_per_user",
+            limit=limit,
+            observed=observed,
         )
 
     elif rule_type == "max_streams_per_user":
         observed = len(involved)
-        limit_label = "maximum simultaneous streams"
-        explanation = (
-            f"Your subscription allows up to {limit} simultaneous stream(s). "
-            f"VODUM detected {observed} active stream(s) at the same time."
+        limit_label = _policy_t("policy_limit_label_max_streams_per_user")
+        explanation = _policy_t(
+            "policy_explanation_max_streams_per_user",
+            limit=limit,
+            observed=observed,
         )
 
     elif rule_type == "max_streams_per_ip":
         observed = len(involved)
-        limit_label = "maximum simultaneous streams per IP"
-        explanation = (
-            f"The policy allows up to {limit} simultaneous stream(s) from the same public IP. "
-            f"VODUM detected {observed} active stream(s) from IP {target_ip or 'unknown'}."
+        limit_label = _policy_t("policy_limit_label_max_streams_per_ip")
+        explanation = _policy_t(
+            "policy_explanation_max_streams_per_ip",
+            limit=limit,
+            observed=observed,
+            ip=target_ip or "unknown",
         )
 
-    elif rule_type in {"max_streams_per_server"}:
+    elif rule_type == "max_streams_per_server":
         observed = len(involved)
-        limit_label = "maximum simultaneous streams on this server"
-        explanation = (
-            f"The server limit is {limit} simultaneous stream(s). "
-            f"VODUM detected {observed} active stream(s) on this server."
+        limit_label = _policy_t("policy_limit_label_max_streams_per_server")
+        explanation = _policy_t(
+            "policy_explanation_max_streams_per_server",
+            limit=limit,
+            observed=observed,
         )
 
     elif rule_type in {"max_transcodes_per_server", "max_transcodes_global"}:
         observed = sum(int(s.get("is_transcode") or 0) for s in involved)
-        limit_label = "maximum simultaneous transcodes"
-        explanation = (
-            f"The transcode limit is {limit}. "
-            f"VODUM detected {observed} active transcode(s)."
+        limit_label = _policy_t("policy_limit_label_max_transcodes")
+        explanation = _policy_t(
+            "policy_explanation_max_transcodes",
+            limit=limit,
+            observed=observed,
         )
 
     elif rule_type == "max_bitrate_kbps":
         observed = ""
-        limit_label = "maximum bitrate"
-        explanation = (
-            f"The maximum allowed bitrate is {limit} kbps. "
-            f"This stream was above the allowed bitrate."
+        limit_label = _policy_t("policy_limit_label_max_bitrate")
+        explanation = _policy_t(
+            "policy_explanation_max_bitrate",
+            limit=limit,
         )
 
     elif rule_type == "ban_4k_transcode":
         observed = ""
-        limit_label = "4K transcode blocked"
-        explanation = "This playback was stopped because 4K transcoding is not allowed."
+        limit_label = _policy_t("policy_limit_label_ban_4k_transcode")
+        explanation = _policy_t("policy_explanation_ban_4k_transcode")
 
     else:
         observed = len(involved)
-        limit_label = "policy limit"
-        explanation = (
-            f"This playback was stopped because it matched policy {rule_type or 'unknown'}."
+        limit_label = _policy_t("policy_limit_label_unknown")
+        explanation = _policy_t(
+            "policy_explanation_unknown",
+            rule_type=rule_type or "unknown",
         )
+
+    policy_translation_key = "subscription_expired" if rule.get("system_tag") == "expired_subscription" else (rule_type or "unknown")
+    policy_translation_variables = {
+        "limit": limit,
+        "value": observed,
+        "observed": observed,
+        "ip": target_ip or "unknown",
+        "rule_type": rule_type or "unknown",
+    }
+    policy_limit_label_key = f"limit_label_{policy_translation_key}"
+    if policy_translation_key == "subscription_expired":
+        policy_limit_label_key = "limit_label_max_streams_per_user"
 
     others = [
         s for s in involved
@@ -1659,6 +1728,12 @@ def _notification_policy_context(policy: dict, target: dict, related_sessions: l
         "policy_limit_label": limit_label,
         "policy_observed": observed,
         "policy_explanation": explanation,
+        "policy_reason_key": policy_translation_key,
+        "policy_reason_variables": policy_translation_variables,
+        "policy_explanation_key": policy_translation_key,
+        "policy_explanation_variables": policy_translation_variables,
+        "policy_limit_label_key": policy_limit_label_key,
+        "policy_limit_label_variables": policy_translation_variables,
 
         "maximum_streams": limit if "streams" in rule_type else "",
         "maximum_ips": limit if "ips" in rule_type else "",
@@ -1995,7 +2070,7 @@ def run(task_id: int, db):
 
     live_sessions = _load_live_sessions()
     fresh_live_sessions = _load_live_sessions(stable_seconds=0)
-    
+
     if is_debug_mode_enabled():
         logger.debug(f"[TASK {task_id}] stream_enforcer: live_sessions={len(live_sessions)}")
     if not live_sessions and not fresh_live_sessions:

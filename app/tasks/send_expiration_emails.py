@@ -24,6 +24,8 @@ from communications_engine import (
     send_to_user,
     record_history,
     fetch_template_attachments,
+    get_localized_template_content,
+    localize_communication_context,
     SendAttempt,
     available_channels,
     schedule_template_notification,
@@ -227,6 +229,14 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
               u.expiration_date,
               u.discord_user_id,
               u.notifications_order_override,
+              (
+                SELECT mu.preferred_language
+                FROM media_users mu
+                WHERE mu.vodum_user_id = u.id
+                  AND TRIM(COALESCE(mu.preferred_language, '')) <> ''
+                ORDER BY mu.id ASC
+                LIMIT 1
+              ) AS preferred_language,
               u.subscription_template_id,
               st.name AS subscription_name,
               st.duration_days AS subscription_duration_days,
@@ -275,9 +285,23 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
 
         exp_iso = (payload.get("expiration_date") or user.get("expiration_date") or "")[:10]
         extra_context = dict(payload or {})
-        subject, body = _format_message(
+        raw_subject, raw_body, communication_language = get_localized_template_content(
+            db,
+            tpl_id,
             q.get("subject") or "",
             q.get("body") or "",
+            settings,
+            user,
+        )
+        extra_context, communication_language = localize_communication_context(
+            settings,
+            user,
+            extra_context,
+            communication_language,
+        )
+        subject, body = _format_message(
+            raw_subject,
+            raw_body,
             user,
             exp_iso,
             extra_context=extra_context,
@@ -346,7 +370,10 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
                     "scheduled_id": scheduled_id,
                     "send_at": q.get("send_at"),
                     "dedupe_key": q.get("dedupe_key"),
-                    "payload": payload,
+                    "payload": extra_context,
+                    "communication_language": communication_language,
+                    "rendered_subject": subject,
+                    "rendered_body": body,
                     "attachments": [a.get("filename") for a in (attachments or [])],
                 },
             )
@@ -932,9 +959,9 @@ def run(task_id: int | None = None, db=None):
     try:
         task_logs(task_id, "info", "Task send_expiration_emails (unified) started")
 
-        settings = db.query_one("SELECT id, mail_from, smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_auth_method, smtp_oauth_access_token, email_history_retention_years, disable_on_expiry, delete_after_expiry_days, send_reminders, preavis_days, reminder_days, default_language, timezone, admin_email, contact_email, admin_password_hash, auth_enabled, admin_totp_enabled, admin_totp_secret, wizard_active, wizard_completed, wizard_step, wizard_state_json, web_secure_cookies, web_cookie_samesite, web_trust_proxy, enable_cron_jobs, default_expiration_days, default_subscription_days, maintenance_mode, debug_mode, backup_retention_days, backup_retention_count, data_retention_years, brand_name, notifications_order, user_notifications_can_override, notifications_send_mode, expiry_mode, warn_then_disable_days, discord_enabled, discord_bot_token, discord_bot_id, mailing_enabled, skip_never_used_accounts, plex_user_import_mode, enable_anonymous_telemetry, telemetry_instance_id, telemetry_last_sent_at, task_defaults_version, stream_enforcer_boost_until, usage_risk_enabled, usage_risk_send_upgrade_suggestions, usage_risk_send_stream_blocked_message, usage_risk_min_kills_before_suggestion, usage_risk_analysis_window_days, usage_risk_suggestion_cooldown_days, usage_risk_medium_threshold, usage_risk_high_threshold FROM settings WHERE id = 1")
+        settings = db.query_one("SELECT id, mail_from, smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_auth_method, smtp_oauth_access_token, email_history_retention_years, disable_on_expiry, delete_after_expiry_days, send_reminders, preavis_days, reminder_days, default_language, communication_language, timezone, admin_email, contact_email, admin_password_hash, auth_enabled, admin_totp_enabled, admin_totp_secret, wizard_active, wizard_completed, wizard_step, wizard_state_json, web_secure_cookies, web_cookie_samesite, web_trust_proxy, enable_cron_jobs, default_expiration_days, default_subscription_days, maintenance_mode, debug_mode, backup_retention_days, backup_retention_count, data_retention_years, brand_name, notifications_order, user_notifications_can_override, notifications_send_mode, expiry_mode, warn_then_disable_days, discord_enabled, discord_bot_token, discord_bot_id, mailing_enabled, skip_never_used_accounts, plex_user_import_mode, enable_anonymous_telemetry, telemetry_instance_id, telemetry_last_sent_at, task_defaults_version, stream_enforcer_boost_until, usage_risk_enabled, usage_risk_send_upgrade_suggestions, usage_risk_send_stream_blocked_message, usage_risk_min_kills_before_suggestion, usage_risk_analysis_window_days, usage_risk_suggestion_cooldown_days, usage_risk_medium_threshold, usage_risk_high_threshold FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
-        
+
         # If no channel is ready, do nothing (avoid pointless DB work and errors)
         s2 = enrich_discord_settings(db, settings)
         email_ok = is_email_ready(settings)
@@ -945,7 +972,7 @@ def run(task_id: int | None = None, db=None):
             task_logs(task_id, "info", msg)
             log.warning(msg)
             return
-        
+
         catchup = recover_missed_scheduled_emails(db, settings)
         if catchup.get("requeued"):
             log.warning("Recovered %s missed scheduled email(s)", catchup["requeued"])

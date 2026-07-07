@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS media_users (
     email TEXT,
     avatar TEXT,
 	stored_password TEXT DEFAULT NULL,
+    preferred_language TEXT DEFAULT NULL,
 
     type TEXT,                            -- 'plex', 'jellyfin', …
 
@@ -282,6 +283,7 @@ CREATE TABLE IF NOT EXISTS settings (
     reminder_days INTEGER NOT NULL DEFAULT 7,
 
     default_language TEXT DEFAULT NULL,
+    communication_language TEXT DEFAULT NULL,
     timezone TEXT DEFAULT 'Europe/Paris',
     admin_email TEXT,
     contact_email TEXT,
@@ -1005,6 +1007,22 @@ CREATE TABLE IF NOT EXISTS comm_templates (
 
   FOREIGN KEY(subscription_template_id) REFERENCES subscription_templates(id) ON DELETE SET NULL
 );
+
+
+CREATE TABLE IF NOT EXISTS comm_template_translations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  template_id INTEGER NOT NULL,
+  language TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  body TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(template_id, language),
+  FOREIGN KEY(template_id) REFERENCES comm_templates(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_comm_template_translations_template
+ON comm_template_translations(template_id, language);
 
 CREATE TABLE IF NOT EXISTS app_repairs (
     key TEXT PRIMARY KEY,

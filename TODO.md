@@ -3,7 +3,7 @@
 Ce fichier contient uniquement le travail restant. Les changements termines sont documentes dans
 `changelog.md`.
 
-Derniere mise a jour: 2026-07-03
+Derniere mise a jour: 2026-07-07
 
 ## Principes de suivi
 
@@ -21,6 +21,13 @@ Derniere mise a jour: 2026-07-03
   instance reelle. Les garde-fous existent, il reste la validation terrain.
 - [~] Valider les campagnes Migrations sur de grandes instances reelles Plex et
   Jellyfin avant d'activer davantage d'automatisations destructives.
+
+## P0 bis - bugs / correction a faire
+
+- [ ] dans servers & libraries, quand je clic sur un serveur, donc ca doit etre dans servers_details, j'ai la liste des utilisateurs. probleme, la liste peut monté a plus de 100 users. il faut que la card users with access to this serveur soit limité a 20 lignes avec un next/previous page.
+- [ ] dans servers & libraries, libraries, le type de media peut etre different entre plex et jellyfin (tvshows ou shows) il faut uniformiser ça
+- [ ] dans servers & libraries, libraries, il est possible d'avoir quelques centaines de libraries, il faut limité a 20 lignes et avoir un next/previous page.
+- [ ] dans servers & libraries, libraries, il faut pouvoir trier les colonnes par nom de colonne.trie par server par defaut
 
 
 ## P1 - Performance UI et experience percue
