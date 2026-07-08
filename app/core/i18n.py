@@ -21,6 +21,7 @@ GLOBAL_TEMPLATE_SETTINGS_COLUMNS = """
     backup_retention_days,
     brand_name,
     contact_email,
+    communication_language,
     data_retention_years,
     debug_mode,
     default_language,
@@ -69,7 +70,7 @@ def load_language_dict(lang_code: str) -> dict:
     """
     Charge le dictionnaire de traduction pour une langue donnée.
 
-    - Source unique : fichiers JSON du dossier lang/
+    - Source principale : fichiers JSON du dossier translations/ui
     - Mise en cache en mémoire par langue
     """
     logger = get_logger("i18n")
@@ -79,8 +80,12 @@ def load_language_dict(lang_code: str) -> dict:
 
     translations: dict[str, str] = {}
 
-    lang_dir = current_app.config.get("LANG_DIR") or os.path.join(current_app.root_path, "lang")
-    json_path = os.path.join(lang_dir, f"{lang_code}.json")
+    lang_dir = current_app.config.get("LANG_DIR") or os.path.join(current_app.root_path, "..", "translations", "ui")
+    json_path = os.path.abspath(os.path.join(lang_dir, f"{lang_code}.json"))
+
+    if not os.path.exists(json_path):
+        legacy_lang_dir = os.path.join(current_app.root_path, "..", "lang")
+        json_path = os.path.abspath(os.path.join(legacy_lang_dir, f"{lang_code}.json"))
 
     if not os.path.exists(json_path):
         logger.warning(f"[i18n] Fichier de langue introuvable: {json_path}")
@@ -116,7 +121,12 @@ def get_available_languages():
     if _AVAILABLE_LANGUAGES_CACHE is not None:
         return dict(_AVAILABLE_LANGUAGES_CACHE)
 
-    lang_dir = current_app.config.get("LANG_DIR") or os.path.join(current_app.root_path, "lang")
+    lang_dir = current_app.config.get("LANG_DIR") or os.path.join(current_app.root_path, "..", "translations", "ui")
+    lang_dir = os.path.abspath(lang_dir)
+    if not os.path.isdir(lang_dir):
+        legacy_lang_dir = os.path.abspath(os.path.join(current_app.root_path, "..", "lang"))
+        if os.path.isdir(legacy_lang_dir):
+            lang_dir = legacy_lang_dir
     languages: Dict[str, str] = {}
 
     if not os.path.isdir(lang_dir):

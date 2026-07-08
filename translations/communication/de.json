@@ -1,0 +1,25 @@
+{
+  "language_name": "Deutsch",
+  "common": {
+    "none": "Keine"
+  },
+  "policy": {
+    "subscription_expired": "Dein Abonnement ist abgelaufen. Bitte erneuere es, um den Zugriff wiederherzustellen.",
+    "max_streams_per_user": "Dein Abonnement erlaubt {limit} gleichzeitige Wiedergabe(n). VODUM hat {value} Wiedergabe(n) erkannt.",
+    "max_ips_per_user": "Zu viele verschiedene IP-Adressen verwenden dein Konto.",
+    "max_streams_per_ip": "Zu viele gleichzeitige Wiedergaben verwenden dieselbe IP-Adresse ({ip}).",
+    "max_streams_per_server": "Das Wiedergabelimit des Servers wurde erreicht.",
+    "max_transcodes": "Zu viele transkodierte Wiedergaben sind aktiv.",
+    "max_bitrate": "Eine Wiedergabe überschreitet das erlaubte Bitratenlimit.",
+    "ban_4k_transcode": "4K-Transkodierung ist nicht erlaubt.",
+    "unknown": "Eine Wiedergaberichtlinie wurde verletzt: {rule_type}.",
+    "limit_label_max_ips_per_user": "Maximale IP-Adressen pro Benutzer",
+    "limit_label_max_streams_per_user": "Maximale Wiedergaben pro Benutzer",
+    "limit_label_max_streams_per_ip": "Maximale Wiedergaben pro IP-Adresse",
+    "limit_label_max_streams_per_server": "Maximale Wiedergaben pro Server",
+    "limit_label_max_transcodes": "Maximale transkodierte Wiedergaben",
+    "limit_label_max_bitrate": "Maximale Bitrate",
+    "limit_label_ban_4k_transcode": "4K-Transkodierung blockiert",
+    "limit_label_unknown": "Richtlinienlimit"
+  }
+}

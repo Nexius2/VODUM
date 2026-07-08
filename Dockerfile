@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app/ /app/
 COPY templates/ /app/templates/
 COPY static/ /app/static/
-COPY lang/ /app/lang/
+COPY translations/ /app/translations/
 COPY migrations/ /app/migrations/
 
 # SQL seeds

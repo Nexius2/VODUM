@@ -17,6 +17,7 @@
 </p> -->
 
 <form id="comm_config_form" method="post" action="{{ url_for('communications_configuration_action') }}">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
   <input type="hidden" name="action" value="save_all">
 
 	<div class="flex items-center justify-end mb-3">
@@ -243,6 +244,18 @@
 
       <div class="mt-4 space-y-4">
 
+
+        <div class="text-xs">
+          <label class="block mb-1">{{ t('settings_communication_language') }}</label>
+          {% set comm_lang = settings.communication_language or 'en' %}
+          <select name="communication_language" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+            {% for lang in communication_languages %}
+              <option value="{{ lang.code }}" {% if lang.code == comm_lang %}selected{% endif %}>{{ lang.name }}</option>
+            {% endfor %}
+          </select>
+          <p class="mt-1 text-[11px] text-slate-500">{{ t('settings_communication_language_help') }}</p>
+        </div>
+
         <div class="text-xs">
           <label class="block mb-1">{{ t('comm_send_mode') }}</label>
           {% set mode = (settings.notifications_send_mode or 'first') %}
@@ -324,10 +337,12 @@
 
 <!-- Test forms (outside main save form so they don't overwrite settings) -->
 <form id="test_email_form" method="post" action="{{ url_for('communications_configuration_action') }}" class="hidden">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
   <input type="hidden" name="action" value="test_email">
 </form>
 
 <form id="test_discord_form" method="post" action="{{ url_for('communications_configuration_action') }}" class="hidden">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
   <input type="hidden" name="action" value="test_discord">
   <input type="hidden" name="discord_bot_token" id="test_discord_token" value="">
 </form>

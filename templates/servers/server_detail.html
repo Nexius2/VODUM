@@ -159,6 +159,10 @@
         {% endfor %}
       </tbody>
     </table>
+    <div class="mt-4">
+      {% set pagination = dict(libraries_pagination, unit_label=t("libraries")) %}
+      {% include "partials/_pagination.html" %}
+    </div>
   {% else %}
     <p class="text-xs text-slate-500">{{ t("no_libraries") }}</p>
   {% endif %}
@@ -183,6 +187,10 @@
       </li>
       {% endfor %}
     </ul>
+    <div class="mt-4">
+      {% set pagination = dict(users_pagination, unit_label=t("users")) %}
+      {% include "partials/_pagination.html" %}
+    </div>
   {% else %}
     <p class="text-xs text-slate-500">{{ t("no_users_for_server") }}</p>
   {% endif %}

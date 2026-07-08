@@ -26,6 +26,50 @@ SERVER_DELETE_LOCK = threading.Lock()
 SERVER_DELETE_IN_PROGRESS = set()
 
 DELETE_BATCH_SIZE = 1000
+SERVER_TABLE_PAGE_SIZE = 20
+
+LIBRARY_TYPE_SQL = """
+                CASE LOWER(TRIM(COALESCE(l.type, '')))
+                    WHEN 'tvshows' THEN 'shows'
+                    WHEN 'tvshow' THEN 'shows'
+                    WHEN 'show' THEN 'shows'
+                    WHEN 'series' THEN 'shows'
+                    WHEN 'movies' THEN 'movie'
+                    WHEN 'film' THEN 'movie'
+                    WHEN 'films' THEN 'movie'
+                    WHEN 'music' THEN 'music'
+                    WHEN 'artist' THEN 'music'
+                    WHEN 'artists' THEN 'music'
+                    WHEN 'audio' THEN 'music'
+                    ELSE COALESCE(NULLIF(LOWER(TRIM(l.type)), ''), 'unknown')
+                END
+"""
+
+
+def _page_arg(name: str = "page") -> int:
+    return max(request.args.get(name, 1, type=int), 1)
+
+
+def _pagination(page: int, per_page: int, total_rows: int, endpoint: str, page_param: str = "page", unit_label: str | None = None, **kwargs):
+    total_pages = max(1, (int(total_rows or 0) + per_page - 1) // per_page)
+    page = min(max(page, 1), total_pages)
+
+    def page_url(value: int):
+        args = dict(kwargs)
+        args[page_param] = value
+        return url_for(endpoint, **args)
+
+    return {
+        "page": page,
+        "per_page": per_page,
+        "total_pages": total_pages,
+        "total_rows": int(total_rows or 0),
+        "first_url": page_url(1),
+        "prev_url": page_url(max(1, page - 1)),
+        "next_url": page_url(min(total_pages, page + 1)),
+        "last_url": page_url(total_pages),
+        "unit_label": unit_label,
+    }
 
 SERVERS_LIST_COLUMNS = """
                 s.id,
@@ -38,11 +82,11 @@ SERVERS_LIST_COLUMNS = """
                 s.server_version
 """
 
-LIBRARIES_LIST_COLUMNS = """
+LIBRARIES_LIST_COLUMNS = f"""
                 l.id,
                 l.server_id,
                 l.name,
-                l.type,
+{LIBRARY_TYPE_SQL} AS type,
                 l.section_id
 """
 
@@ -57,10 +101,10 @@ SERVER_DETAIL_COLUMNS = """
             settings_json
 """
 
-SERVER_DETAIL_LIBRARY_COLUMNS = """
+SERVER_DETAIL_LIBRARY_COLUMNS = f"""
                 l.id,
                 l.name,
-                l.type,
+{LIBRARY_TYPE_SQL} AS type,
                 l.section_id
 """
 
@@ -488,36 +532,69 @@ def register(app):
     def libraries_list():
         db = get_db()
 
+        page = _page_arg("page")
+        per_page = SERVER_TABLE_PAGE_SIZE
+        sort = (request.args.get("sort") or "server").strip().lower()
+        order = (request.args.get("order") or "asc").strip().lower()
+        if order not in ("asc", "desc"):
+            order = "asc"
+
+        sort_map = {
+            "server": "LOWER(s.name)",
+            "name": "LOWER(l.name)",
+            "type": "type",
+            "section_id": "LOWER(COALESCE(l.section_id, ''))",
+            "users": "users_count",
+        }
+        if sort not in sort_map:
+            sort = "server"
+        order_sql = "DESC" if order == "desc" else "ASC"
+        order_sql_clause = f"{sort_map[sort]} {order_sql}, LOWER(s.name) ASC, LOWER(l.name) ASC, l.id ASC"
+
+        total_row = db.query_one("SELECT COUNT(*) AS total FROM libraries")
+        total_rows = int(total_row["total"] if total_row and total_row["total"] is not None else 0)
+        pagination = _pagination(
+            page,
+            per_page,
+            total_rows,
+            "libraries_list",
+            sort=sort,
+            order=order,
+            unit_label="libraries",
+        )
+        page = pagination["page"]
+        offset = (page - 1) * per_page
+
         libraries = db.query(
             f"""
             SELECT
 {LIBRARIES_LIST_COLUMNS},
                 s.name AS server_name,
-
-                -- nb d'utilisateurs Vodum ayant accès
                 COUNT(DISTINCT mu.vodum_user_id) AS users_count
-
             FROM libraries l
             JOIN servers s
                 ON s.id = l.server_id
-
             LEFT JOIN media_user_libraries mul
                 ON mul.library_id = l.id
-
             LEFT JOIN media_users mu
                 ON mu.id = mul.media_user_id
-
             GROUP BY l.id
-            ORDER BY s.name, l.name
-            """
+            ORDER BY {order_sql_clause}
+            LIMIT ? OFFSET ?
+            """,
+            (per_page, offset),
         )
 
         return render_template(
             "servers/libraries.html",
             libraries=libraries,
+            pagination=pagination,
+            sort=sort,
+            order=order,
             active_page="servers",
             active_tab="libraries",
         )
+
 
 
 
@@ -745,6 +822,28 @@ def register(app):
         if not server:
             return "Serveur introuvable", 404
 
+        per_page = SERVER_TABLE_PAGE_SIZE
+        libraries_page = _page_arg("libraries_page")
+        users_page = _page_arg("users_page")
+
+        library_total_row = db.query_one(
+            "SELECT COUNT(*) AS total FROM libraries WHERE server_id = ?",
+            (server_id,),
+        )
+        library_total = int(library_total_row["total"] if library_total_row and library_total_row["total"] is not None else 0)
+        libraries_pagination = _pagination(
+            libraries_page,
+            per_page,
+            library_total,
+            "server_detail",
+            page_param="libraries_page",
+            server_id=server_id,
+            users_page=users_page,
+            unit_label="libraries",
+        )
+        libraries_page = libraries_pagination["page"]
+        libraries_offset = (libraries_page - 1) * per_page
+
         libraries = db.query(
             f"""
             SELECT
@@ -757,10 +856,35 @@ def register(app):
                    ON mu.id = mul.media_user_id
             WHERE l.server_id = ?
             GROUP BY l.id
-            ORDER BY l.name
+            ORDER BY LOWER(l.name), l.id
+            LIMIT ? OFFSET ?
+            """,
+            (server_id, per_page, libraries_offset),
+        )
+
+        user_total_row = db.query_one(
+            """
+            SELECT COUNT(DISTINCT vu.id) AS total
+            FROM vodum_users vu
+            JOIN media_users mu
+                ON mu.vodum_user_id = vu.id
+            WHERE mu.server_id = ?
             """,
             (server_id,),
         )
+        user_total = int(user_total_row["total"] if user_total_row and user_total_row["total"] is not None else 0)
+        users_pagination = _pagination(
+            users_page,
+            per_page,
+            user_total,
+            "server_detail",
+            page_param="users_page",
+            server_id=server_id,
+            libraries_page=libraries_page,
+            unit_label="users",
+        )
+        users_page = users_pagination["page"]
+        users_offset = (users_page - 1) * per_page
 
         users = db.query(
             """
@@ -773,16 +897,19 @@ def register(app):
                 ON mu.vodum_user_id = vu.id
             WHERE mu.server_id = ?
             GROUP BY vu.id
-            ORDER BY vu.username
+            ORDER BY LOWER(vu.username), vu.id
+            LIMIT ? OFFSET ?
             """,
-            (server_id,),
+            (server_id, per_page, users_offset),
         )
 
         return render_template(
             "servers/server_detail.html",
             server=server,
             libraries=libraries,
+            libraries_pagination=libraries_pagination,
             users=users,
+            users_pagination=users_pagination,
             active_page="servers",
         )
 

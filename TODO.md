@@ -3,7 +3,7 @@
 Ce fichier contient uniquement le travail restant. Les changements termines sont documentes dans
 `changelog.md`.
 
-Derniere mise a jour: 2026-07-03
+Derniere mise a jour: 2026-07-07
 
 ## Principes de suivi
 
@@ -21,6 +21,7 @@ Derniere mise a jour: 2026-07-03
   instance reelle. Les garde-fous existent, il reste la validation terrain.
 - [~] Valider les campagnes Migrations sur de grandes instances reelles Plex et
   Jellyfin avant d'activer davantage d'automatisations destructives.
+
 
 ## P1 - Performance UI et experience percue
 

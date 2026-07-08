@@ -15,7 +15,12 @@
 <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-6">
 
     <!-- Users -->
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+    <section
+	  role="link"
+	  tabindex="0"
+	  data-dashboard-link="{{ url_for('users_list') }}"
+	  class="bg-slate-900 border border-slate-800 rounded-2xl p-6 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/40"
+	>
       <div class="flex items-center justify-between mb-4">
         <div class="text-xs uppercase tracking-wide text-slate-400">
           {{ t("users") }}
@@ -70,7 +75,7 @@
         </div>
 
       </div>
-    </div>
+    </section>
 
     <!-- Single server -->
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
@@ -208,7 +213,12 @@
 <div class="grid grid-cols-1 xl:grid-cols-[0.85fr_1.15fr] gap-4 mb-6">
 
     <!-- Users -->
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+    <section
+	  role="link"
+	  tabindex="0"
+	  data-dashboard-link="{{ url_for('users_list') }}"
+	  class="bg-slate-900 border border-slate-800 rounded-2xl p-6 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/40"
+	>
       <div class="flex items-center justify-between mb-4">
         <div class="text-xs uppercase tracking-wide text-slate-400">
           {{ t("users") }}
@@ -263,7 +273,7 @@
         </div>
 
       </div>
-    </div>
+    </section>
 
     {% include "dashboard/partials/_streams_killed_subscriptions.html" %}
 

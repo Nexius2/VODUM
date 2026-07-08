@@ -1,0 +1,25 @@
+{
+  "language_name": "Italiano",
+  "common": {
+    "none": "Nessuno"
+  },
+  "policy": {
+    "subscription_expired": "Il tuo abbonamento è terminato. Rinnovalo per ripristinare l'accesso.",
+    "max_streams_per_user": "Il tuo abbonamento consente {limit} riproduzione/i simultanea/e. VODUM ha rilevato {value} riproduzione/i.",
+    "max_ips_per_user": "Troppe indirizzi IP diversi stanno usando il tuo account.",
+    "max_streams_per_ip": "Troppe riproduzioni simultanee usano lo stesso indirizzo IP ({ip}).",
+    "max_streams_per_server": "Il limite di riproduzioni del server è stato raggiunto.",
+    "max_transcodes": "Sono attive troppe riproduzioni transcodificate.",
+    "max_bitrate": "Una riproduzione supera il limite di bitrate consentito.",
+    "ban_4k_transcode": "La transcodifica 4K non è consentita.",
+    "unknown": "Una regola di riproduzione è stata violata: {rule_type}.",
+    "limit_label_max_ips_per_user": "Numero massimo di indirizzi IP per utente",
+    "limit_label_max_streams_per_user": "Numero massimo di riproduzioni per utente",
+    "limit_label_max_streams_per_ip": "Numero massimo di riproduzioni per indirizzo IP",
+    "limit_label_max_streams_per_server": "Numero massimo di riproduzioni per server",
+    "limit_label_max_transcodes": "Numero massimo di riproduzioni transcodificate",
+    "limit_label_max_bitrate": "Bitrate massimo",
+    "limit_label_ban_4k_transcode": "Transcodifica 4K bloccata",
+    "limit_label_unknown": "Limite della regola"
+  }
+}

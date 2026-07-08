@@ -6,6 +6,7 @@ from web.helpers import table_exists
 def _task_queue_busy(db) -> bool:
     if not table_exists(db, "tasks"):
         return False
+
     row = db.query_one(
         """
         SELECT COUNT(*) AS total
@@ -15,6 +16,26 @@ def _task_queue_busy(db) -> bool:
         """
     )
     return int(row["total"] or 0) > 0 if row else False
+
+
+def _totals(db, window_sql: str) -> dict:
+    row = db.query_one(
+        """
+        SELECT
+          COUNT(*) AS total_live,
+          COALESCE(SUM(CASE WHEN ms.is_transcode = 1 THEN 1 ELSE 0 END), 0) AS total_transcode
+        FROM media_sessions ms
+        JOIN servers s ON s.id = ms.server_id
+        WHERE LOWER(TRIM(s.type)) IN ('plex', 'jellyfin')
+          AND datetime(ms.last_seen_at) >= datetime('now', ?)
+        """,
+        (window_sql,),
+    )
+
+    return {
+        "total_live": int(row["total_live"] or 0) if row else 0,
+        "total_transcode": int(row["total_transcode"] or 0) if row else 0,
+    }
 
 
 def _sessions(db, window_sql: str, limit: int = 6) -> list[dict]:
@@ -56,7 +77,8 @@ def _sessions(db, window_sql: str, limit: int = 6) -> list[dict]:
         FROM media_sessions ms
         JOIN servers s ON s.id = ms.server_id
         LEFT JOIN media_users mu ON mu.id = ms.media_user_id
-        WHERE datetime(ms.last_seen_at) >= datetime('now', ?)
+        WHERE LOWER(TRIM(s.type)) IN ('plex', 'jellyfin')
+          AND datetime(ms.last_seen_at) >= datetime('now', ?)
         ORDER BY datetime(ms.last_seen_at) DESC
         LIMIT ?
         """,
@@ -67,21 +89,23 @@ def _sessions(db, window_sql: str, limit: int = 6) -> list[dict]:
 
 def load_dashboard_now_playing(db, *, live_window_seconds: int = 300) -> dict:
     live_window_sql = f"-{int(live_window_seconds)} seconds"
-    sessions = _sessions(db, live_window_sql)
+
+    sessions = _sessions(db, live_window_sql, limit=6)
+    totals = _totals(db, live_window_sql)
     stale_fallback = False
 
     # The task engine is deliberately sequential. A long-running task can delay
     # collection without ending playback, so retain unconfirmed DB sessions for
     # a bounded period while the queue is genuinely busy.
-    if not sessions and _task_queue_busy(db):
-        sessions = _sessions(db, "-30 minutes")
-        stale_fallback = bool(sessions)
+    if totals["total_live"] <= 0 and _task_queue_busy(db):
+        fallback_window_sql = "-30 minutes"
+        sessions = _sessions(db, fallback_window_sql, limit=6)
+        totals = _totals(db, fallback_window_sql)
+        stale_fallback = totals["total_live"] > 0
 
-    total_live = len(sessions)
-    total_transcode = sum(int(row.get("is_transcode") or 0) for row in sessions)
     return {
         "sessions": sessions,
-        "total_live": total_live,
-        "total_transcode": total_transcode,
+        "total_live": totals["total_live"],
+        "total_transcode": totals["total_transcode"],
         "stale_fallback": stale_fallback,
     }

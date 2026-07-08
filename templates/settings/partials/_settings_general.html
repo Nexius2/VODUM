@@ -6,7 +6,7 @@
 
     <!-- Language -->
     <div>
-      <label class="block text-sm mb-1 text-slate-300">{{ t("language") }}</label>
+      <label class="block text-sm mb-1 text-slate-300">{{ t("settings_ui_language") }}</label>
       <select name="default_language"
               class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
         <option value="" {% if not settings.default_language %}selected{% endif %}>
@@ -23,6 +23,7 @@
         <p class="text-xs text-slate-400 mt-1">{{ t("language_auto_hint") }}</p>
       {% endif %}
     </div>
+
 
     <!-- Timezone -->
     <div>

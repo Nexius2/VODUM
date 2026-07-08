@@ -1,0 +1,25 @@
+{
+  "language_name": "Français",
+  "common": {
+    "none": "Aucun"
+  },
+  "policy": {
+    "subscription_expired": "Votre abonnement est terminé. Merci de le renouveler pour restaurer l'accès.",
+    "max_streams_per_user": "Votre abonnement autorise {limit} lecture(s) simultanée(s). VODUM a détecté {value} lecture(s).",
+    "max_ips_per_user": "Trop d'adresses IP différentes utilisent votre compte.",
+    "max_streams_per_ip": "Trop de lectures simultanées utilisent la même adresse IP ({ip}).",
+    "max_streams_per_server": "La limite de lectures simultanées du serveur a été atteinte.",
+    "max_transcodes": "Trop de lectures transcodées sont actives.",
+    "max_bitrate": "Une lecture dépasse la limite de débit autorisée.",
+    "ban_4k_transcode": "Le transcodage 4K n'est pas autorisé.",
+    "unknown": "Une règle de lecture a été enfreinte : {rule_type}.",
+    "limit_label_max_ips_per_user": "Nombre maximum d'adresses IP par utilisateur",
+    "limit_label_max_streams_per_user": "Nombre maximum de lectures par utilisateur",
+    "limit_label_max_streams_per_ip": "Nombre maximum de lectures par adresse IP",
+    "limit_label_max_streams_per_server": "Nombre maximum de lectures par serveur",
+    "limit_label_max_transcodes": "Nombre maximum de lectures transcodées",
+    "limit_label_max_bitrate": "Débit maximum",
+    "limit_label_ban_4k_transcode": "Transcodage 4K bloqué",
+    "limit_label_unknown": "Limite de la règle"
+  }
+}

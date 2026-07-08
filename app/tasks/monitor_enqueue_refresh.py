@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timezone
 from core.server_cooldown import should_skip_unreachable_server
 
-DEFAULT_INTERVAL_SEC = 60
+DEFAULT_INTERVAL_SEC = 15
 MIN_INTERVAL_SEC = 15
 
 
