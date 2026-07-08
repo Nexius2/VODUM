@@ -13,6 +13,10 @@ from discord_utils import enrich_discord_settings, is_discord_ready, send_discor
 from email_sender import send_email
 from tasks_engine import enqueue_task
 from mailing_utils import build_user_context, render_mail
+from core.communication_i18n import (
+    resolve_communication_language,
+    resolve_generated_payload_text,
+)
 log = get_logger("communications_engine")
 
 
@@ -42,6 +46,65 @@ def _as_dict(row_or_dict):
         return dict(row_or_dict)
     except Exception:
         return {}
+
+
+
+def get_localized_template_content(
+    db,
+    template_id: int,
+    subject: str,
+    body: str,
+    settings: Dict | None = None,
+    user: Dict | None = None,
+    language: str | None = None,
+) -> Tuple[str, str, str]:
+    lang = language or resolve_communication_language(settings, user)
+
+    if db is None or not template_id:
+        return subject or "", body or "", lang
+
+    try:
+        row = db.query_one(
+            """
+            SELECT subject, body
+            FROM comm_template_translations
+            WHERE template_id = ?
+              AND language = ?
+            LIMIT 1
+            """,
+            (int(template_id), lang),
+        )
+        if not row and lang != "en":
+            row = db.query_one(
+                """
+                SELECT subject, body
+                FROM comm_template_translations
+                WHERE template_id = ?
+                  AND language = 'en'
+                LIMIT 1
+                """,
+                (int(template_id),),
+            )
+        if row:
+            row = dict(row)
+            return row.get("subject") or subject or "", row.get("body") or body or "", lang
+    except Exception:
+        pass
+
+    return subject or "", body or "", lang
+
+
+def localize_communication_context(
+    settings: Dict | None,
+    user: Dict | None,
+    context: Dict | None,
+    language: str | None = None,
+) -> Tuple[Dict, str]:
+    lang = language or resolve_communication_language(settings, user)
+    localized = dict(context or {})
+    localized.update(resolve_generated_payload_text(localized, lang))
+    localized["communication_language"] = lang
+    return localized, lang
 
 
 @dataclass

@@ -1,4 +1,5 @@
 import json
+import os
 import time
 import ipaddress
 from datetime import datetime, timedelta
@@ -16,13 +17,62 @@ logger = get_logger("stream_enforcer")
 _db = None
 _USER_STREAM_OVERRIDES: Dict[int, int] = {}
 
+_POLICY_I18N_CACHE: Dict[str, dict] = {}
+
+
+def _policy_lang() -> str:
+    try:
+        row = _db.query_one("SELECT default_language FROM settings WHERE id = 1")
+        lang = str((dict(row) if row else {}).get("default_language") or "en").strip().lower()
+        return lang if lang else "en"
+    except Exception:
+        return "en"
+
+
+def _load_policy_lang(lang: str) -> dict:
+    lang = (lang or "en").strip().lower()
+
+    if lang in _POLICY_I18N_CACHE:
+        return _POLICY_I18N_CACHE[lang]
+
+    paths = [
+        os.path.join("/app", "translations", "ui", f"{lang}.json"),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "translations", "ui", f"{lang}.json")),
+    ]
+
+    data = {}
+    for path in paths:
+        try:
+            if os.path.exists(path):
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f) or {}
+                break
+        except Exception:
+            data = {}
+
+    _POLICY_I18N_CACHE[lang] = data
+    return data
+
+
+def _policy_t(key: str, **kwargs) -> str:
+    lang = _policy_lang()
+    data = _load_policy_lang(lang)
+    fallback = _load_policy_lang("en")
+
+    text = data.get(key) or fallback.get(key) or key
+
+    try:
+        return str(text).format(**kwargs)
+    except Exception:
+        return str(text)
+
 def _set_db(db):
     global _db
     _db = db
 
 
 LIVE_WINDOW_SECONDS = 90      # sécurité DB: ignore les sessions trop anciennes
-LIVE_STABLE_SECONDS = 45      # une session doit être stable avant d'être comptée par l'enforcer
+LIVE_STABLE_SECONDS = 15      # une session doit être stable avant d'être comptée par l'enforcer
 RECHECK_DELAY_SECONDS = 45    # recheck après warn, laisse passer les transitions d'épisode
 JELLYFIN_KILL_MESSAGE_SPAM_COUNT = 5   # 5 messages
 JELLYFIN_KILL_MESSAGE_SPAM_SLEEP = 1.0 # 1 seconde entre chaque
@@ -33,14 +83,17 @@ HOUSEHOLD_TRANSITION_SECONDS = 90
 HOUSEHOLD_MEMORY_SECONDS = 300
 HOUSEHOLD_DEVICE_MATCH_SCORE = 5
 HOUSEHOLD_MEDIA_GRACE_SECONDS = 300
+STREAM_SYNC_GRACE_RUNS = 2
+STREAM_SYNC_TRANSITION_SECONDS = 120
 STREAM_ENFORCER_NORMAL_INTERVAL_SECONDS = 15
-STREAM_ENFORCER_BOOST_INTERVAL_SECONDS = 15
+STREAM_ENFORCER_BOOST_INTERVAL_SECONDS = 5
 STREAM_ENFORCER_BOOST_KILL_THRESHOLD = 1
 STREAM_ENFORCER_BOOST_WINDOW_MINUTES = 10
 STREAM_ENFORCER_BOOST_DURATION_MINUTES = 30
 
 _RECENT_SESSION_CACHE: Dict[str, List[dict]] = {}
 _IP_GRACE_CACHE: Dict[str, float] = {}
+_STREAM_SYNC_GRACE_CACHE: Dict[str, dict] = {}
 
 # -------------------------
 # Smart household helpers
@@ -179,6 +232,154 @@ def _household_match_score(a: dict, b: dict) -> int:
 
 def _is_probable_same_household(a: dict, b: dict) -> bool:
     return _household_match_score(a, b) >= HOUSEHOLD_DEVICE_MATCH_SCORE
+
+
+
+def _session_endpoint_identity(sess: dict) -> tuple[str, bool]:
+    machine = _extract_machine_identifier(sess)
+    if machine:
+        return (f"machine:{machine}", True)
+
+    ip = _safe_lower(sess.get("ip"))
+    device = _safe_lower(sess.get("device"))
+    client = _safe_lower(sess.get("client_product"))
+    client_name = _safe_lower(sess.get("client_name"))
+
+    if not ip or ip == "unknown":
+        return ("", False)
+
+    descriptor = "|".join([client, client_name, device]).strip("|")
+    if not descriptor:
+        return ("", False)
+
+    return (f"client:{ip}|{descriptor}", False)
+
+
+def _session_time_delta_seconds(a: dict, b: dict) -> int:
+    a_ts = _parse_datetime(a.get("started_at") or a.get("last_seen_at"))
+    b_ts = _parse_datetime(b.get("started_at") or b.get("last_seen_at"))
+
+    if not a_ts or not b_ts:
+        return 999999
+
+    return int(abs((a_ts - b_ts).total_seconds()))
+
+
+def _session_sort_key(sess: dict) -> str:
+    return str(sess.get("last_seen_at") or sess.get("started_at") or "")
+
+
+def _stream_sync_grace_key(policy_id: int, user_key, endpoint_key: str, sessions: List[dict]) -> str:
+    session_parts = []
+    for sess in sessions:
+        session_parts.append(
+            f"{sess.get('server_id')}:{sess.get('session_key')}:{_media_family_key(sess)}"
+        )
+    return f"policy:{policy_id}|user:{user_key}|endpoint:{endpoint_key}|" + "|".join(sorted(session_parts))
+
+
+def _cleanup_stream_sync_grace_cache():
+    now = time.time()
+    ttl = max(STREAM_SYNC_TRANSITION_SECONDS * 3, HOUSEHOLD_MEMORY_SECONDS)
+
+    for key in list(_STREAM_SYNC_GRACE_CACHE.keys()):
+        entry = _STREAM_SYNC_GRACE_CACHE.get(key) or {}
+        ts = float(entry.get("ts") or 0)
+        if now - ts > ttl:
+            _STREAM_SYNC_GRACE_CACHE.pop(key, None)
+
+
+def _deduplicate_user_stream_sessions(
+    policy: dict,
+    user_key,
+    sessions: List[dict],
+) -> List[dict]:
+    """
+    Collapse impossible duplicate playbacks before max_streams_per_user counts.
+
+    Strong matches use the provider/client machine id and are treated as one
+    playback. Weak matches use same IP + client/device text only; those can be
+    two identical TVs, so they are only ignored for a couple of scheduler runs.
+    """
+    if len(sessions) < 2:
+        return sessions
+
+    _cleanup_stream_sync_grace_cache()
+
+    groups: Dict[str, dict] = {}
+    passthrough = []
+
+    for sess in sessions:
+        endpoint_key, is_strong = _session_endpoint_identity(sess)
+        if not endpoint_key:
+            passthrough.append(sess)
+            continue
+
+        bucket = groups.setdefault(endpoint_key, {"strong": False, "sessions": []})
+        bucket["strong"] = bool(bucket["strong"] or is_strong)
+        bucket["sessions"].append(sess)
+
+    kept = list(passthrough)
+    policy_id = int(policy.get("id") or 0)
+
+    for endpoint_key, bucket in groups.items():
+        endpoint_sessions = list(bucket["sessions"])
+        if len(endpoint_sessions) <= 1:
+            kept.extend(endpoint_sessions)
+            continue
+
+        endpoint_sessions = sorted(endpoint_sessions, key=_session_sort_key, reverse=True)
+        representative = endpoint_sessions[0]
+
+        if bool(bucket.get("strong")):
+            kept.append(representative)
+            if is_debug_mode_enabled():
+                logger.debug(
+                    "[stream_sync_dedupe] merged same machine | policy=%s | user=%s | endpoint=%s | sessions=%s",
+                    policy_id,
+                    user_key,
+                    endpoint_key,
+                    len(endpoint_sessions),
+                )
+            continue
+
+        max_delta = max(
+            _session_time_delta_seconds(endpoint_sessions[0], sess)
+            for sess in endpoint_sessions[1:]
+        )
+        if max_delta > STREAM_SYNC_TRANSITION_SECONDS:
+            kept.extend(endpoint_sessions)
+            continue
+
+        grace_key = _stream_sync_grace_key(policy_id, user_key, endpoint_key, endpoint_sessions)
+        entry = _STREAM_SYNC_GRACE_CACHE.get(grace_key) or {"runs": 0, "ts": time.time()}
+        entry["runs"] = int(entry.get("runs") or 0) + 1
+        entry["ts"] = time.time()
+        _STREAM_SYNC_GRACE_CACHE[grace_key] = entry
+
+        if int(entry["runs"]) <= STREAM_SYNC_GRACE_RUNS:
+            kept.append(representative)
+            logger.info(
+                "[stream_sync_grace] probable same-device sync overlap | policy=%s | user=%s | endpoint=%s | sessions=%s | run=%s/%s",
+                policy_id,
+                user_key,
+                endpoint_key,
+                len(endpoint_sessions),
+                int(entry["runs"]),
+                STREAM_SYNC_GRACE_RUNS,
+            )
+            continue
+
+        logger.warning(
+            "[stream_sync_grace] weak same-device overlap persisted, counting all streams | policy=%s | user=%s | endpoint=%s | sessions=%s",
+            policy_id,
+            user_key,
+            endpoint_key,
+            len(endpoint_sessions),
+        )
+        kept.extend(endpoint_sessions)
+
+    return kept
 
 
 def _deduplicate_household_sessions(sessions: List[dict]) -> List[dict]:
@@ -974,7 +1175,7 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
     # Nothing in scope
     if not scoped:
         return violations
-    
+
     # Visibilité : combien de sessions sont réellement dans le scope de cette policy
     try:
         # Only log policies that actually match sessions
@@ -1036,6 +1237,8 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
             if allow_local_ip:
                 counted_sessions = [s for s in user_sessions if not _is_local_ip((s.get('ip') or '').strip())]
 
+            counted_sessions = _deduplicate_user_stream_sessions(policy, user_key, counted_sessions)
+
             defer_probable_switch = should_defer_stream_violation(
                 policy_id=int(policy.get("id") or 0),
                 user_key=user_key,
@@ -1084,7 +1287,7 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
             })
 
 
-    
+
 
 
     elif rule_type == "max_ips_per_user":
@@ -1163,7 +1366,7 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
             })
 
 
-    
+
 
 
     elif rule_type == "max_streams_per_ip":
@@ -1178,7 +1381,7 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
             # VIP users should not be limited by per-IP stream policies
             if _is_vip_override(s.get("vodum_user_id")):
                 continue
-        
+
             ip = (s.get("ip") or "").strip() or "unknown"
 
             if ip == "unknown" and ignore_unknown:
@@ -1224,7 +1427,7 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
 
 
 
-    
+
 
 
     elif rule_type == "max_transcodes_global":
@@ -1590,63 +1793,82 @@ def _notification_policy_context(policy: dict, target: dict, related_sessions: l
 
     if rule_type == "max_ips_per_user":
         observed = len(unique_ips)
-        limit_label = "maximum public IPs"
-        explanation = (
-            f"Your subscription allows up to {limit} public IP(s) at the same time. "
-            f"VODUM detected {observed} public IP(s) being used simultaneously."
+        limit_label = _policy_t("policy_limit_label_max_ips_per_user")
+        explanation = _policy_t(
+            "policy_explanation_max_ips_per_user",
+            limit=limit,
+            observed=observed,
         )
 
     elif rule_type == "max_streams_per_user":
         observed = len(involved)
-        limit_label = "maximum simultaneous streams"
-        explanation = (
-            f"Your subscription allows up to {limit} simultaneous stream(s). "
-            f"VODUM detected {observed} active stream(s) at the same time."
+        limit_label = _policy_t("policy_limit_label_max_streams_per_user")
+        explanation = _policy_t(
+            "policy_explanation_max_streams_per_user",
+            limit=limit,
+            observed=observed,
         )
 
     elif rule_type == "max_streams_per_ip":
         observed = len(involved)
-        limit_label = "maximum simultaneous streams per IP"
-        explanation = (
-            f"The policy allows up to {limit} simultaneous stream(s) from the same public IP. "
-            f"VODUM detected {observed} active stream(s) from IP {target_ip or 'unknown'}."
+        limit_label = _policy_t("policy_limit_label_max_streams_per_ip")
+        explanation = _policy_t(
+            "policy_explanation_max_streams_per_ip",
+            limit=limit,
+            observed=observed,
+            ip=target_ip or "unknown",
         )
 
-    elif rule_type in {"max_streams_per_server"}:
+    elif rule_type == "max_streams_per_server":
         observed = len(involved)
-        limit_label = "maximum simultaneous streams on this server"
-        explanation = (
-            f"The server limit is {limit} simultaneous stream(s). "
-            f"VODUM detected {observed} active stream(s) on this server."
+        limit_label = _policy_t("policy_limit_label_max_streams_per_server")
+        explanation = _policy_t(
+            "policy_explanation_max_streams_per_server",
+            limit=limit,
+            observed=observed,
         )
 
     elif rule_type in {"max_transcodes_per_server", "max_transcodes_global"}:
         observed = sum(int(s.get("is_transcode") or 0) for s in involved)
-        limit_label = "maximum simultaneous transcodes"
-        explanation = (
-            f"The transcode limit is {limit}. "
-            f"VODUM detected {observed} active transcode(s)."
+        limit_label = _policy_t("policy_limit_label_max_transcodes")
+        explanation = _policy_t(
+            "policy_explanation_max_transcodes",
+            limit=limit,
+            observed=observed,
         )
 
     elif rule_type == "max_bitrate_kbps":
         observed = ""
-        limit_label = "maximum bitrate"
-        explanation = (
-            f"The maximum allowed bitrate is {limit} kbps. "
-            f"This stream was above the allowed bitrate."
+        limit_label = _policy_t("policy_limit_label_max_bitrate")
+        explanation = _policy_t(
+            "policy_explanation_max_bitrate",
+            limit=limit,
         )
 
     elif rule_type == "ban_4k_transcode":
         observed = ""
-        limit_label = "4K transcode blocked"
-        explanation = "This playback was stopped because 4K transcoding is not allowed."
+        limit_label = _policy_t("policy_limit_label_ban_4k_transcode")
+        explanation = _policy_t("policy_explanation_ban_4k_transcode")
 
     else:
         observed = len(involved)
-        limit_label = "policy limit"
-        explanation = (
-            f"This playback was stopped because it matched policy {rule_type or 'unknown'}."
+        limit_label = _policy_t("policy_limit_label_unknown")
+        explanation = _policy_t(
+            "policy_explanation_unknown",
+            rule_type=rule_type or "unknown",
         )
+
+    policy_translation_key = "subscription_expired" if rule.get("system_tag") == "expired_subscription" else (rule_type or "unknown")
+    policy_translation_variables = {
+        "limit": limit,
+        "value": observed,
+        "observed": observed,
+        "ip": target_ip or "unknown",
+        "rule_type": rule_type or "unknown",
+    }
+    policy_limit_label_key = f"limit_label_{policy_translation_key}"
+    if policy_translation_key == "subscription_expired":
+        policy_limit_label_key = "limit_label_max_streams_per_user"
 
     others = [
         s for s in involved
@@ -1659,6 +1881,12 @@ def _notification_policy_context(policy: dict, target: dict, related_sessions: l
         "policy_limit_label": limit_label,
         "policy_observed": observed,
         "policy_explanation": explanation,
+        "policy_reason_key": policy_translation_key,
+        "policy_reason_variables": policy_translation_variables,
+        "policy_explanation_key": policy_translation_key,
+        "policy_explanation_variables": policy_translation_variables,
+        "policy_limit_label_key": policy_limit_label_key,
+        "policy_limit_label_variables": policy_translation_variables,
 
         "maximum_streams": limit if "streams" in rule_type else "",
         "maximum_ips": limit if "ips" in rule_type else "",
@@ -1995,7 +2223,7 @@ def run(task_id: int, db):
 
     live_sessions = _load_live_sessions()
     fresh_live_sessions = _load_live_sessions(stable_seconds=0)
-    
+
     if is_debug_mode_enabled():
         logger.debug(f"[TASK {task_id}] stream_enforcer: live_sessions={len(live_sessions)}")
     if not live_sessions and not fresh_live_sessions:

@@ -1,0 +1,25 @@
+{
+  "language_name": "English",
+  "common": {
+    "none": "None"
+  },
+  "policy": {
+    "subscription_expired": "Your subscription has ended. Please renew to restore access.",
+    "max_streams_per_user": "Your subscription allows {limit} simultaneous stream(s). VODUM detected {value} stream(s).",
+    "max_ips_per_user": "Too many different IP addresses are using your account.",
+    "max_streams_per_ip": "Too many simultaneous stream(s) are using the same IP address ({ip}).",
+    "max_streams_per_server": "The server stream limit has been reached.",
+    "max_transcodes": "Too many transcoded streams are active.",
+    "max_bitrate": "One stream is above the allowed bitrate limit.",
+    "ban_4k_transcode": "4K transcoding is not allowed.",
+    "unknown": "A playback policy was violated: {rule_type}.",
+    "limit_label_max_ips_per_user": "Maximum IP addresses per user",
+    "limit_label_max_streams_per_user": "Maximum streams per user",
+    "limit_label_max_streams_per_ip": "Maximum streams per IP address",
+    "limit_label_max_streams_per_server": "Maximum streams per server",
+    "limit_label_max_transcodes": "Maximum transcoded streams",
+    "limit_label_max_bitrate": "Maximum bitrate",
+    "limit_label_ban_4k_transcode": "4K transcode blocked",
+    "limit_label_unknown": "Policy limit"
+  }
+}

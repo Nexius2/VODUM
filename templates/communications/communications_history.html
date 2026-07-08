@@ -89,8 +89,8 @@
       </thead>
       <tbody>
       {% for h in history %}
-        {% set subject_value = h.template_subject if h.kind == 'template' else h.campaign_subject %}
-        {% set body_value = h.template_body if h.kind == 'template' else h.campaign_body %}
+        {% set subject_value = h.rendered_subject %}
+		{% set body_value = h.rendered_body %}
         {% set modal_payload = {
           "kind": h.kind or "",
           "kind_label": (t('template') if h.kind == 'template' else t('campaign')),

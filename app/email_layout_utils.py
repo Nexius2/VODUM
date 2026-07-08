@@ -19,7 +19,7 @@ def _load_lang_dict(lang_code: str, lang_dir: str) -> Dict[str, str]:
         return {}
 
 
-def get_script_translator(settings: Dict, lang_dir: str = "/app/lang") -> Callable[[str], str]:
+def get_script_translator(settings: Dict, lang_dir: str = "/app/translations/ui") -> Callable[[str], str]:
     """
     Traducteur i18n utilisable dans les scripts (hors Flask).
     Langue = settings.default_language sinon 'en'.
@@ -127,7 +127,7 @@ def wrap_email_html(inner_html: str, title: str, footer_text: str) -> str:
 """
 
 
-def build_email_parts(body: str, settings: Dict, lang_dir: str = "/app/lang") -> Tuple[str, str]:
+def build_email_parts(body: str, settings: Dict, lang_dir: str = "/app/translations/ui") -> Tuple[str, str]:
     """
     Retourne: (plain_text, full_html)
     """

@@ -315,13 +315,13 @@ def _resolve_asset_dir(start_dir: str, target: str) -> str:
     return target
 
 def create_app():
-    # Ensure templates/static/lang are loaded correctly regardless of whether the code is mounted as
+    # Ensure templates/static/translations are loaded correctly regardless of whether the code is mounted as
     # /app/app.py or /app/app/app.py (Docker COPY layouts vary).
     base_dir = os.path.dirname(os.path.abspath(__file__))
 
     template_dir = _resolve_asset_dir(base_dir, "templates")
     static_dir = _resolve_asset_dir(base_dir, "static")
-    lang_dir = _resolve_asset_dir(base_dir, "lang")
+    lang_dir = _resolve_asset_dir(base_dir, os.path.join("translations", "ui"))
 
     app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 
@@ -386,7 +386,7 @@ def create_app():
         lambda: str(app.config.get("TRUSTED_PROXY_NETS", "")),
     )
 
-    # Absolute path to lang/
+    # Absolute path to translations/ui. app/core/i18n.py can still read an external legacy lang/ fallback.
     app.config["LANG_DIR"] = lang_dir
 
     # Filters / globals

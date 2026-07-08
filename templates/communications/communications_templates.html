@@ -114,7 +114,7 @@
 				  {% endfor %}
 				</select>
 			  </div>
-			  
+
 			<div class="text-xs hidden" id="expiration_change_direction_block">
 			  <label class="block mb-1">{{ t('comm_expiration_change_direction') }}</label>
 			  {% set exp_change_dir = (loaded_template.expiration_change_direction if loaded_template and loaded_template.expiration_change_direction else 'all') %}
@@ -124,7 +124,7 @@
 				<option value="decrease" {% if exp_change_dir == 'decrease' %}selected{% endif %}>{{ t('comm_expiration_change_decrease') }}</option>
 			  </select>
 			</div>
-			  
+
 			</div>
 
 		{#

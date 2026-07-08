@@ -10,6 +10,20 @@
 
 {% include "servers/servers_nav.html" with context %}
 
+{% set current_sort = sort or "server" %}
+{% set current_order = order or "asc" %}
+{% macro library_sort_url(sort_key) -%}
+  {% set next_order = "desc" if current_sort == sort_key and current_order == "asc" else "asc" %}
+  {{ url_for("libraries_list", sort=sort_key, order=next_order) }}
+{%- endmacro %}
+{% macro sortable_header(label, key) -%}
+  {% set active = current_sort == key %}
+  <a href="{{ library_sort_url(key) }}" class="inline-flex items-center gap-1 {{ 'text-emerald-300 font-semibold' if active else 'text-slate-400 hover:text-slate-200' }}">
+    <span>{{ label }}</span>
+    {% if active %}<span>{{ '&uarr;'|safe if current_order == 'asc' else '&darr;'|safe }}</span>{% else %}<span>&harr;</span>{% endif %}
+  </a>
+{%- endmacro %}
+
 <form method="post" action="{{ url_for('bulk_grant_libraries') }}" id="lib-form">
   <div class="flex justify-between items-center mb-3">
     <h2 class="text-sm font-semibold">{{ t("all_libraries") }}</h2>
@@ -23,11 +37,11 @@
           <th class="px-3 py-2">
             <input type="checkbox" id="check-all">
           </th>
-          <th class="px-3 py-2 text-left">{{ t("server") }}</th>
-          <th class="px-3 py-2 text-left">{{ t("name") }}</th>
-          <th class="px-3 py-2 text-left">{{ t("type") }}</th>
-          <th class="px-3 py-2 text-left">{{ t("id") }}</th>
-          <th class="px-3 py-2 text-left">{{ t("users") }}</th>
+          <th class="px-3 py-2 text-left">{{ sortable_header(t("server"), "server") }}</th>
+          <th class="px-3 py-2 text-left">{{ sortable_header(t("name"), "name") }}</th>
+          <th class="px-3 py-2 text-left">{{ sortable_header(t("type"), "type") }}</th>
+          <th class="px-3 py-2 text-left">{{ sortable_header(t("id"), "section_id") }}</th>
+          <th class="px-3 py-2 text-left">{{ sortable_header(t("users"), "users") }}</th>
         </tr>
       </thead>
       <tbody>
@@ -51,6 +65,12 @@
         {% endfor %}
       </tbody>
     </table>
+  </div>
+
+  {# servers/libraries pagination #}
+  <div class="mt-4">
+    {% set pagination = dict(pagination, unit_label=t("libraries")) %}
+    {% include "partials/_pagination.html" %}
   </div>
 </form>
 

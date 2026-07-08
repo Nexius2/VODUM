@@ -2,8 +2,10 @@
 
 import json
 from flask import render_template, request, redirect, url_for, flash, jsonify
+from mailing_utils import build_user_context, render_mail
 
 from core.i18n import get_translator
+from core.communication_i18n import communication_language_options, normalize_communication_language
 from core.communications_recovery import retry_failed_scheduled_communications
 from core.communications.default_templates import (
     is_stream_blocked_template,
@@ -54,7 +56,48 @@ def _sanitize_notifications_order(raw: str) -> str:
     return ",".join(parts)
 
 
-COMM_TRANSLATION_SETTINGS_COLUMNS = "default_language"
+
+
+def _selected_template_language(settings=None):
+    raw = request.form.get("language") or request.args.get("language") or (settings or {}).get("communication_language") or "en"
+    return normalize_communication_language(raw)
+
+
+def _upsert_template_translation(db, template_id: int, language: str, subject: str, body: str) -> None:
+    language = normalize_communication_language(language)
+    db.execute(
+        """
+        INSERT INTO comm_template_translations(template_id, language, subject, body, created_at, updated_at)
+        VALUES(?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(template_id, language) DO UPDATE SET
+            subject=excluded.subject,
+            body=excluded.body,
+            updated_at=CURRENT_TIMESTAMP
+        """,
+        (int(template_id), language, subject or "", body or ""),
+    )
+
+
+def _apply_template_translation(db, template: dict | None, language: str) -> dict | None:
+    if not template:
+        return template
+    row = db.query_one(
+        """
+        SELECT subject, body
+        FROM comm_template_translations
+        WHERE template_id = ?
+          AND language = ?
+        LIMIT 1
+        """,
+        (int(template["id"]), normalize_communication_language(language)),
+    )
+    if row:
+        row = dict(row)
+        template["subject"] = row.get("subject") or ""
+        template["body"] = row.get("body") or ""
+    return template
+
+COMM_TRANSLATION_SETTINGS_COLUMNS = "default_language, communication_language"
 COMM_TEST_CAMPAIGN_SETTINGS_COLUMNS = "contact_email"
 COMM_CAMPAIGN_EDITOR_COLUMNS = """
     id,
@@ -114,7 +157,7 @@ COMM_TEMPLATE_LIST_COLUMNS = """
               ct.subscription_template_id,
               ct.days_before,
               ct.days_after,
-              ct.subject
+              COALESCE(ctl.subject, ct.subject) AS subject
 """
 COMM_HISTORY_COLUMNS = """
                 h.kind,
@@ -139,7 +182,8 @@ COMM_CONFIG_SETTINGS_COLUMNS = """
     discord_bot_token,
     notifications_send_mode,
     notifications_order,
-    user_notifications_can_override
+    user_notifications_can_override,
+    communication_language
 """
 
 
@@ -441,6 +485,7 @@ def register(app):
         t = get_translator(settings)
 
         action = (request.form.get("action") or "").strip().lower()
+        selected_language = _selected_template_language(settings)
 
         # Create
         if action == "create":
@@ -600,6 +645,7 @@ def register(app):
                 ),
             )
             tid = getattr(cur, "lastrowid", None)
+            _upsert_template_translation(db, int(tid), selected_language, subject, body)
 
             files = request.files.getlist("attachments")
             saved = store_uploads("template", int(tid), files)
@@ -625,7 +671,7 @@ def register(app):
 
 
 
-            return redirect(url_for("communications_templates_page", load=tid))
+            return redirect(url_for("communications_templates_page", load=tid, language=selected_language))
 
         # Save
         if action == "save":
@@ -641,7 +687,7 @@ def register(app):
 
             existing = dict(existing)
 
-            settings = db.query_one("SELECT expiry_mode FROM settings WHERE id = 1")
+            settings = db.query_one("SELECT expiry_mode, communication_language FROM settings WHERE id = 1")
             settings = dict(settings) if settings else {}
 
             is_stream_blocked = is_stream_blocked_template(existing)
@@ -765,7 +811,7 @@ def register(app):
 
             if not key or not name or not subject or not body:
                 flash(t("comm_missing_fields"), "error")
-                return redirect(url_for("communications_templates_page", load=tid))
+                return redirect(url_for("communications_templates_page", load=tid, language=selected_language))
 
             exists = db.query_one(
                 "SELECT 1 FROM comm_templates WHERE key = ? AND id <> ?",
@@ -773,10 +819,10 @@ def register(app):
             )
             if exists:
                 flash(t("comm_template_key_exists"), "error")
-                return redirect(url_for("communications_templates_page", load=tid))
+                return redirect(url_for("communications_templates_page", load=tid, language=selected_language))
 
             duplicate = None
-         
+
 
             if enabled:
                 duplicate = find_enabled_template_duplicate(
@@ -795,8 +841,10 @@ def register(app):
                         f"{t('comm_template_duplicate_enabled')} #{duplicate['id']} - {duplicate['name']}",
                         "error",
                     )
-                    return redirect(url_for("communications_templates_page", load=tid))
+                    return redirect(url_for("communications_templates_page", load=tid, language=selected_language))
 
+            legacy_subject = subject if selected_language == "en" else (existing.get("subject") or subject)
+            legacy_body = body if selected_language == "en" else (existing.get("body") or body)
             db.execute(
                 """
                 UPDATE comm_templates
@@ -813,10 +861,11 @@ def register(app):
                     trigger_event, trigger_provider, expiration_change_direction,
                     subscription_scope, subscription_template_id,
                     days_before, days_after,
-                    subject, body,
+                    legacy_subject, legacy_body,
                     tid,
                 ),
             )
+            _upsert_template_translation(db, int(tid), selected_language, subject, body)
 
             files = request.files.getlist("attachments")
             saved = store_uploads("template", int(tid), files)
@@ -841,7 +890,7 @@ def register(app):
 
 
 
-            return redirect(url_for("communications_templates_page", load=tid))
+            return redirect(url_for("communications_templates_page", load=tid, language=selected_language))
 
         # Delete
         if action == "delete":
@@ -855,7 +904,7 @@ def register(app):
 
             if is_stream_blocked_template(existing):
                 flash(t("comm_stream_blocked_template_locked"), "error")
-                return redirect(url_for("communications_templates_page", load=tid))
+                return redirect(url_for("communications_templates_page", load=tid, language=selected_language))
 
             db.execute("DELETE FROM comm_templates WHERE id = ?", (tid,))
             add_log("info", "communications", "Template deleted", {"id": tid})
@@ -889,8 +938,9 @@ def register(app):
         #duplicate_disabled = request.args.get("duplicate_disabled", type=int) == 1
         #duplicate_disabled_reason = (request.args.get("duplicate_disabled_reason") or "").strip()
 
-        settings = db.query_one("SELECT expiry_mode FROM settings WHERE id = 1")
+        settings = db.query_one("SELECT expiry_mode, communication_language FROM settings WHERE id = 1")
         settings = dict(settings) if settings else {}
+        selected_language = _selected_template_language(settings)
 
         loaded = None
         loaded_is_stream_blocked = False
@@ -900,6 +950,7 @@ def register(app):
             loaded = db.query_one(f"SELECT {COMM_TEMPLATE_EDITOR_COLUMNS} FROM comm_templates WHERE id = ?", (load_id,))
             loaded = dict(loaded) if loaded else None
             if loaded:
+                loaded = _apply_template_translation(db, loaded, selected_language)
                 loaded["attachments"] = fetch_template_attachments(db, int(loaded["id"]))
                 loaded_is_stream_blocked = is_stream_blocked_template(loaded)
 
@@ -908,9 +959,10 @@ def register(app):
               {COMM_TEMPLATE_LIST_COLUMNS},
               st.name AS subscription_template_name
             FROM comm_templates ct
+            LEFT JOIN comm_template_translations ctl ON ctl.template_id = ct.id AND ctl.language = ?
             LEFT JOIN subscription_templates st ON st.id = ct.subscription_template_id
             ORDER BY ct.enabled DESC, LOWER(ct.name), ct.id DESC
-        """)
+        """, (selected_language,))
         templates = [dict(r) for r in (templates or [])]
 
         subscription_templates = db.query(
@@ -933,6 +985,7 @@ def register(app):
             #duplicate_disabled_reason=duplicate_disabled_reason,
             loaded_is_stream_blocked=loaded_is_stream_blocked,
             stream_blocked_required=stream_blocked_required,
+            selected_language=selected_language,
         )
 
 
@@ -1021,11 +1074,24 @@ def register(app):
 
         offset = (page - 1) * per_page
 
+        settings_row = db.query_one("SELECT brand_name FROM settings WHERE id = 1")
+        settings = dict(settings_row) if settings_row else {}
+        brand_name = settings.get("brand_name") or "VODUM"
+
         rows = db.query(
             f"""
             SELECT
                 {COMM_HISTORY_COLUMNS},
+                u.id AS user_id,
                 u.username AS user_username,
+                u.firstname AS user_firstname,
+                u.lastname AS user_lastname,
+                u.email AS user_email,
+                u.expiration_date AS user_expiration_date,
+                u.subscription_template_id AS user_subscription_template_id,
+                st.name AS subscription_name,
+                st.duration_days AS subscription_duration_days,
+                st.subscription_value AS subscription_value,
                 t.key AS template_key,
                 t.subject AS template_subject,
                 t.body AS template_body,
@@ -1034,6 +1100,7 @@ def register(app):
                 c.body AS campaign_body
             FROM comm_history h
             LEFT JOIN vodum_users u ON u.id = h.user_id
+            LEFT JOIN subscription_templates st ON st.id = u.subscription_template_id
             LEFT JOIN comm_templates t ON t.id = h.template_id
             LEFT JOIN comm_campaigns c ON c.id = h.campaign_id
             ORDER BY {order_by_sql}
@@ -1042,7 +1109,53 @@ def register(app):
             (per_page, offset),
         )
 
-        history = [dict(r) for r in (rows or [])]
+        def _render_history_message(row):
+            meta = {}
+            try:
+                meta = json.loads(row.get("meta_json") or "{}")
+            except Exception:
+                meta = {}
+
+            if meta.get("rendered_subject") or meta.get("rendered_body"):
+                row["rendered_subject"] = meta.get("rendered_subject") or ""
+                row["rendered_body"] = meta.get("rendered_body") or ""
+                return row
+
+            payload = meta.get("payload") or {}
+
+            context_input = {
+                "id": row.get("user_id"),
+                "username": row.get("user_username") or "",
+                "firstname": row.get("user_firstname") or "",
+                "lastname": row.get("user_lastname") or "",
+                "email": row.get("user_email") or "",
+                "expiration_date": row.get("user_expiration_date") or "",
+                "subscription_template_id": row.get("user_subscription_template_id"),
+                "subscription_name": row.get("subscription_name") or "",
+                "subscription_duration_days": row.get("subscription_duration_days") or "",
+                "subscription_value": row.get("subscription_value") or "",
+                "brand_name": brand_name,
+            }
+
+            context_input.update(meta)
+            context_input.update(payload)
+            context_input["brand_name"] = meta.get("brand_name") or payload.get("brand_name") or brand_name
+
+            context = build_user_context(context_input)
+
+            for key, value in context_input.items():
+                if value not in (None, ""):
+                    context[key] = str(value)
+
+            subject = row.get("template_subject") if row.get("kind") == "template" else row.get("campaign_subject")
+            body = row.get("template_body") if row.get("kind") == "template" else row.get("campaign_body")
+
+            row["rendered_subject"] = render_mail(subject or "", context)
+            row["rendered_body"] = render_mail(body or "", context)
+
+            return row
+
+        history = [_render_history_message(dict(r)) for r in (rows or [])]
         return render_template(
             "communications/communications_history.html",
             history=history,
@@ -1113,6 +1226,9 @@ def register(app):
                 request.form.get("notifications_order") or settings.get("notifications_order") or "email"
             )
             user_can_override = 1 if request.form.get("user_notifications_can_override") == "1" else 0
+            communication_language = normalize_communication_language(
+                request.form.get("communication_language") or settings.get("communication_language") or "en"
+            )
 
             db.execute(
                 """
@@ -1131,7 +1247,8 @@ def register(app):
                   discord_bot_token=?,
                   notifications_send_mode=?,
                   notifications_order=?,
-                  user_notifications_can_override=?
+                  user_notifications_can_override=?,
+                  communication_language=?
                 WHERE id=1
                 """,
                 (
@@ -1150,6 +1267,7 @@ def register(app):
                     send_mode,
                     notifications_order,
                     user_can_override,
+                    communication_language,
                 ),
             )
 
@@ -1193,16 +1311,5 @@ def register(app):
             "communications/communications_configuration.html",
             settings=settings,
             current_subpage="configuration",
+            communication_languages=communication_language_options(),
         )
-
-
-
-
-
-
-
-
-
-
-
-

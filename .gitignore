@@ -39,7 +39,7 @@ node_modules/
 
 # Documentation / non-application assets
 vodum-docs/
-screenshots/
+
 
 # Optional side projects / local helper scripts
 worker_telemetry/

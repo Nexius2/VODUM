@@ -156,10 +156,12 @@ def run_migrations():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_stream_enforcements_time ON stream_enforcements(created_at);")
         conn.commit()
 
-    # ✅ IMPORTANT : migrations même si la table existe déjà
+    # ? IMPORTANT : migrations m?me si la table existe d?j?
     ensure_column(cursor, "stream_enforcements", "account_username", "TEXT")
     ensure_column(cursor, "stream_enforcements", "ips_json", "TEXT")
     ensure_column(cursor, "stream_enforcements", "details_json", "TEXT")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_stream_enforcements_vodum_user_created ON stream_enforcements(vodum_user_id, created_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_stream_enforcements_external_user_created ON stream_enforcements(external_user_id, created_at)")
 
     # -------------------------------------------------
     # 0.3 Tautulli import jobs
@@ -172,7 +174,7 @@ def run_migrations():
           server_id INTEGER NOT NULL, -- legacy (0 maintenant)
           file_path TEXT NOT NULL,
 
-          
+
           keep_all_libraries INTEGER NOT NULL DEFAULT 0,
           import_only_available_libraries INTEGER NOT NULL DEFAULT 1,
           target_server_id INTEGER NOT NULL DEFAULT 0,
@@ -188,9 +190,9 @@ def run_migrations():
         """)
         conn.commit()
 
-    # ✅ IMPORTANT : ces migrations doivent être exécutées même si la table existe déjà
-   
-    
+    # ? IMPORTANT : ces migrations doivent ?tre ex?cut?es m?me si la table existe d?j?
+
+
     ensure_column(cursor, "tautulli_import_jobs", "keep_all_libraries", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(cursor, "tautulli_import_jobs", "import_only_available_libraries", "INTEGER NOT NULL DEFAULT 1")
     ensure_column(cursor, "tautulli_import_jobs", "target_server_id", "INTEGER NOT NULL DEFAULT 0")
@@ -356,7 +358,7 @@ def run_migrations():
             schedule_mode = 'interval',
             interval_seconds = CASE
                 WHEN name = 'stream_enforcer' THEN 15
-                ELSE 60
+                ELSE 15
             END
         WHERE name IN (
             'monitor_enqueue_refresh',
@@ -410,7 +412,7 @@ def run_migrations():
 
     for table in REQUIRED_TABLES:
         if not table_exists(cursor, table):
-            raise RuntimeError(f"❌ ERROR: table '{table}' does not exist ! "
+            raise RuntimeError(f"âŒ ERROR: table '{table}' does not exist ! "
                                f"-> Check that tables.sql has been imported correctly.")
 
     ensure_column(cursor, "servers", "server_version", "TEXT DEFAULT NULL")
@@ -422,6 +424,7 @@ def run_migrations():
     ensure_column(cursor, "servers", "last_failure", "TEXT DEFAULT NULL")
     # Jellyfin stored password (1 password per media account/server)
     ensure_column(cursor, "media_users", "stored_password", "TEXT DEFAULT NULL")
+    ensure_column(cursor, "media_users", "preferred_language", "TEXT DEFAULT NULL")
     # Vodum only needs the Jellyfin admin token to replace a user's password.
     # Purge legacy plaintext passwords; new password changes also leave this NULL.
     cursor.execute(
@@ -733,7 +736,7 @@ def run_migrations():
             print("✅ user_referrals CHECK constraint migrated")
 
     except Exception as e:
-        print(f"❌ Failed migrating user_referrals constraint: {e}")
+        print(f"âŒ Failed migrating user_referrals constraint: {e}")
 
     ensure_column(cursor, "user_referral_settings", "auto_expire_pending", "INTEGER NOT NULL DEFAULT 1")
     ensure_column(cursor, "user_referral_settings", "auto_archive_rewarded", "INTEGER NOT NULL DEFAULT 1")
@@ -841,7 +844,7 @@ def run_migrations():
         conn.commit()
         print("✔ vodum_users.status constraint upgraded.")
 
-    # 1.2 vodum_users per-user stream override 
+    # 1.2 vodum_users per-user stream override
     ensure_column(cursor, "vodum_users", "max_streams_override", "INTEGER DEFAULT NULL")
     ensure_column(cursor, "vodum_users", "notifications_order_override", "TEXT DEFAULT NULL")
 
@@ -1008,12 +1011,13 @@ def run_migrations():
     ensure_column(cursor, "settings", "skip_never_used_accounts", "INTEGER DEFAULT 0")
     ensure_column(cursor, "settings", "smtp_auth_method", "TEXT DEFAULT 'password'")
     ensure_column(cursor, "settings", "smtp_oauth_access_token", "TEXT DEFAULT NULL")
+    ensure_column(cursor, "settings", "communication_language", "TEXT DEFAULT NULL")
 
     # Plex settings
     ensure_column(cursor, "settings", "plex_user_import_mode", "TEXT DEFAULT 'global'")
 
 
-    
+
     # Auth admin
     ensure_column(cursor, "settings", "contact_email", "TEXT DEFAULT NULL")
     ensure_column(cursor, "settings", "admin_password_hash", "TEXT DEFAULT NULL")
@@ -1064,7 +1068,7 @@ def run_migrations():
         "CREATE INDEX IF NOT EXISTS idx_auth_login_attempts_alert_sent_at "
         "ON auth_login_attempts(alert_sent_at);"
     )
-    
+
     # -------------------------------------------------
     # 2.1.1 Discord settings + user fields (NEW)
     # -------------------------------------------------
@@ -1109,7 +1113,7 @@ def run_migrations():
             print("➕ Migrated legacy discord_bot_token into discord_bots (Primary bot)")
     except Exception as e:
         # non-fatal
-        print(f"⚠️ Discord bots migration skipped: {e}")
+        print(f"âš ï¸ Discord bots migration skipped: {e}")
     ensure_column(cursor, "settings", "notifications_order", "TEXT DEFAULT 'email'")
     ensure_column(cursor, "settings", "user_notifications_can_override", "INTEGER DEFAULT 0")
     ensure_column(cursor, "settings", "notifications_send_mode", "TEXT DEFAULT 'first'")
@@ -1172,7 +1176,7 @@ def run_migrations():
     # Seed default discord templates (only if missing)
     defaults = {
         "preavis": (
-            "⏳ Subscription expiring soon",
+            "â³ Subscription expiring soon",
             "Hi {username}! You have {days_left} day(s) left. Your subscription expires on {expiration_date}."
         ),
         "relance": (
@@ -1180,7 +1184,7 @@ def run_migrations():
             "Hello {username} 🙂 Just a reminder: your subscription expires on {expiration_date} ({days_left} day(s) left)."
         ),
         "fin": (
-            "⚠️ Subscription expired",
+            "âš ï¸ Subscription expired",
             "Hi {username}. Your subscription expired on {expiration_date}. Please contact me to renew it."
         ),
     }
@@ -1250,6 +1254,34 @@ def run_migrations():
         "TEXT NOT NULL DEFAULT 'none' CHECK(subscription_scope IN ('none','all','specific'))",
     )
     ensure_column(cursor, "comm_templates", "subscription_template_id", "INTEGER DEFAULT NULL")
+
+    if not table_exists(cursor, "comm_template_translations"):
+        print("Creating table: comm_template_translations")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS comm_template_translations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            template_id INTEGER NOT NULL,
+            language TEXT NOT NULL,
+            subject TEXT NOT NULL,
+            body TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(template_id, language),
+            FOREIGN KEY(template_id) REFERENCES comm_templates(id) ON DELETE CASCADE
+        );
+        """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_comm_template_translations_template ON comm_template_translations(template_id, language)")
+    cursor.execute("""
+        INSERT OR IGNORE INTO comm_template_translations(template_id, language, subject, body)
+        SELECT
+            id,
+            COALESCE(NULLIF(TRIM((SELECT communication_language FROM settings WHERE id = 1)), ''), 'en'),
+            subject,
+            body
+        FROM comm_templates
+        WHERE COALESCE(subject, '') <> ''
+          AND COALESCE(body, '') <> ''
+    """)
     conn.commit()
 
     def comm_templates_schema_needs_upgrade():
@@ -1777,7 +1809,7 @@ def run_migrations():
         # Migrate templates only once (when comm_templates is empty)
         if comm_tpl_count == 0 and (table_exists(cursor, "email_templates") or table_exists(cursor, "discord_templates")):
             import json as _json
-            print("🔁 Migrating templates: email_templates + discord_templates → comm_templates")
+            print("?? Migrating templates: email_templates + discord_templates ? comm_templates")
 
             # Read current global delays (legacy) as a starting point for days_before
             preavis_days = None
@@ -1849,7 +1881,7 @@ def run_migrations():
         cursor.execute("SELECT COUNT(*) FROM comm_campaigns")
         comm_c_count = int(cursor.fetchone()[0] or 0)
         if comm_c_count == 0 and (table_exists(cursor, "mail_campaigns") or table_exists(cursor, "discord_campaigns")):
-            print("🔁 Migrating campaigns: mail_campaigns + discord_campaigns → comm_campaigns")
+            print("?? Migrating campaigns: mail_campaigns + discord_campaigns ? comm_campaigns")
 
             if table_exists(cursor, "mail_campaigns"):
                 cursor.execute("SELECT id, subject, body, server_id, status, is_test, created_at, finished_at FROM mail_campaigns ORDER BY id")
@@ -1895,7 +1927,7 @@ def run_migrations():
                 tpl_map = {}
 
             if table_exists(cursor, "sent_emails"):
-                print("🔁 Migrating history: sent_emails → comm_history")
+                print("?? Migrating history: sent_emails ? comm_history")
                 cursor.execute("SELECT user_id, template_type, expiration_date, sent_at FROM sent_emails ORDER BY id")
                 for user_id, template_type, expiration_date, sent_at in cursor.fetchall() or []:
                     tid = tpl_map.get(template_type)
@@ -1922,7 +1954,7 @@ def run_migrations():
                         )
 
             if table_exists(cursor, "sent_discord"):
-                print("🔁 Migrating history: sent_discord → comm_history")
+                print("?? Migrating history: sent_discord ? comm_history")
                 cursor.execute("SELECT user_id, template_type, expiration_date, sent_at FROM sent_discord ORDER BY id")
                 for user_id, template_type, expiration_date, sent_at in cursor.fetchall() or []:
                     tid = tpl_map.get(template_type)
@@ -1962,7 +1994,7 @@ def run_migrations():
             except Exception:
                 pass
     except Exception as e:
-        print(f"⚠️ Communications migration skipped: {e}")
+        print(f"âš ï¸ Communications migration skipped: {e}")
 
 
 
@@ -2573,7 +2605,7 @@ def run_migrations():
                 WHEN status = 'disabled' THEN 'idle'
                 ELSE status
             END
-         
+
         WHERE name IN ('monitor_enqueue_refresh', 'media_jobs_worker')
     """)
 
@@ -2994,7 +3026,7 @@ def run_migrations():
         print(f"✔ Bundled default communication templates inserted: {inserted_defaults}")
 
     # -------------------------------------------------
-    # 4. Templates email par défaut 
+    # 4. Templates email par défaut
     # -------------------------------------------------
 
     DEFAULT_TEMPLATES = {
@@ -3100,12 +3132,12 @@ def run_migrations():
     })
 
 
-    # Tâche stream_enforcer 
+    # Tâche stream_enforcer
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "stream_enforcer",
         "description": "task_description.stream_enforcer",
         "schedule": "*/2 * * * *",   # toutes les 2 minutes
-        "enabled": 0,                
+        "enabled": 0,
         "status": "disabled"
     })
 
@@ -3245,7 +3277,7 @@ def run_migrations():
         "smtp_oauth_access_token": None,
         "skip_never_used_accounts": 0,
 
-        # â›” NE PAS FORCER LA LANGUE
+        # ? NE PAS FORCER LA LANGUE
         "default_language": None,
 
         "timezone": "Europe/Paris",
@@ -3312,7 +3344,7 @@ def run_migrations():
     # ensure_row() only inserts missing tasks.
     # This migration updates existing installs when Vodum changes default schedules,
     # without overwriting admin-customized schedules.
-    TASK_DEFAULTS_VERSION = 3
+    TASK_DEFAULTS_VERSION = 4
 
     TASK_SCHEDULE_DEFAULTS = {
         "sync_plex": "7 */6 * * *",
@@ -3397,6 +3429,37 @@ def run_migrations():
             WHERE id = 1
             """,
             (TASK_DEFAULTS_VERSION,),
+        )
+        conn.commit()
+
+    if current_task_defaults_version < 4:
+        cursor.execute(
+            """
+            UPDATE tasks
+            SET schedule_mode = 'interval',
+                interval_seconds = 15,
+                next_run = NULL,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE name IN ('monitor_enqueue_refresh', 'media_jobs_worker')
+              AND (
+                    interval_seconds IS NULL
+                 OR interval_seconds IN (60, 120, 180)
+              )
+            """
+        )
+        cursor.execute(
+            """
+            UPDATE tasks
+            SET schedule_mode = 'interval',
+                interval_seconds = 15,
+                next_run = NULL,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE name = 'stream_enforcer'
+              AND (
+                    interval_seconds IS NULL
+                 OR interval_seconds IN (15, 60, 120)
+              )
+            """
         )
         conn.commit()
 
@@ -3576,6 +3639,3 @@ def run_migrations():
 if __name__ == "__main__":
     run_migrations()
     #ensure_settings_defaults(cursor)
-
-
-

@@ -24,6 +24,12 @@ document.addEventListener("DOMContentLoaded", function () {
 
   let saveTimer = null;
 
+  function csrfToken() {
+    const field = configForm ? configForm.querySelector('input[name="_csrf_token"]') : null;
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return (field && field.value) || (meta && meta.getAttribute("content")) || "";
+  }
+
   async function saveNow() {
     if (!configForm) {
       return;
@@ -31,9 +37,12 @@ document.addEventListener("DOMContentLoaded", function () {
     setStatus("Saving...");
 
     try {
-      const response = await fetch(configForm.action, {
+      const response = await fetch(configForm.getAttribute("action") || window.location.href, {
         method: "POST",
-        headers: { "X-Requested-With": "XMLHttpRequest" },
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          "X-CSRF-Token": csrfToken(),
+        },
         body: new FormData(configForm),
         credentials: "same-origin",
       });

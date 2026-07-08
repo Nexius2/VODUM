@@ -15,6 +15,33 @@ LEASE_SECONDS = 120          # durée du lock
 MAX_BATCH = 20               # jobs max par run
 TIME_BUDGET_SECONDS = 25     # temps max par run (évite chevauchements)
 
+def _enqueue_stream_enforcer(db) -> bool:
+    row = db.query_one("""
+        SELECT id, enabled, status, queued_count
+        FROM tasks
+        WHERE name = 'stream_enforcer'
+        LIMIT 1
+    """)
+    if not row or not int(row["enabled"] or 0):
+        return False
+
+    status = str(row["status"] or "").lower()
+    queued_count = int(row["queued_count"] or 0)
+    if status == "running" or queued_count > 0:
+        return False
+
+    cur = db.execute("""
+        UPDATE tasks
+        SET queued_count = 1,
+            status = 'queued',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+          AND enabled = 1
+          AND COALESCE(queued_count, 0) = 0
+          AND COALESCE(status, '') != 'running'
+    """, (int(row["id"]),))
+    return int(getattr(cur, "rowcount", 0) or 0) == 1
+
 
 def _utcnow():
     return datetime.now(timezone.utc)
@@ -273,6 +300,13 @@ def run(task_id, db):
     except Exception as e:
         snapshot = {"error": str(e)}
 
+    stream_enforcer_enqueued = False
+    if processed > 0 and sessions_seen > 0:
+        try:
+            stream_enforcer_enqueued = _enqueue_stream_enforcer(db)
+        except Exception:
+            stream_enforcer_enqueued = False
+
     queued_left_row = db.query_one("""
         SELECT COUNT(*) AS c
         FROM media_jobs
@@ -300,5 +334,6 @@ def run(task_id, db):
         "processed_servers": processed_servers,
         "queued_left": queued_left,
         "running_left": running_left,
+        "stream_enforcer_enqueued": stream_enforcer_enqueued,
         "snapshot": snapshot,
     }

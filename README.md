@@ -18,7 +18,7 @@ Manage users, subscriptions, permissions, monitoring, stream policies, migration
 </a>
 
 <a href="https://github.com/Nexius2/VODUM/blob/main/LICENSE">
-<img src="https://img.shields.io/github/license/Nexius2/VODUM?style=for-the-badge">
+    <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge">
 </a>
 
 <a href="https://hub.docker.com/r/nexius2/vodum">
@@ -30,7 +30,6 @@ Manage users, subscriptions, permissions, monitoring, stream policies, migration
 </a>
 
 <a href="https://discord.gg/5PU7TnegZt">
-<img src="https://img.shields.io/discord/1468541673184296962?style=for-the-badge&logo=discord">
 </a>
 
 </p>
@@ -39,7 +38,7 @@ Manage users, subscriptions, permissions, monitoring, stream policies, migration
 
 <p align="center">
 
-**Plex • Jellyfin • Docker • Multi-Server • Subscription Management • Live Monitoring • Stream Policies • Email & Discord • Automatic Backups • Open Source**
+**Plex • Jellyfin • Multi-Server • Subscription Management • Live Monitoring • Stream Policies • Email & Discord • Automatic Backups • Open Source**
 
 </p>
 
@@ -610,6 +609,8 @@ python -m compileall -q app migrations tools
 python tools/smoke_routes.py
 
 python tools/smoke_application_runtime.py
+
+python app/tasks/import_tautulli.py --summary-only --help
 ```
 
 ---
