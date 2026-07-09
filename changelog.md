@@ -141,6 +141,8 @@ All notable changes to Vodum will be documented in this file.
 - Limit Communications settings queries to the columns required for template actions, test campaigns, and Email/Discord configuration.
 - Reduce user detail settings queries to explicit columns used by the page and save handler.
 - Reduce the Users list settings query to the single setting needed by the page instead of loading the full settings row.
+- Added qrcode for 2fa
+- Added ui for mobile
 
 
 

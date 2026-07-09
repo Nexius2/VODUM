@@ -151,9 +151,67 @@ Derniere mise a jour: 2026-07-07
   Les retries et les logs d'erreur de base existent deja.
 -[ ] controle du mecanisme de log, ajout au endroit manquant, controle du system de log en mode debug 
 
-## P6 - Partie utilisateur et ouverture externe
+## P7 Revoir l'ui pour les mobile 
 
-- [ ] revoir l'ui pour les mobile (autre ui simplifié?). lors de l'acces via le net (souvent via mobile, les card sont mal placé, le texte depasse, bref rien d'adapté a un mobile. il faut pouvoir y acceder via mobile, don cpeut etre une ui dedié.
+	## Mobile responsive UI
+	- Review all pages on mobile width.
+	- Keep one responsive UI, no separate mobile app/UI.
+
+	### Global layout
+	- Verify desktop sidebar remains unchanged.
+	- Verify mobile menu opens/closes correctly.
+	- Close mobile menu on backdrop click, Escape key, and nav click.
+	- Reduce mobile padding: `p-4` mobile, `md:p-6` desktop.
+	- Prevent horizontal page overflow globally.
+
+	### Tables
+	- Wrap every large table in `overflow-x-auto`.
+	- Ensure tables keep readable minimum width.
+	- Check Users, Monitoring, Communication History, Logs, Tasks, Servers, Libraries.
+
+	### Buttons / actions
+	- Make action button groups wrap on mobile.
+	- Use `flex-wrap gap-2`.
+	- Avoid fixed-width buttons that overflow.
+	- Ensure forms/buttons stay tappable on iPhone.
+
+	### Dashboard
+	- Verify all cards stack correctly on mobile.
+	- Force 1-column layout on mobile.
+	- Keep multi-column layout only on `md`, `lg`, or `xl`.
+	- Check Now Playing, Users, Tasks, Servers, Latest logs, Usage Risk.
+
+	### Forms
+	- Inputs/selects/textareas must use full width on mobile.
+	- Multi-column forms should become one column on mobile.
+	- Check Settings, Servers, Users edit, Communications.
+
+	### Modals
+	- Modals must fit mobile screen.
+	- Add max height and internal scroll if needed.
+	- Avoid modals wider than viewport.
+
+	### Text / badges
+	- Long usernames, emails, server names, IPs must wrap or truncate.
+	- Badges should wrap instead of overflowing.
+	- Check Now Playing and user detail pages.
+
+	### Mobile priority pages
+	1. Dashboard
+	2. Users list
+	3. User detail
+	4. Monitoring / Now Playing
+	5. Communication History
+	6. Settings
+	7. Servers
+	8. Logs / Tasks
+
+	### Rule
+	- Do not change backend logic, routes, translations, permissions, or database schema.
+	- Desktop UI must stay visually unchanged.
+
+## P8 - Partie utilisateur et ouverture externe
+
 - [ ] Permettre au compte admin de se connecter via un compte Plex.
 - [ ] Creer un acces web utilisateur configurable depuis un nouveau menu admin.
   - Login possible via compte admin, Plex, Jellyfin ou email standard selon les

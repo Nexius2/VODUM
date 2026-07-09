@@ -6,6 +6,52 @@
 
 // Artwork is also injected by HTMX, so handle failures at document level.
 // This prevents broken-image icons or alt text from shifting a media card.
+
+// ------------ MOBILE MENU ---------------------------------
+
+function initMobileMenu() {
+  const menu = document.getElementById("mobileMenu");
+  const openBtn = document.getElementById("mobileMenuOpen");
+  const closeBtn = document.getElementById("mobileMenuClose");
+  const backdrop = document.getElementById("mobileMenuBackdrop");
+  const mobileNav = document.getElementById("mobileMenuNav");
+  const desktopNav = document.querySelector("#desktopSidebar nav");
+
+  if (!menu || !openBtn || !closeBtn || !backdrop || !mobileNav || !desktopNav) return;
+
+  if (!mobileNav.dataset.ready) {
+    mobileNav.innerHTML = desktopNav.innerHTML;
+    mobileNav.dataset.ready = "1";
+
+    mobileNav.querySelectorAll("a").forEach((link) => {
+      link.addEventListener("click", () => {
+        menu.classList.add("hidden");
+        document.body.classList.remove("overflow-hidden");
+      });
+    });
+  }
+
+  function openMenu() {
+    menu.classList.remove("hidden");
+    document.body.classList.add("overflow-hidden");
+  }
+
+  function closeMenu() {
+    menu.classList.add("hidden");
+    document.body.classList.remove("overflow-hidden");
+  }
+
+  openBtn.addEventListener("click", openMenu);
+  closeBtn.addEventListener("click", closeMenu);
+  backdrop.addEventListener("click", closeMenu);
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeMenu();
+  });
+}
+
+document.addEventListener("DOMContentLoaded", initMobileMenu);
+
 document.addEventListener("error", (event) => {
   const image = event.target;
   if (image instanceof HTMLImageElement && image.classList.contains("js-artwork-image")) {

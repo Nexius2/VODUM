@@ -69,3 +69,131 @@
     .flatpickr-current-month .numInputWrapper span.arrowDown:after {
       border-top-color: #94a3b8 !important;
     }
+
+/* Mobile responsive safety */
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+main {
+  min-width: 0;
+}
+
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
+}
+
+table {
+  min-width: max-content;
+}
+
+@media (max-width: 767px) {
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  header h1 {
+    font-size: 1.05rem;
+    line-height: 1.35rem;
+  }
+
+  header [type="submit"],
+  header button,
+  header a {
+    max-width: 100%;
+  }
+
+  .grid {
+    min-width: 0;
+  }
+}
+
+@media (min-width: 768px) {
+  #desktopSidebar {
+    display: flex !important;
+  }
+
+  .md\:flex {
+    display: flex !important;
+  }
+}
+@media (max-width: 767px) {
+  body {
+    width: 100%;
+  }
+
+  main,
+  main > * {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  table {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  th,
+  td,
+  a,
+  p,
+  span,
+  code,
+  pre {
+    overflow-wrap: anywhere;
+  }
+
+  form,
+  fieldset,
+  label,
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    max-width: 100%;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    width: 100%;
+  }
+
+  main .flex,
+  header .flex,
+  header [class*="header_actions"] {
+    min-width: 0;
+  }
+
+  main .flex.gap-2:not(.flex-col),
+  main .flex.gap-3:not(.flex-col),
+  main .flex.gap-4:not(.flex-col),
+  main .flex.items-center.justify-between:not(.flex-col),
+  header .flex.gap-2:not(.flex-col),
+  header .flex.gap-3:not(.flex-col),
+  header .flex.items-center.justify-between:not(.flex-col) {
+    flex-wrap: wrap;
+  }
+
+  button,
+  [role="button"],
+  .inline-flex {
+    max-width: 100%;
+  }
+
+  [role="dialog"],
+  .modal,
+  [data-modal] {
+    max-width: calc(100vw - 2rem);
+    max-height: calc(100dvh - 2rem);
+    overflow: auto;
+  }
+}
