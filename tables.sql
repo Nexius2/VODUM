@@ -806,6 +806,9 @@ ON media_session_history(media_user_id, started_at);
 CREATE INDEX IF NOT EXISTS idx_msh_media_time
 ON media_session_history(media_key, started_at);
 
+CREATE INDEX IF NOT EXISTS idx_msh_stopped_media_type
+ON media_session_history(stopped_at, media_type);
+
 CREATE INDEX IF NOT EXISTS idx_hist_user_stopped ON media_session_history(media_user_id, stopped_at);
 CREATE INDEX IF NOT EXISTS idx_hist_server_stopped ON media_session_history(server_id, stopped_at);
 
@@ -922,6 +925,10 @@ CREATE INDEX IF NOT EXISTS idx_stream_enforcements_time
 ON stream_enforcements(created_at);
 CREATE INDEX IF NOT EXISTS idx_stream_enforcements_server
 ON stream_enforcements(server_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_stream_enforcements_vodum_user_created
+ON stream_enforcements(vodum_user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_stream_enforcements_external_user_created
+ON stream_enforcements(external_user_id, created_at);
 
 
 -----------------------------------------------------------------------

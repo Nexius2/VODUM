@@ -5,10 +5,23 @@
   <title>{% block title %}VODUM{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="csrf-token" content="{{ csrf_token }}">
+
+  <!-- Browser icons -->
   <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icon.png', v=g.app_version|default('dev')) }}">
-  <link rel="icon" type="image/png" sizes="96x96" href="{{ url_for('static', filename='icon.png', v=g.app_version|default('dev')) }}">
-  <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icon.png', v=g.app_version|default('dev')) }}">
-  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/logo.svg', v=g.app_version|default('dev')) }}">
+
+  <!-- iOS Home Screen icon -->
+  <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='img/apple-touch-icon.png', v=g.app_version|default('dev')) }}">
+
+  <!-- Android / PWA icons -->
+  <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='img/icons/icon-192.png', v=g.app_version|default('dev')) }}">
+  <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='img/icons/icon-512.png', v=g.app_version|default('dev')) }}">
+
+  <!-- PWA -->
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.json', v=g.app_version|default('dev')) }}">
+  <meta name="theme-color" content="#020617">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="VODUM">
 
   <script src="{{ url_for('static', filename='vendor/htmx/htmx.min.js', v=g.app_version|default('dev')) }}"></script>
 

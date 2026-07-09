@@ -38,7 +38,7 @@ Manage users, subscriptions, permissions, monitoring, stream policies, migration
 
 <p align="center">
 
-**Plex • Jellyfin • Docker • Multi-Server • Subscription Management • Live Monitoring • Stream Policies • Email & Discord • Automatic Backups • Open Source**
+**Plex • Jellyfin • Multi-Server • Subscription Management • Live Monitoring • Stream Policies • Email & Discord • Automatic Backups • Open Source**
 
 </p>
 
@@ -609,6 +609,8 @@ python -m compileall -q app migrations tools
 python tools/smoke_routes.py
 
 python tools/smoke_application_runtime.py
+
+python app/tasks/import_tautulli.py --summary-only --help
 ```
 
 ---

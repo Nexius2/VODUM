@@ -1,0 +1,16 @@
+<div class="animate-pulse" aria-busy="true">
+    <div class="flex items-center justify-between mb-3">
+        <div class="h-4 w-24 rounded bg-slate-800"></div>
+        <div class="h-3 w-20 rounded bg-slate-800"></div>
+    </div>
+    <div class="space-y-2">
+        {% for _ in range(5) %}
+            <div class="rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2">
+                <div class="flex items-center justify-between gap-3">
+                    <div class="h-3 w-40 max-w-[60%] rounded bg-slate-800"></div>
+                    <div class="h-3 w-24 rounded bg-slate-800"></div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+</div>

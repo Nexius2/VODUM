@@ -1936,5 +1936,10 @@
   "settings_communication_language_help": "Idioma predeterminado para emails y mensajes de Discord enviados a usuarios. Es independiente del idioma de la interfaz de administracion.",
   "comm_template_language": "Idioma de la plantilla",
   "comm_template_language_help": "Edita solo el asunto y el cuerpo de este idioma de la plantilla.",
-  "settings_ui_language": "Idioma de la interfaz"
+  "settings_ui_language": "Idioma de la interfaz",
+  "shows": "Series",
+  "music": "Música",
+  "totp_scan_qr": "Escanear código QR",
+  "totp_qr_help": "Escanea este código QR con Google Authenticator, Microsoft Authenticator, Bitwarden u otra aplicación TOTP.",
+  "totp_manual_key": "Clave manual"
 }

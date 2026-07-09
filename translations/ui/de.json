@@ -1936,5 +1936,10 @@
   "settings_communication_language_help": "Standardsprache fuer E-Mails und Discord-Nachrichten an Benutzer. Unabhaengig von der Sprache der Admin-Oberflaeche.",
   "comm_template_language": "Template-Sprache",
   "comm_template_language_help": "Bearbeitet nur Betreff und Inhalt dieser Template-Sprache.",
-  "settings_ui_language": "Sprache der Oberflaeche"
+  "settings_ui_language": "Sprache der Oberflaeche",
+  "shows": "Serien",
+  "music": "Musik",
+  "totp_scan_qr": "QR-Code scannen",
+  "totp_qr_help": "Scannen Sie diesen QR-Code mit Google Authenticator, Microsoft Authenticator, Bitwarden oder einer anderen TOTP-App.",
+  "totp_manual_key": "Manueller Schlüssel"
 }

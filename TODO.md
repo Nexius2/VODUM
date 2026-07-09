@@ -21,14 +21,7 @@ Derniere mise a jour: 2026-07-07
   instance reelle. Les garde-fous existent, il reste la validation terrain.
 - [~] Valider les campagnes Migrations sur de grandes instances reelles Plex et
   Jellyfin avant d'activer davantage d'automatisations destructives.
-
-## P0 bis - bugs / correction a faire
-
-- [ ] dans servers & libraries, quand je clic sur un serveur, donc ca doit etre dans servers_details, j'ai la liste des utilisateurs. probleme, la liste peut monté a plus de 100 users. il faut que la card users with access to this serveur soit limité a 20 lignes avec un next/previous page.
-- [ ] dans servers & libraries, libraries, le type de media peut etre different entre plex et jellyfin (tvshows ou shows) il faut uniformiser ça
-- [ ] dans servers & libraries, libraries, il est possible d'avoir quelques centaines de libraries, il faut limité a 20 lignes et avoir un next/previous page.
-- [ ] dans servers & libraries, libraries, il faut pouvoir trier les colonnes par nom de colonne.trie par server par defaut
-
+-[ ] ajouter une case Remember this device for 30 days dans les settings au niveau du 2fa pour eviter de l'avoir trop souvent en local uniquement.
 
 ## P1 - Performance UI et experience percue
 
@@ -83,6 +76,7 @@ Derniere mise a jour: 2026-07-07
     fetch.
   - Ajouter un timeout/fallback par widget pour qu'une aggregation lente ne
     bloque pas toute la page.
+  - Deja fait: Now Playing et Next Tasks utilisent des endpoints partiels avec skeleton au rendu initial.
 
 ### Listes et layout stable
 
@@ -111,11 +105,6 @@ Derniere mise a jour: 2026-07-07
   - `vodum_users(username COLLATE NOCASE)` ou index expression `LOWER(username)`.
   - `vodum_users(email COLLATE NOCASE)` si recherche email frequente.
   - `user_referrals(status, start_at)` pour l'onglet referrals.
-  - `stream_enforcements(vodum_user_id, created_at)` et
-    `stream_enforcements(external_user_id, created_at)` pour
-    `/monitoring/policies/enforcements/by-user`.
-  - `media_session_history(stopped_at, media_type)` si les tops movies/series
-    restent lourds.
 
 - [ ] Ajouter un dashboard avance oriente exploitation: etat global, files de
   jobs, echecs recents, sante providers et indicateurs d'action. ( a voir si interessant et/ou comment l'integrer a l'actuel)
@@ -160,9 +149,11 @@ Derniere mise a jour: 2026-07-07
 - [ ] Enrichir les notifications Discord: meilleure gestion des erreurs,
   diagnostics admin, templates/campagnes plus explicites et usages avances.
   Les retries et les logs d'erreur de base existent deja.
+-[ ] controle du mecanisme de log, ajout au endroit manquant, controle du system de log en mode debug 
 
 ## P6 - Partie utilisateur et ouverture externe
 
+- [ ] revoir l'ui pour les mobile (autre ui simplifié?). lors de l'acces via le net (souvent via mobile, les card sont mal placé, le texte depasse, bref rien d'adapté a un mobile. il faut pouvoir y acceder via mobile, don cpeut etre une ui dedié.
 - [ ] Permettre au compte admin de se connecter via un compte Plex.
 - [ ] Creer un acces web utilisateur configurable depuis un nouveau menu admin.
   - Login possible via compte admin, Plex, Jellyfin ou email standard selon les
@@ -176,6 +167,7 @@ Derniere mise a jour: 2026-07-07
   utilisateurs.
 - [ ] Ajouter une API publique apres cadrage: quoi exposer, pourquoi, securite,
   quotas et authentification.
+- [ ] amelioration de la creation user / mail d'invitation sur le web user vodum pour gestion / creation automatique ou controlé, aidé de compte user sur plex & jellyfin / lien fourni au user pour telecharger le lecteur media et le configurer, etc....
 
 ## Notes de prudence
 

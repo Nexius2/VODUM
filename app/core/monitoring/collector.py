@@ -27,7 +27,8 @@ _COLLECT_ERROR_THROTTLE_SECONDS = 300  # 5 minutes
 # Délai de grâce avant de considérer une session comme réellement stoppée.
 # Cela évite qu'un timeout Plex/Jellyfin fasse disparaître temporairement
 # toutes les lectures en cours.
-_SESSION_MISSING_GRACE_SECONDS = 30
+_SESSION_MISSING_GRACE_SECONDS = 10
+_SESSION_MISSING_CONFIRM_POLLS = 1
 
 
 class AttrDict(dict):
@@ -764,8 +765,8 @@ def collect_sessions_for_server(
 
             missing = int(row["missing_count"] or 0) if row else 0
 
-            # tolérance : 3 cycles avant suppression
-            if missing < 3:
+            # tolerance: confirmed successful miss before stop/history cleanup
+            if missing < _SESSION_MISSING_CONFIRM_POLLS:
                 continue
 
             live = db.query_one(

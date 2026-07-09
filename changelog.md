@@ -6,6 +6,18 @@ All notable changes to Vodum will be documented in this file.
 
 ## Unreleased
 
+- Defer dashboard Now Playing and Next Tasks widget content behind HTMX-loaded skeletons to reduce initial dashboard work.
+
+- Stabilize dashboard Now Playing card ordering so active sessions no longer jump between refreshes.
+
+- Add a media session history stopped/media-type index for faster monitoring top media queries.
+
+- Parse Plex websocket notification containers, refresh Now Playing immediately on playback state events, and shorten stop cleanup latency.
+
+- Add stream enforcement user/date indexes for faster per-user policy enforcement history lookups.
+
+- Add pagination, sorting, and normalized media type labels to Servers & Libraries lists and server detail access lists.
+
 - Move UI translation loading and validation to `translations/ui`, document the split in `translations/README.md`, and remove the legacy `lang/` catalogs from the repo.
 
 - Add a dedicated communication-language layer with `translations/communication`, localized generated policy text, per-template language storage, a Communications > Configuration default, and future per-user language support.

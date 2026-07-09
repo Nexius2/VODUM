@@ -207,7 +207,6 @@ def register(app):
                 "offline": int(offline),
             }
 
-        dashboard_tasks = _get_dashboard_next_tasks(db)
 
         # --------------------------
         # TASK STATS
@@ -425,17 +424,6 @@ def register(app):
 
         latest_logs = latest_logs[:10]
 
-        now_playing = load_dashboard_now_playing(db)
-        sessions = now_playing["sessions"]
-        total_live = now_playing["total_live"]
-        total_transcode = now_playing["total_transcode"]
-        now_playing_stale = now_playing["stale_fallback"]
-        sessions = [enrich_live_session_artwork(s, db) for s in sessions]
-
-
-        idle_card = None
-        if total_live <= 0:
-            idle_card = build_dashboard_quote_card()
 
 
         # --------------------------
@@ -454,13 +442,7 @@ def register(app):
             users_stats=users_stats,
             servers=servers,
             dashboard_servers=dashboard_servers,
-            dashboard_tasks=dashboard_tasks,
             latest_logs=latest_logs,
-            sessions=sessions,
-            total_live=total_live,
-            total_transcode=total_transcode,
-            now_playing_stale=now_playing_stale,
-            idle_card=idle_card,
             active_page="dashboard",
         ))
 
@@ -473,7 +455,6 @@ def register(app):
             "dashboard/partials/_next_tasks.html",
             dashboard_tasks=dashboard_tasks,
         ))
-
     @app.route("/dashboard/_now_playing")
     def dashboard_now_playing_partial():
         db = get_db()
@@ -487,7 +468,6 @@ def register(app):
         idle_card = None
         if total_live <= 0:
             idle_card = build_dashboard_quote_card()
-
 
         return _no_store_response(render_template(
             "dashboard/partials/_now_playing.html",

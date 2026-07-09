@@ -160,6 +160,8 @@ def run_migrations():
     ensure_column(cursor, "stream_enforcements", "account_username", "TEXT")
     ensure_column(cursor, "stream_enforcements", "ips_json", "TEXT")
     ensure_column(cursor, "stream_enforcements", "details_json", "TEXT")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_stream_enforcements_vodum_user_created ON stream_enforcements(vodum_user_id, created_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_stream_enforcements_external_user_created ON stream_enforcements(external_user_id, created_at)")
 
     # -------------------------------------------------
     # 0.3 Tautulli import jobs
@@ -356,7 +358,7 @@ def run_migrations():
             schedule_mode = 'interval',
             interval_seconds = CASE
                 WHEN name = 'stream_enforcer' THEN 15
-                ELSE 60
+                ELSE 15
             END
         WHERE name IN (
             'monitor_enqueue_refresh',
@@ -2202,6 +2204,7 @@ def run_migrations():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_msh_time ON media_session_history(started_at, stopped_at)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_msh_user_time ON media_session_history(media_user_id, started_at)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_msh_media_time ON media_session_history(media_key, started_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_msh_stopped_media_type ON media_session_history(stopped_at, media_type)")
 
     # Unique dedup index (required by collector upserts / imports)
     try:
@@ -3342,7 +3345,7 @@ def run_migrations():
     # ensure_row() only inserts missing tasks.
     # This migration updates existing installs when Vodum changes default schedules,
     # without overwriting admin-customized schedules.
-    TASK_DEFAULTS_VERSION = 3
+    TASK_DEFAULTS_VERSION = 4
 
     TASK_SCHEDULE_DEFAULTS = {
         "sync_plex": "7 */6 * * *",
@@ -3427,6 +3430,37 @@ def run_migrations():
             WHERE id = 1
             """,
             (TASK_DEFAULTS_VERSION,),
+        )
+        conn.commit()
+
+    if current_task_defaults_version < 4:
+        cursor.execute(
+            """
+            UPDATE tasks
+            SET schedule_mode = 'interval',
+                interval_seconds = 15,
+                next_run = NULL,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE name IN ('monitor_enqueue_refresh', 'media_jobs_worker')
+              AND (
+                    interval_seconds IS NULL
+                 OR interval_seconds IN (60, 120, 180)
+              )
+            """
+        )
+        cursor.execute(
+            """
+            UPDATE tasks
+            SET schedule_mode = 'interval',
+                interval_seconds = 15,
+                next_run = NULL,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE name = 'stream_enforcer'
+              AND (
+                    interval_seconds IS NULL
+                 OR interval_seconds IN (15, 60, 120)
+              )
+            """
         )
         conn.commit()
 

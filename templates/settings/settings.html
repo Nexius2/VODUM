@@ -73,10 +73,26 @@
               <div class="text-xs text-slate-400 mb-1">{{ t("totp_secret") }}</div>
               <code class="block text-sm text-emerald-300 break-all">{{ pending_totp_secret }}</code>
             </div>
-            <div>
-              <div class="text-xs text-slate-400 mb-1">{{ t("totp_uri") }}</div>
-              <code class="block text-xs text-slate-300 break-all">{{ pending_totp_uri }}</code>
-            </div>
+			<div>
+			  <div class="text-xs text-slate-400 mb-2">{{ t("totp_scan_qr") }}</div>
+
+			  <div class="flex flex-col md:flex-row gap-4 items-start">
+				<div class="bg-white rounded-lg p-3">
+				  <div id="totp-qr-code" class="w-[180px] h-[180px]"></div>
+				</div>
+
+				<div class="flex-1">
+				  <p class="text-xs text-slate-400 mb-3">
+					{{ t("totp_qr_help") }}
+				  </p>
+
+				  <div class="text-xs text-slate-400 mb-1">{{ t("totp_manual_key") }}</div>
+				  <code class="block text-sm text-emerald-300 break-all">{{ pending_totp_secret }}</code>
+
+				  <code id="totp-uri-value" class="hidden">{{ pending_totp_uri }}</code>
+				</div>
+			  </div>
+			</div>
             <div>
               <label class="block text-sm mb-1 text-slate-300">{{ t("totp_code") }}</label>
               <input type="text" name="totp_code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
@@ -96,5 +112,6 @@
 
 {% block scripts %}
   {{ super() }}
+  <script src="{{ url_for('static', filename='vendor/qrcode/qrcode.min.js', v=g.app_version|default('dev')) }}"></script>
   <script src="{{ url_for('static', filename='js/pages/settings.js', v=g.app_version|default('dev')) }}"></script>
 {% endblock %}
