@@ -5,7 +5,7 @@ import json
 import os
 from typing import Callable, Dict, Optional
 
-from flask import session, redirect, url_for, request, current_app
+from flask import session, redirect, url_for, request, current_app, has_request_context
 from logging_utils import get_logger, is_debug_mode_enabled
 from web.security import safe_redirect_target
 
@@ -192,10 +192,28 @@ def _resolve_active_language(settings: Optional[dict] = None) -> str:
     return available_langs[0]
 
 
+def _load_request_language_settings() -> Optional[dict]:
+    if not has_request_context():
+        return None
+
+    try:
+        from web.helpers import get_db
+
+        row = get_db().query_one("SELECT default_language FROM settings WHERE id = 1")
+        return dict(row) if row else None
+    except Exception as e:
+        get_logger("i18n").warning(
+            f"[i18n] Impossible de charger la langue UI depuis les settings: {e}",
+            exc_info=True,
+        )
+        return None
+
+
 def get_translator(settings: Optional[dict] = None):
     logger = get_logger("i18n")
 
-    lang = _resolve_active_language(settings)
+    effective_settings = settings if settings is not None else _load_request_language_settings()
+    lang = _resolve_active_language(effective_settings)
 
     try:
         translations = load_language_dict(lang)

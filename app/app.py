@@ -14,6 +14,7 @@ from logging_utils import get_logger
 task_logger = get_logger("app")
 from db_manager import DBManager, open_sqlite_connection
 from core.backup import BackupConfig
+from core.session_security import VodumSessionInterface
 from core.i18n import init_i18n
 from core.repair.plex_media_users_repair import run_repair_if_needed
 from core.monitoring.plex_websocket import PlexWebsocketClient
@@ -410,6 +411,7 @@ def create_app():
             g.update_pending_days = 0
 
     app.config.from_object(Config)
+    app.session_interface = VodumSessionInterface()
     static_max_age = _env_int("VODUM_STATIC_MAX_AGE_SECONDS", 60 * 60 * 24 * 30, minimum=0)
     app.config["SEND_FILE_MAX_AGE_DEFAULT"] = timedelta(seconds=max(0, static_max_age))
 

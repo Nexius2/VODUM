@@ -1024,6 +1024,7 @@ def run_migrations():
     ensure_column(cursor, "settings", "auth_enabled", "INTEGER DEFAULT 1")
     ensure_column(cursor, "settings", "admin_totp_enabled", "INTEGER DEFAULT 0")
     ensure_column(cursor, "settings", "admin_totp_secret", "TEXT DEFAULT NULL")
+    ensure_column(cursor, "settings", "admin_totp_local_trust_enabled", "INTEGER DEFAULT 0")
     ensure_column(cursor, "settings", "wizard_active", "INTEGER DEFAULT NULL")
     ensure_column(cursor, "settings", "wizard_completed", "INTEGER DEFAULT NULL")
     ensure_column(cursor, "settings", "wizard_step", "INTEGER DEFAULT 1")

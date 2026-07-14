@@ -67,6 +67,15 @@
           </span>
         </label>
 
+        {% if settings.admin_totp_enabled %}
+          <label class="flex items-start gap-3 text-sm text-slate-300 cursor-pointer mt-4 pl-7">
+            <input type="checkbox" name="admin_totp_local_trust_enabled" value="1" {% if settings.admin_totp_local_trust_enabled %}checked{% endif %} class="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-800">
+            <span>
+              <span class="block text-slate-200">{{ t("totp_local_trust_30_days") }}</span>
+              <span class="block text-xs text-slate-500 mt-1">{{ t("totp_local_trust_30_days_help") }}</span>
+            </span>
+          </label>
+        {% endif %}
         {% if not settings.admin_totp_enabled %}
           <div class="mt-4 rounded-lg border border-slate-800 bg-slate-950 p-3 space-y-3">
             <div>

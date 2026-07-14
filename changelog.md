@@ -6,6 +6,24 @@ All notable changes to Vodum will be documented in this file.
 
 ## Unreleased
 
+- Fix local HTTP admin login when secure cookies are enabled by relaxing session cookie `Secure`/`SameSite=None` behavior only for non-HTTPS local requests.
+
+- Add a local 2FA trust option that, when 2FA is enabled, lets private/local IP browsers skip the 2FA prompt for 30 days after a successful 2FA login.
+
+- Preserve SMTP, OAuth, and Discord secrets during Communications autosave when password/token fields are left blank, and prevent browser autofill from showing stale secret values.
+
+- Normalize SMTP authentication so OAuth2 falls back to password authentication when no OAuth access token is configured but a password/app password is available.
+
+- Add real Email and Discord test actions from Communications settings, including decrypted Discord-token fallback for testing an already saved bot token.
+
+- Add a visible Communications settings action to retry scheduled communications in error, with pending/error counts and automatic send-task wakeup.
+
+- Fix admin flash message language resolution so route-side notifications follow the configured UI language before falling back to the browser language.
+
+- Translate remaining admin auth/security flash messages and standalone login/setup/wizard flash rendering.
+
+- Replace remaining native alert/debug console output in user flows with VODUM flash UI or remove it.
+
 - Defer dashboard Now Playing and Next Tasks widget content behind HTMX-loaded skeletons to reduce initial dashboard work.
 
 - Stabilize dashboard Now Playing card ordering so active sessions no longer jump between refreshes.

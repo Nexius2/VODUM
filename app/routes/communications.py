@@ -6,6 +6,7 @@ from mailing_utils import build_user_context, render_mail
 
 from core.i18n import get_translator
 from core.communication_i18n import communication_language_options, normalize_communication_language
+from core.smtp_settings import normalize_smtp_auth_method
 from core.communications_recovery import retry_failed_scheduled_communications
 from core.communications.default_templates import (
     is_stream_blocked_template,
@@ -17,9 +18,10 @@ from core.communications.rules import (
     normalize_campaign_targets,
 )
 from web.helpers import get_db, add_log, send_email_via_settings
+from email_sender import send_email
 from discord_utils import validate_discord_bot_token
 from notifications_utils import parse_notifications_order
-from secret_store import encrypt_secret
+from secret_store import encrypt_secret, decrypt_secret
 
 from communications_engine import (
     store_uploads,
@@ -56,6 +58,12 @@ def _sanitize_notifications_order(raw: str) -> str:
     return ",".join(parts)
 
 
+
+
+def _encrypted_secret_from_form(raw_value, existing_value, *, empty_existing=None):
+    if raw_value is None or not str(raw_value).strip():
+        return existing_value if existing_value is not None else empty_existing
+    return encrypt_secret(str(raw_value).strip())
 
 
 def _selected_template_language(settings=None):
@@ -385,7 +393,7 @@ def register(app):
                     flash(t("comm_campaign_send_failed"), "error")
                     return redirect(url_for("communications_campaigns_page", load=cid))
 
-                flash("Test campaign queued.", "success")
+                flash(t("comm_test_campaign_queued"), "success")
                 return redirect(url_for("communications_campaigns_page", load=cid))
 
             queue_result = queue_campaign_delivery(
@@ -1199,14 +1207,24 @@ def register(app):
 
             # Safety: do not wipe secrets on auto-save if input is empty
             smtp_pass_raw = request.form.get("smtp_pass")
-            smtp_pass = encrypt_secret(smtp_pass_raw or "")
-            if smtp_pass_raw is not None and smtp_pass_raw.strip() == "":
-                smtp_pass = settings.get("smtp_pass") or ""
+            smtp_pass = _encrypted_secret_from_form(
+                smtp_pass_raw,
+                settings.get("smtp_pass"),
+                empty_existing="",
+            )
 
             smtp_oauth_token_raw = request.form.get("smtp_oauth_access_token")
-            smtp_oauth_access_token = encrypt_secret((smtp_oauth_token_raw or "").strip() or None)
-            if smtp_oauth_token_raw is not None and smtp_oauth_token_raw.strip() == "":
-                smtp_oauth_access_token = settings.get("smtp_oauth_access_token") or None
+            smtp_oauth_access_token = _encrypted_secret_from_form(
+                smtp_oauth_token_raw,
+                settings.get("smtp_oauth_access_token"),
+                empty_existing=None,
+            )
+            smtp_auth_method = normalize_smtp_auth_method(
+                smtp_auth_method,
+                settings,
+                smtp_pass,
+                smtp_oauth_access_token,
+            )
 
             # Discord
             discord_enabled = 1 if request.form.get("discord_enabled") == "1" else 0
@@ -1275,6 +1293,46 @@ def register(app):
             flash(t("comm_config_saved"), "success")
             return redirect(url_for("communications_configuration_page"))
 
+        if action == "test_email":
+            test_settings = db.query_one(
+                f"SELECT {COMM_CONFIG_SETTINGS_COLUMNS}, admin_email, contact_email FROM settings WHERE id = 1"
+            )
+            test_settings = dict(test_settings) if test_settings else {}
+            to_email = (
+                (test_settings.get("contact_email") or "").strip()
+                or (test_settings.get("admin_email") or "").strip()
+                or (test_settings.get("mail_from") or "").strip()
+            )
+            if not to_email:
+                flash(t("comm_test_failed").format(error=t("comm_missing_admin_email_short")), "error")
+                return redirect(url_for("communications_configuration_page"))
+
+            ok, error = send_email(
+                t("comm_test_email_subject"),
+                t("comm_test_email_body"),
+                to_email,
+                test_settings,
+            )
+            if ok:
+                flash(t("comm_test_ok"), "success")
+            else:
+                flash(t("comm_test_failed").format(error=error or t("comm_email_send_failed_short")), "error")
+            return redirect(url_for("communications_configuration_page"))
+
+        if action == "test_discord":
+            token = (request.form.get("discord_bot_token") or "").strip()
+            if not token:
+                try:
+                    token = (decrypt_secret(settings.get("discord_bot_token")) or "").strip()
+                except Exception as e:
+                    flash(t("comm_test_failed").format(error=str(e)), "error")
+                    return redirect(url_for("communications_configuration_page"))
+            ok, detail = validate_discord_bot_token(token)
+            if ok:
+                flash(t("comm_test_ok"), "success")
+            else:
+                flash(t("comm_test_failed").format(error=detail), "error")
+            return redirect(url_for("communications_configuration_page"))
         # Queue retry of failed scheduled communications
         if action == "retry_scheduled_errors":
             try:
@@ -1307,9 +1365,19 @@ def register(app):
         settings["smtp_pass"] = ""
         settings["smtp_oauth_access_token"] = ""
         settings["discord_bot_token"] = ""
+        queue_row = db.query_one(
+            """
+            SELECT
+              SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending,
+              SUM(CASE WHEN status='error' THEN 1 ELSE 0 END) AS errors
+            FROM comm_scheduled
+            """
+        ) or {}
+        queue_summary = {key: int(value or 0) for key, value in dict(queue_row).items()}
         return render_template(
             "communications/communications_configuration.html",
             settings=settings,
             current_subpage="configuration",
             communication_languages=communication_language_options(),
+            queue_summary=queue_summary,
         )

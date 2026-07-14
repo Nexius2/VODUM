@@ -4,7 +4,7 @@ import os
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-from flask import render_template, request, redirect, url_for, flash, session
+from flask import render_template, request, redirect, url_for, flash, session, current_app
 
 from logging_utils import get_logger
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -14,6 +14,13 @@ from web.helpers import get_db, send_email_via_settings
 from web.security import safe_redirect_target
 from secret_store import decrypt_secret
 from core.auth_totp import verify_totp_code
+from core.i18n import get_translator
+from core.auth_local_trust import (
+    LOCAL_TOTP_COOKIE_NAME,
+    is_local_client_ip,
+    is_valid_local_totp_trust,
+    set_local_totp_trust_cookie,
+)
 
 auth_logger = get_logger("auth")
 
@@ -261,10 +268,7 @@ def _login_failed(db, email: str, client_ip: str, reason: str) -> None:
 
 def _login_locked_response(email: str, client_ip: str, remaining_seconds: int):
     remaining_minutes = max(1, math.ceil(remaining_seconds / 60))
-    flash(
-        f"Trop de tentatives de connexion. Réessayez dans {remaining_minutes} minute(s).",
-        "error",
-    )
+    flash(get_translator()("auth.login_too_many_attempts").format(minutes=remaining_minutes), "error")
     auth_logger.warning(
         "AUTH login blocked email=%s ip=%s remaining_seconds=%s ua=%s",
         email or "<empty>",
@@ -282,7 +286,7 @@ def register(app):
 
         # Legacy first-run screen retained for compatibility with old links.
         db = get_db()
-        s = db.query_one("SELECT admin_email, admin_password_hash, admin_totp_enabled, admin_totp_secret, wizard_active FROM settings WHERE id = 1")
+        s = db.query_one("SELECT admin_email, admin_password_hash, admin_totp_enabled, admin_totp_secret, admin_totp_local_trust_enabled, wizard_active FROM settings WHERE id = 1")
         s = dict(s) if s else {"admin_email": "", "admin_password_hash": None}
 
         # déjà configuré => go login/home
@@ -326,12 +330,12 @@ def register(app):
             or email.count("@") != 1
             or "." not in email.split("@", 1)[1]
         ):
-            flash("Un email admin valide est obligatoire.", "error")
+            flash(get_translator()("auth.admin_email_required"), "error")
             return redirect(url_for("setup_admin"))
 
         # Mot de passe strict
         if len(password) < 8:
-            flash("Mot de passe trop court (8 caractères minimum).", "error")
+            flash(get_translator()("auth.password_too_short"), "error")
             return redirect(url_for("setup_admin"))
 
         pwd_hash = generate_password_hash(password)
@@ -388,7 +392,7 @@ def register(app):
     @app.route("/login/submit", methods=["POST"])
     def login_submit():
         db = get_db()
-        s = db.query_one("SELECT admin_email, admin_password_hash, admin_totp_enabled, admin_totp_secret, wizard_active FROM settings WHERE id = 1")
+        s = db.query_one("SELECT admin_email, admin_password_hash, admin_totp_enabled, admin_totp_secret, admin_totp_local_trust_enabled, wizard_active FROM settings WHERE id = 1")
         s = dict(s) if s else {"admin_email": "", "admin_password_hash": None}
 
         if not (s.get("admin_password_hash") or "").strip():
@@ -411,21 +415,32 @@ def register(app):
         expected_email = (s.get("admin_email") or "").strip().lower()
         if not email or email != expected_email:
             _login_failed(db, email, client_ip, "bad_email")
-            flash("Email ou mot de passe incorrect.", "error")
+            flash(get_translator()("auth.invalid_credentials"), "error")
             return redirect(url_for("login"))
 
         if not check_password_hash(s["admin_password_hash"], password):
             _login_failed(db, email, client_ip, "bad_password")
-            flash("Email ou mot de passe incorrect.", "error")
+            flash(get_translator()("auth.invalid_credentials"), "error")
             return redirect(url_for("login"))
 
+        remember_local_totp = False
         if int(s.get("admin_totp_enabled") or 0) == 1:
-            totp_secret = decrypt_secret(s.get("admin_totp_secret"))
-            totp_code = request.form.get("totp_code") or ""
-            if not totp_secret or not verify_totp_code(totp_secret, totp_code):
-                _login_failed(db, email, client_ip, "bad_totp")
-                flash("Code double authentification incorrect.", "error")
-                return redirect(url_for("login"))
+            local_trust_enabled = int(s.get("admin_totp_local_trust_enabled") or 0) == 1
+            local_totp_trusted = local_trust_enabled and is_valid_local_totp_trust(
+                secret_key=current_app.secret_key,
+                admin_email=email,
+                stored_totp_secret=s.get("admin_totp_secret"),
+                client_ip=client_ip,
+                token=request.cookies.get(LOCAL_TOTP_COOKIE_NAME),
+            )
+            if not local_totp_trusted:
+                totp_secret = decrypt_secret(s.get("admin_totp_secret"))
+                totp_code = request.form.get("totp_code") or ""
+                if not totp_secret or not verify_totp_code(totp_secret, totp_code):
+                    _login_failed(db, email, client_ip, "bad_totp")
+                    flash(get_translator()("auth.invalid_totp"), "error")
+                    return redirect(url_for("login"))
+                remember_local_totp = local_trust_enabled and is_local_client_ip(client_ip)
 
         _reset_failed_login(db, "ip", client_ip)
         _reset_failed_login(db, "email", email)
@@ -437,14 +452,24 @@ def register(app):
 
         if int(s.get("wizard_active") or 0) == 1:
             auth_logger.info("AUTH login ok; resuming installation wizard for email=%s", email)
-            return redirect(url_for("setup_wizard"))
+            response = redirect(url_for("setup_wizard"))
+        else:
+            next_url = safe_redirect_target(
+                request.form.get("next") or request.args.get("next"),
+                url_for("dashboard"),
+            )
+            auth_logger.info("AUTH login ok email=%s ip=%s ua=%s", email, client_ip, request.user_agent.string)
+            response = redirect(next_url)
 
-        next_url = safe_redirect_target(
-            request.form.get("next") or request.args.get("next"),
-            url_for("dashboard"),
-        )
-        auth_logger.info("AUTH login ok email=%s ip=%s ua=%s", email, client_ip, request.user_agent.string)
-        return redirect(next_url)
+        if remember_local_totp:
+            set_local_totp_trust_cookie(
+                response,
+                secret_key=current_app.secret_key,
+                admin_email=email,
+                stored_totp_secret=s.get("admin_totp_secret"),
+                secure=request.is_secure,
+            )
+        return response
 
     @app.post("/logout")
     def logout():
