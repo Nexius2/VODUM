@@ -22,6 +22,27 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
+  const secretInputIds = ["smtp_pass", "smtp_oauth_access_token", "discord_bot_token"];
+
+  function resetSecretInputs() {
+    secretInputIds.forEach(function (id) {
+      const input = document.getElementById(id);
+      if (!input) return;
+      input.value = "";
+      input.type = "password";
+    });
+    const labels = {
+      toggle_pass: "Show",
+      toggle_oauth_token: "Show",
+      toggle_discord_token: "Show",
+    };
+    Object.keys(labels).forEach(function (id) {
+      const button = document.getElementById(id);
+      if (button) button.textContent = labels[id];
+    });
+  }
+
+  window.setTimeout(resetSecretInputs, 250);
   let saveTimer = null;
 
   function csrfToken() {
@@ -50,6 +71,7 @@ document.addEventListener("DOMContentLoaded", function () {
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
+      resetSecretInputs();
       setStatus("Saved");
       window.setTimeout(function () {
         setStatus("");

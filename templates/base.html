@@ -5,10 +5,23 @@
   <title>{% block title %}VODUM{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="csrf-token" content="{{ csrf_token }}">
+
+  <!-- Browser icons -->
   <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icon.png', v=g.app_version|default('dev')) }}">
-  <link rel="icon" type="image/png" sizes="96x96" href="{{ url_for('static', filename='icon.png', v=g.app_version|default('dev')) }}">
-  <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icon.png', v=g.app_version|default('dev')) }}">
-  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/logo.svg', v=g.app_version|default('dev')) }}">
+
+  <!-- iOS Home Screen icon -->
+  <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='img/apple-touch-icon.png', v=g.app_version|default('dev')) }}">
+
+  <!-- Android / PWA icons -->
+  <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='img/icons/icon-192.png', v=g.app_version|default('dev')) }}">
+  <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='img/icons/icon-512.png', v=g.app_version|default('dev')) }}">
+
+  <!-- PWA -->
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.json', v=g.app_version|default('dev')) }}">
+  <meta name="theme-color" content="#020617">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="VODUM">
 
   <script src="{{ url_for('static', filename='vendor/htmx/htmx.min.js', v=g.app_version|default('dev')) }}"></script>
 
@@ -34,9 +47,37 @@
     <symbol id="vodum-icon-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 11v6M12 7h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
     <symbol id="vodum-icon-logout" viewBox="0 0 24 24"><path d="M10 17l5-5-5-5M15 12H3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 3h4a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
   </svg>
-  <div class="min-h-screen flex">
-    <!-- Sidebar -->
-    <aside class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col sticky top-0 h-screen">
+<div class="min-h-screen md:flex">
+    <!-- Mobile top bar -->
+    <div class="md:hidden sticky top-0 z-40 h-14 bg-slate-950/95 border-b border-slate-800 backdrop-blur flex items-center justify-between px-4">
+      <span class="text-lg font-bold tracking-tight">{{ app_brand_name }}</span>
+      <button id="mobileMenuOpen"
+              type="button"
+              class="inline-flex items-center justify-center rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100">
+        &#9776;
+      </button>
+    </div>
+
+    <!-- Mobile menu -->
+    <div id="mobileMenu" class="fixed inset-0 z-50 hidden md:hidden">
+      <div id="mobileMenuBackdrop" class="absolute inset-0 bg-black/70"></div>
+
+      <div class="absolute left-0 top-0 h-full w-72 max-w-[85vw] bg-slate-900 border-r border-slate-800 flex flex-col">
+        <div class="h-14 flex items-center justify-between px-4 border-b border-slate-800">
+          <span class="text-lg font-bold tracking-tight">{{ app_brand_name }}</span>
+          <button id="mobileMenuClose"
+                  type="button"
+                  class="rounded-lg border border-slate-700 px-3 py-1.5 text-slate-100">
+            &times;
+          </button>
+        </div>
+
+        <nav id="mobileMenuNav" class="flex-1 px-2 py-4 space-y-1 text-sm overflow-y-auto"></nav>
+      </div>
+    </div>
+
+    <!-- Sidebar desktop -->
+    <aside id="desktopSidebar" class="hidden md:flex w-64 bg-slate-900 border-r border-slate-800 flex-col sticky top-0 h-screen">
 
       <!-- Header -->
       <div class="h-16 flex items-center px-4 border-b border-slate-800">
@@ -197,9 +238,9 @@
     </aside>
 
     <!-- Main content -->
-    <div class="flex-1 flex flex-col">
+    <div class="flex-1 flex flex-col min-w-0">
       <!-- Header -->
-      <header class="h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-950/80 backdrop-blur">
+      <header class="min-h-16 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 md:px-6 py-3 bg-slate-950/80 backdrop-blur">
         <div class="flex flex-col">
           <h1 class="text-xl font-semibold text-slate-200">
             {% block header_title %}{% endblock %}
@@ -216,7 +257,7 @@
       </header>
 
       <!-- Page content -->
-      <main class="flex-1 p-6">
+      <main class="flex-1 p-4 md:p-6 overflow-x-hidden">
         <div id="clientFlash" class="space-y-2 mb-4 hidden"></div>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -241,6 +282,29 @@
 
   <script src="{{ url_for('static', filename='js/app.js', v=g.app_version|default('dev')) }}"></script>
   <script src="{{ url_for('static', filename='js/modal_manager.js', v=g.app_version|default('dev')) }}"></script>
+  <script>
+    (() => {
+      const menu = document.getElementById("mobileMenu");
+      const openButton = document.getElementById("mobileMenuOpen");
+      const closeButton = document.getElementById("mobileMenuClose");
+      const backdrop = document.getElementById("mobileMenuBackdrop");
+      const nav = document.getElementById("mobileMenuNav");
+      if (!menu || !openButton || !closeButton) return;
+
+      const openMenu = () => menu.classList.remove("hidden");
+      const closeMenu = () => menu.classList.add("hidden");
+
+      openButton.addEventListener("click", openMenu);
+      closeButton.addEventListener("click", closeMenu);
+      backdrop?.addEventListener("click", closeMenu);
+      nav?.addEventListener("click", (event) => {
+        if (event.target.closest("a, button")) closeMenu();
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeMenu();
+      });
+    })();
+  </script>
   {% block scripts %}{% endblock %}
 
 </body>

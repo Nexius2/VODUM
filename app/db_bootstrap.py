@@ -1024,6 +1024,7 @@ def run_migrations():
     ensure_column(cursor, "settings", "auth_enabled", "INTEGER DEFAULT 1")
     ensure_column(cursor, "settings", "admin_totp_enabled", "INTEGER DEFAULT 0")
     ensure_column(cursor, "settings", "admin_totp_secret", "TEXT DEFAULT NULL")
+    ensure_column(cursor, "settings", "admin_totp_local_trust_enabled", "INTEGER DEFAULT 0")
     ensure_column(cursor, "settings", "wizard_active", "INTEGER DEFAULT NULL")
     ensure_column(cursor, "settings", "wizard_completed", "INTEGER DEFAULT NULL")
     ensure_column(cursor, "settings", "wizard_step", "INTEGER DEFAULT 1")
@@ -2204,6 +2205,7 @@ def run_migrations():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_msh_time ON media_session_history(started_at, stopped_at)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_msh_user_time ON media_session_history(media_user_id, started_at)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_msh_media_time ON media_session_history(media_key, started_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_msh_stopped_media_type ON media_session_history(stopped_at, media_type)")
 
     # Unique dedup index (required by collector upserts / imports)
     try:

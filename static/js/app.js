@@ -6,6 +6,52 @@
 
 // Artwork is also injected by HTMX, so handle failures at document level.
 // This prevents broken-image icons or alt text from shifting a media card.
+
+// ------------ MOBILE MENU ---------------------------------
+
+function initMobileMenu() {
+  const menu = document.getElementById("mobileMenu");
+  const openBtn = document.getElementById("mobileMenuOpen");
+  const closeBtn = document.getElementById("mobileMenuClose");
+  const backdrop = document.getElementById("mobileMenuBackdrop");
+  const mobileNav = document.getElementById("mobileMenuNav");
+  const desktopNav = document.querySelector("#desktopSidebar nav");
+
+  if (!menu || !openBtn || !closeBtn || !backdrop || !mobileNav || !desktopNav) return;
+
+  if (!mobileNav.dataset.ready) {
+    mobileNav.innerHTML = desktopNav.innerHTML;
+    mobileNav.dataset.ready = "1";
+
+    mobileNav.querySelectorAll("a").forEach((link) => {
+      link.addEventListener("click", () => {
+        menu.classList.add("hidden");
+        document.body.classList.remove("overflow-hidden");
+      });
+    });
+  }
+
+  function openMenu() {
+    menu.classList.remove("hidden");
+    document.body.classList.add("overflow-hidden");
+  }
+
+  function closeMenu() {
+    menu.classList.add("hidden");
+    document.body.classList.remove("overflow-hidden");
+  }
+
+  openBtn.addEventListener("click", openMenu);
+  closeBtn.addEventListener("click", closeMenu);
+  backdrop.addEventListener("click", closeMenu);
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeMenu();
+  });
+}
+
+document.addEventListener("DOMContentLoaded", initMobileMenu);
+
 document.addEventListener("error", (event) => {
   const image = event.target;
   if (image instanceof HTMLImageElement && image.classList.contains("js-artwork-image")) {
@@ -591,4 +637,33 @@ window.vodumFlash = function(category, message, autoHideMs = 4000) {
   document.body.addEventListener("htmx:configRequest", function (event) {
     event.detail.headers["X-CSRF-Token"] = csrfToken;
   });
+})();
+
+// ------------ MOBILE TABLES ---------------------------------------------
+(function vodumMobileTables() {
+  function shouldSkip(table) {
+    return table.closest(".vodum-mobile-table-scroll, .overflow-x-auto, .table-responsive");
+  }
+
+  function enhanceMobileTables(root = document) {
+    const scope = root && root.querySelectorAll ? root : document;
+    const tables = Array.from(scope.querySelectorAll("main table"));
+    if (scope.matches && scope.matches("main table")) {
+      tables.unshift(scope);
+    }
+
+    tables.forEach((table) => {
+      if (shouldSkip(table) || !table.parentNode) return;
+
+      const wrapper = document.createElement("div");
+      wrapper.className = "vodum-mobile-table-scroll";
+      wrapper.dataset.vodumMobileTable = "1";
+      table.parentNode.insertBefore(wrapper, table);
+      wrapper.appendChild(table);
+    });
+  }
+
+  window.vodumEnhanceMobileTables = enhanceMobileTables;
+  document.addEventListener("DOMContentLoaded", () => enhanceMobileTables(document));
+  document.addEventListener("htmx:load", (event) => enhanceMobileTables(event.target));
 })();

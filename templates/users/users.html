@@ -1566,7 +1566,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if(!state.servers.length) await initServers();
       VodumCreateUser.open();
     }catch(e){
-      alert({{ t("users_failed_servers")|tojson }}.replace('{error}', e.message || e));
+      const message = {{ t("users_failed_servers")|tojson }}.replace('{error}', e.message || e);
+      if (window.vodumFlash) window.vodumFlash('error', message);
     }
   });
 })();

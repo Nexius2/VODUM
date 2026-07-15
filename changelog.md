@@ -6,6 +6,38 @@ All notable changes to Vodum will be documented in this file.
 
 ## Unreleased
 
+- Improve mobile table readability by automatically wrapping unprotected admin tables in a horizontal scroll container while keeping desktop rendering unchanged.
+
+- Fix usage-risk upgrade suggestion communications so detected subscription upgrade recommendations are queued with a valid media provider, are not permanently blocked by stale dedupe/cooldown state when no real delivery exists, and can be filtered in Communications history.
+
+- Improve Communications history diagnostics by showing pending/error queued notifications in the main deliveries table and adding trigger filters such as Upgrade suggestions.
+
+- Fix local HTTP admin login when secure cookies are enabled by relaxing session cookie `Secure`/`SameSite=None` behavior only for non-HTTPS local requests.
+
+- Add a local 2FA trust option that, when 2FA is enabled, lets private/local IP browsers skip the 2FA prompt for 30 days after a successful 2FA login.
+
+- Preserve SMTP, OAuth, and Discord secrets during Communications autosave when password/token fields are left blank, and prevent browser autofill from showing stale secret values.
+
+- Normalize SMTP authentication so OAuth2 falls back to password authentication when no OAuth access token is configured but a password/app password is available.
+
+- Add real Email and Discord test actions from Communications settings, including decrypted Discord-token fallback for testing an already saved bot token.
+
+- Add a visible Communications settings action to retry scheduled communications in error, with pending/error counts and automatic send-task wakeup.
+
+- Fix admin flash message language resolution so route-side notifications follow the configured UI language before falling back to the browser language.
+
+- Translate remaining admin auth/security flash messages and standalone login/setup/wizard flash rendering.
+
+- Replace remaining native alert/debug console output in user flows with VODUM flash UI or remove it.
+
+- Defer dashboard Now Playing and Next Tasks widget content behind HTMX-loaded skeletons to reduce initial dashboard work.
+
+- Stabilize dashboard Now Playing card ordering so active sessions no longer jump between refreshes.
+
+- Add a media session history stopped/media-type index for faster monitoring top media queries.
+
+- Parse Plex websocket notification containers, refresh Now Playing immediately on playback state events, and shorten stop cleanup latency.
+
 - Add stream enforcement user/date indexes for faster per-user policy enforcement history lookups.
 
 - Add pagination, sorting, and normalized media type labels to Servers & Libraries lists and server detail access lists.
@@ -133,6 +165,8 @@ All notable changes to Vodum will be documented in this file.
 - Limit Communications settings queries to the columns required for template actions, test campaigns, and Email/Discord configuration.
 - Reduce user detail settings queries to explicit columns used by the page and save handler.
 - Reduce the Users list settings query to the single setting needed by the page instead of loading the full settings row.
+- Added qrcode for 2fa
+- Added ui for mobile
 
 
 

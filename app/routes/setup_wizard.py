@@ -14,6 +14,7 @@ from core.i18n import get_available_languages
 from core.server_validation import validate_media_server
 from core.auth_totp import generate_totp_secret, provisioning_uri, verify_totp_code
 from secret_store import encrypt_secret, encrypt_server_settings_json
+from core.smtp_settings import normalize_smtp_auth_method
 from tasks_engine import enable_and_run_task_by_name, enqueue_server_discovery_sequence, ensure_tasks_enabled
 from web.helpers import get_db
 
@@ -364,6 +365,12 @@ def register(app):
                     smtp_auth_method = (request.form.get("smtp_auth_method") or "password").strip().lower()
                     if smtp_auth_method not in {"password", "oauth2"}:
                         smtp_auth_method = "password"
+                    smtp_auth_method = normalize_smtp_auth_method(
+                        smtp_auth_method,
+                        settings,
+                        smtp_pass,
+                        smtp_oauth_access_token,
+                    )
                     mailing_enabled = 1 if request.form.get("mailing_enabled") == "1" else 0
                     discord_enabled = 1 if request.form.get("discord_enabled") == "1" else 0
                     smtp_host = (request.form.get("smtp_host") or "").strip() or None
