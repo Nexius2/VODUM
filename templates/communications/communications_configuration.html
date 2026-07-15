@@ -162,7 +162,7 @@
         <div class="text-xs" id="smtp_password_block">
           <label class="block mb-1">{{ t('smtp_pass') }}</label>
           <div class="relative">
-            <input type="password" id="smtp_pass" name="smtp_pass" value=""
+            <input type="password" id="smtp_pass" name="smtp_pass" value="" autocomplete="new-password" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore
                    placeholder="{% if settings.smtp_pass_configured %}Configured - leave empty to keep{% endif %}"
                    class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs pr-10">
             <button type="button" id="toggle_pass"
@@ -175,7 +175,7 @@
         <div class="text-xs" id="smtp_oauth_block">
           <label class="block mb-1">{{ t('smtp_oauth_access_token') }}</label>
           <div class="relative">
-            <input type="password" id="smtp_oauth_access_token" name="smtp_oauth_access_token" value=""
+            <input type="password" id="smtp_oauth_access_token" name="smtp_oauth_access_token" value="" autocomplete="new-password" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore
                    placeholder="{% if settings.smtp_oauth_access_token_configured %}Configured - leave empty to keep{% endif %}"
                    class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs pr-10">
             <button type="button" id="toggle_oauth_token"
@@ -216,7 +216,7 @@
         <div class="text-xs">
           <label class="block mb-1">{{ t('discord_bot_token') }}</label>
           <div class="relative">
-            <input type="password" id="discord_bot_token" name="discord_bot_token" value=""
+            <input type="password" id="discord_bot_token" name="discord_bot_token" value="" autocomplete="new-password" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore
                    placeholder="{% if settings.discord_bot_token_configured %}Configured - leave empty to keep{% endif %}"
                    class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs pr-10">
             <button type="button" id="toggle_discord_token"
@@ -328,6 +328,21 @@
 	  </label>
 	</div>
 
+        <div class="mt-5 pt-4 border-t border-slate-800">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <div class="text-sm font-medium">{{ t('comm_retry_scheduled_button') }}</div>
+              <p class="mt-1 text-xs text-slate-400">{{ t('comm_retry_scheduled_help') }}</p>
+              <p class="mt-1 text-[11px] text-slate-500">{{ t('pending') }}: {{ queue_summary.pending or 0 }} / {{ t('failed') }}: {{ queue_summary.errors or 0 }}</p>
+            </div>
+            <button form="retry_scheduled_form" type="submit"
+                    class="shrink-0 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 text-xs font-medium"
+                    {% if not queue_summary.errors %}disabled{% endif %}>
+              {{ t('retry') }}
+            </button>
+          </div>
+        </div>
+
 
       </div>
     </div>
@@ -345,6 +360,11 @@
   <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
   <input type="hidden" name="action" value="test_discord">
   <input type="hidden" name="discord_bot_token" id="test_discord_token" value="">
+</form>
+
+<form id="retry_scheduled_form" method="post" action="{{ url_for('communications_configuration_action') }}" class="hidden">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="action" value="retry_scheduled_errors">
 </form>
 
 <script src="{{ url_for('static', filename='js/pages/communications-configuration.js', v=g.app_version|default('dev')) }}"></script>

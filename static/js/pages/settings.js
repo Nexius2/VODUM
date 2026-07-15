@@ -42,4 +42,24 @@
       closeModal(modal.id);
     }
   });
+  function renderTotpQrCode() {
+    const container = document.getElementById("totp-qr-code");
+    const uriElement = document.getElementById("totp-uri-value");
+
+    if (!container || !uriElement || !window.QRCode) return;
+
+    const uri = uriElement.textContent.trim();
+    if (!uri) return;
+
+    container.innerHTML = "";
+
+    new QRCode(container, {
+      text: uri,
+      width: 180,
+      height: 180,
+      correctLevel: QRCode.CorrectLevel.M,
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", renderTotpQrCode);
 })();

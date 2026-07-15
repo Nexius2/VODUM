@@ -37,7 +37,8 @@ SETTINGS_PAGE_COLUMNS = """
     web_trust_proxy,
     plex_user_import_mode,
     enable_anonymous_telemetry,
-    admin_totp_enabled
+    admin_totp_enabled,
+    admin_totp_local_trust_enabled
 """
 
 
@@ -332,7 +333,7 @@ def register(app):
         else:
             session.pop("lang", None)
 
-        flash(get_translator()("settings_saved"), "success")
+        flash(get_translator(new_values)("settings_saved"), "success")
         return redirect(url_for("settings_page"))
 
 
@@ -344,7 +345,7 @@ def register(app):
         db = get_db()
         settings = db.query_one(
             """
-            SELECT admin_email, admin_password_hash, admin_totp_enabled, admin_totp_secret
+            SELECT admin_email, admin_password_hash, admin_totp_enabled, admin_totp_secret, admin_totp_local_trust_enabled
             FROM settings
             WHERE id = 1
             """
@@ -357,7 +358,7 @@ def register(app):
         current_password = request.form.get("current_password") or ""
         password_hash = settings.get("admin_password_hash") or ""
         if not password_hash or not check_password_hash(password_hash, current_password):
-            flash("Mot de passe actuel incorrect.", "error")
+            flash(get_translator()("settings_current_password_invalid"), "error")
             return redirect(url_for("settings_page"))
 
         admin_email = (request.form.get("admin_email") or "").strip().lower()
@@ -367,7 +368,7 @@ def register(app):
             or admin_email.count("@") != 1
             or "." not in admin_email.split("@", 1)[1]
         ):
-            flash("Email de connexion invalide.", "error")
+            flash(get_translator()("settings_login_email_invalid"), "error")
             return redirect(url_for("settings_page"))
 
         new_password = (request.form.get("new_password") or "").strip()
@@ -377,39 +378,46 @@ def register(app):
             "admin_email": admin_email,
             "admin_totp_enabled": int(settings.get("admin_totp_enabled") or 0),
             "admin_totp_secret": settings.get("admin_totp_secret"),
+            "admin_totp_local_trust_enabled": int(settings.get("admin_totp_local_trust_enabled") or 0),
         }
 
         if new_password or confirm_password:
             if len(new_password) < 8:
-                flash("Mot de passe admin trop court (8 caracteres minimum).", "error")
+                flash(get_translator()("settings_admin_password_too_short"), "error")
                 return redirect(url_for("settings_page"))
             if new_password != confirm_password:
-                flash("La confirmation du mot de passe ne correspond pas.", "error")
+                flash(get_translator()("settings_password_confirmation_mismatch"), "error")
                 return redirect(url_for("settings_page"))
             password_update_sql = ", admin_password_hash = :admin_password_hash"
             params["admin_password_hash"] = generate_password_hash(new_password)
 
         requested_totp = request.form.get("admin_totp_enabled") == "1"
         current_totp = int(settings.get("admin_totp_enabled") or 0) == 1
+        requested_local_trust = request.form.get("admin_totp_local_trust_enabled") == "1"
 
         if requested_totp and not current_totp:
             pending_secret = (request.form.get("pending_totp_secret") or "").strip()
             totp_code = request.form.get("totp_code") or ""
             if not pending_secret or not verify_totp_code(pending_secret, totp_code):
-                flash("Code double authentification invalide.", "error")
+                flash(get_translator()("settings_totp_invalid"), "error")
                 return redirect(url_for("settings_page"))
             params["admin_totp_enabled"] = 1
             params["admin_totp_secret"] = encrypt_secret(pending_secret)
+            params["admin_totp_local_trust_enabled"] = 0
         elif not requested_totp and current_totp:
             params["admin_totp_enabled"] = 0
             params["admin_totp_secret"] = None
+            params["admin_totp_local_trust_enabled"] = 0
+        elif requested_totp and current_totp:
+            params["admin_totp_local_trust_enabled"] = 1 if requested_local_trust else 0
 
         db.execute(
             f"""
             UPDATE settings
             SET admin_email = :admin_email,
                 admin_totp_enabled = :admin_totp_enabled,
-                admin_totp_secret = :admin_totp_secret
+                admin_totp_secret = :admin_totp_secret,
+                admin_totp_local_trust_enabled = :admin_totp_local_trust_enabled
                 {password_update_sql}
             WHERE id = 1
             """,
@@ -417,7 +425,7 @@ def register(app):
         )
 
         session["vodum_admin_email"] = admin_email
-        flash("Securite de l'application mise a jour.", "success")
+        flash(get_translator()("settings_security_saved"), "success")
         return redirect(url_for("settings_page"))
     @app.route("/settings/<section>", methods=["GET"])
     def settings_section_page(section: str):

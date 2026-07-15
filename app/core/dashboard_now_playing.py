@@ -28,6 +28,7 @@ def _totals(db, window_sql: str) -> dict:
         JOIN servers s ON s.id = ms.server_id
         WHERE LOWER(TRIM(s.type)) IN ('plex', 'jellyfin')
           AND datetime(ms.last_seen_at) >= datetime('now', ?)
+          AND COALESCE(ms.missing_count, 0) = 0
         """,
         (window_sql,),
     )
@@ -79,7 +80,10 @@ def _sessions(db, window_sql: str, limit: int = 6) -> list[dict]:
         LEFT JOIN media_users mu ON mu.id = ms.media_user_id
         WHERE LOWER(TRIM(s.type)) IN ('plex', 'jellyfin')
           AND datetime(ms.last_seen_at) >= datetime('now', ?)
-        ORDER BY datetime(ms.last_seen_at) DESC
+          AND COALESCE(ms.missing_count, 0) = 0
+        ORDER BY
+          datetime(COALESCE(ms.started_at, '1970-01-01')) DESC,
+          ms.id ASC
         LIMIT ?
         """,
         (window_sql, int(limit)),

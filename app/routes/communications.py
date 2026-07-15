@@ -6,6 +6,7 @@ from mailing_utils import build_user_context, render_mail
 
 from core.i18n import get_translator
 from core.communication_i18n import communication_language_options, normalize_communication_language
+from core.smtp_settings import normalize_smtp_auth_method
 from core.communications_recovery import retry_failed_scheduled_communications
 from core.communications.default_templates import (
     is_stream_blocked_template,
@@ -17,9 +18,10 @@ from core.communications.rules import (
     normalize_campaign_targets,
 )
 from web.helpers import get_db, add_log, send_email_via_settings
+from email_sender import send_email
 from discord_utils import validate_discord_bot_token
 from notifications_utils import parse_notifications_order
-from secret_store import encrypt_secret
+from secret_store import encrypt_secret, decrypt_secret
 
 from communications_engine import (
     store_uploads,
@@ -56,6 +58,12 @@ def _sanitize_notifications_order(raw: str) -> str:
     return ",".join(parts)
 
 
+
+
+def _encrypted_secret_from_form(raw_value, existing_value, *, empty_existing=None):
+    if raw_value is None or not str(raw_value).strip():
+        return existing_value if existing_value is not None else empty_existing
+    return encrypt_secret(str(raw_value).strip())
 
 
 def _selected_template_language(settings=None):
@@ -385,7 +393,7 @@ def register(app):
                     flash(t("comm_campaign_send_failed"), "error")
                     return redirect(url_for("communications_campaigns_page", load=cid))
 
-                flash("Test campaign queued.", "success")
+                flash(t("comm_test_campaign_queued"), "success")
                 return redirect(url_for("communications_campaigns_page", load=cid))
 
             queue_result = queue_campaign_delivery(
@@ -1011,6 +1019,21 @@ def register(app):
         if sort == "sent_at" and order == "asc" and not request.args.get("order"):
             order = "desc"
 
+        trigger_filter = (request.args.get("trigger") or "").strip().lower()
+        trigger_options = [
+            ("", "All communications"),
+            ("usage_risk_upgrade_suggestion", "Upgrade suggestions"),
+            ("stream_blocked", "Stream blocked"),
+            ("expiration", "Expiration"),
+            ("expiration_change", "Expiration changes"),
+            ("user_creation", "User creation"),
+            ("pending_invite_reminder", "Pending invites"),
+            ("referral_reward", "Referral rewards"),
+        ]
+        allowed_triggers = {value for value, _label in trigger_options if value}
+        if trigger_filter not in allowed_triggers:
+            trigger_filter = ""
+
         sent_at_sort_expr = """
             COALESCE(
                 CASE
@@ -1038,7 +1061,22 @@ def register(app):
         order_sql = "ASC" if order == "asc" else "DESC"
         order_by_sql = f"{sort_map[sort]} {order_sql}, h.id DESC"
 
-        total_row = db.query_one("SELECT COUNT(*) AS total FROM comm_history")
+        history_where = []
+        history_params = []
+        if trigger_filter:
+            history_where.append("(t.trigger_event = ? OR h.meta_json LIKE ?)")
+            history_params.extend([trigger_filter, f"%{trigger_filter}%"])
+        history_where_sql = f"WHERE {' AND '.join(history_where)}" if history_where else ""
+
+        total_row = db.query_one(
+            f"""
+            SELECT COUNT(*) AS total
+            FROM comm_history h
+            LEFT JOIN comm_templates t ON t.id = h.template_id
+            {history_where_sql}
+            """,
+            tuple(history_params),
+        )
         total_rows = int(total_row["total"]) if total_row and total_row["total"] is not None else 0
         total_pages = max((total_rows + per_page - 1) // per_page, 1)
 
@@ -1103,10 +1141,11 @@ def register(app):
             LEFT JOIN subscription_templates st ON st.id = u.subscription_template_id
             LEFT JOIN comm_templates t ON t.id = h.template_id
             LEFT JOIN comm_campaigns c ON c.id = h.campaign_id
+            {history_where_sql}
             ORDER BY {order_by_sql}
             LIMIT ? OFFSET ?
             """,
-            (per_page, offset),
+            (*history_params, per_page, offset),
         )
 
         def _render_history_message(row):
@@ -1156,6 +1195,113 @@ def register(app):
             return row
 
         history = [_render_history_message(dict(r)) for r in (rows or [])]
+
+        scheduled_where = "AND t.trigger_event = ?" if trigger_filter else ""
+        scheduled_params = (trigger_filter,) if trigger_filter else ()
+
+        scheduled_rows = db.query(
+            f"""
+            SELECT
+              q.id,
+              q.status,
+              q.send_at,
+              q.next_attempt_at,
+              q.last_attempt_at,
+              q.attempt_count,
+              q.max_attempts,
+              q.last_error,
+              q.channels_sent,
+              q.dedupe_key,
+              q.updated_at,
+              q.payload_json,
+              t.id AS template_id,
+              t.key AS template_key,
+              t.subject AS template_subject,
+              t.body AS template_body,
+              t.trigger_event,
+              u.id AS user_id,
+              u.username AS user_username,
+              u.firstname AS user_firstname,
+              u.lastname AS user_lastname,
+              u.email AS user_email,
+              u.expiration_date AS user_expiration_date,
+              u.subscription_template_id AS user_subscription_template_id,
+              st.name AS subscription_name,
+              st.duration_days AS subscription_duration_days,
+              st.subscription_value AS subscription_value
+            FROM comm_scheduled q
+            JOIN comm_templates t ON t.id = q.template_id
+            LEFT JOIN vodum_users u ON u.id = q.vodum_user_id
+            LEFT JOIN subscription_templates st ON st.id = u.subscription_template_id
+            WHERE q.status IN ('pending', 'error')
+              {scheduled_where}
+            ORDER BY
+              CASE q.status WHEN 'error' THEN 0 ELSE 1 END,
+              datetime(COALESCE(q.next_attempt_at, q.send_at, q.updated_at)) ASC,
+              q.id ASC
+            LIMIT 25
+            """,
+            scheduled_params,
+        ) or []
+
+        scheduled_history = []
+        for r in scheduled_rows:
+            r = dict(r)
+            payload = {}
+            try:
+                payload = json.loads(r.get("payload_json") or "{}")
+            except Exception:
+                payload = {}
+            if not isinstance(payload, dict):
+                payload = {}
+
+            meta = {
+                "scheduled_id": r.get("id"),
+                "template_key": r.get("template_key"),
+                "trigger_event": r.get("trigger_event"),
+                "payload": payload,
+                "dedupe_key": r.get("dedupe_key"),
+                "attempt_count": r.get("attempt_count") or 0,
+                "max_attempts": r.get("max_attempts") or 10,
+                "next_attempt_at": r.get("next_attempt_at"),
+            }
+            row = {
+                "id": f"scheduled-{r.get('id')}",
+                "kind": "template",
+                "is_scheduled": True,
+                "template_id": r.get("template_id"),
+                "campaign_id": None,
+                "user_id": r.get("user_id"),
+                "user_username": r.get("user_username"),
+                "user_firstname": r.get("user_firstname"),
+                "user_lastname": r.get("user_lastname"),
+                "user_email": r.get("user_email"),
+                "user_expiration_date": r.get("user_expiration_date"),
+                "user_subscription_template_id": r.get("user_subscription_template_id"),
+                "subscription_name": r.get("subscription_name"),
+                "subscription_duration_days": r.get("subscription_duration_days"),
+                "subscription_value": r.get("subscription_value"),
+                "template_key": r.get("template_key"),
+                "template_subject": r.get("template_subject"),
+                "template_body": r.get("template_body"),
+                "campaign_name": None,
+                "campaign_subject": None,
+                "campaign_body": None,
+                "channel_used": r.get("channels_sent") or "",
+                "status": r.get("status") or "pending",
+                "error": r.get("last_error") or r.get("dedupe_key") or "",
+                "sent_at": r.get("last_attempt_at") or r.get("send_at"),
+                "send_at": r.get("send_at"),
+                "next_attempt_at": r.get("next_attempt_at"),
+                "attempt_count": r.get("attempt_count") or 0,
+                "max_attempts": r.get("max_attempts") or 10,
+                "meta_json": json.dumps(meta, ensure_ascii=False),
+            }
+            scheduled_history.append(_render_history_message(row))
+
+        if page == 1:
+            history = scheduled_history + history
+
         return render_template(
             "communications/communications_history.html",
             history=history,
@@ -1166,6 +1312,8 @@ def register(app):
             total_pages=total_pages,
             sort=sort,
             order=order,
+            trigger_filter=trigger_filter,
+            trigger_options=trigger_options,
             communication_summary=communication_summary,
         )
 
@@ -1199,14 +1347,24 @@ def register(app):
 
             # Safety: do not wipe secrets on auto-save if input is empty
             smtp_pass_raw = request.form.get("smtp_pass")
-            smtp_pass = encrypt_secret(smtp_pass_raw or "")
-            if smtp_pass_raw is not None and smtp_pass_raw.strip() == "":
-                smtp_pass = settings.get("smtp_pass") or ""
+            smtp_pass = _encrypted_secret_from_form(
+                smtp_pass_raw,
+                settings.get("smtp_pass"),
+                empty_existing="",
+            )
 
             smtp_oauth_token_raw = request.form.get("smtp_oauth_access_token")
-            smtp_oauth_access_token = encrypt_secret((smtp_oauth_token_raw or "").strip() or None)
-            if smtp_oauth_token_raw is not None and smtp_oauth_token_raw.strip() == "":
-                smtp_oauth_access_token = settings.get("smtp_oauth_access_token") or None
+            smtp_oauth_access_token = _encrypted_secret_from_form(
+                smtp_oauth_token_raw,
+                settings.get("smtp_oauth_access_token"),
+                empty_existing=None,
+            )
+            smtp_auth_method = normalize_smtp_auth_method(
+                smtp_auth_method,
+                settings,
+                smtp_pass,
+                smtp_oauth_access_token,
+            )
 
             # Discord
             discord_enabled = 1 if request.form.get("discord_enabled") == "1" else 0
@@ -1275,6 +1433,46 @@ def register(app):
             flash(t("comm_config_saved"), "success")
             return redirect(url_for("communications_configuration_page"))
 
+        if action == "test_email":
+            test_settings = db.query_one(
+                f"SELECT {COMM_CONFIG_SETTINGS_COLUMNS}, admin_email, contact_email FROM settings WHERE id = 1"
+            )
+            test_settings = dict(test_settings) if test_settings else {}
+            to_email = (
+                (test_settings.get("contact_email") or "").strip()
+                or (test_settings.get("admin_email") or "").strip()
+                or (test_settings.get("mail_from") or "").strip()
+            )
+            if not to_email:
+                flash(t("comm_test_failed").format(error=t("comm_missing_admin_email_short")), "error")
+                return redirect(url_for("communications_configuration_page"))
+
+            ok, error = send_email(
+                t("comm_test_email_subject"),
+                t("comm_test_email_body"),
+                to_email,
+                test_settings,
+            )
+            if ok:
+                flash(t("comm_test_ok"), "success")
+            else:
+                flash(t("comm_test_failed").format(error=error or t("comm_email_send_failed_short")), "error")
+            return redirect(url_for("communications_configuration_page"))
+
+        if action == "test_discord":
+            token = (request.form.get("discord_bot_token") or "").strip()
+            if not token:
+                try:
+                    token = (decrypt_secret(settings.get("discord_bot_token")) or "").strip()
+                except Exception as e:
+                    flash(t("comm_test_failed").format(error=str(e)), "error")
+                    return redirect(url_for("communications_configuration_page"))
+            ok, detail = validate_discord_bot_token(token)
+            if ok:
+                flash(t("comm_test_ok"), "success")
+            else:
+                flash(t("comm_test_failed").format(error=detail), "error")
+            return redirect(url_for("communications_configuration_page"))
         # Queue retry of failed scheduled communications
         if action == "retry_scheduled_errors":
             try:
@@ -1307,9 +1505,19 @@ def register(app):
         settings["smtp_pass"] = ""
         settings["smtp_oauth_access_token"] = ""
         settings["discord_bot_token"] = ""
+        queue_row = db.query_one(
+            """
+            SELECT
+              SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending,
+              SUM(CASE WHEN status='error' THEN 1 ELSE 0 END) AS errors
+            FROM comm_scheduled
+            """
+        ) or {}
+        queue_summary = {key: int(value or 0) for key, value in dict(queue_row).items()}
         return render_template(
             "communications/communications_configuration.html",
             settings=settings,
             current_subpage="configuration",
             communication_languages=communication_language_options(),
+            queue_summary=queue_summary,
         )

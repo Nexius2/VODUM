@@ -35,7 +35,28 @@ tools/
 .coverage
 htmlcov/
 node_modules/
+
+
+# -----------------------------
+# Node / pnpm / Codex generated
+# -----------------------------
+node_modules/
 .pnpm-store/
+.npm/
+
+package.json
+pnpm-lock.yaml
+pnpm-workspace.yaml
+.npmrc
+
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+node_migration/
+.codex/
+.codex-cache/
 
 # Documentation / non-application assets
 vodum-docs/
@@ -49,7 +70,6 @@ get-container.sh
 
 # Build outputs
 node_modules/
-.pnpm-store/
 dist/
 build/
 *.egg-info/
@@ -68,3 +88,4 @@ Thumbs.db
 *.seed
 config.json
 settings.json
+*.bat

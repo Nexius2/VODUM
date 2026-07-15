@@ -17,29 +17,29 @@
   <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
     <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("comm_summary_email") }}</div>
     <div class="mt-2 text-2xl font-semibold text-emerald-300">{{ communication_summary.email_sent }}</div>
-    <div class="mt-1 text-xs text-slate-400">{{ t("sent") }} · <span class="text-rose-300">{{ communication_summary.email_failed }} {{ t("failed") }}</span></div>
+    <div class="mt-1 text-xs text-slate-400">{{ t("sent") }} - <span class="text-rose-300">{{ communication_summary.email_failed }} {{ t("failed") }}</span></div>
   </div>
   <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
     <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("comm_summary_discord") }}</div>
     <div class="mt-2 text-2xl font-semibold text-indigo-300">{{ communication_summary.discord_sent }}</div>
-    <div class="mt-1 text-xs text-slate-400">{{ t("sent") }} · <span class="text-rose-300">{{ communication_summary.discord_failed }} {{ t("failed") }}</span></div>
+    <div class="mt-1 text-xs text-slate-400">{{ t("sent") }} - <span class="text-rose-300">{{ communication_summary.discord_failed }} {{ t("failed") }}</span></div>
   </div>
   <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
     <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("comm_summary_last_24h") }}</div>
     <div class="mt-2 text-2xl font-semibold text-slate-100">{{ communication_summary.sent_24h }}</div>
-    <div class="mt-1 text-xs text-slate-400">{{ t("sent") }} · <span class="text-rose-300">{{ communication_summary.failed_24h }} {{ t("failed") }}</span></div>
+    <div class="mt-1 text-xs text-slate-400">{{ t("sent") }} - <span class="text-rose-300">{{ communication_summary.failed_24h }} {{ t("failed") }}</span></div>
   </div>
   <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
     <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("comm_summary_queue") }}</div>
     <div class="mt-2 text-2xl font-semibold text-amber-300">{{ communication_summary.pending }}</div>
-    <div class="mt-1 text-xs text-slate-400">{{ t("pending") }} · <span class="text-rose-300">{{ communication_summary.errors }} {{ t("in_error") }}</span></div>
+    <div class="mt-1 text-xs text-slate-400">{{ t("pending") }} - <span class="text-rose-300">{{ communication_summary.errors }} {{ t("in_error") }}</span></div>
   </div>
 </div>
 
 {% macro sort_link(label, key) -%}
   {% set is_active = (sort == key) %}
   <a
-    href="{{ url_for('communications_history_page', sort=key, order=('asc' if is_active and order == 'desc' else 'desc'), page=1) }}"
+    href="{{ url_for('communications_history_page', sort=key, order=('asc' if is_active and order == 'desc' else 'desc'), page=1, trigger=trigger_filter) }}"
     class="inline-flex items-center gap-1 transition {{ 'text-emerald-400' if is_active else 'text-slate-400 hover:text-slate-200' }}"
   >
     <span>{{ label }}</span>
@@ -63,6 +63,22 @@
 {%- endmacro %}
 
 <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+  <div class="px-4 py-3 border-b border-slate-800">
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+      <div>
+        <h2 class="text-sm font-semibold text-slate-100">Communication deliveries</h2>
+        <p class="text-xs text-slate-500 mt-1">Sent and failed deliveries, plus pending or errored queued notifications when action is needed.</p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        {% for value, label in trigger_options %}
+          <a
+            href="{{ url_for('communications_history_page', trigger=value, sort=sort, order=order, page=1) }}"
+            class="px-3 py-1.5 rounded-lg text-xs border {{ 'border-primary bg-primary/15 text-primary' if trigger_filter == value else 'border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-800' }}"
+          >{{ label }}</a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
   <div class="overflow-x-auto">
     <table class="w-full text-xs table-fixed">
       <thead class="bg-slate-950/60 text-left">
@@ -80,7 +96,7 @@
             {{ sort_link(t('status'), 'status') }}
           </th>
           <th class="px-4 py-3">
-            {{ sort_link(t('error'), 'error') }}
+            Details
           </th>
           <th class="px-4 py-3 w-[190px]">
             {{ sort_link(t('sent_at'), 'sent_at') }}
@@ -93,11 +109,11 @@
 		{% set body_value = h.rendered_body %}
         {% set modal_payload = {
           "kind": h.kind or "",
-          "kind_label": (t('template') if h.kind == 'template' else t('campaign')),
+          "kind_label": ('Queued template' if h.is_scheduled else (t('template') if h.kind == 'template' else t('campaign'))),
           "name": (h.template_key if h.kind == 'template' else h.campaign_name) or "",
           "user": h.user_username or "",
           "channel_used": t(h.channel_used) if h.channel_used else "-",
-          "status": t('sent') if h.status == 'sent' else t('failed'),
+          "status": (t('sent') if h.status == 'sent' else (t('failed') if h.status == 'failed' else h.status)),
           "error": h.error or "",
           "sent_at": h.sent_at or "-",
           "subject": subject_value or "",
@@ -112,14 +128,15 @@
         >
           <td class="px-4 py-3 align-top">
             <div class="flex items-center gap-2 min-w-0">
-              {% if h.kind == 'template' %}
+              {% if h.is_scheduled %}
+                <span class="px-2 py-1 rounded bg-amber-900/40 text-amber-300 shrink-0">Queued</span>
+                <span class="text-slate-400 truncate"><code>{{ h.template_key or '-' }}</code></span>
+              {% elif h.kind == 'template' %}
                 <span class="px-2 py-1 rounded bg-slate-800 text-slate-200 shrink-0">{{ t('template') }}</span>
                 {% if h.template_key %}
                   <span class="text-slate-400 truncate"><code>{{ h.template_key }}</code></span>
                 {% endif %}
-              {% endif %}
-
-              {% if h.kind != 'template' %}
+              {% else %}
                 <span class="px-2 py-1 rounded bg-slate-800 text-slate-200 shrink-0">{{ t('campaign') }}</span>
                 {% if h.campaign_name %}
                   <span class="text-slate-400 truncate">{{ h.campaign_name }}</span>
@@ -133,19 +150,28 @@
           </td>
 
           <td class="px-4 py-3 align-top">
-            {{ t(h.channel_used) }}
+            {{ t(h.channel_used) if h.channel_used else '-' }}
           </td>
 
           <td class="px-4 py-3 align-top">
             {% if h.status == 'sent' %}
               <span class="px-2 py-1 rounded-full bg-emerald-900/40 text-emerald-300">{{ t('sent') }}</span>
+            {% elif h.status == 'pending' %}
+              <span class="px-2 py-1 rounded-full bg-amber-900/40 text-amber-300">pending</span>
+            {% elif h.status == 'error' %}
+              <span class="px-2 py-1 rounded-full bg-rose-900/40 text-rose-300">error</span>
             {% else %}
               <span class="px-2 py-1 rounded-full bg-rose-900/40 text-rose-300">{{ t('failed') }}</span>
             {% endif %}
           </td>
 
           <td class="px-4 py-3 align-top text-slate-400">
-            <div class="truncate" title="{{ h.error or '-' }}">{{ h.error or '-' }}</div>
+            {% if h.is_scheduled %}
+              <div class="truncate" title="{{ h.error or '-' }}">{{ h.error or '-' }}</div>
+              <div class="text-[11px] text-slate-500 mt-1">Attempts {{ h.attempt_count or 0 }} / {{ h.max_attempts or 10 }}{% if h.next_attempt_at %} - next {{ h.next_attempt_at|browser_datetime }}{% endif %}</div>
+            {% else %}
+              <div class="truncate" title="{{ h.error or '-' }}">{{ h.error or '-' }}</div>
+            {% endif %}
           </td>
 
           <td class="px-4 py-3 align-top whitespace-nowrap">
@@ -169,10 +195,10 @@
   "total_pages": total_pages,
   "total_rows": total_rows,
   "unit_label": t("comm_history_rows"),
-  "first_url": url_for("communications_history_page", page=1, sort=sort, order=order),
-  "prev_url": url_for("communications_history_page", page=page-1, sort=sort, order=order),
-  "next_url": url_for("communications_history_page", page=page+1, sort=sort, order=order),
-  "last_url": url_for("communications_history_page", page=total_pages, sort=sort, order=order)
+  "first_url": url_for("communications_history_page", page=1, sort=sort, order=order, trigger=trigger_filter),
+  "prev_url": url_for("communications_history_page", page=page-1, sort=sort, order=order, trigger=trigger_filter),
+  "next_url": url_for("communications_history_page", page=page+1, sort=sort, order=order, trigger=trigger_filter),
+  "last_url": url_for("communications_history_page", page=total_pages, sort=sort, order=order, trigger=trigger_filter)
 } %}
 <div class="mt-4">
   {% include "partials/_pagination.html" %}

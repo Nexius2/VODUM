@@ -36,7 +36,7 @@
 
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% for category, message in messages %}
-        <div class="mb-4 rounded-lg border p-3 text-sm {% if category == 'error' %}border-rose-700 bg-rose-950/30 text-rose-200{% else %}border-emerald-700 bg-emerald-950/30 text-emerald-200{% endif %}">{{ message }}</div>
+        <div class="mb-4 rounded-lg border p-3 text-sm {% if category == 'error' %}border-rose-700 bg-rose-950/30 text-rose-200{% else %}border-emerald-700 bg-emerald-950/30 text-emerald-200{% endif %}">{{ t(message) }}</div>
       {% endfor %}
     {% endwith %}
 

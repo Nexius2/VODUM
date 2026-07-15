@@ -3,7 +3,7 @@
 Ce fichier contient uniquement le travail restant. Les changements termines sont documentes dans
 `changelog.md`.
 
-Derniere mise a jour: 2026-07-07
+Derniere mise a jour: 2026-07-15
 
 ## Principes de suivi
 
@@ -22,33 +22,12 @@ Derniere mise a jour: 2026-07-07
 - [~] Valider les campagnes Migrations sur de grandes instances reelles Plex et
   Jellyfin avant d'activer davantage d'automatisations destructives.
 
-
 ## P1 - Performance UI et experience percue
 
 ### Scripts par page
 
 - [~] Continuer a deplacer les scripts inline vers `static/js/pages/*.js`.
-  - Deja fait: helpers globaux datepicker/CSRF dans `static/js/app.js`.
-  - Deja fait: Tasks dans `static/js/pages/tasks.js`.
-  - Deja fait: Logs dans `static/js/pages/logs.js`.
-  - Deja fait: Backup restore/auto-refresh dans `static/js/pages/backup.js`.
-  - Deja fait: Backup list actions dans `static/js/pages/backup.js`.
-  - Deja fait: Dashboard card navigation dans `static/js/pages/dashboard.js`.
-  - Deja fait: Login dans `static/js/pages/login.js`.
-  - Deja fait: Setup Wizard dans `static/js/pages/setup-wizard.js`.
-  - Deja fait: Settings modales securite/telemetrie dans `static/js/pages/settings.js`.
-  - Deja fait: Communications campaigns dans `static/js/pages/communications-campaigns.js`.
-  - Deja fait: Communications history dans `static/js/pages/communications-history.js`.
-  - Deja fait: Communications configuration dans `static/js/pages/communications-configuration.js`.
-  - Deja fait: Communications templates dans `static/js/pages/communications-templates.js`.
-  - Deja fait: Subscriptions gifts dans `static/js/pages/subscriptions-gifts.js`.
-  - Deja fait: Migrations list/detail dans `static/js/pages/migrations.js` et `static/js/pages/migration-campaign-detail.js`.
-  - Deja fait: Monitoring shell search/ticker dans `static/js/pages/monitoring.js`.
-  - Deja fait: Monitoring user detail IP lookup dans `static/js/pages/monitoring-user-detail.js`.
-  - Deja fait: Monitoring user detail profile charts dans `static/js/pages/monitoring-user-detail.js`.
-  - Deja fait: Monitoring activity charts dans `static/js/pages/monitoring-activity.js`.
-  - Deja fait: Monitoring servers charts dans `static/js/pages/monitoring-servers.js`.
-  - Deja fait: Monitoring policies charts/modals dans `static/js/pages/monitoring-policies.js`.
+  Les extractions deja terminees sont tracees dans `changelog.md`.
   - Restant: extraire progressivement les scripts metier lourds des pages
     users, monitoring, communications, subscriptions et migrations.
 
@@ -70,12 +49,10 @@ Derniere mise a jour: 2026-07-07
   - Exemple Communications: templates/campaigns/history/config en fragments
     separes.
 
-- [ ] Ajouter des endpoints fragmentaires pour les widgets dashboard.
-  - Rendre le dashboard initial rapidement avec skeletons.
-  - Charger now playing, stats, top users, top media et quote/cache via HTMX ou
-    fetch.
-  - Ajouter un timeout/fallback par widget pour qu'une aggregation lente ne
-    bloque pas toute la page.
+- [~] Ajouter des endpoints fragmentaires pour les widgets dashboard.
+  - Deja fait: Now Playing et Next Tasks utilisent des endpoints partiels avec skeleton au rendu initial.
+  - Restant: charger stats, top users, top media et quote/cache via HTMX ou fetch.
+  - Ajouter un timeout/fallback par widget pour qu'une aggregation lente ne bloque pas toute la page.
 
 ### Listes et layout stable
 
@@ -104,11 +81,6 @@ Derniere mise a jour: 2026-07-07
   - `vodum_users(username COLLATE NOCASE)` ou index expression `LOWER(username)`.
   - `vodum_users(email COLLATE NOCASE)` si recherche email frequente.
   - `user_referrals(status, start_at)` pour l'onglet referrals.
-  - `stream_enforcements(vodum_user_id, created_at)` et
-    `stream_enforcements(external_user_id, created_at)` pour
-    `/monitoring/policies/enforcements/by-user`.
-  - `media_session_history(stopped_at, media_type)` si les tops movies/series
-    restent lourds.
 
 - [ ] Ajouter un dashboard avance oriente exploitation: etat global, files de
   jobs, echecs recents, sante providers et indicateurs d'action. ( a voir si interessant et/ou comment l'integrer a l'actuel)
@@ -153,8 +125,66 @@ Derniere mise a jour: 2026-07-07
 - [ ] Enrichir les notifications Discord: meilleure gestion des erreurs,
   diagnostics admin, templates/campagnes plus explicites et usages avances.
   Les retries et les logs d'erreur de base existent deja.
+-[ ] controle du mecanisme de log, ajout au endroit manquant, controle du system de log en mode debug 
 
-## P6 - Partie utilisateur et ouverture externe
+## P7 - Revoir l'UI mobile
+
+	## Mobile responsive UI
+	- Review all pages on mobile width.
+	- Keep one responsive UI, no separate mobile app/UI.
+
+	### Global layout
+	- Verify desktop sidebar remains unchanged.
+	- Deja fait: menu mobile avec fermeture backdrop, Escape et navigation.
+	- Deja fait: padding principal `p-4` mobile, `md:p-6` desktop.
+	- Restant: verifier les pages prioritaires et corriger les debordements reels.
+
+	### Tables
+	- Deja fait: filet global mobile pour encapsuler les tableaux non proteges dans un scroll horizontal.
+	- Restant: verifier Users, Monitoring, Communication History, Logs, Tasks, Servers et Libraries sur largeur mobile.
+
+	### Buttons / actions
+	- Make action button groups wrap on mobile.
+	- Use `flex-wrap gap-2`.
+	- Avoid fixed-width buttons that overflow.
+	- Ensure forms/buttons stay tappable on iPhone.
+
+	### Dashboard
+	- Verify all cards stack correctly on mobile.
+	- Force 1-column layout on mobile.
+	- Keep multi-column layout only on `md`, `lg`, or `xl`.
+	- Check Now Playing, Users, Tasks, Servers, Latest logs, Usage Risk.
+
+	### Forms
+	- Inputs/selects/textareas must use full width on mobile.
+	- Multi-column forms should become one column on mobile.
+	- Check Settings, Servers, Users edit, Communications.
+
+	### Modals
+	- Modals must fit mobile screen.
+	- Add max height and internal scroll if needed.
+	- Avoid modals wider than viewport.
+
+	### Text / badges
+	- Long usernames, emails, server names, IPs must wrap or truncate.
+	- Badges should wrap instead of overflowing.
+	- Check Now Playing and user detail pages.
+
+	### Mobile priority pages
+	1. Dashboard
+	2. Users list
+	3. User detail
+	4. Monitoring / Now Playing
+	5. Communication History
+	6. Settings
+	7. Servers
+	8. Logs / Tasks
+
+	### Rule
+	- Do not change backend logic, routes, translations, permissions, or database schema.
+	- Desktop UI must stay visually unchanged.
+
+## P8 - Partie utilisateur et ouverture externe
 
 - [ ] Permettre au compte admin de se connecter via un compte Plex.
 - [ ] Creer un acces web utilisateur configurable depuis un nouveau menu admin.
@@ -169,6 +199,7 @@ Derniere mise a jour: 2026-07-07
   utilisateurs.
 - [ ] Ajouter une API publique apres cadrage: quoi exposer, pourquoi, securite,
   quotas et authentification.
+- [ ] amelioration de la creation user / mail d'invitation sur le web user vodum pour gestion / creation automatique ou controlé, aidé de compte user sur plex & jellyfin / lien fourni au user pour telecharger le lecteur media et le configurer, etc....
 
 ## Notes de prudence
 

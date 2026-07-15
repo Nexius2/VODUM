@@ -629,9 +629,11 @@ def schedule_template_notification(
     payload: Optional[Dict] = None,
     dedupe_key: Optional[str] = None,
     max_attempts: int = 10,
-) -> None:
+) -> bool:
     """
     Queue a notification in comm_scheduled.
+
+    Returns True when a row was inserted or revived for sending.
 
     - send_at_modifier examples:
         None            -> now
@@ -669,7 +671,7 @@ def schedule_template_notification(
 
         # Already sent => keep as-is
         if status == "sent":
-            return
+            return False
 
         # Only revive notifications that are stuck in final error.
         # Do NOT reset pending / retrying rows, otherwise we would break backoff.
@@ -735,10 +737,10 @@ def schedule_template_notification(
                         int(existing["id"]),
                     ),
                 )
-        return
+        return bool(is_final_error)
 
     if send_at_modifier:
-        db.execute(
+        cur = db.execute(
             """
             INSERT OR IGNORE INTO comm_scheduled(
                 template_id, vodum_user_id, provider, server_id,
@@ -767,7 +769,7 @@ def schedule_template_notification(
             ),
         )
     else:
-        db.execute(
+        cur = db.execute(
             """
             INSERT OR IGNORE INTO comm_scheduled(
                 template_id, vodum_user_id, provider, server_id,
@@ -794,6 +796,8 @@ def schedule_template_notification(
                 dedupe_key,
             ),
         )
+
+    return bool(getattr(cur, "rowcount", 0) and cur.rowcount > 0)
 
 def _normalize_send_mode(settings: Dict) -> str:
     mode = (settings or {}).get("notifications_send_mode")

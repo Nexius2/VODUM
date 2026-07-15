@@ -204,6 +204,23 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
     )
     due = [dict(r) for r in (rows or [])]
     if not due:
+        if task_id is not None:
+            queue_snapshot = db.query(
+                """
+                SELECT t.trigger_event, q.status, COUNT(*) AS count
+                FROM comm_scheduled q
+                JOIN comm_templates t ON t.id = q.template_id
+                WHERE t.trigger_event IN ('usage_risk_upgrade_suggestion', 'stream_blocked', 'expiration_change')
+                GROUP BY t.trigger_event, q.status
+                ORDER BY t.trigger_event, q.status
+                """
+            ) or []
+            task_logs(
+                task_id,
+                "info",
+                "comm_scheduled flushed: sent=0 failed=0 due=0",
+                details=[dict(r) for r in queue_snapshot],
+            )
         return 0, 0
 
     sent = 0

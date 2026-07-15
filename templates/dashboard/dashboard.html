@@ -152,7 +152,7 @@
 				 hx-get="{{ url_for('dashboard_now_playing_partial') }}"
 				 hx-trigger="load, every 2500ms"
 				 hx-swap="innerHTML">
-				{% include "dashboard/partials/_now_playing.html" %}
+				{% include "dashboard/partials/_now_playing_skeleton.html" %}
 			</div>
     </section>
 
@@ -292,7 +292,7 @@
 			 hx-get="{{ url_for('dashboard_now_playing_partial') }}"
 			 hx-trigger="load, every 2500ms"
 			 hx-swap="innerHTML">
-			{% include "dashboard/partials/_now_playing.html" %}
+			{% include "dashboard/partials/_now_playing_skeleton.html" %}
 		</div>
     </section>
 
@@ -502,7 +502,7 @@
              hx-get="{{ url_for('dashboard_next_tasks_partial') }}"
              hx-trigger="load, every 15000ms"
              hx-swap="innerHTML">
-            {% include "dashboard/partials/_next_tasks.html" %}
+            {% include "dashboard/partials/_next_tasks_skeleton.html" %}
         </div>
     </section>
 
