@@ -4,7 +4,6 @@
 {% block title %}{{ t("dashboard") }}{% endblock %}
 {% block header_title %}{{ t("dashboard") }}{% endblock %}
 {% block header_subtitle %}{{ t("dashboard_subtitle") }}{% endblock %}
-
 {% block content %}
 
 {% set server_count = servers|length %}
@@ -151,7 +150,8 @@
 			<div id="dashboard-now-playing"
 				 hx-get="{{ url_for('dashboard_now_playing_partial') }}"
 				 hx-trigger="load, every 2500ms"
-				 hx-swap="innerHTML">
+				 hx-swap="innerHTML"
+                 data-stable-swap="now-playing">
 				{% include "dashboard/partials/_now_playing_skeleton.html" %}
 			</div>
     </section>
@@ -291,7 +291,8 @@
 		<div id="dashboard-now-playing"
 			 hx-get="{{ url_for('dashboard_now_playing_partial') }}"
 			 hx-trigger="load, every 2500ms"
-			 hx-swap="innerHTML">
+			 hx-swap="innerHTML"
+             data-stable-swap="now-playing">
 			{% include "dashboard/partials/_now_playing_skeleton.html" %}
 		</div>
     </section>
@@ -410,7 +411,7 @@
         </div>
 
         <div class="rounded-xl border border-slate-800 bg-gradient-to-br from-slate-950/80 to-violet-950/20 p-4 mb-3 overflow-hidden">
-            <div class="flex items-stretch justify-between gap-5">
+            <div class="flex flex-col sm:flex-row sm:items-stretch sm:justify-between gap-4 sm:gap-5">
                 <div class="shrink-0 flex flex-col justify-center">
                     <div class="text-xs text-slate-300 font-medium">{{ t("upgrade_suggestions") }}</div>
                     <div class="text-4xl font-bold text-primary mt-1 leading-none">{{ usage_risk_summary.suggested or 0 }}</div>
@@ -572,6 +573,7 @@
         </div>
     </div>
 </div>
+
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/pages/dashboard.js', v=g.app_version|default('dev')) }}"></script>

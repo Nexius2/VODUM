@@ -197,3 +197,169 @@ table {
     overflow: auto;
   }
 }
+
+/* Mobile table readability: desktop stays visually unchanged. */
+.vodum-mobile-table-scroll {
+  display: contents;
+}
+
+@media (max-width: 767px) {
+  .vodum-mobile-table-scroll {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+
+  .vodum-mobile-table-scroll > table,
+  main .overflow-x-auto > table {
+    display: table;
+    width: max-content;
+    min-width: 100%;
+    max-width: none;
+    overflow: visible;
+    table-layout: auto;
+    white-space: nowrap;
+  }
+
+  .vodum-mobile-table-scroll th,
+  .vodum-mobile-table-scroll td,
+  main .overflow-x-auto > table th,
+  main .overflow-x-auto > table td {
+    white-space: nowrap;
+  }
+
+  .vodum-mobile-table-scroll td :where(p, span, a, code),
+  .vodum-mobile-table-scroll th :where(p, span, a, code),
+  main .overflow-x-auto > table td :where(p, span, a, code),
+  main .overflow-x-auto > table th :where(p, span, a, code) {
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+
+  main :where(.rounded-lg, .rounded-xl, .rounded-2xl, .border, .grid, .flex) {
+    min-width: 0;
+  }
+
+  main :where(p, a, span, code, pre, dd, dt, li) {
+    overflow-wrap: anywhere;
+  }
+}
+
+/* Mobile actions/forms safety: keep desktop classes untouched. */
+@media (max-width: 767px) {
+  main :where(.inline-flex, .flex):not(.flex-col) {
+    min-width: 0;
+  }
+
+  main :where(.inline-flex, .flex):not(.flex-col):not(.vodum-mobile-nowrap) {
+    flex-wrap: wrap;
+  }
+
+  main :where(button, [role="button"], a[class*="px-"], input[type="submit"], input[type="button"]) {
+    min-width: 0;
+    white-space: normal;
+  }
+
+  main :where(div, section, article, form, label, button, a, select, input, textarea)[class*="min-w-"] {
+    min-width: 0;
+  }
+
+  main :where(div, section, article, form, label, button, a, select, input, textarea)[class*="w-"] {
+    max-width: 100%;
+  }
+
+  main :where(.fixed.inset-0, [role="dialog"], .modal, [data-modal]) {
+    padding-inline: 1rem;
+  }
+
+  main :where(.fixed.inset-0 > *, [role="dialog"], .modal, [data-modal]) {
+    max-width: min(100%, calc(100vw - 2rem));
+    max-height: calc(100dvh - 2rem);
+  }
+
+  main :where(pre, code) {
+    white-space: pre-wrap;
+  }
+}
+
+/* Login easter egg visual: desktop uses backdrop, mobile uses poster. */
+.login-visual-page {
+  min-height: 100vh;
+  position: relative;
+  isolation: isolate;
+  overflow-x: hidden;
+}
+
+.login-visual-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background: #020617;
+}
+
+.login-visual-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.42;
+  transform: scale(1.02);
+  filter: saturate(1.08) contrast(1.05);
+}
+
+.login-visual-poster {
+  display: none;
+}
+
+.login-visual-vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(15, 23, 42, 0.18), rgba(2, 6, 23, 0.94) 72%),
+    linear-gradient(90deg, rgba(2, 6, 23, 0.88), rgba(2, 6, 23, 0.38), rgba(2, 6, 23, 0.9));
+}
+
+.login-visual-content {
+  position: relative;
+  z-index: 1;
+}
+
+.login-card {
+  background: rgba(15, 23, 42, 0.9);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(14px);
+}
+
+.login-quote {
+  border-left: 2px solid rgba(99, 102, 241, 0.72);
+  padding-left: 0.85rem;
+}
+
+@media (max-width: 767px) {
+  .login-visual-backdrop {
+    display: none;
+  }
+
+  .login-visual-poster {
+    display: block;
+    object-position: center top;
+    opacity: 0.36;
+    transform: scale(1.04);
+  }
+
+  .login-visual-vignette {
+    background:
+      linear-gradient(180deg, rgba(2, 6, 23, 0.7), rgba(2, 6, 23, 0.86) 44%, rgba(2, 6, 23, 0.96)),
+      radial-gradient(circle at 50% 18%, rgba(15, 23, 42, 0.05), rgba(2, 6, 23, 0.82) 70%);
+  }
+
+  .login-card {
+    max-width: min(100%, 28rem);
+  }
+}

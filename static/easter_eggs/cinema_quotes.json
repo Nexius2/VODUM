@@ -750,4 +750,33 @@
 "ids":{"imdb":"tt0110357","tmdb":"8587"},
 "quotes":{"en":"Hakuna Matata!","fr":"Hakuna Matata !"}
 }
+,
+{
+"key":"les_visiteurs_okayyy",
+"media_type":"movie",
+"ids":{"imdb":"tt0108500","tmdb":"11687"},
+"quotes":{"en":"Okayyy!","fr":"Okayyy !"}
+}
+,
+{
+"key":"taxi_1998_alerte_generale",
+"media_type":"movie",
+"ids":{"imdb":"tt0152930","tmdb":"2330"},
+"quotes":{"en":"General alaaaarm!","fr":"Alerte generaaaale !"}
+}
+,
+{
+"key":"les_trois_freres_cent_patates",
+"media_type":"movie",
+"ids":{"imdb":"tt0114733"},
+"quotes":{"en":"A hundred potatoes!","fr":"100 patates !"}
+}
+,
+{
+"key":"mission_cleopatre_pas_de_palais",
+"media_type":"movie",
+"ids":{"imdb":"tt0250223","tmdb":"2899"},
+"quotes":{"en":"No palace, no palace.","fr":"Pas de palais, pas de palais."}
+}
+
 ]

@@ -72,3 +72,7 @@
 {% endif %}
 
 {% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/pages/subscriptions.js', v=g.app_version|default('dev')) }}"></script>
+{% endblock %}

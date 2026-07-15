@@ -154,10 +154,10 @@
     </div>
   </div>
 
-<div id="subscriptionApplyConfirmModal" class="hidden fixed inset-0 z-50" aria-hidden="true">
+<div id="subscriptionApplyConfirmModal" class="hidden fixed inset-0 z-50 p-4" aria-hidden="true">
   <div class="absolute inset-0 bg-black/70"></div>
 
-  <div class="relative mx-auto mt-24 w-[92%] max-w-lg">
+  <div class="relative mx-auto mt-8 sm:mt-24 w-full max-w-lg">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
       <div class="p-5">
         <div class="flex items-center gap-3">
@@ -181,7 +181,7 @@
 
       <div class="border-t border-slate-800"></div>
 
-      <div class="p-4 flex items-center justify-end gap-2">
+      <div class="p-4 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2">
         <button type="button" id="subscriptionApplyConfirmCancel"
                 class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-200">
           {{ t("cancel") }}
@@ -210,116 +210,8 @@
     {% include "partials/_pagination.html" %}
   </div>
 
-<script>
-  document.addEventListener("DOMContentLoaded", () => {
-    const modal = document.getElementById("subscriptionApplyConfirmModal");
-    const btnCancel = document.getElementById("subscriptionApplyConfirmCancel");
-    const btnOk = document.getElementById("subscriptionApplyConfirmOk");
-    const forms = document.querySelectorAll(".js-subscription-confirm-form");
 
-    if (!modal || !btnCancel || !btnOk || !forms.length) {
-      return;
-    }
 
-    let pendingForm = null;
-    let allowSubmit = false;
 
-    function openModal() {
-      modal.classList.remove("hidden");
-      modal.setAttribute("aria-hidden", "false");
-    }
-
-    function closeModal() {
-      modal.classList.add("hidden");
-      modal.setAttribute("aria-hidden", "true");
-    }
-
-    forms.forEach((form) => {
-      form.addEventListener("submit", (e) => {
-        if (allowSubmit) {
-          allowSubmit = false;
-          return;
-        }
-
-        e.preventDefault();
-        pendingForm = form;
-        openModal();
-      });
-    });
-
-    btnCancel.addEventListener("click", () => {
-      pendingForm = null;
-      allowSubmit = false;
-      closeModal();
-    });
-
-    btnOk.addEventListener("click", () => {
-      if (!pendingForm) return;
-
-      const confirmInput = pendingForm.querySelector('input[name="confirm_replace"]');
-      if (confirmInput) {
-        confirmInput.value = "1";
-      }
-
-      allowSubmit = true;
-      closeModal();
-      pendingForm.requestSubmit();
-    });
-
-    modal.addEventListener("click", (e) => {
-      if (e.target === modal || (e.target.classList && e.target.classList.contains("bg-black/70"))) {
-        pendingForm = null;
-        allowSubmit = false;
-        closeModal();
-      }
-    });
-
-    const userSelects = document.querySelectorAll(".js-subscription-user-select");
-
-    userSelects.forEach((select) => {
-      select.addEventListener("change", () => {
-        const form = select.closest("form");
-        if (!form) return;
-
-        form.requestSubmit();
-      });
-    });
-
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !modal.classList.contains("hidden")) {
-        pendingForm = null;
-        allowSubmit = false;
-        closeModal();
-      }
-    });
-  });
-</script>
-
-<script>
-  document.addEventListener("DOMContentLoaded", () => {
-    const searchInput = document.getElementById("subscriptionUsersSearch");
-    const searchForm = searchInput ? searchInput.closest("form") : null;
-    let timer = null;
-
-    if (!searchInput || !searchForm) {
-      return;
-    }
-
-    searchInput.addEventListener("input", () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        searchForm.requestSubmit();
-      }, 500);
-    });
-
-    searchInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        clearTimeout(timer);
-        searchForm.requestSubmit();
-      }
-    });
-  });
-</script>
 
 </div>

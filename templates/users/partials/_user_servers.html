@@ -277,20 +277,7 @@
                  class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 {% if readonly_text %} cursor-not-allowed {% endif %}">
         </label>
       </form>
-
-      {# Debounce JS (1 seul global, safe si déjà présent ailleurs) #}
-      <script>
-        window.__vodumDebounceSubmit = window.__vodumDebounceSubmit || (function () {
-          let t = null;
-          return function (form) {
-            if (!form) return;
-            clearTimeout(t);
-            t = setTimeout(function () { form.submit(); }, 500);
-          };
-        })();
-      </script>
-
-    {% else %}
+{% else %}
       <p class="text-xs text-slate-500 italic">{{ t("not_available") }}</p>
     {% endif %}
 
@@ -345,10 +332,10 @@
     </div>
 
     {# --- BARRE D'ACTIONS FIXE (Show all / Merge / Annuler alignés) --- #}
-    <div class="flex items-center justify-between gap-3">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
 
       <!-- Left: Show all / Show top (uniquement si > 5) -->
-      <div class="flex items-center gap-3">
+      <div class="flex flex-wrap items-center gap-3">
         {% if merge_suggestions|length > 5 %}
           <button type="button"
                   class="px-3 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 text-sm"
@@ -360,7 +347,7 @@
       </div>
 
       <!-- Right: Annuler + Merge -->
-      <div class="flex items-center gap-3">
+      <div class="flex flex-wrap items-center gap-3">
 
         <button type="button"
                 class="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
@@ -568,7 +555,7 @@
           </div>
 
           <!-- Footer (fixed) -->
-          <div class="px-5 py-4 border-t border-slate-800 flex items-center justify-end gap-3">
+          <div class="px-5 py-4 border-t border-slate-800 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
             <button type="button"
                     class="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
                     onclick="closeMergeConfirmModal()">

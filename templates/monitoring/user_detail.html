@@ -98,7 +98,7 @@
 
 
 
-      <div class="grid grid-cols-2 xl:grid-cols-4 gap-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         <div class="rounded-xl border border-slate-800/80 bg-slate-950/40 px-3 py-3">
           <div class="text-[11px] tracking-wide text-slate-500">{{ t("monitoring_user_plays_24h") }}:</div>
           <div class="mt-2 text-2xl font-semibold text-white">{{ s24.plays }}</div>
@@ -126,7 +126,7 @@
     </div>
 
     {# Ligne des 2 petites bulles #}
-    <div class="grid grid-cols-2 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
       <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
         <div class="text-xs uppercase tracking-wide text-slate-400">{{ t("monitoring_user_policy_stops") }}</div>
@@ -162,8 +162,8 @@
       <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
 
         {# Media types donut + legend #}
-        <div class="flex items-center gap-6">
-          <div class="w-[230px] h-[180px] shrink-0">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
+          <div class="w-[230px] max-w-full h-[180px] shrink-0 mx-auto sm:mx-0">
             <canvas id="chartMediaTypes"></canvas>
           </div>
           <div class="min-w-0">
@@ -177,8 +177,8 @@
         </div>
 
         {# Per server donut + legend #}
-        <div class="flex items-center gap-6">
-          <div class="w-[230px] h-[180px] shrink-0">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
+          <div class="w-[230px] max-w-full h-[180px] shrink-0 mx-auto sm:mx-0">
             <canvas id="chartServerUsage"></canvas>
           </div>
           <div class="min-w-0">
@@ -192,8 +192,8 @@
     {% else %}
       {# 1 donut only => plus compact, centré, pas de gros vide #}
       <div class="flex items-center justify-center">
-        <div class="flex items-center gap-6 max-w-3xl w-full">
-          <div class="w-[230px] h-[180px] shrink-0">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6 max-w-3xl w-full">
+          <div class="w-[230px] max-w-full h-[180px] shrink-0 mx-auto sm:mx-0">
             <canvas id="chartMediaTypes"></canvas>
           </div>
           <div class="min-w-0">

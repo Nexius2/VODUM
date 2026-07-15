@@ -211,10 +211,10 @@
         {% endif %}
       </div>
 
-      <div id="commVarsHelpModal" class="hidden fixed inset-0 z-50" aria-hidden="true">
+      <div id="commVarsHelpModal" class="hidden fixed inset-0 z-50 p-4" aria-hidden="true">
         <div class="absolute inset-0 bg-black/70"></div>
 
-        <div class="relative mx-auto mt-8 w-[95%] max-w-6xl max-h-[90vh]">
+        <div class="relative mx-auto w-full max-w-6xl max-h-[calc(100dvh-2rem)]">
           <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
             <div class="p-5 overflow-y-auto">
               <div class="flex items-start justify-between gap-4">
@@ -315,7 +315,7 @@
 
             <div class="border-t border-slate-800"></div>
 
-            <div class="p-4 flex items-center justify-end gap-2">
+            <div class="p-4 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2">
               <button type="button"
                       id="commVarsHelpCloseBottom"
                       class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-200">
@@ -445,7 +445,7 @@
 <div id="commTemplateDeleteModal" class="hidden fixed inset-0 z-50" aria-hidden="true">
   <div class="absolute inset-0 bg-black/70"></div>
 
-  <div class="relative mx-auto mt-24 w-[92%] max-w-lg">
+  <div class="relative mx-auto mt-8 sm:mt-24 w-full max-w-lg">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
       <div class="p-5">
         <div class="text-sm font-semibold text-slate-100">
@@ -483,7 +483,7 @@
 <div id="duplicateDisabledModal" class="fixed inset-0 z-50" aria-hidden="false">
   <div class="absolute inset-0 bg-black/70"></div>
 
-  <div class="relative mx-auto mt-16 w-[92%] max-w-xl">
+  <div class="relative mx-auto mt-8 sm:mt-16 w-full max-w-xl">
     <div class="bg-slate-900 border border-amber-700/40 rounded-2xl shadow-xl overflow-hidden">
       <div class="p-5">
         <div class="flex items-start justify-between gap-4">
@@ -506,7 +506,7 @@
 
       <div class="border-t border-slate-800"></div>
 
-      <div class="p-4 flex items-center justify-end gap-2">
+      <div class="p-4 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2">
         <button type="button"
                 id="duplicateDisabledCloseBottom"
                 class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-200">

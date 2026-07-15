@@ -52,6 +52,8 @@ function initMobileMenu() {
 
 document.addEventListener("DOMContentLoaded", initMobileMenu);
 
+
+
 document.addEventListener("error", (event) => {
   const image = event.target;
   if (image instanceof HTMLImageElement && image.classList.contains("js-artwork-image")) {
@@ -59,6 +61,59 @@ document.addEventListener("error", (event) => {
   }
 }, true);
 
+
+window.__vodumDebounceSubmit = window.__vodumDebounceSubmit || (() => {
+  let timer = null;
+  return (form) => {
+    if (!form) return;
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => form.submit(), 500);
+  };
+})();
+
+function initUserNotificationOrder() {
+  const checkbox = document.getElementById("use_global_notifications_order_cb");
+  const layer = document.getElementById("user_notif_order_layer");
+  const list = document.getElementById("user-notif-order-list");
+  const hidden = document.getElementById("user_notifications_order_hidden");
+  if (!checkbox || !layer || !list || !hidden || list.dataset.vodumBound === "1") return;
+  list.dataset.vodumBound = "1";
+
+  function updateHidden() {
+    const items = Array.from(list.querySelectorAll("li[data-channel]"));
+    hidden.value = items.map((item) => item.dataset.channel).filter(Boolean).join(",");
+  }
+
+  function moveItem(item, direction) {
+    if (!item) return;
+    if (direction === "up" && item.previousElementSibling) {
+      list.insertBefore(item, item.previousElementSibling);
+    }
+    if (direction === "down" && item.nextElementSibling) {
+      list.insertBefore(item.nextElementSibling, item);
+    }
+    updateHidden();
+  }
+
+  function syncLayerState() {
+    layer.classList.toggle("opacity-50", checkbox.checked);
+    layer.classList.toggle("pointer-events-none", checkbox.checked);
+  }
+
+  list.addEventListener("click", (event) => {
+    const item = event.target.closest("li[data-channel]");
+    if (!item) return;
+    if (event.target.closest(".order-up")) moveItem(item, "up");
+    if (event.target.closest(".order-down")) moveItem(item, "down");
+  });
+
+  checkbox.addEventListener("change", syncLayerState);
+  updateHidden();
+  syncLayerState();
+}
+
+document.addEventListener("DOMContentLoaded", initUserNotificationOrder);
+document.addEventListener("htmx:load", initUserNotificationOrder);
 // ------------ UTILITAIRES ---------------------------------
 
 async function apiGet(url) {
@@ -637,4 +692,34 @@ window.vodumFlash = function(category, message, autoHideMs = 4000) {
   document.body.addEventListener("htmx:configRequest", function (event) {
     event.detail.headers["X-CSRF-Token"] = csrfToken;
   });
+})();
+
+// ------------ MOBILE TABLES ---------------------------------------------
+(function vodumMobileTables() {
+  function shouldSkip(table) {
+    return table.closest(".vodum-mobile-table-scroll, .overflow-x-auto, .table-responsive");
+  }
+
+  function enhanceMobileTables(root = document) {
+    const scope = root && root.querySelectorAll ? root : document;
+    const selector = scope === document ? "main table" : "table";
+    const tables = Array.from(scope.querySelectorAll(selector));
+    if (scope.matches && scope.matches("table")) {
+      tables.unshift(scope);
+    }
+
+    tables.forEach((table) => {
+      if (!table.closest("main") || shouldSkip(table) || !table.parentNode) return;
+
+      const wrapper = document.createElement("div");
+      wrapper.className = "vodum-mobile-table-scroll";
+      wrapper.dataset.vodumMobileTable = "1";
+      table.parentNode.insertBefore(wrapper, table);
+      wrapper.appendChild(table);
+    });
+  }
+
+  window.vodumEnhanceMobileTables = enhanceMobileTables;
+  document.addEventListener("DOMContentLoaded", () => enhanceMobileTables(document));
+  document.addEventListener("htmx:load", (event) => enhanceMobileTables(event.target));
 })();

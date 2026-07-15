@@ -1,4 +1,4 @@
-﻿(function vodumBackupPage() {
+(function vodumBackupPage() {
   const configEl = document.getElementById("vodum-backup-config");
   const config = (() => {
     if (!configEl) return {};
@@ -174,7 +174,172 @@
     }
   }
 
+
+  function initTautulliImport() {
+    const tautulliModal = document.getElementById("tautulliImportModal");
+    const openBtn = document.getElementById("openTautulliImportModal");
+    const closeBtn = document.getElementById("closeTautulliImportModal");
+    const confirmBtn = document.getElementById("confirmTautulliImportBtn");
+    const form = document.getElementById("tautulliImportForm");
+    const fileInput = document.getElementById("tautulliDbFile");
+    const errBox = document.getElementById("tautulliFileError");
+    const overlay = document.getElementById("tautulliCopyOverlay");
+    const statusBox = document.getElementById("tautulliJobStatus");
+    const statusMeta = document.getElementById("tautulliJobStatusMeta");
+    const statusText = document.getElementById("tautulliJobStatusText");
+    const statusErr = document.getElementById("tautulliJobStatusError");
+
+    if (!tautulliModal || !openBtn || !form || !fileInput || !errBox || !statusBox || form.dataset.vodumBound === "1") return;
+    form.dataset.vodumBound = "1";
+
+    const statusUrl = config.tautulliStatusUrl || "";
+    const msgSelectFile = labels.tautulliSelectFileFirst || "Select a file first.";
+    let statusTimer = null;
+
+    function showError(message) {
+      errBox.textContent = message;
+      errBox.classList.remove("hidden");
+    }
+
+    function clearError() {
+      errBox.textContent = "";
+      errBox.classList.add("hidden");
+    }
+
+    function updateButtonState() {
+      const hasFile = fileInput.files && fileInput.files.length > 0;
+      openBtn.disabled = !hasFile;
+      if (hasFile) {
+        openBtn.classList.remove("cursor-not-allowed", "opacity-60", "bg-primary/40");
+        openBtn.classList.add("cursor-pointer", "bg-primary/80", "hover:bg-primary");
+        clearError();
+      } else {
+        openBtn.classList.remove("cursor-pointer", "bg-primary/80", "hover:bg-primary");
+        openBtn.classList.add("cursor-not-allowed", "opacity-60", "bg-primary/40");
+      }
+    }
+
+    function openModal() {
+      if (!fileInput.files || fileInput.files.length === 0) {
+        showError(msgSelectFile);
+        return;
+      }
+      tautulliModal.classList.remove("hidden");
+      tautulliModal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeModal() {
+      tautulliModal.classList.add("hidden");
+      tautulliModal.setAttribute("aria-hidden", "true");
+    }
+
+    function setStatusBoxStyle(kind) {
+      statusBox.classList.remove(
+        "bg-slate-950", "border-slate-800", "text-slate-200",
+        "bg-emerald-900/20", "border-emerald-900/40", "text-emerald-100",
+        "bg-red-900/20", "border-red-900/40", "text-red-100"
+      );
+      if (kind === "ok") {
+        statusBox.classList.add("bg-emerald-900/20", "border-emerald-900/40", "text-emerald-100");
+      } else if (kind === "err") {
+        statusBox.classList.add("bg-red-900/20", "border-red-900/40", "text-red-100");
+      } else {
+        statusBox.classList.add("bg-slate-950", "border-slate-800", "text-slate-200");
+      }
+    }
+
+    function stopStatusTimer() {
+      if (statusTimer) window.clearInterval(statusTimer);
+      statusTimer = null;
+    }
+
+    function renderJobStatus(data) {
+      if (!data || !data.status || data.status === "none") {
+        statusBox.classList.add("hidden");
+        return;
+      }
+
+      statusBox.classList.remove("hidden");
+      statusErr.classList.add("hidden");
+      statusErr.textContent = "";
+      statusMeta.textContent = data.id ? `#${data.id}` : "";
+
+      if (data.status === "queued") {
+        setStatusBoxStyle("info");
+        statusText.textContent = "Queued, waiting for the worker to start.";
+      } else if (data.status === "running") {
+        setStatusBoxStyle("info");
+        statusText.textContent = "Running, importing sessions.";
+      } else if (data.status === "success") {
+        const finishedAt = data.finished_at && window.vodumParseDate ? window.vodumParseDate(data.finished_at) : null;
+        const ageMs = finishedAt ? (Date.now() - finishedAt.getTime()) : 0;
+        if (finishedAt && ageMs > (2 * 60 * 60 * 1000)) {
+          statusBox.classList.add("hidden");
+          stopStatusTimer();
+          return;
+        }
+        setStatusBoxStyle("ok");
+        statusText.textContent = "Completed successfully.";
+        stopStatusTimer();
+      } else if (data.status === "error") {
+        setStatusBoxStyle("err");
+        statusText.textContent = "Failed.";
+        if (data.last_error) {
+          statusErr.textContent = data.last_error;
+          statusErr.classList.remove("hidden");
+        }
+        stopStatusTimer();
+      } else {
+        setStatusBoxStyle("info");
+        statusText.textContent = `Status: ${data.status}`;
+      }
+    }
+
+    async function pollJobStatusOnce() {
+      if (!statusUrl) return;
+      try {
+        const response = await fetch(statusUrl, { cache: "no-store" });
+        if (!response.ok) return;
+        const data = await response.json();
+        renderJobStatus(data);
+        if (data && (data.status === "queued" || data.status === "running") && !statusTimer) {
+          statusTimer = window.setInterval(pollJobStatusOnce, 2000);
+        }
+      } catch (error) {
+        // Status polling is best-effort.
+      }
+    }
+
+    form.addEventListener("submit", () => {
+      if (overlay) {
+        overlay.classList.remove("hidden");
+        overlay.classList.add("flex");
+      }
+      openBtn.disabled = true;
+      openBtn.classList.add("opacity-60", "cursor-not-allowed");
+      if (closeBtn) closeBtn.disabled = true;
+      if (confirmBtn) confirmBtn.disabled = true;
+      Array.from(form.querySelectorAll("button")).forEach((button) => {
+        button.disabled = true;
+        button.classList.add("opacity-60", "cursor-not-allowed");
+      });
+    });
+
+    fileInput.addEventListener("change", updateButtonState);
+    openBtn.addEventListener("click", openModal);
+    if (closeBtn) closeBtn.addEventListener("click", closeModal);
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !tautulliModal.classList.contains("hidden")) closeModal();
+    });
+    tautulliModal.addEventListener("click", (event) => {
+      if (event.target === tautulliModal || event.target?.classList?.contains("bg-black/70")) closeModal();
+    });
+
+    updateButtonState();
+    pollJobStatusOnce();
+  }
   document.addEventListener("DOMContentLoaded", function () {
+    initTautulliImport();
     document.querySelectorAll(".js-restore-backup-form").forEach(function (form) {
       form.addEventListener("submit", function () {
         window.showRestoreWaitingModal();

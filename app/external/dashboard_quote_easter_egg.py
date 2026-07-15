@@ -109,6 +109,40 @@ def _save_cache(payload):
         logger.exception(f"Failed to save dashboard quote cache: {path}")
 
 
+def _quote_key(entry):
+    key = _normalize_str((entry or {}).get("key"))
+    if key:
+        return key
+
+    ids = (entry or {}).get("ids") or {}
+    return _normalize_str(ids.get("imdb")) or _normalize_str(ids.get("tmdb"))
+
+
+def _load_rotation(cached):
+    rotation = (cached or {}).get("rotation") or {}
+    if not isinstance(rotation, dict):
+        return {"seen_keys": []}
+
+    seen = rotation.get("seen_keys") or []
+    if not isinstance(seen, list):
+        seen = []
+
+    cleaned = []
+    for key in seen:
+        key = _normalize_str(key)
+        if key and key not in cleaned:
+            cleaned.append(key)
+
+    return {"seen_keys": cleaned}
+
+
+def _with_rotation(payload, seen_keys):
+    payload["rotation"] = {
+        "seen_keys": list(seen_keys or []),
+    }
+    return payload
+
+
 def _normalize_str(value):
     if value is None:
         return None
@@ -267,6 +301,11 @@ def _resolve_on_plex(server, media_type, imdb, tmdb):
                     or node.attrib.get("grandparentThumb")
                     or node.attrib.get("parentThumb")
                 )
+                backdrop_path = (
+                    node.attrib.get("art")
+                    or node.attrib.get("grandparentArt")
+                    or node.attrib.get("parentArt")
+                )
 
                 if not poster_path:
                     logger.info(
@@ -290,6 +329,9 @@ def _resolve_on_plex(server, media_type, imdb, tmdb):
                     "poster_mode": "plex_path",
                     "poster_path": poster_path,
                     "poster_item_id": None,
+                    "backdrop_mode": "plex_path",
+                    "backdrop_path": backdrop_path,
+                    "backdrop_item_id": None,
                 }
 
         except Exception:
@@ -378,6 +420,9 @@ def _resolve_on_jellyfin(server, media_type, imdb, tmdb):
                         "poster_mode": "jellyfin_item",
                         "poster_path": None,
                         "poster_item_id": str(item_id),
+                        "backdrop_mode": "jellyfin_item",
+                        "backdrop_path": None,
+                        "backdrop_item_id": str(item_id),
                     }
 
                 if len(items) < page_size:
@@ -404,6 +449,8 @@ def _resolve_on_jellyfin(server, media_type, imdb, tmdb):
 
 def _resolve_media(entry):
     media_type = str(entry.get("media_type") or "").strip().lower()
+    if media_type == "tv":
+        media_type = "show"
     if media_type not in {"movie", "show"}:
         logger.warning(f"Unsupported media_type for quote entry: {entry.get('key')}")
         return None
@@ -463,6 +510,7 @@ def refresh_dashboard_quote_cache(force=False):
             "none": True,
             "reason": "quotes_file_empty_or_missing",
         }
+        _with_rotation(payload, (_load_rotation(cached).get("seen_keys") or []))
         _save_cache(payload)
         return payload
 
@@ -479,45 +527,73 @@ def refresh_dashboard_quote_cache(force=False):
             "none": True,
             "reason": "no_english_quotes_available",
         }
+        _with_rotation(payload, (_load_rotation(cached).get("seen_keys") or []))
         _save_cache(payload)
         return payload
 
-    random.shuffle(candidates)
+    rotation = _load_rotation(cached)
+    seen_keys = rotation.get("seen_keys") or []
+    seen_set = set(seen_keys)
 
-    for entry in candidates:
-        quote_text = _pick_quote_text(entry)
-        resolved = _resolve_media(entry)
+    unseen_candidates = [entry for entry in candidates if _quote_key(entry) not in seen_set]
+    random.shuffle(unseen_candidates)
 
-        if not quote_text or not resolved:
+    retry_candidates = list(candidates)
+    random.shuffle(retry_candidates)
+
+    passes = [
+        (unseen_candidates, False),
+        (retry_candidates, True),
+    ]
+
+    for pass_candidates, reset_rotation in passes:
+        if not pass_candidates:
             continue
 
-        payload = {
-            "day": today,
-            "none": False,
-            "quote_key": entry.get("key"),
-            "phrase": quote_text,
-            "title": resolved.get("title"),
-            "year": resolved.get("year"),
-            "provider": resolved.get("provider"),
-            "server_id": resolved.get("server_id"),
-            "server_name": resolved.get("server_name"),
-            "poster_mode": resolved.get("poster_mode"),
-            "poster_path": resolved.get("poster_path"),
-            "poster_item_id": resolved.get("poster_item_id"),
-        }
+        for entry in pass_candidates:
+            quote_text = _pick_quote_text(entry)
+            resolved = _resolve_media(entry)
 
-        _save_cache(payload)
+            if not quote_text or not resolved:
+                continue
 
-        logger.info(
-            f"Dashboard quote selected key={payload.get('quote_key')} provider={payload.get('provider')} server={payload.get('server_name')} title={payload.get('title')} year={payload.get('year')}"
-        )
-        return payload
+            key = _quote_key(entry) or entry.get("key")
+            next_seen = [] if reset_rotation else list(seen_keys)
+            if key and key not in next_seen:
+                next_seen.append(key)
+
+            payload = {
+                "day": today,
+                "none": False,
+                "quote_key": entry.get("key"),
+                "phrase": quote_text,
+                "title": resolved.get("title"),
+                "year": resolved.get("year"),
+                "provider": resolved.get("provider"),
+                "server_id": resolved.get("server_id"),
+                "server_name": resolved.get("server_name"),
+                "poster_mode": resolved.get("poster_mode"),
+                "poster_path": resolved.get("poster_path"),
+                "poster_item_id": resolved.get("poster_item_id"),
+                "backdrop_mode": resolved.get("backdrop_mode"),
+                "backdrop_path": resolved.get("backdrop_path"),
+                "backdrop_item_id": resolved.get("backdrop_item_id"),
+            }
+            _with_rotation(payload, next_seen)
+
+            _save_cache(payload)
+
+            logger.info(
+                f"Dashboard quote selected key={payload.get('quote_key')} provider={payload.get('provider')} server={payload.get('server_name')} title={payload.get('title')} year={payload.get('year')} rotation_reset={reset_rotation}"
+            )
+            return payload
 
     payload = {
         "day": today,
         "none": True,
         "reason": "no_matching_media_found",
     }
+    _with_rotation(payload, seen_keys)
     _save_cache(payload)
     logger.info("No valid dashboard quote found for today")
     return payload
@@ -567,6 +643,101 @@ def _build_local_quote_fallback():
         "quote_key": entry.get("key"),
     }
 
+
+def _quote_image_url(server_id, mode, path=None, item_id=None, image_type="Primary", width=None):
+    if not server_id:
+        return None
+
+    try:
+        if mode == "plex_path" and path:
+            return url_for(
+                "api_monitoring_poster",
+                server_id=int(server_id),
+                path=path,
+            )
+
+        if mode == "jellyfin_item" and item_id:
+            kwargs = {
+                "server_id": int(server_id),
+                "item_id": str(item_id),
+                "image_type": image_type,
+            }
+            if width:
+                kwargs["w"] = str(width)
+            return url_for("api_monitoring_poster", **kwargs)
+    except Exception:
+        logger.exception("Failed to build quote artwork url")
+
+    return None
+
+
+def _build_quote_artwork_urls(payload):
+    payload = payload or {}
+    server_id = payload.get("server_id")
+
+    poster_url = _quote_image_url(
+        server_id,
+        payload.get("poster_mode"),
+        path=payload.get("poster_path"),
+        item_id=payload.get("poster_item_id"),
+        image_type="Primary",
+        width=420,
+    )
+
+    backdrop_url = _quote_image_url(
+        server_id,
+        payload.get("backdrop_mode"),
+        path=payload.get("backdrop_path"),
+        item_id=payload.get("backdrop_item_id"),
+        image_type="Backdrop",
+        width=1400,
+    )
+
+    if not poster_url and payload.get("poster_url"):
+        poster_url = payload.get("poster_url")
+
+    return poster_url, backdrop_url
+
+
+def build_login_quote_artwork_request(kind="poster"):
+    payload = _load_cache()
+    if not payload or payload.get("day") != _today_str() or payload.get("none") is True:
+        return None
+
+    kind = str(kind or "poster").strip().lower()
+    if kind == "backdrop":
+        mode = payload.get("backdrop_mode") or payload.get("poster_mode")
+        path = payload.get("backdrop_path") or payload.get("poster_path")
+        item_id = payload.get("backdrop_item_id") or payload.get("poster_item_id")
+        image_type = "Backdrop" if payload.get("backdrop_mode") else "Primary"
+        width = "1400" if image_type == "Backdrop" else "420"
+    else:
+        mode = payload.get("poster_mode")
+        path = payload.get("poster_path")
+        item_id = payload.get("poster_item_id")
+        image_type = "Primary"
+        width = "420"
+
+    server_id = payload.get("server_id")
+    if not server_id or not mode:
+        return None
+
+    if mode == "plex_path" and path:
+        return {"server_id": int(server_id), "query": {"path": path}}
+
+    if mode == "jellyfin_item" and item_id:
+        return {
+            "server_id": int(server_id),
+            "query": {
+                "item_id": str(item_id),
+                "image_type": image_type,
+                "w": width,
+            },
+        }
+
+    return None
+
+
 def build_dashboard_quote_card():
     payload = _load_cache()
     if not payload:
@@ -581,32 +752,7 @@ def build_dashboard_quote_card():
         logger.info("Dashboard quote cache says no matching media for today -> using local quote fallback")
         return _build_local_quote_fallback()
 
-    server_id = payload.get("server_id")
-    poster_mode = payload.get("poster_mode")
-    poster_path = payload.get("poster_path")
-    poster_item_id = payload.get("poster_item_id")
-
-    poster_url = None
-
-    try:
-        if poster_mode == "plex_path" and server_id and poster_path:
-            poster_url = url_for(
-                "api_monitoring_poster",
-                server_id=int(server_id),
-                path=poster_path,
-            )
-        elif poster_mode == "jellyfin_item" and server_id and poster_item_id:
-            poster_url = url_for(
-                "api_monitoring_poster",
-                server_id=int(server_id),
-                item_id=str(poster_item_id),
-            )
-        elif payload.get("poster_url"):
-            # Compat cache legacy déjà stocké avec poster_url complet
-            poster_url = payload.get("poster_url")
-    except Exception:
-        logger.exception("Failed to build poster_url from dashboard quote cache")
-        poster_url = None
+    poster_url, backdrop_url = _build_quote_artwork_urls(payload)
 
     if not poster_url:
         logger.warning("Dashboard quote cache exists but poster_url could not be built -> using local quote fallback")
@@ -615,7 +761,27 @@ def build_dashboard_quote_card():
     return {
         "phrase": payload.get("phrase"),
         "poster_url": poster_url,
+        "backdrop_url": backdrop_url,
+        "title": payload.get("title"),
+        "year": payload.get("year"),
+        "quote_key": payload.get("quote_key"),
+    }
+
+
+def build_login_quote_visual():
+    payload = _load_cache()
+    if not payload or payload.get("day") != _today_str() or payload.get("none") is True:
+        return None
+
+    has_poster = build_login_quote_artwork_request("poster") is not None
+    has_backdrop = build_login_quote_artwork_request("backdrop") is not None
+    if not has_poster and not has_backdrop:
+        return None
+
+    return {
+        "phrase": payload.get("phrase"),
+        "poster_url": url_for("login_quote_artwork", kind="poster") if has_poster else (url_for("login_quote_artwork", kind="backdrop") if has_backdrop else None),
+        "backdrop_url": url_for("login_quote_artwork", kind="backdrop") if has_backdrop else (url_for("login_quote_artwork", kind="poster") if has_poster else None),
         "title": payload.get("title"),
         "year": payload.get("year"),
     }
-

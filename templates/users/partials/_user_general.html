@@ -231,51 +231,7 @@
           </div>
 
         </div>
-
-        <script>
-        (function(){
-          const cb = document.getElementById('use_global_notifications_order_cb');
-          const layer = document.getElementById('user_notif_order_layer');
-          const list = document.getElementById('user-notif-order-list');
-          const hidden = document.getElementById('user_notifications_order_hidden');
-
-          if (!cb || !layer || !list || !hidden) return;
-
-          function updateHidden() {
-            const items = [...list.querySelectorAll('li[data-channel]')];
-            hidden.value = items.map(li => li.dataset.channel).join(',');
-          }
-
-          function moveItem(li, dir) {
-            if (dir === 'up' && li.previousElementSibling) {
-              list.insertBefore(li, li.previousElementSibling);
-            }
-            if (dir === 'down' && li.nextElementSibling) {
-              list.insertBefore(li.nextElementSibling, li);
-            }
-            updateHidden();
-          }
-
-          list.addEventListener('click', e => {
-            const li = e.target.closest('li[data-channel]');
-            if (!li) return;
-            if (e.target.closest('.order-up')) moveItem(li, 'up');
-            if (e.target.closest('.order-down')) moveItem(li, 'down');
-          });
-
-          cb.addEventListener('change', () => {
-            if (cb.checked) {
-              layer.classList.add('opacity-50','pointer-events-none');
-            } else {
-              layer.classList.remove('opacity-50','pointer-events-none');
-            }
-          });
-
-          updateHidden();
-        })();
-        </script>
-
-      {% endif %}
+{% endif %}
     </div>
 
     <!-- ======================= Options + Usage Risk ======================= -->
@@ -631,7 +587,7 @@
               {% endif %}
             </div>
 
-            <div class="grid grid-cols-2 gap-3 mt-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
               <div>
                 <div class="text-xs text-slate-400 mb-1">{{ t("referral_status") }}</div>
                 <div class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm">

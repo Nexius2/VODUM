@@ -1,7 +1,10 @@
 ﻿{% set live = total_live|default(0) %}
 {% set transcode = total_transcode|default(0) %}
 {% set direct = live - transcode %}
+{% set fragment_state = 'live' if sessions and sessions|length > 0 else ('idle' if idle_card else 'empty') %}
+{% set fragment_key = idle_card.quote_key if idle_card and idle_card.quote_key else fragment_state %}
 
+<div data-now-playing-fragment data-state="{{ fragment_state }}" data-key="{{ fragment_key }}">
 <div class="flex items-center justify-between mb-3">
     <div class="flex items-center gap-3 min-w-0">
 		<h2 class="text-sm font-semibold truncate">
@@ -140,7 +143,7 @@
                 <img
                     src="{{ idle_card.poster_url }}"
                     alt="{{ idle_card.title or '' }}"
-                    class="w-20 h-28 rounded-lg object-cover border border-slate-700/70 shrink-0"
+                    class="js-artwork-image w-20 h-28 rounded-lg object-cover border border-slate-700/70 shrink-0"
                     loading="lazy"
                     decoding="async"
                 />
@@ -168,4 +171,4 @@
 {% else %}
     <p class="text-xs text-slate-500">{{ t("monitoring_no_active_session") }}</p>
 {% endif %}
-
+</div>

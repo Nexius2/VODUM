@@ -1,13 +1,13 @@
 <!-- LEFT: PLAN EDITOR -->
 <div class="lg:col-span-8 xl:col-span-8 bg-slate-900 border border-slate-800 rounded-2xl p-6">
 
-  <div class="flex items-start justify-between mb-5 gap-3">
+  <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-5 gap-3">
     <div>
       <h2 class="text-lg font-semibold text-slate-100">{{ t("subscription_plan") }}</h2>
       <div class="text-sm text-slate-400 mt-1">{{ t("subscription_plan_editor_hint") }}</div>
     </div>
 
-    <div class="flex items-center gap-2 shrink-0">
+    <div class="flex flex-wrap items-center gap-2 shrink-0">
       <span id="tpl_policies_count_badge" class="text-xs text-slate-500 hidden"></span>
       <button type="button"
               onclick="resetTemplateEditor()"
@@ -110,12 +110,12 @@
 
     <!-- SIMPLE LIMITS -->
     <div id="simple_policy_mode" class="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden">
-      <div class="px-5 py-4 border-b border-slate-800 bg-slate-900/40 flex items-start justify-between gap-3">
+      <div class="px-5 py-4 border-b border-slate-800 bg-slate-900/40 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
           <div class="text-sm font-semibold text-slate-100">{{ t("subscription_plan_rules") }}</div>
           <div class="text-xs text-slate-500 mt-1">{{ t("subscription_plan_rules_simple_hint") }}</div>
         </div>
-        <div class="flex items-center gap-2 shrink-0">
+        <div class="flex flex-wrap items-center gap-2 shrink-0">
           <button
             type="button"
             id="templatePolicyModeToggleBtnSimple"
@@ -129,7 +129,7 @@
 
       <div class="p-5 grid grid-cols-1 xl:grid-cols-2 gap-4">
         <div class="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-          <div class="flex items-start justify-between gap-3">
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
             <div>
               <div class="text-sm font-semibold text-slate-100">{{ t("subscription_limit_streams") }}</div>
               <div class="text-xs text-slate-500 mt-1">{{ t("subscription_limit_streams_hint") }}</div>
@@ -161,7 +161,7 @@
         </div>
 
         <div class="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-          <div class="flex items-start justify-between gap-3">
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
             <div>
               <div class="text-sm font-semibold text-slate-100">{{ t("subscription_ip_addresses") }}</div>
               <div class="text-xs text-slate-500 mt-1">{{ t("subscription_ip_addresses_hint") }}</div>
@@ -193,7 +193,7 @@
         </div>
 
         <div class="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-          <div class="flex items-start justify-between gap-3">
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
             <div>
               <div class="text-sm font-semibold text-slate-100">{{ t("bitrate") }}</div>
               <div class="text-xs text-slate-500 mt-1">{{ t("subscription_bitrate_hint") }}</div>
@@ -211,7 +211,7 @@
         </div>
 
         <div class="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-          <div class="flex items-start justify-between gap-3">
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
             <div>
               <div class="text-sm font-semibold text-slate-100">{{ t("subscription_allowed_devices") }}</div>
               <div class="text-xs text-slate-500 mt-1">{{ t("subscription_allowed_devices_hint") }}</div>
@@ -232,7 +232,7 @@
 
     <!-- GENERATED SUMMARY -->
     <div id="simple_policy_summary" class="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden">
-      <div class="px-5 py-4 border-b border-slate-800 bg-slate-900/40 flex items-center justify-between gap-3">
+      <div class="px-5 py-4 border-b border-slate-800 bg-slate-900/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <div class="text-sm font-semibold text-slate-100">{{ t("subscription_rules_generated") }}</div>
           <div class="text-xs text-slate-500 mt-1">{{ t("subscription_rules_generated_hint") }}</div>
@@ -245,12 +245,12 @@
 
     <!-- ADVANCED POLICY EDITOR -->
     <div id="advanced_policy_editor" class="hidden bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden">
-      <div class="px-5 py-4 border-b border-slate-800 bg-slate-900/40 flex items-start justify-between gap-3">
+      <div class="px-5 py-4 border-b border-slate-800 bg-slate-900/40 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
           <div class="text-sm font-semibold text-slate-100">{{ t("subscription_plan_rules") }}</div>
           <div class="text-xs text-slate-500 mt-1">{{ t("advanced") }} mode exposes the full policy editor for provider, server filter, priority, selectors and custom rules.</div>
         </div>
-        <div class="flex items-center gap-2 shrink-0">
+        <div class="flex flex-wrap items-center gap-2 shrink-0">
           <button
             type="button"
             id="templatePolicyModeToggleBtnAdvanced"
@@ -820,7 +820,7 @@
 
       return `
         <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-          <div class="flex items-start justify-between gap-3">
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
             <div class="min-w-0">
               <div class="text-sm font-semibold text-slate-100">${escapeHtml(getPolicySummaryTitle(p))}</div>
               <div class="text-xs text-slate-500 mt-1">${escapeHtml(getRuleTypeLabel(p.rule_type))}</div>

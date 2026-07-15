@@ -54,7 +54,7 @@
                   {% endif %}
                 </div>
 
-                <div class="grid grid-cols-2 gap-2 mt-3 text-xs">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3 text-xs">
                   <div class="rounded-lg bg-slate-900 border border-slate-800 px-3 py-2">
                     <div class="text-slate-500">{{ t("duration") }}</div>
                     <div class="text-slate-200 font-semibold mt-0.5">
@@ -110,7 +110,7 @@
       </div>
     {% endif %}
 
-    <div class="mt-5 flex justify-end">
+    <div class="mt-5 flex justify-start sm:justify-end">
       <form method="post" action="{{ url_for('subscription_templates_restore_defaults') }}">
         <button type="submit"
                 class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs">
@@ -122,10 +122,10 @@
   </div>
 </div>
 
-<div id="templateDeleteConfirmModal" class="hidden fixed inset-0 z-50" aria-hidden="true">
+<div id="templateDeleteConfirmModal" class="hidden fixed inset-0 z-50 p-4" aria-hidden="true">
   <div class="absolute inset-0 bg-black/70"></div>
 
-  <div class="relative mx-auto mt-24 w-[92%] max-w-lg">
+  <div class="relative mx-auto mt-8 sm:mt-24 w-full max-w-lg">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
       <div class="p-5">
         <div class="flex items-center gap-3">
@@ -147,7 +147,7 @@
 
       <div class="border-t border-slate-800"></div>
 
-      <div class="p-4 flex items-center justify-end gap-2">
+      <div class="p-4 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2">
         <button type="button" id="templateDeleteConfirmCancel"
                 class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-200">
           {{ t("cancel") }}
@@ -161,117 +161,3 @@
     </div>
   </div>
 </div>
-
-<script>
-  document.addEventListener("DOMContentLoaded", () => {
-    function cardEscapeHtml(value) {
-      return String(value ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
-    }
-
-    function summarizePolicy(policy) {
-      const rule = policy.rule || {};
-      if (policy.rule_type === "max_streams_per_user") return `${rule.max ?? "?"} streams`;
-      if (policy.rule_type === "max_ips_per_user") return `${rule.max ?? "?"} IPs`;
-      if (policy.rule_type === "max_streams_per_ip") return `${rule.max ?? "?"} streams / IP`;
-      if (policy.rule_type === "max_transcodes_global") return `${rule.max ?? "?"} transcodes`;
-      if (policy.rule_type === "max_bitrate_kbps") return `${rule.max_kbps ?? "?"} kbps`;
-      if (policy.rule_type === "device_allowlist") return `Devices: ${(rule.allowed || []).join(", ") || "—"}`;
-      if (policy.rule_type === "ban_4k_transcode") return `No 4K transcode`;
-      return policy.rule_type || "Policy";
-    }
-
-    document.querySelectorAll(".js-plan-card").forEach((card) => {
-      const box = card.querySelector(".js-plan-summary");
-      if (!box) return;
-
-      let policies = [];
-      try {
-        policies = JSON.parse(card.dataset.policies || "[]") || [];
-      } catch (e) {
-        policies = [];
-      }
-
-      if (!policies.length) return;
-
-      box.innerHTML = policies.slice(0, 4).map((policy) => {
-        const enabledClass = policy.is_enabled ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-slate-700 bg-slate-800 text-slate-400";
-        return `<span class="rounded-full border px-2 py-1 ${enabledClass}">${cardEscapeHtml(summarizePolicy(policy))}</span>`;
-      }).join("");
-
-      if (policies.length > 4) {
-        box.innerHTML += `<span class="rounded-full border border-slate-800 bg-slate-900 px-2 py-1 text-slate-400">+${policies.length - 4}</span>`;
-      }
-    });
-
-    const enabledOnly = document.getElementById("plansEnabledOnly");
-    if (enabledOnly) {
-      const applyEnabledFilter = () => {
-        document.querySelectorAll(".js-plan-card").forEach((card) => {
-          const shouldHide = enabledOnly.checked && card.dataset.enabled !== "1";
-          card.classList.toggle("hidden", shouldHide);
-        });
-      };
-
-      enabledOnly.addEventListener("change", applyEnabledFilter);
-      applyEnabledFilter();
-    }
-
-    const modal = document.getElementById("templateDeleteConfirmModal");
-    const nameBox = document.getElementById("templateDeleteConfirmName");
-    const btnCancel = document.getElementById("templateDeleteConfirmCancel");
-    const btnOk = document.getElementById("templateDeleteConfirmOk");
-    const forms = document.querySelectorAll(".js-template-delete-form");
-
-    if (!modal || !nameBox || !btnCancel || !btnOk || !forms.length) {
-      return;
-    }
-
-    let pendingForm = null;
-
-    function openModal(form) {
-      pendingForm = form;
-      nameBox.textContent = form.dataset.templateName || "—";
-      modal.classList.remove("hidden");
-      modal.setAttribute("aria-hidden", "false");
-    }
-
-    function closeModal() {
-      pendingForm = null;
-      modal.classList.add("hidden");
-      modal.setAttribute("aria-hidden", "true");
-    }
-
-    forms.forEach((form) => {
-      form.addEventListener("submit", (e) => {
-        e.preventDefault();
-        openModal(form);
-      });
-    });
-
-    btnCancel.addEventListener("click", closeModal);
-
-    btnOk.addEventListener("click", () => {
-      if (!pendingForm) return;
-      const form = pendingForm;
-      pendingForm = null;
-      form.submit();
-    });
-
-    modal.addEventListener("click", (e) => {
-      if (e.target === modal || (e.target.classList && e.target.classList.contains("bg-black/70"))) {
-        closeModal();
-      }
-    });
-
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !modal.classList.contains("hidden")) {
-        closeModal();
-      }
-    });
-  });
-</script>

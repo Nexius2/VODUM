@@ -314,18 +314,18 @@
         </div>
       </div>
 
-      <div class="flex items-center justify-between gap-3">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <form method="post"
               action="{{ url_for('stream_policy_bulk_delete') }}"
               id="policyBulkDeleteForm"
-              class="flex items-center gap-3">
+              class="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
           <input type="hidden" name="redirect_endpoint" value="{{ current_redirect_endpoint }}">
           <input type="hidden" name="redirect_tab" value="{{ current_redirect_tab }}">
           <div id="policyBulkDeleteInputs"></div>
 
           <button type="button"
                   id="policyBulkDeleteBtn"
-                  class="px-3 py-2 rounded-lg border border-red-800 bg-red-950/40 text-red-300 hover:bg-red-950/70 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                  class="w-full sm:w-auto px-3 py-2 rounded-lg border border-red-800 bg-red-950/40 text-red-300 hover:bg-red-950/70 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
                   disabled>
             {{ t("delete") }}
             <span id="policyBulkDeleteCount" class="ml-1">(0)</span>
@@ -578,7 +578,7 @@
           </p>
         </div>
 
-        <div class="px-5 py-4 border-t border-slate-800 flex items-center justify-end gap-3">
+        <div class="px-5 py-4 border-t border-slate-800 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
           <button type="button"
                   id="policyBulkDeleteModalCancel"
                   class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-950/40 text-slate-200 hover:bg-slate-950/70">

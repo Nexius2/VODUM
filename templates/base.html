@@ -282,29 +282,6 @@
 
   <script src="{{ url_for('static', filename='js/app.js', v=g.app_version|default('dev')) }}"></script>
   <script src="{{ url_for('static', filename='js/modal_manager.js', v=g.app_version|default('dev')) }}"></script>
-  <script>
-    (() => {
-      const menu = document.getElementById("mobileMenu");
-      const openButton = document.getElementById("mobileMenuOpen");
-      const closeButton = document.getElementById("mobileMenuClose");
-      const backdrop = document.getElementById("mobileMenuBackdrop");
-      const nav = document.getElementById("mobileMenuNav");
-      if (!menu || !openButton || !closeButton) return;
-
-      const openMenu = () => menu.classList.remove("hidden");
-      const closeMenu = () => menu.classList.add("hidden");
-
-      openButton.addEventListener("click", openMenu);
-      closeButton.addEventListener("click", closeMenu);
-      backdrop?.addEventListener("click", closeMenu);
-      nav?.addEventListener("click", (event) => {
-        if (event.target.closest("a, button")) closeMenu();
-      });
-      document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape") closeMenu();
-      });
-    })();
-  </script>
   {% block scripts %}{% endblock %}
 
 </body>
