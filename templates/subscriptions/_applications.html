@@ -49,8 +49,11 @@
 		</div>
 
 		<div class="flex items-center gap-3">
-		  <form method="get" action="{{ url_for('subscriptions') }}" class="w-full md:w-auto">
+		  <form method="get" action="{{ url_for('subscriptions') }}" class="flex w-full items-center gap-2 md:w-auto">
 			<input type="hidden" name="tab" value="applications">
+			<select name="applications_per_page" aria-label="{{ t('rows_per_page') }}" class="rounded-lg border border-slate-800 bg-slate-950 px-2 py-2 text-sm" onchange="this.form.submit()">
+			  {% for size in (20, 50, 100) %}<option value="{{ size }}" {% if applications_per_page == size %}selected{% endif %}>{{ size }}</option>{% endfor %}
+			</select>
 			<input
 			  type="text"
 			  id="subscriptionUsersSearch"
@@ -201,10 +204,10 @@
     "total_pages": applications_total_pages,
     "total_rows": applications_total_users,
     "unit_label": t("users"),
-    "first_url": url_for("subscriptions", tab="applications", applications_page=1, applications_q=applications_q),
-    "prev_url": url_for("subscriptions", tab="applications", applications_page=applications_page-1, applications_q=applications_q),
-    "next_url": url_for("subscriptions", tab="applications", applications_page=applications_page+1, applications_q=applications_q),
-    "last_url": url_for("subscriptions", tab="applications", applications_page=applications_total_pages, applications_q=applications_q)
+    "first_url": url_for("subscriptions", tab="applications", applications_page=1, applications_q=applications_q, applications_per_page=applications_per_page),
+    "prev_url": url_for("subscriptions", tab="applications", applications_page=applications_page-1, applications_q=applications_q, applications_per_page=applications_per_page),
+    "next_url": url_for("subscriptions", tab="applications", applications_page=applications_page+1, applications_q=applications_q, applications_per_page=applications_per_page),
+    "last_url": url_for("subscriptions", tab="applications", applications_page=applications_total_pages, applications_q=applications_q, applications_per_page=applications_per_page)
   } %}
   <div class="mt-4">
     {% include "partials/_pagination.html" %}

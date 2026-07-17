@@ -398,6 +398,26 @@
       document.body.classList.add("overflow-hidden");
     }
 
+    async function openModalFromData(summary, url) {
+      openModal(summary);
+      if (!url) return;
+      setText("pem_details_json", label("loading", "Loading..."));
+      try {
+        const response = await fetch(url, { headers: { Accept: "application/json" } });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json();
+        if (payload?.row) openModal(payload.row);
+      } catch (_) {
+        setText("pem_details_json", label("requestFailed", "Request failed"));
+      }
+    }
+
+    function openModalFromRow(row) {
+      let summary = {};
+      try { summary = JSON.parse(row.getAttribute("data-enforcement") || "{}"); } catch (_) {}
+      return openModalFromData(summary, row.dataset.enforcementUrl || "");
+    }
+
     function closeModal() {
       modal.classList.add("hidden");
       modal.setAttribute("aria-hidden", "true");
@@ -484,8 +504,10 @@
             tr.setAttribute("role", "button");
 
             const actionBadge = item.action === "kill"
-              ? '<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-rose-950/40 border border-rose-800 text-[11px] text-rose-300">${escapeHtml(label("killAction", "Kill"))}</span>'
-              : '<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-950/40 border border-amber-800 text-[11px] text-amber-300">${escapeHtml(label("warnAction", "Warn"))}</span>';
+              ? `<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-rose-950/40 border border-rose-800 text-[11px] text-rose-300">${escapeHtml(label("killAction", "Kill"))}</span>`
+              : item.action === "kill_failed"
+                ? `<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-950/40 border border-slate-600 text-[11px] text-slate-300">${escapeHtml(label("failed", "Failed"))}</span>`
+                : `<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-950/40 border border-amber-800 text-[11px] text-amber-300">${escapeHtml(label("warnAction", "Warn"))}</span>`;
 
             tr.innerHTML = `
               <td class="p-3 text-slate-300">${escapeHtml(vodumFormatDateTime(item.created_at))}</td>
@@ -498,14 +520,14 @@
 
             tr.addEventListener("click", () => {
               closeGroupModal();
-              openModal(item);
+              openModalFromData(item, item.detail_url || "");
             });
 
             tr.addEventListener("keydown", (e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
                 closeGroupModal();
-                openModal(item);
+                openModalFromData(item, item.detail_url || "");
               }
             });
 
@@ -575,20 +597,12 @@
       if (row.dataset.boundPolicyModal === "1") return;
       row.dataset.boundPolicyModal = "1";
 
-      row.addEventListener("click", () => {
-        try {
-          const payload = JSON.parse(row.getAttribute("data-enforcement"));
-          openModal(payload);
-        } catch (_) {}
-      });
+      row.addEventListener("click", () => openModalFromRow(row));
 
       row.addEventListener("keydown", (e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          try {
-            const payload = JSON.parse(row.getAttribute("data-enforcement"));
-            openModal(payload);
-          } catch (_) {}
+          openModalFromRow(row);
         }
       });
     });

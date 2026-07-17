@@ -17,9 +17,23 @@
     const next = template.content.querySelector("[data-now-playing-fragment]");
     if (!next) return;
 
-    if (current.dataset.state === "idle" && current.dataset.state === next.dataset.state && current.dataset.key === next.dataset.key) {
+    if (current.dataset.state === next.dataset.state && current.dataset.key === next.dataset.key) {
       event.preventDefault();
     }
+  });
+
+  function showWidgetFallback(event) {
+    const target = (event.detail && event.detail.target) || event.target;
+    if (!target?.dataset?.dashboardWidgetFallback) return;
+
+    const fallback = document.createElement("div");
+    fallback.className = "min-h-24 flex items-center justify-center rounded-xl border border-slate-800 bg-slate-950/40 px-4 text-sm text-slate-400";
+    fallback.textContent = target.dataset.dashboardWidgetFallback;
+    target.replaceChildren(fallback);
+  }
+
+  ["htmx:timeout", "htmx:sendError", "htmx:responseError"].forEach((eventName) => {
+    document.addEventListener(eventName, showWidgetFallback);
   });
 
   document.addEventListener("click", function (event) {

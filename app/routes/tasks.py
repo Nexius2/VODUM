@@ -129,7 +129,11 @@ def register(app):
                 try:
                     mark_task_queue_failed(task_id, str(e))
                 except Exception:
-                    pass
+                    task_logger.exception(
+                        "Unable to persist task queue failure | task_id=%s | task_name=%s",
+                        task_id,
+                        name,
+                    )
 
             return redirect(url_for("tasks_page"))
 
@@ -283,7 +287,10 @@ def register(app):
         s = _get_auth_settings()
 
         # assets toujours OK
-        always_allowed_prefixes = ("/static", "/set_language", "/health")
+        # Login artwork is intentionally proxied through a dedicated public
+        # endpoint so the unauthenticated login page can load it. The proxy
+        # only accepts poster/backdrop and never exposes provider credentials.
+        always_allowed_prefixes = ("/static", "/set_language", "/health", "/login/artwork/")
         if request.path.startswith(always_allowed_prefixes) or request.path in ("/favicon.ico",):
             return
 

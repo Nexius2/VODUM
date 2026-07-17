@@ -128,6 +128,13 @@
     <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
       <div class="px-5 py-4 border-b border-slate-800"><h2 class="font-semibold">{{ t("migration_saved_users") }}</h2></div>
       <div class="overflow-x-auto">
+        <div class="mb-3 flex justify-end">
+          <form method="get">
+            <select name="users_per_page" aria-label="{{ t('rows_per_page') }}" class="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs" onchange="this.form.submit()">
+              {% for size in (20, 50, 100) %}<option value="{{ size }}" {% if users_per_page == size %}selected{% endif %}>{{ size }}</option>{% endfor %}
+            </select>
+          </form>
+        </div>
         <table class="w-full text-sm">
           <thead class="text-left text-slate-400 bg-slate-950/50"><tr><th class="px-4 py-3">{{ t("users") }}</th><th class="px-4 py-3">{{ t("email") }}</th><th class="px-4 py-3">{{ t("migration_eligibility") }}</th><th class="px-4 py-3">{{ t("migration_execution_status") }}</th><th class="px-4 py-3">{{ t("migration_constraints") }}</th><th class="px-4 py-3">{{ t("actions") }}</th></tr></thead>
           <tbody>
@@ -209,6 +216,15 @@
             {% endfor %}
           </tbody>
         </table>
+        {% set pagination = {
+          "page": users_page, "total_pages": users_total_pages, "total_rows": users_total,
+          "unit_label": t("users"),
+          "first_url": url_for("migration_campaign_detail", campaign_id=campaign.id, users_page=1, users_per_page=users_per_page),
+          "prev_url": url_for("migration_campaign_detail", campaign_id=campaign.id, users_page=users_page-1, users_per_page=users_per_page),
+          "next_url": url_for("migration_campaign_detail", campaign_id=campaign.id, users_page=users_page+1, users_per_page=users_per_page),
+          "last_url": url_for("migration_campaign_detail", campaign_id=campaign.id, users_page=users_total_pages, users_per_page=users_per_page)
+        } %}
+        <div class="mt-4">{% include "partials/_pagination.html" %}</div>
       </div>
     </div>
 

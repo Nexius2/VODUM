@@ -39,7 +39,7 @@
 {% macro sort_link(label, key) -%}
   {% set is_active = (sort == key) %}
   <a
-    href="{{ url_for('communications_history_page', sort=key, order=('asc' if is_active and order == 'desc' else 'desc'), page=1, trigger=trigger_filter) }}"
+    href="{{ url_for('communications_history_page', sort=key, order=('asc' if is_active and order == 'desc' else 'desc'), page=1, trigger=trigger_filter, per_page=per_page) }}"
     class="inline-flex items-center gap-1 transition {{ 'text-emerald-400' if is_active else 'text-slate-400 hover:text-slate-200' }}"
   >
     <span>{{ label }}</span>
@@ -70,9 +70,17 @@
         <p class="text-xs text-slate-500 mt-1">Sent and failed deliveries, plus pending or errored queued notifications when action is needed.</p>
       </div>
       <div class="flex flex-wrap gap-2">
+        <form method="get" class="flex items-center">
+          <input type="hidden" name="trigger" value="{{ trigger_filter }}">
+          <input type="hidden" name="sort" value="{{ sort }}">
+          <input type="hidden" name="order" value="{{ order }}">
+          <select name="per_page" aria-label="{{ t('rows_per_page') }}" class="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200" onchange="this.form.submit()">
+            {% for size in (20, 50, 100) %}<option value="{{ size }}" {% if per_page == size %}selected{% endif %}>{{ size }}</option>{% endfor %}
+          </select>
+        </form>
         {% for value, label in trigger_options %}
           <a
-            href="{{ url_for('communications_history_page', trigger=value, sort=sort, order=order, page=1) }}"
+            href="{{ url_for('communications_history_page', trigger=value, sort=sort, order=order, page=1, per_page=per_page) }}"
             class="px-3 py-1.5 rounded-lg text-xs border {{ 'border-primary bg-primary/15 text-primary' if trigger_filter == value else 'border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-800' }}"
           >{{ label }}</a>
         {% endfor %}
@@ -105,8 +113,6 @@
       </thead>
       <tbody>
       {% for h in history %}
-        {% set subject_value = h.rendered_subject %}
-		{% set body_value = h.rendered_body %}
         {% set modal_payload = {
           "kind": h.kind or "",
           "kind_label": ('Queued template' if h.is_scheduled else (t('template') if h.kind == 'template' else t('campaign'))),
@@ -116,15 +122,16 @@
           "status": (t('sent') if h.status == 'sent' else (t('failed') if h.status == 'failed' else h.status)),
           "error": h.error or "",
           "sent_at": h.sent_at or "-",
-          "subject": subject_value or "",
-          "body": body_value or "",
-          "meta_json": h.meta_json or ""
+          "subject": h.rendered_subject or "",
+          "body": h.rendered_body or "",
+          "meta_json": h.meta_json if h.is_scheduled else ""
         } %}
         <tr
           class="border-t border-slate-800 cursor-pointer hover:bg-slate-800/40 focus-within:bg-slate-800/40"
           tabindex="0"
           role="button"
           data-history='{{ modal_payload | tojson | forceescape }}'
+          {% if not h.is_scheduled and h.id is defined and h.id %}data-history-url="{{ url_for('communications_history_detail', history_id=h.id) }}"{% endif %}
         >
           <td class="px-4 py-3 align-top">
             <div class="flex items-center gap-2 min-w-0">
@@ -195,10 +202,10 @@
   "total_pages": total_pages,
   "total_rows": total_rows,
   "unit_label": t("comm_history_rows"),
-  "first_url": url_for("communications_history_page", page=1, sort=sort, order=order, trigger=trigger_filter),
-  "prev_url": url_for("communications_history_page", page=page-1, sort=sort, order=order, trigger=trigger_filter),
-  "next_url": url_for("communications_history_page", page=page+1, sort=sort, order=order, trigger=trigger_filter),
-  "last_url": url_for("communications_history_page", page=total_pages, sort=sort, order=order, trigger=trigger_filter)
+  "first_url": url_for("communications_history_page", page=1, sort=sort, order=order, trigger=trigger_filter, per_page=per_page),
+  "prev_url": url_for("communications_history_page", page=page-1, sort=sort, order=order, trigger=trigger_filter, per_page=per_page),
+  "next_url": url_for("communications_history_page", page=page+1, sort=sort, order=order, trigger=trigger_filter, per_page=per_page),
+  "last_url": url_for("communications_history_page", page=total_pages, sort=sort, order=order, trigger=trigger_filter, per_page=per_page)
 } %}
 <div class="mt-4">
   {% include "partials/_pagination.html" %}
@@ -212,10 +219,10 @@
   data-comm-history-modal
 >
   <div
-    class="w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"
+    class="vodum-modal-viewport w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl flex flex-col"
     data-comm-history-panel
   >
-    <div class="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+    <div class="shrink-0 flex items-center justify-between px-5 py-4 border-b border-slate-800">
       <div>
         <div id="commHistoryModalTitle" class="text-lg font-semibold text-slate-100">{{ t("comm_history_details") }}</div>
         <div id="commHistoryModalSubtitle" class="text-xs text-slate-400 mt-1"></div>
@@ -229,7 +236,7 @@
       </button>
     </div>
 
-    <div class="p-5 overflow-y-auto max-h-[calc(90vh-72px)] space-y-5">
+    <div class="vodum-modal-scroll flex-1 p-5 space-y-5">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
           <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">{{ t("general") }}</div>
@@ -270,7 +277,9 @@
 <script type="application/json" id="comm-history-config">
   {
     "detailsLabel": {{ t("comm_history_details")|tojson }},
-    "entryLabel": {{ t("comm_history_entry")|tojson }}
+    "entryLabel": {{ t("comm_history_entry")|tojson }},
+    "loadingLabel": {{ t("loading")|tojson }},
+    "loadErrorLabel": {{ t("request_failed")|tojson }}
   }
 </script>
 <script src="{{ url_for('static', filename='js/pages/communications-history.js', v=g.app_version|default('dev')) }}"></script>

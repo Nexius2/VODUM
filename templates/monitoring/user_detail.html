@@ -411,9 +411,9 @@
        aria-hidden="true">
     <div class="absolute inset-0 bg-black/70"></div>
 
-    <div class="relative mx-auto mt-10 w-[95%] max-w-4xl">
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
-        <div class="flex items-start justify-between gap-4 px-5 py-4 border-b border-slate-800">
+    <div class="vodum-modal-viewport relative mx-auto my-4 w-[95%] max-w-4xl">
+      <div class="vodum-modal-viewport bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+        <div class="shrink-0 flex items-start justify-between gap-4 px-5 py-4 border-b border-slate-800">
           <div>
             <div class="text-lg font-semibold text-white">{{ t("monitoring_user_ip_details") }}</div>
             <div id="ipLookupModalSubtitle" class="text-sm text-slate-400 mt-1">—</div>
@@ -425,7 +425,7 @@
           </button>
         </div>
 
-        <div class="p-5 space-y-5">
+        <div class="vodum-modal-scroll flex-1 p-5 space-y-5">
           <div id="ipLookupLoading" class="hidden">
             <div class="flex items-center gap-3 text-slate-300">
               <svg class="animate-spin h-5 w-5 text-emerald-400" viewBox="0 0 24 24" fill="none">

@@ -57,6 +57,11 @@
   .chart-container { position: relative; width: 100%; }
   .chart-container-md { height: 280px; min-height: 280px; }
   .chart-container-sm { height: 220px; min-height: 220px; }
+  .chart-container canvas { width: 100% !important; height: 100% !important; }
+  @media (max-width: 767px) {
+    .chart-container-md { height: 250px; min-height: 250px; }
+    .chart-container-sm { height: 260px; min-height: 260px; }
+  }
 </style>
 
 <script type="application/json" id="monitoring-activity-config">
@@ -74,5 +79,4 @@
   }
 </script>
 <script src="{{ url_for('static', filename='js/pages/monitoring-activity.js', v=g.app_version|default('dev')) }}"></script>
-
 

@@ -1,164 +1,100 @@
-# Auto-split from app.py (keep URLs/endpoints intact)
 import math
-import re
 from datetime import datetime
 
 from flask import Response, render_template, request
 
-from logging_utils import read_all_logs, AnonymizeFilter, LOG_FILE
-from web.helpers import get_db
+from logging_utils import AnonymizeFilter, parse_log_records, read_all_logs, read_logs_snapshot
+
+
+ALLOWED_LOG_LEVELS = {"ALL", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+
+
+def normalize_log_level(value) -> str:
+    level = str(value or "ALL").strip().upper()
+    return level if level in ALLOWED_LOG_LEVELS else "ALL"
+
+
+def summarize_log_levels(records) -> dict[str, int]:
+    counts = {level: 0 for level in ALLOWED_LOG_LEVELS if level != "ALL"}
+    for record in records:
+        level = str(record.get("level") or "").upper()
+        if level in counts:
+            counts[level] += 1
+    counts["ALL"] = sum(counts.values())
+    return counts
+
 
 def register(app):
     @app.route("/logs")
     def logs_page():
-        # Filtres
-        level = request.args.get("level")
-        if not level:
-            # Pas de filtre demandé => on choisit le défaut selon debug_mode
-            db = get_db()
-            row = db.query_one("SELECT debug_mode FROM settings WHERE id = 1")
-            debug_mode = int(row["debug_mode"]) if row and row["debug_mode"] is not None else 0
-            level = "ALL" if debug_mode == 1 else "INFO"
-
-        level = level.upper()
-
+        # Default to the complete stream. The previous INFO default was an
+        # exact filter and therefore hid WARNING/ERROR/CRITICAL incidents.
+        level = normalize_log_level(request.args.get("level"))
         search = request.args.get("q", "").strip()
+        try:
+            page = int(request.args.get("page", 1))
+        except (TypeError, ValueError):
+            page = 1
+        per_page = 200
 
-        # Pagination
-        page = int(request.args.get("page", 1))
-        per_page = 200  # Nombre de lignes de log à afficher par page
-
-        
-        lines = []
-
-        # ----------------------------
-        # Lecture fichier de log
-        # ----------------------------
-        raw_lines = read_all_logs()
-        # ----------------------------
-        # Filtrage + parsing minimal
-        # ----------------------------
-        for line in raw_lines:
-            line = line.strip()
-
-            # Filtre niveau
-            if level != "ALL" and f"| {level} |" not in line:
+        snapshot = read_logs_snapshot()
+        all_records = parse_log_records(snapshot["lines"])
+        level_counts = summarize_log_levels(all_records)
+        records = []
+        for record in all_records:
+            if level != "ALL" and record["level"] != level:
                 continue
-
-            # Filtre recherche
-            if search and search.lower() not in line.lower():
+            searchable = " ".join(str(value) for value in record.values())
+            if search and search.lower() not in searchable.lower():
                 continue
+            records.append(record)
 
-            lines.append(line)
-
-        total_logs = len(lines)
-        lines.reverse()  # ✅ plus récents d'abord
-
-
-        # Pagination
+        total_logs = len(records)
+        records.reverse()
         total_pages = max(1, math.ceil(total_logs / per_page))
         page = max(1, min(page, total_pages))
         start = (page - 1) * per_page
-        end = start + per_page
-        paginated = lines[start:end]
+        paginated = records[start:start + per_page]
 
-        # ----------------------------
-        # Parser chaque ligne
-        # Format réel :
-        # 2025-01-01 12:00:00 | INFO | module | Message...
-        # ----------------------------
-        parsed_logs = []
-
-        for l in paginated:
-            try:
-                parts = l.split("|", 3)
-                created_at = parts[0].strip()
-                level_part = parts[1].strip()
-                source_part = parts[2].strip()
-                message_part = parts[3].strip()
-
-                parsed_logs.append({
-                    "created_at": created_at,
-                    "level": level_part,
-                    "source": source_part,
-                    "message": message_part,
-                })
-            except Exception:
-                parsed_logs.append({
-                    "created_at": "",
-                    "level": "INFO",
-                    "source": "system",
-                    "message": l,
-                })
-
-        # ----------------------------
-        # Fenêtre de pagination
-        # ----------------------------
         window_size = 10
         page_window_start = max(1, page - 4)
         page_window_end = min(total_pages, page_window_start + window_size - 1)
-
         if (page_window_end - page_window_start) < (window_size - 1):
             page_window_start = max(1, page_window_end - window_size + 1)
 
-        # ----------------------------
-        # Rendu HTML
-        # ----------------------------
         return render_template(
             "logs/logs.html",
-            logs=parsed_logs,
+            logs=paginated,
             page=page,
             total_pages=total_pages,
             page_window_start=page_window_start,
             page_window_end=page_window_end,
             level=level,
             search=search,
+            level_counts=level_counts,
+            log_read_errors=snapshot["errors"],
             active_page="logs",
         )
 
-
-
-
-
-
-
     @app.route("/logs/download")
     def download_logs():
-        log_path = LOG_FILE
-
         output = []
+        anonymizer = AnonymizeFilter(force=True)
+        for line in read_all_logs():
+            record = type(
+                "Record",
+                (),
+                {"msg": line, "args": (), "getMessage": lambda self: self.msg},
+            )()
+            anonymizer.filter(record)
+            output.append(record.msg)
 
-        try:
-            with open(log_path, "r", encoding="utf-8") as f:
-                for line in f:
-                    record = type("Record", (), {"msg": line, "args": (), "getMessage": lambda self: self.msg})()
-                    AnonymizeFilter().filter(record)
-                    output.append(record.msg)
-        except FileNotFoundError:
+        if not output:
             output.append("No logs available.\n")
 
-        # 🆕 Nom de fichier avec date en préfixe
-        today = datetime.now().strftime("%Y-%m-%d")
-        filename = f"{today}_vodum-logs-anonymized.log"
-
+        filename = f"{datetime.now().strftime('%Y-%m-%d')}_vodum-logs-anonymized.log"
         return Response(
             "".join(output),
             mimetype="text/plain",
-            headers={
-                "Content-Disposition": f"attachment; filename={filename}"
-            }
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
-
-
-
-
-
-
-
-    # -----------------------------
-    # ABOUT
-    # -----------------------------
-
-
-
-

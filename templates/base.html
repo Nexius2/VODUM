@@ -280,6 +280,14 @@
     </div>
   </div>
 
+  <div id="vodumNavigationLoader" class="vodum-navigation-loader" role="status" aria-live="polite" aria-label="{{ t('loading') }}" hidden>
+    <div class="vodum-navigation-loader__backdrop"></div>
+    <div class="vodum-navigation-loader__panel">
+      <span class="vodum-navigation-loader__spinner" aria-hidden="true"></span>
+      <span class="sr-only">{{ t("loading") }}</span>
+    </div>
+  </div>
+
   <script src="{{ url_for('static', filename='js/app.js', v=g.app_version|default('dev')) }}"></script>
   <script src="{{ url_for('static', filename='js/modal_manager.js', v=g.app_version|default('dev')) }}"></script>
   {% block scripts %}{% endblock %}

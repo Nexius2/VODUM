@@ -228,6 +228,140 @@
     radios.forEach((radio) => radio.addEventListener("change", syncStreamBlockedCheckbox));
     syncStreamBlockedCheckbox();
   }
+
+  function readJsonConfig(id) {
+    const element = document.getElementById(id);
+    if (!element) return {};
+    try { return JSON.parse(element.textContent || "{}"); }
+    catch (error) { console.error(`Invalid JSON configuration in #${id}`, error); return {}; }
+  }
+
+  function bindPoliciesTable() {
+    const tableBody = document.getElementById("policyTableBody");
+    if (!tableBody || tableBody.dataset.vodumBound === "1") return;
+    tableBody.dataset.vodumBound = "1";
+
+    const rows = Array.from(tableBody.querySelectorAll(".policy-row"));
+    const byId = (id) => document.getElementById(id);
+    const filters = ["policyFilterSearch", "policyFilterStatus", "policyFilterScope", "policyFilterProvider", "policyFilterOrigin"].map(byId);
+    const pageSize = byId("policyPageSize");
+    const reset = byId("policyFilterReset");
+    const previous = byId("policyPrevPage");
+    const next = byId("policyNextPage");
+    const summary = byId("policyTableSummary");
+    const indicator = byId("policyPageIndicator");
+    const selectAll = byId("policySelectAll");
+    const deleteButton = byId("policyBulkDeleteBtn");
+    const deleteCount = byId("policyBulkDeleteCount");
+    const deleteInputs = byId("policyBulkDeleteInputs");
+    const deleteForm = byId("policyBulkDeleteForm");
+    const modal = byId("policyBulkDeleteModal");
+    const modalBackdrop = byId("policyBulkDeleteModalBackdrop");
+    const modalCancel = byId("policyBulkDeleteModalCancel");
+    const modalConfirm = byId("policyBulkDeleteModalConfirm");
+    const modalCount = byId("policyBulkDeleteModalCount");
+    const modalPlural = byId("policyBulkDeleteModalPlural");
+    if (filters.some((item) => !item) || !pageSize || !previous || !next || !summary || !indicator) return;
+
+    const config = readJsonConfig("subscription-policies-config");
+    const normalize = (value) => String(value || "").trim().toLowerCase();
+    let currentPage = 1;
+    let visibleRows = [];
+
+    function selectedCheckboxes() {
+      return rows.map((row) => row.querySelector(".policy-row-checkbox")).filter((item) => item?.checked);
+    }
+
+    function visibleCheckboxes() {
+      return visibleRows.filter((row) => row.dataset.deletable === "1").map((row) => row.querySelector(".policy-row-checkbox")).filter(Boolean);
+    }
+
+    function syncSelection() {
+      const selected = selectedCheckboxes();
+      const visible = visibleCheckboxes();
+      const visibleSelected = visible.filter((item) => item.checked);
+      if (deleteInputs) {
+        deleteInputs.replaceChildren(...selected.map((checkbox) => {
+          const input = document.createElement("input");
+          input.type = "hidden";
+          input.name = "policy_ids";
+          input.value = checkbox.value;
+          return input;
+        }));
+      }
+      if (deleteCount) deleteCount.textContent = `(${selected.length})`;
+      if (deleteButton) deleteButton.disabled = selected.length === 0;
+      if (selectAll) {
+        selectAll.disabled = visible.length === 0;
+        selectAll.checked = visible.length > 0 && visibleSelected.length === visible.length;
+        selectAll.indeterminate = visibleSelected.length > 0 && visibleSelected.length < visible.length;
+      }
+    }
+
+    function filteredRows() {
+      const [search, status, scope, provider, origin] = filters.map((item) => normalize(item.value));
+      return rows.filter((row) => (!search || normalize(row.dataset.search).includes(search))
+        && (!status || normalize(row.dataset.status) === status)
+        && (!scope || normalize(row.dataset.scope) === scope)
+        && (!provider || normalize(row.dataset.provider) === provider)
+        && (!origin || normalize(row.dataset.origin) === origin));
+    }
+
+    function render() {
+      const filtered = filteredRows();
+      const size = Number.parseInt(pageSize.value || "20", 10);
+      const pages = Math.max(1, Math.ceil(filtered.length / size));
+      currentPage = Math.min(Math.max(currentPage, 1), pages);
+      const start = (currentPage - 1) * size;
+      visibleRows = filtered.slice(start, start + size);
+      rows.forEach((row) => { row.style.display = "none"; });
+      visibleRows.forEach((row) => { row.style.display = ""; });
+      summary.textContent = filtered.length
+        ? String(config.showing_results || "{from}-{to} / {total}").replace("{from}", start + 1).replace("{to}", Math.min(start + size, filtered.length)).replace("{total}", filtered.length)
+        : config.zero_results || "0";
+      indicator.textContent = `${currentPage} / ${pages}`;
+      previous.disabled = currentPage <= 1;
+      next.disabled = currentPage >= pages;
+      [previous, next].forEach((button) => {
+        button.classList.toggle("opacity-50", button.disabled);
+        button.classList.toggle("cursor-not-allowed", button.disabled);
+      });
+      syncSelection();
+    }
+
+    function closeModal() {
+      modal?.classList.add("hidden");
+      document.body.classList.remove("overflow-hidden");
+    }
+    function openModal() {
+      const count = selectedCheckboxes().length;
+      if (!count || !modal) return;
+      if (modalCount) modalCount.textContent = String(count);
+      if (modalPlural) modalPlural.textContent = count > 1 ? config.selected_policies : config.selected_policy;
+      modal.classList.remove("hidden");
+      document.body.classList.add("overflow-hidden");
+    }
+
+    filters.forEach((filter) => ["input", "change"].forEach((name) => filter.addEventListener(name, () => { currentPage = 1; render(); })));
+    pageSize.addEventListener("change", () => { currentPage = 1; render(); });
+    reset?.addEventListener("click", () => {
+      filters.forEach((filter) => { filter.value = ""; });
+      pageSize.value = "20";
+      rows.forEach((row) => { const checkbox = row.querySelector(".policy-row-checkbox"); if (checkbox) checkbox.checked = false; });
+      currentPage = 1;
+      render();
+    });
+    previous.addEventListener("click", () => { currentPage -= 1; render(); });
+    next.addEventListener("click", () => { currentPage += 1; render(); });
+    rows.forEach((row) => row.querySelector(".policy-row-checkbox")?.addEventListener("change", syncSelection));
+    selectAll?.addEventListener("change", () => { visibleCheckboxes().forEach((checkbox) => { checkbox.checked = selectAll.checked; }); syncSelection(); });
+    deleteButton?.addEventListener("click", openModal);
+    modalCancel?.addEventListener("click", closeModal);
+    modalBackdrop?.addEventListener("click", closeModal);
+    modalConfirm?.addEventListener("click", () => { if (selectedCheckboxes().length) deleteForm?.submit(); else closeModal(); });
+    document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !modal?.classList.contains("hidden")) closeModal(); });
+    render();
+  }
   function initSubscriptionsPage() {
     bindSubscriptionApplyConfirm();
     bindSubscriptionApplicationsFilters();
@@ -235,6 +369,7 @@
     bindPlansEnabledOnly();
     bindTemplateDeleteConfirm();
     bindSubscriptionSettingsExpiryMode();
+    bindPoliciesTable();
   }
 
   document.addEventListener("DOMContentLoaded", initSubscriptionsPage);

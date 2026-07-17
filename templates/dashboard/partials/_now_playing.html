@@ -2,7 +2,7 @@
 {% set transcode = total_transcode|default(0) %}
 {% set direct = live - transcode %}
 {% set fragment_state = 'live' if sessions and sessions|length > 0 else ('idle' if idle_card else 'empty') %}
-{% set fragment_key = idle_card.quote_key if idle_card and idle_card.quote_key else fragment_state %}
+{% set fragment_key = now_playing_key if fragment_state == 'live' else (idle_card.quote_key if idle_card and idle_card.quote_key else fragment_state) %}
 
 <div data-now-playing-fragment data-state="{{ fragment_state }}" data-key="{{ fragment_key }}">
 <div class="flex items-center justify-between mb-3">

@@ -26,7 +26,7 @@ Derniere mise a jour: 2026-07-15
 
 ### Scripts par page
 
-- [~] Continuer a deplacer les scripts inline vers `static/js/pages/*.js`.
+- [x] Deplacer les scripts metier inline vers `static/js/pages/*.js`.
   Les extractions deja terminees sont tracees dans `changelog.md`.
   - Deja fait: extraction des scripts de filtres Users, bulk Referrals et modal Create User vers `static/js/pages/users.js`.
   - Deja fait: extraction des confirmations Applications/Templates et resume des plans Subscriptions vers `static/js/pages/subscriptions.js`.
@@ -35,12 +35,18 @@ Derniere mise a jour: 2026-07-15
   - Deja fait: nettoyage du handler dashboard Now Playing, sorti des blocs title/header et centralise dans `static/js/pages/dashboard.js`.
   - Deja fait: centralisation du debounce des formulaires Users/Plex dans `static/js/app.js`.
   - Deja fait: centralisation de l ordre des notifications User detail dans `static/js/app.js`.
-  - Restant: extraire progressivement les scripts metier lourds des pages
-    users, monitoring, communications, subscriptions et migrations.
+  - Deja fait: extraction de la synchronisation expiration/abonnement a vie, du selecteur de parrain et du changement de mot de passe Jellyfin du detail User vers `static/js/pages/user-detail.js`.
+  - Deja fait: centralisation des panneaux repliables Plex/Jellyfin/emails du detail User dans `static/js/pages/user-detail.js`.
+  - Deja fait: correction des identifiants JavaScript de l'editeur Subscriptions qui incorporaient a tort des traductions.
+  - Deja fait: extraction des filtres, pagination et suppression groupee de la table Policies vers `static/js/pages/subscriptions.js`.
+  - Deja fait: extraction de la fusion User et de sa previsualisation vers `static/js/pages/user-detail.js`.
+  - Deja fait: extraction de l'editeur de templates Subscriptions vers `static/js/pages/subscriptions-template-editor.js`.
+  - Les balises script restantes dans les templates ne contiennent que des
+    configurations JSON ou chargent des fichiers JavaScript statiques.
 
 ### Fragments et chargement progressif
 
-- [ ] Decouper les gros templates/pages en fragments HTMX ou endpoints JSON
+- [x] Decouper les gros templates/pages en fragments HTMX ou endpoints JSON
   charges a la demande.
   - Cibles prioritaires: `templates/users/users.html`,
     `templates/monitoring/tabs/policies.html`,
@@ -53,63 +59,112 @@ Derniere mise a jour: 2026-07-15
     `templates/migrations/campaign_detail.html`.
   - Exemple User detail: general visible, servers/history/referrals/actions
     charges au clic.
+  - Deja fait: la route User detail ne charge plus les historiques, bibliotheques, fusions, parrainages, risque et comptes media enrichis des onglets non affiches.
   - Exemple Communications: templates/campaigns/history/config en fragments
     separes.
 
-- [~] Ajouter des endpoints fragmentaires pour les widgets dashboard.
+- [x] Ajouter des endpoints fragmentaires pour les widgets dashboard.
   - Deja fait: Now Playing et Next Tasks utilisent des endpoints partiels avec skeleton au rendu initial.
-  - Restant: charger stats, top users, top media et quote/cache via HTMX ou fetch.
-  - Ajouter un timeout/fallback par widget pour qu'une aggregation lente ne bloque pas toute la page.
+  - Deja fait: Now Playing et Next Tasks ont un timeout de 8 secondes et un fallback stable en cas d'erreur.
+  - Deja fait: streams coupes et resume des abonnements sont charges dans un fragment independant avec skeleton, timeout et fallback.
+  - Deja fait: Usage Risk et sa tendance sont calcules dans un fragment independant apres le rendu initial.
+  - Deja fait: liste multi-serveurs et pics de streams sur 7 jours sont charges dans un fragment independant.
+  - Les agregations couteuses visibles (lecture en cours/quote, taches, abonnements,
+    risque et serveurs) sont isolees; les compteurs et logs legers restent dans le
+    rendu initial afin d'eviter des requetes HTTP sans benefice mesurable.
+  - Chaque widget asynchrone a un timeout et un fallback stable.
 
 ### Listes et layout stable
 
-- [ ] Virtualiser ou paginer davantage les listes denses.
+- [x] Virtualiser ou paginer davantage les listes denses.
   - Garder pagination serveur partout ou une table peut depasser 50-100 lignes.
   - Ajouter mode dense + pagination configurable 20/50/100 sur les listes admin
     repetitives.
   - Eviter d'injecter toutes les modales/actions par ligne; charger la modale au
     clic.
+  - Deja fait: listes Users et Referrals paginees cote serveur avec taille configurable 20/50/100 et conservation dans les liens de pagination.
+  - Deja fait: historique Monitoring Policies configurable a 20/50/100 lignes avec pagination serveur.
+  - Deja fait: historique Communications configurable a 20/50/100 lignes en conservant tri et filtre de type.
+  - Deja fait: Subscriptions charge utilisateurs, cadeaux, templates, serveurs et reglages uniquement pour l'onglet consommateur; Applications configurable a 20/50/100.
+  - Deja fait: liste Communications Templates paginee cote serveur a 20/50/100 en conservant la langue d'edition.
+  - Deja fait: utilisateurs du detail de campagne Migration limites a 20/50/100 lignes rendues, avec compteurs globaux conserves.
+  - Deja fait: sujet, corps et metadata des communications envoyees sont charges au clic au lieu d'etre injectes dans chaque ligne.
+  - Deja fait: snapshots complets des enforcements Monitoring Policies charges au clic au lieu d'etre injectes dans la table principale.
 
-- [ ] Ajouter des skeletons et placeholders stables sur dashboard, monitoring et
+- [x] Ajouter des skeletons et placeholders stables sur dashboard, monitoring et
   users detail.
   - Conserver dimensions fixes pour cards, tableaux et images.
   - Eviter que les boutons/actions changent la hauteur de ligne apres chargement.
+  - Deja fait: skeletons stables pour tous les widgets dashboard fragmentes, y compris Usage Risk, et pour l'iframe Monitoring du detail User avec fallback temporise.
 
 ## P2 - Monitoring, donnees et backend visible dans l'UI
 
-- [ ] Materialiser certains agregats monitoring pour les grosses instances.
-  - Creer une table `monitoring_daily_stats` alimentee par tache.
-  - Pre-calculer par jour: sessions, watch_ms, users actifs, top media/user
-    approximatifs.
-  - Faire lire le dashboard dans une table compacte au lieu de scanner
-    `media_session_history`.
+- [x] Materialiser certains agregats monitoring pour les grosses instances.
+  - Table reconstructible `monitoring_daily_stats` alimentee quotidiennement.
+  - Sessions, watch_ms, utilisateurs distincts et tops media/user approximatifs
+    sont precalcules sur 31 jours.
+  - L'overview Monitoring lit les lignes compactes quand la fenetre est complete
+    et conserve la requete historique comme fallback pendant le backfill.
 
-- [ ] Evaluer des index supplementaires apres `EXPLAIN QUERY PLAN` sur vraie DB.
-  - `vodum_users(username COLLATE NOCASE)` ou index expression `LOWER(username)`.
-  - `vodum_users(email COLLATE NOCASE)` si recherche email frequente.
-  - `user_referrals(status, start_at)` pour l'onglet referrals.
-
-- [ ] Ajouter un dashboard avance oriente exploitation: etat global, files de
-  jobs, echecs recents, sante providers et indicateurs d'action. ( a voir si interessant et/ou comment l'integrer a l'actuel)
+- [x] Evaluer des index supplementaires avec `EXPLAIN QUERY PLAN`.
+  - Les index `username`/`email` ne sont pas ajoutes: la recherche multi-colonnes
+    utilise volontairement un `LIKE '%terme%'`, incompatible avec leur usage par
+    SQLite, et le tri Users reste domine par les priorites/agregations.
+  - Ajout de `user_referrals(status, start_at DESC, id DESC)`: le plan confirme
+    son usage et la disparition du tri temporaire pour les vues filtrees.
+  - Un validateur reproductible conserve ces hypotheses de plan dans le depot.
 
 ## P3 - Architecture, routes et refactor
+
+- [x] Premier lot: supprimer le helper mort d'acces serveurs/bibliotheques qui
+  etait reste imbrique dans la route dashboard, ainsi que ses constantes SQL.
+  - Les constructeurs de donnees des widgets ont aussi ete extraits vers
+    `core/dashboard_widgets.py`; la route conserve uniquement l'orchestration HTTP.
 
 - [~] Reduire les dependances globales entre routes, taches et providers.
 - [~] Deplacer la logique provider restante des routes/templates vers les
   services et les taches.
-- [~] Continuer le decoupage de `tasks_engine.py`: file d'attente dedupliquee,
-  execution sequentielle et regles pures de planification sont deja extraites;
-  le fichier reste encore trop volumineux.
+  - Deja fait P3: selection du compte Plex prefere et orchestration des resyncs
+    Plex/Jellyfin extraites de `users_actions.py` vers `core/user_sync_jobs.py`;
+    duplication correspondante supprimee de `servers.py`.
+- [x] Decouper `tasks_engine.py`: l'orchestrateur est passe sous 1000 lignes;
+  file, execution, sequences, auto-activation, configuration et cycle de vie du
+  scheduler sont maintenant isoles dans `core/tasks/`.
+  - Deja fait P3: validation pure des retours/timeout extraite dans
+    `core/tasks/result_validation.py`, couverte par tests unitaires.
+  - Deja fait P3: signaux concurrents d'execution forcee et d'auto-configuration
+    extraits dans `core/tasks/runtime_signals.py`, avec semantique consume-once testee.
+  - Deja fait P3: normalisation des valeurs DB et decisions de retry/occupation/echeance
+    extraites dans `core/tasks/scheduler_rules.py`, avec tests des cas limites.
+  - Deja fait P3: file FIFO des sequences extraite dans
+    `core/tasks/sequence_queue.py`, avec propriete de worker unique testee en concurrence.
+  - Deja fait P3: attribution du worker principal extraite dans
+    `core/tasks/worker_lease.py`, sans verrou ni booleen global dans l'orchestrateur.
+  - Deja fait P3: orchestration FIFO des sequences, attente bloquante et choix
+    discovery Plex/Jellyfin extraits dans `core/tasks/sequences.py` et testes.
+  - Deja fait P3: premieres regles pures d'auto-activation extraites dans
+    `core/tasks/auto_enable_rules.py` avec normalisation defensive des compteurs.
+  - Deja fait P3: orchestration complete de l'auto-activation extraite dans
+    `core/tasks/auto_enable.py`; les fonctions historiques sont desormais des facades.
+  - Deja fait P3: cycle complet d'execution d'une tache extrait dans
+    `core/tasks/execution.py` avec transitions, validation, retries et failsafe testes.
+  - Deja fait P3: tick scheduler (retries, bootstrap, echeances et next_run)
+    extrait dans `core/tasks/scheduler.py`, independant de la boucle de sommeil.
 - [~] Decouper les fichiers de plus de 1000 lignes. Restent notamment
   `db_bootstrap.py`, `monitoring_overview.py`, `stream_enforcer.py`,
-  `tasks_engine.py`, `sync_plex.py`, `apply_plex_access_updates.py`,
+  `sync_plex.py`, `apply_plex_access_updates.py`,
   `users_detail.py` et `core/monitoring/collector.py`.
 - [~] Continuer la separation routes / services / providers, surtout sur les
   routes les plus longues: monitoring, users, communications, subscriptions,
   migrations, setup wizard et servers.
+  - Deja fait P3: contrat de pagination (normalisation, bornes, offsets et liens)
+    extrait dans `web/pagination.py`; routes Users et Servers migrees.
 - [~] Uniformiser les acces DB applicatifs restants. Les connexions SQLite
   internes de bootstrap, config, logs, restauration et suppression serveur sont
   deja centralisees via `open_sqlite_connection`.
+  - Deja fait P3: validation et lecture des imports Tautulli/Backup migrees vers
+    la factory commune en lecture seule; un validateur interdit desormais tout
+    nouvel appel direct a `sqlite3.connect` hors de `db_manager.py`.
 - [~] Supprimer le code mort apres une passe outillee dediee.
 
 ### Exceptions GET autorisees
@@ -132,7 +187,61 @@ Derniere mise a jour: 2026-07-15
 - [ ] Enrichir les notifications Discord: meilleure gestion des erreurs,
   diagnostics admin, templates/campagnes plus explicites et usages avances.
   Les retries et les logs d'erreur de base existent deja.
--[ ] controle du mecanisme de log, ajout au endroit manquant, controle du system de log en mode debug 
+
+## P6 - Logs, erreurs et diagnostic
+
+- [x] Auditer de bout en bout la couverture des erreurs et completer les logs
+  manquants dans les routes, services, providers, taches et workers.
+  - Inventorier les blocs `except` qui avalent une exception, retournent un
+    fallback ou affichent seulement un `flash` sans journaliser la cause.
+  - Deja fait P6: audit AST reproductible `tools/audit_exception_logging.py`
+    pour inventorier les handlers silencieux sans imposer de logs aux fallbacks legitimes.
+  - Journaliser les erreurs inattendues avec `exc_info=True`, une source stable
+    et le contexte utile (operation, provider, serveur, tache ou identifiant),
+    sans exposer token, mot de passe ni donnee personnelle sensible.
+  - Distinguer les erreurs attendues/metier des incidents techniques afin de ne
+    pas transformer la page Logs en bruit inutilisable.
+  - Deja fait P6: premier lot de chemins UI qui affichaient seulement une erreur
+    a l'admin maintenant journalises avec traceback: backup/restore, campagnes
+    et retries Communications, test Discord et application groupee Subscriptions.
+  - Deja fait P6: echecs de demarrage des workers d'acces Plex/Jellyfin et panne
+    du provider de geolocalisation Monitoring journalises avec contexte minimal.
+  - Deja fait P6: lot large Users/Servers/Migrations/Tasks couvrant les workers
+    non demarres, les echecs d'import/export et la persistance d'erreur secondaire.
+  - Verifier les points d'entree globaux Flask, threads, scheduler et jobs pour
+    qu'une exception non geree soit toujours capturee et visible.
+  - Deja fait P6: les exceptions Flask non gerees et celles qui s'echappent des
+    threads Python sont journalisees avec traceback et contexte requete/thread.
+- [x] Verifier que la page Logs restitue bien toutes les erreurs applicatives.
+  - Controler la chaine complete `get_logger` / `add_log` / fichier `app.log` /
+    rotation / lecture et filtres de `/logs`.
+  - Verifier que les erreurs des fichiers rotates restent consultables ou
+    telechargeables selon une retention explicite.
+  - Ajouter des filtres/compteurs utiles pour ERROR et CRITICAL et signaler
+    clairement une erreur de lecture ou de parsing des logs.
+  - Deja fait P6: le filtre initial de `/logs` est maintenant `ALL`; l'ancien
+    defaut `INFO` masquait exactement les WARNING, ERROR et CRITICAL. Le niveau
+    CRITICAL est aussi selectionnable explicitement.
+  - Deja fait P6: compteurs cliquables ALL, WARNING, ERROR et CRITICAL calcules
+    sur toute la retention, independamment de la page courante.
+  - Tester les erreurs multilignes et tracebacks: elles doivent rester rattachees
+    a leur evenement au lieu d'apparaitre comme de fausses lignes INFO.
+  - Deja fait P6: `/logs` et son telechargement lisent maintenant `app.log` et
+    les cinq rotations dans l'ordre chronologique; les tracebacks multilignes
+    restent rattaches a leur evenement et donc a son niveau ERROR/CRITICAL.
+  - Deja fait P6: une erreur de lecture d'un fichier actif/rotate est affichee
+    dans la page au lieu de produire silencieusement une liste incomplete.
+- [x] Valider le systeme de logs en modes normal et debug.
+  - Confirmer les niveaux effectivement captures, affiches et filtres dans les
+    deux modes, ainsi que l'absence de doublons.
+  - Tester l'anonymisation du fichier telecharge et l'absence de secrets dans
+    les messages, details et tracebacks.
+  - Deja fait P6: le telechargement force l'anonymisation meme lorsque le mode
+    debug est actif, avec test de non-regression email/token/IP.
+  - Ajouter un audit reproductible et des tests de non-regression pour les
+    chemins critiques et les gestionnaires d'erreurs globaux.
+  - Deja fait P6: handler fichier et filtre d'anonymisation rendus idempotents;
+    tests des modes normal/debug, absence de doublons, export force et hooks globaux.
 
 ## P7 - Revoir l'UI mobile
 

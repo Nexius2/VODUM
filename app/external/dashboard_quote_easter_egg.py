@@ -701,7 +701,10 @@ def _build_quote_artwork_urls(payload):
 
 def build_login_quote_artwork_request(kind="poster"):
     payload = _load_cache()
-    if not payload or payload.get("day") != _today_str() or payload.get("none") is True:
+    # The login screen is available before scheduled tasks have necessarily
+    # refreshed today's cache. Keep showing the last resolved media artwork
+    # instead of dropping to a blank background at midnight/startup.
+    if not payload or payload.get("none") is True:
         return None
 
     kind = str(kind or "poster").strip().lower()
@@ -770,7 +773,7 @@ def build_dashboard_quote_card():
 
 def build_login_quote_visual():
     payload = _load_cache()
-    if not payload or payload.get("day") != _today_str() or payload.get("none") is True:
+    if not payload or payload.get("none") is True:
         return None
 
     has_poster = build_login_quote_artwork_request("poster") is not None
@@ -778,10 +781,30 @@ def build_login_quote_visual():
     if not has_poster and not has_backdrop:
         return None
 
+    # The artwork endpoint is otherwise identical every day and browsers may
+    # cache its response for up to the artwork TTL (seven days by default).
+    # Include the selected day/media in the URL so a new daily quote cannot
+    # reuse yesterday's login image from the browser cache.
+    artwork_version = ":".join(
+        value
+        for value in (
+            _normalize_str(payload.get("day")),
+            _normalize_str(payload.get("quote_key")),
+        )
+        if value
+    ) or "current"
+
+    def artwork_url(kind):
+        return url_for(
+            "login_quote_artwork",
+            kind=kind,
+            v=artwork_version,
+        )
+
     return {
-        "phrase": payload.get("phrase"),
-        "poster_url": url_for("login_quote_artwork", kind="poster") if has_poster else (url_for("login_quote_artwork", kind="backdrop") if has_backdrop else None),
-        "backdrop_url": url_for("login_quote_artwork", kind="backdrop") if has_backdrop else (url_for("login_quote_artwork", kind="poster") if has_poster else None),
-        "title": payload.get("title"),
-        "year": payload.get("year"),
+        # Keep the artwork roles strict: mobile must never receive a landscape
+        # backdrop in the portrait slot. Desktop may use the poster as a
+        # fallback when the provider has no backdrop for the media item.
+        "poster_url": artwork_url("poster") if has_poster else None,
+        "backdrop_url": artwork_url("backdrop") if has_backdrop else (artwork_url("poster") if has_poster else None),
     }

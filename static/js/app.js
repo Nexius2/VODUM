@@ -558,6 +558,56 @@ window.vodumFlash = function(category, message, autoHideMs = 4000) {
   }
 };
 
+// ------------ GLOBAL PAGE NAVIGATION FEEDBACK ----------------------------
+(function vodumNavigationLoader() {
+  const loader = document.getElementById("vodumNavigationLoader");
+  if (!loader) return;
+
+  let showTimer = null;
+  let safetyTimer = null;
+
+  function show(delay = 80) {
+    clearTimeout(showTimer);
+    showTimer = setTimeout(() => {
+      loader.hidden = false;
+      document.documentElement.setAttribute("aria-busy", "true");
+      clearTimeout(safetyTimer);
+      safetyTimer = setTimeout(hide, 15000);
+    }, delay);
+  }
+
+  function hide() {
+    clearTimeout(showTimer);
+    clearTimeout(safetyTimer);
+    showTimer = null;
+    safetyTimer = null;
+    loader.hidden = true;
+    document.documentElement.removeAttribute("aria-busy");
+  }
+
+  document.addEventListener("click", (event) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.target.closest("a[href]");
+    if (!link || link.target === "_blank" || link.hasAttribute("download") || link.hasAttribute("data-no-navigation-loader")) return;
+
+    let destination;
+    try { destination = new URL(link.href, window.location.href); } catch (_) { return; }
+    if (destination.origin !== window.location.origin) return;
+    if (destination.pathname === window.location.pathname && destination.search === window.location.search && destination.hash) return;
+    show(80);
+  }, true);
+
+  document.addEventListener("submit", (event) => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || form.hasAttribute("data-no-navigation-loader")) return;
+    if (form.hasAttribute("hx-post") || form.hasAttribute("hx-get")) return;
+    show(80);
+  }, true);
+
+  window.addEventListener("pageshow", hide);
+  window.addEventListener("pagehide", () => clearTimeout(showTimer));
+})();
+
 // ------------ DATE PICKERS (Flatpickr lazy loader) -----------------------
 // Loads Flatpickr only on pages/fragments that expose input.vodum-date.
 (function vodumDatePickers() {

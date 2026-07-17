@@ -185,6 +185,11 @@ def run(task_id=None, db=None):
 
     report_rows = report.get("rows") or []
     suggested_in_report = [r for r in report_rows if r.get("suggested_subscription")]
+    current_suggestion_keys = {
+        (int(row["vodum_user_id"]), str(row["suggested_subscription"]).strip())
+        for row in suggested_in_report
+        if row.get("vodum_user_id") and str(row.get("suggested_subscription") or "").strip()
+    }
 
     rows = db.query(
         """
@@ -221,6 +226,7 @@ def run(task_id=None, db=None):
     skip_reasons = {
         "no_user_id": 0,
         "below_min_kills": 0,
+        "not_in_current_report": 0,
         "user_not_found": 0,
         "no_matching_template": 0,
         "cooldown_active": 0,
@@ -234,6 +240,12 @@ def run(task_id=None, db=None):
         if not user_id:
             skipped += 1
             skip_reasons["no_user_id"] += 1
+            continue
+
+        suggestion_key = (int(user_id), str(rec.get("suggested_subscription") or "").strip())
+        if suggestion_key not in current_suggestion_keys:
+            skipped += 1
+            skip_reasons["not_in_current_report"] += 1
             continue
 
         try:

@@ -345,6 +345,12 @@
 
   <!-- RIGHT : list -->
   <div class="lg:col-span-3">
+    <form method="get" class="mb-3 flex justify-end">
+      <input type="hidden" name="language" value="{{ selected_language }}">
+      <select name="per_page" aria-label="{{ t('rows_per_page') }}" class="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs" onchange="this.form.submit()">
+        {% for size in (20, 50, 100) %}<option value="{{ size }}" {% if per_page == size %}selected{% endif %}>{{ size }}</option>{% endfor %}
+      </select>
+    </form>
     <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
       <table class="w-full text-xs">
         <thead class="bg-slate-950/60 text-slate-400 text-left">
@@ -364,7 +370,7 @@
             class="border-t border-slate-800 cursor-pointer hover:bg-slate-800/40 focus-within:bg-slate-800/40"
             tabindex="0"
             role="button"
-            data-href="{{ url_for('communications_templates_page', load=tpl.id) }}"
+            data-href="{{ url_for('communications_templates_page', load=tpl.id, page=page, per_page=per_page, language=selected_language) }}"
           >
             <td class="px-4 py-2">{{ tpl.name }}</td>
             <td class="px-4 py-2">
@@ -433,6 +439,16 @@
         </form>
       </div>
     </div>
+
+    {% set pagination = {
+      "page": page, "total_pages": total_pages, "total_rows": total_rows,
+      "unit_label": t("templates"),
+      "first_url": url_for("communications_templates_page", page=1, per_page=per_page, language=selected_language),
+      "prev_url": url_for("communications_templates_page", page=page-1, per_page=per_page, language=selected_language),
+      "next_url": url_for("communications_templates_page", page=page+1, per_page=per_page, language=selected_language),
+      "last_url": url_for("communications_templates_page", page=total_pages, per_page=per_page, language=selected_language)
+    } %}
+    <div class="mt-4">{% include "partials/_pagination.html" %}</div>
 
     <!-- <div class="mt-3 text-[11px] text-slate-500">
       {{ t('comm_templates_note') }}

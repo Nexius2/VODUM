@@ -771,95 +771,12 @@
     </div>
   </div>
 
-  <script>
-  (function(){
-    const modal = document.getElementById('modal_referrer_picker');
-    const openBtn = document.getElementById('btn_open_referrer_modal');
-    const closeBtn = document.getElementById('btn_close_referrer_modal');
-    const clearBtn = null;
-    const input = document.getElementById('referrer_search_input');
-    const list = document.getElementById('referrer_candidates');
-    const hidden = document.getElementById('referrer_user_id');
-    const display = document.getElementById('referrer_display');
-    
-    if (!modal || !openBtn || !closeBtn || !input || !list || !hidden || !display) return;
-
-    async function loadCandidates(q='') {
-      const r = await fetch(`/api/users/referrer-candidates?q=${encodeURIComponent(q)}`, {
-        headers: {'Accept':'application/json'}
-      });
-      const rows = await r.json();
-
-      const noneRow = `
-        <button type="button"
-                class="w-full text-left px-4 py-3 hover:bg-slate-800 border-b border-slate-800"
-                data-id=""
-                data-username="{{ t('no_referrer') }}"
-                data-email="">
-          <div class="text-sm font-medium text-slate-100">{{ t("no_referrer") }}</div>
-          <div class="text-xs text-slate-500 mt-1">{{ t("referrer_none_help") }}</div>
-        </button>
-      `;
-
-      if (!rows.length) {
-        list.innerHTML = noneRow + `<div class="px-4 py-3 text-sm text-slate-400">{{ t("no_user_found") }}</div>`;
-        return;
-      }
-
-      list.innerHTML = noneRow + rows.map(u => `
-        <button type="button"
-                class="w-full text-left px-4 py-3 hover:bg-slate-800"
-                data-id="${u.id}"
-                data-username="${(u.username || '').replace(/"/g, '&quot;')}"
-                data-email="${(u.email || '').replace(/"/g, '&quot;')}">
-          <div class="text-sm font-medium text-slate-100">${u.username || '—'}</div>
-          <div class="text-xs text-slate-400">${u.email || ''}</div>
-          <div class="text-xs text-slate-500 mt-1">{{ t("referrals_total") }}: ${u.referrals_count || 0}</div>
-        </button>
-      `).join('');
-    }
-
-    function openModal() {
-      modal.classList.remove('hidden');
-      input.value = '';
-      loadCandidates('');
-      setTimeout(() => input.focus(), 30);
-    }
-
-    function closeModal() {
-      modal.classList.add('hidden');
-    }
-
-    openBtn.addEventListener('click', openModal);
-    closeBtn.addEventListener('click', closeModal);
-    modal.querySelector('.absolute.inset-0')?.addEventListener('click', closeModal);
-
-    input.addEventListener('input', () => loadCandidates(input.value.trim()));
-
-    list.addEventListener('click', (e) => {
-      const btn = e.target.closest('button[data-id]');
-      if (!btn) return;
-
-      if (!btn.dataset.id) {
-        hidden.value = '';
-        display.innerHTML = `<span class="text-slate-500">{{ t("no_referrer") }}</span>`;
-        closeModal();
-        return;
-      }
-
-      hidden.value = btn.dataset.id || '';
-      display.textContent = `${btn.dataset.username || ''}${btn.dataset.email ? ' — ' + btn.dataset.email : ''}`;
-      closeModal();
-    });
-  })();
-  </script>
-
 <div id="deleteUserModal" class="fixed inset-0 z-50 hidden">
   <div class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
 
   <div class="relative z-10 flex min-h-full items-center justify-center p-4">
-    <div class="w-full max-w-2xl rounded-2xl border border-rose-900/60 bg-slate-950 shadow-2xl overflow-hidden">
-      <div class="flex items-start justify-between gap-4 px-6 py-5 border-b border-slate-800">
+    <div class="vodum-modal-viewport w-full max-w-2xl rounded-2xl border border-rose-900/60 bg-slate-950 shadow-2xl overflow-hidden flex flex-col">
+      <div class="shrink-0 flex items-start justify-between gap-4 px-6 py-5 border-b border-slate-800">
         <div>
           <div class="text-lg font-semibold text-rose-300">
             {{ t("delete_user_title") if t("delete_user_title") != "delete_user_title" else "Delete this user?" }}
@@ -876,7 +793,7 @@
         </button>
       </div>
 
-      <div class="px-6 py-5 space-y-4 text-sm text-slate-300">
+      <div class="vodum-modal-scroll flex-1 px-6 py-5 space-y-4 text-sm text-slate-300">
 		<div id="deleteUserCheckLoading"
 			 class="rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-5 text-slate-300 hidden">
 		  <div class="flex flex-col items-center justify-center gap-2 text-center">
@@ -913,7 +830,7 @@
         </div>
       </div>
 
-      <div class="px-6 py-4 border-t border-slate-800 flex items-center justify-end gap-3">
+      <div class="shrink-0 px-6 py-4 border-t border-slate-800 flex items-center justify-end gap-3">
         <button type="button"
                 id="cancelDeleteUserModalBtn"
                 class="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 text-sm">
@@ -972,70 +889,21 @@
 	}
 }
 </style>
-<script>
-(function () {
-
-  const subscriptionSelect = document.getElementById("subscription_template_id");
-  const overrideCheckbox = document.getElementById("expiration_date_override_cb");
-  const notice = document.getElementById("lifetime_override_notice");
-  const serverExpirationLocked = {{ 'true' if expiration_lock and expiration_lock.locked else 'false' }};
-
-  if (!subscriptionSelect || !overrideCheckbox) {
-    return;
-  }
-
-  function updateLifetimeOverride() {
-
-    if (serverExpirationLocked) {
-      overrideCheckbox.checked = true;
-      overrideCheckbox.disabled = true;
-
-      if (notice) {
-        notice.classList.remove("hidden");
-        notice.textContent = "{{ expiration_lock.label if expiration_lock and expiration_lock.locked else '' }}";
-      }
-
-      return;
-    }
-
-    const selected =
-      subscriptionSelect.options[subscriptionSelect.selectedIndex];
-
-    const isLifetime =
-      selected &&
-      selected.dataset &&
-      selected.dataset.lifetime === "1";
-
-    if (isLifetime) {
-
-      overrideCheckbox.checked = true;
-      overrideCheckbox.disabled = true;
-
-      if (notice) {
-        notice.classList.remove("hidden");
-      }
-
-    } else {
-
-      overrideCheckbox.disabled = false;
-
-      overrideCheckbox.checked =
-        overrideCheckbox.dataset.original === "1";
-
-      if (notice) {
-        notice.classList.add("hidden");
-      }
-    }
-  }
-
-  subscriptionSelect.addEventListener(
-    "change",
-    updateLifetimeOverride
-  );
-
-  updateLifetimeOverride();
-
-})();
+<script type="application/json" id="user-general-expiration-config">
+  {{ {
+    "server_expiration_locked": expiration_lock.locked if expiration_lock else false,
+    "server_expiration_label": expiration_lock.label if expiration_lock and expiration_lock.locked else "",
+    "referrer_candidates_url": "/api/users/referrer-candidates",
+    "no_referrer": t("no_referrer"),
+    "referrer_none_help": t("referrer_none_help"),
+    "no_user_found": t("no_user_found"),
+    "referrals_total": t("referrals_total"),
+    "jellyfin_password_url": url_for("user_change_jellyfin_password", user_id=user.id),
+    "jellyfin_password_success": "Password updated on {count} Jellyfin server(s).",
+    "invalid_json_response": "Invalid JSON response",
+    "unknown_error": "Unknown error",
+    "request_failed": "Request failed. Check browser console."
+  }|tojson }}
 </script>
 </form>
 
@@ -1046,9 +914,9 @@
 
   <div class="relative z-10 flex min-h-full items-center justify-center p-4">
 
-    <div class="w-full max-w-xl rounded-2xl border border-slate-800 bg-slate-950 shadow-2xl overflow-hidden">
+    <div class="vodum-modal-viewport w-full max-w-xl rounded-2xl border border-slate-800 bg-slate-950 shadow-2xl overflow-hidden flex flex-col">
 
-      <div class="flex items-start justify-between gap-4 px-6 py-5 border-b border-slate-800">
+      <div class="shrink-0 flex items-start justify-between gap-4 px-6 py-5 border-b border-slate-800">
         <div>
           <div class="text-lg font-semibold text-slate-100">
             {{ t("change_jellyfin_password") if t("change_jellyfin_password") != "change_jellyfin_password" else "Change Jellyfin password" }}
@@ -1066,7 +934,7 @@
         </button>
       </div>
 
-      <form id="jellyfinPasswordForm" method="post" autocomplete="off">
+      <form id="jellyfinPasswordForm" method="post" autocomplete="off" class="vodum-modal-scroll flex-1">
 
         <div class="px-6 py-5 space-y-5">
 
@@ -1154,137 +1022,4 @@
     </div>
   </div>
 </div>
-
-<script>
-(function () {
-
-  const modal = document.getElementById('jellyfinPasswordModal');
-  const openBtn = document.getElementById('openJellyfinPasswordModalBtn');
-  const closeBtn = document.getElementById('closeJellyfinPasswordModalBtn');
-  const cancelBtn = document.getElementById('cancelJellyfinPasswordModalBtn');
-  const form = document.getElementById('jellyfinPasswordForm');
-  const resultBox = document.getElementById('jf_password_result');
-
-  if (!modal || !openBtn || !form) {
-    console.error('Jellyfin modal init failed');
-    return;
-  }
-
-  function openModal() {
-    modal.classList.remove('hidden');
-  }
-
-  function closeModal() {
-
-    modal.classList.add('hidden');
-
-    if (resultBox) {
-      resultBox.classList.add('hidden');
-      resultBox.innerHTML = '';
-    }
-
-    form.reset();
-  }
-
-  openBtn.addEventListener('click', openModal);
-
-  closeBtn?.addEventListener('click', closeModal);
-
-  cancelBtn?.addEventListener('click', closeModal);
-
-  modal.querySelector('.absolute.inset-0')
-    ?.addEventListener('click', closeModal);
-
-  const selectAll = document.getElementById('jf_select_all_servers');
-
-  if (selectAll) {
-
-    selectAll.addEventListener('change', () => {
-
-      document.querySelectorAll('.jf-server-checkbox').forEach(cb => {
-        cb.checked = selectAll.checked;
-      });
-
-    });
-
-  }
-
-  form.addEventListener('submit', async function (e) {
-
-    e.preventDefault();
-
-    try {
-
-      const fd = new FormData(form);
-
-      const response = await fetch(
-        "{{ url_for('user_change_jellyfin_password', user_id=user.id) }}",
-        {
-          method: "POST",
-          body: fd,
-          headers: {
-            "Accept": "application/json"
-          }
-        }
-      );
-
-		const rawText = await response.text();
-
-
-		let data = {};
-
-		try {
-		  data = JSON.parse(rawText);
-		} catch (e) {
-
-		  resultBox.classList.remove('hidden');
-
-		  resultBox.className =
-			"rounded-xl border border-rose-800 bg-rose-950/30 px-4 py-3 text-sm text-rose-300";
-
-		  resultBox.innerHTML =
-			rawText || 'Invalid JSON response';
-
-		  return;
-		}
-
-      resultBox.classList.remove('hidden');
-
-      if (data.ok) {
-
-        resultBox.className =
-          "rounded-xl border border-emerald-800 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-300";
-
-        resultBox.innerHTML =
-          "Password updated on " + data.updated + " Jellyfin server(s).";
-
-      } else {
-
-        resultBox.className =
-          "rounded-xl border border-rose-800 bg-rose-950/30 px-4 py-3 text-sm text-rose-300";
-
-        resultBox.innerHTML =
-          (data.errors || [data.error || 'Unknown error']).join('<br>');
-
-      }
-
-    } catch (err) {
-
-      console.error(err);
-
-      resultBox.classList.remove('hidden');
-
-      resultBox.className =
-        "rounded-xl border border-rose-800 bg-rose-950/30 px-4 py-3 text-sm text-rose-300";
-
-      resultBox.innerHTML =
-        "Request failed. Check browser console.";
-
-    }
-
-  });
-
-})();
-</script>
-
 

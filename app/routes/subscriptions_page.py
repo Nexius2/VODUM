@@ -6,6 +6,10 @@ from flask import render_template, request, redirect, url_for, flash
 
 from tasks_engine import auto_enable_stream_enforcer, sync_expiry_tasks_from_settings, force_task_run, enable_and_run_task_by_name, set_tasks_enabled_by_names
 from web.helpers import get_db, add_log
+from logging_utils import get_logger
+
+
+logger = get_logger("subscriptions")
 
 DEFAULT_SUBSCRIPTION_TEMPLATES = [
     (
@@ -137,10 +141,10 @@ def register(app):
         if tab not in ("templates", "applications", "policies", "gifts", "settings"):
             tab = "templates"
 
-        settings = db.query_one(f"SELECT {SUBSCRIPTION_SETTINGS_COLUMNS} FROM settings WHERE id = 1")
+        settings = db.query_one(f"SELECT {SUBSCRIPTION_SETTINGS_COLUMNS} FROM settings WHERE id = 1") if tab in ("templates", "settings") else None
         settings = dict(settings) if settings else {}
 
-        servers = db.query("SELECT id, name, type FROM servers ORDER BY name") or []
+        servers = db.query("SELECT id, name, type FROM servers ORDER BY name") or [] if tab in ("templates", "applications", "policies", "gifts") else []
 
         gift_users = db.query("""
             SELECT
@@ -168,7 +172,7 @@ def register(app):
                 WHERE mu.vodum_user_id = vu.id
               )
             ORDER BY LOWER(COALESCE(vu.username, '')) ASC, vu.id ASC
-        """) or []
+        """) or [] if tab == "gifts" else []
 
         gift_users = [dict(row) for row in gift_users]
 
@@ -187,7 +191,7 @@ def register(app):
               updated_at
             FROM subscription_templates
             ORDER BY is_default DESC, name
-        """) or []
+        """) or [] if tab in ("templates", "applications") else []
         templates = [dict(t) for t in templates]
         for t in templates:
             try:
@@ -199,7 +203,9 @@ def register(app):
 
         # Users list for applications tab (paginated)
         applications_page = max(request.args.get("applications_page", 1, type=int), 1)
-        applications_per_page = 20
+        applications_per_page = request.args.get("applications_per_page", 20, type=int)
+        if applications_per_page not in (20, 50, 100):
+            applications_per_page = 20
         applications_offset = (applications_page - 1) * applications_per_page
         applications_search = " ".join(
             (request.args.get("applications_q") or "").split()
@@ -290,19 +296,20 @@ def register(app):
             LIMIT ? OFFSET ?
         """
 
-        total_row = db.query_one(count_query, tuple(applications_params)) or {"total": 0}
-        applications_total_users = int(total_row["total"] or 0)
-        applications_total_pages = max(math.ceil(applications_total_users / applications_per_page), 1)
-
-        if applications_page > applications_total_pages:
-            applications_page = applications_total_pages
-            applications_offset = (applications_page - 1) * applications_per_page
-
-        users = db.query(
-            users_query,
-            tuple(applications_params + [applications_per_page, applications_offset])
-        ) or []
-        users = [dict(u) for u in users]
+        applications_total_users = 0
+        applications_total_pages = 1
+        users = []
+        if tab == "applications":
+            total_row = db.query_one(count_query, tuple(applications_params)) or {"total": 0}
+            applications_total_users = int(total_row["total"] or 0)
+            applications_total_pages = max(math.ceil(applications_total_users / applications_per_page), 1)
+            if applications_page > applications_total_pages:
+                applications_page = applications_total_pages
+                applications_offset = (applications_page - 1) * applications_per_page
+            users = [dict(u) for u in (db.query(
+                users_query,
+                tuple(applications_params + [applications_per_page, applications_offset])
+            ) or [])]
 
         policies = []
         edit_policy = None
@@ -369,6 +376,7 @@ def register(app):
             applications_total_pages=applications_total_pages,
             applications_total_users=applications_total_users,
             applications_q=applications_search,
+            applications_per_page=applications_per_page,
             policies=policies,
             edit_policy=edit_policy,
         )
@@ -1151,6 +1159,12 @@ def register(app):
             return redirect(url_for("subscriptions", tab="applications"))
 
         except Exception:
+            logger.exception(
+                "Bulk subscription application failed | server_id=%s | template_id=%s | user_count=%s",
+                server_id,
+                template_id,
+                len(user_ids),
+            )
             flash("subscription_apply_failed", "error")
             return redirect(url_for("subscriptions", tab="applications"))
 

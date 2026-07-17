@@ -7,6 +7,10 @@
 {{ t("user") }}: {{ user.username }}
 {% endblock %}
 
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/pages/user-detail.js', v=g.app_version|default('dev')) }}"></script>
+{% endblock %}
+
 {% block header_subtitle %}
 {{ t("user_management_subtitle") }}
 {% endblock %}

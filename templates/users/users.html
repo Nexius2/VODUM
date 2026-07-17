@@ -91,6 +91,10 @@
       <form method="get" id="users_filter_form" class="flex flex-wrap items-center gap-3">
         <input type="hidden" name="tab" value="users">
 
+    <select name="per_page" aria-label="{{ t('rows_per_page') }}" class="rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm" onchange="this.form.submit()">
+      {% for size in (20, 50, 100) %}<option value="{{ size }}" {% if per_page == size %}selected{% endif %}>{{ size }}</option>{% endfor %}
+    </select>
+
     <!-- Search -->
     <input type="text"
            name="q"
@@ -317,7 +321,8 @@
   q=search,
   status=selected_statuses,
   sort=sort,
-  order=order
+  order=order,
+  per_page=per_page
 ) %}
 {% if archive_mode is defined %}
   {% set _ = pagination_args.update({"archive_mode": archive_mode}) %}
@@ -340,6 +345,9 @@
 
 <form method="get" id="referrals_filter_form" class="flex flex-wrap items-center gap-3 mb-6">
   <input type="hidden" name="tab" value="referrals">
+  <select name="per_page" aria-label="{{ t('rows_per_page') }}" class="rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm" onchange="this.form.submit()">
+    {% for size in (20, 50, 100) %}<option value="{{ size }}" {% if per_page == size %}selected{% endif %}>{{ size }}</option>{% endfor %}
+  </select>
 <div class="flex items-center rounded-lg overflow-hidden border border-slate-800">
 
   <a href="{{ url_for(
@@ -349,7 +357,8 @@
       q=search,
       status=selected_statuses,
       sort=sort,
-      order=order
+      order=order,
+      per_page=per_page
   ) }}"
      class="px-3 py-2 text-sm
      {% if archive_mode == 'active' %}
@@ -367,7 +376,8 @@
       q=search,
       status=selected_statuses,
       sort=sort,
-      order=order
+      order=order,
+      per_page=per_page
   ) }}"
      class="px-3 py-2 text-sm border-l border-slate-800
      {% if archive_mode == 'archived' %}
@@ -385,7 +395,8 @@
       q=search,
       status=selected_statuses,
       sort=sort,
-      order=order
+      order=order,
+      per_page=per_page
   ) }}"
      class="px-3 py-2 text-sm border-l border-slate-800
      {% if archive_mode == 'all' %}
@@ -589,7 +600,8 @@
   "q": search,
   "status": selected_statuses,
   "sort": sort,
-  "order": order
+  "order": order,
+  "per_page": per_page
 } %}
 {% set pagination = {
   "page": page,
@@ -833,8 +845,8 @@
 <div id="modal_create_user" class="fixed inset-0 z-50 hidden">
   <div class="absolute inset-0 bg-black/60" onclick="VodumCreateUser.close()"></div>
 
-  <div class="relative max-w-4xl mx-auto mt-16 bg-slate-950 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
-    <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800">
+  <div class="vodum-modal-viewport relative max-w-4xl mx-auto my-4 bg-slate-950 border border-slate-800 rounded-2xl shadow-xl overflow-hidden flex flex-col">
+    <div class="shrink-0 flex items-center justify-between px-6 py-4 border-b border-slate-800">
       <div>
         <div class="text-lg font-semibold">{{ t("create_user") }}</div>
         <div class="text-sm text-slate-400">{{ t("create_user_modal_description") }}</div>
@@ -842,7 +854,7 @@
       <button class="text-slate-300 hover:text-white" onclick="VodumCreateUser.close()">✕</button>
     </div>
 
-    <div class="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+    <div class="vodum-modal-scroll flex-1 p-6 space-y-6">
 
       <!-- USER FIELDS -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
