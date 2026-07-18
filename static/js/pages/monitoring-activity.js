@@ -40,7 +40,7 @@
 
   function baseOpts() {
     return {
-      responsive: false,
+      responsive: true,
       maintainAspectRatio: false,
       animation: false,
       normalized: true
@@ -178,14 +178,10 @@
     const h = parent.clientHeight;
     if (!w || !h) return;
 
-    canvas.style.width = w + "px";
-    canvas.style.height = h + "px";
-
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.floor(w * dpr);
-    canvas.height = Math.floor(h * dpr);
-
-    try { chart.resize(); chart.update("none"); } catch (_) {}
+    // Chart.js owns the backing-store size and applies devicePixelRatio.
+    // Writing canvas.width manually here made mobile charts render at roughly
+    // half the available CSS width on high-density screens.
+    try { chart.resize(w, h); chart.update("none"); } catch (_) {}
   }
 
   function manualResizeAll(list) {

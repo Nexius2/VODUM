@@ -2026,17 +2026,30 @@ def _load_server(server_id: int) -> Optional[dict]:
     return dict(r) if r else None
 
 
-def _recheck_violation(policy: dict, violation: dict) -> bool:
+def _recheck_violation(policy: dict, violation: dict) -> Optional[dict]:
     time.sleep(RECHECK_DELAY_SECONDS)
 
     sessions = _load_live_sessions()
     v2 = _evaluate_policy(policy, sessions)
 
     t_user = violation["target_user"]
+    same_actor = []
     for x in v2:
-        if x["kind"] == violation["kind"] and x["server_id"] == violation["server_id"] and x["target_user"] == t_user:
-            return True
-    return False
+        if x["kind"] != violation["kind"] or x["target_user"] != t_user:
+            continue
+        same_actor.append(x)
+        if x["server_id"] == violation["server_id"]:
+            return x
+
+    # Pour les limites utilisateur/globales, la session choisie peut avoir
+    # basculé sur un autre serveur pendant le délai. Les acteurs synthétiques
+    # des règles strictement serveur ne doivent en revanche jamais traverser.
+    synthetic_actor = str(t_user[1] if len(t_user) > 1 else "") in {
+        "server", "4k", "bitrate", "device",
+    }
+    if same_actor and not synthetic_actor:
+        return same_actor[0]
+    return None
 
 def _parse_sql_datetime(value):
     if not value:
@@ -2326,7 +2339,7 @@ def run(task_id: int, db):
                 _log_enforcement(
                     policy_id, server_id, provider_type, session_key,
                     user_vodum_id, user_ext,
-                    "kill", reason,
+                    "kill" if ok else "kill_failed", reason,
                     account_username=kill_account_username,
                     ips_json=kill_ips_json,
                     details_json=kill_details_json,
@@ -2336,7 +2349,7 @@ def run(task_id: int, db):
                     policy_id, server_id,
                     user_vodum_id, user_ext,
                     warned=False,
-                    killed=True,
+                    killed=ok,
                     reason=reason,
                 )
 
@@ -2394,11 +2407,35 @@ def run(task_id: int, db):
 
 
         # 2) recheck 30s -> si toujours violation -> KILL
-        still_bad = _recheck_violation(policy, v)
-        if not still_bad:
+        rechecked_violation = _recheck_violation(policy, v)
+        if not rechecked_violation:
             if is_debug_mode_enabled():
                 logger.debug(f"[TASK {task_id}] stream_enforcer: violation cleared after recheck (policy={policy_id} server={server_id})")
             continue
+
+        # La session ciblée peut avoir changé pendant le délai d'avertissement.
+        # Recalculer toute la cible depuis le relevé qui vient de confirmer la violation.
+        v = rechecked_violation
+        sessions = v["sessions"]
+        selector = v.get("selector") or "kill_newest"
+        target = _pick_kill_target(sessions, selector)
+        if not target:
+            continue
+
+        server_id = int(v["server_id"])
+        provider_type = v["provider"]
+        server_row = _load_server(server_id)
+        if not server_row:
+            logger.warning(f"[TASK {task_id}] stream_enforcer: server {server_id} missing after recheck")
+            continue
+
+        session_key = str(target["session_key"])
+        jf_message_key = session_key
+        if provider_type == "jellyfin":
+            jf_message_key = _jellyfin_session_id_from_target(target, session_key)
+
+        reason = v.get("reason") or reason
+        kill_reason_for_client = (v.get("warn_text") or reason)
 
         kill_live_sessions = _load_live_sessions()
         kill_account_username, kill_ips_json, kill_details_json = _build_enforcement_snapshot(
@@ -2463,12 +2500,12 @@ def run(task_id: int, db):
             _log_enforcement(
                 policy_id, server_id, provider_type, session_key,
                 user_vodum_id, user_ext,
-                "kill", reason,
+                "kill" if ok else "kill_failed", reason,
                 account_username=kill_account_username,
                 ips_json=kill_ips_json,
                 details_json=kill_details_json,
             )
-            _upsert_state(policy_id, server_id, user_vodum_id, user_ext, warned=False, killed=True, reason=reason)
+            _upsert_state(policy_id, server_id, user_vodum_id, user_ext, warned=False, killed=ok, reason=reason)
 
             logger.warning(
                 f"[TASK {task_id}] [KILL] policy={policy_id} server={server_id} provider={provider_type} "

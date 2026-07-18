@@ -111,7 +111,7 @@
   </div>
 
   <!-- Barre d'actions -->
-  <div class="mt-4 flex justify-between items-center">
+  <div class="mt-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
 
     <!-- Bouton Enregistrer -->
     <button class="px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-sm">
@@ -200,7 +200,7 @@
 <div id="deleteServerConfirmModal" class="hidden fixed inset-0 z-50" aria-hidden="true">
   <div class="absolute inset-0 bg-black/70"></div>
 
-  <div class="relative mx-auto mt-24 w-[92%] max-w-lg">
+  <div class="relative mx-auto mt-8 sm:mt-24 w-full max-w-lg">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
       <div class="p-5">
         <div class="flex items-center gap-2">
@@ -228,7 +228,7 @@
 
       <div class="border-t border-slate-800"></div>
 
-      <div class="p-4 flex items-center justify-end gap-2">
+      <div class="p-4 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2">
         <button type="button" id="deleteServerConfirmCancel"
                 class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-200">
           {{ t("cancel") }}
@@ -243,88 +243,8 @@
   </div>
 </div>
 
-<script>
-  document.addEventListener("DOMContentLoaded", () => {
-    // Toggle token
-    const input = document.getElementById("server_token");
-    const btn = document.getElementById("toggle_server_token");
+{% endblock %}
 
-    if (input && btn) {
-      btn.addEventListener("click", () => {
-        if (input.type === "password") {
-          input.type = "text";
-          btn.textContent = "🙈";
-        } else {
-          input.type = "password";
-          btn.textContent = "👁️";
-        }
-      });
-    }
-
-    // Delete server modal
-    const deleteForm = document.getElementById("delete_form");
-    const deleteButton = document.querySelector('button[form="delete_form"]');
-    const deleteModal = document.getElementById("deleteServerConfirmModal");
-    const deleteCancel = document.getElementById("deleteServerConfirmCancel");
-    const deleteOk = document.getElementById("deleteServerConfirmOk");
-
-    if (!deleteForm || !deleteButton || !deleteModal || !deleteCancel || !deleteOk) {
-      return;
-    }
-
-    let allowDeleteSubmit = false;
-
-    function openDeleteModal() {
-      deleteModal.classList.remove("hidden");
-      deleteModal.setAttribute("aria-hidden", "false");
-    }
-
-    function closeDeleteModal() {
-      deleteModal.classList.add("hidden");
-      deleteModal.setAttribute("aria-hidden", "true");
-    }
-
-    deleteButton.addEventListener("click", (e) => {
-      e.preventDefault();
-      openDeleteModal();
-    });
-
-    deleteCancel.addEventListener("click", () => {
-      allowDeleteSubmit = false;
-      closeDeleteModal();
-    });
-
-    deleteOk.addEventListener("click", () => {
-      allowDeleteSubmit = true;
-      closeDeleteModal();
-      deleteForm.requestSubmit();
-    });
-
-    deleteForm.addEventListener("submit", (e) => {
-      if (!allowDeleteSubmit) {
-        e.preventDefault();
-        openDeleteModal();
-        return;
-      }
-
-      allowDeleteSubmit = false;
-    });
-
-    deleteModal.addEventListener("click", (e) => {
-      if (e.target === deleteModal || (e.target.classList && e.target.classList.contains("bg-black/70"))) {
-        allowDeleteSubmit = false;
-        closeDeleteModal();
-      }
-    });
-
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !deleteModal.classList.contains("hidden")) {
-        allowDeleteSubmit = false;
-        closeDeleteModal();
-      }
-    });
-  });
-</script>
-
-
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/pages/servers-detail.js', v=g.app_version|default('dev')) }}"></script>
 {% endblock %}

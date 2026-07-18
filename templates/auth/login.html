@@ -6,10 +6,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/vodum.css', v=g.app_version|default('dev')) }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css', v=g.app_version|default('dev')) }}">
+  <style>
+    .login-visual-page{min-height:100vh;position:relative;isolation:isolate;overflow-x:hidden}.login-visual-layer{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;background:#020617}.login-visual-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.62;transform:scale(1.02);filter:saturate(1.08) contrast(1.05)}.login-visual-poster{display:none}.login-visual-vignette{position:absolute;inset:0;background:radial-gradient(circle at 50% 42%,rgba(15,23,42,.08),rgba(2,6,23,.72) 78%),linear-gradient(90deg,rgba(2,6,23,.68),rgba(2,6,23,.2),rgba(2,6,23,.7))}.login-visual-content{position:relative;z-index:1}.login-card{background:rgba(15,23,42,.9);box-shadow:0 24px 80px rgba(0,0,0,.34);backdrop-filter:blur(14px)}@media(max-width:767px){.login-visual-backdrop{display:none}.login-visual-poster{display:block;object-position:center top;opacity:.58;transform:scale(1.04)}.login-visual-vignette{background:linear-gradient(180deg,rgba(2,6,23,.42),rgba(2,6,23,.68) 48%,rgba(2,6,23,.84)),radial-gradient(circle at 50% 18%,rgba(15,23,42,.02),rgba(2,6,23,.62) 74%)}.login-card{max-width:min(100%,28rem)}}
+  </style>
 </head>
-<body class="bg-slate-950 text-slate-100">
-  <div class="min-h-screen flex items-center justify-center p-4">
-    <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-xl p-6">
+<body class="bg-slate-950 text-slate-100 login-visual-page">
+  {% if login_quote_visual %}
+    <div class="login-visual-layer" aria-hidden="true">
+      {% if login_quote_visual.backdrop_url %}
+        <img
+          src="{{ login_quote_visual.backdrop_url }}"
+          alt=""
+          class="login-visual-bg login-visual-backdrop"
+          decoding="async"
+        >
+      {% endif %}
+      {% if login_quote_visual.poster_url %}
+        <img
+          src="{{ login_quote_visual.poster_url }}"
+          alt=""
+          class="login-visual-bg login-visual-poster"
+          decoding="async"
+        >
+      {% endif %}
+      <div class="login-visual-vignette"></div>
+    </div>
+  {% endif %}
+
+  <div class="min-h-screen flex items-center justify-center p-4 login-visual-content">
+    <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-xl p-6 login-card">
 
       <h1 class="text-xl font-semibold mb-1">{{ t("auth.title_login") }}</h1>
       <p class="text-sm text-slate-400 mb-6">{{ t("auth.login_description") }}</p>
@@ -91,8 +116,8 @@
     <div class="absolute inset-0 bg-black/70"></div>
 
     <!-- modal panel -->
-    <div class="relative mx-auto my-10 w-[92%] max-w-2xl">
-      <div class="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden">
+    <div class="vodum-modal-viewport relative mx-auto my-4 w-full max-w-2xl px-4 sm:px-0">
+      <div class="vodum-modal-viewport vodum-modal-scroll bg-slate-900 border border-slate-800 rounded-xl shadow-2xl">
 
         <div class="flex items-start justify-between px-6 py-4 border-b border-slate-800">
           <div>
@@ -143,7 +168,7 @@
 
         </div>
 
-        <div class="px-6 py-4 border-t border-slate-800 flex justify-end gap-2">
+        <div class="px-6 py-4 border-t border-slate-800 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
           <button type="button" id="closeResetModal2"
                   class="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 text-sm">
             {{ t("common.close") }}
@@ -153,6 +178,7 @@
       </div>
     </div>
   </div>
+<script src="{{ url_for('static', filename='js/modal_manager.js', v=g.app_version|default('dev')) }}"></script>
 <script src="{{ url_for('static', filename='js/pages/login.js', v=g.app_version|default('dev')) }}"></script>
 </body>
 </html>

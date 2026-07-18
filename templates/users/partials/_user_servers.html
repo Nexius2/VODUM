@@ -277,20 +277,7 @@
                  class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 {% if readonly_text %} cursor-not-allowed {% endif %}">
         </label>
       </form>
-
-      {# Debounce JS (1 seul global, safe si déjà présent ailleurs) #}
-      <script>
-        window.__vodumDebounceSubmit = window.__vodumDebounceSubmit || (function () {
-          let t = null;
-          return function (form) {
-            if (!form) return;
-            clearTimeout(t);
-            t = setTimeout(function () { form.submit(); }, 500);
-          };
-        })();
-      </script>
-
-    {% else %}
+{% else %}
       <p class="text-xs text-slate-500 italic">{{ t("not_available") }}</p>
     {% endif %}
 
@@ -345,10 +332,10 @@
     </div>
 
     {# --- BARRE D'ACTIONS FIXE (Show all / Merge / Annuler alignés) --- #}
-    <div class="flex items-center justify-between gap-3">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
 
       <!-- Left: Show all / Show top (uniquement si > 5) -->
-      <div class="flex items-center gap-3">
+      <div class="flex flex-wrap items-center gap-3">
         {% if merge_suggestions|length > 5 %}
           <button type="button"
                   class="px-3 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 text-sm"
@@ -360,7 +347,7 @@
       </div>
 
       <!-- Right: Annuler + Merge -->
-      <div class="flex items-center gap-3">
+      <div class="flex flex-wrap items-center gap-3">
 
         <button type="button"
                 class="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
@@ -568,7 +555,7 @@
           </div>
 
           <!-- Footer (fixed) -->
-          <div class="px-5 py-4 border-t border-slate-800 flex items-center justify-end gap-3">
+          <div class="px-5 py-4 border-t border-slate-800 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
             <button type="button"
                     class="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
                     onclick="closeMergeConfirmModal()">
@@ -610,509 +597,26 @@
 </div>
 </div>
 
-<script>
-(() => {
-  // -----------------------
-  // Helpers
-  // -----------------------
-  const $ = (sel, root = document) => root.querySelector(sel);
-  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
-
-
-  
-  const mergePreviewContent = $('#mergePreviewContent');
-  const mergePreviewLoading = $('#mergePreviewLoading');
-  const mergePreviewError = $('#mergePreviewError');
-  const mergePreviewChanges = $('#mergePreviewChanges');
-const TXT_PREVIEW_MOVED_TITLE = {{ t('merge.preview.title')|tojson }};
-const TXT_PREVIEW_MEDIA_USERS = {{ t('merge.preview.media_users')|tojson }};
-const TXT_PREVIEW_USER_IDENTITIES = {{ t('merge.preview.user_identities')|tojson }};
-const TXT_PREVIEW_SENT_EMAILS = {{ t('merge.preview.sent_emails')|tojson }};
-const TXT_PREVIEW_MEDIA_JOBS = {{ t('merge.preview.media_jobs')|tojson }};
-
-
-
-
-  function badge(source) {
-    if (source === 'master') return `<span class="px-2 py-0.5 text-[11px] rounded bg-emerald-900/40 text-emerald-300">master</span>`;
-    if (source === 'target') return `<span class="px-2 py-0.5 text-[11px] rounded bg-amber-900/40 text-amber-300">target</span>`;
-    return `<span class="px-2 py-0.5 text-[11px] rounded bg-slate-800 text-slate-300">computed</span>`;
-  }
-
-  function row(label, value, source) {
-    const v = (value === null || value === undefined || value === '') ? '—' : String(value);
-    return `
-      <div class="rounded-lg border border-slate-800 bg-slate-950/60 p-3">
-        <div class="flex items-center justify-between gap-2">
-          <div class="text-xs text-slate-400">${label}</div>
-          ${badge(source)}
-        </div>
-        <div class="mt-1 text-slate-200 break-words">${v}</div>
-      </div>
-    `;
-  }
-
-  async function loadMergePreview(otherId) {
-    if (!mergePreviewContent) return;
-
-    mergePreviewError?.classList.add('hidden');
-    mergePreviewChanges?.classList.add('hidden');
-    mergePreviewContent.innerHTML = '';
-    mergePreviewLoading?.classList.remove('hidden');
-
-    try {
-      const url = `/users/{{ user.id }}/merge/preview?other_id=${encodeURIComponent(otherId)}`;
-      const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'preview_failed');
-
-      const u = data.result || {};
-      const s = data.sources || {};
-
-      // Champs que tu veux “comme user details”
-      mergePreviewContent.innerHTML = [
-        row('{{ t("firstname") }}', u.firstname, s.firstname),
-        row('{{ t("lastname") }}', u.lastname, s.lastname),
-        row('{{ t("email") }}', u.email, s.email),
-        row('{{ t("second_email") }}', u.second_email, s.second_email),
-        row('{{ t("expiration") }}', u.expiration_date, s.expiration_date),
-        row('{{ t("renewal_date") }}', u.renewal_date, s.renewal_date),
-        row('{{ t("renewal_method") }}', u.renewal_method, s.renewal_method),
-        row('{{ t("notes") }}', u.notes, s.notes),
-      ].join('');
-
-		// Bonus “ce qui bouge”
-		if (mergePreviewChanges && data.changes) {
-		  const c = data.changes;
-
-		  mergePreviewChanges.innerHTML = `
-			<div class="mt-2">
-			  <div class="text-slate-300 font-semibold mb-1">
-				${TXT_PREVIEW_MOVED_TITLE} :
-			  </div>
-			  <ul class="list-disc pl-5 space-y-1">
-				<li>${TXT_PREVIEW_MEDIA_USERS}: ${c.media_users_to_move}</li>
-				<li>${TXT_PREVIEW_USER_IDENTITIES}: ${c.identities_to_move}</li>
-				<li>${TXT_PREVIEW_SENT_EMAILS}: ${c.sent_emails_to_move}</li>
-				<li>${TXT_PREVIEW_MEDIA_JOBS}: ${c.media_jobs_to_move}</li>
-			  </ul>
-			</div>
-		  `;
-
-		  mergePreviewChanges.classList.remove('hidden');
-		}
-
-
-
-    } catch (e) {
-      if (mergePreviewError) {
-        mergePreviewError.textContent = `Preview error: ${e.message || e}`;
-        mergePreviewError.classList.remove('hidden');
-      }
-    } finally {
-      mergePreviewLoading?.classList.add('hidden');
-    }
-  }
-
-
-
-  // -----------------------
-  // Elements
-  // -----------------------
-  const overlay = $('#mergeOverlay');
-  const mainForm = $('#user_main_form');
-
-  const mergeAllBox = $('#mergeAllCandidates');
-  const mergeMoreBtn = $('#mergeMoreBtn');
-
-  const mergeForm = $('#mergeForm');
-  const mergeOtherIdInput = $('#mergeOtherId');
-  const mergeConfirmBtn = $('#mergeConfirmBtn');
-
-  // Confirm modal elements
-  const mergeConfirmModal = $('#mergeConfirmModal');
-  const mergeFinalConfirmBtn = $('#mergeFinalConfirmBtn');
-  const mergeTargetName = $('#mergeTargetName');
-  const mergeTargetEmail = $('#mergeTargetEmail');
-  const mergeTargetScore = $('#mergeTargetScore');
-
-  let selectedCandidateEl = null;
-
-  // Texts (Jinja inside JS = OK)
-  const TXT_SHOW_TOP = {{ t('merge_show_top')|tojson }};
-  const TXT_SHOW_ALL = {{ (t('merge_show_all') ~ " (" ~ (merge_suggestions|length) ~ ")")|tojson }};
-
-  // -----------------------
-  // Overlay open/close
-  // -----------------------
-  function openMergeOverlay() {
-    if (!overlay) return;
-    overlay.classList.remove('hidden');
-    document.body.classList.add('overflow-hidden');
-    clearMergeSelection();
-  }
-
-  function closeMergeOverlay() {
-    if (!overlay) return;
-    overlay.classList.add('hidden');
-    document.body.classList.remove('overflow-hidden');
-    closeMergeConfirmModal(); // sécurité
-  }
-
-  window.openMergeOverlay = openMergeOverlay;
-  window.closeMergeOverlay = closeMergeOverlay;
-
-
-// Auto-open merge overlay when arriving with ?merge=1 (from General tab)
-document.addEventListener('DOMContentLoaded', function () {
-  try {
-    const params = new URLSearchParams(window.location.search || '');
-    if (params.get('merge') === '1') {
-      openMergeOverlay();
-      // Optional: remove merge=1 from URL to avoid reopening on refresh
-      params.delete('merge');
-      const qs = params.toString();
-      const newUrl = window.location.pathname + (qs ? ('?' + qs) : '');
-      window.history.replaceState({}, '', newUrl);
-    }
-  } catch (e) { /* ignore */ }
-});
-
-  // Close overlay when clicking backdrop
-  if (overlay) {
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) closeMergeOverlay();
-    });
-  }
-
-  // -----------------------
-  // Confirm modal open/close
-  // -----------------------
-  
-
-  
-  function openMergeConfirmModal() {
-    if (!mergeConfirmModal) return;
-    mergeConfirmModal.classList.remove('hidden');
-    // on laisse overflow-hidden actif (overlay déjà ouvert)
-  }
-
-  function closeMergeConfirmModal() {
-    if (!mergeConfirmModal) return;
-    mergeConfirmModal.classList.add('hidden');
-  }
-
-  window.closeMergeConfirmModal = closeMergeConfirmModal;
-
-  if (mergeConfirmModal) {
-    mergeConfirmModal.addEventListener('click', (e) => {
-      if (e.target === mergeConfirmModal) closeMergeConfirmModal();
-    });
-  }
-
-  // -----------------------
-  // Prevent Enter submit in main form inputs (except textarea)
-  // -----------------------
-  if (mainForm) {
-    mainForm.addEventListener('keydown', (e) => {
-      const tag = (e.target && e.target.tagName) ? e.target.tagName.toUpperCase() : '';
-      if (e.key === 'Enter' && tag === 'INPUT') e.preventDefault();
-    });
-  }
-
-  // -----------------------
-  // Inject dynamic fields on submit (libraries + options)
-  // -----------------------
-  if (mainForm) {
-    mainForm.addEventListener('submit', () => {
-      $$('input[data-dyn="1"]', mainForm).forEach(el => el.remove());
-
-      // Libraries toggles
-      $$('form[action*="toggle_library"]').forEach(f => {
-        const libInput = $('input[name="library_id"]', f);
-        if (!libInput) return;
-
-        const libId = libInput.value;
-        const btn = $('button', f);
-        const enabled = !!(btn && btn.classList.contains('bg-emerald-500'));
-
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'library_' + libId;
-        input.value = enabled ? '1' : '0';
-        input.setAttribute('data-dyn', '1');
-        mainForm.appendChild(input);
-      });
-
-      // Server options
-      const selectors = [
-        'input[name^="allow_sync_"]',
-        'input[name^="allow_camera_upload_"]',
-        'input[name^="allow_channels_"]',
-        'input[name^="filter_movies_"]',
-        'input[name^="filter_television_"]',
-        'input[name^="filter_music_"]'
-      ];
-
-      $$(selectors.join(',')).forEach(el => {
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = el.name;
-        input.value = (el.type === 'checkbox') ? (el.checked ? '1' : '0') : (el.value || '');
-        input.setAttribute('data-dyn', '1');
-        mainForm.appendChild(input);
-      });
-    });
-  }
-
-  // -----------------------
-  // Merge selection
-  // -----------------------
-  function clearMergeSelection() {
-    $$('.merge-candidate').forEach(x => {
-      x.classList.remove('border-amber-700', 'bg-amber-900/10');
-      x.classList.add('border-slate-800');
-      x.setAttribute('aria-selected', 'false');
-    });
-
-    selectedCandidateEl = null;
-
-    if (mergeOtherIdInput) mergeOtherIdInput.value = '';
-
-    if (mergeConfirmBtn) {
-      mergeConfirmBtn.disabled = true;
-      mergeConfirmBtn.classList.add('opacity-50', 'cursor-not-allowed');
-      mergeConfirmBtn.classList.remove('hover:bg-amber-800');
-    }
-  }
-
-  function fillConfirmModalFromCandidate(el) {
-    if (!el) return;
-
-    // name line (contains firstname lastname + @username)
-    if (mergeTargetName) {
-      const nameLine = (el.querySelector('.font-medium')?.innerText || '—').trim();
-      mergeTargetName.textContent = nameLine;
-    }
-
-    // email + score line
-    const info = (el.querySelector('.text-xs.text-slate-400')?.innerText || '').trim();
-    const parts = info.split('·').map(x => x.trim());
-
-    if (mergeTargetEmail) mergeTargetEmail.textContent = parts[0] || '—';
-    if (mergeTargetScore) mergeTargetScore.textContent = parts[1] ? `(${parts[1]})` : '—';
-  }
-
-  function selectMergeCandidate(el) {
-    if (!el) return;
-
-    clearMergeSelection();
-    selectedCandidateEl = el;
-
-    el.classList.remove('border-slate-800');
-    el.classList.add('border-amber-700', 'bg-amber-900/10');
-    el.setAttribute('aria-selected', 'true');
-
-    const otherId = el.getAttribute('data-other-id') || '';
-    if (mergeOtherIdInput) mergeOtherIdInput.value = otherId;
-
-    if (mergeConfirmBtn && otherId) {
-      mergeConfirmBtn.disabled = false;
-      mergeConfirmBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-      mergeConfirmBtn.classList.add('hover:bg-amber-800');
-    }
-
-    fillConfirmModalFromCandidate(el);
-  }
-
-  // Single click handler (NO DOUBLE)
-  document.addEventListener('click', (e) => {
-    const item = e.target.closest && e.target.closest('.merge-candidate');
-    if (!item) return;
-    selectMergeCandidate(item);
-  });
-
-  // Keyboard accessibility: Enter/Space
-  document.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' && e.key !== ' ') return;
-    const active = document.activeElement;
-    if (!active) return;
-    if (active.classList && active.classList.contains('merge-candidate')) {
-      e.preventDefault();
-      selectMergeCandidate(active);
-    }
-  });
-
-  // -----------------------
-  // Toggle show all / show top
-  // -----------------------
-  function toggleAllMergeCandidates() {
-    if (!mergeAllBox || !mergeMoreBtn) return;
-    const willShow = mergeAllBox.classList.contains('hidden');
-    mergeAllBox.classList.toggle('hidden');
-    mergeMoreBtn.textContent = willShow ? TXT_SHOW_TOP : TXT_SHOW_ALL;
-  }
-
-  window.toggleAllMergeCandidates = toggleAllMergeCandidates;
-
-  // -----------------------
-  // Merge submit -> open confirm modal (no browser confirm)
-  // -----------------------
-  if (mergeForm) {
-    mergeForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-
-      // No selection? do nothing
-      if (!mergeOtherIdInput || !mergeOtherIdInput.value) return;
-
-      // Make sure modal displays latest selected candidate
-      fillConfirmModalFromCandidate(selectedCandidateEl);
-
-	  loadMergePreview(mergeOtherIdInput.value);
-      openMergeConfirmModal();
-    });
-  }
-
-  // Final confirm button actually submits
-  if (mergeFinalConfirmBtn && mergeForm) {
-    mergeFinalConfirmBtn.addEventListener('click', () => {
-      if (!mergeOtherIdInput || !mergeOtherIdInput.value) return;
-      closeMergeConfirmModal();
-      mergeForm.submit();
-    });
-  }
-
-})();
-</script>
-<script>
-  (function () {
-    const box = document.getElementById("plexBox");
-    const btn = document.getElementById("plexToggle");
-    const fade = document.getElementById("plexFade");
-    if (!box || !btn) return;
-
-    // Traductions injectées depuis Jinja
-    const TXT_SHOW_MORE = {{ t("collapse_show_more") | tojson }};
-    const TXT_SHOW_LESS = {{ t("collapse_show_less") | tojson }};
-
-    let expanded = false;
-
-    btn.addEventListener("click", () => {
-      expanded = !expanded;
-
-      if (expanded) {
-        box.classList.remove("max-h-48");
-        box.classList.add("max-h-[9999px]");
-        if (fade) fade.classList.add("hidden");
-        btn.textContent = TXT_SHOW_LESS;
-      } else {
-        box.classList.add("max-h-48");
-        box.classList.remove("max-h-[9999px]");
-        if (fade) fade.classList.remove("hidden");
-        btn.textContent = TXT_SHOW_MORE;
-      }
-    });
-  })();
-</script>
-<script>
-  (function () {
-    const box = document.getElementById("jellyfinBox");
-    const btn = document.getElementById("jellyfinToggle");
-    const fade = document.getElementById("jellyfinFade");
-    if (!box || !btn) return;
-
-    const TXT_MORE = {{ t("collapse_show_more") | tojson }};
-    const TXT_LESS = {{ t("collapse_show_less") | tojson }};
-
-    let expanded = false;
-
-    btn.addEventListener("click", () => {
-      expanded = !expanded;
-
-      if (expanded) {
-        box.classList.remove("max-h-48");
-        box.classList.add("max-h-[9999px]");
-        if (fade) fade.classList.add("hidden");
-        btn.textContent = TXT_LESS;
-      } else {
-        box.classList.add("max-h-48");
-        box.classList.remove("max-h-[9999px]");
-        if (fade) fade.classList.remove("hidden");
-        btn.textContent = TXT_MORE;
-      }
-    });
-  })();
-</script>
-<script>
-  (function () {
-    const box = document.getElementById("emailsBox");
-    const inner = document.getElementById("emailsInner");
-    const fade = document.getElementById("emailsFade");
-    const btn = document.getElementById("emailsToggle");
-    const btnWrap = document.getElementById("emailsToggleWrap");
-    if (!box || !inner || !btn || !btnWrap) return;
-
-    const TXT_MORE = {{ t("collapse_show_more") | tojson }};
-    const TXT_LESS = {{ t("collapse_show_less") | tojson }};
-
-    // Hauteur "repliée" (doit matcher max-h-48 = 12rem = ~192px)
-    const COLLAPSED_PX = 192;
-
-    let expanded = false;
-
-    function needsToggle() {
-      // Si le contenu total dépasse la hauteur repliée -> on affiche le bouton
-      return inner.scrollHeight > COLLAPSED_PX + 1;
-    }
-
-    function applyState() {
-      if (expanded) {
-        box.classList.remove("max-h-48");
-        box.classList.add("max-h-[9999px]");
-        inner.classList.remove("overflow-y-auto");
-        if (fade) fade.classList.add("hidden");
-        btn.textContent = TXT_LESS;
-      } else {
-        box.classList.add("max-h-48");
-        box.classList.remove("max-h-[9999px]");
-        inner.classList.add("overflow-y-auto");
-        if (fade) fade.classList.remove("hidden");
-        btn.textContent = TXT_MORE;
-      }
-    }
-
-    // Affiche/masque le bouton uniquement si nécessaire
-    if (needsToggle()) {
-      btnWrap.classList.remove("hidden");
-      applyState();
-    } else {
-      // pas besoin de bouton, pas de fade non plus
-      btnWrap.classList.add("hidden");
-      if (fade) fade.classList.add("hidden");
-      // et on enlève la limite si tu veux (optionnel)
-      box.classList.remove("max-h-48");
-      box.classList.add("max-h-[9999px]");
-      inner.classList.remove("overflow-y-auto");
-    }
-
-    btn.addEventListener("click", () => {
-      expanded = !expanded;
-      applyState();
-    });
-
-    // Optionnel: si la page se redimensionne (responsive), on recheck
-    window.addEventListener("resize", () => {
-      if (needsToggle()) {
-        btnWrap.classList.remove("hidden");
-        // si on était "expanded", on laisse expanded
-        applyState();
-      } else {
-        btnWrap.classList.add("hidden");
-        if (fade) fade.classList.add("hidden");
-        box.classList.remove("max-h-48");
-        box.classList.add("max-h-[9999px]");
-        inner.classList.remove("overflow-y-auto");
-      }
-    });
-  })();
+<script type="application/json" id="user-merge-config">
+  {{ {
+    "preview_url": url_for("user_merge_preview", user_id=user.id),
+    "preview_moved_title": t("merge.preview.title"),
+    "preview_media_users": t("merge.preview.media_users"),
+    "preview_user_identities": t("merge.preview.user_identities"),
+    "preview_sent_emails": t("merge.preview.sent_emails"),
+    "preview_media_jobs": t("merge.preview.media_jobs"),
+    "show_top": t("merge_show_top"),
+    "show_all": t("merge_show_all") ~ " (" ~ (merge_suggestions|length) ~ ")",
+    "preview_error": "Preview error",
+    "fields": [
+      [t("firstname"), "firstname"],
+      [t("lastname"), "lastname"],
+      [t("email"), "email"],
+      [t("second_email"), "second_email"],
+      [t("expiration"), "expiration_date"],
+      [t("renewal_date"), "renewal_date"],
+      [t("renewal_method"), "renewal_method"],
+      [t("notes"), "notes"]
+    ]
+  }|tojson }}
 </script>

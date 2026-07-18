@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% set active_page = 'backup' %}
 
 {% block title %}{{ t("backup") }} - VODUM{% endblock %}
@@ -95,11 +95,13 @@
 <script type="application/json" id="vodum-backup-config">
 {
   "autoRefreshBackups": {{ "true" if request.args.get("refresh_backups") == "1" else "false" }},
+  "tautulliStatusUrl": {{ url_for("tautulli_import_status")|tojson }},
   "i18n": {
     "download": {{ (t("download") if t("download") else "Download")|tojson }},
     "restore": {{ t("restore_btn")|tojson }},
     "delete": {{ (t("delete") if t("delete") else "Delete")|tojson }},
-    "confirmRestore": {{ t("confirm_restore")|tojson }}
+    "confirmRestore": {{ t("confirm_restore")|tojson }},
+    "tautulliSelectFileFirst": {{ t("tautulli_select_file_first")|tojson }}
   }
 }
 </script>

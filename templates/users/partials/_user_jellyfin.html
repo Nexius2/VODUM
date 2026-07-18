@@ -80,7 +80,7 @@
               </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-y-2 text-sm">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-y-2 text-sm">
               <div class="text-slate-400">{{ t("jellyfin_id") if t("jellyfin_id") else "Jellyfin ID" }}</div>
               <div class="font-mono text-slate-200">{{ j.external_user_id or t("not_available") }}</div>
 
@@ -126,7 +126,7 @@
               <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
                 <div class="text-xs font-semibold text-slate-300 mb-3">{{ t("user_jellyfin_policy") }}</div>
 
-                <div class="grid grid-cols-2 gap-y-2 text-sm">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-y-2 text-sm">
                   <div class="text-slate-400">{{ t("user_jellyfin_remote_access") }}</div>
                   <div class="text-slate-200">
                     {% if policy and policy.EnableRemoteAccess is defined %}
@@ -168,7 +168,7 @@
               <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
                 <div class="text-xs font-semibold text-slate-300 mb-3">{{ t("communications.tabs.configuration") }}</div>
 
-                <div class="grid grid-cols-2 gap-y-2 text-sm">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-y-2 text-sm">
                   <div class="text-slate-400">{{ t("user_jellyfin_audio_language") }}</div>
                   <div class="text-slate-200">
                     {{ config.AudioLanguagePreference if config and config.AudioLanguagePreference is defined and config.AudioLanguagePreference else t("not_available") }}

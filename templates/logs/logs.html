@@ -28,9 +28,41 @@
 {% block content %}
 <div class="p-6 space-y-6">
 
+    {% if log_read_errors %}
+    <div class="rounded-lg border border-amber-700 bg-amber-950/40 px-4 py-3 text-amber-200">
+        <div class="font-medium">Log files could not all be read.</div>
+        <div class="mt-1 text-sm text-amber-300">
+            {% for item in log_read_errors %}{{ item.path }} ({{ item.error }}){% if not loop.last %}, {% endif %}{% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <a href="{{ url_for('logs_page', level='ALL', q=search) }}"
+           class="log-level-counter log-level-counter--all cursor-pointer rounded-lg border px-4 py-3 transition-colors {{ 'border-primary bg-primary/10' if level == 'ALL' else 'border-slate-700 bg-slate-900 hover:bg-slate-800/40' }}">
+            <div class="text-xs uppercase tracking-wide text-slate-400">{{ t("all_levels") }}</div>
+            <div class="mt-1 text-2xl font-semibold text-slate-100">{{ level_counts.ALL }}</div>
+        </a>
+        <a href="{{ url_for('logs_page', level='WARNING', q=search) }}"
+           class="log-level-counter log-level-counter--warning cursor-pointer rounded-lg border px-4 py-3 transition-colors {{ 'border-amber-500 bg-amber-500/10' if level == 'WARNING' else 'border-slate-700 bg-slate-900 hover:bg-slate-800/40' }}">
+            <div class="text-xs uppercase tracking-wide text-amber-400">{{ t("warning") }}</div>
+            <div class="mt-1 text-2xl font-semibold text-amber-300">{{ level_counts.WARNING }}</div>
+        </a>
+        <a href="{{ url_for('logs_page', level='ERROR', q=search) }}"
+           class="log-level-counter log-level-counter--error cursor-pointer rounded-lg border px-4 py-3 transition-colors {{ 'border-red-500 bg-red-500/10' if level == 'ERROR' else 'border-slate-700 bg-slate-900 hover:bg-slate-800/40' }}">
+            <div class="text-xs uppercase tracking-wide text-red-400">{{ t("error") }}</div>
+            <div class="mt-1 text-2xl font-semibold text-red-300">{{ level_counts.ERROR }}</div>
+        </a>
+        <a href="{{ url_for('logs_page', level='CRITICAL', q=search) }}"
+           class="log-level-counter log-level-counter--critical cursor-pointer rounded-lg border px-4 py-3 transition-colors {{ 'border-fuchsia-500 bg-fuchsia-500/10' if level == 'CRITICAL' else 'border-slate-700 bg-slate-900 hover:bg-slate-800/40' }}">
+            <div class="text-xs uppercase tracking-wide text-fuchsia-400">CRITICAL</div>
+            <div class="mt-1 text-2xl font-semibold text-fuchsia-300">{{ level_counts.CRITICAL }}</div>
+        </a>
+    </div>
+
 
 	<!-- Barre de filtres -->
-	<form id="logsFilterForm" method="get" class="flex items-center gap-4 mb-4">
+	<form id="logsFilterForm" method="get" class="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-4">
 		<!-- On force le retour page 1 dès qu’on change un filtre -->
 		<input type="hidden" id="pageInput" name="page" value="1">
 
@@ -40,6 +72,7 @@
 			<option value="INFO" {% if level == "INFO" %}selected{% endif %}>{{ t("info") }}</option>
 			<option value="WARNING" {% if level == "WARNING" %}selected{% endif %}>{{ t("warning") }}</option>
 			<option value="ERROR" {% if level == "ERROR" %}selected{% endif %}>{{ t("error") }}</option>
+			<option value="CRITICAL" {% if level == "CRITICAL" %}selected{% endif %}>CRITICAL</option>
 		</select>
 
 		<!-- Recherche -->
@@ -76,6 +109,10 @@
 							</div>
 						</td>
 
+                    </tr>
+                {% else %}
+                    <tr class="border-t border-slate-800">
+                        <td colspan="4" class="px-4 py-8 text-center text-slate-400">{{ t("no_data") }}</td>
                     </tr>
                 {% endfor %}
             </tbody>

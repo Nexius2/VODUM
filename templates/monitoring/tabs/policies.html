@@ -144,6 +144,13 @@
         <div class="mt-1 text-xs text-slate-500">{{ t("monitoring_policies_grouped_view_available") }}</div>
       </div>
 
+      <div class="flex flex-wrap items-center gap-2">
+      <form method="get" class="flex items-center">
+        <input type="hidden" name="tab" value="policies">
+        <select name="enforcement_per_page" aria-label="{{ t('rows_per_page') }}" class="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200" onchange="this.form.submit()">
+          {% for size in (20, 50, 100) %}<option value="{{ size }}" {% if policy_enforcement_per_page == size %}selected{% endif %}>{{ size }}</option>{% endfor %}
+        </select>
+      </form>
       <button
         type="button"
         id="policyEnforcementViewToggleBtn"
@@ -151,6 +158,7 @@
       >
         {{ t("monitoring_policies_group_by_user") }}
       </button>
+      </div>
     </div>
 
     <div id="policyEnforcementEventView" class="overflow-x-auto">
@@ -173,6 +181,7 @@
               tabindex="0"
               role="button"
               data-enforcement='{{ row|tojson|forceescape }}'
+              data-enforcement-url="{{ url_for('monitoring_policy_enforcement_detail', enforcement_id=row.enforcement_id) }}"
             >
               <td class="p-3 text-slate-300">{{ row.created_at|browser_datetime if row.created_at else "—" }}</td>
               <td class="p-3 text-slate-200">{{ row.user_label }}</td>
@@ -182,6 +191,8 @@
               <td class="p-3">
                 {% if row.action == 'kill' %}
                   <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-rose-950/40 border border-rose-800 text-[11px] text-rose-300">{{ t("monitoring_policies_kill_action") }}</span>
+                {% elif row.action == 'kill_failed' %}
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-950/40 border border-slate-600 text-[11px] text-slate-300">{{ t("failed") }}</span>
                 {% else %}
                   <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-950/40 border border-amber-800 text-[11px] text-amber-300">{{ t("monitoring_policies_warn_action") }}</span>
                 {% endif %}
@@ -205,11 +216,11 @@
         <div class="flex gap-2">
           {% if policy_enforcement_page > 1 %}
           <a class="rounded-lg bg-slate-800 px-3 py-1.5 text-slate-200 hover:bg-slate-700"
-             href="{{ url_for('monitoring_page', tab='policies', enforcement_page=policy_enforcement_page-1) }}">{{ t("previous") }}</a>
+             href="{{ url_for('monitoring_page', tab='policies', enforcement_page=policy_enforcement_page-1, enforcement_per_page=policy_enforcement_per_page) }}">{{ t("previous") }}</a>
           {% endif %}
           {% if policy_enforcement_page < policy_enforcement_total_pages %}
           <a class="rounded-lg bg-primary px-3 py-1.5 text-white hover:bg-primary-dark"
-             href="{{ url_for('monitoring_page', tab='policies', enforcement_page=policy_enforcement_page+1) }}">{{ t("next") }}</a>
+             href="{{ url_for('monitoring_page', tab='policies', enforcement_page=policy_enforcement_page+1, enforcement_per_page=policy_enforcement_per_page) }}">{{ t("next") }}</a>
           {% endif %}
         </div>
       </div>
@@ -266,8 +277,8 @@
     <div class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
 
     <div class="relative z-10 flex min-h-full items-center justify-center p-4">
-      <div class="w-full max-w-5xl rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
-        <div class="flex items-start justify-between gap-4 border-b border-slate-800 px-5 py-4">
+      <div class="vodum-modal-viewport w-full max-w-5xl rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden flex flex-col">
+        <div class="shrink-0 flex items-start justify-between gap-4 border-b border-slate-800 px-4 sm:px-5 py-4">
           <div>
             <div id="policyEnforcementGroupModalTitle" class="text-base font-semibold text-white">
               {{ t("monitoring_policies_user_history") }}
@@ -286,7 +297,7 @@
           </button>
         </div>
 
-        <div class="max-h-[75vh] overflow-y-auto">
+        <div class="vodum-modal-scroll flex-1 overflow-auto">
           <table class="min-w-full text-sm">
             <thead class="sticky top-0 bg-slate-950 text-slate-400">
               <tr>
@@ -313,8 +324,8 @@
     <div class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
 
     <div class="relative z-10 flex min-h-full items-center justify-center p-4">
-      <div class="w-full max-w-5xl rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
-        <div class="flex items-start justify-between gap-4 border-b border-slate-800 px-5 py-4">
+      <div class="vodum-modal-viewport w-full max-w-5xl rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden flex flex-col">
+        <div class="shrink-0 flex items-start justify-between gap-4 border-b border-slate-800 px-4 sm:px-5 py-4">
           <div>
             <div class="text-base font-semibold text-white">{{ t("monitoring_policies_enforcement_details") }}</div>
             <div id="policyEnforcementModalSubtitle" class="mt-1 text-xs text-slate-400">—</div>
@@ -328,7 +339,7 @@
           </button>
         </div>
 
-        <div class="max-h-[80vh] overflow-y-auto px-5 py-5 space-y-5">
+        <div class="vodum-modal-scroll flex-1 px-4 sm:px-5 py-5 space-y-5">
           <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
               <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_enforcement_id") }}</div>
@@ -498,6 +509,9 @@
   "labels": {
     "warnAction": t("monitoring_policies_warn_action"),
     "killAction": t("monitoring_policies_kill_action"),
+    "failed": t("failed"),
+    "loading": t("loading"),
+    "requestFailed": t("request_failed"),
     "total": t("total"),
     "yes": t("yes"),
     "no": t("no"),

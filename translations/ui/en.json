@@ -1452,6 +1452,7 @@
   "task_description.cleanup_tautulli_imports": "Deletes old Tautulli diagnostic uploads and completed import records.",
   "task.cleanup_data_consistency": "Data consistency cleanup",
   "task_description.cleanup_data_consistency": "Removes orphaned and impossible cross-server access relationships.",
+  "task_description.materialize_monitoring_daily_stats": "Builds compact daily Monitoring statistics for faster overview pages.",
   "task.warmup_artwork_cache": "Artwork cache warmup",
   "task_description.warmup_artwork_cache": "Preloads recent posters and backdrops to speed up dashboard and monitoring display.",
   "task.db_integrity_check": "Database integrity check",
@@ -1959,5 +1960,18 @@
   "totp_local_trust_30_days_help": "On private/local IPs, this browser will not ask for a 2FA code again for 30 days after a successful 2FA login.",
   "totp_scan_qr": "Scan QR code",
   "totp_qr_help": "Scan this QR code with Google Authenticator, Microsoft Authenticator, Bitwarden or another TOTP app.",
-  "totp_manual_key": "Manual key"
+  "totp_manual_key": "Manual key",
+  "loading": "Loading...",
+  "retry": "Retry",
+  "rows_per_page": "Rows per page",
+  "operations_health": "Operations health",
+  "operations_health_help": "Providers, queues and recent incidents at a glance.",
+  "operations_healthy": "Healthy",
+  "operations_warning": "Attention",
+  "operations_critical": "Action required",
+  "operations_stale": "stale",
+  "operations_media_jobs": "Media jobs",
+  "operations_recent_incidents": "Recent incidents",
+  "providers": "Providers",
+  "queued": "Queued"
 }

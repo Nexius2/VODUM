@@ -52,6 +52,8 @@ function initMobileMenu() {
 
 document.addEventListener("DOMContentLoaded", initMobileMenu);
 
+
+
 document.addEventListener("error", (event) => {
   const image = event.target;
   if (image instanceof HTMLImageElement && image.classList.contains("js-artwork-image")) {
@@ -59,6 +61,59 @@ document.addEventListener("error", (event) => {
   }
 }, true);
 
+
+window.__vodumDebounceSubmit = window.__vodumDebounceSubmit || (() => {
+  let timer = null;
+  return (form) => {
+    if (!form) return;
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => form.submit(), 500);
+  };
+})();
+
+function initUserNotificationOrder() {
+  const checkbox = document.getElementById("use_global_notifications_order_cb");
+  const layer = document.getElementById("user_notif_order_layer");
+  const list = document.getElementById("user-notif-order-list");
+  const hidden = document.getElementById("user_notifications_order_hidden");
+  if (!checkbox || !layer || !list || !hidden || list.dataset.vodumBound === "1") return;
+  list.dataset.vodumBound = "1";
+
+  function updateHidden() {
+    const items = Array.from(list.querySelectorAll("li[data-channel]"));
+    hidden.value = items.map((item) => item.dataset.channel).filter(Boolean).join(",");
+  }
+
+  function moveItem(item, direction) {
+    if (!item) return;
+    if (direction === "up" && item.previousElementSibling) {
+      list.insertBefore(item, item.previousElementSibling);
+    }
+    if (direction === "down" && item.nextElementSibling) {
+      list.insertBefore(item.nextElementSibling, item);
+    }
+    updateHidden();
+  }
+
+  function syncLayerState() {
+    layer.classList.toggle("opacity-50", checkbox.checked);
+    layer.classList.toggle("pointer-events-none", checkbox.checked);
+  }
+
+  list.addEventListener("click", (event) => {
+    const item = event.target.closest("li[data-channel]");
+    if (!item) return;
+    if (event.target.closest(".order-up")) moveItem(item, "up");
+    if (event.target.closest(".order-down")) moveItem(item, "down");
+  });
+
+  checkbox.addEventListener("change", syncLayerState);
+  updateHidden();
+  syncLayerState();
+}
+
+document.addEventListener("DOMContentLoaded", initUserNotificationOrder);
+document.addEventListener("htmx:load", initUserNotificationOrder);
 // ------------ UTILITAIRES ---------------------------------
 
 async function apiGet(url) {
@@ -503,6 +558,56 @@ window.vodumFlash = function(category, message, autoHideMs = 4000) {
   }
 };
 
+// ------------ GLOBAL PAGE NAVIGATION FEEDBACK ----------------------------
+(function vodumNavigationLoader() {
+  const loader = document.getElementById("vodumNavigationLoader");
+  if (!loader) return;
+
+  let showTimer = null;
+  let safetyTimer = null;
+
+  function show(delay = 80) {
+    clearTimeout(showTimer);
+    showTimer = setTimeout(() => {
+      loader.hidden = false;
+      document.documentElement.setAttribute("aria-busy", "true");
+      clearTimeout(safetyTimer);
+      safetyTimer = setTimeout(hide, 15000);
+    }, delay);
+  }
+
+  function hide() {
+    clearTimeout(showTimer);
+    clearTimeout(safetyTimer);
+    showTimer = null;
+    safetyTimer = null;
+    loader.hidden = true;
+    document.documentElement.removeAttribute("aria-busy");
+  }
+
+  document.addEventListener("click", (event) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.target.closest("a[href]");
+    if (!link || link.target === "_blank" || link.hasAttribute("download") || link.hasAttribute("data-no-navigation-loader")) return;
+
+    let destination;
+    try { destination = new URL(link.href, window.location.href); } catch (_) { return; }
+    if (destination.origin !== window.location.origin) return;
+    if (destination.pathname === window.location.pathname && destination.search === window.location.search && destination.hash) return;
+    show(80);
+  }, true);
+
+  document.addEventListener("submit", (event) => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || form.hasAttribute("data-no-navigation-loader")) return;
+    if (form.hasAttribute("hx-post") || form.hasAttribute("hx-get")) return;
+    show(80);
+  }, true);
+
+  window.addEventListener("pageshow", hide);
+  window.addEventListener("pagehide", () => clearTimeout(showTimer));
+})();
+
 // ------------ DATE PICKERS (Flatpickr lazy loader) -----------------------
 // Loads Flatpickr only on pages/fragments that expose input.vodum-date.
 (function vodumDatePickers() {
@@ -647,13 +752,14 @@ window.vodumFlash = function(category, message, autoHideMs = 4000) {
 
   function enhanceMobileTables(root = document) {
     const scope = root && root.querySelectorAll ? root : document;
-    const tables = Array.from(scope.querySelectorAll("main table"));
-    if (scope.matches && scope.matches("main table")) {
+    const selector = scope === document ? "main table" : "table";
+    const tables = Array.from(scope.querySelectorAll(selector));
+    if (scope.matches && scope.matches("table")) {
       tables.unshift(scope);
     }
 
     tables.forEach((table) => {
-      if (shouldSkip(table) || !table.parentNode) return;
+      if (!table.closest("main") || shouldSkip(table) || !table.parentNode) return;
 
       const wrapper = document.createElement("div");
       wrapper.className = "vodum-mobile-table-scroll";

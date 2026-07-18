@@ -10,6 +10,7 @@ from tasks_engine import enable_and_run_task_by_name
 from core.i18n import get_translator
 from core.backup import list_backups
 from core.app_paths import imports_dir as get_imports_dir
+from db_manager import open_sqlite_connection
 
 from web.helpers import get_db, get_backup_cfg
 
@@ -96,13 +97,10 @@ def register(app):
         Returns (ok, details). details contains tables count or the exception message.
         """
         try:
-            import sqlite3
-
             # Ouvre en lecture seule (évite toute création implicite)
-            conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
-            cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
-            tables = {r[0] for r in cur.fetchall()}
-            conn.close()
+            with open_sqlite_connection(path, read_only=True) as conn:
+                cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                tables = {r[0] for r in cur.fetchall()}
 
             required = {"users", "session_history", "session_history_metadata", "library_sections"}
             missing = sorted(list(required - tables))
@@ -207,6 +205,7 @@ def register(app):
                     flash("Manual backup could not be queued.", "error")
                     return redirect(url_for("backup_page"))
             except Exception as e:
+                settings_logger.exception("Manual backup enqueue failed")
                 flash(t("backup_create_error").format(error=str(e)), "error")
                 return redirect(url_for("backup_page"))
 
@@ -227,6 +226,7 @@ def register(app):
                     flash(t("backup_not_found"), "error")
                     return redirect(url_for("backup_page"))
                 except Exception as e:
+                    settings_logger.exception("Backup restore path validation failed")
                     flash(t("backup_restore_error").format(error=str(e)), "error")
                     return redirect(url_for("backup_page"))
 
@@ -240,6 +240,7 @@ def register(app):
                     flash("Restore queued. The container will restart automatically after completion.", "success")
                     return redirect(url_for("backup_page"))
                 except Exception as e:
+                    settings_logger.exception("Existing backup restore enqueue failed")
                     flash(t("backup_restore_error").format(error=str(e)), "error")
                     return redirect(url_for("backup_page"))
 
@@ -271,6 +272,7 @@ def register(app):
                         flash("Restore queued. The container will restart automatically after completion.", "success")
                         return redirect(url_for("backup_page"))
                     except Exception as e:
+                        settings_logger.exception("Uploaded backup restore enqueue failed")
                         flash(t("backup_restore_error").format(error=str(e)), "error")
                         return redirect(url_for("backup_page"))
 

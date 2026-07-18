@@ -1,6 +1,45 @@
 from datetime import datetime, timedelta
 
 
+def parse_scheduler_datetime(value):
+    """Return a scheduler datetime or None for missing/invalid persisted values."""
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def normalize_counter(value) -> int:
+    """Normalize nullable or malformed database counters without raising."""
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def retry_is_pending(status, next_retry_at, retry_count, max_retries) -> bool:
+    return (
+        str(status or "").strip().lower() == "error"
+        and next_retry_at is not None
+        and normalize_counter(retry_count) < normalize_counter(max_retries)
+    )
+
+
+def task_is_busy(status, queued_count) -> bool:
+    return (
+        str(status or "").strip().lower() in {"running", "queued"}
+        or normalize_counter(queued_count) > 0
+    )
+
+
+def scheduled_run_is_due(next_run, now, *, forced=False) -> bool:
+    return bool(forced or (next_run is not None and next_run <= now))
+
+
 def retry_modifier_for_attempt(next_attempt_number: int) -> str:
     """
     Standard scheduler backoff:

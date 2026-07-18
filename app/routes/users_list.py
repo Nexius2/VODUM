@@ -1,7 +1,6 @@
 # Auto-split from app.py (keep URLs/endpoints intact)
 import json
 import re
-import math
 from difflib import SequenceMatcher
 
 from flask import (
@@ -12,6 +11,7 @@ from flask import (
 from logging_utils import get_logger
 
 from web.helpers import get_db
+from web.pagination import normalize_page, normalize_page_size, page_bounds
 from core.referral_bulk import bulk_update_referrals, normalize_referral_ids
 
 task_logger = get_logger("tasks_ui")
@@ -81,8 +81,8 @@ def register(app):
         search = " ".join(
             request.args.get("q", "").split()
         ).strip()
-        page = max(request.args.get("page", 1, type=int), 1)
-        per_page = 20
+        page = normalize_page(request.args.get("page", 1, type=int))
+        per_page = normalize_page_size(request.args.get("per_page", 20, type=int))
         offset = (page - 1) * per_page
 
         # --------------------------------------------------
@@ -184,11 +184,11 @@ def register(app):
             WHERE COALESCE(is_enabled, 1) = 1
             ORDER BY is_default DESC, name ASC
             """
-        ) or []
+        ) or [] if tab in ("users", "referral_settings") else []
 
         referral_settings = db.query_one(
             f"SELECT {USER_REFERRAL_SETTINGS_COLUMNS} FROM user_referral_settings WHERE id = 1"
-        )
+        ) if tab == "referral_settings" else None
         referral_settings = dict(referral_settings) if referral_settings else {
             "enabled": 0,
             "reward_enabled": 1,
@@ -219,7 +219,7 @@ def register(app):
                 END), 0) AS granted_days
             FROM user_referrals
             """
-        )
+        ) if tab == "referrals" else None
         referral_stats = dict(referral_stats) if referral_stats else {
             "total_referrals": 0,
             "pending_referrals": 0,
@@ -371,7 +371,8 @@ def register(app):
             count_params = params[:-2]
             total_row = db.query_one(count_query, count_params) or {"total": 0}
             total_users = int(total_row["total"] or 0)
-            total_pages = max(math.ceil(total_users / per_page), 1)
+            pagination = page_bounds(page, per_page, total_users)
+            total_pages = pagination["total_pages"]
 
             if page > total_pages:
                 page = total_pages
@@ -474,7 +475,8 @@ def register(app):
             count_params = params[:-2]
             total_row = db.query_one(count_query, count_params) or {"total": 0}
             total_referrals = int(total_row["total"] or 0)
-            total_pages = max(math.ceil(total_referrals / per_page), 1)
+            pagination = page_bounds(page, per_page, total_referrals)
+            total_pages = pagination["total_pages"]
 
             if page > total_pages:
                 page = total_pages
@@ -483,7 +485,7 @@ def register(app):
 
             referrals = db.query(query, params) or []
 
-        settings = db.query_one("SELECT default_subscription_days FROM settings WHERE id = 1")
+        settings = db.query_one("SELECT default_subscription_days FROM settings WHERE id = 1") if tab == "users" else None
         settings = dict(settings) if settings else {}
 
         resp = make_response(render_template(
@@ -502,6 +504,7 @@ def register(app):
             search=search,
             sort=sort,
             order=order,
+            per_page=per_page,
             subscription_templates=subscription_templates,
             settings=settings,
             archive_mode=archive_mode,

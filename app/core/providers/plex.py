@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import requests
+import time
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Optional
 from core.plex_rate_limit import wait_for_plex_slot
@@ -126,33 +127,35 @@ class PlexProvider(BaseProvider):
         xml_text = self._get("/status/sessions")
         root = ET.fromstring(xml_text)
 
-        target_session_id = None
+        def find_session_id(container: ET.Element) -> Optional[str]:
+            # Retrouver la session correspondante au session_key.
+            for node in container:
+                # sessionKey est souvent sur le node (Video/Track/Episode)
+                sk = node.attrib.get("sessionKey") or node.attrib.get("sessionId") or node.attrib.get("key")
+                if not sk or str(sk) != str(session_key):
+                    continue
 
-        # 2) retrouver la session correspondante au session_key
-        for node in root:
-            # sessionKey est souvent sur le node (Video/Track/Episode)
-            sk = node.attrib.get("sessionKey") or node.attrib.get("sessionId") or node.attrib.get("key")
-            if not sk:
-                continue
-            if str(sk) != str(session_key):
-                continue
+                # La vraie sessionId est généralement dans <Session id="...">.
+                sess = node.find("Session")
+                if sess is not None:
+                    sid = sess.attrib.get("id")
+                    if sid:
+                        return str(sid)
 
-            # la vraie sessionId est généralement dans <Session id="...">
-            sess = node.find("Session")
-            if sess is not None:
-                sid = sess.attrib.get("id")
-                if sid:
-                    target_session_id = str(sid)
-                    break
+                # Certaines versions exposent sessionId directement.
+                if node.attrib.get("sessionId"):
+                    return str(node.attrib["sessionId"])
+            return None
 
-            # fallback (au cas où) : certaines versions exposent sessionId directement
-            if node.attrib.get("sessionId"):
-                target_session_id = str(node.attrib["sessionId"])
-                break
+        target_session_id = find_session_id(root)
 
-        # 3) si on n'a pas trouvé, on tente quand même avec session_key (mais on logge clairement)
+        # 3) Sans correspondance certaine, ne pas confondre sessionKey et sessionId.
         if not target_session_id:
-            target_session_id = str(session_key)
+            log.warning(
+                "Cannot terminate Plex session: session is absent from /status/sessions "
+                f"session_key={session_key}"
+            )
+            return False
 
         params = {"sessionId": target_session_id}
         if reason:
@@ -160,34 +163,43 @@ class PlexProvider(BaseProvider):
 
         # GET puis POST (compat)
         try:
-            return self._request("GET", "/status/sessions/terminate", params=params)
+            requested = self._request("GET", "/status/sessions/terminate", params=params)
 
-        except Exception as e:
-            error_text = str(e)
-
-            # La session n'existe déjà plus côté Plex.
-            # Ce n'est pas une erreur fonctionnelle.
-            if "404" in error_text:
-                log.info(
-                    f"Session already terminated on Plex "
-                    f"session_key={session_key} session_id={target_session_id}"
-                )
-                return True
-
+        except Exception:
             try:
-                return self._request("POST", "/status/sessions/terminate", params=params)
+                requested = self._request("POST", "/status/sessions/terminate", params=params)
 
             except Exception as e2:
                 error_text = str(e2)
 
                 if "404" in error_text:
-                    log.info(
-                        f"Session already terminated on Plex "
-                        f"session_key={session_key} session_id={target_session_id}"
-                    )
-                    return True
+                    refreshed = ET.fromstring(self._get("/status/sessions"))
+                    if find_session_id(refreshed) is None:
+                        log.info(
+                            f"Session already terminated on Plex "
+                            f"session_key={session_key} session_id={target_session_id}"
+                        )
+                        return True
 
                 raise
+
+        if not requested:
+            return False
+
+        # Plex peut répondre 2xx avant que la session soit retirée. On ne
+        # confirme l'arrêt qu'après disparition effective de la session.
+        for attempt in range(5):
+            if attempt:
+                time.sleep(0.5)
+            refreshed = ET.fromstring(self._get("/status/sessions"))
+            if find_session_id(refreshed) is None:
+                return True
+
+        log.warning(
+            "Plex accepted terminate request but session is still active "
+            f"session_key={session_key} session_id={target_session_id}"
+        )
+        return False
 
 
 

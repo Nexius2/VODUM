@@ -1,6 +1,47 @@
 """Reliable dashboard preview for live media sessions."""
 
+import hashlib
+import json
+
 from web.helpers import table_exists
+
+
+def build_now_playing_fragment_key(
+    sessions,
+    *,
+    total_live: int,
+    total_transcode: int,
+    stale_fallback: bool,
+) -> str:
+    """Return a stable key for fields that are actually rendered by the widget."""
+    visible_sessions = []
+    for session in sessions or []:
+        visible_sessions.append({
+            "id": session.get("id"),
+            "server_id": session.get("server_id"),
+            "session_key": session.get("session_key"),
+            "media_key": session.get("media_key"),
+            "media_type": session.get("media_type"),
+            "title": session.get("title"),
+            "grandparent_title": session.get("grandparent_title"),
+            "episode_code": session.get("episode_code"),
+            "state": session.get("state"),
+            "is_transcode": session.get("is_transcode"),
+            "client_name": session.get("client_name"),
+            "server_name": session.get("server_name"),
+            "username": session.get("username"),
+            "poster_url": session.get("poster_url"),
+            "backdrop_url": session.get("backdrop_url"),
+        })
+
+    payload = {
+        "total_live": int(total_live or 0),
+        "total_transcode": int(total_transcode or 0),
+        "stale_fallback": bool(stale_fallback),
+        "sessions": visible_sessions,
+    }
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
 
 
 def _task_queue_busy(db) -> bool:

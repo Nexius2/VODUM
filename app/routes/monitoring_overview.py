@@ -143,6 +143,25 @@ def _build_history_backdrop_url(row, db=None):
 
 
 def register(app):
+    @app.route("/monitoring/policies/enforcements/<int:enforcement_id>")
+    def monitoring_policy_enforcement_detail(enforcement_id):
+        row = get_db().query_one("""
+            SELECT e.id AS enforcement_id, e.created_at, e.action, e.reason, e.provider,
+              e.session_key, e.policy_id, e.server_id, e.vodum_user_id, e.external_user_id,
+              e.account_username, e.ips_json, e.details_json, p.rule_type, p.scope_type,
+              p.scope_id, p.priority AS policy_priority, p.is_enabled AS policy_enabled,
+              p.rule_value_json, s.name AS server_name, vu.username AS vodum_username,
+              COALESCE(NULLIF(TRIM(e.account_username), ''), NULLIF(TRIM(vu.username), ''), NULLIF(TRIM(e.external_user_id), ''), '—') AS user_label
+            FROM stream_enforcements e
+            LEFT JOIN stream_policies p ON p.id = e.policy_id
+            LEFT JOIN servers s ON s.id = e.server_id
+            LEFT JOIN vodum_users vu ON vu.id = e.vodum_user_id
+            WHERE e.id = ? LIMIT 1
+        """, (enforcement_id,))
+        if not row:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+        return jsonify({"ok": True, "row": dict(row)})
+
     @app.route("/monitoring/policies/enforcements/by-user")
     def monitoring_policy_enforcements_by_user():
         db = get_db()
@@ -182,16 +201,11 @@ def register(app):
               e.vodum_user_id,
               e.external_user_id,
               e.account_username,
-              e.ips_json,
-              e.details_json,
-
               p.rule_type,
               p.scope_type,
               p.scope_id,
               p.priority AS policy_priority,
               p.is_enabled AS policy_enabled,
-              p.rule_value_json,
-
               s.name AS server_name,
               vu.username AS vodum_username,
 
@@ -225,9 +239,18 @@ def register(app):
             LIMIT 200
         """, params) or []
 
+        result_rows = []
+        for row in rows:
+            item = dict(row)
+            item["detail_url"] = url_for(
+                "monitoring_policy_enforcement_detail",
+                enforcement_id=item["enforcement_id"],
+            )
+            result_rows.append(item)
+
         return jsonify({
             "ok": True,
-            "rows": [dict(r) for r in rows],
+            "rows": result_rows,
         })
     @app.route("/monitoring")
     def monitoring_page():
@@ -466,6 +489,7 @@ def register(app):
         policy_top_users_30d = []
         policy_recent_enforcements = []
         policy_enforcement_page = 1
+        policy_enforcement_per_page = 20
         policy_enforcement_total_pages = 1
         policy_enforcement_total = 0
         policy_grouped_enforcements = []
@@ -940,7 +964,9 @@ ranked AS (
 
         elif tab == "policies":
             policy_enforcement_page = max(request.args.get("enforcement_page", 1, type=int), 1)
-            policy_enforcement_per_page = 12
+            policy_enforcement_per_page = request.args.get("enforcement_per_page", 20, type=int)
+            if policy_enforcement_per_page not in (20, 50, 100):
+                policy_enforcement_per_page = 20
             policy_enforcement_count = db.query_one(
                 "SELECT COUNT(*) AS total FROM stream_enforcements"
             ) or {"total": 0}
@@ -2203,6 +2229,7 @@ ranked AS (
                 policy_top_users_30d=policy_top_users_30d,
                 policy_recent_enforcements=policy_recent_enforcements,
                 policy_enforcement_page=policy_enforcement_page,
+                policy_enforcement_per_page=policy_enforcement_per_page,
                 policy_enforcement_total_pages=policy_enforcement_total_pages,
                 policy_enforcement_total=policy_enforcement_total,
                 policy_grouped_enforcements=policy_grouped_enforcements,
@@ -2265,6 +2292,7 @@ ranked AS (
             policy_top_users_30d=policy_top_users_30d,
             policy_recent_enforcements=policy_recent_enforcements,
             policy_enforcement_page=policy_enforcement_page,
+            policy_enforcement_per_page=policy_enforcement_per_page,
             policy_enforcement_total_pages=policy_enforcement_total_pages,
             policy_enforcement_total=policy_enforcement_total,
             policy_grouped_enforcements=policy_grouped_enforcements,

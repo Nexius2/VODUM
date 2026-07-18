@@ -2,7 +2,7 @@
   <div class="text-sm font-semibold mb-4">{{ t("monitoring.section.sessions") }}</div>
 
   {% if sessions and sessions|length > 0 %}
-    <div class="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(380px,1fr))]">
+    <div class="grid gap-4" style="grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));">
       {% for s in sessions %}
         <div class="relative overflow-hidden bg-slate-950/40 border border-slate-800 rounded-2xl p-4 min-h-[190px]">
           {% if s.backdrop_url %}
