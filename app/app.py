@@ -20,6 +20,10 @@ from core.repair.plex_media_users_repair import run_repair_if_needed
 from core.monitoring.plex_websocket import PlexWebsocketClient
 from core.startup import StartupStep, run_startup_sequence
 from core.app_paths import update_status_path
+from core.error_reporting import (
+    install_thread_exception_logging,
+    register_flask_exception_logging,
+)
 from utils.version import load_app_version
 
 from api.subscriptions import subscriptions_api
@@ -325,6 +329,8 @@ def create_app():
     lang_dir = _resolve_asset_dir(base_dir, os.path.join("translations", "ui"))
 
     app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
+    register_flask_exception_logging(app, get_logger("requests"))
+    install_thread_exception_logging(get_logger("threads"))
 
     def _get_csrf_token() -> str:
         token = session.get("_csrf_token")

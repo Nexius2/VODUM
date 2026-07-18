@@ -2,6 +2,7 @@
 
 from core.aggregate_cache import cached_aggregate, cached_query_rows
 from core.monitoring.artwork import build_history_backdrop_url, build_history_poster_url
+from core.monitoring.daily_stats import load_materialized_window
 
 def build_monitoring_overview_aggregates(db, sessions_stats):
     stats_7d = {"sessions": 0, "active_users": 0, "total_watch_ms": 0, "avg_watch_ms": 0}
@@ -11,7 +12,11 @@ def build_monitoring_overview_aggregates(db, sessions_stats):
     concurrent_7d = {"peak_streams": 0}
 
     
-    stats_7d = cached_aggregate(
+    materialized_7d = cached_aggregate(
+        "monitoring:overview:materialized-7d", 120,
+        lambda: load_materialized_window(db, 7),
+    )
+    stats_7d = materialized_7d or cached_aggregate(
         "monitoring:overview:stats-7d",
         120,
         lambda: dict(db.query_one(
@@ -63,7 +68,11 @@ def build_monitoring_overview_aggregates(db, sessions_stats):
     )
     stats_7d = dict(stats_7d) if stats_7d else {"sessions": 0, "active_users": 0, "total_watch_ms": 0, "avg_watch_ms": 0}
     
-    top_users_30d = cached_aggregate(
+    materialized_30d = cached_aggregate(
+        "monitoring:overview:materialized-30d", 120,
+        lambda: load_materialized_window(db, 30),
+    )
+    top_users_30d = (materialized_30d or {}).get("top_users") or cached_aggregate(
         "monitoring:overview:top-users-30d",
         120,
         lambda: [dict(row) for row in (db.query(

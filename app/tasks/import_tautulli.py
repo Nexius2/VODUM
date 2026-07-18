@@ -28,6 +28,7 @@ import os
 import sqlite3
 import json
 import sys
+from db_manager import open_sqlite_connection
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -323,10 +324,9 @@ def _is_valid_tautulli_db(db_path: str) -> bool:
     We validate presence of required tables used by this importer.
     """
     try:
-        conn = sqlite3.connect(db_path)
-        cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        tables = {r[0] for r in cur.fetchall()}
-        conn.close()
+        with open_sqlite_connection(db_path, read_only=True) as conn:
+            cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            tables = {r[0] for r in cur.fetchall()}
         required = {"users", "session_history", "session_history_metadata", "library_sections"}
         return required.issubset(tables)
     except Exception:
@@ -583,8 +583,12 @@ def import_tautulli_db(
     stats = ImportStats()
 
     # Open Tautulli DB (read-only is not guaranteed with sqlite3 stdlib, but we only SELECT)
-    tconn = sqlite3.connect(tautulli_db_path)
-    tconn.row_factory = sqlite3.Row
+    tconn = open_sqlite_connection(
+        tautulli_db_path,
+        read_only=True,
+        row_factory=sqlite3.Row,
+        busy_timeout_ms=30000,
+    )
 
     try:
         # ------------------------------------------------------------
@@ -1146,4 +1150,3 @@ def main(argv=None):
 
 if __name__ == "__main__":
     main()
-

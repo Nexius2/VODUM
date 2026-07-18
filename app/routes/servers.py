@@ -10,7 +10,9 @@ from flask import (
 from logging_utils import get_logger
 from tasks_engine import enqueue_server_discovery_sequence, enable_and_run_task_by_name, ensure_tasks_enabled
 from web.helpers import get_db
+from web.pagination import normalize_page, pagination_links
 from core.media_jobs import insert_plex_media_job
+from core.user_sync_jobs import get_preferred_plex_media_user_id
 from core.library_bulk_access import (
     BulkAccessError,
     grant_libraries_to_active_users,
@@ -47,29 +49,15 @@ LIBRARY_TYPE_SQL = """
 
 
 def _page_arg(name: str = "page") -> int:
-    return max(request.args.get(name, 1, type=int), 1)
+    return normalize_page(request.args.get(name, 1, type=int))
 
 
 def _pagination(page: int, per_page: int, total_rows: int, endpoint: str, page_param: str = "page", unit_label: str | None = None, **kwargs):
-    total_pages = max(1, (int(total_rows or 0) + per_page - 1) // per_page)
-    page = min(max(page, 1), total_pages)
-
     def page_url(value: int):
         args = dict(kwargs)
         args[page_param] = value
         return url_for(endpoint, **args)
-
-    return {
-        "page": page,
-        "per_page": per_page,
-        "total_pages": total_pages,
-        "total_rows": int(total_rows or 0),
-        "first_url": page_url(1),
-        "prev_url": page_url(max(1, page - 1)),
-        "next_url": page_url(min(total_pages, page + 1)),
-        "last_url": page_url(total_pages),
-        "unit_label": unit_label,
-    }
+    return pagination_links(page, per_page, total_rows, page_url, unit_label=unit_label)
 
 SERVERS_LIST_COLUMNS = """
                 s.id,
@@ -107,29 +95,6 @@ SERVER_DETAIL_LIBRARY_COLUMNS = f"""
 {LIBRARY_TYPE_SQL} AS type,
                 l.section_id
 """
-
-def _get_preferred_plex_media_user_id(db, vodum_user_id: int, server_id: int):
-    row = db.query_one(
-        """
-        SELECT id
-        FROM media_users
-        WHERE vodum_user_id = ?
-          AND server_id = ?
-          AND type = 'plex'
-        ORDER BY
-            CASE WHEN LOWER(COALESCE(role, '')) = 'owner' THEN 1 ELSE 0 END ASC,
-            CASE WHEN TRIM(COALESCE(accepted_at, '')) <> '' THEN 0 ELSE 1 END ASC,
-            CASE WHEN TRIM(COALESCE(external_user_id, '')) <> '' THEN 0 ELSE 1 END ASC,
-            CASE WHEN LOWER(COALESCE(role, '')) = 'unfriended' THEN 1 ELSE 0 END ASC,
-            id ASC
-        LIMIT 1
-        """,
-        (vodum_user_id, server_id),
-    )
-    return int(row["id"]) if row and row["id"] is not None else None
-
-
-
 
 def _delete_in_chunks(conn, sql, params=(), batch_size=DELETE_BATCH_SIZE):
     total = 0
@@ -432,7 +397,7 @@ def register(app):
         created = 0
         for r in vodum_users:
             vodum_user_id = int(r["vodum_user_id"])
-            preferred_media_user_id = _get_preferred_plex_media_user_id(db, vodum_user_id, server_id)
+            preferred_media_user_id = get_preferred_plex_media_user_id(db, vodum_user_id, server_id)
 
             dedupe_key = (
                 f"plex:sync:server={server_id}:"
@@ -1036,7 +1001,11 @@ def register(app):
         try:
             enable_and_run_task_by_name("apply_plex_access_updates")
         except Exception:
-            pass
+            logger.exception(
+                "Bulk library grant persisted but Plex worker startup failed | server_id=%s | changed_users=%s",
+                result.get("server_id"),
+                result.get("changed_users"),
+            )
         mark_auto_enable_dirty()
         force_task_run("apply_plex_access_updates")
 
@@ -1061,7 +1030,11 @@ def register(app):
         try:
             enable_and_run_task_by_name("apply_plex_access_updates")
         except Exception:
-            pass
+            logger.exception(
+                "Bulk library removal persisted but Plex worker startup failed | server_id=%s | changed_users=%s",
+                result.get("server_id"),
+                result.get("changed_users"),
+            )
         mark_auto_enable_dirty()
         force_task_run("apply_plex_access_updates")
 

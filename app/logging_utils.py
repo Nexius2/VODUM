@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import tempfile
 import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -11,7 +12,13 @@ from db_manager import open_sqlite_connection
 # CONFIG
 # -------------------------------------------------------------------
 
-LOG_DIR = os.environ.get("VODUM_LOG_DIR", "/appdata/logs")
+LOG_DIR = os.environ.get("VODUM_LOG_DIR")
+if not LOG_DIR:
+    LOG_DIR = (
+        os.path.join(tempfile.gettempdir(), "vodum", "logs")
+        if os.name == "nt"
+        else "/appdata/logs"
+    )
 Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
 os.makedirs(LOG_DIR, exist_ok=True)
 
@@ -33,19 +40,26 @@ _DEBUG_CACHE = {
 logger = logging.getLogger("vodum")
 logger.setLevel(logging.DEBUG)  # On capture tout, filtrage via filter
 
-handler = RotatingFileHandler(
-    LOG_FILE,
-    maxBytes=5_000_000,   # 5 Mo
-    backupCount=5,
-    encoding="utf-8"
+handler = next(
+    (item for item in logger.handlers if getattr(item, "_vodum_file_handler", False)),
+    None,
 )
+if handler is None:
+    handler = RotatingFileHandler(
+        LOG_FILE,
+        maxBytes=5_000_000,
+        backupCount=5,
+        encoding="utf-8",
+        delay=True,
+    )
+    handler._vodum_file_handler = True
+    logger.addHandler(handler)
 
 formatter = logging.Formatter(
     "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
 )
 
 handler.setFormatter(formatter)
-logger.addHandler(handler)
 logger.propagate = False  # Pas de duplication stdout
 
 
@@ -116,12 +130,32 @@ class AnonymizeFilter(logging.Filter):
         r'\b(?:\d{1,3}\.){3}\d{1,3}\b'
     )
 
+    def __init__(self, *, force=False):
+        super().__init__()
+        self.force = bool(force)
+
+    def anonymize(self, value: str) -> str:
+        msg = str(value or "")
+        msg = self.EMAIL_REGEX.sub(
+            lambda m: f"{m.group(1)}{'*' * len(m.group(2))}{m.group(3)}", msg
+        )
+        msg = self.BEARER_REGEX.sub(
+            lambda m: f"{m.group(1)}***REDACTED***", msg
+        )
+        msg = self.TOKEN_REGEX.sub(
+            lambda m: f"{m.group(1)}=***REDACTED***", msg
+        )
+        msg = self.QUERY_TOKEN_REGEX.sub(
+            lambda m: f"{m.group(1)}***REDACTED***", msg
+        )
+        return self.IP_REGEX.sub("***.***.***.***", msg)
+
     def filter(self, record: logging.LogRecord) -> bool:
         # 🧪 Debug actif → logs NON anonymisés
-        if is_debug_mode_enabled():
+        if not self.force and is_debug_mode_enabled():
             return True
 
-        msg = record.getMessage()
+        msg = self.anonymize(record.getMessage())
 
         # 📧 Email → masquer uniquement avant @
         msg = self.EMAIL_REGEX.sub(
@@ -156,6 +190,13 @@ class AnonymizeFilter(logging.Filter):
         record.msg = msg
         record.args = ()
 
+        # Tracebacks are formatted after filters. Sanitize the pre-rendered
+        # exception text so exception messages cannot leak secrets to app.log.
+        if record.exc_info:
+            record.exc_text = self.anonymize(
+                logging.Formatter().formatException(record.exc_info)
+            )
+
         return True
 
 def read_last_logs(limit=10):
@@ -170,18 +211,56 @@ def read_last_logs(limit=10):
         return []
 
 def read_all_logs():
-    try:
-        with open(LOG_FILE, "r", encoding="utf-8") as f:
-            return f.readlines()
-    except FileNotFoundError:
-        return []
+    return read_logs_snapshot()["lines"]
+
+
+def read_logs_snapshot():
+    lines = []
+    errors = []
+    paths = [f"{LOG_FILE}.{index}" for index in range(handler.backupCount, 0, -1)]
+    paths.append(LOG_FILE)
+    for path in paths:
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                lines.extend(f.readlines())
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            errors.append({"path": os.path.basename(path), "error": type(exc).__name__})
+    return {"lines": lines, "errors": errors}
+
+
+LOG_RECORD_RE = re.compile(
+    r"^(?P<created_at>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:,\d+)?)"
+    r"\s*\|\s*(?P<level>[A-Z]+)\s*\|\s*(?P<source>[^|]+?)\s*\|\s*(?P<message>.*)$"
+)
+
+
+def parse_log_records(lines):
+    """Group traceback and continuation lines with their originating event."""
+    records = []
+    current = None
+    for raw_line in lines:
+        line = str(raw_line).rstrip("\r\n")
+        match = LOG_RECORD_RE.match(line)
+        if match:
+            current = match.groupdict()
+            records.append(current)
+        elif current is not None:
+            current["message"] += f"\n{line}"
+        elif line:
+            records.append({"created_at": "", "level": "INFO", "source": "system", "message": line})
+    return records
 
 
 # -------------------------------------------------------------------
 # ATTACH FILTER
 # -------------------------------------------------------------------
 
-handler.addFilter(AnonymizeFilter())
+if not any(getattr(item, "_vodum_anonymizer", False) for item in handler.filters):
+    anonymizer = AnonymizeFilter()
+    anonymizer._vodum_anonymizer = True
+    handler.addFilter(anonymizer)
 
 
 # -------------------------------------------------------------------
@@ -194,5 +273,3 @@ def get_logger(name: str):
     ex: vodum.sync_plex, vodum.tasks_engine
     """
     return logger.getChild(name)
-
-

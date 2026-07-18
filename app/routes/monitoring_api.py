@@ -10,6 +10,10 @@ from core.monitoring.artwork_cache import (
 )
 from core.monitoring.artwork_proxy import ArtworkProxyError, fetch_monitoring_artwork
 from web.helpers import get_db
+from logging_utils import get_logger
+
+
+logger = get_logger("monitoring_api")
 
 def json_rows(rows):
     return current_app.response_class(
@@ -371,9 +375,14 @@ def register(app):
             resp.raise_for_status()
             data = resp.json() or {}
         except Exception:
+            logger.exception("IP geolocation lookup failed")
             return jsonify({"ok": False, "error": "lookup_failed"}), 502
 
         if data.get("status") != "success":
+            logger.warning(
+                "IP geolocation provider rejected lookup | reason=%s",
+                data.get("message") or "lookup_failed",
+            )
             return jsonify({
                 "ok": False,
                 "error": data.get("message") or "lookup_failed",

@@ -25,7 +25,7 @@
 {%- endmacro %}
 
 <form method="post" action="{{ url_for('bulk_grant_libraries') }}" id="lib-form">
-  <div class="flex justify-between items-center mb-3">
+  <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-3">
     <h2 class="text-sm font-semibold">{{ t("all_libraries") }}</h2>
     <div id="bulk-buttons" class="flex flex-wrap gap-2"></div>
   </div>
@@ -130,171 +130,20 @@
   </div>
 </div>
 
-<script>
-const form = document.getElementById('lib-form');
-const checkAll = document.getElementById('check-all');
-const checks = Array.from(document.querySelectorAll('.lib-check'));
-const buttonZone = document.getElementById('bulk-buttons');
+{% endblock %}
 
-const removeModal = document.getElementById('bulk-remove-modal');
-const removeModalCancel = document.getElementById('bulk-remove-cancel');
-const removeModalConfirm = document.getElementById('bulk-remove-confirm');
-const removeModalServer = document.getElementById('bulk-remove-server');
-const removeModalCount = document.getElementById('bulk-remove-count');
-const removeModalList = document.getElementById('bulk-remove-list');
-
-let pendingRemoveAction = null;
-
-checkAll.addEventListener('change', () => {
-  checks.forEach(c => {
-    c.checked = checkAll.checked;
-  });
-  refreshButtons();
-});
-
-checks.forEach(c => c.addEventListener('change', refreshButtons));
-
-function selectedByServer() {
-  const byServer = {};
-
-  checks.forEach(c => {
-    if (!c.checked) return;
-
-    const sid = c.dataset.server;
-    const sname = c.dataset.serverName;
-    const lname = c.dataset.libraryName;
-
-    if (!byServer[sid]) {
-      byServer[sid] = {
-        name: sname,
-        libs: []
-      };
-    }
-
-    byServer[sid].libs.push({
-      id: c.value,
-      name: lname
-    });
-  });
-
-  return byServer;
-}
-
-function createButton({ text, value, action, className, onClick = null }) {
-  const btn = document.createElement('button');
-  btn.type = 'submit';
-  btn.name = 'server_id';
-  btn.value = value;
-  btn.formAction = action;
-  btn.className = className;
-  btn.textContent = text;
-
-  if (onClick) {
-    btn.addEventListener('click', onClick);
+{% block scripts %}
+<script type="application/json" id="servers-libraries-config">
+{{ {
+  "labels": {
+    "grantActiveUsers": t('grant_active_users'),
+    "removeAccessAllUsers": t('remove_access_all_users')
+  },
+  "urls": {
+    "grant": url_for('bulk_grant_libraries'),
+    "remove": url_for('bulk_remove_libraries')
   }
-
-  return btn;
-}
-
-function openRemoveModal(serverId, serverName, libs) {
-  pendingRemoveAction = { serverId, libs };
-
-  removeModalServer.textContent = serverName;
-  removeModalCount.textContent = String(libs.length);
-  removeModalList.innerHTML = '';
-
-  libs.forEach(lib => {
-    const badge = document.createElement('span');
-    badge.className = 'inline-flex items-center rounded-full border border-slate-700 bg-slate-800 px-3 py-1 text-xs text-slate-200';
-    badge.textContent = lib.name;
-    removeModalList.appendChild(badge);
-  });
-
-  removeModal.classList.remove('hidden');
-  removeModal.setAttribute('aria-hidden', 'false');
-}
-
-function closeRemoveModal() {
-  pendingRemoveAction = null;
-  removeModal.classList.add('hidden');
-  removeModal.setAttribute('aria-hidden', 'true');
-}
-
-function refreshButtons() {
-  buttonZone.innerHTML = '';
-
-  const byServer = selectedByServer();
-
-  Object.keys(byServer).forEach(serverId => {
-    const serverName = byServer[serverId].name;
-    const libs = byServer[serverId].libs;
-
-    const grantBtn = createButton({
-      text: "{{ t('grant_active_users') }} " + serverName,
-      value: serverId,
-      action: "{{ url_for('bulk_grant_libraries') }}",
-      className: "px-3 py-1 rounded-lg bg-primary hover:bg-primary-dark text-white text-xs"
-    });
-
-    const removeBtn = createButton({
-      text: "{{ t('remove_access_all_users') }} " + serverName,
-      value: serverId,
-      action: "{{ url_for('bulk_remove_libraries') }}",
-      className: "px-3 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs",
-      onClick: function (e) {
-        e.preventDefault();
-        openRemoveModal(serverId, serverName, libs);
-      }
-    });
-
-    buttonZone.appendChild(grantBtn);
-    buttonZone.appendChild(removeBtn);
-  });
-}
-
-removeModalCancel.addEventListener('click', closeRemoveModal);
-
-removeModal.addEventListener('click', (e) => {
-  if (e.target === removeModal || (e.target.classList && e.target.classList.contains('bg-black/70'))) {
-    closeRemoveModal();
-  }
-});
-
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && !removeModal.classList.contains('hidden')) {
-    closeRemoveModal();
-  }
-});
-
-removeModalConfirm.addEventListener('click', () => {
-  if (!pendingRemoveAction) return;
-
-  const serverId = pendingRemoveAction.serverId;
-  const libs = pendingRemoveAction.libs;
-
-  checks.forEach(c => {
-    if (c.dataset.server === serverId) {
-      c.checked = libs.some(lib => lib.id === c.value);
-    } else {
-      c.checked = false;
-    }
-  });
-
-  checkAll.checked = checks.length > 0 && checks.every(c => c.checked);
-
-  closeRemoveModal();
-
-  const hiddenServerInput = document.createElement('input');
-  hiddenServerInput.type = 'hidden';
-  hiddenServerInput.name = 'server_id';
-  hiddenServerInput.value = serverId;
-
-  form.appendChild(hiddenServerInput);
-  form.action = "{{ url_for('bulk_remove_libraries') }}";
-  form.submit();
-});
-
-refreshButtons();
+}|tojson }}
 </script>
-
+<script src="{{ url_for('static', filename='js/pages/servers-libraries.js', v=g.app_version|default('dev')) }}"></script>
 {% endblock %}

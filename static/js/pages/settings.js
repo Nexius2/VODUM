@@ -61,5 +61,48 @@
     });
   }
 
-  document.addEventListener("DOMContentLoaded", renderTotpQrCode);
+  function initNotificationOrder() {
+    const list = document.getElementById("notif-order-list");
+    const hidden = document.getElementById("notifications_order_hidden");
+    if (!list || !hidden || list.dataset.vodumBound === "1") return;
+    list.dataset.vodumBound = "1";
+
+    function updateHidden() {
+      const items = Array.from(list.querySelectorAll("li[data-channel]"));
+      const order = items.map((li) => li.getAttribute("data-channel")).filter(Boolean);
+      hidden.value = order.join(",");
+    }
+
+    function moveItem(li, direction) {
+      if (!li) return;
+      if (direction === "up") {
+        const previous = li.previousElementSibling;
+        if (previous) list.insertBefore(li, previous);
+      } else if (direction === "down") {
+        const next = li.nextElementSibling;
+        if (next) list.insertBefore(next, li);
+      }
+      updateHidden();
+    }
+
+    list.addEventListener("click", (event) => {
+      const btnUp = event.target.closest(".order-up");
+      const btnDown = event.target.closest(".order-down");
+      if (!btnUp && !btnDown) return;
+
+      const li = event.target.closest("li[data-channel]");
+      if (btnUp) moveItem(li, "up");
+      if (btnDown) moveItem(li, "down");
+    });
+
+    updateHidden();
+  }
+
+  function initSettingsPage() {
+    renderTotpQrCode();
+    initNotificationOrder();
+  }
+
+  document.addEventListener("DOMContentLoaded", initSettingsPage);
+  document.addEventListener("htmx:load", initSettingsPage);
 })();

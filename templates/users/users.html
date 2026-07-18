@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 {% set active_page = 'users' %}
+{% set _default_subscription_days = (settings.default_subscription_days if settings and settings.default_subscription_days is not none else 90) %}
+{% set _default_subscription_template = (subscription_templates|selectattr('is_default')|list|first) %}
 
 {% block title %}{{ t("users_title") }} - VODUM{% endblock %}
 {% block header_title %}{{ t("users") }}{% endblock %}
@@ -88,6 +90,10 @@
 
       <form method="get" id="users_filter_form" class="flex flex-wrap items-center gap-3">
         <input type="hidden" name="tab" value="users">
+
+    <select name="per_page" aria-label="{{ t('rows_per_page') }}" class="rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm" onchange="this.form.submit()">
+      {% for size in (20, 50, 100) %}<option value="{{ size }}" {% if per_page == size %}selected{% endif %}>{{ size }}</option>{% endfor %}
+    </select>
 
     <!-- Search -->
     <input type="text"
@@ -315,7 +321,8 @@
   q=search,
   status=selected_statuses,
   sort=sort,
-  order=order
+  order=order,
+  per_page=per_page
 ) %}
 {% if archive_mode is defined %}
   {% set _ = pagination_args.update({"archive_mode": archive_mode}) %}
@@ -334,60 +341,13 @@
   {% include "partials/_pagination.html" %}
 </div>
 
-<!-- SCRIPT FILTRES -->
-<script>
-document.addEventListener("DOMContentLoaded", () => {
-    const form = document.getElementById("users_filter_form");
-    if (!form) return;
-
-    const searchInput = form.querySelector('input[name="q"]');
-    const statusCheckboxes = form.querySelectorAll('input[name="status"]');
-    let timer = null;
-
-    function submitForm() {
-        const pageInput = form.querySelector('input[name="page"]');
-        if (pageInput) {
-            pageInput.value = "1";
-        } else {
-            const hiddenPage = document.createElement("input");
-            hiddenPage.type = "hidden";
-            hiddenPage.name = "page";
-            hiddenPage.value = "1";
-            form.appendChild(hiddenPage);
-        }
-
-        if (form.requestSubmit) form.requestSubmit();
-        else form.submit();
-    }
-
-    if (searchInput) {
-        searchInput.addEventListener("input", () => {
-            clearTimeout(timer);
-            timer = setTimeout(submitForm, 500);
-        });
-
-        searchInput.addEventListener("keydown", (e) => {
-            if (e.key === "Enter") {
-                e.preventDefault();
-                clearTimeout(timer);
-                submitForm();
-            }
-        });
-    }
-
-    statusCheckboxes.forEach(cb => {
-        cb.addEventListener("change", () => {
-            clearTimeout(timer);
-            submitForm();
-        });
-    });
-});
-</script>
-
 {% elif tab == "referrals" %}
 
 <form method="get" id="referrals_filter_form" class="flex flex-wrap items-center gap-3 mb-6">
   <input type="hidden" name="tab" value="referrals">
+  <select name="per_page" aria-label="{{ t('rows_per_page') }}" class="rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm" onchange="this.form.submit()">
+    {% for size in (20, 50, 100) %}<option value="{{ size }}" {% if per_page == size %}selected{% endif %}>{{ size }}</option>{% endfor %}
+  </select>
 <div class="flex items-center rounded-lg overflow-hidden border border-slate-800">
 
   <a href="{{ url_for(
@@ -397,7 +357,8 @@ document.addEventListener("DOMContentLoaded", () => {
       q=search,
       status=selected_statuses,
       sort=sort,
-      order=order
+      order=order,
+      per_page=per_page
   ) }}"
      class="px-3 py-2 text-sm
      {% if archive_mode == 'active' %}
@@ -415,7 +376,8 @@ document.addEventListener("DOMContentLoaded", () => {
       q=search,
       status=selected_statuses,
       sort=sort,
-      order=order
+      order=order,
+      per_page=per_page
   ) }}"
      class="px-3 py-2 text-sm border-l border-slate-800
      {% if archive_mode == 'archived' %}
@@ -433,7 +395,8 @@ document.addEventListener("DOMContentLoaded", () => {
       q=search,
       status=selected_statuses,
       sort=sort,
-      order=order
+      order=order,
+      per_page=per_page
   ) }}"
      class="px-3 py-2 text-sm border-l border-slate-800
      {% if archive_mode == 'all' %}
@@ -552,7 +515,7 @@ document.addEventListener("DOMContentLoaded", () => {
       <input type="checkbox" id="referrals_select_all" class="rounded border-slate-700 bg-slate-950">
       {{ t("referral_bulk_select_visible") }}
     </label>
-    <span id="referrals_selected_count" class="text-xs text-slate-500">0 {{ t("referral_bulk_selected") }}</span>
+    <span id="referrals_selected_count" data-selected-label='{{ t("referral_bulk_selected") }}' class="text-xs text-slate-500">0 {{ t("referral_bulk_selected") }}</span>
     <div id="referrals_bulk_actions" class="hidden gap-2 sm:ml-auto">
       {% if archive_mode in ('active', 'all') %}
       <button type="submit" name="action" value="archive" data-bulk-action
@@ -637,7 +600,8 @@ document.addEventListener("DOMContentLoaded", () => {
   "q": search,
   "status": selected_statuses,
   "sort": sort,
-  "order": order
+  "order": order,
+  "per_page": per_page
 } %}
 {% set pagination = {
   "page": page,
@@ -652,59 +616,6 @@ document.addEventListener("DOMContentLoaded", () => {
 <div class="mt-4">
   {% include "partials/_pagination.html" %}
 </div>
-
-<script>
-document.addEventListener("DOMContentLoaded", () => {
-
-    const form = document.getElementById("referrals_filter_form");
-
-    if (!form) return;
-
-    form.querySelectorAll('input[name="status"]').forEach(cb => {
-        cb.addEventListener("change", () => {
-
-            if (form.requestSubmit) {
-                form.requestSubmit();
-            } else {
-                form.submit();
-            }
-
-        });
-    });
-
-});
-
-document.addEventListener("DOMContentLoaded", () => {
-    const bulkForm = document.getElementById("referrals_bulk_form");
-    if (!bulkForm) return;
-
-    const selectAll = document.getElementById("referrals_select_all");
-    const checkboxes = [...bulkForm.querySelectorAll(".referral-row-checkbox")];
-    const count = document.getElementById("referrals_selected_count");
-    const selectedLabel = {{ t("referral_bulk_selected")|tojson }};
-    const buttons = [...bulkForm.querySelectorAll("[data-bulk-action]")];
-    const actions = document.getElementById("referrals_bulk_actions");
-
-    const refresh = () => {
-        const selected = checkboxes.filter(cb => cb.checked).length;
-        count.textContent = `${selected} ${selectedLabel}`;
-        buttons.forEach(button => { button.disabled = selected === 0; });
-        if (actions) {
-            actions.classList.toggle("hidden", selected === 0 || buttons.length === 0);
-            actions.classList.toggle("flex", selected > 0 && buttons.length > 0);
-        }
-        selectAll.checked = checkboxes.length > 0 && selected === checkboxes.length;
-        selectAll.indeterminate = selected > 0 && selected < checkboxes.length;
-    };
-
-    selectAll.addEventListener("change", () => {
-        checkboxes.forEach(cb => { cb.checked = selectAll.checked; });
-        refresh();
-    });
-    checkboxes.forEach(cb => cb.addEventListener("change", refresh));
-    refresh();
-});
-</script>
 
 {% elif tab == "referral_settings" %}
 
@@ -909,7 +820,7 @@ document.addEventListener("DOMContentLoaded", () => {
       <div class="text-xs text-slate-500 mb-3">{{ t("referral_eligible_statuses_help") }}</div>
 
       {% set _eligible = (referral_settings.eligible_statuses or 'active').split(',') %}
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
         {% for s in ['active','pre_expired','reminder','expired','invited','unfriended','suspended','unknown'] %}
           <label class="flex items-center gap-2 text-sm">
             <input type="checkbox" name="eligible_statuses" value="{{ s }}" {% if s in _eligible %}checked{% endif %}>
@@ -934,8 +845,8 @@ document.addEventListener("DOMContentLoaded", () => {
 <div id="modal_create_user" class="fixed inset-0 z-50 hidden">
   <div class="absolute inset-0 bg-black/60" onclick="VodumCreateUser.close()"></div>
 
-  <div class="relative max-w-4xl mx-auto mt-16 bg-slate-950 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
-    <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800">
+  <div class="vodum-modal-viewport relative max-w-4xl mx-auto my-4 bg-slate-950 border border-slate-800 rounded-2xl shadow-xl overflow-hidden flex flex-col">
+    <div class="shrink-0 flex items-center justify-between px-6 py-4 border-b border-slate-800">
       <div>
         <div class="text-lg font-semibold">{{ t("create_user") }}</div>
         <div class="text-sm text-slate-400">{{ t("create_user_modal_description") }}</div>
@@ -943,7 +854,7 @@ document.addEventListener("DOMContentLoaded", () => {
       <button class="text-slate-300 hover:text-white" onclick="VodumCreateUser.close()">✕</button>
     </div>
 
-    <div class="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+    <div class="vodum-modal-scroll flex-1 p-6 space-y-6">
 
       <!-- USER FIELDS -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -992,7 +903,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
           <input type="hidden" id="cu_referrer_user_id" value="">
 
-          <div class="flex items-center gap-2">
+          <div class="flex flex-col sm:flex-row sm:items-center gap-2">
             <div id="cu_referrer_display"
                  class="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-400 min-h-[42px] flex items-center">
               {{ t("no_referrer") }}
@@ -1031,7 +942,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     </div>
 
-    <div class="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-800">
+    <div class="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 px-6 py-4 border-t border-slate-800">
       <button type="button" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700" onclick="VodumCreateUser.close()">{{ t("cancel") }}</button>
       <button id="cu_submit" type="button" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white" onclick="VodumCreateUser.submit()">{{ t("create") }}</button>
     </div>
@@ -1062,516 +973,49 @@ document.addEventListener("DOMContentLoaded", () => {
   </div>
 </div>
 
-{% set _default_subscription_days = (settings.default_subscription_days if settings and settings.default_subscription_days is not none else 90) %}
+{% endblock %}
 
-<script>
-(function(){
-  const DEFAULT_SUBSCRIPTION_DAYS = {{ _default_subscription_days|int }};
-  const DEFAULT_SUBSCRIPTION_TEMPLATE_ID = "{{ (subscription_templates|selectattr('is_default')|list|first).id if (subscription_templates|selectattr('is_default')|list|first) else '' }}";
-  const api = {
-    servers: '/api/servers',
-    libs: (serverId) => `/api/servers/${serverId}/libraries`,
-    create: '/api/users/create',
-    referrers: (q='') => `/api/users/referrer-candidates?q=${encodeURIComponent(q)}`,
-  };
-
-  const state = {
-    servers: [],
-    blocks: [],
-    referrerUserId: null,
-    referrerUserLabel: '',
-  };
-
-  function el(html){
-    const t = document.createElement('template');
-    t.innerHTML = html.trim();
-    return t.content.firstChild;
+{% block scripts %}
+<script type="application/json" id="users-page-config">
+{{ {
+  "defaults": {
+    "subscriptionDays": _default_subscription_days|int,
+    "subscriptionTemplateId": (_default_subscription_template.id if _default_subscription_template else "")
+  },
+  "api": {
+    "servers": "/api/servers",
+    "libs": "/api/servers/{serverId}/libraries",
+    "create": "/api/users/create",
+    "referrers": "/api/users/referrer-candidates?q={q}"
+  },
+  "i18n": {
+    "noReferrer": t("no_referrer"),
+    "referrerNoneHelp": t("referrer_none_help"),
+    "noUserFound": t("no_user_found"),
+    "referralsTotal": t("referrals_total"),
+    "chooseServer": t("users_choose_server"),
+    "server": t("server"),
+    "remove": t("remove"),
+    "libraries": t("libraries"),
+    "selectServerFirst": t("select_server_first"),
+    "jellyfinOptions": t("users_jellyfin_options"),
+    "initialPasswordOptional": t("users_initial_password_optional"),
+    "forcePasswordChange": t("users_force_password_change"),
+    "plexShareFlags": t("users_plex_share_flags"),
+    "enqueuePlexJobs": t("users_enqueue_plex_jobs"),
+    "linkedPlexServers": t("users_linked_plex_servers"),
+    "addLinkedPlexServers": t("users_add_linked_plex_servers"),
+    "loadingLibraries": t("users_loading_libraries"),
+    "noLibrariesServer": t("users_no_libraries_server"),
+    "failedLibraries": t("users_failed_libraries"),
+    "failedServers": t("users_failed_servers"),
+    "creating": "Creating...",
+    "selectOneServer": "Select at least one server.",
+    "serverCreateError": "Server error during user creation. Check backend logs.",
+    "createFailed": "Create failed",
+    "userCreated": "User created"
   }
-
-  async function fetchJSON(url){
-    const r = await fetch(url, {headers:{'Accept':'application/json'}});
-    if(!r.ok) throw new Error(`${r.status} ${await r.text()}`);
-    return await r.json();
-  }
-
-  function pickUrl(s){
-    const clean = (v) => {
-      v = String(v || '').trim();
-      if (!v || v.toLowerCase() === 'none' || v.toLowerCase() === 'null') return '';
-      return v;
-    };
-    return clean(s.public_url) || clean(s.url) || clean(s.local_url) || '';
-  }
-
-  function feedback(msg, kind='info'){
-    const box = document.getElementById('cu_feedback');
-    box.classList.remove('hidden');
-    box.textContent = msg;
-    box.classList.remove('border-emerald-600','border-red-600','border-slate-800');
-    if(kind==='success') box.classList.add('border-emerald-600');
-    else if(kind==='error') box.classList.add('border-red-600');
-    else box.classList.add('border-slate-800');
-  }
-
-  function computeDefaultExpirationDate(days){
-    const d = new Date();
-    d.setHours(12, 0, 0, 0);
-    d.setDate(d.getDate() + parseInt(days || 0, 10));
-    return d.toISOString().slice(0, 10);
-  }
-
-  function applyDefaultExpirationDate(force=false){
-    const input = document.getElementById('cu_expiration');
-    if(!input) return;
-
-    if(force || !input.value){
-      input.value = computeDefaultExpirationDate(DEFAULT_SUBSCRIPTION_DAYS);
-    }
-  }
-
-  function resetCreateUserForm(){
-    document.getElementById('cu_email').value = '';
-    document.getElementById('cu_second_email').value = '';
-    document.getElementById('cu_username').value = '';
-    document.getElementById('cu_firstname').value = '';
-    document.getElementById('cu_lastname').value = '';
-    document.getElementById('cu_notes').value = '';
-    document.getElementById('cu_subscription_template_id').value = DEFAULT_SUBSCRIPTION_TEMPLATE_ID;
-    clearReferrer();
-    applyDefaultExpirationDate(true);
-
-    state.blocks = [];
-    document.getElementById('cu_servers_container').innerHTML = '';
-    addServerBlock();
-  }
-
-  function open(){
-    document.getElementById('modal_create_user').classList.remove('hidden');
-    document.getElementById('cu_feedback').classList.add('hidden');
-    resetCreateUserForm();
-  }
-
-  function close(){
-    document.getElementById('modal_create_user').classList.add('hidden');
-    document.getElementById('cu_feedback').classList.add('hidden');
-  }
-
-  function openReferrerModal(){
-    document.getElementById('modal_create_user_referrer').classList.remove('hidden');
-    document.getElementById('cu_referrer_search').value = '';
-    loadReferrerCandidates('');
-    setTimeout(() => {
-      document.getElementById('cu_referrer_search')?.focus();
-    }, 20);
-  }
-
-  function closeReferrerModal(){
-    document.getElementById('modal_create_user_referrer').classList.add('hidden');
-  }
-
-  function setReferrer(user){
-    state.referrerUserId = parseInt(user.id, 10);
-    state.referrerUserLabel = `${user.username || ''}${user.email ? ' — ' + user.email : ''}`;
-
-    document.getElementById('cu_referrer_user_id').value = String(state.referrerUserId);
-    document.getElementById('cu_referrer_display').textContent = state.referrerUserLabel || '{{ t("no_referrer") }}';
-
-    closeReferrerModal();
-  }
-
-  function clearReferrer(){
-    state.referrerUserId = null;
-    state.referrerUserLabel = '';
-    document.getElementById('cu_referrer_user_id').value = '';
-    document.getElementById('cu_referrer_display').textContent = '{{ t("no_referrer") }}';
-  }
-
-  async function loadReferrerCandidates(q=''){
-    const rows = await fetchJSON(api.referrers(q));
-    const box = document.getElementById('cu_referrer_results');
-
-    const noneRow = `
-      <button type="button"
-              class="w-full text-left px-4 py-3 hover:bg-slate-800 border-b border-slate-800"
-              data-id=""
-              data-username="{{ t('no_referrer') }}"
-              data-email="">
-        <div class="text-sm font-medium text-slate-100">{{ t("no_referrer") }}</div>
-        <div class="text-xs text-slate-500 mt-1">{{ t("referrer_none_help") }}</div>
-      </button>
-    `;
-
-    if(!rows.length){
-      box.innerHTML = noneRow + `<div class="px-4 py-3 text-sm text-slate-400">{{ t("no_user_found") }}</div>`;
-      return;
-    }
-
-    box.innerHTML = noneRow + rows.map(u => `
-      <button type="button"
-              class="w-full text-left px-4 py-3 hover:bg-slate-800"
-              data-id="${u.id}"
-              data-username="${(u.username || '').replace(/"/g, '&quot;')}"
-              data-email="${(u.email || '').replace(/"/g, '&quot;')}">
-        <div class="text-sm font-medium text-slate-100">${u.username || '—'}</div>
-        <div class="text-xs text-slate-400">${u.email || ''}</div>
-        <div class="text-xs text-slate-500 mt-1">{{ t("referrals_total") }}: ${u.referrals_count || 0}</div>
-      </button>
-    `).join('');
-  }
-
-  async function initServers(){
-    state.servers = await fetchJSON(api.servers);
-  }
-
-  function serverOptionsHtml(){
-    const opts = state.servers.map(s => {
-      const label = `${s.name} (${(s.type||'').toUpperCase()})`;
-      return `<option value="${s.id}">${label}</option>`;
-    });
-    return `<option value="">{{ t("users_choose_server") }}</option>` + opts.join('');
-  }
-
-  async function loadLibraries(serverId){
-    if(!serverId) return [];
-    return await fetchJSON(api.libs(serverId));
-  }
-
-  function renderBlock(blockId){
-    const block = state.blocks.find(b => b.id===blockId);
-    const node = el(`
-      <div class="border border-slate-800 rounded-2xl p-4 bg-slate-950">
-        <div class="flex items-center justify-between mb-3">
-          <div class="text-sm font-semibold">{{ t("server") }}</div>
-          <button type="button" class="text-xs px-2 py-1 rounded bg-slate-800 hover:bg-slate-700" data-action="remove">{{ t("remove") }}</button>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label class="text-xs text-slate-400">{{ t("server") }}</label>
-            <div class="flex gap-2 items-center">
-              <select class="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" data-field="server_id">
-                ${serverOptionsHtml()}
-              </select>
-              <button type="button"
-                      class="hidden"
-                      title="{{ t('users_add_linked_plex_servers') }}"
-                      data-add-linked>
-                +
-              </button>
-            </div>
-            <div class="text-xs text-slate-500 mt-1" data-server-url></div>
-            <div class="text-xs text-slate-500 mt-1" data-linked-info></div>
-          </div>
-
-
-          <div>
-            <label class="text-xs text-slate-400">{{ t("libraries") }}</label>
-            <div class="bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs max-h-40 overflow-y-auto" data-libs>
-              <div class="text-slate-500">{{ t("select_server_first") }}</div>
-            </div>
-          </div>
-
-          <div data-jellyfin class="hidden md:col-span-2">
-            <div class="text-xs text-slate-400 mb-1">{{ t("users_jellyfin_options") }}</div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label class="text-xs text-slate-500">{{ t("users_initial_password_optional") }}</label>
-                <input type="password" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" data-field="jellyfin_password" autocomplete="new-password">
-              </div>
-              <label class="flex items-center gap-2 text-sm mt-5">
-                <input type="checkbox" data-field="jellyfin_force_password_change">
-                <span class="text-slate-200">{{ t("users_force_password_change") }}</span>
-              </label>
-            </div>
-          </div>
-
-          <div data-plex class="hidden md:col-span-2">
-            <div class="text-xs text-slate-400 mb-1">{{ t("users_plex_share_flags") }}</div>
-            <div class="flex flex-wrap gap-4 text-sm">
-              <label class="flex items-center gap-2">
-                <input type="checkbox" data-plex-flag="allowSync">
-                <span>allowSync</span>
-              </label>
-              <label class="flex items-center gap-2">
-                <input type="checkbox" data-plex-flag="allowCameraUpload">
-                <span>allowCameraUpload</span>
-              </label>
-              <label class="flex items-center gap-2">
-                <input type="checkbox" data-plex-flag="allowChannels">
-                <span>allowChannels</span>
-              </label>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
-              <div>
-                <label class="text-xs text-slate-500">filterMovies</label>
-                <input type="text" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" data-plex-flag="filterMovies">
-              </div>
-              <div>
-                <label class="text-xs text-slate-500">filterTelevision</label>
-                <input type="text" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" data-plex-flag="filterTelevision">
-              </div>
-              <div>
-                <label class="text-xs text-slate-500">filterMusic</label>
-                <input type="text" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" data-plex-flag="filterMusic">
-              </div>
-            </div>
-
-            <label class="flex items-center gap-2 text-sm mt-3">
-              <input type="checkbox" data-field="enqueue_plex_jobs">
-              <span class="text-slate-200">{{ t("users_enqueue_plex_jobs") }}</span>
-            </label>
-          </div>
-        </div>
-      </div>
-    `);
-
-    const container = document.getElementById('cu_servers_container');
-    container.appendChild(node);
-
-    const select = node.querySelector('[data-field="server_id"]');
-    const libsBox = node.querySelector('[data-libs]');
-    const serverUrlLine = node.querySelector('[data-server-url]');
-    const jellyfinBox = node.querySelector('[data-jellyfin]');
-    const plexBox = node.querySelector('[data-plex]');
-	const linkedInfo = node.querySelector('[data-linked-info]');
-    const btnAddLinked = node.querySelector('[data-add-linked]');
-
-
-    node.querySelector('[data-action="remove"]').addEventListener('click', () => removeServerBlock(blockId));
-
-    select.addEventListener('change', async () => {
-      const serverId = select.value ? parseInt(select.value,10) : null;
-      block.server_id = serverId;
-      block.library_ids = [];
-
-      const srv = state.servers.find(s => s.id===serverId);
-      const provider = (srv?.type||'').toLowerCase();
-      block.provider = provider;
-
-      const u = srv ? pickUrl(srv) : '';
-	  serverUrlLine.textContent = u ? `URL: ${u}` : '';
-
-
-      // Show linked Plex servers (same token)
-      if(provider === 'plex' && srv?.linked_servers?.length){
-        linkedInfo.textContent = {{ t("users_linked_plex_servers")|tojson }} + ': ' + srv.linked_servers.map(x => x.name).join(', ');
-        btnAddLinked.disabled = false;
-      } else {
-        linkedInfo.textContent = '';
-        btnAddLinked.disabled = true;
-      }
-
-
-      jellyfinBox.classList.toggle('hidden', provider!=='jellyfin');
-      plexBox.classList.toggle('hidden', provider!=='plex');
-
-      libsBox.innerHTML = `<div class="text-slate-500">{{ t("users_loading_libraries") }}</div>`;
-      try{
-        const libs = await loadLibraries(serverId);
-        if(!libs.length){
-          libsBox.innerHTML = `<div class="text-slate-500">{{ t("users_no_libraries_server") }}</div>`;
-          return;
-        }
-
-        libsBox.innerHTML = libs.map(l => {
-          return `
-            <label class="flex items-center justify-between gap-2 py-1">
-              <span class="text-slate-200">${l.server_name ? (l.server_name + " — ") : ""}${l.name}</span>
-              <input type="checkbox" data-lib-id="${l.id}">
-            </label>
-          `;
-        }).join('');
-
-        libsBox.querySelectorAll('input[data-lib-id]').forEach(cb => {
-          cb.addEventListener('change', () => {
-            const id = parseInt(cb.getAttribute('data-lib-id'),10);
-            if(cb.checked){
-              if(!block.library_ids.includes(id)) block.library_ids.push(id);
-            } else {
-              block.library_ids = block.library_ids.filter(x => x!==id);
-            }
-          });
-        });
-
-      } catch(e){
-        libsBox.innerHTML = `<div class="text-red-400">{{ t("users_failed_libraries") }}</div>`;
-      }
-    });
-
-
-
-    node.querySelectorAll('[data-field="jellyfin_password"]').forEach(inp => {
-      inp.addEventListener('input', () => block.jellyfin_password = inp.value);
-    });
-    node.querySelectorAll('[data-field="jellyfin_force_password_change"]').forEach(inp => {
-      inp.addEventListener('change', () => block.jellyfin_force_password_change = inp.checked);
-    });
-    node.querySelectorAll('[data-field="enqueue_plex_jobs"]').forEach(inp => {
-      inp.addEventListener('change', () => block.enqueue_plex_jobs = inp.checked);
-    });
-
-    node.querySelectorAll('[data-plex-flag]').forEach(inp => {
-      const key = inp.getAttribute('data-plex-flag');
-      inp.addEventListener('input', () => {
-        if(!block.plex_share) block.plex_share = {};
-        if(inp.type==='checkbox') block.plex_share[key] = inp.checked;
-        else block.plex_share[key] = inp.value;
-      });
-      inp.addEventListener('change', () => {
-        if(!block.plex_share) block.plex_share = {};
-        if(inp.type==='checkbox') block.plex_share[key] = inp.checked;
-        else block.plex_share[key] = inp.value;
-      });
-    });
-
-    return node;
-  }
-
-  function addServerBlock(){
-    const id = Math.random().toString(16).slice(2);
-    const block = {id, server_id:null, library_ids:[], provider:null};
-    state.blocks.push(block);
-    renderBlock(id);
-  }
-
-  function removeServerBlock(blockId){
-    state.blocks = state.blocks.filter(b => b.id!==blockId);
-    const container = document.getElementById('cu_servers_container');
-    container.innerHTML = '';
-    state.blocks.forEach(b => renderBlock(b.id));
-  }
-
-  async function submit(){
-    const btn = document.getElementById('cu_submit');
-    btn.disabled = true;
-    feedback('Creating…');
-
-    try{
-      const email = document.getElementById('cu_email').value.trim();
-      const username = document.getElementById('cu_username').value.trim();
-      const payload = {
-        email,
-        second_email: document.getElementById('cu_second_email').value.trim(),
-        username,
-        firstname: document.getElementById('cu_firstname').value.trim(),
-        lastname: document.getElementById('cu_lastname').value.trim(),
-        expiration_date: document.getElementById('cu_expiration').value,
-        subscription_template_id: document.getElementById('cu_subscription_template_id').value || '',
-		referrer_user_id: document.getElementById('cu_referrer_user_id').value || '',
-        notes: document.getElementById('cu_notes').value.trim(),
-        servers: state.blocks
-          .filter(b => b.server_id)
-          .map(b => ({
-            server_id: b.server_id,
-            library_ids: b.library_ids || [],
-            jellyfin_password: b.jellyfin_password || '',
-            jellyfin_force_password_change: !!b.jellyfin_force_password_change,
-            plex_share: b.plex_share || {},
-            enqueue_plex_jobs: !!b.enqueue_plex_jobs,
-          })),
-      };
-
-      if(!payload.servers.length){
-        feedback('Select at least one server.', 'error');
-        return;
-      }
-
-      const csrf =
-        document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ||
-        document.querySelector('input[name="_csrf_token"]')?.value ||
-        window.csrfToken ||
-        '';
-
-      const r = await fetch(api.create, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'X-CSRF-Token': csrf
-        },
-        body: JSON.stringify(payload)
-      });
-
-      const raw = await r.text();
-      let data;
-      try{
-        data = JSON.parse(raw);
-      }catch(e){
-        data = {
-          ok: false,
-          error: raw && !raw.toLowerCase().includes('<!doctype html')
-            ? raw
-            : 'Server error during user creation. Check backend logs.'
-        };
-      }
-
-      if(!r.ok || !data.ok){
-        feedback(data.error || 'Create failed', 'error');
-        return;
-      }
-
-      let msg = `User created (vodum_user_id=${data.vodum_user_id}).`;
-      if(data.provider_errors?.length){
-        msg += ` Provider errors: ${data.provider_errors.join(' | ')}`;
-      }
-      if(data.mailing_errors?.length){
-        msg += ` Mailing errors: ${data.mailing_errors.join(' | ')}`;
-      }
-      feedback(msg, 'success');
-
-      setTimeout(() => window.location.reload(), 800);
-
-    } catch(e){
-      feedback(e.message || String(e), 'error');
-    } finally {
-      btn.disabled = false;
-    }
-  }
-
-  window.VodumCreateUser = {
-    open,
-    close,
-    addServerBlock,
-    removeServerBlock,
-    submit,
-    openReferrerModal,
-    closeReferrerModal,
-    clearReferrer
-  };
-
-  document.getElementById('cu_referrer_search')?.addEventListener('input', (e) => {
-    loadReferrerCandidates((e.target.value || '').trim());
-  });
-
-  document.getElementById('cu_referrer_results')?.addEventListener('click', (e) => {
-    const btn = e.target.closest('button[data-id]');
-    if(!btn) return;
-
-    if (!btn.dataset.id) {
-      clearReferrer();
-      closeReferrerModal();
-      return;
-    }
-
-    setReferrer({
-      id: btn.dataset.id,
-      username: btn.dataset.username || '',
-      email: btn.dataset.email || '',
-    });
-  });
-
-  document.getElementById('btn_create_user')?.addEventListener('click', async () => {
-    try{
-      if(!state.servers.length) await initServers();
-      VodumCreateUser.open();
-    }catch(e){
-      const message = {{ t("users_failed_servers")|tojson }}.replace('{error}', e.message || e);
-      if (window.vodumFlash) window.vodumFlash('error', message);
-    }
-  });
-})();
+}|tojson }}
 </script>
-
-
+<script src="{{ url_for('static', filename='js/pages/users.js', v=g.app_version|default('dev')) }}"></script>
 {% endblock %}

@@ -9,202 +9,22 @@ from tasks_engine import enable_and_run_task_by_name
 from web.helpers import get_db
 from .users_list import merge_vodum_users
 from core.media_jobs import insert_plex_media_job, insert_jellyfin_media_job
+from core.user_sync_jobs import (
+    force_queue_full_jellyfin_sync_for_user,
+    force_queue_full_plex_sync_for_user,
+    get_preferred_plex_media_user_id,
+    queue_plex_share_settings_sync,
+)
 from core.provider_presence import build_user_delete_check, get_user_deletion_protection
 
 
 task_logger = get_logger("tasks_ui")
 
-def _get_preferred_plex_media_user_id(db, user_id: int, server_id: int):
-    row = db.query_one(
-        """
-        SELECT id
-        FROM media_users
-        WHERE vodum_user_id = ?
-          AND server_id = ?
-          AND type = 'plex'
-        ORDER BY
-            CASE WHEN LOWER(COALESCE(role, '')) = 'owner' THEN 1 ELSE 0 END ASC,
-            CASE WHEN TRIM(COALESCE(accepted_at, '')) <> '' THEN 0 ELSE 1 END ASC,
-            CASE WHEN TRIM(COALESCE(external_user_id, '')) <> '' THEN 0 ELSE 1 END ASC,
-            CASE WHEN LOWER(COALESCE(role, '')) = 'unfriended' THEN 1 ELSE 0 END ASC,
-            id ASC
-        LIMIT 1
-        """,
-        (user_id, server_id),
-    )
-    return int(row["id"]) if row and row["id"] is not None else None
-
-def _queue_plex_share_settings_sync(db, user_id: int, server_id: int, reason: str):
-    preferred_media_user_id = _get_preferred_plex_media_user_id(
-        db,
-        user_id,
-        server_id,
-    )
-
-    dedupe_key = f"plex:sync:server={server_id}:user={user_id}:share_settings"
-
-    payload = {
-        "reason": reason,
-        "preferred_media_user_id": preferred_media_user_id,
-    }
-
-    inserted = insert_plex_media_job(
-        db,
-        action="sync",
-        vodum_user_id=user_id,
-        server_id=server_id,
-        library_id=None,
-        dedupe_key=dedupe_key,
-        payload=payload,
-    )
-
-    if inserted:
-        task_logger.info(
-            f"[MEDIA JOB CREATED] provider=plex action=sync "
-            f"user_id={user_id} server_id={server_id} "
-            f"preferred_media_user_id={preferred_media_user_id} "
-            f"reason={reason}"
-        )
-
-    try:
-        enable_and_run_task_by_name("apply_plex_access_updates")
-    except Exception:
-        pass
-
-    return inserted
-
-
-def _force_queue_full_plex_sync_for_user(db, user_id: int, reason: str = "admin_force_resync"):
-    """
-    Recrée un job 'sync' complet par serveur Plex lié.
-
-    Important :
-    on passe par _insert_plex_media_job() pour annuler proprement
-    les anciens jobs actifs du même user/server, au lieu de supprimer
-    brutalement des jobs éventuellement en cours.
-    """
-    rows = db.query(
-        """
-        SELECT
-            mu.server_id,
-            mu.id AS preferred_media_user_id
-        FROM media_users mu
-        JOIN servers s ON s.id = mu.server_id
-        WHERE mu.vodum_user_id = ?
-          AND s.type = 'plex'
-          AND mu.type = 'plex'
-        ORDER BY
-            mu.server_id ASC,
-            CASE WHEN LOWER(COALESCE(mu.role, '')) = 'owner' THEN 1 ELSE 0 END ASC,
-            CASE WHEN TRIM(COALESCE(mu.accepted_at, '')) <> '' THEN 0 ELSE 1 END ASC,
-            CASE WHEN TRIM(COALESCE(mu.external_user_id, '')) <> '' THEN 0 ELSE 1 END ASC,
-            CASE WHEN LOWER(COALESCE(mu.role, '')) = 'unfriended' THEN 1 ELSE 0 END ASC,
-            mu.id ASC
-        """,
-        (user_id,),
-    ) or []
-
-    queued = 0
-    seen_servers = set()
-
-    for row in rows:
-        server_id = int(row["server_id"])
-        if server_id in seen_servers:
-            continue
-        seen_servers.add(server_id)
-
-        preferred_media_user_id = (
-            int(row["preferred_media_user_id"])
-            if row["preferred_media_user_id"] is not None
-            else None
-        )
-
-        dedupe_key = (
-            f"plex:sync:server={server_id}:"
-            f"media_user={preferred_media_user_id or 'none'}:admin_force"
-        )
-
-        payload = {
-            "reason": reason,
-            "forced_by_admin": True,
-            "preferred_media_user_id": preferred_media_user_id,
-        }
-
-        inserted = insert_plex_media_job(
-            db,
-            action="sync",
-            vodum_user_id=user_id,
-            server_id=server_id,
-            library_id=None,
-            dedupe_key=dedupe_key,
-            payload=payload,
-        )
-
-        if inserted:
-            queued += 1
-
-        task_logger.info(
-            f"[MEDIA JOB CREATED] provider=plex action=sync "
-            f"user_id={user_id} server_id={server_id} "
-            f"preferred_media_user_id={preferred_media_user_id} "
-            f"inserted={inserted} reason=admin_force"
-        )
-
-    return queued
-
-def _force_queue_full_jellyfin_sync_for_user(db, user_id: int, reason: str = "admin_force_resync"):
-    rows = db.query(
-        """
-        SELECT DISTINCT
-            mu.server_id
-        FROM media_users mu
-        JOIN servers s ON s.id = mu.server_id
-        WHERE mu.vodum_user_id = ?
-          AND s.type = 'jellyfin'
-          AND mu.type = 'jellyfin'
-        ORDER BY mu.server_id ASC
-        """,
-        (user_id,),
-    ) or []
-
-    queued = 0
-
-    for row in rows:
-        server_id = int(row["server_id"])
-
-        dedupe_key = f"jellyfin:sync:server={server_id}:user={user_id}:admin_force"
-
-        payload = {
-            "reason": reason,
-            "forced_by_admin": True,
-        }
-
-        inserted = insert_jellyfin_media_job(
-            db,
-            action="sync",
-            vodum_user_id=user_id,
-            server_id=server_id,
-            library_id=None,
-            dedupe_key=dedupe_key,
-            payload=payload,
-        )
-
-        if inserted:
-            queued += 1
-
-        task_logger.info(
-            f"[MEDIA JOB CREATED] provider=jellyfin action=sync "
-            f"user_id={user_id} server_id={server_id} "
-            f"inserted={inserted} reason=admin_force"
-        )
-
-    return queued
-
 def _delete_vodum_user_everywhere(db, user_id: int) -> bool:
     """
     Suppression LOCALE uniquement.
     Si le compte existe encore sur une plateforme active,
-    un prochain sync peut le recréer.
+    un prochain sync peut le recrÃ©er.
     """
     with db._lock:
         cur = db.conn.cursor()
@@ -235,7 +55,7 @@ def _delete_vodum_user_everywhere(db, user_id: int) -> bool:
                 (user_id,),
             )
 
-            # media_users doit être supprimé avant vodum_users
+            # media_users doit Ãªtre supprimÃ© avant vodum_users
             cur.execute(
                 "DELETE FROM media_users WHERE vodum_user_id = ?",
                 (user_id,),
@@ -306,11 +126,12 @@ def register(app):
             (json.dumps(details, ensure_ascii=False), int(mu["id"])),
         )
 
-        _queue_plex_share_settings_sync(
+        queue_plex_share_settings_sync(
             db,
             user_id=user_id,
             server_id=server_id,
             reason=f"plex_share_filter_{field}",
+            wake_task=enable_and_run_task_by_name,
         )
 
         flash("user_saved", "success")
@@ -337,7 +158,7 @@ def register(app):
             flash("invalid_field", "error")
             return redirect(url_for("user_detail", user_id=user_id))
 
-        # sécurité: s'assurer que ce media_user appartient bien au user_id + server_id
+        # sÃ©curitÃ©: s'assurer que ce media_user appartient bien au user_id + server_id
         mu = db.query_one(
             """
             SELECT mu.id, mu.details_json
@@ -375,11 +196,12 @@ def register(app):
             (json.dumps(details, ensure_ascii=False), int(mu["id"])),
         )
 
-        _queue_plex_share_settings_sync(
+        queue_plex_share_settings_sync(
             db,
             user_id=user_id,
             server_id=server_id,
             reason=f"plex_share_option_{field}",
+            wake_task=enable_and_run_task_by_name,
         )
 
         flash("user_saved", "success")
@@ -482,7 +304,7 @@ def register(app):
             return redirect(url_for("user_detail", user_id=user_id, tab="access"))
 
         # --------------------------------------------------
-        # Récup library + server (pour savoir sur quel serveur on agit)
+        # RÃ©cup library + server (pour savoir sur quel serveur on agit)
         # --------------------------------------------------
         lib = db.query_one(
             "SELECT id, server_id, name FROM libraries WHERE id = ?",
@@ -502,7 +324,7 @@ def register(app):
 
         # --------------------------------------------------
         # IMPORTANT : on ne doit toggler QUE les media_users
-        # de CE serveur (sinon tu peux lier une lib Plex à un compte Jellyfin)
+        # de CE serveur (sinon tu peux lier une lib Plex Ã  un compte Jellyfin)
         # --------------------------------------------------
         media_users = db.query(
             """
@@ -521,7 +343,7 @@ def register(app):
         placeholders = ",".join("?" * len(media_user_ids))
 
         # --------------------------------------------------
-        # Vérifier si l'accès existe déjà
+        # VÃ©rifier si l'accÃ¨s existe dÃ©jÃ 
         # --------------------------------------------------
         exists = db.query_one(
             f"""
@@ -562,11 +384,11 @@ def register(app):
             flash("library_access_added", "success")
 
         # --------------------------------------------------
-        # Création d'un job pour apply_plex_access_updates
+        # CrÃ©ation d'un job pour apply_plex_access_updates
         # -> uniquement si serveur Plex (pour Jellyfin on fera plus tard)
         # --------------------------------------------------
         if server["type"] == "plex":
-            preferred_media_user_id = _get_preferred_plex_media_user_id(
+            preferred_media_user_id = get_preferred_plex_media_user_id(
                 db,
                 user_id,
                 lib["server_id"],
@@ -587,8 +409,8 @@ def register(app):
 
             # --------------------------------------------------
             # Choix de l'action:
-            # - Ajout d'une bibliothèque => grant (équivalent plex_api_share.py --add --libraries X)
-            # - Retrait d'une bibliothèque => sync (réapplique la liste DB), ou revoke si plus rien
+            # - Ajout d'une bibliothÃ¨que => grant (Ã©quivalent plex_api_share.py --add --libraries X)
+            # - Retrait d'une bibliothÃ¨que => sync (rÃ©applique la liste DB), ou revoke si plus rien
             # --------------------------------------------------
             if removed and remaining_count == 0:
                 action = "revoke"
@@ -629,12 +451,16 @@ def register(app):
                     f"library_id={job_library_id} preferred_media_user_id={preferred_media_user_id}"
                 )
 
-            # Activer + queue la tâche apply_plex_access_updates
+            # Activer + queue la tÃ¢che apply_plex_access_updates
             try:
                 enable_and_run_task_by_name("apply_plex_access_updates")
             except Exception:
-                # pas bloquant si enqueue échoue, le scheduler le prendra plus tard
-                pass
+                # pas bloquant si enqueue Ã©choue, le scheduler le prendra plus tard
+                task_logger.exception(
+                    "Plex access job persisted but worker startup failed | user_id=%s | server_id=%s",
+                    user_id,
+                    lib["server_id"],
+                )
 
         elif server["type"] == "jellyfin":
             action = "sync"
@@ -668,7 +494,11 @@ def register(app):
             try:
                 enable_and_run_task_by_name("apply_jellyfin_access_updates")
             except Exception:
-                pass
+                task_logger.exception(
+                    "Jellyfin access job persisted but worker startup failed | user_id=%s | server_id=%s",
+                    user_id,
+                    lib["server_id"],
+                )
 
 
 
@@ -710,13 +540,13 @@ def register(app):
             flash("no_media_accounts_for_user", "error")
             return redirect(url_for("user_detail", user_id=user_id, tab="access"))
 
-        queued_plex = _force_queue_full_plex_sync_for_user(
+        queued_plex = force_queue_full_plex_sync_for_user(
             db,
             user_id=user_id,
             reason="admin_force_resync",
         )
 
-        queued_jellyfin = _force_queue_full_jellyfin_sync_for_user(
+        queued_jellyfin = force_queue_full_jellyfin_sync_for_user(
             db,
             user_id=user_id,
             reason="admin_force_resync",
@@ -726,13 +556,21 @@ def register(app):
             try:
                 enable_and_run_task_by_name("apply_plex_access_updates")
             except Exception:
-                pass
+                task_logger.exception(
+                    "Forced Plex resync jobs persisted but worker startup failed | user_id=%s | jobs=%s",
+                    user_id,
+                    queued_plex,
+                )
 
         if queued_jellyfin:
             try:
                 enable_and_run_task_by_name("apply_jellyfin_access_updates")
             except Exception:
-                pass
+                task_logger.exception(
+                    "Forced Jellyfin resync jobs persisted but worker startup failed | user_id=%s | jobs=%s",
+                    user_id,
+                    queued_jellyfin,
+                )
 
         queued = queued_plex + queued_jellyfin
 
@@ -749,4 +587,3 @@ def register(app):
     # -----------------------------
     # SERVEURS & BIBLIO
     # -----------------------------
-

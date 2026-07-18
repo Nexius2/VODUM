@@ -25,6 +25,16 @@ from core.auth_local_trust import (
 auth_logger = get_logger("auth")
 
 
+def _build_login_quote_visual_safe():
+    try:
+        from external.dashboard_quote_easter_egg import build_login_quote_visual
+
+        return build_login_quote_visual()
+    except Exception:
+        auth_logger.exception("Unable to build login easter egg visual")
+        return None
+
+
 AUTH_BRUTEFORCE_MAX_ATTEMPTS = max(1, int(os.environ.get("VODUM_AUTH_MAX_ATTEMPTS", "5")))
 AUTH_BRUTEFORCE_WINDOW_MINUTES = max(1, int(os.environ.get("VODUM_AUTH_WINDOW_MINUTES", "15")))
 AUTH_BRUTEFORCE_LOCK_MINUTES = max(1, int(os.environ.get("VODUM_AUTH_LOCK_MINUTES", "15")))
@@ -387,7 +397,65 @@ def register(app):
             reset_cmd=reset_cmd,
             totp_enabled=int(s.get("admin_totp_enabled") or 0) == 1,
             next_url=safe_redirect_target(request.args.get("next"), ""),
+            login_quote_visual=_build_login_quote_visual_safe(),
         )
+
+    @app.get("/login/artwork/<kind>")
+    def login_quote_artwork(kind):
+        if kind not in {"poster", "backdrop"}:
+            from flask import abort
+
+            abort(404)
+
+        try:
+            from flask import Response, abort, send_file
+            from core.monitoring.artwork_cache import ARTWORK_CACHE_TTL_SECONDS
+            from core.monitoring.artwork_proxy import ArtworkProxyError, fetch_monitoring_artwork
+            from external.dashboard_quote_easter_egg import build_login_quote_artwork_request
+
+            artwork = build_login_quote_artwork_request(kind)
+            if not artwork:
+                abort(404)
+
+            db = get_db()
+            srv = db.query_one(
+                """
+                SELECT id, LOWER(TRIM(type)) AS type, url, local_url, public_url, token, settings_json
+                FROM servers
+                WHERE id = ?
+                  AND LOWER(TRIM(type)) IN ('plex','jellyfin')
+                LIMIT 1
+                """,
+                (int(artwork["server_id"]),),
+            )
+            if not srv:
+                abort(404)
+
+            result = fetch_monitoring_artwork(dict(srv), artwork.get("query") or {})
+            cache_header = f"public, max-age={ARTWORK_CACHE_TTL_SECONDS}"
+
+            if result["kind"] == "content":
+                return Response(
+                    result["content"],
+                    mimetype=result["content_type"],
+                    headers={"Cache-Control": cache_header, "X-VODUM-Artwork-Cache": "MISS"},
+                )
+
+            response = send_file(
+                result["path"],
+                mimetype=result["content_type"],
+                conditional=True,
+                max_age=result["max_age"],
+            )
+            response.headers["Cache-Control"] = f"public, max-age={result['max_age']}"
+            response.headers["X-VODUM-Artwork-Cache"] = "STALE" if result["is_stale"] else "HIT"
+            return response
+        except ArtworkProxyError as exc:
+            abort(exc.status_code)
+        except Exception:
+            auth_logger.exception("Unable to serve login quote artwork")
+            abort(404)
+
 
     @app.route("/login/submit", methods=["POST"])
     def login_submit():

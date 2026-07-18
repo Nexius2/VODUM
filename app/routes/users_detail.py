@@ -11,7 +11,7 @@ from tasks_engine import enable_and_run_task_by_name, auto_enable_stream_enforce
 
 from web.helpers import get_db, add_log
 from .users_list import get_merge_suggestions
-from .users_actions import _get_preferred_plex_media_user_id
+from core.user_sync_jobs import get_preferred_plex_media_user_id
 from core.media_jobs import insert_plex_media_job
 from api.subscriptions import update_user_expiration
 from notifications_utils import parse_notifications_order
@@ -821,7 +821,7 @@ def register(app):
             plex_server_ids = sorted({int(mu["server_id"]) for mu in plex_media_for_jobs if mu["server_id"] is not None})
 
             for server_id in plex_server_ids:
-                preferred_media_user_id = _get_preferred_plex_media_user_id(
+                preferred_media_user_id = get_preferred_plex_media_user_id(
                     db,
                     user_id,
                     server_id,
@@ -855,7 +855,10 @@ def register(app):
             try:
                 enable_and_run_task_by_name("apply_plex_access_updates")
             except Exception:
-                pass
+                task_logger.exception(
+                    "User detail saved and Plex jobs persisted but worker startup failed | user_id=%s",
+                    user_id,
+                )
 
         flash("user_saved", "success")
         return redirect(url_for("user_detail", user_id=user_id))
@@ -1014,6 +1017,14 @@ def register(app):
         # on convertit en dict pour éviter les surprises sqlite3.Row
         user = dict(user)
 
+        tab = (request.args.get("tab") or "general").strip().lower()
+        if tab not in ("general", "monitoring", "access", "notifications", "media"):
+            tab = "general"
+
+        mview = (request.args.get("view") or "profile").strip().lower()
+        if mview not in ("profile", "history", "ip"):
+            mview = "profile"
+
         # --------------------------------------------------
         # Never used: no playback/session history linked to this VODUM user
         # --------------------------------------------------
@@ -1026,7 +1037,7 @@ def register(app):
             LIMIT 1
             """,
             (user_id,),
-        )
+        ) if tab == "general" else False
 
         # --------------------------------------------------
         # Subscription template (optional)
@@ -1050,14 +1061,14 @@ def register(app):
             WHERE is_enabled = 1
             ORDER BY name ASC
             """
-        ) or []
+        ) or [] if tab == "general" else []
 
         # --------------------------------------------------
         # Settings (needed for per-user notification override)
         # --------------------------------------------------
         settings = db.query_one(
             f"SELECT {USER_DETAIL_SETTINGS_COLUMNS} FROM settings WHERE id = 1"
-        )
+        ) if tab in ("general", "access") else None
         settings = dict(settings) if settings else {}
 
         try:
@@ -1082,18 +1093,7 @@ def register(app):
                 (user_id,),
             )
             if row["type"]
-        ]
-
-        # --------------------------------------------------
-        # Tabs (User detail)
-        # --------------------------------------------------
-        tab = (request.args.get("tab") or "general").strip().lower()
-        if tab not in ("general", "monitoring", "access", "notifications", "media"):
-            tab = "general"
-
-        mview = (request.args.get("view") or "profile").strip().lower()
-        if mview not in ("profile", "history", "ip"):
-            mview = "profile"
+        ] if tab in ("general", "access", "media") else []
 
         # --------------------------------------------------
         # Monitoring: on a besoin d'un media_users.id pour ouvrir la page monitoring/user/<id>
@@ -1102,7 +1102,7 @@ def register(app):
         monitoring_mu = db.query_one(
             "SELECT id FROM media_users WHERE vodum_user_id = ? ORDER BY id LIMIT 1",
             (user_id,),
-        )
+        ) if tab == "monitoring" else None
         monitoring_mu_id = int(monitoring_mu["id"]) if (monitoring_mu and monitoring_mu["id"] is not None) else None
 
 
@@ -1162,7 +1162,7 @@ def register(app):
             ORDER BY s.type, s.name
             """,
             (user_id,),
-        )
+        ) if tab in ("general", "access", "media") else []
 
         enriched = []
         for row in servers:
@@ -1201,7 +1201,7 @@ def register(app):
             enriched.append(r)
 
         servers = enriched
-        active_user_policies = _load_active_policies_for_user(db, user_id)
+        active_user_policies = _load_active_policies_for_user(db, user_id) if tab == "general" else []
         
         libraries = db.query(
             f"""
@@ -1224,11 +1224,11 @@ def register(app):
             ORDER BY s.name, l.name
             """,
             (user_id,),
-        )
+        ) if tab == "access" else []
 
 
 
-        merge_suggestions = get_merge_suggestions(db, user_id, limit=None)
+        merge_suggestions = get_merge_suggestions(db, user_id, limit=None) if tab == "access" else []
 
         # --------------------------------------------------
         # merged_usernames = tous les usernames (media_users) liés à ce vodum_user_id
@@ -1250,7 +1250,7 @@ def register(app):
               AND TRIM(username) <> ''
             """,
             (user_id,),
-        )
+        ) if tab == "general" else []
 
         for r in rows:
             uname = str(r["username"]).strip()
@@ -1324,7 +1324,7 @@ def register(app):
               AND h.channel_used = 'email'
             """,
             (user_id,),
-        )["c"] or 0
+        )["c"] or 0 if tab == "notifications" else 0
 
         discord_total = db.query_one(
             """
@@ -1334,7 +1334,7 @@ def register(app):
               AND h.channel_used = 'discord'
             """,
             (user_id,),
-        )["c"] or 0
+        )["c"] or 0 if tab == "notifications" else 0
 
         email_pages = max(1, math.ceil(email_total / per_page)) if email_total else 1
         discord_pages = max(1, math.ceil(discord_total / per_page)) if discord_total else 1
@@ -1361,7 +1361,7 @@ def register(app):
             LIMIT ? OFFSET ?
             """,
             (user_id, per_page, email_offset),
-        ) or []
+        ) or [] if tab == "notifications" else []
 
         sent_discord_rows = db.query(
             f"""
@@ -1379,7 +1379,7 @@ def register(app):
             LIMIT ? OFFSET ?
             """,
             (user_id, per_page, discord_offset),
-        ) or []
+        ) or [] if tab == "notifications" else []
 
         sent_emails = []
         for row in sent_emails_rows:
@@ -1405,11 +1405,11 @@ def register(app):
             LIMIT 1
             """,
             (user_id,),
-        )
+        ) if tab == "general" else None
         referral = dict(referral) if referral else None
 
         referrer_fallback = None
-        if not referral and user.get("referrer_user_id"):
+        if tab == "general" and not referral and user.get("referrer_user_id"):
             row = db.query_one(
                 """
                 SELECT id, username, email
@@ -1432,7 +1432,7 @@ def register(app):
             WHERE referrer_user_id = ?
             """,
             (user_id,),
-        )
+        ) if tab == "general" else None
         referral_stats = dict(referral_stats) if referral_stats else {
             "total_referrals": 0,
             "pending_referrals": 0,
@@ -1455,11 +1455,11 @@ def register(app):
             ORDER BY u.username ASC
             """,
             (user_id,),
-        ) or []
+        ) or [] if tab == "general" else []
         referred_users = [dict(x) for x in referred_users]
 
-        usage_risk = build_usage_risk_for_user(db, user_id)
-        expiration_lock = _get_expiration_lock_for_user(db, user_id)
+        usage_risk = build_usage_risk_for_user(db, user_id) if tab == "general" else {}
+        expiration_lock = _get_expiration_lock_for_user(db, user_id) if tab == "general" else None
         
         return render_template(
             "users/user_detail.html",

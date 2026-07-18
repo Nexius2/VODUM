@@ -2242,6 +2242,24 @@ def run_migrations():
     conn.commit()
     print("✔ Monitoring history table verified (media_session_history).")
 
+    # Compact, rebuildable daily aggregates for bounded overview reads.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS monitoring_daily_stats (
+          day TEXT PRIMARY KEY,
+          sessions INTEGER NOT NULL DEFAULT 0,
+          watch_ms INTEGER NOT NULL DEFAULT 0,
+          active_users INTEGER NOT NULL DEFAULT 0,
+          viewer_keys_json TEXT NOT NULL DEFAULT '[]',
+          top_users_json TEXT NOT NULL DEFAULT '[]',
+          top_media_json TEXT NOT NULL DEFAULT '[]',
+          source_max_id INTEGER NOT NULL DEFAULT 0,
+          computed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_monitoring_daily_stats_computed ON monitoring_daily_stats(computed_at)")
+    conn.commit()
+    print("✔ Monitoring daily aggregate table verified.")
+
     # -------------------------------------------------
     # 2.4+ Media jobs: queue robuste (status/lease/backoff/priority)
     # -------------------------------------------------
@@ -2422,6 +2440,14 @@ def run_migrations():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_vodum_users_status_expiration ON vodum_users(status, expiration_date)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_vodum_users_expiration_date ON vodum_users(expiration_date)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_vodum_users_subscription_template ON vodum_users(subscription_template_id)")
+    # Users search uses leading-wildcard LIKE across several columns, so
+    # username/email indexes are intentionally omitted: SQLite cannot use them
+    # for that access pattern. Referral status + chronological listing does
+    # benefit from a single covering traversal index (see query-plan validator).
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_user_referrals_status_start
+        ON user_referrals(status, start_at DESC, id DESC)
+    """)
     cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_media_users_vodum_server
         ON media_users(vodum_user_id, server_id)
@@ -2551,6 +2577,14 @@ def run_migrations():
         "name": "cleanup_data_consistency",
         "description": "task_description.cleanup_data_consistency",
         "schedule": "50 4 * * 0",
+        "enabled": 1,
+        "status": "idle"
+    })
+
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "materialize_monitoring_daily_stats",
+        "description": "task_description.materialize_monitoring_daily_stats",
+        "schedule": "20 1 * * *",
         "enabled": 1,
         "status": "idle"
     })

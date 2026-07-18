@@ -1,10 +1,17 @@
 {% if monitoring_mu_id %}
+  <div class="relative min-h-[82vh]" data-user-monitoring-frame>
+  <div class="absolute inset-0 z-10 animate-pulse rounded-2xl border border-slate-800 bg-slate-900 p-6" data-user-monitoring-skeleton data-error-label="{{ t('request_failed') }}" aria-busy="true">
+    <div class="mb-6 h-6 w-48 rounded bg-slate-800"></div>
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-3"><div class="h-28 rounded-xl bg-slate-800/80"></div><div class="h-28 rounded-xl bg-slate-800/80"></div><div class="h-28 rounded-xl bg-slate-800/80"></div></div>
+    <div class="mt-5 h-72 rounded-xl bg-slate-800/70"></div>
+  </div>
   <iframe
     src="{{ url_for('monitoring_user_detail', user_id=monitoring_mu_id, view=mview, embed='1') }}"
     class="w-full"
     style="height: 82vh; border:0; background: transparent;"
-    loading="lazy">
+    loading="lazy" data-user-monitoring-iframe>
   </iframe>
+  </div>
 {% else %}
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
     <div class="text-sm text-slate-200">

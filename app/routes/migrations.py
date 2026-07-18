@@ -24,6 +24,10 @@ from core.migrations.phase3 import remove_validated_source_access, rollback_dest
 from tasks_engine import enable_and_run_task_by_name
 from secret_store import decrypt_secret
 from web.helpers import add_log, get_db, table_exists
+from logging_utils import get_logger
+
+
+logger = get_logger("migrations")
 
 MIGRATION_CAMPAIGN_DETAIL_COLUMNS = """
               mc.id,
@@ -318,6 +322,7 @@ def register(app):
             flash("migration_plan_imported", "success")
             return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
         except Exception as exc:
+            logger.exception("Migration plan import failed")
             add_log("error", "migrations", f"Migration plan import failed: {exc}")
             flash(str(exc), "error")
             return redirect(url_for("migrations_page"))
@@ -328,6 +333,7 @@ def register(app):
         try:
             plan = export_migration_plan(db, campaign_id)
         except Exception as exc:
+            logger.exception("Migration plan export failed | campaign_id=%s", campaign_id)
             return jsonify({"ok": False, "error": str(exc)}), 404
         payload = json.dumps(plan, indent=2, sort_keys=True)
         return Response(
@@ -342,6 +348,10 @@ def register(app):
     @app.get("/migrations/<int:campaign_id>")
     def migration_campaign_detail(campaign_id: int):
         db = get_db()
+        users_page = max(request.args.get("users_page", 1, type=int), 1)
+        users_per_page = request.args.get("users_per_page", 20, type=int)
+        if users_per_page not in (20, 50, 100):
+            users_per_page = 20
         campaign_row = db.query_one(
             f"""
             SELECT
@@ -537,11 +547,21 @@ def register(app):
             )
         )
 
+        users_total = len(users)
+        users_total_pages = max((users_total + users_per_page - 1) // users_per_page, 1)
+        users_page = min(users_page, users_total_pages)
+        users_offset = (users_page - 1) * users_per_page
+        visible_users = users[users_offset:users_offset + users_per_page]
+
         return render_template(
             "migrations/campaign_detail.html",
             active_page="migrations",
             campaign=campaign,
-            users=users,
+            users=visible_users,
+            users_page=users_page,
+            users_per_page=users_per_page,
+            users_total=users_total,
+            users_total_pages=users_total_pages,
             mappings=mapping_groups,
             destination_libraries=destination_libraries,
             summary=summary,

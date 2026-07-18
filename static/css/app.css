@@ -88,8 +88,54 @@ svg {
   max-width: 100%;
 }
 
-table {
-  min-width: max-content;
+.vodum-navigation-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: grid;
+  place-items: center;
+}
+
+.vodum-navigation-loader[hidden] {
+  display: none;
+}
+
+.vodum-navigation-loader__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.42);
+  backdrop-filter: blur(2px);
+}
+
+.vodum-navigation-loader__panel {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 4rem;
+  height: 4rem;
+  border: 1px solid rgba(99, 102, 241, 0.42);
+  border-radius: 1rem;
+  background: rgba(15, 23, 42, 0.94);
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.45);
+}
+
+.vodum-navigation-loader__spinner {
+  width: 2rem;
+  height: 2rem;
+  border: 3px solid rgba(148, 163, 184, 0.28);
+  border-top-color: #818cf8;
+  border-radius: 9999px;
+  animation: vodum-navigation-spin 0.72s linear infinite;
+}
+
+@keyframes vodum-navigation-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vodum-navigation-loader__spinner {
+    animation-duration: 1.5s;
+  }
 }
 
 @media (max-width: 767px) {
@@ -116,6 +162,22 @@ table {
 @media (min-width: 768px) {
   #desktopSidebar {
     display: flex !important;
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 40;
+    width: 16rem;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  #desktopSidebar + div {
+    margin-left: 16rem;
+  }
+
+  #desktopSidebar nav {
+    min-height: 0;
+    overscroll-behavior: contain;
   }
 
   .md\:flex {
@@ -131,15 +193,6 @@ table {
   main > * {
     max-width: 100%;
     min-width: 0;
-  }
-
-  table {
-    display: block;
-    width: 100%;
-    max-width: 100%;
-    overflow-x: auto;
-    white-space: nowrap;
-    -webkit-overflow-scrolling: touch;
   }
 
   th,
@@ -199,6 +252,17 @@ table {
 }
 
 /* Mobile table readability: desktop stays visually unchanged. */
+.vodum-modal-viewport {
+  max-height: calc(100dvh - 2rem);
+}
+
+.vodum-modal-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
 .vodum-mobile-table-scroll {
   display: contents;
 }
@@ -220,6 +284,7 @@ table {
     min-width: 100%;
     max-width: none;
     overflow: visible;
+    table-layout: auto;
     white-space: nowrap;
   }
 
@@ -244,5 +309,148 @@ table {
 
   main :where(p, a, span, code, pre, dd, dt, li) {
     overflow-wrap: anywhere;
+  }
+}
+
+/* Mobile actions/forms safety: keep desktop classes untouched. */
+@media (max-width: 767px) {
+  main :where(.inline-flex, .flex):not(.flex-col) {
+    min-width: 0;
+  }
+
+  main :where(.inline-flex, .flex):not(.flex-col):not(.vodum-mobile-nowrap) {
+    flex-wrap: wrap;
+  }
+
+  main :where(button, [role="button"], a[class*="px-"], input[type="submit"], input[type="button"]) {
+    min-width: 0;
+    white-space: normal;
+  }
+
+  main :where(div, section, article, form, label, button, a, select, input, textarea)[class*="min-w-"] {
+    min-width: 0;
+  }
+
+  main :where(div, section, article, form, label, button, a, select, input, textarea)[class*="w-"] {
+    max-width: 100%;
+  }
+
+  main :where(.fixed.inset-0, [role="dialog"], .modal, [data-modal]) {
+    padding-inline: 1rem;
+  }
+
+  main :where(.fixed.inset-0 > *, [role="dialog"], .modal, [data-modal]) {
+    max-width: min(100%, calc(100vw - 2rem));
+    max-height: calc(100dvh - 2rem);
+  }
+
+  main :where(pre, code) {
+    white-space: pre-wrap;
+  }
+}
+
+/* Login easter egg visual: desktop uses backdrop, mobile uses poster. */
+.login-visual-page {
+  min-height: 100vh;
+  position: relative;
+  isolation: isolate;
+  overflow-x: hidden;
+}
+
+.login-visual-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background: #020617;
+}
+
+.login-visual-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.42;
+  transform: scale(1.02);
+  filter: saturate(1.08) contrast(1.05);
+}
+
+.login-visual-poster {
+  display: none;
+}
+
+.login-visual-vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(15, 23, 42, 0.18), rgba(2, 6, 23, 0.94) 72%),
+    linear-gradient(90deg, rgba(2, 6, 23, 0.88), rgba(2, 6, 23, 0.38), rgba(2, 6, 23, 0.9));
+}
+
+.login-visual-content {
+  position: relative;
+  z-index: 1;
+}
+
+.login-card {
+  background: rgba(15, 23, 42, 0.9);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(14px);
+}
+
+.login-quote {
+  border-left: 2px solid rgba(99, 102, 241, 0.72);
+  padding-left: 0.85rem;
+}
+
+/* Log severity counters: make their click target obvious without overpowering it. */
+.log-level-counter {
+  --log-counter-accent: #6366f1;
+}
+
+.log-level-counter--warning {
+  --log-counter-accent: #f59e0b;
+}
+
+.log-level-counter--error {
+  --log-counter-accent: #ef4444;
+}
+
+.log-level-counter--critical {
+  --log-counter-accent: #d946ef;
+}
+
+.log-level-counter:hover,
+.log-level-counter:focus-visible {
+  border-color: var(--log-counter-accent);
+}
+
+.log-level-counter:focus-visible {
+  outline: 2px solid var(--log-counter-accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 767px) {
+  .login-visual-backdrop {
+    display: none;
+  }
+
+  .login-visual-poster {
+    display: block;
+    object-position: center top;
+    opacity: 0.36;
+    transform: scale(1.04);
+  }
+
+  .login-visual-vignette {
+    background:
+      linear-gradient(180deg, rgba(2, 6, 23, 0.7), rgba(2, 6, 23, 0.86) 44%, rgba(2, 6, 23, 0.96)),
+      radial-gradient(circle at 50% 18%, rgba(15, 23, 42, 0.05), rgba(2, 6, 23, 0.82) 70%);
+  }
+
+  .login-card {
+    max-width: min(100%, 28rem);
   }
 }

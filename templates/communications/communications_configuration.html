@@ -129,7 +129,7 @@
                  class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
         </div>
 
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div class="text-xs">
             <label class="block mb-1">{{ t('smtp_port') }}</label>
             <input type="number" id="smtp_port" name="smtp_port" value="{{ settings.smtp_port or '' }}"

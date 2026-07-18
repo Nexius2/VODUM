@@ -1,0 +1,13 @@
+<section class="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+  {% set online_count = servers | selectattr('status', 'equalto', 'up') | list | length %}
+  {% set offline_count = servers | selectattr('status', 'equalto', 'down') | list | length %}
+  <div class="mb-3 flex items-center justify-between"><h2 class="text-sm font-semibold">{{ t("servers") }}</h2><span class="whitespace-nowrap text-[11px] text-slate-400"><span class="font-medium text-emerald-300">{{ online_count }}</span> {{ t("online") }} · <span class="font-medium text-rose-300">{{ offline_count }}</span> {{ t("offline") }}</span></div>
+  <div class="space-y-2">
+    {% for s in dashboard_servers %}
+      <div class="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2">
+        <div class="min-w-0"><div class="flex min-w-0 items-center text-sm font-medium"><span class="truncate">{{ s.name }}</span><span class="ml-2 shrink-0 rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-semibold capitalize text-slate-300">{{ t(s.type) }}</span></div><div class="truncate text-xs text-slate-400">{{ s.url }}</div><div class="mt-1 text-[11px] text-slate-500">Peak streams (7d): <span class="font-bold text-amber-300">{{ s.peak_streams_7d or 0 }}</span></div></div>
+        <div class="ml-3 shrink-0 text-right"><span class="rounded-full px-2 py-1 text-xs {% if s.status == 'up' %}bg-emerald-900/40 text-emerald-300{% elif s.status == 'down' %}bg-rose-900/40 text-rose-300{% else %}bg-slate-800 text-slate-200{% endif %}">{{ t("online") if s.status == 'up' else t("offline") if s.status == 'down' else "Unknown" }}</span><div class="mt-2 text-[10px] text-slate-400">{{ s.last_checked|browser_datetime if s.last_checked else '-' }}</div></div>
+      </div>
+    {% else %}<p class="text-xs text-slate-500">{{ t("no_servers_configured") }}</p>{% endfor %}
+  </div>
+</section>

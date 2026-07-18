@@ -1,12 +1,13 @@
 <!-- Streams killed / Subscription plans -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+<div class="h-full" data-dashboard-subscription-summary>
+<div class="h-full bg-slate-900 border border-slate-800 rounded-2xl p-4">
     <div class="h-full grid grid-cols-1 items-center gap-4 2xl:grid-cols-[150px_1px_minmax(0,1fr)] 2xl:gap-6">
 		<a href="{{ url_for('monitoring_page', tab='policies') }}"
 		   title="Streams terminated by VODUM policies during the last 7 days. Click to open Monitoring Policies."
 		   class="rounded-xl px-3 py-2 -mx-3 -my-2 cursor-pointer transition-all duration-200 hover:bg-slate-800/40 hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/10 border border-transparent focus:outline-none focus:ring-2 focus:ring-primary/40 group">
 
             <div class="text-4xl font-bold text-rose-400 leading-none transition-colors group-hover:text-rose-300">
-                {{ stats.kills_7d }}
+                {{ kills_7d }}
             </div>
 
             <div class="text-xs text-slate-400 mt-1 transition-colors group-hover:text-slate-300">
@@ -73,4 +74,24 @@
             </div>
         </a>
     </div>
+</div>
+<div id="subscriptions-summary-modal"
+     class="hidden fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+            <h3 class="text-sm font-semibold">{{ t("dashboard_subscribers_by_subscription") }}</h3>
+            <button type="button" data-dashboard-modal-close="subscriptions-summary-modal" class="text-slate-400 hover:text-white">&times;</button>
+        </div>
+        <div class="p-5 space-y-2 overflow-auto max-h-[65vh]">
+            {% for sub in subscription_stats %}
+                <div class="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2">
+                    <div class="text-sm text-slate-100 truncate">{{ sub.name }}</div>
+                    <div class="text-sm text-slate-300 shrink-0">{{ sub.user_count }} subscribers</div>
+                </div>
+            {% else %}
+                <div class="text-sm text-slate-400">{{ t("dashboard_no_subscription") }}</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
 </div>

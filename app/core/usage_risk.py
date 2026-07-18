@@ -598,27 +598,37 @@ def build_usage_risk_report(db, filters=None, persist_history=True):
                     elif session_identity["is_browser"]:
                         item["browser_devices"].add(label)
 
+    # Count blocked playback incidents, not raw enforcement rows. A provider
+    # can report the same still-visible session over several enforcement runs;
+    # those repeated rows must not look like separate risky behaviours.
     kill_windows = db.query(
         """
         SELECT
-          COALESCE(e.vodum_user_id, 0) AS vodum_user_id,
-          COALESCE(e.external_user_id, '') AS external_user_id,
-          SUM(CASE WHEN e.action = 'kill' AND datetime(e.created_at) >= datetime('now', '-7 days') THEN 1 ELSE 0 END) AS kills_7d,
-          SUM(CASE WHEN e.action = 'kill' AND datetime(e.created_at) >= datetime('now', '-30 days') THEN 1 ELSE 0 END) AS kills_30d,
-          SUM(CASE WHEN e.action = 'kill' AND datetime(e.created_at) >= datetime('now', '-90 days') THEN 1 ELSE 0 END) AS kills_90d
+          CASE
+            WHEN e.vodum_user_id IS NOT NULL THEN 'vodum:' || e.vodum_user_id
+            ELSE 'ext:' || COALESCE(NULLIF(e.external_user_id, ''), NULLIF(e.account_username, ''), 'unknown')
+          END AS actor_key,
+          COUNT(DISTINCT CASE
+            WHEN e.action = 'kill' AND datetime(e.created_at) >= datetime('now', '-7 days')
+            THEN COALESCE(NULLIF(TRIM(e.session_key), ''), 'row:' || e.id)
+          END) AS kills_7d,
+          COUNT(DISTINCT CASE
+            WHEN e.action = 'kill' AND datetime(e.created_at) >= datetime('now', '-30 days')
+            THEN COALESCE(NULLIF(TRIM(e.session_key), ''), 'row:' || e.id)
+          END) AS kills_30d,
+          COUNT(DISTINCT CASE
+            WHEN e.action = 'kill' AND datetime(e.created_at) >= datetime('now', '-90 days')
+            THEN COALESCE(NULLIF(TRIM(e.session_key), ''), 'row:' || e.id)
+          END) AS kills_90d
         FROM stream_enforcements e
         WHERE datetime(e.created_at) >= datetime('now', '-90 days')
-        GROUP BY COALESCE(e.vodum_user_id, 0), COALESCE(e.external_user_id, '')
+        GROUP BY actor_key
         """
     ) or []
 
     for row in kill_windows:
         row = dict(row)
-        actor_key = (
-            f"vodum:{row.get('vodum_user_id')}"
-            if _safe_int(row.get("vodum_user_id"), 0) > 0
-            else f"ext:{row.get('external_user_id') or 'unknown'}"
-        )
+        actor_key = row.get("actor_key") or "ext:unknown"
 
         if actor_key not in by_user:
             continue

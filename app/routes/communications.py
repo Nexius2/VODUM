@@ -30,6 +30,10 @@ from communications_engine import (
     queue_campaign_delivery,
 )
 from tasks_engine import enable_and_run_task_by_name
+from logging_utils import get_logger
+
+
+logger = get_logger("communications")
 
 
 def _as_int(v, default=None):
@@ -37,6 +41,41 @@ def _as_int(v, default=None):
         return int(v)
     except Exception:
         return default
+
+
+def _render_comm_history_message(row, brand_name):
+    meta = {}
+    try:
+        meta = json.loads(row.get("meta_json") or "{}")
+    except Exception:
+        meta = {}
+    if meta.get("rendered_subject") or meta.get("rendered_body"):
+        row["rendered_subject"] = meta.get("rendered_subject") or ""
+        row["rendered_body"] = meta.get("rendered_body") or ""
+        return row
+
+    payload = meta.get("payload") or {}
+    context_input = {
+        "id": row.get("user_id"), "username": row.get("user_username") or "",
+        "firstname": row.get("user_firstname") or "", "lastname": row.get("user_lastname") or "",
+        "email": row.get("user_email") or "", "expiration_date": row.get("user_expiration_date") or "",
+        "subscription_template_id": row.get("user_subscription_template_id"),
+        "subscription_name": row.get("subscription_name") or "",
+        "subscription_duration_days": row.get("subscription_duration_days") or "",
+        "subscription_value": row.get("subscription_value") or "", "brand_name": brand_name,
+    }
+    context_input.update(meta)
+    context_input.update(payload)
+    context_input["brand_name"] = meta.get("brand_name") or payload.get("brand_name") or brand_name
+    context = build_user_context(context_input)
+    for key, value in context_input.items():
+        if value not in (None, ""):
+            context[key] = str(value)
+    subject = row.get("template_subject") if row.get("kind") == "template" else row.get("campaign_subject")
+    body = row.get("template_body") if row.get("kind") == "template" else row.get("campaign_body")
+    row["rendered_subject"] = render_mail(subject or "", context)
+    row["rendered_body"] = render_mail(body or "", context)
+    return row
 
 
 def _sanitize_key(raw: str) -> str:
@@ -168,7 +207,10 @@ COMM_TEMPLATE_LIST_COLUMNS = """
               COALESCE(ctl.subject, ct.subject) AS subject
 """
 COMM_HISTORY_COLUMNS = """
+                h.id,
                 h.kind,
+                h.template_id,
+                h.campaign_id,
                 h.channel_used,
                 h.status,
                 h.error,
@@ -390,6 +432,7 @@ def register(app):
                 try:
                     enable_and_run_task_by_name("send_comm_campaigns")
                 except Exception:
+                    logger.exception("Unable to start test campaign delivery | campaign_id=%s", cid)
                     flash(t("comm_campaign_send_failed"), "error")
                     return redirect(url_for("communications_campaigns_page", load=cid))
 
@@ -943,6 +986,10 @@ def register(app):
         db = get_db()
 
         load_id = request.args.get("load", type=int)
+        page = max(_as_int(request.args.get("page"), 1), 1)
+        per_page = _as_int(request.args.get("per_page"), 20)
+        if per_page not in (20, 50, 100):
+            per_page = 20
         #duplicate_disabled = request.args.get("duplicate_disabled", type=int) == 1
         #duplicate_disabled_reason = (request.args.get("duplicate_disabled_reason") or "").strip()
 
@@ -962,6 +1009,12 @@ def register(app):
                 loaded["attachments"] = fetch_template_attachments(db, int(loaded["id"]))
                 loaded_is_stream_blocked = is_stream_blocked_template(loaded)
 
+        total_row = db.query_one("SELECT COUNT(*) AS total FROM comm_templates") or {"total": 0}
+        total_rows = int(total_row["total"] or 0)
+        total_pages = max((total_rows + per_page - 1) // per_page, 1)
+        page = min(page, total_pages)
+        offset = (page - 1) * per_page
+
         templates = db.query(f"""
             SELECT
               {COMM_TEMPLATE_LIST_COLUMNS},
@@ -970,7 +1023,8 @@ def register(app):
             LEFT JOIN comm_template_translations ctl ON ctl.template_id = ct.id AND ctl.language = ?
             LEFT JOIN subscription_templates st ON st.id = ct.subscription_template_id
             ORDER BY ct.enabled DESC, LOWER(ct.name), ct.id DESC
-        """, (selected_language,))
+            LIMIT ? OFFSET ?
+        """, (selected_language, per_page, offset))
         templates = [dict(r) for r in (templates or [])]
 
         subscription_templates = db.query(
@@ -994,6 +1048,10 @@ def register(app):
             loaded_is_stream_blocked=loaded_is_stream_blocked,
             stream_blocked_required=stream_blocked_required,
             selected_language=selected_language,
+            page=page,
+            per_page=per_page,
+            total_rows=total_rows,
+            total_pages=total_pages,
         )
 
 
@@ -1005,7 +1063,9 @@ def register(app):
         db = get_db()
 
         page = max(_as_int(request.args.get("page"), 1), 1)
-        per_page = 20
+        per_page = _as_int(request.args.get("per_page"), 20)
+        if per_page not in (20, 50, 100):
+            per_page = 20
 
         sort = (request.args.get("sort") or "sent_at").strip().lower()
         order = (request.args.get("order") or "").strip().lower()
@@ -1194,7 +1254,7 @@ def register(app):
 
             return row
 
-        history = [_render_history_message(dict(r)) for r in (rows or [])]
+        history = [dict(r) for r in (rows or [])]
 
         scheduled_where = "AND t.trigger_event = ?" if trigger_filter else ""
         scheduled_params = (trigger_filter,) if trigger_filter else ()
@@ -1297,7 +1357,7 @@ def register(app):
                 "max_attempts": r.get("max_attempts") or 10,
                 "meta_json": json.dumps(meta, ensure_ascii=False),
             }
-            scheduled_history.append(_render_history_message(row))
+            scheduled_history.append(_render_comm_history_message(row, brand_name))
 
         if page == 1:
             history = scheduled_history + history
@@ -1316,6 +1376,37 @@ def register(app):
             trigger_options=trigger_options,
             communication_summary=communication_summary,
         )
+
+    @app.route("/communications/history/<int:history_id>/detail")
+    def communications_history_detail(history_id):
+        db = get_db()
+        row = db.query_one(
+            f"""
+            SELECT {COMM_HISTORY_COLUMNS}, u.id AS user_id, u.username AS user_username,
+              u.firstname AS user_firstname, u.lastname AS user_lastname, u.email AS user_email,
+              u.expiration_date AS user_expiration_date, u.subscription_template_id AS user_subscription_template_id,
+              st.name AS subscription_name, st.duration_days AS subscription_duration_days,
+              st.subscription_value AS subscription_value, t.subject AS template_subject, t.body AS template_body,
+              c.subject AS campaign_subject, c.body AS campaign_body
+            FROM comm_history h
+            LEFT JOIN vodum_users u ON u.id = h.user_id
+            LEFT JOIN subscription_templates st ON st.id = u.subscription_template_id
+            LEFT JOIN comm_templates t ON t.id = h.template_id
+            LEFT JOIN comm_campaigns c ON c.id = h.campaign_id
+            WHERE h.id = ? LIMIT 1
+            """,
+            (history_id,),
+        )
+        if not row:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+        settings = db.query_one("SELECT brand_name FROM settings WHERE id = 1") or {}
+        item = _render_comm_history_message(dict(row), dict(settings).get("brand_name") or "VODUM")
+        return jsonify({
+            "ok": True,
+            "subject": item.get("rendered_subject") or "",
+            "body": item.get("rendered_body") or "",
+            "meta_json": item.get("meta_json") or "{}",
+        })
 
 
     # ------------------------------------------------------------------
@@ -1465,6 +1556,7 @@ def register(app):
                 try:
                     token = (decrypt_secret(settings.get("discord_bot_token")) or "").strip()
                 except Exception as e:
+                    logger.exception("Unable to decrypt Discord token for connection test")
                     flash(t("comm_test_failed").format(error=str(e)), "error")
                     return redirect(url_for("communications_configuration_page"))
             ok, detail = validate_discord_bot_token(token)
@@ -1480,11 +1572,15 @@ def register(app):
                 try:
                     enable_and_run_task_by_name("send_expiration_emails")
                 except Exception:
-                    pass
+                    logger.exception(
+                        "Scheduled communications were requeued but task startup failed | retried=%s",
+                        retried,
+                    )
 
                 add_log("info", "communications", f"{retried} scheduled communication error(s) requeued")
                 flash(t("comm_retry_scheduled_success"), "success")
             except Exception as e:
+                logger.exception("Unable to retry failed scheduled communications")
                 flash(f"{t('comm_retry_scheduled_error')}: {e}", "error")
 
             return redirect(url_for("communications_configuration_page"))

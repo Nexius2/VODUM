@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import requests
+import time
 from typing import Any, Dict, List, Optional
 
 from core.providers.base import BaseProvider
@@ -93,7 +94,26 @@ class JellyfinProvider(BaseProvider):
 
     def terminate_session(self, session_key: str, reason: str = "") -> bool:
         session_id = str(session_key).split(":", 1)[0]  # sessionId uniquement
-        return self._post_json(f"/Sessions/{session_id}/Playing/Stop", {})
+        requested = self._post_json(f"/Sessions/{session_id}/Playing/Stop", {})
+        if not requested:
+            return False
+
+        # Une session Jellyfin peut rester connectée après l'arrêt. La coupure
+        # est confirmée lorsque cette session n'a plus de NowPlayingItem.
+        for attempt in range(5):
+            if attempt:
+                time.sleep(0.5)
+            sessions = self._get_json("/Sessions?EnableRemoteIP=true") or []
+            still_playing = any(
+                str(item.get("Id") or "") == session_id
+                and bool((item.get("NowPlayingItem") or {}).get("Id"))
+                for item in sessions
+                if isinstance(item, dict)
+            )
+            if not still_playing:
+                return True
+
+        return False
 
 
 

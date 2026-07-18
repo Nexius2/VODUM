@@ -20,7 +20,7 @@
     }
   }
 
-  function openModal(raw) {
+  async function openModal(raw, detailUrl) {
     let data = {};
     try {
       data = JSON.parse(raw || "{}");
@@ -40,9 +40,9 @@
     setText("commHistoryModalStatus", data.status || "-");
     setText("commHistoryModalSentAt", window.vodumFormatDateTime ? window.vodumFormatDateTime(data.sent_at || "-") : data.sent_at || "-");
     setText("commHistoryModalError", data.error || "-");
-    setText("commHistoryModalSubject", data.subject || "-");
-    setText("commHistoryModalBody", data.body || "-");
-    setText("commHistoryModalMeta", data.meta_json || "{}");
+    setText("commHistoryModalSubject", detailUrl ? (config.loadingLabel || "Loading...") : (data.subject || "-"));
+    setText("commHistoryModalBody", detailUrl ? (config.loadingLabel || "Loading...") : (data.body || "-"));
+    setText("commHistoryModalMeta", detailUrl ? "{}" : (data.meta_json || "{}"));
 
     const modal = document.getElementById("commHistoryModal");
     if (!modal) {
@@ -51,6 +51,20 @@
     modal.classList.remove("hidden");
     modal.classList.add("flex");
     document.body.classList.add("overflow-hidden");
+
+    if (detailUrl) {
+      try {
+        const response = await fetch(detailUrl, { headers: { Accept: "application/json" } });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const detail = await response.json();
+        setText("commHistoryModalSubject", detail.subject || "-");
+        setText("commHistoryModalBody", detail.body || "-");
+        setText("commHistoryModalMeta", detail.meta_json || "{}");
+      } catch (_) {
+        setText("commHistoryModalSubject", config.loadErrorLabel || "Unable to load details.");
+        setText("commHistoryModalBody", "-");
+      }
+    }
   }
 
   function closeModal() {
@@ -70,13 +84,13 @@
     row.dataset.boundCommHistory = "1";
 
     row.addEventListener("click", function () {
-      openModal(row.dataset.history);
+      openModal(row.dataset.history, row.dataset.historyUrl || "");
     });
 
     row.addEventListener("keydown", function (event) {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
-        openModal(row.dataset.history);
+        openModal(row.dataset.history, row.dataset.historyUrl || "");
       }
     });
   });

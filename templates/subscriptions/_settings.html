@@ -312,36 +312,4 @@
       {{ t("save") }}
     </button>
   </div>
-  <script>
-    document.addEventListener("DOMContentLoaded", function () {
-      const checkbox = document.getElementById("usage_risk_send_stream_blocked_message");
-      const radios = document.querySelectorAll('input[name="expiry_mode"]');
-
-      if (!checkbox || !radios.length) {
-        return;
-      }
-
-      const manualChecked = checkbox.dataset.currentManualValue === "1";
-
-      function syncStreamBlockedCheckbox() {
-        const selected = document.querySelector('input[name="expiry_mode"]:checked');
-        const mode = selected ? selected.value : "none";
-        const forced = mode === "warn_only" || mode === "warn_then_disable";
-
-        if (forced) {
-          checkbox.checked = true;
-          checkbox.disabled = true;
-        } else {
-          checkbox.disabled = false;
-          checkbox.checked = manualChecked;
-        }
-      }
-
-      radios.forEach(function (radio) {
-        radio.addEventListener("change", syncStreamBlockedCheckbox);
-      });
-
-      syncStreamBlockedCheckbox();
-    });
-  </script>
 </form>
