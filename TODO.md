@@ -151,14 +151,125 @@ Derniere mise a jour: 2026-07-15
   - Deja fait P3: tick scheduler (retries, bootstrap, echeances et next_run)
     extrait dans `core/tasks/scheduler.py`, independant de la boucle de sommeil.
 - [~] Decouper les fichiers de plus de 1000 lignes. Restent notamment
-  `db_bootstrap.py`, `monitoring_overview.py`, `stream_enforcer.py`,
-  `sync_plex.py`, `apply_plex_access_updates.py`,
-  `users_detail.py` et `core/monitoring/collector.py`.
+  `db_bootstrap.py`, `monitoring_overview.py` et `stream_enforcer.py`.
+  - Deja fait P3: schema des politiques et enforcements de streaming extrait
+    de `db_bootstrap.py` vers `core/db_bootstrap_streams.py`, avec creation
+    idempotente testee sur SQLite.
+  - Deja fait P3: tables techniques des imports Tautulli et du stockage
+    Monitoring extraites vers `core/db_bootstrap_monitoring.py`, avec
+    migrations de colonnes et index testees sur SQLite.
+  - Deja fait P3: fondations SQLite des campagnes de migration extraites vers
+    `core/db_bootstrap_migrations.py`; tables, colonnes et index sont testes
+    de maniere idempotente.
+  - Deja fait P3: migration des taches cron vers le mode intervalle extraite
+    vers `core/db_bootstrap_tasks.py`, avec frequences des workers et
+    idempotence testees.
+  - Deja fait P3: validation des tables principales, colonnes serveurs/comptes
+    media et reglages applicatifs extraite vers `core/db_bootstrap_core.py`.
+  - Deja fait P3: historique des recommandations Usage Risk extrait vers
+    `core/db_bootstrap_usage_risk.py`, avec schema et index testes sur SQLite.
+  - Deja fait P3: reglages, table principale et migration des anciens statuts
+    de parrainage extraits vers `core/db_bootstrap_referrals.py`.
+  - Deja fait P3: journal des evenements de parrainage extrait vers
+    `core/db_bootstrap_referral_events.py`, avec creation idempotente testee.
+  - Deja fait P3: reconstruction des anciens statuts et colonnes de profil des
+    utilisateurs extraite vers `core/db_bootstrap_users.py`, avec conservation
+    des donnees testee.
+  - Deja fait P3: schema et amorcage unique des modeles d'abonnement extraits
+    vers `core/db_bootstrap_subscriptions.py`; une suppression admin reste
+    respectee aux demarrages suivants.
+  - Deja fait P3: colonnes obligatoires Tasks/Settings et protection
+    anti-bruteforce extraites vers `core/db_bootstrap_settings.py`, avec
+    valeurs par defaut et index testes.
+  - Deja fait P3: collecte et persistance des statistiques CPU/RAM serveur
+    extraites de `core/monitoring/collector.py` vers
+    `core/monitoring/resource_stats.py`, avec parsing Plex teste.
+  - Deja fait P3: politiques actives, historique de notifications, snapshots
+    d'abonnement et contexte profil/parrainage extraits de `users_detail.py`,
+    qui repasse sous 1000 lignes.
+  - Deja fait P3: resolution robuste et synchronisation des identites Plex
+    extraites de `apply_plex_access_updates.py` vers
+    `core/plex_access_identity.py`.
+  - Deja fait P3: nettoyage des jobs, selection du compte media et lecture des
+    options de partage extraits vers `core/plex_access_jobs.py`.
+  - Deja fait P3: diagnostics HTTP Plex extraits vers
+    `core/plex_access_runtime.py`; les anciens helpers de pilotage inutilises
+    ont ete supprimes et `apply_plex_access_updates.py` repasse sous 1000 lignes.
+  - Deja fait P3: mode d'import Plex extrait vers `core/plex_sync_config.py`,
+    detection d'invitation mutualisee et anciens helpers inutilises supprimes
+    de `sync_plex.py`.
+  - Deja fait P3: client XML Plex.tv (compte admin, users et shared servers)
+    extrait de `sync_plex.py` vers `core/plex_sync_api.py`.
+  - Deja fait P3: orchestration globale des serveurs, bibliotheques et acces
+    extraite vers `core/plex_sync_orchestrator.py`.
+  - Deja fait P3: comptage des sections et application des diffs d'acces aux
+    bibliotheques extraits vers `core/plex_library_access.py`.
+  - Deja fait P3: rapprochement et upsert du proprietaire de chaque serveur
+    Plex extraits vers `core/plex_owner_sync.py`.
+  - Deja fait P3: decouverte, reconciliation et nettoyage des bibliotheques
+    extraits vers `core/plex_library_sync.py`; `sync_plex.py` repasse sous
+    1000 lignes.
 - [~] Continuer la separation routes / services / providers, surtout sur les
   routes les plus longues: monitoring, users, communications, subscriptions,
   migrations, setup wizard et servers.
   - Deja fait P3: contrat de pagination (normalisation, bornes, offsets et liens)
     extrait dans `web/pagination.py`; routes Users et Servers migrees.
+  - Deja fait P3: resolution et presentation des politiques actives du detail
+    User extraites de la route vers `core/user_active_policies.py`.
+  - Deja fait P3: pagination, tri et libelles de l'historique de notifications
+    du detail User extraits vers `core/user_notification_history.py`.
+  - Deja fait P3: application et nettoyage des snapshots de templates
+    d'abonnement extraits du detail User vers
+    `core/user_subscription_snapshots.py`.
+  - Deja fait P3: verrou d'expiration, alias media, donnees de parrainage,
+    normalisation des dates et enrichissement des serveurs extraits vers
+    `core/user_profile_context.py`.
+  - Deja fait P3: lecture et application des statistiques CPU/RAM extraites de
+    `monitoring_overview.py` vers le service Monitoring existant.
+  - Deja fait P3: endpoints JSON de detail et d'historique des enforcements
+    extraits vers `routes/monitoring_enforcements.py`.
+  - Deja fait P3: contexte serveurs partage et donnees Now Playing extraits
+    vers `core/monitoring/overview_servers.py` et `overview_live.py`.
+  - Deja fait P3: activite recente et contexte Usage Risk extraits vers
+    `core/monitoring/overview_activity.py` et `overview_usage_risk.py`.
+  - Deja fait P3: parametres, tri, formatage et pagination de l'onglet Users
+    Monitoring extraits vers `core/monitoring/overview_users.py`.
+  - Deja fait P3: comptage filtre de l'onglet Users Monitoring extrait vers
+    `core/monitoring/overview_users.py`.
+  - Deja fait P3: requete agregee et formatage de la liste Users Monitoring
+    extraits vers `core/monitoring/overview_users.py`.
+  - Deja fait P3: normalisation et bornage de la pagination des enforcements
+    Policies extraits vers `core/monitoring/overview_policies.py`.
+  - Deja fait P3: catalogue, decodage JSON et compteurs des policies extraits
+    vers `core/monitoring/overview_policies.py`.
+  - Deja fait P3: statistiques du dashboard Policies et fenetres 24 h/7 jours
+    extraites vers `core/monitoring/overview_policies.py`.
+  - Deja fait P3: repartitions scopes, providers et regles Policies extraites
+    vers `core/monitoring/overview_policies.py`.
+  - Deja fait P3: classement des utilisateurs touches par les enforcements
+    extrait vers `core/monitoring/overview_policies.py`.
+  - Deja fait P3: liste paginee des enforcements recents extraite vers
+    `core/monitoring/overview_policies.py`.
+  - Deja fait P3: regroupement des enforcements par acteur et etat des sessions
+    suivies extraits vers `core/monitoring/overview_policies.py`.
+  - Deja fait P3: chronologie completee warn/kill sur 30 jours extraite vers
+    `core/monitoring/overview_policies.py`; onglet Policies decouple.
+  - Deja fait P3: filtres, tri, requetes, formatage et pagination de l'onglet
+    History extraits vers `core/monitoring/overview_history.py`.
+  - Deja fait P3: parametres, tri et pagination de l'onglet Libraries extraits
+    vers `core/monitoring/overview_libraries.py`.
+  - Deja fait P3: table agregee Libraries, acces utilisateurs et durees jouees
+    extraits vers `core/monitoring/overview_libraries.py`.
+  - Deja fait P3: liste des utilisateurs du filtre Libraries extraite vers
+    `core/monitoring/overview_libraries.py`.
+  - Deja fait P3: construction des filtres de periode/utilisateur du classement
+    Libraries extraite vers `core/monitoring/overview_libraries.py`.
+  - Deja fait P3: classement Top played Libraries et enrichissement des visuels
+    extraits vers `core/monitoring/overview_libraries.py`.
+  - Deja fait P3: statistiques combinees, details, series temporelles et
+    classements de l'onglet Servers extraits vers
+    `core/monitoring/overview_servers.py`; `monitoring_overview.py` ne conserve
+    plus que l'orchestration HTTP et repasse largement sous 1000 lignes.
 - [~] Uniformiser les acces DB applicatifs restants. Les connexions SQLite
   internes de bootstrap, config, logs, restauration et suppression serveur sont
   deja centralisees via `open_sqlite_connection`.

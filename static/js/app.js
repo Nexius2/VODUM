@@ -566,9 +566,10 @@ window.vodumFlash = function(category, message, autoHideMs = 4000) {
   let showTimer = null;
   let safetyTimer = null;
 
-  function show(delay = 80) {
+  function show(delay = 180) {
     clearTimeout(showTimer);
     showTimer = setTimeout(() => {
+      if (document.visibilityState === "hidden") return;
       loader.hidden = false;
       document.documentElement.setAttribute("aria-busy", "true");
       clearTimeout(safetyTimer);
@@ -585,25 +586,39 @@ window.vodumFlash = function(category, message, autoHideMs = 4000) {
     document.documentElement.removeAttribute("aria-busy");
   }
 
+  function isHtmxManaged(element) {
+    if (!element) return false;
+    if (element.matches("[hx-get], [hx-post], [hx-put], [hx-patch], [hx-delete], [data-hx-get], [data-hx-post], [data-hx-put], [data-hx-patch], [data-hx-delete]")) {
+      return true;
+    }
+    const boostedParent = element.closest("[hx-boost], [data-hx-boost]");
+    if (!boostedParent) return false;
+    return (boostedParent.getAttribute("hx-boost") || boostedParent.getAttribute("data-hx-boost") || "").toLowerCase() !== "false";
+  }
+
   document.addEventListener("click", (event) => {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     const link = event.target.closest("a[href]");
     if (!link || link.target === "_blank" || link.hasAttribute("download") || link.hasAttribute("data-no-navigation-loader")) return;
+    if (isHtmxManaged(link)) return;
 
     let destination;
     try { destination = new URL(link.href, window.location.href); } catch (_) { return; }
     if (destination.origin !== window.location.origin) return;
     if (destination.pathname === window.location.pathname && destination.search === window.location.search && destination.hash) return;
-    show(80);
+    show();
   }, true);
 
   document.addEventListener("submit", (event) => {
     const form = event.target;
     if (!(form instanceof HTMLFormElement) || form.hasAttribute("data-no-navigation-loader")) return;
-    if (form.hasAttribute("hx-post") || form.hasAttribute("hx-get")) return;
-    show(80);
+    if (isHtmxManaged(form)) return;
+    show();
   }, true);
 
+  document.body.addEventListener("htmx:afterRequest", hide);
+  document.body.addEventListener("htmx:sendError", hide);
+  document.body.addEventListener("htmx:timeout", hide);
   window.addEventListener("pageshow", hide);
   window.addEventListener("pagehide", () => clearTimeout(showTimer));
 })();

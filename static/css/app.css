@@ -103,8 +103,7 @@ svg {
 .vodum-navigation-loader__backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(2, 6, 23, 0.42);
-  backdrop-filter: blur(2px);
+  background: rgba(2, 6, 23, 0.28);
 }
 
 .vodum-navigation-loader__panel {

@@ -1,5 +1,134 @@
 # Changelog
 
+- Refactor Monitoring P3 : extraction complète des classements Libraries et
+  des statistiques de l'onglet Servers hors de la route
+  `monitoring_overview.py`, avec conservation des requêtes et des contrats de
+  rendu existants.
+- Stabilisation de la suite de tests : import tardif de l'aide DB du widget
+  Now Playing et dates relatives pour la couverture des statistiques
+  quotidiennes. Les fins de ligne sont désormais normalisées par
+  `.gitattributes`.
+- Premier découpage de `db_bootstrap.py` : création et mise à niveau des tables
+  de politiques et d'enforcements de streaming déplacées dans un module dédié,
+  avec test SQLite d'idempotence.
+- Extraction des tables techniques Tautulli et Monitoring depuis
+  `db_bootstrap.py`, avec validation SQLite des colonnes historiques et index.
+- Extraction des fondations des campagnes de migration depuis
+  `db_bootstrap.py` : campagnes, utilisateurs, étapes et correspondances de
+  bibliothèques sont désormais initialisés par un module dédié testé.
+- Migration du mode de planification des tâches extraite de
+  `db_bootstrap.py`, avec validation des intervalles des workers récurrents.
+- Validation et mise à niveau des tables principales extraites de
+  `db_bootstrap.py`, notamment les colonnes serveur, comptes média et réglages.
+- Schéma de l'historique des recommandations Usage Risk déplacé dans un module
+  dédié avec contrôle SQLite de son idempotence.
+- Réglages, parrainages et reconstruction de l'ancienne contrainte de statuts
+  extraits de `db_bootstrap.py`, avec vérification de la conservation des
+  données existantes.
+- Journal des événements de parrainage extrait dans un module de bootstrap
+  dédié et testé sur SQLite.
+- Migration des statuts et colonnes de profil utilisateur extraite de
+  `db_bootstrap.py`, avec test de reconstruction d'une ancienne table et de
+  conservation des comptes.
+- Schéma et amorçage initial des modèles d'abonnement extraits dans un module
+  dédié ; les modèles supprimés volontairement ne sont plus recréés lors des
+  initialisations suivantes.
+- Colonnes obligatoires des tâches et réglages, ainsi que la table de
+  protection anti-bruteforce, extraites de `db_bootstrap.py` et testées de
+  manière idempotente.
+
+## 2026-07-19 - P3 monitoring
+
+- Optimisation du loader global de navigation : affichage differe a 180 ms,
+  exclusion des interactions HTMX, fermeture defensive en fin de requete et
+  suppression du flou plein ecran couteux.
+- Extraction de la collecte et de la persistance des statistiques CPU/RAM
+  serveur vers `core/monitoring/resource_stats.py`; le collecteur repasse sous
+  1000 lignes et le parsing XML Plex est couvert par des tests unitaires.
+- Extraction de la resolution et de la presentation des politiques actives du
+  detail User vers `core/user_active_policies.py`, sans dependance Flask.
+- Extraction de la pagination email/Discord, du tri et des libelles de
+  l'historique du detail User vers `core/user_notification_history.py`.
+- Extraction de l'application et du nettoyage des snapshots de templates
+  d'abonnement vers `core/user_subscription_snapshots.py`.
+- Extraction du contexte profil du detail User (verrou owner/admin, alias,
+  parrainages, dates et options Plex) vers `core/user_profile_context.py`;
+  `users_detail.py` repasse sous 1000 lignes.
+- Extraction de la resolution des comptes Plex et de la synchronisation des
+  identites invitees acceptees vers `core/plex_access_identity.py`.
+- Extraction du nettoyage des jobs Plex, de la selection du compte media et de
+  la lecture des options de partage vers `core/plex_access_jobs.py`.
+- Extraction des diagnostics HTTP et des logs de payload Plex vers
+  `core/plex_access_runtime.py`; suppression de trois helpers de pilotage morts
+  et passage de `apply_plex_access_updates.py` sous 1000 lignes.
+- Extraction de la regle du mode d'import vers `core/plex_sync_config.py`,
+  mutualisation de la detection des invitations Plex en attente et suppression
+  de trois helpers sans appel dans `sync_plex.py`.
+- Extraction du client XML Plex.tv utilise pour le compte administrateur, les
+  utilisateurs et les shared servers vers `core/plex_sync_api.py`.
+- Extraction de l'orchestration globale de synchronisation des serveurs,
+  bibliotheques et acces Plex vers `core/plex_sync_orchestrator.py`.
+- Extraction du comptage des sections et de l'application des diffs d'acces
+  aux bibliotheques vers `core/plex_library_access.py`.
+- Extraction du rapprochement global et de l'upsert du proprietaire de chaque
+  serveur Plex vers `core/plex_owner_sync.py`.
+- Extraction de la decouverte et de la reconciliation des bibliotheques vers
+  `core/plex_library_sync.py`; `sync_plex.py` repasse sous 1000 lignes.
+- Centralisation de la collecte, persistance, lecture et application des
+  statistiques CPU/RAM dans `core/monitoring/resource_stats.py`.
+- Extraction des endpoints JSON de detail et d'historique des enforcements
+  Monitoring vers `routes/monitoring_enforcements.py`, sans changement d'URL.
+- Extraction du contexte serveurs Monitoring et des donnees Now Playing vers
+  `core/monitoring/overview_servers.py` et `overview_live.py`.
+- Extraction de l'activite recente et du contexte Usage Risk vers
+  `core/monitoring/overview_activity.py` et `overview_usage_risk.py`.
+- Extraction des parametres, du tri, du formatage et de la pagination de
+  l'onglet Users Monitoring vers `core/monitoring/overview_users.py`.
+- Restauration du helper de compatibilite Plex pour l'activation differee des
+  abonnements, detectee par la passe de validation globale.
+- Clarification des libelles CRON de la page Tasks : les listes regulieres
+  affichent maintenant simplement leur frequence et les minutes fixes utilisent
+  une formulation naturelle dans les cinq langues de l'interface.
+- Extraction du comptage filtre de l'onglet Users Monitoring vers
+  `core/monitoring/overview_users.py`, avec correction d'un suffixe SQL parasite
+  qui pouvait casser une recherche utilisateur.
+- Extraction de la requete agregee de la liste Users Monitoring vers
+  `core/monitoring/overview_users.py`, avec test SQLite du filtrage, du
+  dedoublonnage des lectures et du formatage.
+- Extraction de la pagination des enforcements Monitoring Policies vers
+  `core/monitoring/overview_policies.py`, avec bornage de la page et des tailles
+  autorisees.
+- Extraction du catalogue Monitoring Policies, du decodage des regles JSON et
+  des compteurs systeme/verrouillage/abonnement vers
+  `core/monitoring/overview_policies.py`.
+- Extraction des statistiques du dashboard Monitoring Policies et des fenetres
+  d'enforcement 24 heures/7 jours vers `core/monitoring/overview_policies.py`.
+- Extraction des repartitions Monitoring Policies par scope, provider et type
+  de regle vers `core/monitoring/overview_policies.py`.
+- Extraction du classement des utilisateurs touches par les enforcements,
+  avec resolution des identites Vodum/Plex, vers
+  `core/monitoring/overview_policies.py`.
+- Extraction de la liste paginee des enforcements recents et de la resolution
+  de leur libelle utilisateur vers `core/monitoring/overview_policies.py`.
+- Extraction du regroupement des enforcements par acteur et de l'etat des
+  sessions suivies vers `core/monitoring/overview_policies.py`.
+- Extraction de la chronologie warn/kill Monitoring Policies sur 30 jours,
+  avec remplissage des jours sans evenement; l'onglet est desormais decouple
+  de ses requetes metier.
+- Extraction complete de l'onglet Monitoring History vers
+  `core/monitoring/overview_history.py`, avec test SQLite des filtres, du tri,
+  du formatage et de la pagination.
+- Extraction des parametres, du tri securise et de la pagination de l'onglet
+  Monitoring Libraries vers `core/monitoring/overview_libraries.py`.
+- Extraction de la table agregee Monitoring Libraries, du comptage des acces
+  hors proprietaire et du formatage des durees vers
+  `core/monitoring/overview_libraries.py`, avec test SQLite reel.
+- Extraction de la liste des utilisateurs du filtre Monitoring Libraries et de
+  ses libelles de repli vers `core/monitoring/overview_libraries.py`.
+- Extraction de la construction parametree des filtres de periode et
+  d'utilisateur du classement Monitoring Libraries vers
+  `core/monitoring/overview_libraries.py`.
+
 ## 2026-07-16 - P3 architecture, premier lot
 
 - Finalisation du decoupage de `tasks_engine.py`, ramene sous 1000 lignes: suppression des anciennes implementations inatteignables et extraction de la configuration des taches et du cycle de vie scheduler dans `core/tasks/`.
@@ -159,4 +288,3 @@ All notable changes to Vodum will be documented in this file.
 - Improve the dashboard Usage Risk card on mobile by stacking the metric and chart on small screens.
 
 - Improve mobile action, form, and modal resilience by wrapping action groups and constraining fixed-width controls only on small screens.
-

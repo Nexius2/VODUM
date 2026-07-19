@@ -77,13 +77,13 @@ def safe_datetime(value):
 
 
 
-def _format_minute_list(minutes: list[int]) -> str:
-    formatted = [f":{minute:02d}" for minute in minutes]
+def _format_minute_list(minutes: list[int], conjunction="and") -> str:
+    formatted = [f"{minute:02d}" for minute in minutes]
     if len(formatted) == 1:
         return formatted[0]
     if len(formatted) == 2:
-        return f"{formatted[0]} and {formatted[1]}"
-    return f"{', '.join(formatted[:-1])} and {formatted[-1]}"
+        return f"{formatted[0]} {conjunction} {formatted[1]}"
+    return f"{', '.join(formatted[:-1])} {conjunction} {formatted[-1]}"
 
 
 def _parse_minute_list(value: str) -> list[int] | None:
@@ -130,14 +130,16 @@ def cron_human(expr, t=None):
     if hour == "*" and dom == "*" and month == "*" and dow == "*" and minute_list:
         step = _regular_minute_step(minute_list)
         if step:
-            return t("cron_every_x_minutes_at_minutes").format(
-                x=step,
-                minutes=_format_minute_list(minute_list),
+            return t("cron_every_x_minutes").format(x=step)
+        return t("cron_every_hour_at_minutes").format(
+            minutes=_format_minute_list(
+                minute_list,
+                conjunction=t("cron_list_and"),
             )
-        return t("cron_every_hour_at_minutes").format(minutes=_format_minute_list(minute_list))
+        )
 
     if hour == "*" and dom == "*" and month == "*" and dow == "*" and minute.isdigit():
-        return t("cron_every_hour_at_minute").format(m=f":{int(minute):02d}")
+        return t("cron_every_hour_at_minute").format(m=f"{int(minute):02d}")
 
     if hour == "*" and dom == "*" and month == "*" and dow == "*" and minute.startswith("*/"):
         return t("cron_every_x_minutes").format(x=minute[2:])
@@ -153,7 +155,7 @@ def cron_human(expr, t=None):
         if minute_value is not None and minute_value != 0:
             return t("cron_every_x_hours_at_minute").format(
                 x=hour[2:],
-                m=f":{minute_value:02d}",
+                m=f"{minute_value:02d}",
             )
         if minute_value == 0:
             return t("cron_every_x_hours").format(x=hour[2:])
