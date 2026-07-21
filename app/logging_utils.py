@@ -99,9 +99,22 @@ def is_debug_mode_enabled() -> bool:
     return value
 
 
+def update_debug_mode_cache(enabled: bool) -> None:
+    """Apply a saved debug setting immediately in the current process."""
+    _DEBUG_CACHE["value"] = bool(enabled)
+    _DEBUG_CACHE["last_check"] = time.time()
+
+
 # -------------------------------------------------------------------
-# LOG FILTER (ANONYMISATION)
+# LOG FILTERS
 # -------------------------------------------------------------------
+
+class DebugModeFilter(logging.Filter):
+    """Keep DEBUG records only while the application debug option is enabled."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.levelno >= logging.INFO or is_debug_mode_enabled()
+
 
 class AnonymizeFilter(logging.Filter):
     """
@@ -256,6 +269,11 @@ def parse_log_records(lines):
 # -------------------------------------------------------------------
 # ATTACH FILTER
 # -------------------------------------------------------------------
+
+if not any(getattr(item, "_vodum_debug_mode_filter", False) for item in handler.filters):
+    debug_mode_filter = DebugModeFilter()
+    debug_mode_filter._vodum_debug_mode_filter = True
+    handler.addFilter(debug_mode_filter)
 
 if not any(getattr(item, "_vodum_anonymizer", False) for item in handler.filters):
     anonymizer = AnonymizeFilter()

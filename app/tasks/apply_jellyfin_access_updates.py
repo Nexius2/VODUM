@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -142,6 +143,33 @@ def _mark_success(db, job_id: int) -> None:
     )
 
 
+def _mark_jellyfin_account_removed(db, media_user_id: int, jf_user_id: str) -> None:
+    row = db.query_one(
+        "SELECT details_json FROM media_users WHERE id = ?",
+        (media_user_id,),
+    )
+    details: Dict[str, Any] = {}
+    if row and row["details_json"]:
+        try:
+            parsed = json.loads(row["details_json"])
+            if isinstance(parsed, dict):
+                details = parsed
+        except (TypeError, ValueError):
+            pass
+
+    details.update(
+        {
+            "provider_presence": "removed",
+            "provider_presence_external_user_id": jf_user_id,
+            "provider_presence_checked_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        }
+    )
+    db.execute(
+        "UPDATE media_users SET details_json = ? WHERE id = ?",
+        (json.dumps(details, ensure_ascii=False), media_user_id),
+    )
+
+
 def _mark_failure(db, job_id: int, err: str) -> None:
     """
     IMPORTANT:
@@ -167,7 +195,7 @@ def _get_server(db, server_id: int) -> Optional[Dict[str, Any]]:
 def _get_jellyfin_accounts(db, vodum_user_id: int, server_id: int) -> List[Dict[str, Any]]:
     rows = db.query(
         """
-        SELECT id, external_user_id, username
+        SELECT id, external_user_id, username, details_json
         FROM media_users
         WHERE vodum_user_id = ?
           AND server_id = ?
@@ -250,7 +278,29 @@ def _process_job(db, job: Dict[str, Any]) -> None:
             )
             continue
 
-        _apply_policy_enabled_folders(http, base_url, api_key, jf_user_id, enabled_folders)
+        try:
+            account_details = json.loads(acc.get("details_json") or "{}")
+        except (TypeError, ValueError):
+            account_details = {}
+        if isinstance(account_details, dict) and account_details.get("provider_presence") == "removed":
+            logger.info(
+                f"Skipping removed Jellyfin account media_user_id={acc['id']} "
+                f"vodum_user_id={vodum_user_id} server_id={server_id}"
+            )
+            continue
+
+        try:
+            _apply_policy_enabled_folders(http, base_url, api_key, jf_user_id, enabled_folders)
+        except requests.HTTPError as exc:
+            response = getattr(exc, "response", None)
+            if response is None or response.status_code != 404:
+                raise
+            _mark_jellyfin_account_removed(db, int(acc["id"]), jf_user_id)
+            logger.warning(
+                f"Jellyfin account marked removed: media_user_id={acc['id']} "
+                f"vodum_user_id={vodum_user_id} server_id={server_id} "
+                f"external_user_id={jf_user_id}"
+            )
 
 
 # ---------------------------------------------------------------------

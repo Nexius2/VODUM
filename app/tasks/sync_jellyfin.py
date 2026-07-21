@@ -808,6 +808,7 @@ def _sync_users_and_policies_for_server(
     if not isinstance(users, list):
         return 0, 0
 
+    seen_jellyfin_ids = set()
     for u in users:
         if not isinstance(u, dict):
             continue
@@ -819,6 +820,7 @@ def _sync_users_and_policies_for_server(
 
         jellyfin_id = str(jellyfin_id)
         username = str(username)
+        seen_jellyfin_ids.add(jellyfin_id)
 
         media_user_id, vodum_user_id = _upsert_media_user_by_jellyfin_id(
             db, server_id, jellyfin_id, username
@@ -940,6 +942,48 @@ def _sync_users_and_policies_for_server(
 
         # Si accès réel → init expiration_date sur le vodum_user
         processed += 1
+
+    existing_accounts = db.query(
+        """
+        SELECT id, external_user_id, details_json
+        FROM media_users
+        WHERE server_id = ?
+          AND type = 'jellyfin'
+          AND TRIM(COALESCE(external_user_id, '')) <> ''
+        """,
+        (server_id,),
+    ) or []
+    removed_count = 0
+    for raw_account in existing_accounts:
+        account = dict(raw_account)
+        external_user_id = str(account.get("external_user_id") or "").strip()
+        if external_user_id in seen_jellyfin_ids:
+            continue
+        details = {}
+        try:
+            parsed = json.loads(account.get("details_json") or "{}")
+            if isinstance(parsed, dict):
+                details = parsed
+        except (TypeError, ValueError):
+            pass
+        details.update(
+            {
+                "provider_presence": "removed",
+                "provider_presence_external_user_id": external_user_id,
+                "provider_presence_checked_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            }
+        )
+        db.execute(
+            "UPDATE media_users SET details_json = ? WHERE id = ?",
+            (json.dumps(details, ensure_ascii=False), int(account["id"])),
+        )
+        removed_count += 1
+
+    if removed_count:
+        logger.warning(
+            f"[SYNC JELLYFIN] {removed_count} account(s) marked removed "
+            f"because they are absent from Jellyfin (server_id={server_id})"
+        )
 
     logger.info(
         f"Jellyfin users/policies: {processed} users traités, "

@@ -566,14 +566,29 @@ window.vodumFlash = function(category, message, autoHideMs = 4000) {
   let showTimer = null;
   let safetyTimer = null;
 
-  function show(delay = 180) {
+  function reveal() {
+    loader.hidden = false;
+    document.documentElement.setAttribute("aria-busy", "true");
+    clearTimeout(safetyTimer);
+    safetyTimer = setTimeout(hide, 15000);
+  }
+
+  function navigationDelay() {
+    const touchNavigation = navigator.maxTouchPoints > 0
+      || window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+    return touchNavigation ? 0 : 180;
+  }
+
+  function show(delay = navigationDelay()) {
     clearTimeout(showTimer);
+    if (delay <= 0) {
+      showTimer = null;
+      reveal();
+      return;
+    }
     showTimer = setTimeout(() => {
       if (document.visibilityState === "hidden") return;
-      loader.hidden = false;
-      document.documentElement.setAttribute("aria-busy", "true");
-      clearTimeout(safetyTimer);
-      safetyTimer = setTimeout(hide, 15000);
+      reveal();
     }, delay);
   }
 

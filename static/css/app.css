@@ -262,6 +262,13 @@ svg {
   -webkit-overflow-scrolling: touch;
 }
 
+.vodum-modal-close {
+  position: absolute;
+  inset: 0.75rem 0.75rem auto auto;
+  margin: 0;
+  transform: none;
+}
+
 .vodum-mobile-table-scroll {
   display: contents;
 }
