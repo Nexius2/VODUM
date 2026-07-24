@@ -13,6 +13,12 @@ from web.helpers import get_db
 from web.pagination import normalize_page, pagination_links
 from core.media_jobs import insert_plex_media_job
 from core.user_sync_jobs import get_preferred_plex_media_user_id
+from core.server_page_queries import (
+    LIBRARIES_LIST_COLUMNS,
+    SERVER_DETAIL_COLUMNS,
+    SERVER_DETAIL_LIBRARY_COLUMNS,
+    SERVERS_LIST_COLUMNS,
+)
 from core.library_bulk_access import (
     BulkAccessError,
     grant_libraries_to_active_users,
@@ -30,24 +36,6 @@ SERVER_DELETE_IN_PROGRESS = set()
 DELETE_BATCH_SIZE = 1000
 SERVER_TABLE_PAGE_SIZE = 20
 
-LIBRARY_TYPE_SQL = """
-                CASE LOWER(TRIM(COALESCE(l.type, '')))
-                    WHEN 'tvshows' THEN 'shows'
-                    WHEN 'tvshow' THEN 'shows'
-                    WHEN 'show' THEN 'shows'
-                    WHEN 'series' THEN 'shows'
-                    WHEN 'movies' THEN 'movie'
-                    WHEN 'film' THEN 'movie'
-                    WHEN 'films' THEN 'movie'
-                    WHEN 'music' THEN 'music'
-                    WHEN 'artist' THEN 'music'
-                    WHEN 'artists' THEN 'music'
-                    WHEN 'audio' THEN 'music'
-                    ELSE COALESCE(NULLIF(LOWER(TRIM(l.type)), ''), 'unknown')
-                END
-"""
-
-
 def _page_arg(name: str = "page") -> int:
     return normalize_page(request.args.get(name, 1, type=int))
 
@@ -58,43 +46,6 @@ def _pagination(page: int, per_page: int, total_rows: int, endpoint: str, page_p
         args[page_param] = value
         return url_for(endpoint, **args)
     return pagination_links(page, per_page, total_rows, page_url, unit_label=unit_label)
-
-SERVERS_LIST_COLUMNS = """
-                s.id,
-                s.name,
-                s.type,
-                s.url,
-                s.local_url,
-                s.public_url,
-                s.status,
-                s.server_version
-"""
-
-LIBRARIES_LIST_COLUMNS = f"""
-                l.id,
-                l.server_id,
-                l.name,
-{LIBRARY_TYPE_SQL} AS type,
-                l.section_id
-"""
-
-SERVER_DETAIL_COLUMNS = """
-            id,
-            name,
-            type,
-            url,
-            local_url,
-            public_url,
-            status,
-            settings_json
-"""
-
-SERVER_DETAIL_LIBRARY_COLUMNS = f"""
-                l.id,
-                l.name,
-{LIBRARY_TYPE_SQL} AS type,
-                l.section_id
-"""
 
 def _delete_in_chunks(conn, sql, params=(), batch_size=DELETE_BATCH_SIZE):
     total = 0

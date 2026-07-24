@@ -5,6 +5,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from core.communication_template_selection import select_best_templates
 from typing import Dict, List, Optional, Tuple
 
 from logging_utils import get_logger
@@ -452,40 +453,6 @@ def get_user_subscription_context(db, user_id: int) -> Dict:
     }
 
 
-def _subscription_scope_rank(template_row: Dict, user_subscription_template_id: int | None) -> int:
-    scope = (template_row.get("subscription_scope") or "none").strip().lower()
-    tpl_subscription_id = _safe_nullable_int(template_row.get("subscription_template_id"))
-
-    if scope == "specific":
-        if user_subscription_template_id is None:
-            return -1
-        return 3 if tpl_subscription_id == user_subscription_template_id else -1
-
-    if scope == "all":
-        return 2
-
-    return 1  # none
-
-
-def _provider_rank(template_row: Dict, provider: str) -> int:
-    tpl_provider = (template_row.get("trigger_provider") or "all").strip().lower()
-    if tpl_provider == provider:
-        return 2
-    if tpl_provider == "all":
-        return 1
-    return -1
-
-def _expiration_change_direction_rank(template_row: Dict, change_direction: str | None) -> int:
-    if not change_direction:
-        return 1
-
-    tpl_dir = (template_row.get("expiration_change_direction") or "all").strip().lower()
-    if tpl_dir == change_direction:
-        return 2
-    if tpl_dir == "all":
-        return 1
-    return -1
-
 def select_comm_templates_for_user(
     *,
     db,
@@ -519,87 +486,13 @@ def select_comm_templates_for_user(
         (trigger_event, provider),
     ) or []
 
-    candidates = []
-    for row in rows:
-        tpl = dict(row)
-
-        sub_rank = _subscription_scope_rank(tpl, user_subscription_template_id)
-        if sub_rank < 0:
-            continue
-
-        prov_rank = _provider_rank(tpl, provider)
-        if prov_rank < 0:
-            continue
-
-        dir_rank = 0
-        if trigger_event == "expiration_change":
-            dir_rank = _expiration_change_direction_rank(tpl, expiration_change_direction)
-            if dir_rank < 0:
-                continue
-
-        tpl["_sub_rank"] = sub_rank
-        tpl["_prov_rank"] = prov_rank
-        tpl["_dir_rank"] = dir_rank
-        candidates.append(tpl)
-
-    if not candidates:
-        return []
-
-    def _slot_key(tpl: Dict):
-        if trigger_event == "expiration":
-            return (
-                "expiration",
-                tpl.get("days_before"),
-                tpl.get("days_after"),
-            )
-
-        if trigger_event in ("user_creation", "pending_invite_reminder", "referral_reward"):
-            return (
-                trigger_event,
-                tpl.get("days_after"),
-            )
-
-        if trigger_event == "expiration_change":
-            return (
-                "expiration_change",
-                tpl.get("expiration_change_direction") or "all",
-            )
-
-        return (
-            trigger_event,
-            tpl.get("days_before"),
-            tpl.get("days_after"),
-        )
-
-    best_by_slot: Dict[tuple, Dict] = {}
-
-    candidates.sort(
-        key=lambda x: (
-            -int(x["_sub_rank"]),
-            -int(x["_prov_rank"]),
-            -int(x.get("_dir_rank", 0)),
-            int(x["id"]),
-        )
+    return select_best_templates(
+        rows,
+        trigger_event=trigger_event,
+        provider=provider,
+        subscription_template_id=user_subscription_template_id,
+        expiration_change_direction=expiration_change_direction,
     )
-
-    for tpl in candidates:
-        slot = _slot_key(tpl)
-        if slot not in best_by_slot:
-            cleaned = dict(tpl)
-            cleaned.pop("_sub_rank", None)
-            cleaned.pop("_prov_rank", None)
-            cleaned.pop("_dir_rank", None)
-            best_by_slot[slot] = cleaned
-
-    out = list(best_by_slot.values())
-    out.sort(
-        key=lambda x: (
-            999999 if x.get("days_before") is None else int(x.get("days_before") or 0),
-            999999 if x.get("days_after") is None else int(x.get("days_after") or 0),
-            int(x["id"]),
-        )
-    )
-    return out
 
 def select_comm_template_for_user(
     *,

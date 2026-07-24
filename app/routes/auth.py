@@ -379,7 +379,14 @@ def register(app):
     @app.route("/login", methods=["GET"])
     def login():
         db = get_db()
-        s = db.query_one("SELECT admin_email, admin_password_hash, admin_totp_enabled FROM settings WHERE id = 1")
+        s = db.query_one(
+            """
+            SELECT admin_email, admin_password_hash, admin_totp_enabled,
+                   admin_totp_secret, admin_totp_local_trust_enabled
+            FROM settings
+            WHERE id = 1
+            """
+        )
         s = dict(s) if s else {"admin_email": "", "admin_password_hash": None}
 
         if not (s.get("admin_password_hash") or "").strip():
@@ -391,11 +398,24 @@ def register(app):
         )
         reset_cmd = f'echo "{RESET_MAGIC}" > {reset_host_example}'
 
+        totp_enabled = int(s.get("admin_totp_enabled") or 0) == 1
+        local_totp_trusted = (
+            totp_enabled
+            and int(s.get("admin_totp_local_trust_enabled") or 0) == 1
+            and is_valid_local_totp_trust(
+                secret_key=current_app.secret_key,
+                admin_email=s.get("admin_email") or "",
+                stored_totp_secret=s.get("admin_totp_secret"),
+                client_ip=_client_ip(),
+                token=request.cookies.get(LOCAL_TOTP_COOKIE_NAME),
+            )
+        )
+
         return render_template(
             "auth/login.html",
             reset_available=os.path.exists(RESET_FILE),
             reset_cmd=reset_cmd,
-            totp_enabled=int(s.get("admin_totp_enabled") or 0) == 1,
+            totp_required=totp_enabled and not local_totp_trusted,
             next_url=safe_redirect_target(request.args.get("next"), ""),
             login_quote_visual=_build_login_quote_visual_safe(),
         )

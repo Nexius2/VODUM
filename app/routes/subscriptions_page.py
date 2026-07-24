@@ -7,40 +7,19 @@ from flask import render_template, request, redirect, url_for, flash
 from tasks_engine import auto_enable_stream_enforcer, sync_expiry_tasks_from_settings, force_task_run, enable_and_run_task_by_name, set_tasks_enabled_by_names
 from web.helpers import get_db, add_log
 from logging_utils import get_logger
+from core.user_subscription_snapshots import (
+    apply_template_snapshot,
+    clear_template_snapshot,
+)
+from core.subscription_template_policies import (
+    normalize_template_policies,
+    parse_json_list,
+    validate_subscription_template_policy_limits,
+)
+from core.default_subscription_templates import restore_default_subscription_templates
 
 
 logger = get_logger("subscriptions")
-
-DEFAULT_SUBSCRIPTION_TEMPLATES = [
-    (
-        "base sub",
-        "2 streams / Same IP",
-        365,
-        70,
-        0,
-        0,
-        '[{"rule_type":"max_streams_per_user","provider":null,"server_id":null,"is_enabled":1,"priority":100,"rule":{"selector":"kill_newest","warn_title":"Streaming limit reached","warn_text":"You have reached the allowed number of simultaneous streams","max":2,"allow_local_ip":true}},{"rule_type":"max_streams_per_ip","provider":null,"server_id":null,"is_enabled":1,"priority":100,"rule":{"selector":"kill_newest","warn_title":"Streaming limit reached","warn_text":"You have reached the allowed number of simultaneous streams","max":2,"allow_local_ip":true}}]',
-    ),
-    (
-        "Family sub",
-        "4 streams",
-        365,
-        200,
-        0,
-        0,
-        '[{"rule_type":"max_streams_per_user","provider":null,"server_id":null,"is_enabled":1,"priority":100,"rule":{"selector":"kill_newest","warn_title":"Streaming limit reached","warn_text":"You have reached the allowed number of simultaneous streams","max":4,"allow_local_ip":true}}]',
-    ),
-    (
-        "Plus sub",
-        "3 streams / 2 IP",
-        365,
-        120,
-        0,
-        0,
-        '[{"rule_type":"max_streams_per_user","provider":null,"server_id":null,"is_enabled":1,"priority":100,"rule":{"selector":"kill_newest","warn_title":"Streaming limit reached","warn_text":"You have reached the allowed number of simultaneous streams","max":3,"allow_local_ip":true}},{"rule_type":"max_ips_per_user","provider":null,"server_id":null,"is_enabled":1,"priority":100,"rule":{"selector":"kill_newest","warn_title":"Streaming limit reached","warn_text":"You have reached the allowed number of simultaneous streams","max":2,"allow_local_ip":true}}]',
-    ),
-]
-
 
 SUBSCRIPTION_SETTINGS_COLUMNS = """
     default_subscription_days,
@@ -94,44 +73,6 @@ SUBSCRIPTION_TEMPLATE_DUPLICATE_COLUMNS = """
             policies_json
 """
 
-
-def _restore_default_subscription_templates(db) -> int:
-    restored = 0
-
-    for name, notes, duration_days, subscription_value, is_default, is_enabled, policies_json in DEFAULT_SUBSCRIPTION_TEMPLATES:
-        existing = db.query_one(
-            "SELECT id FROM subscription_templates WHERE name = ?",
-            (name,),
-        )
-
-        if existing:
-            continue
-
-        db.execute(
-            """
-            INSERT INTO subscription_templates(
-              name,
-              notes,
-              duration_days,
-              subscription_value,
-              is_default,
-              is_enabled,
-              policies_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                name,
-                notes,
-                duration_days,
-                subscription_value,
-                is_default,
-                is_enabled,
-                policies_json,
-            ),
-        )
-        restored += 1
-
-    return restored
 
 def register(app):
     @app.route("/subscriptions", methods=["GET"])
@@ -623,92 +564,6 @@ def register(app):
     # TEMPLATES (CRUD)
     # -----------------------------
 
-    def _parse_json_list(raw: str):
-        try:
-            v = json.loads(raw or "[]")
-            return v if isinstance(v, list) else []
-        except Exception:
-            return []
-
-    def _policy_int_or_none(value):
-        try:
-            return int(value)
-        except Exception:
-            return None
-
-    def _stream_user_policy_applies_to_policy(stream_policy, target_policy) -> bool:
-        stream_provider = (stream_policy.get("provider") or "").strip() or None
-        target_provider = (target_policy.get("provider") or "").strip() or None
-
-        stream_server_id = _policy_int_or_none(stream_policy.get("server_id"))
-        target_server_id = _policy_int_or_none(target_policy.get("server_id"))
-
-        if stream_provider and not target_provider:
-            return False
-
-        if stream_provider and target_provider and stream_provider != target_provider:
-            return False
-
-        if stream_server_id is not None and target_server_id is None:
-            return False
-
-        if stream_server_id is not None and target_server_id is not None and stream_server_id != target_server_id:
-            return False
-
-        return True
-
-    def _validate_subscription_template_policy_limits(policies: list) -> str | None:
-        stream_user_policies = []
-
-        for p in policies:
-            if not isinstance(p, dict):
-                continue
-
-            if int(p.get("is_enabled") or 0) != 1:
-                continue
-
-            if (p.get("rule_type") or "").strip() != "max_streams_per_user":
-                continue
-
-            rule = p.get("rule") if isinstance(p.get("rule"), dict) else {}
-            max_streams = _policy_int_or_none(rule.get("max"))
-
-            if max_streams is not None and max_streams > 0:
-                stream_user_policies.append(p)
-
-        for p in policies:
-            if not isinstance(p, dict):
-                continue
-
-            if int(p.get("is_enabled") or 0) != 1:
-                continue
-
-            if (p.get("rule_type") or "").strip() != "max_ips_per_user":
-                continue
-
-            rule = p.get("rule") if isinstance(p.get("rule"), dict) else {}
-            max_ips = _policy_int_or_none(rule.get("max"))
-
-            if max_ips is None or max_ips <= 0:
-                continue
-
-            applicable_stream_limits = []
-
-            for stream_policy in stream_user_policies:
-                if not _stream_user_policy_applies_to_policy(stream_policy, p):
-                    continue
-
-                stream_rule = stream_policy.get("rule") if isinstance(stream_policy.get("rule"), dict) else {}
-                max_streams = _policy_int_or_none(stream_rule.get("max"))
-
-                if max_streams is not None and max_streams > 0:
-                    applicable_stream_limits.append(max_streams)
-
-            if applicable_stream_limits and max_ips > min(applicable_stream_limits):
-                return "subscription_template_invalid_ip_streams_limit"
-
-        return None
-
     @app.post("/subscriptions/templates/save")
     def subscription_templates_save():
         db = get_db()
@@ -735,7 +590,7 @@ def register(app):
             subscription_value = 0
 
         policies_json = (request.form.get("policies_json") or "[]").strip()
-        policies = _parse_json_list(policies_json)
+        policies = parse_json_list(policies_json)
         is_default = 1 if request.form.get("is_default") == "1" else 0
         is_enabled = 1 if request.form.get("is_enabled") == "1" else 0
         is_lifetime = 1 if request.form.get("is_lifetime") == "1" else 0
@@ -750,25 +605,9 @@ def register(app):
             return redirect(url_for("subscriptions", tab="templates"))
 
         # Keep only allowed keys (defensive)
-        clean = []
-        any_enabled = False
+        clean = normalize_template_policies(policies)
 
-        for p in policies:
-            if not isinstance(p, dict):
-                continue
-            rule_type = (p.get("rule_type") or "").strip()
-            if not rule_type:
-                continue
-            clean.append({
-                "rule_type": rule_type,
-                "provider": (p.get("provider") or "").strip() or None,
-                "server_id": int(p["server_id"]) if str(p.get("server_id","")).isdigit() else None,
-                "is_enabled": 1 if str(p.get("is_enabled","1")) == "1" else 0,
-                "priority": int(p.get("priority") or 100),
-                "rule": p.get("rule") if isinstance(p.get("rule"), dict) else {},
-            })
-
-        limit_error = _validate_subscription_template_policy_limits(clean)
+        limit_error = validate_subscription_template_policy_limits(clean)
         if limit_error:
             flash(limit_error, "error")
             return redirect(url_for("subscriptions", tab="templates"))
@@ -811,7 +650,12 @@ def register(app):
 
             for row in assigned_users:
                 try:
-                    _apply_template_snapshot(db, int(row["id"]), template_id)
+                    apply_template_snapshot(
+                        db,
+                        int(row["id"]),
+                        template_id,
+                        auto_enable_stream_enforcer,
+                    )
                     refreshed += 1
                 except Exception as e:
                     add_log(
@@ -913,7 +757,7 @@ def register(app):
     def subscription_templates_restore_defaults():
         db = get_db()
 
-        restored = _restore_default_subscription_templates(db)
+        restored = restore_default_subscription_templates(db)
 
         add_log("info", "subscriptions", f"Default subscription templates restored: {restored}")
         flash("subscription_template_defaults_restored", "success")
@@ -977,77 +821,6 @@ def register(app):
     # APPLICATIONS (snapshot)
     # -----------------------------
 
-    def _delete_locked_subscription_policies(db, vodum_user_id: int):
-        rows = db.query(
-            "SELECT id, rule_value_json FROM stream_policies WHERE scope_type='user' AND scope_id=?",
-            (vodum_user_id,),
-        ) or []
-        for r in rows:
-            try:
-                rj = json.loads(r["rule_value_json"] or "{}")
-            except Exception:
-                rj = {}
-            if rj.get("locked") and rj.get("subscription_name"):
-                db.execute("DELETE FROM stream_policies WHERE id=?", (int(r["id"]),))
-
-    def _clear_template_snapshot(db, vodum_user_id: int):
-        _delete_locked_subscription_policies(db, vodum_user_id)
-        db.execute(
-            "UPDATE vodum_users SET subscription_template_id=NULL WHERE id=?",
-            (vodum_user_id,),
-        )
-
-    def _apply_template_snapshot(db, vodum_user_id: int, template_id: int):
-        tpl = db.query_one("SELECT id, name, policies_json FROM subscription_templates WHERE id=?", (template_id,))
-        if not tpl:
-            raise ValueError("subscription_template_not_found")
-
-        tpl = dict(tpl)
-        tname = tpl.get("name") or ""
-        policies = _parse_json_list(tpl.get("policies_json") or "[]")
-
-        # Replace existing subscription policies for that user
-        _delete_locked_subscription_policies(db, vodum_user_id)
-
-        any_enabled = False
-
-        for p in policies:
-            if not isinstance(p, dict):
-                continue
-            rule_type = (p.get("rule_type") or "").strip()
-            if not rule_type:
-                continue
-
-            rule = p.get("rule") if isinstance(p.get("rule"), dict) else {}
-            # Mark as subscription-locked
-            rule = dict(rule)
-            rule["locked"] = True
-            rule["subscription_name"] = tname
-            rule["subscription_template_id"] = template_id
-
-            provider = (p.get("provider") or "").strip() or None
-            server_id = int(p["server_id"]) if str(p.get("server_id","")).isdigit() else None
-            is_enabled = 1 if str(p.get("is_enabled","1")) == "1" else 0
-            if is_enabled == 1:
-                any_enabled = True
-            priority = int(p.get("priority") or 100)
-
-            db.execute(
-                """
-                INSERT INTO stream_policies(scope_type, scope_id, provider, server_id, is_enabled, priority, rule_type, rule_value_json)
-                VALUES ('user', ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (vodum_user_id, provider, server_id, is_enabled, priority, rule_type, json.dumps(rule)),
-            )
-
-        db.execute("UPDATE vodum_users SET subscription_template_id=? WHERE id=?", (template_id, vodum_user_id))
-
-        # Auto-enable stream_enforcer if at least one policy is enabled
-        if any_enabled:
-            auto_enable_stream_enforcer()
-
-        return tname
-
     @app.post("/subscriptions/apply/user")
     def subscription_apply_user():
         db = get_db()
@@ -1072,7 +845,7 @@ def register(app):
                 flash("subscription_apply_replace_warning", "warning")
                 return redirect(url_for("subscriptions", tab="applications"))
 
-            _clear_template_snapshot(db, user_id)
+            clear_template_snapshot(db, user_id)
             add_log("info", "subscriptions", f"Subscription removed for user #{user_id}")
             flash("subscription_apply_success", "success")
             return redirect(url_for("subscriptions", tab="applications"))
@@ -1082,7 +855,12 @@ def register(app):
             return redirect(url_for("subscriptions", tab="applications"))
 
         try:
-            tname = _apply_template_snapshot(db, user_id, template_id)
+            tname = apply_template_snapshot(
+                db,
+                user_id,
+                template_id,
+                auto_enable_stream_enforcer,
+            )
         except ValueError:
             flash("subscription_template_not_found", "error")
             return redirect(url_for("subscriptions", tab="applications"))
@@ -1132,7 +910,7 @@ def register(app):
         try:
             if clear_subscription:
                 for uid in user_ids:
-                    _clear_template_snapshot(db, uid)
+                    clear_template_snapshot(db, uid)
                     applied += 1
 
                 add_log(
@@ -1147,7 +925,12 @@ def register(app):
             tname = (tpl["name"] if tpl else "")
 
             for uid in user_ids:
-                _apply_template_snapshot(db, uid, template_id)
+                apply_template_snapshot(
+                    db,
+                    uid,
+                    template_id,
+                    auto_enable_stream_enforcer,
+                )
                 applied += 1
 
             add_log(

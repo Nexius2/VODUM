@@ -31,6 +31,14 @@ from communications_engine import (
     schedule_template_notification,
 )
 from core.communications_recovery import recover_missed_scheduled_emails
+from core.expiration_template_selection import (
+    get_days_after as _get_after,
+    get_days_before as _get_days_before,
+    match_after_window as _match_after_window,
+    match_before_window as _match_before_window,
+    pick_expiration_template as _pick_expiration_template,
+    safe_int as _safe_int,
+)
 #from email_sender import send_email
 from mailing_utils import build_user_context, render_mail
 
@@ -565,17 +573,6 @@ def _get_expiration_templates(db):
     return [dict(r) for r in (rows or [])]
 
 
-def _get_days_before(template_row: dict | None, fallback: int | None) -> int | None:
-    if not template_row:
-        return fallback
-    v = template_row.get("days_before")
-    if v is None:
-        return fallback
-    try:
-        return int(v)
-    except Exception:
-        return fallback
-
 def _stable_template_marker(template_row: dict | None) -> str | None:
     if not template_row:
         return None
@@ -704,190 +701,6 @@ def _format_message(
     msg_subject = render_mail(subject or "", context)
     msg_body = render_mail(body or "", context)
     return msg_subject, msg_body
-
-def _get_after(template_row: dict | None) -> int | None:
-    if not template_row:
-        return None
-    v = template_row.get("days_after")
-    if v is None:
-        return None
-    try:
-        return int(v)
-    except Exception:
-        return None
-
-def _safe_int(value):
-    try:
-        if value is None or value == "":
-            return None
-        return int(value)
-    except Exception:
-        return None
-
-
-def _subscription_scope_rank(template_row: dict, user_subscription_template_id: int | None) -> int:
-    scope = (template_row.get("subscription_scope") or "none").strip().lower()
-    tpl_subscription_id = _safe_int(template_row.get("subscription_template_id"))
-
-    if scope == "specific":
-        if user_subscription_template_id is None:
-            return -1
-        return 3 if tpl_subscription_id == user_subscription_template_id else -1
-
-    if scope == "all":
-        return 2
-
-    return 1
-
-
-def _provider_rank(template_row: dict, providers: list[str]) -> int:
-    tpl_provider = (template_row.get("trigger_provider") or "all").strip().lower()
-    normalized = [p for p in (providers or []) if p in ("plex", "jellyfin")]
-
-    # Best case: exact provider match for one of the user's real media providers
-    if tpl_provider in normalized:
-        return 3
-
-    # Generic template
-    if tpl_provider == "all":
-        return 2
-
-    # Fallback: allow a specific provider template even if the user has another
-    # provider (or none), so expiration mail can still be sent.
-    if tpl_provider in ("plex", "jellyfin"):
-        return 1
-
-    return -1
-
-
-def _pick_expiration_template(
-    days_left: int,
-    templates: list[dict],
-    providers: list[str],
-    user_subscription_template_id: int | None,
-) -> tuple[dict, str, int | None] | None:
-    applicable = []
-    normalized_providers = [p for p in (providers or []) if p in ("plex", "jellyfin")]
-
-    for tpl in templates:
-        sub_rank = _subscription_scope_rank(tpl, user_subscription_template_id)
-        if sub_rank < 0:
-            continue
-
-        prov_rank = _provider_rank(tpl, normalized_providers)
-        if prov_rank < 0:
-            continue
-
-        applicable.append({
-            **tpl,
-            "_sub_rank": sub_rank,
-            "_prov_rank": prov_rank,
-        })
-
-    if not applicable:
-        return None
-
-    before_values = []
-    after_values = []
-
-    for tpl in applicable:
-        before_v = _get_days_before(tpl, None)
-        after_v = _get_after(tpl)
-
-        if before_v is not None:
-            before_values.append(before_v)
-        if after_v is not None:
-            after_values.append(after_v)
-
-    matches = []
-
-    for tpl in applicable:
-        before_v = _get_days_before(tpl, None)
-        after_v = _get_after(tpl)
-
-        matched = False
-        if before_v is not None and _match_before_window(days_left, before_v, before_values, after_values):
-            matched = True
-        elif after_v is not None and _match_after_window(days_left, after_v, after_values):
-            matched = True
-
-        if matched:
-            matches.append(tpl)
-
-    if not matches:
-        return None
-
-    matches.sort(key=lambda x: (-int(x["_sub_rank"]), -int(x["_prov_rank"]), int(x["id"])))
-    best = matches[0]
-
-    tpl_provider = (best.get("trigger_provider") or "all").strip().lower()
-
-    # Queue context:
-    # - exact match => use that real provider
-    # - otherwise, if user has at least one provider, use the first real one
-    # - otherwise, use the template provider if specific
-    # - final technical fallback: plex (required by comm_scheduled schema)
-    queue_provider = None
-    queue_server_id = None
-
-    if tpl_provider in normalized_providers:
-        queue_provider = tpl_provider
-    elif normalized_providers:
-        queue_provider = normalized_providers[0]
-    elif tpl_provider in ("plex", "jellyfin"):
-        queue_provider = tpl_provider
-    else:
-        queue_provider = "plex"
-
-    best.pop("_sub_rank", None)
-    best.pop("_prov_rank", None)
-
-    return best, queue_provider, queue_server_id
-
-def _match_before_window(
-    days_left: int,
-    current_value: int | None,
-    all_values: list[int],
-    after_values: list[int] | None = None,
-) -> bool:
-    if current_value is None:
-        return False
-
-    # Cas spécial J0 "before":
-    # si l'app était arrêtée, on autorise le rattrapage après expiration
-    # jusqu'au prochain palier "after" s'il existe.
-    if days_left < 0:
-        if current_value != 0:
-            return False
-
-        overdue_days = -days_left
-        future_after_values = sorted(
-            [v for v in (after_values or []) if v is not None and int(v) >= 0]
-        )
-        next_after = future_after_values[0] if future_after_values else None
-
-        if next_after is None:
-            return True
-
-        return overdue_days < next_after
-
-    lower_values = sorted([v for v in all_values if v < current_value], reverse=True)
-    lower_bound = lower_values[0] if lower_values else -1
-    return lower_bound < days_left <= current_value
-
-
-def _match_after_window(days_left: int, current_value: int | None, all_values: list[int]) -> bool:
-    if current_value is None or days_left >= 0:
-        return False
-
-    overdue_days = -days_left
-    higher_values = sorted([v for v in all_values if v > current_value])
-    upper_bound = higher_values[0] if higher_values else None
-
-    if upper_bound is None:
-        return overdue_days >= current_value
-    return current_value <= overdue_days < upper_bound
-
 
 def _pick_expiration_template_key(days_left: int, templates: dict) -> str | None:
     preavis_tpl = templates.get("preavis")

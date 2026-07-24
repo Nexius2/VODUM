@@ -5,7 +5,7 @@ from flask import (
     render_template, g, request, redirect, url_for, flash, session, current_app,
 )
 
-from logging_utils import get_logger
+from logging_utils import get_logger, update_debug_mode_cache
 from core.i18n import get_translator, get_available_languages
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -237,6 +237,7 @@ def register(app):
             """,
             new_values,
         )
+        update_debug_mode_cache(bool(new_values["debug_mode"]))
 
         telemetry_enabled = int(new_values["enable_anonymous_telemetry"] or 0)
         db.execute(
