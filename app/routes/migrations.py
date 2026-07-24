@@ -4,9 +4,7 @@ from datetime import datetime, timedelta
 from flask import Response, flash, jsonify, redirect, render_template, request, url_for
 
 from core.migrations.analysis import (
-    SUPPORTED_PROVIDERS,
     analyze_migration,
-    is_server_online,
     migration_pair_blocker,
     migration_workspace_blocker,
 )
@@ -21,6 +19,11 @@ from core.migrations.lifecycle import (
 )
 from core.migrations.phase4 import export_migration_plan, import_migration_plan
 from core.migrations.phase3 import remove_validated_source_access, rollback_destination_access, rollback_source_access
+from core.migrations.page_data import (
+    group_mapping_rows,
+    mapping_overrides_from_form,
+    online_migration_servers,
+)
 from tasks_engine import enable_and_run_task_by_name
 from secret_store import decrypt_secret
 from web.helpers import add_log, get_db, table_exists
@@ -79,71 +82,11 @@ MIGRATION_LIBRARY_MAPPING_COLUMNS = """
                   mlm.updated_at
 """
 
-def _online_migration_servers(db) -> list[dict]:
-    return [
-        dict(row)
-        for row in db.query(
-            """
-            SELECT id, name, type, status, last_checked
-            FROM servers
-            ORDER BY lower(name), id
-            """
-        )
-        if str(row["type"] or "").strip().lower() in SUPPORTED_PROVIDERS
-        and is_server_online(row["status"])
-    ]
-
-
-def _mapping_overrides_from_form(prefix: str = "library_mapping_") -> dict[int, list[int]]:
-    overrides: dict[int, list[int]] = {}
-    for key in request.form.keys():
-        if not key.startswith(prefix):
-            continue
-        try:
-            source_library_id = int(key[len(prefix):])
-        except (TypeError, ValueError):
-            continue
-        destination_ids = []
-        for value in request.form.getlist(key):
-            try:
-                if str(value).strip():
-                    destination_ids.append(int(value))
-            except (TypeError, ValueError):
-                continue
-        overrides[source_library_id] = sorted(set(destination_ids))
-    return overrides
-
-
-def _group_mapping_rows(rows: list[dict]) -> list[dict]:
-    groups: dict[int, dict] = {}
-    for row in rows:
-        source_id = int(row["source_library_id"])
-        group = groups.setdefault(source_id, {
-            "source_library_id": source_id,
-            "source_name": row.get("source_name"),
-            "source_type": row.get("source_type"),
-            "mapping_status": row.get("mapping_status"),
-            "destination_library_ids": [],
-            "destinations": [],
-        })
-        if row.get("destination_library_id"):
-            destination_id = int(row["destination_library_id"])
-            if destination_id not in group["destination_library_ids"]:
-                group["destination_library_ids"].append(destination_id)
-                group["destinations"].append({
-                    "id": destination_id,
-                    "name": row.get("destination_name"),
-                    "type": row.get("destination_type"),
-                })
-                group["mapping_status"] = "mapped"
-    return list(groups.values())
-
-
 def register(app):
     @app.get("/migrations")
     def migrations_page():
         db = get_db()
-        servers = _online_migration_servers(db)
+        servers = online_migration_servers(db)
         workspace_blocker = migration_workspace_blocker(db, servers)
         incompatible_servers = {
             str(server["id"]): [
@@ -245,7 +188,7 @@ def register(app):
     @app.post("/migrations/drafts")
     def migration_draft_create():
         db = get_db()
-        servers = _online_migration_servers(db)
+        servers = online_migration_servers(db)
         if migration_workspace_blocker(db, servers):
             flash("migration_not_available", "warning")
             return redirect(url_for("migrations_page"))
@@ -260,7 +203,7 @@ def register(app):
             flash(f"migration_blocker.{pair_blocker}", "error")
             return redirect(url_for("migrations_page"))
 
-        mapping_overrides = _mapping_overrides_from_form()
+        mapping_overrides = mapping_overrides_from_form(request.form)
 
         try:
             analysis = analyze_migration(db, source_id, destination_id, mapping_overrides)
@@ -433,7 +376,7 @@ def register(app):
                 (campaign["destination_server_id"],),
             )
         ]
-        mapping_groups = _group_mapping_rows(mappings)
+        mapping_groups = group_mapping_rows(mappings)
         source_libraries_by_id = {int(group["source_library_id"]): group for group in mapping_groups}
         summary = {
             "total": len(users),
@@ -575,7 +518,7 @@ def register(app):
                 db,
                 campaign_id,
                 name=request.form.get("name") or "",
-                mapping_overrides=_mapping_overrides_from_form(),
+                mapping_overrides=mapping_overrides_from_form(request.form),
                 safety_delay_days=request.form.get("safety_delay_days", type=int) if request.form.get("safety_delay_days", type=int) is not None else 7,
                 scheduled_at=request.form.get("scheduled_at") or "",
                 batch_size=request.form.get("batch_size", type=int) or 10,
@@ -770,7 +713,7 @@ def register(app):
             options = json.loads(row["options_json"] or "{}")
         except Exception:
             options = {}
-        overrides = _mapping_overrides_from_form(prefix="user_library_mapping_")
+        overrides = mapping_overrides_from_form(request.form, prefix="user_library_mapping_")
         options["library_mapping_overrides"] = {
             str(source_id): destination_ids
             for source_id, destination_ids in sorted(overrides.items())

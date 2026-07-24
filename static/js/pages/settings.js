@@ -61,6 +61,25 @@
     });
   }
 
+  function initTotpDependencies() {
+    const totp = document.getElementById("admin-totp-enabled");
+    const localTrust = document.getElementById("admin-totp-local-trust-enabled");
+    const localTrustOption = document.getElementById("admin-totp-local-trust-option");
+    if (!totp || !localTrust || !localTrustOption || totp.dataset.vodumDependencyBound === "1") return;
+    totp.dataset.vodumDependencyBound = "1";
+
+    function syncLocalTrust() {
+      const enabled = totp.checked;
+      localTrust.disabled = !enabled;
+      localTrustOption.classList.toggle("cursor-pointer", enabled);
+      localTrustOption.classList.toggle("cursor-not-allowed", !enabled);
+      localTrustOption.classList.toggle("opacity-50", !enabled);
+    }
+
+    totp.addEventListener("change", syncLocalTrust);
+    syncLocalTrust();
+  }
+
   function initNotificationOrder() {
     const list = document.getElementById("notif-order-list");
     const hidden = document.getElementById("notifications_order_hidden");
@@ -100,6 +119,7 @@
 
   function initSettingsPage() {
     renderTotpQrCode();
+    initTotpDependencies();
     initNotificationOrder();
   }
 

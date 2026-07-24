@@ -87,7 +87,10 @@
     const panel = modalPanel(modal);
     if (panel instanceof HTMLElement) {
       panel.classList.add("relative");
-      panel.appendChild(close);
+      // Keep the close control first in scrollable panels. Besides being the
+      // natural keyboard order, this prevents its static position from
+      // drifting to the bottom if positioning styles load late.
+      panel.prepend(close);
     }
 
     modal.querySelectorAll(EXPLICIT_CLOSE_CONTROL).forEach((other) => {

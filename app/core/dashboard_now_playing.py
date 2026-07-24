@@ -3,9 +3,6 @@
 import hashlib
 import json
 
-from web.helpers import table_exists
-
-
 def build_now_playing_fragment_key(
     sessions,
     *,
@@ -45,6 +42,8 @@ def build_now_playing_fragment_key(
 
 
 def _task_queue_busy(db) -> bool:
+    from web.helpers import table_exists
+
     if not table_exists(db, "tasks"):
         return False
 

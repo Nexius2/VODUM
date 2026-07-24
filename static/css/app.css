@@ -103,8 +103,7 @@ svg {
 .vodum-navigation-loader__backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(2, 6, 23, 0.42);
-  backdrop-filter: blur(2px);
+  background: rgba(2, 6, 23, 0.28);
 }
 
 .vodum-navigation-loader__panel {
@@ -261,6 +260,13 @@ svg {
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+}
+
+.vodum-modal-close {
+  position: absolute;
+  inset: 0.75rem 0.75rem auto auto;
+  margin: 0;
+  transform: none;
 }
 
 .vodum-mobile-table-scroll {

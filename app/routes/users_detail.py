@@ -1,8 +1,5 @@
 # Auto-split from app.py (keep URLs/endpoints intact)
 import json
-import re
-import math
-from datetime import datetime
 
 from flask import render_template, request, redirect, url_for, flash, jsonify
 
@@ -17,6 +14,19 @@ from api.subscriptions import update_user_expiration
 from notifications_utils import parse_notifications_order
 from core.user_credentials import change_jellyfin_password
 from core.usage_risk import build_usage_risk_for_user
+from core.user_active_policies import load_active_policies_for_user
+from core.user_notification_history import load_user_notification_history
+from core.user_subscription_snapshots import (
+    apply_template_snapshot,
+    clear_template_snapshot,
+)
+from core.user_profile_context import (
+    enrich_media_servers,
+    load_expiration_lock,
+    load_merged_usernames,
+    load_referral_context,
+    normalize_profile_date,
+)
 from secret_store import find_plex_server_ids_by_token
 
 
@@ -65,26 +75,6 @@ USER_DETAIL_CURRENT_REFERRAL_COLUMNS = """
     status
 """
 
-USER_DETAIL_REFERRAL_DISPLAY_COLUMNS = """
-                r.id,
-                r.referrer_user_id,
-                r.referred_user_id,
-                r.status,
-                r.qualification_due_at,
-                r.reward_days_snapshot
-"""
-
-USER_DETAIL_ACTIVE_POLICY_COLUMNS = """
-                p.id,
-                p.rule_type,
-                p.scope_type,
-                p.scope_id,
-                p.provider,
-                p.server_id,
-                p.priority,
-                p.rule_value_json
-"""
-
 USER_DETAIL_SERVER_ACCESS_COLUMNS = """
                 s.id AS server_id,
                 s.name,
@@ -102,171 +92,6 @@ USER_DETAIL_LIBRARY_ACCESS_COLUMNS = """
                 l.type,
                 l.section_id
 """
-
-USER_DETAIL_COMM_HISTORY_COLUMNS = """
-                h.id,
-                h.kind,
-                h.status,
-                h.sent_at,
-                h.error,
-                h.meta_json,
-                h.template_id,
-                h.campaign_id
-"""
-
-
-def _iso_date_or_none(raw: str):
-    raw = (raw or "").strip()
-    if not raw:
-        return None
-
-    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%d/%m/%Y", "%d-%m-%Y"):
-        try:
-            return datetime.strptime(raw, fmt).date().isoformat()
-        except Exception:
-            pass
-
-    m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})$", raw)
-    if m:
-        y, mo, d = m.group(1), m.group(2).zfill(2), m.group(3).zfill(2)
-        try:
-            return datetime.strptime(f"{y}-{mo}-{d}", "%Y-%m-%d").date().isoformat()
-        except Exception:
-            return None
-
-    try:
-        date_part = raw.split("T", 1)[0].split(" ", 1)[0]
-        return datetime.fromisoformat(date_part).date().isoformat()
-    except Exception:
-        return None
-
-def _parse_json_list(raw: str):
-    try:
-        v = json.loads(raw or "[]")
-        return v if isinstance(v, list) else []
-    except Exception:
-        return []
-
-def _get_expiration_lock_for_user(db, user_id: int) -> dict:
-    rows = db.query(
-        """
-        SELECT
-            s.type AS server_type,
-            s.name AS server_name,
-            mu.role AS media_role,
-            mu.raw_json
-        FROM media_users mu
-        JOIN servers s ON s.id = mu.server_id
-        WHERE mu.vodum_user_id = ?
-        """,
-        (user_id,),
-    ) or []
-
-    reasons = []
-
-    for row in rows:
-        r = dict(row)
-        server_type = (r.get("server_type") or "").strip().lower()
-        media_role = (r.get("media_role") or "").strip().lower()
-        server_name = (r.get("server_name") or "").strip()
-
-        if server_type == "plex" and media_role == "owner":
-            reasons.append(f"Plex owner ({server_name})")
-
-        if server_type == "jellyfin":
-            is_admin = media_role == "admin"
-
-            try:
-                raw = json.loads(r.get("raw_json") or "{}")
-                policy = raw.get("Policy") if isinstance(raw, dict) else {}
-                if isinstance(policy, dict) and policy.get("IsAdministrator"):
-                    is_admin = True
-            except Exception:
-                pass
-
-            if is_admin:
-                reasons.append(f"Jellyfin admin ({server_name})")
-
-    role_label = ""
-    if any(r.startswith("Plex owner") for r in reasons):
-        role_label = "Owner"
-    elif any(r.startswith("Jellyfin admin") for r in reasons):
-        role_label = "Admin"
-
-    return {
-        "locked": bool(reasons),
-        "label": " / ".join(reasons),
-        "role_label": role_label,
-    }
-
-def _delete_locked_subscription_policies(db, vodum_user_id: int):
-    rows = db.query(
-        "SELECT id, rule_value_json FROM stream_policies WHERE scope_type='user' AND scope_id=?",
-        (vodum_user_id,),
-    ) or []
-    for r in rows:
-        try:
-            rj = json.loads(r["rule_value_json"] or "{}")
-        except Exception:
-            rj = {}
-        if rj.get("locked") and rj.get("subscription_name"):
-            db.execute("DELETE FROM stream_policies WHERE id=?", (int(r["id"]),))
-
-
-def _clear_template_snapshot(db, vodum_user_id: int):
-    _delete_locked_subscription_policies(db, vodum_user_id)
-    db.execute(
-        "UPDATE vodum_users SET subscription_template_id=NULL WHERE id=?",
-        (vodum_user_id,),
-    )
-
-
-def _apply_template_snapshot(db, vodum_user_id: int, template_id: int):
-    tpl = db.query_one("SELECT id, name, policies_json FROM subscription_templates WHERE id=?", (template_id,))
-    if not tpl:
-        raise ValueError("subscription_template_not_found")
-
-    tpl = dict(tpl)
-    tname = tpl.get("name") or ""
-    policies = _parse_json_list(tpl.get("policies_json") or "[]")
-
-    _delete_locked_subscription_policies(db, vodum_user_id)
-
-    any_enabled = False
-
-    for p in policies:
-        if not isinstance(p, dict):
-            continue
-        rule_type = (p.get("rule_type") or "").strip()
-        if not rule_type:
-            continue
-
-        rule = p.get("rule") if isinstance(p.get("rule"), dict) else {}
-        rule = dict(rule)
-        rule["locked"] = True
-        rule["subscription_name"] = tname
-
-        provider = (p.get("provider") or "").strip() or None
-        server_id = int(p["server_id"]) if str(p.get("server_id", "")).isdigit() else None
-        is_enabled = 1 if str(p.get("is_enabled", "1")) == "1" else 0
-        if is_enabled == 1:
-            any_enabled = True
-        priority = int(p.get("priority") or 100)
-
-        db.execute(
-            """
-            INSERT INTO stream_policies(scope_type, scope_id, provider, server_id, is_enabled, priority, rule_type, rule_value_json)
-            VALUES ('user', ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (vodum_user_id, provider, server_id, is_enabled, priority, rule_type, json.dumps(rule)),
-        )
-
-    db.execute("UPDATE vodum_users SET subscription_template_id=? WHERE id=?", (template_id, vodum_user_id))
-
-    if any_enabled:
-        auto_enable_stream_enforcer()
-
-    return tname
 
 def register(app):
     @app.route("/users/<int:user_id>/change-jellyfin-password", methods=["POST"])
@@ -318,7 +143,7 @@ def register(app):
             return redirect(url_for("users_list"))
 
         user = dict(user)
-        expiration_lock = _get_expiration_lock_for_user(db, user_id)
+        expiration_lock = load_expiration_lock(db, user_id)
         
         settings = db.query_one(
             f"SELECT {USER_DETAIL_SETTINGS_COLUMNS} FROM settings WHERE id = 1"
@@ -361,14 +186,14 @@ def register(app):
         if expiration_lock["locked"]:
             expiration_date = user.get("expiration_date")
         elif raw_exp:
-            parsed = _iso_date_or_none(raw_exp)
+            parsed = normalize_profile_date(raw_exp)
             if parsed is not None:
                 expiration_date = parsed
             else:
                 flash("invalid_expiration_date_format", "error")
 
         if raw_ren:
-            parsed = _iso_date_or_none(raw_ren)
+            parsed = normalize_profile_date(raw_ren)
             if parsed is not None:
                 renewal_date = parsed
             else:
@@ -500,14 +325,19 @@ def register(app):
         if requested_subscription_template_id != current_subscription_template_id:
             try:
                 if requested_subscription_template_id is None:
-                    _clear_template_snapshot(db, user_id)
+                    clear_template_snapshot(db, user_id)
                     add_log(
                         "info",
                         "subscriptions",
                         f"Subscription removed from user #{user_id} via user_detail",
                     )
                 else:
-                    applied_name = _apply_template_snapshot(db, user_id, requested_subscription_template_id)
+                    applied_name = apply_template_snapshot(
+                        db,
+                        user_id,
+                        requested_subscription_template_id,
+                        auto_enable_stream_enforcer,
+                    )
                     add_log(
                         "info",
                         "subscriptions",
@@ -863,138 +693,6 @@ def register(app):
         flash("user_saved", "success")
         return redirect(url_for("user_detail", user_id=user_id))
 
-    def _load_active_policies_for_user(db, vodum_user_id: int):
-        media_rows = db.query(
-            """
-            SELECT
-                mu.server_id,
-                LOWER(COALESCE(s.type, mu.type, '')) AS provider,
-                COALESCE(s.name, '') AS server_name
-            FROM media_users mu
-            LEFT JOIN servers s ON s.id = mu.server_id
-            WHERE mu.vodum_user_id = ?
-            """,
-            (vodum_user_id,),
-        ) or []
-
-        server_ids = []
-        providers = set()
-        server_names = {}
-
-        for row in media_rows:
-            r = dict(row)
-            if r.get("server_id") is not None:
-                sid = int(r["server_id"])
-                server_ids.append(sid)
-                server_names[sid] = r.get("server_name") or f"#{sid}"
-
-            provider = (r.get("provider") or "").strip().lower()
-            if provider:
-                providers.add(provider)
-
-        clauses = ["p.scope_type = 'global'", "(p.scope_type = 'user' AND p.scope_id = ?)"]
-        params = [vodum_user_id]
-
-        if server_ids:
-            placeholders = ",".join("?" for _ in server_ids)
-            clauses.append(f"(p.scope_type = 'server' AND p.scope_id IN ({placeholders}))")
-            params.extend(server_ids)
-
-            clauses.append(f"(p.server_id IN ({placeholders}))")
-            params.extend(server_ids)
-
-        rows = db.query(
-            f"""
-            SELECT
-{USER_DETAIL_ACTIVE_POLICY_COLUMNS},
-                s.name AS policy_server_name
-            FROM stream_policies p
-            LEFT JOIN servers s ON s.id = p.server_id
-            WHERE p.is_enabled = 1
-              AND ({' OR '.join(clauses)})
-            ORDER BY p.priority ASC, p.id ASC
-            """,
-            tuple(params),
-        ) or []
-
-        policies = []
-
-        for row in rows:
-            p = dict(row)
-
-            provider = (p.get("provider") or "").strip().lower()
-            if provider and providers and provider not in providers:
-                continue
-
-            try:
-                rule = json.loads(p.get("rule_value_json") or "{}")
-                if not isinstance(rule, dict):
-                    rule = {}
-            except Exception:
-                rule = {}
-
-            scope_type = (p.get("scope_type") or "").strip()
-            scope_label = scope_type
-
-            if scope_type == "global":
-                scope_label = "Global"
-            elif scope_type == "user":
-                scope_label = "User"
-            elif scope_type == "server":
-                sid = p.get("scope_id")
-                scope_label = server_names.get(int(sid), f"Server #{sid}") if sid is not None else "Server"
-
-            origin_type = "Manual"
-            origin_label = "Manual"
-
-            system_tag = (rule.get("system_tag") or "").strip()
-            subscription_name = (rule.get("subscription_name") or "").strip()
-
-            if system_tag == "expired_subscription":
-                origin_type = "System"
-                origin_label = "Expired subscription"
-            elif subscription_name:
-                origin_type = "Subscription"
-                origin_label = subscription_name
-
-            value_parts = []
-
-            if "max" in rule:
-                value_parts.append(f"max={rule.get('max')}")
-            elif p.get("rule_type") == "max_bitrate_kbps" and rule.get("kbps") is not None:
-                value_parts.append(f"kbps={rule.get('kbps')}")
-            elif p.get("rule_type") == "device_allowlist":
-                devices = rule.get("devices") or rule.get("allowed_devices") or []
-                if isinstance(devices, list):
-                    value_parts.append(", ".join(str(x) for x in devices) if devices else "empty")
-                else:
-                    value_parts.append(str(devices))
-            elif p.get("rule_type") == "ban_4k_transcode":
-                value_parts.append("enabled")
-            else:
-                value_parts.append("configured")
-
-            selector = rule.get("selector")
-            if selector:
-                value_parts.append(f"selector={selector}")
-
-            if rule.get("allow_local_ip") or rule.get("local_ip"):
-                value_parts.append("local_ip=yes")
-
-            policies.append({
-                "id": p.get("id"),
-                "rule_type": p.get("rule_type"),
-                "scope_type": scope_type,
-                "scope_label": scope_label,
-                "origin_type": origin_type,
-                "origin_label": origin_label,
-                "provider": provider or "both",
-                "priority": p.get("priority"),
-                "value": " | ".join(value_parts),
-            })
-
-        return policies
-
     @app.route("/users/<int:user_id>", methods=["GET"])
     def user_detail(user_id):
         db = get_db()
@@ -1164,44 +862,8 @@ def register(app):
             (user_id,),
         ) if tab in ("general", "access", "media") else []
 
-        enriched = []
-        for row in servers:
-            r = dict(row)
-
-            # defaults pour le template
-            r["allow_sync"] = 0
-            r["allow_camera_upload"] = 0
-            r["allow_channels"] = 0
-            r["filter_movies"] = ""
-            r["filter_television"] = ""
-            r["filter_music"] = ""
-
-            try:
-                details = json.loads(r.get("details_json") or "{}")
-            except Exception:
-                details = {}
-
-            if not isinstance(details, dict):
-                details = {}
-
-            # Plex
-            if r.get("media_type") == "plex":
-                plex_share = details.get("plex_share", {})
-                if not isinstance(plex_share, dict):
-                    plex_share = {}
-
-                r["allow_sync"] = 1 if plex_share.get("allowSync") else 0
-                r["allow_camera_upload"] = 1 if plex_share.get("allowCameraUpload") else 0
-                r["allow_channels"] = 1 if plex_share.get("allowChannels") else 0
-                r["filter_movies"] = plex_share.get("filterMovies") or ""
-                r["filter_television"] = plex_share.get("filterTelevision") or ""
-                r["filter_music"] = plex_share.get("filterMusic") or ""
-
-            r["_details_obj"] = details
-            enriched.append(r)
-
-        servers = enriched
-        active_user_policies = _load_active_policies_for_user(db, user_id) if tab == "general" else []
+        servers = enrich_media_servers(servers)
+        active_user_policies = load_active_policies_for_user(db, user_id) if tab == "general" else []
         
         libraries = db.query(
             f"""
@@ -1235,231 +897,54 @@ def register(app):
         # (qu'ils soient "merge" ou le compte principal)
         # SAUF le username identique à celui affiché (vodum_users.username)
         # --------------------------------------------------
-        main_username = (user.get("username") or "").strip()
-        main_username_norm = main_username.lower() if main_username else ""
-
-        # On dédoublonne en insensible à la casse, mais on garde une forme "propre" pour l'affichage
-        merged_usernames_map = {}  # key: lower(username) -> value: username (original)
-
-        rows = db.query(
-            """
-            SELECT DISTINCT username
-            FROM media_users
-            WHERE vodum_user_id = ?
-              AND username IS NOT NULL
-              AND TRIM(username) <> ''
-            """,
-            (user_id,),
-        ) if tab == "general" else []
-
-        for r in rows:
-            uname = str(r["username"]).strip()
-            if not uname:
-                continue
-
-            # Ne pas afficher le username media_user si c'est le même que celui affiché (vodum_users.username)
-            if main_username_norm and uname.lower() == main_username_norm:
-                continue
-
-            key = uname.lower()
-            if key not in merged_usernames_map:
-                merged_usernames_map[key] = uname
-
-        merged_usernames = sorted(merged_usernames_map.values(), key=lambda x: x.lower())
+        merged_usernames = (
+            load_merged_usernames(db, user_id, user.get("username") or "")
+            if tab == "general"
+            else []
+        )
 
         # ----------------------------
         # Notification history paging
         # ----------------------------
-        def _safe_int(v, default):
-            try:
-                return int(v)
-            except Exception:
-                return default
+        notification_history = load_user_notification_history(
+            db,
+            user_id,
+            request.args.get("email_page"),
+            request.args.get("discord_page"),
+            enabled=tab == "notifications",
+        )
+        sent_emails = notification_history["sent_emails"]
+        sent_discord = notification_history["sent_discord"]
+        email_page = notification_history["email_page"]
+        email_pages = notification_history["email_pages"]
+        email_total = notification_history["email_total"]
+        discord_page = notification_history["discord_page"]
+        discord_pages = notification_history["discord_pages"]
+        discord_total = notification_history["discord_total"]
+        per_page = notification_history["per_page"]
 
-        def _history_order_sql(alias="h"):
-            return f"""
-                COALESCE(
-                    CASE
-                        WHEN typeof({alias}.sent_at) = 'integer' THEN {alias}.sent_at
-                        WHEN typeof({alias}.sent_at) = 'text' AND {alias}.sent_at GLOB '[0-9]*' THEN CAST({alias}.sent_at AS INTEGER)
-                        ELSE CAST(strftime('%s', {alias}.sent_at) AS INTEGER)
-                    END,
-                    0
-                ) DESC,
-                {alias}.id DESC
-            """
-
-        def _build_history_label(row_dict):
-            meta = {}
-            try:
-                meta = json.loads(row_dict.get("meta_json") or "{}")
-                if not isinstance(meta, dict):
-                    meta = {}
-            except Exception:
-                meta = {}
-
-            kind = (row_dict.get("kind") or "").strip().lower()
-
-            if kind == "campaign":
-                return (row_dict.get("campaign_name") or "").strip() or "Campaign"
-
-            # template
-            return (
-                (row_dict.get("template_key") or "").strip()
-                or (row_dict.get("template_name") or "").strip()
-                or (meta.get("template_key") or "").strip()
-                or "Template"
-            )
-
-        per_page = 10
-
-        email_page = max(1, _safe_int(request.args.get("email_page"), 1))
-        discord_page = max(1, _safe_int(request.args.get("discord_page"), 1))
-
-        email_total = db.query_one(
-            """
-            SELECT COUNT(*) AS c
-            FROM comm_history h
-            WHERE h.user_id = ?
-              AND h.channel_used = 'email'
-            """,
-            (user_id,),
-        )["c"] or 0 if tab == "notifications" else 0
-
-        discord_total = db.query_one(
-            """
-            SELECT COUNT(*) AS c
-            FROM comm_history h
-            WHERE h.user_id = ?
-              AND h.channel_used = 'discord'
-            """,
-            (user_id,),
-        )["c"] or 0 if tab == "notifications" else 0
-
-        email_pages = max(1, math.ceil(email_total / per_page)) if email_total else 1
-        discord_pages = max(1, math.ceil(discord_total / per_page)) if discord_total else 1
-
-        email_page = min(email_page, email_pages)
-        discord_page = min(discord_page, discord_pages)
-
-        email_offset = (email_page - 1) * per_page
-        discord_offset = (discord_page - 1) * per_page
-
-        sent_emails_rows = db.query(
-            f"""
-            SELECT
-{USER_DETAIL_COMM_HISTORY_COLUMNS},
-                ct.key AS template_key,
-                ct.name AS template_name,
-                cc.name AS campaign_name
-            FROM comm_history h
-            LEFT JOIN comm_templates ct ON ct.id = h.template_id
-            LEFT JOIN comm_campaigns cc ON cc.id = h.campaign_id
-            WHERE h.user_id = ?
-              AND h.channel_used = 'email'
-            ORDER BY {_history_order_sql("h")}
-            LIMIT ? OFFSET ?
-            """,
-            (user_id, per_page, email_offset),
-        ) or [] if tab == "notifications" else []
-
-        sent_discord_rows = db.query(
-            f"""
-            SELECT
-{USER_DETAIL_COMM_HISTORY_COLUMNS},
-                ct.key AS template_key,
-                ct.name AS template_name,
-                cc.name AS campaign_name
-            FROM comm_history h
-            LEFT JOIN comm_templates ct ON ct.id = h.template_id
-            LEFT JOIN comm_campaigns cc ON cc.id = h.campaign_id
-            WHERE h.user_id = ?
-              AND h.channel_used = 'discord'
-            ORDER BY {_history_order_sql("h")}
-            LIMIT ? OFFSET ?
-            """,
-            (user_id, per_page, discord_offset),
-        ) or [] if tab == "notifications" else []
-
-        sent_emails = []
-        for row in sent_emails_rows:
-            item = dict(row)
-            item["label"] = _build_history_label(item)
-            sent_emails.append(item)
-
-        sent_discord = []
-        for row in sent_discord_rows:
-            item = dict(row)
-            item["label"] = _build_history_label(item)
-            sent_discord.append(item)
-
-        referral = db.query_one(
-            f"""
-            SELECT
-{USER_DETAIL_REFERRAL_DISPLAY_COLUMNS},
-                referrer.username AS referrer_username,
-                referrer.email AS referrer_email
-            FROM user_referrals r
-            LEFT JOIN vodum_users referrer ON referrer.id = r.referrer_user_id
-            WHERE r.referred_user_id = ?
-            LIMIT 1
-            """,
-            (user_id,),
-        ) if tab == "general" else None
-        referral = dict(referral) if referral else None
-
-        referrer_fallback = None
-        if tab == "general" and not referral and user.get("referrer_user_id"):
-            row = db.query_one(
-                """
-                SELECT id, username, email
-                FROM vodum_users
-                WHERE id = ?
-                LIMIT 1
-                """,
-                (user["referrer_user_id"],),
-            )
-            referrer_fallback = dict(row) if row else None
-
-        referral_stats = db.query_one(
-            """
-            SELECT
-                COUNT(*) AS total_referrals,
-                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_referrals,
-                SUM(CASE WHEN status = 'qualified' THEN 1 ELSE 0 END) AS qualified_referrals,
-                SUM(CASE WHEN status = 'rewarded' THEN 1 ELSE 0 END) AS rewarded_referrals
-            FROM user_referrals
-            WHERE referrer_user_id = ?
-            """,
-            (user_id,),
-        ) if tab == "general" else None
-        referral_stats = dict(referral_stats) if referral_stats else {
-            "total_referrals": 0,
-            "pending_referrals": 0,
-            "qualified_referrals": 0,
-            "rewarded_referrals": 0,
-        }
-
-        referred_users = db.query(
-            """
-            SELECT
-                u.id,
-                u.username,
-                u.email,
-                u.status,
-                r.status AS referral_status,
-                r.qualification_due_at
-            FROM user_referrals r
-            JOIN vodum_users u ON u.id = r.referred_user_id
-            WHERE r.referrer_user_id = ?
-            ORDER BY u.username ASC
-            """,
-            (user_id,),
-        ) or [] if tab == "general" else []
-        referred_users = [dict(x) for x in referred_users]
+        referral_context = (
+            load_referral_context(db, user_id, user.get("referrer_user_id"))
+            if tab == "general"
+            else {
+                "referral": None,
+                "referrer_fallback": None,
+                "referral_stats": {
+                    "total_referrals": 0,
+                    "pending_referrals": 0,
+                    "qualified_referrals": 0,
+                    "rewarded_referrals": 0,
+                },
+                "referred_users": [],
+            }
+        )
+        referral = referral_context["referral"]
+        referrer_fallback = referral_context["referrer_fallback"]
+        referral_stats = referral_context["referral_stats"]
+        referred_users = referral_context["referred_users"]
 
         usage_risk = build_usage_risk_for_user(db, user_id) if tab == "general" else {}
-        expiration_lock = _get_expiration_lock_for_user(db, user_id) if tab == "general" else None
+        expiration_lock = load_expiration_lock(db, user_id) if tab == "general" else None
         
         return render_template(
             "users/user_detail.html",
