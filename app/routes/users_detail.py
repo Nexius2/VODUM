@@ -4,14 +4,11 @@ import json
 from flask import render_template, request, redirect, url_for, flash, jsonify
 
 from logging_utils import get_logger, is_debug_mode_enabled
-from tasks_engine import enable_and_run_task_by_name, auto_enable_stream_enforcer
+from tasks_engine import auto_enable_stream_enforcer
 
 from web.helpers import get_db, add_log
 from .users_list import get_merge_suggestions
-from core.user_sync_jobs import get_preferred_plex_media_user_id
-from core.media_jobs import insert_plex_media_job
 from api.subscriptions import update_user_expiration
-from notifications_utils import parse_notifications_order
 from core.user_credentials import change_jellyfin_password
 from core.usage_risk import build_usage_risk_for_user
 from core.user_active_policies import load_active_policies_for_user
@@ -27,71 +24,20 @@ from core.user_profile_context import (
     load_referral_context,
     normalize_profile_date,
 )
-from secret_store import find_plex_server_ids_by_token
+from core.user_plex_options import apply_user_plex_options, queue_user_plex_option_syncs
+from core.user_referral_admin import update_user_referrer
+from core.user_profile_form import normalize_user_profile_overrides
+from core.user_detail_repository import (
+    load_referral_admin_data,
+    load_user_access_rows,
+    load_user_detail,
+    load_user_detail_settings,
+    load_user_provider_types,
+)
 
 
 task_logger = get_logger("tasks_ui")
 logger = get_logger("users_detail")
-
-USER_DETAIL_COLUMNS = """
-    id,
-    username,
-    firstname,
-    lastname,
-    email,
-    second_email,
-    expiration_date,
-    renewal_method,
-    renewal_date,
-    created_at,
-    notes,
-    status,
-    last_status,
-    status_changed_at,
-    max_streams_override,
-    notifications_order_override,
-    expiration_date_override,
-    referrer_user_id,
-    subscription_template_id,
-    discord_user_id,
-    discord_name
-"""
-
-USER_DETAIL_SETTINGS_COLUMNS = """
-    user_notifications_can_override,
-    notifications_order,
-    debug_mode
-"""
-
-USER_DETAIL_REFERRAL_SETTINGS_COLUMNS = """
-    allow_referrer_change_before_qualification,
-    qualification_days,
-    reward_days
-"""
-
-USER_DETAIL_CURRENT_REFERRAL_COLUMNS = """
-    id,
-    referrer_user_id,
-    status
-"""
-
-USER_DETAIL_SERVER_ACCESS_COLUMNS = """
-                s.id AS server_id,
-                s.name,
-                s.type,
-                s.url,
-                s.local_url,
-                s.public_url,
-                s.status
-"""
-
-USER_DETAIL_LIBRARY_ACCESS_COLUMNS = """
-                l.id,
-                l.server_id,
-                l.name,
-                l.type,
-                l.section_id
-"""
 
 def register(app):
     @app.route("/users/<int:user_id>/change-jellyfin-password", methods=["POST"])
@@ -134,40 +80,21 @@ def register(app):
     def user_detail_save(user_id):
         db = get_db()
 
-        user = db.query_one(
-            f"SELECT {USER_DETAIL_COLUMNS} FROM vodum_users WHERE id = ?",
-            (user_id,),
-        )
+        user = load_user_detail(db, user_id)
         if not user:
             flash("user_not_found", "error")
             return redirect(url_for("users_list"))
 
-        user = dict(user)
         expiration_lock = load_expiration_lock(db, user_id)
         
-        settings = db.query_one(
-            f"SELECT {USER_DETAIL_SETTINGS_COLUMNS} FROM settings WHERE id = 1"
-        )
-        settings = dict(settings) if settings else {}
+        settings = load_user_detail_settings(db)
 
         try:
             user_notifications_can_override = int(settings.get("user_notifications_can_override") or 0) == 1
         except Exception:
             user_notifications_can_override = False
 
-        allowed_types = [
-            row["type"]
-            for row in db.query(
-                """
-                SELECT DISTINCT s.type
-                FROM servers s
-                JOIN media_users mu ON mu.server_id = s.id
-                WHERE mu.vodum_user_id = ?
-                """,
-                (user_id,),
-            )
-            if row["type"]
-        ]
+        allowed_types = load_user_provider_types(db, user_id)
 
         form = request.form
 
@@ -228,19 +155,9 @@ def register(app):
         discord_user_id = (form.get("discord_user_id") or "").strip() or None
         discord_name    = (form.get("discord_name") or "").strip() or None
 
-        referral_settings = db.query_one(
-            f"SELECT {USER_DETAIL_REFERRAL_SETTINGS_COLUMNS} FROM user_referral_settings WHERE id = 1"
-        )
-        referral_settings = dict(referral_settings) if referral_settings else {}
-
         referrer_user_id_raw = (form.get("referrer_user_id") or "").strip()
         requested_referrer_user_id = int(referrer_user_id_raw) if referrer_user_id_raw.isdigit() else None
-
-        current_referral = db.query_one(
-            f"SELECT {USER_DETAIL_CURRENT_REFERRAL_COLUMNS} FROM user_referrals WHERE referred_user_id = ? LIMIT 1",
-            (user_id,),
-        )
-        current_referral = dict(current_referral) if current_referral else None
+        referral_settings, current_referral = load_referral_admin_data(db, user_id)
 
         selected_subscription_is_lifetime = False
         if requested_subscription_template_id is not None:
@@ -258,46 +175,16 @@ def register(app):
                 else False
             )
 
-        # Optional per-user override
-        # Empty or 0 => NULL (no override, policy applies)
-        #
-        # Lifetime subscriptions already enable the same automatic extension
-        # in update_user_status.py through:
-        # expiration_override == 1 OR subscription_is_lifetime.
-        #
-        # So when Lifetime is selected, we keep the real stored override value
-        # instead of forcing it to 1. The checkbox is only displayed as checked
-        # and disabled in the UI to make the behavior clear.
-        if expiration_lock["locked"]:
-            expiration_date_override = 1
-        elif selected_subscription_is_lifetime:
-            expiration_date_override = int(user["expiration_date_override"] or 0)
-        else:
-            expiration_date_override = 1 if form.get("expiration_date_override") == "1" else 0
-        raw_override = form.get("max_streams_override")
-        max_streams_override = None
-        if raw_override is not None:
-            raw_override = raw_override.strip()
-            if raw_override != "":
-                try:
-                    parsed_override = int(raw_override)
-                    max_streams_override = parsed_override if parsed_override > 0 else None
-                except Exception:
-                    max_streams_override = None
-
-        # --------------------------------------------------
-        # Per-user notification order override (optional)
-        # - Only allowed if enabled globally in settings
-        # --------------------------------------------------
-        notifications_order_override = None
-        if user_notifications_can_override:
-            use_global = (form.get("use_global_notifications_order") == "1")
-            if not use_global:
-                raw = (form.get("user_notifications_order") or "").strip()
-                if raw:
-                    notifications_order_override = ",".join(parse_notifications_order(raw))
-                else:
-                    notifications_order_override = None
+        overrides = normalize_user_profile_overrides(
+            form,
+            expiration_locked=expiration_lock["locked"],
+            subscription_is_lifetime=selected_subscription_is_lifetime,
+            current_expiration_override=user["expiration_date_override"],
+            notifications_can_override=user_notifications_can_override,
+        )
+        expiration_date_override = overrides["expiration_date_override"]
+        max_streams_override = overrides["max_streams_override"]
+        notifications_order_override = overrides["notifications_order_override"]
 
         # --- MAJ infos Vodum ---
         db.execute(
@@ -347,138 +234,16 @@ def register(app):
                 flash("subscription_template_not_found", "error")
                 return redirect(url_for("user_detail", user_id=user_id, tab="general"))
 
-        current_referrer_user_id = int(current_referral["referrer_user_id"]) if current_referral and current_referral.get("referrer_user_id") else None
-
-        if requested_referrer_user_id == user_id:
-            flash("Referrer cannot be the same user", "error")
+        referral_error = update_user_referrer(
+            db,
+            user_id=user_id,
+            requested_referrer_user_id=requested_referrer_user_id,
+            current_referral=current_referral,
+            referral_settings=referral_settings,
+        )
+        if referral_error:
+            flash(referral_error, "error")
             return redirect(url_for("user_detail", user_id=user_id, tab="general"))
-
-        if requested_referrer_user_id != current_referrer_user_id:
-            if current_referral and current_referral.get("status") in ("qualified", "rewarded"):
-                flash("Referrer cannot be changed after qualification/reward", "error")
-                return redirect(url_for("user_detail", user_id=user_id, tab="general"))
-
-            if current_referral and int(referral_settings.get("allow_referrer_change_before_qualification") or 0) != 1:
-                flash("Referrer change is disabled", "error")
-                return redirect(url_for("user_detail", user_id=user_id, tab="general"))
-
-            if requested_referrer_user_id is None:
-                db.execute("UPDATE vodum_users SET referrer_user_id = NULL WHERE id = ?", (user_id,))
-                if current_referral:
-                    db.execute(
-                        """
-                        UPDATE user_referrals
-                        SET status = 'cancelled',
-                            updated_at = CURRENT_TIMESTAMP
-                        WHERE id = ?
-                        """,
-                        (int(current_referral["id"]),),
-                    )
-                    db.execute(
-                        """
-                        INSERT INTO user_referral_events(
-                            referral_id, event_type, actor,
-                            old_referrer_user_id, new_referrer_user_id, details_json
-                        )
-                        VALUES (?, 'cancelled', 'ui', ?, NULL, ?)
-                        """,
-                        (
-                            int(current_referral["id"]),
-                            current_referrer_user_id,
-                            json.dumps({"source": "user_detail"}, ensure_ascii=False),
-                        ),
-                    )
-            else:
-                referrer = db.query_one(
-                    "SELECT id, status FROM vodum_users WHERE id = ?",
-                    (requested_referrer_user_id,),
-                )
-                if not referrer:
-                    flash("Referrer not found", "error")
-                    return redirect(url_for("user_detail", user_id=user_id, tab="general"))
-
-                if (referrer["status"] or "").lower() != "active":
-                    flash("Referrer must be active", "error")
-                    return redirect(url_for("user_detail", user_id=user_id, tab="general"))
-
-                db.execute(
-                    "UPDATE vodum_users SET referrer_user_id = ? WHERE id = ?",
-                    (requested_referrer_user_id, user_id),
-                )
-
-                qualification_days = int(referral_settings.get("qualification_days") or 60)
-                reward_days = int(referral_settings.get("reward_days") or 60)
-
-                if current_referral:
-                    db.execute(
-                        """
-                        UPDATE user_referrals
-                        SET referrer_user_id = ?,
-                            status = 'pending',
-                            start_at = CURRENT_TIMESTAMP,
-                            qualification_due_at = datetime('now', ?),
-                            qualified_at = NULL,
-                            reward_granted_at = NULL,
-                            reward_expiration_before = NULL,
-                            reward_expiration_after = NULL,
-                            notification_sent_at = NULL,
-                            last_error = NULL,
-                            updated_at = CURRENT_TIMESTAMP
-                        WHERE id = ?
-                        """,
-                        (
-                            requested_referrer_user_id,
-                            f"+{qualification_days} days",
-                            int(current_referral["id"]),
-                        ),
-                    )
-                    db.execute(
-                        """
-                        INSERT INTO user_referral_events(
-                            referral_id, event_type, actor,
-                            old_referrer_user_id, new_referrer_user_id, details_json
-                        )
-                        VALUES (?, 'referrer_changed', 'ui', ?, ?, ?)
-                        """,
-                        (
-                            int(current_referral["id"]),
-                            current_referrer_user_id,
-                            requested_referrer_user_id,
-                            json.dumps({"source": "user_detail"}, ensure_ascii=False),
-                        ),
-                    )
-                else:
-                    db.execute(
-                        """
-                        INSERT INTO user_referrals(
-                            referrer_user_id,
-                            referred_user_id,
-                            status,
-                            referral_source,
-                            start_at,
-                            qualification_due_at,
-                            qualification_days_snapshot,
-                            reward_days_snapshot,
-                            created_at,
-                            updated_at
-                        )
-                        VALUES(
-                            ?, ?, 'pending', 'manual',
-                            CURRENT_TIMESTAMP,
-                            datetime('now', ?),
-                            ?, ?,
-                            CURRENT_TIMESTAMP,
-                            CURRENT_TIMESTAMP
-                        )
-                        """,
-                        (
-                            requested_referrer_user_id,
-                            user_id,
-                            f"+{qualification_days} days",
-                            qualification_days,
-                            reward_days,
-                        ),
-                    )
 
         # Gestion expiration (vodum_users.expiration_date est contractuel)
         if expiration_date != user.get("expiration_date"):
@@ -489,206 +254,15 @@ def register(app):
                 db=db,
             )
 
-        # ------------------------------------------------------------------
-        # Helper pour répliquer les flags Plex sur serveurs même owner
-        # ------------------------------------------------------------------
-        def replicate_plex_flags_same_owner(db, vodum_user_id: int, changed_mu_id: int, plex_share_new: dict):
-            """
-            Réplique allowSync/allowCameraUpload/allowChannels + filtres sur tous les serveurs Plex
-            qui partagent le même owner (approché par même servers.token).
-            """
-            row = db.query_one("SELECT server_id FROM media_users WHERE id = ?", (changed_mu_id,))
-            if not row:
-                return
-            changed_server_id = int(row["server_id"])
-
-            srv = db.query_one("SELECT token FROM servers WHERE id = ?", (changed_server_id,))
-            if not srv:
-                return
-            srv = dict(srv)
-            owner_token = srv.get("token")
-            if not owner_token:
-                return
-
-            owner_server_ids = find_plex_server_ids_by_token(db, owner_token)
-            if not owner_server_ids:
-                return
-
-            placeholders = ",".join(["?"] * len(owner_server_ids))
-
-            rows = db.query(
-                f"""
-                SELECT mu.id, mu.details_json
-                FROM media_users mu
-                JOIN servers s ON s.id = mu.server_id
-                WHERE mu.vodum_user_id = ?
-                  AND s.type = 'plex'
-                  AND mu.type = 'plex'
-                  AND mu.server_id IN ({placeholders})
-                """,
-                (vodum_user_id, *owner_server_ids),
-            )
-
-            for r in rows:
-                mu_id2 = int(r["id"])
-                try:
-                    details2 = json.loads(r["details_json"] or "{}")
-                except Exception:
-                    details2 = {}
-
-                if not isinstance(details2, dict):
-                    details2 = {}
-
-                plex_share2 = details2.get("plex_share", {})
-                if not isinstance(plex_share2, dict):
-                    plex_share2 = {}
-
-                for k in ("allowSync", "allowCameraUpload", "allowChannels", "filterMovies", "filterTelevision", "filterMusic"):
-                    if k in plex_share_new:
-                        plex_share2[k] = plex_share_new[k]
-
-                details2["plex_share"] = plex_share2
-
-                db.execute(
-                    "UPDATE media_users SET details_json = ? WHERE id = ?",
-                    (json.dumps(details2, ensure_ascii=False), mu_id2),
-                )
-
-        plex_options_changed = False
-
-        plex_media = db.query(
-            """
-            SELECT mu.id, mu.details_json
-            FROM media_users mu
-            JOIN servers s ON s.id = mu.server_id
-            WHERE mu.vodum_user_id = ?
-              AND s.type = 'plex'
-              AND mu.type = 'plex'
-            """,
-            (user_id,),
+        plex_options_changed = apply_user_plex_options(
+            db,
+            user_id,
+            form,
+            debug_logger=task_logger if is_debug_mode_enabled() else None,
         )
 
-        truthy = {"1", "true", "on", "yes"}
-
-        for mu in plex_media:
-            mu_id = int(mu["id"])
-
-            try:
-                details = json.loads(mu["details_json"] or "{}")
-            except Exception:
-                details = {}
-
-            if not isinstance(details, dict):
-                details = {}
-
-            plex_share = details.get("plex_share", {})
-            if not isinstance(plex_share, dict):
-                plex_share = {}
-
-            old_plex_share = dict(plex_share)
-
-            vals = form.getlist(f"allow_sync_{mu_id}")
-            if is_debug_mode_enabled():
-                task_logger.debug(f"FORM DEBUG mu_id={mu_id} allow_sync getlist={vals}")
-            v = vals[-1] if vals else None
-            if v is not None:
-                plex_share["allowSync"] = 1 if str(v).strip().lower() in truthy else 0
-            else:
-                plex_share["allowSync"] = int(plex_share.get("allowSync", 0) or 0)
-
-            vals = form.getlist(f"allow_camera_upload_{mu_id}")
-            if is_debug_mode_enabled():
-                task_logger.debug(f"FORM DEBUG mu_id={mu_id} allow_camera_upload getlist={vals}")
-            v = vals[-1] if vals else None
-            if v is not None:
-                plex_share["allowCameraUpload"] = 1 if str(v).strip().lower() in truthy else 0
-            else:
-                plex_share["allowCameraUpload"] = int(plex_share.get("allowCameraUpload", 0) or 0)
-
-            vals = form.getlist(f"allow_channels_{mu_id}")
-            if is_debug_mode_enabled():
-                task_logger.debug(f"FORM DEBUG mu_id={mu_id} allow_channels getlist={vals}")
-            v = vals[-1] if vals else None
-            if v is not None:
-                plex_share["allowChannels"] = 1 if str(v).strip().lower() in truthy else 0
-            else:
-                plex_share["allowChannels"] = int(plex_share.get("allowChannels", 0) or 0)
-
-            plex_share["filterMovies"] = (form.get(f"filter_movies_{mu_id}") or "").strip()
-            plex_share["filterTelevision"] = (form.get(f"filter_television_{mu_id}") or "").strip()
-            plex_share["filterMusic"] = (form.get(f"filter_music_{mu_id}") or "").strip()
-
-            details["plex_share"] = plex_share
-
-            if old_plex_share != plex_share:
-                plex_options_changed = True
-
-                db.execute(
-                    "UPDATE media_users SET details_json = ? WHERE id = ?",
-                    (json.dumps(details, ensure_ascii=False), mu_id),
-                )
-
-                replicate_plex_flags_same_owner(
-                    db,
-                    vodum_user_id=user_id,
-                    changed_mu_id=mu_id,
-                    plex_share_new=plex_share,
-                )
-
         if plex_options_changed and "plex" in allowed_types:
-            plex_media_for_jobs = db.query(
-                """
-                SELECT mu.id, mu.server_id
-                FROM media_users mu
-                JOIN servers s ON s.id = mu.server_id
-                WHERE mu.vodum_user_id = ?
-                  AND s.type = 'plex'
-                  AND mu.type = 'plex'
-                """,
-                (user_id,),
-            )
-
-            plex_server_ids = sorted({int(mu["server_id"]) for mu in plex_media_for_jobs if mu["server_id"] is not None})
-
-            for server_id in plex_server_ids:
-                preferred_media_user_id = get_preferred_plex_media_user_id(
-                    db,
-                    user_id,
-                    server_id,
-                )
-
-                dedupe_key = f"plex:sync:server={server_id}:vodum_user={user_id}:user_detail_save"
-
-                payload = {
-                    "reason": "user_detail_save",
-                    "updated_options": True,
-                    "preferred_media_user_id": preferred_media_user_id,
-                }
-
-                inserted = insert_plex_media_job(
-                    db,
-                    action="sync",
-                    vodum_user_id=user_id,
-                    server_id=server_id,
-                    library_id=None,
-                    dedupe_key=dedupe_key,
-                    payload=payload,
-                )
-
-                if inserted:
-                    task_logger.info(
-                        f"[MEDIA JOB CREATED] provider=plex action=sync "
-                        f"user_id={user_id} server_id={server_id} "
-                        f"preferred_media_user_id={preferred_media_user_id} reason=user_detail_save"
-                    )
-
-            try:
-                enable_and_run_task_by_name("apply_plex_access_updates")
-            except Exception:
-                task_logger.exception(
-                    "User detail saved and Plex jobs persisted but worker startup failed | user_id=%s",
-                    user_id,
-                )
+            queue_user_plex_option_syncs(db, user_id, task_logger=task_logger)
 
         flash("user_saved", "success")
         return redirect(url_for("user_detail", user_id=user_id))
@@ -703,18 +277,13 @@ def register(app):
         # --------------------------------------------------
         # Charger l’utilisateur (VODUM)
         # --------------------------------------------------
-        user = db.query_one(
-            f"SELECT {USER_DETAIL_COLUMNS} FROM vodum_users WHERE id = ?",
-            (user_id,),
-        )
+        user = load_user_detail(db, user_id)
 
         if not user:
             flash("user_not_found", "error")
             return redirect(url_for("users_list"))
 
         # on convertit en dict pour éviter les surprises sqlite3.Row
-        user = dict(user)
-
         tab = (request.args.get("tab") or "general").strip().lower()
         if tab not in ("general", "monitoring", "access", "notifications", "media"):
             tab = "general"
@@ -764,10 +333,7 @@ def register(app):
         # --------------------------------------------------
         # Settings (needed for per-user notification override)
         # --------------------------------------------------
-        settings = db.query_one(
-            f"SELECT {USER_DETAIL_SETTINGS_COLUMNS} FROM settings WHERE id = 1"
-        ) if tab in ("general", "access") else None
-        settings = dict(settings) if settings else {}
+        settings = load_user_detail_settings(db) if tab in ("general", "access") else {}
 
         try:
             user_notifications_can_override = int(settings.get("user_notifications_can_override") or 0) == 1
@@ -779,19 +345,11 @@ def register(app):
         # Types de serveurs réellement liés à l'utilisateur
         # (basé sur media_users + servers)
         # --------------------------------------------------
-        allowed_types = [
-            row["type"]
-            for row in db.query(
-                """
-                SELECT DISTINCT s.type
-                FROM servers s
-                JOIN media_users mu ON mu.server_id = s.id
-                WHERE mu.vodum_user_id = ?
-                """,
-                (user_id,),
-            )
-            if row["type"]
-        ] if tab in ("general", "access", "media") else []
+        allowed_types = (
+            load_user_provider_types(db, user_id)
+            if tab in ("general", "access", "media")
+            else []
+        )
 
         # --------------------------------------------------
         # Monitoring: on a besoin d'un media_users.id pour ouvrir la page monitoring/user/<id>
@@ -811,82 +369,14 @@ def register(app):
         # GET ? Chargement infos complètes
         # ==================================================
 
-        servers = db.query(
-            f"""
-            SELECT
-{USER_DETAIL_SERVER_ACCESS_COLUMNS},
-
-                mu.id AS media_user_id,
-                mu.external_user_id,
-                mu.username AS media_username,
-                mu.email AS media_email,
-                mu.avatar AS media_avatar,
-                mu.type AS media_type,
-                mu.role AS media_role,
-                mu.joined_at,
-                mu.accepted_at,
-                mu.raw_json,
-                mu.details_json,
-
-                CASE
-                    WHEN EXISTS (
-                        SELECT 1
-                        FROM media_user_libraries mul
-                        WHERE mul.media_user_id = mu.id
-                        LIMIT 1
-                    ) THEN 1
-                    ELSE 0
-                END AS has_access
-            FROM media_users mu
-            JOIN servers s ON s.id = mu.server_id
-            WHERE mu.vodum_user_id = ?
-              AND mu.id = (
-                    SELECT mu2.id
-                    FROM media_users mu2
-                    WHERE mu2.vodum_user_id = mu.vodum_user_id
-                      AND mu2.server_id = mu.server_id
-                    ORDER BY
-                        CASE
-                            WHEN COALESCE(NULLIF(TRIM(mu2.details_json), ''), '') <> '' THEN 0
-                            ELSE 1
-                        END,
-                        CASE
-                            WHEN COALESCE(NULLIF(TRIM(mu2.raw_json), ''), '') <> '' THEN 0
-                            ELSE 1
-                        END,
-                        mu2.id ASC
-                    LIMIT 1
-              )
-            ORDER BY s.type, s.name
-            """,
-            (user_id,),
-        ) if tab in ("general", "access", "media") else []
-
+        servers, libraries = load_user_access_rows(
+            db,
+            user_id,
+            include_servers=tab in ("general", "access", "media"),
+            include_libraries=tab == "access",
+        )
         servers = enrich_media_servers(servers)
         active_user_policies = load_active_policies_for_user(db, user_id) if tab == "general" else []
-        
-        libraries = db.query(
-            f"""
-            SELECT
-{USER_DETAIL_LIBRARY_ACCESS_COLUMNS},
-                s.name AS server_name,
-                CASE
-                    WHEN EXISTS (
-                        SELECT 1
-                        FROM media_user_libraries mul
-                        JOIN media_users mu ON mu.id = mul.media_user_id
-                        WHERE mul.library_id = l.id
-                          AND mu.vodum_user_id = ?
-                          AND mu.server_id = l.server_id
-                    ) THEN 1
-                    ELSE 0
-                END AS has_access
-            FROM libraries l
-            JOIN servers s ON s.id = l.server_id
-            ORDER BY s.name, l.name
-            """,
-            (user_id,),
-        ) if tab == "access" else []
 
 
 
@@ -985,12 +475,5 @@ def register(app):
             referral_stats=referral_stats,
             referred_users=referred_users,
         )
-
-
-
-
-
-
-
 
 

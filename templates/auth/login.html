@@ -84,7 +84,7 @@
 		</div>
 
 
-        {% if totp_enabled %}
+        {% if totp_required %}
           <div>
             <label class="block text-sm mb-1 text-slate-300">{{ t("totp_code") }}</label>
             <input type="text" name="totp_code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code"

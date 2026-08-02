@@ -2,12 +2,39 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import json
 import requests
-from datetime import datetime, timedelta
-from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+from datetime import datetime, timezone
 
 from logging_utils import get_logger, is_debug_mode_enabled
 from core.server_cooldown import should_skip_unreachable_server, mark_server_unreachable, clear_server_cooldown
 from core.http_security import servers_http_session
+from core.jellyfin_http import (
+    _jellyfin_library_total_items,
+    _jellyfin_library_total_items_no_user,
+    _jellyfin_list_user_ids,
+    _jellyfin_pick_user_id,
+)
+from core.jellyfin_runtime import (
+    build_jellyfin_api_url,
+    get_jellyfin_json,
+    load_jellyfin_servers,
+    pick_jellyfin_base_url,
+)
+from core.jellyfin_user_metadata import (
+    extract_avatar_path,
+    extract_joined_at,
+    extract_role,
+    store_user_metadata,
+)
+from core.user_first_access_subscription import ensure_first_access_expiration
+from core.jellyfin_vodum_user_matching import (
+    is_placeholder_vodum_user,
+    pick_best_vodum_user_for_username,
+)
+from core.jellyfin_sync_repository import (
+    replace_jellyfin_library_access,
+    set_jellyfin_media_user_state,
+    upsert_jellyfin_library,
+)
 
 
 logger = get_logger("sync_jellyfin")
@@ -16,136 +43,6 @@ logger = get_logger("sync_jellyfin")
 # ----------------------------
 # helpers
 # ----------------------------
-
-def _jellyfin_pick_user_id(session: requests.Session, base_url: str, token: str, timeout: int = 20) -> str | None:
-    users_url = _build_api_url(base_url, "/Users", token)
-    users = _get_json(session, users_url, timeout=timeout, token=token) or []
-    if not isinstance(users, list) or not users:
-        return None
-
-    # Essaye de prendre un admin si possible, sinon le premier
-    for u in users:
-        if isinstance(u, dict) and (u.get("Policy") or {}).get("IsAdministrator"):
-            if u.get("Id"):
-                return str(u["Id"])
-
-    u0 = users[0]
-    if isinstance(u0, dict) and u0.get("Id"):
-        return str(u0["Id"])
-    return None
-
-def _jellyfin_list_user_ids(session: requests.Session, base_url: str, token: str, timeout: int = 20) -> List[str]:
-    """
-    Retourne une liste de UserId Jellyfin (admin d’abord si possible, puis les autres).
-    Utile pour fallback item_count quand le no-user renvoie 0/None.
-    """
-    users_url = _build_api_url(base_url, "/Users", token)
-    users = _get_json(session, users_url, timeout=timeout, token=token) or []
-    if not isinstance(users, list):
-        return []
-
-    admins = []
-    others = []
-    for u in users:
-        if not isinstance(u, dict):
-            continue
-        uid = u.get("Id")
-        if not uid:
-            continue
-        uid = str(uid)
-        is_admin = bool((u.get("Policy") or {}).get("IsAdministrator"))
-        (admins if is_admin else others).append(uid)
-
-    return admins + others
-
-
-def _jellyfin_library_total_items(
-    session: requests.Session,
-    base_url: str,
-    token: str,
-    library_item_id: str,
-    *,
-    user_id: str,
-    timeout: int = 20,
-) -> int | None:
-    # Limit=1 (pas 0) + EnableTotalRecordCount=true
-    url = (
-        f"{base_url.rstrip('/')}/Users/{user_id}/Items"
-        f"?ParentId={library_item_id}&Recursive=true&StartIndex=0&Limit=1&EnableTotalRecordCount=true"
-    )
-    r = session.get(url, headers={"X-Emby-Token": token, "Accept": "application/json"}, timeout=timeout)
-    r.raise_for_status()
-    data = r.json()
-
-    trc = data.get("TotalRecordCount")
-    if trc is None:
-        return None
-    try:
-        return int(trc)
-    except Exception:
-        return None
-
-def _jellyfin_library_total_items_no_user(
-    session: requests.Session,
-    base_url: str,
-    token: str,
-    library_item_id: str,
-    timeout: int = 20,
-) -> int | None:
-    headers = {"X-Emby-Token": token, "Accept": "application/json"}
-
-    # Tentative 1: /Items/Counts?ParentId=...
-    url = _build_api_url(
-        base_url,
-        f"/Items/Counts?ParentId={library_item_id}&Recursive=true",
-        token,
-    )
-    r = session.get(url, headers=headers, timeout=timeout)
-    if r.status_code == 200:
-        try:
-            data = r.json()
-            # selon versions : ItemCount / Items / TotalCount...
-            for key in ("ItemCount", "Items", "TotalCount", "Count"):
-                if key in data and data[key] is not None:
-                    return int(data[key])
-
-            # fallback Jellyfin courant: MovieCount/SeriesCount/EpisodeCount...
-            summed = 0
-            any_found = False
-            for k, v in data.items():
-                if k.endswith("Count"):
-                    try:
-                        summed += int(v)
-                        any_found = True
-                    except Exception:
-                        pass
-            if any_found:
-                return summed
-
-        except Exception:
-            pass
-
-    # Tentative 2 (fallback): /Items?...EnableTotalRecordCount=true
-    url = _build_api_url(
-        base_url,
-        f"/Items?ParentId={library_item_id}&Recursive=true&StartIndex=0&Limit=1&EnableTotalRecordCount=true",
-        token,
-    )
-    r = session.get(url, headers=headers, timeout=timeout)
-    if r.status_code != 200:
-        return None
-
-    try:
-        data = r.json()
-        trc = data.get("TotalRecordCount")
-        if trc is None:
-            return None
-        return int(trc)
-    except Exception:
-        return None
-
-
-
 
 def ensure_expiration_date_on_first_access(db, vodum_user_id: int) -> bool:
     """
@@ -156,50 +53,14 @@ def ensure_expiration_date_on_first_access(db, vodum_user_id: int) -> bool:
     ⚠️ Sur la DB v2, l'expiration est portée par vodum_users (contractuel),
     pas par media_users.
     """
-    row = db.query_one(
-        "SELECT expiration_date FROM vodum_users WHERE id = ?",
-        (vodum_user_id,),
-    )
-    if not row:
-        return False
-
-    # Déjà une date → on ne touche pas
-    if row["expiration_date"]:
-        return False
-
-    settings = db.query_one("SELECT default_subscription_days FROM settings WHERE id = 1")
-    try:
-        days = int(settings["default_subscription_days"]) if settings else 0
-    except Exception:
-        days = 0
-
-
-    if days <= 0:
-        return False
-
-    today = datetime.utcnow().date()
-    expiration = (today + timedelta(days=days)).isoformat()
-
-    db.execute(
-        "UPDATE vodum_users SET expiration_date = ? WHERE id = ?",
-        (expiration, vodum_user_id),
-    )
-
-    logger.info(
-        f"[SUBSCRIPTION] expiration_date initialisée pour vodum_user_id={vodum_user_id} → {expiration}"
-    )
-    return True
+    return ensure_first_access_expiration(db, vodum_user_id, logger=logger)
 
 def _extract_joined_at(detail: Dict[str, Any]) -> Optional[str]:
     """
     Jellyfin ne fournit pas toujours une date de création dans UserDto selon versions/config.
     On tente plusieurs champs courants ; sinon None.
     """
-    for key in ("DateCreated", "CreatedDate", "CreatedAt", "CreationDate", "DateCreatedUtc"):
-        val = detail.get(key)
-        if val:
-            return str(val)
-    return None
+    return extract_joined_at(detail)
 
 
 def _extract_role_from_policy(policy: Dict[str, Any]) -> Optional[str]:
@@ -208,11 +69,7 @@ def _extract_role_from_policy(policy: Dict[str, Any]) -> Optional[str]:
     - admin si IsAdministrator
     - user sinon
     """
-    if not isinstance(policy, dict):
-        return None
-    if policy.get("IsAdministrator"):
-        return "admin"
-    return "user"
+    return extract_role(policy)
 
 
 def _extract_avatar_path(jellyfin_user_id: str, detail: Dict[str, Any]) -> Optional[str]:
@@ -220,12 +77,7 @@ def _extract_avatar_path(jellyfin_user_id: str, detail: Dict[str, Any]) -> Optio
     On stocke une URL *relative* (sans api_key) : le front pourra l’appeler avec l’auth habituelle.
     PrimaryImageTag existe dans UserDto.
     """
-    tag = detail.get("PrimaryImageTag")
-    if not tag:
-        return None
-    # Route généralement supportée : /Users/{id}/Images/Primary
-    # On met tag pour cache-busting.
-    return f"/Users/{jellyfin_user_id}/Images/Primary?tag={tag}"
+    return extract_avatar_path(jellyfin_user_id, detail)
 
 
 def _store_full_user_json_and_fields(
@@ -241,31 +93,7 @@ def _store_full_user_json_and_fields(
       - joined_at (si dispo)
       - avatar (optionnel)
     """
-    if not isinstance(detail, dict):
-        detail = {}
-
-    policy = detail.get("Policy") if isinstance(detail.get("Policy"), dict) else {}
-    role = _extract_role_from_policy(policy)
-    joined_at = _extract_joined_at(detail)
-    avatar = _extract_avatar_path(jellyfin_user_id, detail)
-
-    db.execute(
-        """
-        UPDATE media_users
-        SET raw_json = ?,
-            role = COALESCE(?, role),
-            joined_at = COALESCE(?, joined_at),
-            avatar = COALESCE(?, avatar)
-        WHERE id = ?
-        """,
-        (
-            json.dumps(detail, ensure_ascii=False),
-            role,
-            joined_at,
-            avatar,
-            media_user_id,
-        ),
-    )
+    return store_user_metadata(db, media_user_id, jellyfin_user_id, detail)
 
 
 # ----------------------------
@@ -277,23 +105,11 @@ def _build_api_url(base_url: str, path: str, token: str) -> str:
     Construit une URL Jellyfin en ajoutant api_key=<token> proprement,
     même si `path` contient déjà une querystring (?...).
     """
-    base_url = (base_url or "").rstrip("/")
-    path = "/" + (path or "").lstrip("/")
-
-    raw = f"{base_url}{path}"
-    parts = urlsplit(raw)
-
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, parts.query, parts.fragment))
+    return build_jellyfin_api_url(base_url, path)
 
 
 def _get_json(session: requests.Session, url: str, timeout: int = 20, token: str | None = None) -> Any:
-    headers = {"Accept": "application/json"}
-    if token:
-        headers["X-Emby-Token"] = token
-
-    resp = session.get(url, headers=headers, timeout=timeout)
-    resp.raise_for_status()
-    return resp.json()
+    return get_jellyfin_json(session, url, timeout=timeout, token=token)
 
 
 
@@ -302,21 +118,11 @@ def _get_json(session: requests.Session, url: str, timeout: int = 20, token: str
 # ----------------------------
 
 def _get_jellyfin_servers(db):
-    return db.query(
-        """
-        SELECT id, name, url, local_url, public_url, token, status, cooldown_until
-        FROM servers
-        WHERE type = 'jellyfin'
-        """
-    )
+    return load_jellyfin_servers(db)
 
 
 def _pick_jellyfin_base_url(server) -> str:
-    return (
-        (server.get("url") or "")
-        or (server.get("local_url") or "")
-        or (server.get("public_url") or "")
-    ).strip().rstrip("/")
+    return pick_jellyfin_base_url(server)
 
 
 
@@ -328,15 +134,7 @@ def _is_placeholder_vodum_user(u: dict) -> bool:
     - pas d'expiration_date
     - (souvent status='active' car créé par sync)
     """
-    if not u:
-        return True
-    return (
-        not (u.get("email") or "").strip()
-        and not (u.get("firstname") or "").strip()
-        and not (u.get("lastname") or "").strip()
-        and u.get("expiration_date") is None
-        and not (u.get("notes") or "").strip()
-    )
+    return is_placeholder_vodum_user(u)
 
 
 def _pick_best_vodum_user_for_username(db, username: str) -> Optional[int]:
@@ -344,27 +142,7 @@ def _pick_best_vodum_user_for_username(db, username: str) -> Optional[int]:
     Retourne le "meilleur" vodum_user_id correspondant au username (case-insensitive).
     On préfère un compte déjà renseigné (email/expiration/prénom/nom).
     """
-    if not username or not str(username).strip():
-        return None
-
-    rows = db.query(
-        """
-        SELECT
-          id, username, firstname, lastname, email, expiration_date, notes, status
-        FROM vodum_users
-        WHERE lower(username) = lower(?)
-        ORDER BY
-          CASE WHEN email IS NOT NULL AND trim(email) <> '' THEN 1 ELSE 0 END DESC,
-          CASE WHEN expiration_date IS NOT NULL THEN 1 ELSE 0 END DESC,
-          CASE WHEN firstname IS NOT NULL AND trim(firstname) <> '' THEN 1 ELSE 0 END DESC,
-          CASE WHEN lastname IS NOT NULL AND trim(lastname) <> '' THEN 1 ELSE 0 END DESC,
-          id ASC
-        """,
-        (str(username).strip(),),
-    )
-    if not rows:
-        return None
-    return int(rows[0]["id"])
+    return pick_best_vodum_user_for_username(db, username)
 
 
 def _ensure_vodum_user_for_username(
@@ -592,22 +370,7 @@ def _upsert_media_user_by_jellyfin_id(
 
 
 def _upsert_library(db, server_id, section_id, name, lib_type) -> int:
-    db.execute(
-        """
-        INSERT INTO libraries (server_id, section_id, name, type)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(server_id, section_id) DO UPDATE SET
-            name = excluded.name,
-            type = excluded.type
-        """,
-        (server_id, section_id, name, lib_type),
-    )
-
-    row = db.query_one(
-        "SELECT id FROM libraries WHERE server_id = ? AND section_id = ?",
-        (server_id, section_id),
-    )
-    return int(row["id"])
+    return upsert_jellyfin_library(db, server_id, section_id, name, lib_type)
 
 
 def _set_media_user_state(
@@ -624,19 +387,9 @@ def _set_media_user_state(
     DB v2: on stocke l'état dans media_users.details_json pour garder l'info,
     sans recréer une table user_servers.
     """
-    details = {
-        "owned": int(owned),
-        "all_libraries": int(all_libraries),
-        "num_libraries": int(num_libraries),
-        "pending": 0,
-        "last_seen_at": last_seen_at,
-        "source": "jellyfin_api",
-        "server_id": int(server_id),
-    }
-
-    db.execute(
-        "UPDATE media_users SET details_json = ? WHERE id = ?",
-        (json.dumps(details, ensure_ascii=False), media_user_id),
+    return set_jellyfin_media_user_state(
+        db, media_user_id, server_id, owned,
+        all_libraries, num_libraries, last_seen_at,
     )
 
 
@@ -650,25 +403,9 @@ def _refresh_shared_libraries_for_server(
     Anciennement: shared_libraries (DB v1).
     DB v2: media_user_libraries.
     """
-    db.execute(
-        """
-        DELETE FROM media_user_libraries
-        WHERE media_user_id = ?
-          AND library_id IN (
-              SELECT id FROM libraries WHERE server_id = ?
-          )
-        """,
-        (media_user_id, server_id),
+    return replace_jellyfin_library_access(
+        db, media_user_id, server_id, allowed_library_ids,
     )
-
-    for lib_id in allowed_library_ids:
-        db.execute(
-            """
-            INSERT OR IGNORE INTO media_user_libraries (media_user_id, library_id)
-            VALUES (?, ?)
-            """,
-            (media_user_id, lib_id),
-        )
 
 
 # ----------------------------
@@ -970,7 +707,7 @@ def _sync_users_and_policies_for_server(
             {
                 "provider_presence": "removed",
                 "provider_presence_external_user_id": external_user_id,
-                "provider_presence_checked_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+                "provider_presence_checked_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             }
         )
         db.execute(

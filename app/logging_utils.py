@@ -205,9 +205,10 @@ class AnonymizeFilter(logging.Filter):
 
         # Tracebacks are formatted after filters. Sanitize the pre-rendered
         # exception text so exception messages cannot leak secrets to app.log.
-        if record.exc_info:
+        exc_info = getattr(record, "exc_info", None)
+        if exc_info:
             record.exc_text = self.anonymize(
-                logging.Formatter().formatException(record.exc_info)
+                logging.Formatter().formatException(exc_info)
             )
 
         return True

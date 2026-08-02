@@ -78,6 +78,7 @@ def apply_template_snapshot(
         )
         rule["locked"] = True
         rule["subscription_name"] = template_name
+        rule["subscription_template_id"] = template_id
 
         provider = (policy.get("provider") or "").strip() or None
         server_id = (

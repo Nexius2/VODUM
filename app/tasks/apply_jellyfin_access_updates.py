@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -161,7 +161,7 @@ def _mark_jellyfin_account_removed(db, media_user_id: int, jf_user_id: str) -> N
         {
             "provider_presence": "removed",
             "provider_presence_external_user_id": jf_user_id,
-            "provider_presence_checked_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            "provider_presence_checked_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
     )
     db.execute(

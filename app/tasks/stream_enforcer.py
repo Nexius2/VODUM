@@ -1,14 +1,67 @@
 import json
-import os
 import time
-import ipaddress
-from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 
-from core.providers.registry import get_provider
 from core.policy_transition_grace import should_defer_stream_violation
 from logging_utils import get_logger, is_debug_mode_enabled
-from communications_engine import schedule_template_notification, enqueue_named_task
+from core.stream_policy_i18n import translate_policy
+from core.stream_policy_utils import (
+    loads_json as _loads_json,
+    is_strict_expired_subscription_policy as _is_strict_expired_subscription_policy,
+    jellyfin_session_id_from_target as _jellyfin_session_id_from_target,
+    actor_key as _actor_key,
+    session_started_ts as _session_started_ts,
+    pick_kill_target as _pick_kill_target,
+    is_global_policy as _is_global_policy,
+    normalize_user_key as _normalize_user_key,
+    is_local_ip as _is_local_ip,
+    is_ip_literal as _is_ip_literal,
+    best_account_username as _best_account_username,
+    same_actor_reference as _same_actor_reference,
+)
+from core.stream_enforcer_boost import refresh_boost_state, maybe_boost_after_expired_kill
+from core.stream_enforcement_snapshot import build_enforcement_snapshot as _build_enforcement_snapshot
+from core.stream_media_metadata import parse_media_height as _parse_media_height
+from core.stream_enforcer_repository import (
+    load_user_stream_overrides,
+    load_enabled_policies,
+    load_live_sessions,
+    load_server,
+)
+from core.stream_enforcement_store import (
+    log_enforcement,
+    upsert_state,
+    already_warned_recently,
+)
+from core.stream_notification_delivery import (
+    media_title_from_session as _media_title_from_session,
+    policy_display_name as _policy_display_name,
+    queue_stream_blocked_notification,
+)
+from core.stream_notification_context import build_notification_policy_context
+from core.stream_household_dedupe import (
+    RECENT_SESSION_CACHE as _RECENT_SESSION_CACHE,
+    deduplicate_household_sessions as _deduplicate_household_sessions,
+)
+from core.stream_provider_actions import (
+    kill_session as _kill_session,
+    warn_session as _warn_session,
+)
+from core.stream_policy_scope import has_vip_override, policy_applies as _policy_applies
+from core.stream_violation_recheck import select_rechecked_violation
+from core.stream_session_diagnostics import log_sessions as _debug_log_sessions
+from core.stream_enforcer_config import (
+    LIVE_WINDOW_SECONDS, LIVE_STABLE_SECONDS, RECHECK_DELAY_SECONDS,
+    JELLYFIN_KILL_MESSAGE_SPAM_COUNT, JELLYFIN_KILL_MESSAGE_SPAM_SLEEP,
+    JELLYFIN_KILL_MESSAGE_TIMEOUT_MS, JELLYFIN_PRE_KILL_DURATION_SECONDS,
+    JELLYFIN_PRE_KILL_INTERVAL_SECONDS, HOUSEHOLD_MEMORY_SECONDS,
+    HOUSEHOLD_MEDIA_GRACE_SECONDS,
+)
+from core.stream_session_identity import (
+    extract_machine_identifier as _extract_machine_identifier,
+    household_match_score as _household_match_score,
+    is_probable_same_household as _is_probable_same_household,
+)
 
 
 logger = get_logger("stream_enforcer")
@@ -17,935 +70,35 @@ logger = get_logger("stream_enforcer")
 _db = None
 _USER_STREAM_OVERRIDES: Dict[int, int] = {}
 
-_POLICY_I18N_CACHE: Dict[str, dict] = {}
-
-
-def _policy_lang() -> str:
-    try:
-        row = _db.query_one("SELECT default_language FROM settings WHERE id = 1")
-        lang = str((dict(row) if row else {}).get("default_language") or "en").strip().lower()
-        return lang if lang else "en"
-    except Exception:
-        return "en"
-
-
-def _load_policy_lang(lang: str) -> dict:
-    lang = (lang or "en").strip().lower()
-
-    if lang in _POLICY_I18N_CACHE:
-        return _POLICY_I18N_CACHE[lang]
-
-    paths = [
-        os.path.join("/app", "translations", "ui", f"{lang}.json"),
-        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "translations", "ui", f"{lang}.json")),
-    ]
-
-    data = {}
-    for path in paths:
-        try:
-            if os.path.exists(path):
-                with open(path, "r", encoding="utf-8") as f:
-                    data = json.load(f) or {}
-                break
-        except Exception:
-            data = {}
-
-    _POLICY_I18N_CACHE[lang] = data
-    return data
-
-
 def _policy_t(key: str, **kwargs) -> str:
-    lang = _policy_lang()
-    data = _load_policy_lang(lang)
-    fallback = _load_policy_lang("en")
-
-    text = data.get(key) or fallback.get(key) or key
-
-    try:
-        return str(text).format(**kwargs)
-    except Exception:
-        return str(text)
+    return translate_policy(_db, key, **kwargs)
 
 def _set_db(db):
     global _db
     _db = db
 
 
-LIVE_WINDOW_SECONDS = 90      # sécurité DB: ignore les sessions trop anciennes
-LIVE_STABLE_SECONDS = 15      # une session doit être stable avant d'être comptée par l'enforcer
-RECHECK_DELAY_SECONDS = 45    # recheck après warn, laisse passer les transitions d'épisode
-JELLYFIN_KILL_MESSAGE_SPAM_COUNT = 5   # 5 messages
-JELLYFIN_KILL_MESSAGE_SPAM_SLEEP = 1.0 # 1 seconde entre chaque
-JELLYFIN_KILL_MESSAGE_TIMEOUT_MS = 50000  # durée d'affichage de chaque toast
-JELLYFIN_PRE_KILL_DURATION_SECONDS = 60     # 1 minute avant coupure
-JELLYFIN_PRE_KILL_INTERVAL_SECONDS = 10     # un message toutes les 10 secondes
-HOUSEHOLD_TRANSITION_SECONDS = 90
-HOUSEHOLD_MEMORY_SECONDS = 300
-HOUSEHOLD_DEVICE_MATCH_SCORE = 5
-HOUSEHOLD_MEDIA_GRACE_SECONDS = 300
-STREAM_SYNC_GRACE_RUNS = 2
-STREAM_SYNC_TRANSITION_SECONDS = 120
-STREAM_ENFORCER_NORMAL_INTERVAL_SECONDS = 15
-STREAM_ENFORCER_BOOST_INTERVAL_SECONDS = 5
-STREAM_ENFORCER_BOOST_KILL_THRESHOLD = 1
-STREAM_ENFORCER_BOOST_WINDOW_MINUTES = 10
-STREAM_ENFORCER_BOOST_DURATION_MINUTES = 30
 
-_RECENT_SESSION_CACHE: Dict[str, List[dict]] = {}
-_IP_GRACE_CACHE: Dict[str, float] = {}
-_STREAM_SYNC_GRACE_CACHE: Dict[str, dict] = {}
-
-# -------------------------
-# Smart household helpers
-# -------------------------
-
-def _safe_lower(value) -> str:
-    return str(value or "").strip().lower()
-
-
-def _parse_datetime(value: str):
-    if not value:
-        return None
-
-    value = str(value).replace("T", " ")
-
-    formats = [
-        "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%d %H:%M:%S.%f",
-    ]
-
-    for fmt in formats:
-        try:
-            return datetime.strptime(value, fmt)
-        except Exception:
-            continue
-
-    return None
-
-
-def _seconds_between_sessions(a: dict, b: dict) -> int:
-    a_ts = _parse_datetime(a.get("last_seen_at") or a.get("started_at"))
-    b_ts = _parse_datetime(b.get("last_seen_at") or b.get("started_at"))
-
-    if not a_ts or not b_ts:
-        return 999999
-
-    return int(abs((a_ts - b_ts).total_seconds()))
-
-
-def _same_media_family(a: dict, b: dict) -> bool:
-    a_gp = _safe_lower(a.get("grandparent_title"))
-    b_gp = _safe_lower(b.get("grandparent_title"))
-
-    if a_gp and b_gp and a_gp == b_gp:
-        return True
-
-    a_title = _safe_lower(a.get("title"))
-    b_title = _safe_lower(b.get("title"))
-
-    return bool(a_title and b_title and a_title == b_title)
-
-
-def _extract_machine_identifier(sess: dict) -> str:
-    try:
-        raw = sess.get("_parsed_raw_json") or {}
-
-        for key in [
-            "PlayerMachineIdentifier",
-            "MachineIdentifier",
-            "DeviceId",
-            "ClientIdentifier",
-            "clientIdentifier",
-        ]:
-            value = raw.get(key)
-
-            if value:
-                return str(value).strip().lower()
-
-    except Exception as e:
-        if is_debug_mode_enabled():
-            logger.debug(
-                "[smart_household] failed to extract machine identifier: %s",
-                e,
-            )
-
-    return ""
-
-
-def _same_subnet(ip1: str, ip2: str) -> bool:
-    try:
-        a = ipaddress.ip_address(ip1)
-        b = ipaddress.ip_address(ip2)
-
-        if a.version != b.version:
-            return False
-
-        if a.version == 4:
-            return str(ip1).split(".")[:3] == str(ip2).split(".")[:3]
-
-        return str(ip1).split(":")[:4] == str(ip2).split(":")[:4]
-
-    except Exception:
-        return False
-
-
-def _household_match_score(a: dict, b: dict) -> int:
-    score = 0
-
-    a_ip = _safe_lower(a.get("ip"))
-    b_ip = _safe_lower(b.get("ip"))
-
-    if a_ip and b_ip and a_ip == b_ip:
-        score += 10
-
-    elif a_ip and b_ip and _same_subnet(a_ip, b_ip):
-        score += 4
-
-    a_machine = _extract_machine_identifier(a)
-    b_machine = _extract_machine_identifier(b)
-
-    if a_machine and b_machine and a_machine == b_machine:
-        score += 10
-
-    a_device = _safe_lower(a.get("device"))
-    b_device = _safe_lower(b.get("device"))
-
-    if a_device and b_device and a_device == b_device:
-        score += 3
-
-    a_client = _safe_lower(a.get("client_product"))
-    b_client = _safe_lower(b.get("client_product"))
-
-    if a_client and b_client and a_client == b_client:
-        score += 2
-
-    if _same_media_family(a, b):
-        score += 2
-
-    delta = _seconds_between_sessions(a, b)
-
-    if delta <= HOUSEHOLD_TRANSITION_SECONDS:
-        score += 3
-
-    return score
-
-
-def _is_probable_same_household(a: dict, b: dict) -> bool:
-    return _household_match_score(a, b) >= HOUSEHOLD_DEVICE_MATCH_SCORE
-
-
-
-def _session_endpoint_identity(sess: dict) -> tuple[str, bool]:
-    machine = _extract_machine_identifier(sess)
-    if machine:
-        return (f"machine:{machine}", True)
-
-    ip = _safe_lower(sess.get("ip"))
-    device = _safe_lower(sess.get("device"))
-    client = _safe_lower(sess.get("client_product"))
-    client_name = _safe_lower(sess.get("client_name"))
-
-    if not ip or ip == "unknown":
-        return ("", False)
-
-    descriptor = "|".join([client, client_name, device]).strip("|")
-    if not descriptor:
-        return ("", False)
-
-    return (f"client:{ip}|{descriptor}", False)
-
-
-def _session_time_delta_seconds(a: dict, b: dict) -> int:
-    a_ts = _parse_datetime(a.get("started_at") or a.get("last_seen_at"))
-    b_ts = _parse_datetime(b.get("started_at") or b.get("last_seen_at"))
-
-    if not a_ts or not b_ts:
-        return 999999
-
-    return int(abs((a_ts - b_ts).total_seconds()))
-
-
-def _session_sort_key(sess: dict) -> str:
-    return str(sess.get("last_seen_at") or sess.get("started_at") or "")
-
-
-def _stream_sync_grace_key(policy_id: int, user_key, endpoint_key: str, sessions: List[dict]) -> str:
-    session_parts = []
-    for sess in sessions:
-        session_parts.append(
-            f"{sess.get('server_id')}:{sess.get('session_key')}:{_media_family_key(sess)}"
-        )
-    return f"policy:{policy_id}|user:{user_key}|endpoint:{endpoint_key}|" + "|".join(sorted(session_parts))
-
-
-def _cleanup_stream_sync_grace_cache():
-    now = time.time()
-    ttl = max(STREAM_SYNC_TRANSITION_SECONDS * 3, HOUSEHOLD_MEMORY_SECONDS)
-
-    for key in list(_STREAM_SYNC_GRACE_CACHE.keys()):
-        entry = _STREAM_SYNC_GRACE_CACHE.get(key) or {}
-        ts = float(entry.get("ts") or 0)
-        if now - ts > ttl:
-            _STREAM_SYNC_GRACE_CACHE.pop(key, None)
-
-
-def _deduplicate_user_stream_sessions(
-    policy: dict,
-    user_key,
-    sessions: List[dict],
-) -> List[dict]:
-    """
-    Collapse impossible duplicate playbacks before max_streams_per_user counts.
-
-    Strong matches use the provider/client machine id and are treated as one
-    playback. Weak matches use same IP + client/device text only; those can be
-    two identical TVs, so they are only ignored for a couple of scheduler runs.
-    """
-    if len(sessions) < 2:
-        return sessions
-
-    _cleanup_stream_sync_grace_cache()
-
-    groups: Dict[str, dict] = {}
-    passthrough = []
-
-    for sess in sessions:
-        endpoint_key, is_strong = _session_endpoint_identity(sess)
-        if not endpoint_key:
-            passthrough.append(sess)
-            continue
-
-        bucket = groups.setdefault(endpoint_key, {"strong": False, "sessions": []})
-        bucket["strong"] = bool(bucket["strong"] or is_strong)
-        bucket["sessions"].append(sess)
-
-    kept = list(passthrough)
-    policy_id = int(policy.get("id") or 0)
-
-    for endpoint_key, bucket in groups.items():
-        endpoint_sessions = list(bucket["sessions"])
-        if len(endpoint_sessions) <= 1:
-            kept.extend(endpoint_sessions)
-            continue
-
-        endpoint_sessions = sorted(endpoint_sessions, key=_session_sort_key, reverse=True)
-        representative = endpoint_sessions[0]
-
-        if bool(bucket.get("strong")):
-            kept.append(representative)
-            if is_debug_mode_enabled():
-                logger.debug(
-                    "[stream_sync_dedupe] merged same machine | policy=%s | user=%s | endpoint=%s | sessions=%s",
-                    policy_id,
-                    user_key,
-                    endpoint_key,
-                    len(endpoint_sessions),
-                )
-            continue
-
-        max_delta = max(
-            _session_time_delta_seconds(endpoint_sessions[0], sess)
-            for sess in endpoint_sessions[1:]
-        )
-        if max_delta > STREAM_SYNC_TRANSITION_SECONDS:
-            kept.extend(endpoint_sessions)
-            continue
-
-        grace_key = _stream_sync_grace_key(policy_id, user_key, endpoint_key, endpoint_sessions)
-        entry = _STREAM_SYNC_GRACE_CACHE.get(grace_key) or {"runs": 0, "ts": time.time()}
-        entry["runs"] = int(entry.get("runs") or 0) + 1
-        entry["ts"] = time.time()
-        _STREAM_SYNC_GRACE_CACHE[grace_key] = entry
-
-        if int(entry["runs"]) <= STREAM_SYNC_GRACE_RUNS:
-            kept.append(representative)
-            logger.info(
-                "[stream_sync_grace] probable same-device sync overlap | policy=%s | user=%s | endpoint=%s | sessions=%s | run=%s/%s",
-                policy_id,
-                user_key,
-                endpoint_key,
-                len(endpoint_sessions),
-                int(entry["runs"]),
-                STREAM_SYNC_GRACE_RUNS,
-            )
-            continue
-
-        logger.warning(
-            "[stream_sync_grace] weak same-device overlap persisted, counting all streams | policy=%s | user=%s | endpoint=%s | sessions=%s",
-            policy_id,
-            user_key,
-            endpoint_key,
-            len(endpoint_sessions),
-        )
-        kept.extend(endpoint_sessions)
-
-    return kept
-
-
-def _deduplicate_household_sessions(sessions: List[dict]) -> List[dict]:
-    kept = []
-
-    _cleanup_recent_session_cache()
-
-    enriched_sessions = []
-    seen_session_keys = set()
-
-    for sess in sessions:
-        session_key = str(sess.get("session_key") or "")
-
-        if session_key and session_key not in seen_session_keys:
-            enriched_sessions.append(sess)
-            seen_session_keys.add(session_key)
-
-        user_key = str(
-            sess.get("vodum_user_id")
-            or sess.get("external_user_id")
-            or "unknown"
-        )
-
-        previous = _RECENT_SESSION_CACHE.get(user_key, [])
-
-        for old_sess in previous:
-            old_key = str(old_sess.get("session_key") or "")
-
-            # Avoid reprocessing same session repeatedly
-            if old_key and old_key in seen_session_keys:
-                continue
-
-            enriched_sessions.append(old_sess)
-
-            if old_key:
-                seen_session_keys.add(old_key)
-
-    for sess in enriched_sessions:
-        duplicate = False
-
-        for existing in kept:
-            if _is_probable_same_household(sess, existing):
-                duplicate = True
-
-                if is_debug_mode_enabled():
-                    logger.debug(
-                        "[household_dedupe] merged sessions | user=%s | ip_a=%s | ip_b=%s | device_a=%s | device_b=%s | title_a=%s | title_b=%s | score=%s",
-                        sess.get("media_username") or sess.get("external_user_id"),
-                        sess.get("ip"),
-                        existing.get("ip"),
-                        sess.get("device"),
-                        existing.get("device"),
-                        sess.get("title"),
-                        existing.get("title"),
-                        _household_match_score(sess, existing),
-                    )
-
-                break
-
-        if not duplicate:
-            kept.append(sess)
-
-            user_key = str(
-                sess.get("vodum_user_id")
-                or sess.get("external_user_id")
-                or "unknown"
-            )
-
-            cache_entry = dict(sess)
-            cache_entry["_cache_ts"] = time.time()
-
-            _RECENT_SESSION_CACHE.setdefault(user_key, []).append(cache_entry)
-
-            # sécurité mémoire
-            if len(_RECENT_SESSION_CACHE[user_key]) > 25:
-                _RECENT_SESSION_CACHE[user_key] = _RECENT_SESSION_CACHE[user_key][-25:]
-
-    if is_debug_mode_enabled():
-        if is_debug_mode_enabled():
-            logger.debug(
-                "[smart_household] dedupe result original=%s kept=%s",
-                len(sessions),
-                len(kept),
-            )
-
-    return kept
-
-def _cleanup_recent_session_cache():
-    now = time.time()
-
-    for user_key in list(_RECENT_SESSION_CACHE.keys()):
-        kept = []
-
-        for sess in _RECENT_SESSION_CACHE[user_key]:
-            ts = sess.get("_cache_ts", 0)
-
-            if (now - ts) <= HOUSEHOLD_MEMORY_SECONDS:
-                kept.append(sess)
-
-        if kept:
-            _RECENT_SESSION_CACHE[user_key] = kept
-        else:
-            if is_debug_mode_enabled():
-                logger.debug(
-                    "[smart_household] cleanup cache user=%s",
-                    user_key,
-                )
-
-            _RECENT_SESSION_CACHE.pop(user_key, None)
-
-def _media_family_key(sess: dict) -> str:
-    media_type = _safe_lower(sess.get("media_type"))
-    media_key = _safe_lower(sess.get("media_key"))
-    grandparent_title = _safe_lower(sess.get("grandparent_title"))
-    parent_title = _safe_lower(sess.get("parent_title"))
-    title = _safe_lower(sess.get("title"))
-
-    if media_type in ("episode", "series", "show") and grandparent_title:
-        return f"series:{grandparent_title}"
-
-    if media_type in ("movie", "film") and title:
-        return f"movie:{title}"
-
-    if grandparent_title:
-        return f"series:{grandparent_title}"
-
-    if media_key:
-        return f"key:{media_key}"
-
-    if parent_title and title:
-        return f"parent_title:{parent_title}:{title}"
-
-    if title:
-        return f"title:{title}"
-
-    return ""
-
-
-def _is_coherent_media_transition(sessions: List[dict]) -> bool:
-    family_keys = set()
-
-    for sess in sessions:
-        key = _media_family_key(sess)
-
-        if key:
-            family_keys.add(key)
-
-    return bool(len(family_keys) == 1)
-
-
-def _ip_grace_key(policy_id: int, user_key: Tuple[Optional[int], str], sessions: List[dict]) -> str:
-    session_parts = []
-
-    for sess in sessions:
-        session_parts.append(
-            f"{sess.get('server_id')}:{sess.get('session_key')}:{sess.get('ip')}:{_media_family_key(sess)}"
-        )
-
-    return f"policy:{policy_id}|user:{user_key}|" + "|".join(sorted(session_parts))
-
-
-def _cleanup_ip_grace_cache():
-    now = time.time()
-
-    for key in list(_IP_GRACE_CACHE.keys()):
-        if (now - float(_IP_GRACE_CACHE.get(key) or 0)) > HOUSEHOLD_MEDIA_GRACE_SECONDS:
-            _IP_GRACE_CACHE.pop(key, None)
-
-
-def _should_grace_coherent_ip_switch(
-    policy: dict,
-    user_key: Tuple[Optional[int], str],
-    sessions: List[dict],
-    ips: set,
-    max_ips: int,
-) -> bool:
-    _cleanup_ip_grace_cache()
-
-    if len(ips) > (max_ips + 1):
-        return False
-
-    if len(sessions) < 2:
-        return False
-
-    if not _is_coherent_media_transition(sessions):
-        return False
-
-    key = _ip_grace_key(int(policy.get("id") or 0), user_key, sessions)
-    now = time.time()
-    first_seen = _IP_GRACE_CACHE.get(key)
-
-    if not first_seen:
-        _IP_GRACE_CACHE[key] = now
-
-        logger.info(
-            "[max_ips_grace] coherent media switch detected | policy=%s | user=%s | ips=%s | max_ips=%s | grace=%ss",
-            policy.get("id"),
-            user_key,
-            sorted(ips),
-            max_ips,
-            HOUSEHOLD_MEDIA_GRACE_SECONDS,
-        )
-
-        return True
-
-    elapsed = now - float(first_seen)
-
-    if elapsed <= HOUSEHOLD_MEDIA_GRACE_SECONDS:
-        if is_debug_mode_enabled():
-            logger.debug(
-                "[max_ips_grace] still inside grace window | policy=%s | user=%s | elapsed=%ss/%ss",
-                policy.get("id"),
-                user_key,
-                int(elapsed),
-                HOUSEHOLD_MEDIA_GRACE_SECONDS,
-            )
-
-        return True
-
-    _IP_GRACE_CACHE.pop(key, None)
-
-    logger.warning(
-        "[max_ips_grace] grace expired, enforcing violation | policy=%s | user=%s | ips=%s | max_ips=%s",
-        policy.get("id"),
-        user_key,
-        sorted(ips),
-        max_ips,
-    )
-
-    return False
-
-def _debug_log_sessions(user_key: str, sessions: List[dict], reason: str):
-    logger.warning(
-        "[policy_debug] user=%s reason=%s session_count=%s",
-        user_key,
-        reason,
-        len(sessions),
-    )
-
-    for idx, s in enumerate(sessions, start=1):
-        logger.warning(
-            "[policy_debug] #%s | title=%s | grandparent=%s | ip=%s | device=%s | client=%s | transcode=%s | state=%s | started=%s | last_seen=%s | session_key=%s | machine=%s",
-            idx,
-            s.get("title"),
-            s.get("grandparent_title"),
-            s.get("ip"),
-            s.get("device"),
-            s.get("client_product"),
-            s.get("is_transcode"),
-            s.get("state"),
-            s.get("started_at"),
-            s.get("last_seen_at"),
-            s.get("session_key"),
-            _extract_machine_identifier(s),
-        )
+# Compatibility aliases: caches remain externally accessible while their
+# implementation now lives outside the task module.
+from core.stream_sync_dedupe import (
+    STREAM_SYNC_GRACE_CACHE as _STREAM_SYNC_GRACE_CACHE,
+    deduplicate_user_stream_sessions as _deduplicate_user_stream_sessions,
+)
+from core.stream_ip_transition_grace import (
+    IP_GRACE_CACHE as _IP_GRACE_CACHE,
+    should_grace_coherent_ip_switch as _should_grace_coherent_ip_switch,
+)
 
 # -------------------------
 # Utils
 # -------------------------
 
-def _loads_json(s: Optional[str]) -> dict:
-    if not s:
-        return {}
-    try:
-        return json.loads(s)
-    except Exception:
-        return {}
-
-def _is_strict_expired_subscription_policy(policy: dict) -> bool:
-    """
-    Policy système d'abonnement expiré.
-    Elle doit couper immédiatement, sans warning ni délai de recheck.
-    """
-    if not policy:
-        return False
-
-    if policy.get("rule_type") != "max_streams_per_user":
-        return False
-
-    rule = _loads_json(policy.get("rule_value_json"))
-
-    if rule.get("system_tag") != "expired_subscription":
-        return False
-
-    try:
-        return int(rule.get("max", 1)) <= 0
-    except Exception:
-        return False
-
-def _jellyfin_session_id_from_target(target: dict, fallback_session_key: str) -> str:
-    """
-    Extract real Jellyfin Session Id from raw_json (Session object).
-    Fallback to current session_key.
-    """
-    try:
-        raw = target.get("_parsed_raw_json") or {}
-        sid = raw.get("Id")
-        if sid:
-            return str(sid)
-    except Exception as e:
-        if is_debug_mode_enabled():
-            logger.debug(
-                "[stream_enforcer] failed to extract jellyfin session id: %s",
-                e,
-            )
-    return str(fallback_session_key)
-
-
-def _now_sql_window() -> str:
-    return f"-{int(LIVE_WINDOW_SECONDS)} seconds"
-
-def _actor_key(vodum_user_id: Optional[int], external_user_id: str) -> str:
-    if vodum_user_id is not None:
-        return f"vodum:{int(vodum_user_id)}"
-    external_user_id = (external_user_id or "").strip()
-    return f"ext:{external_user_id}" if external_user_id else "ext:unknown"
-
-def _session_started_ts(row: dict) -> str:
-    return row.get("started_at") or row.get("last_seen_at") or ""
-
-def _pick_kill_target(sessions: List[dict], selector: str) -> Optional[dict]:
-    if not sessions:
-        return None
-
-    selector = (selector or "kill_newest").strip()
-
-    if selector == "kill_newest":
-        return sorted(sessions, key=_session_started_ts, reverse=True)[0]
-
-    if selector == "kill_oldest":
-        return sorted(sessions, key=_session_started_ts)[0]
-
-    if selector == "kill_transcoding_first":
-        trans = [s for s in sessions if int(s.get("is_transcode") or 0) == 1]
-        if trans:
-            return sorted(trans, key=_session_started_ts, reverse=True)[0]
-        return sorted(sessions, key=_session_started_ts, reverse=True)[0]
-
-    return sorted(sessions, key=_session_started_ts, reverse=True)[0]
-
-def _is_global_policy(policy: dict) -> bool:
-    # Global = scope global + pas de server_id forcé
-    return (policy.get("scope_type") == "global") and (not policy.get("server_id"))
-
-
-def _normalize_user_key(sess: dict) -> Tuple[Optional[int], str]:
-    vodum_user_id = sess.get("vodum_user_id")
-    ext = sess.get("external_user_id") or ""
-    return (vodum_user_id, str(ext))
-
-def _is_local_ip(ip: str) -> bool:
-    ip = (ip or "").strip()
-    if not ip or ip.lower() == "unknown":
-        return False
-    try:
-        addr = ipaddress.ip_address(ip)
-        # RFC1918 + loopback + link-local (IPv4/IPv6)
-        return bool(addr.is_private or addr.is_loopback or addr.is_link_local)
-    except Exception:
-        return False
-
-def _is_ip_literal(value: str) -> bool:
-    value = (value or "").strip()
-    if not value:
-        return False
-    try:
-        ipaddress.ip_address(value)
-        return True
-    except Exception:
-        return False
-
-
-def _best_account_username(sess: dict) -> Optional[str]:
-    media_username = str(sess.get("media_username") or "").strip()
-    if media_username:
-        return media_username
-
-    ext = str(sess.get("external_user_id") or "").strip()
-    if ext and not _is_ip_literal(ext):
-        return ext
-
-    return None
-
-
-def _same_actor_reference(candidate: dict, target: dict) -> bool:
-    target_vuid = target.get("vodum_user_id")
-    cand_vuid = candidate.get("vodum_user_id")
-
-    if target_vuid is not None and cand_vuid is not None:
-        try:
-            return int(target_vuid) == int(cand_vuid)
-        except Exception:
-            pass
-
-    target_ext = str(target.get("external_user_id") or "").strip()
-    cand_ext = str(candidate.get("external_user_id") or "").strip()
-
-    if target_ext and cand_ext:
-        try:
-            return (
-                int(candidate.get("server_id") or 0) == int(target.get("server_id") or 0)
-                and cand_ext == target_ext
-            )
-        except Exception:
-            return cand_ext == target_ext
-
-    return False
-
-
-def _build_enforcement_snapshot(
-    target: dict,
-    violation_sessions: List[dict],
-    live_sessions: List[dict],
-    policy: Optional[dict] = None,
-    reason: Optional[str] = None,
-) -> Tuple[Optional[str], str, str]:
-    """
-    Retourne :
-      - account_username snapshot
-      - ips_json snapshot
-      - details_json snapshot complet
-    """
-    related = []
-    seen = set()
-
-    def _add_session(sess: dict):
-        key = (
-            int(sess.get("server_id") or 0),
-            str(sess.get("session_key") or ""),
-        )
-        if key in seen:
-            return
-        seen.add(key)
-        related.append(sess)
-
-    for sess in live_sessions or []:
-        if _same_actor_reference(sess, target):
-            _add_session(sess)
-
-    for sess in violation_sessions or []:
-        _add_session(sess)
-
-    if not related:
-        _add_session(target)
-
-    def _session_snapshot(sess: dict) -> dict:
-        raw_value = sess.get("raw_json")
-        raw_parsed = None
-        if raw_value:
-            try:
-                raw_parsed = sess.get("_parsed_raw_json")
-
-                if raw_parsed is None:
-                    raw_parsed = json.loads(raw_value)
-            except Exception:
-                raw_parsed = raw_value
-
-        return {
-            "server_id": sess.get("server_id"),
-            "provider": sess.get("provider"),
-            "session_key": sess.get("session_key"),
-            "media_user_id": sess.get("media_user_id"),
-            "external_user_id": sess.get("external_user_id"),
-            "vodum_user_id": sess.get("vodum_user_id"),
-            "media_username": sess.get("media_username"),
-            "media_key": sess.get("media_key"),
-            "media_type": sess.get("media_type"),
-            "title": sess.get("title"),
-            "grandparent_title": sess.get("grandparent_title"),
-            "parent_title": sess.get("parent_title"),
-            "state": sess.get("state"),
-            "progress_ms": sess.get("progress_ms"),
-            "duration_ms": sess.get("duration_ms"),
-            "is_transcode": int(sess.get("is_transcode") or 0),
-            "bitrate": sess.get("bitrate"),
-            "device": sess.get("device"),
-            "client_name": sess.get("client_name"),
-            "client_product": sess.get("client_product"),
-            "ip": sess.get("ip"),
-            "started_at": sess.get("started_at"),
-            "last_seen_at": sess.get("last_seen_at"),
-            "raw_json": raw_parsed,
-        }
-
-    account_username = None
-    for sess in [target] + related:
-        account_username = _best_account_username(sess)
-        if account_username:
-            break
-
-    ips = []
-    for sess in related:
-        ip_value = str(sess.get("ip") or "").strip()
-        if not ip_value or ip_value.lower() == "unknown":
-            continue
-        if ip_value not in ips:
-            ips.append(ip_value)
-
-    related_sorted = sorted(
-        related,
-        key=lambda s: (
-            int(s.get("server_id") or 0),
-            str(s.get("started_at") or ""),
-            str(s.get("session_key") or ""),
-        )
-    )
-
-    details = {
-        "account_username": account_username,
-        "all_ips": ips,
-        "reason": reason,
-        "policy": {
-            "id": policy.get("id") if policy else None,
-            "scope_type": policy.get("scope_type") if policy else None,
-            "scope_id": policy.get("scope_id") if policy else None,
-            "provider": policy.get("provider") if policy else None,
-            "server_id": policy.get("server_id") if policy else None,
-            "priority": policy.get("priority") if policy else None,
-            "rule_type": policy.get("rule_type") if policy else None,
-            "rule_value": _loads_json(policy.get("rule_value_json")) if policy else None,
-        },
-        "target_session": _session_snapshot(target),
-        "all_sessions": [_session_snapshot(sess) for sess in related_sorted],
-        "session_count": len(related_sorted),
-    }
-
-    return (
-        account_username,
-        json.dumps(ips, ensure_ascii=False),
-        json.dumps(details, ensure_ascii=False),
-    )
-
 def _load_user_stream_overrides() -> Dict[int, int]:
-    """Return {vodum_user_id: max_streams_override} for positive overrides only."""
-    out: Dict[int, int] = {}
-    try:
-        rows = _db.query(
-            """
-            SELECT id, max_streams_override
-            FROM vodum_users
-            WHERE max_streams_override IS NOT NULL
-              AND max_streams_override > 0
-            """
-        )
-        for r in rows:
-            try:
-                override_value = int(r["max_streams_override"])
-                if override_value > 0:
-                    out[int(r["id"])] = override_value
-            except Exception:
-                continue
-    except Exception:
-        return {}
-    return out
+    return load_user_stream_overrides(_db)
 
 def _is_vip_override(vodum_user_id: Optional[int]) -> bool:
-    """
-    VIP override = user has max_streams_override set and > 0.
-    0 / NULL mean "no override", so policies apply normally.
-    """
-    if vodum_user_id is None:
-        return False
-    try:
-        return int(_USER_STREAM_OVERRIDES.get(int(vodum_user_id), 0)) > 0
-    except Exception:
-        return False
+    return has_vip_override(vodum_user_id, _USER_STREAM_OVERRIDES)
 
 
 
@@ -954,167 +107,13 @@ def _is_vip_override(vodum_user_id: Optional[int]) -> bool:
 # -------------------------
 
 def _load_enabled_policies() -> List[dict]:
-    rows = _db.query("""
-        SELECT id, scope_type, scope_id, provider, server_id, is_enabled, priority, rule_type, rule_value_json, created_at, updated_at FROM stream_policies
-        WHERE is_enabled=1
-        ORDER BY priority ASC, id ASC
-    """)
-    return [dict(r) for r in rows]
+    return load_enabled_policies(_db)
 
 
 def _load_live_sessions(stable_seconds: Optional[int] = None) -> List[dict]:
     if stable_seconds is None:
         stable_seconds = LIVE_STABLE_SECONDS
-    rows = _db.query(f"""
-        SELECT
-          ms.server_id,
-          LOWER(TRIM(s.type)) AS provider,
-          ms.session_key,
-          ms.media_user_id,
-          ms.external_user_id,
-          mu.vodum_user_id,
-          mu.username AS media_username,
-          ms.media_key,
-          ms.media_type,
-          ms.title,
-          ms.grandparent_title,
-          ms.parent_title,
-          ms.state,
-          ms.progress_ms,
-          ms.duration_ms,
-          ms.is_transcode,
-          ms.bitrate,
-          ms.device,
-          ms.client_name,
-          ms.client_product,
-          ms.ip,
-          ms.started_at,
-          ms.last_seen_at,
-          ms.raw_json
-        FROM media_sessions ms
-        JOIN servers s ON s.id = ms.server_id
-        LEFT JOIN media_users mu ON mu.id = ms.media_user_id
-        WHERE LOWER(TRIM(s.type)) IN ('plex','jellyfin')
-          AND COALESCE(s.status, '') != 'down'
-          AND (s.cooldown_until IS NULL OR s.cooldown_until <= CURRENT_TIMESTAMP)
-          AND datetime(ms.last_seen_at) >= datetime('now', ?)
-          AND COALESCE(ms.missing_count, 0) = 0
-          AND datetime(COALESCE(ms.started_at, ms.last_seen_at)) <= datetime('now', ?)
-        ORDER BY ms.server_id
-    """, (
-        _now_sql_window(),
-        f"-{int(stable_seconds)} seconds",
-    ))
-    sessions = []
-
-    for r in rows:
-        sess = dict(r)
-
-        try:
-            sess["_parsed_raw_json"] = _loads_json(sess.get("raw_json"))
-        except Exception:
-            sess["_parsed_raw_json"] = {}
-
-        sessions.append(sess)
-
-    return sessions
-
-
-def _policy_applies(policy: dict, sess: dict) -> bool:
-    # provider filter
-    p_provider = policy.get("provider")
-    if p_provider and p_provider != sess.get("provider"):
-        return False
-
-    # server_id filter (optionnel)
-    p_server_id = policy.get("server_id")
-    if p_server_id and int(p_server_id) != int(sess.get("server_id")):
-        return False
-
-    # scope
-    scope_type = policy.get("scope_type")
-    scope_id = policy.get("scope_id")
-
-    if scope_type == "global":
-        return True
-
-    if scope_type == "server":
-        return scope_id is not None and int(scope_id) == int(sess.get("server_id"))
-
-    if scope_type == "user":
-        vuid = sess.get("vodum_user_id")
-
-        # LOG IMPORTANT : si vodum_user_id est NULL, une policy scope=user ne peut jamais matcher
-        if vuid is None:
-            if is_debug_mode_enabled():
-                logger.debug(
-                    "[stream_enforcer] policy scope=user skipped (vodum_user_id is NULL) "
-                    f"scope_id={scope_id} media_user_id={sess.get('media_user_id')} external_user_id={sess.get('external_user_id')} "
-                    f"server_id={sess.get('server_id')} provider={sess.get('provider')}"
-                )
-            return False
-
-        return (scope_id is not None) and (int(scope_id) == int(vuid))
-
-
-    return False
-
-
-def _parse_media_height(provider: str, raw_json: str) -> Optional[int]:
-    data = _loads_json(raw_json)
-
-    if provider == "plex":
-        medias = data.get("Media") or []
-        if isinstance(medias, list):
-            for m in medias:
-                if not isinstance(m, dict):
-                    continue
-                h = m.get("height")
-                if isinstance(h, str) and h.isdigit():
-                    return int(h)
-                if isinstance(h, int):
-                    return h
-                vr = (m.get("videoResolution") or "").lower()
-                if vr in ("4k", "uhd"):
-                    return 2160
-
-        parts = data.get("Part") or []
-        if isinstance(parts, list):
-            for p in parts:
-                if not isinstance(p, dict):
-                    continue
-                h = p.get("height")
-                if isinstance(h, str) and h.isdigit():
-                    return int(h)
-                if isinstance(h, int):
-                    return h
-
-        return None
-
-    if provider == "jellyfin":
-        npi = data.get("NowPlayingItem") or {}
-        if isinstance(npi, dict):
-            h = npi.get("Height")
-            if isinstance(h, int):
-                return h
-            if isinstance(h, str) and h.isdigit():
-                return int(h)
-
-            streams = npi.get("MediaStreams") or []
-            if isinstance(streams, list):
-                for st in streams:
-                    if not isinstance(st, dict):
-                        continue
-                    if st.get("Type") == "Video":
-                        h2 = st.get("Height")
-                        if isinstance(h2, int):
-                            return h2
-                        if isinstance(h2, str) and h2.isdigit():
-                            return int(h2)
-
-        return None
-
-    return None
+    return load_live_sessions(_db, LIVE_WINDOW_SECONDS, stable_seconds)
 
 
 def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
@@ -1559,355 +558,33 @@ def _log_enforcement(policy_id: int, server_id: int, provider: str, session_key:
                      account_username: Optional[str] = None,
                      ips_json: Optional[str] = None,
                      details_json: Optional[str] = None):
-    _db.execute("""
-        INSERT INTO stream_enforcements(
-            policy_id, server_id, provider, session_key,
-            vodum_user_id, external_user_id,
-            action, reason,
-            account_username, ips_json, details_json
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        policy_id, server_id, provider, session_key,
-        vodum_user_id, external_user_id,
-        action, reason,
-        account_username, ips_json, details_json
-    ))
+    log_enforcement(
+        _db, policy_id, server_id, provider, session_key, vodum_user_id,
+        external_user_id, action, reason, account_username, ips_json, details_json,
+    )
 
 
 def _upsert_state(policy_id: int, server_id: int,
                   vodum_user_id: Optional[int], external_user_id: str,
                   warned: bool = False, killed: bool = False, reason: str = ""):
-    ak = _actor_key(vodum_user_id, external_user_id)
-
-    row = _db.query_one("""
-        SELECT id
-        FROM stream_enforcement_state
-        WHERE policy_id=? AND server_id=? AND actor_key=?
-        LIMIT 1
-    """, (policy_id, server_id, ak))
-
-    if row:
-        sets = ["last_seen_at=CURRENT_TIMESTAMP", "last_reason=?"]
-        params = [reason]
-        if warned:
-            sets.append("warned_at=CURRENT_TIMESTAMP")
-        if killed:
-            sets.append("killed_at=CURRENT_TIMESTAMP")
-
-        _db.execute(f"""
-            UPDATE stream_enforcement_state
-            SET {", ".join(sets)}
-            WHERE id=?
-        """, (*params, row["id"]))
-    else:
-        _db.execute("""
-            INSERT INTO stream_enforcement_state(
-                policy_id, server_id, actor_key,
-                vodum_user_id, external_user_id,
-                warned_at, killed_at, last_reason
-            )
-            VALUES (
-                ?, ?, ?,
-                ?, ?,
-                CASE WHEN ?=1 THEN CURRENT_TIMESTAMP ELSE NULL END,
-                CASE WHEN ?=1 THEN CURRENT_TIMESTAMP ELSE NULL END,
-                ?
-            )
-        """, (policy_id, server_id, ak, vodum_user_id, external_user_id, 1 if warned else 0, 1 if killed else 0, reason))
+    upsert_state(
+        _db, policy_id, server_id, vodum_user_id, external_user_id,
+        warned=warned, killed=killed, reason=reason,
+    )
 
 
 def _already_warned_recently(policy_id: int, server_id: int,
                              vodum_user_id: Optional[int], external_user_id: str,
                              minutes: int = 5) -> bool:
-    ak = _actor_key(vodum_user_id, external_user_id)
-
-    row = _db.query_one("""
-        SELECT 1
-        FROM stream_enforcement_state
-        WHERE policy_id=? AND server_id=? AND actor_key=?
-          AND warned_at IS NOT NULL
-          AND datetime(warned_at) >= datetime('now', ?)
-        LIMIT 1
-    """, (policy_id, server_id, ak, f"-{int(minutes)} minutes"))
-    return bool(row)
-
-
-def _kill_session(server_row: dict, session_key: str, reason: str) -> bool:
-    provider = get_provider(server_row)
-    return provider.terminate_session(session_key, reason=reason)
-
-
-def _media_title_from_session(sess: dict) -> str:
-    title = str(sess.get("title") or "").strip()
-    parent_title = str(sess.get("parent_title") or "").strip()
-    grandparent_title = str(sess.get("grandparent_title") or "").strip()
-
-    parts = []
-    if grandparent_title:
-        parts.append(grandparent_title)
-    if parent_title:
-        parts.append(parent_title)
-    if title:
-        parts.append(title)
-
-    return " - ".join(parts) if parts else title
-
-
-def _policy_display_name(policy: dict) -> str:
-    rule_type = str(policy.get("rule_type") or "").strip()
-    if rule_type:
-        return rule_type
-
-    try:
-        return f"Policy #{int(policy.get('id'))}"
-    except Exception:
-        return "Policy"
+    return already_warned_recently(
+        _db, policy_id, server_id, vodum_user_id, external_user_id, minutes,
+    )
 
 
 def _notification_policy_context(policy: dict, target: dict, related_sessions: list[dict] | None) -> dict:
-    try:
-        rule = json.loads(policy.get("rule_value_json") or "{}")
-    except Exception:
-        rule = {}
-    if not isinstance(rule, dict):
-        rule = {}
+    return build_notification_policy_context(policy, target, related_sessions, _policy_t)
 
-    rule_type = str(policy.get("rule_type") or "").strip()
 
-    try:
-        limit = int(rule.get("max") or rule.get("max_kbps") or 0)
-    except (TypeError, ValueError):
-        limit = 0
-
-    target_key = _normalize_user_key(target)
-    target_session_key = str(target.get("session_key") or "")
-    target_ip = str(target.get("ip") or "").strip()
-    target_server_id = target.get("server_id")
-
-    all_related = list(related_sessions or [])
-
-    if not any(str(s.get("session_key") or "") == target_session_key for s in all_related):
-        all_related.append(target)
-
-    # Sessions réellement utiles pour expliquer le blocage.
-    if rule_type == "max_ips_per_user":
-        involved = [
-            s for s in all_related
-            if _normalize_user_key(s) == target_key
-        ]
-
-    elif rule_type == "max_streams_per_user":
-        involved = [
-            s for s in all_related
-            if _normalize_user_key(s) == target_key
-        ]
-
-    elif rule_type == "max_streams_per_ip":
-        involved = [
-            s for s in all_related
-            if str(s.get("ip") or "").strip() == target_ip
-        ]
-
-    elif rule_type in {
-        "max_streams_per_server",
-        "max_transcodes_per_server",
-        "max_transcodes_global",
-        "max_bitrate_kbps",
-        "ban_4k_transcode",
-    }:
-        involved = [
-            s for s in all_related
-            if s.get("server_id") == target_server_id
-        ]
-
-    else:
-        involved = [
-            s for s in all_related
-            if _normalize_user_key(s) == target_key
-        ]
-
-    if not involved:
-        involved = [target]
-
-    def session_media(session: dict) -> str:
-        return _media_title_from_session(session) or "Unknown media"
-
-    def session_device(session: dict) -> str:
-        return (
-            str(session.get("device") or "").strip()
-            or str(session.get("client_product") or "").strip()
-            or str(session.get("client_name") or "").strip()
-            or "Unknown device"
-        )
-
-    def summary(session: dict) -> str:
-        parts = [session_media(session)]
-
-        device = session_device(session)
-        if device:
-            parts.append(device)
-
-        ip = str(session.get("ip") or "").strip()
-        if ip:
-            parts.append(ip)
-
-        server_name = str(session.get("server_name") or "").strip()
-        if server_name:
-            parts.append(server_name)
-
-        return " - ".join(parts)
-
-    def device_summary(session: dict) -> str:
-        parts = [session_device(session)]
-
-        ip = str(session.get("ip") or "").strip()
-        if ip:
-            parts.append(ip)
-
-        server_name = str(session.get("server_name") or "").strip()
-        if server_name:
-            parts.append(server_name)
-
-        media = session_media(session)
-        if media:
-            parts.append(media)
-
-        return " - ".join(parts)
-
-    unique_ips = sorted({
-        str(s.get("ip") or "").strip()
-        for s in involved
-        if str(s.get("ip") or "").strip()
-    })
-
-    unique_devices = []
-    seen_devices = set()
-    for s in involved:
-        line = device_summary(s)
-        key = line.lower()
-        if key in seen_devices:
-            continue
-        seen_devices.add(key)
-        unique_devices.append(line)
-
-    if rule_type == "max_ips_per_user":
-        observed = len(unique_ips)
-        limit_label = _policy_t("policy_limit_label_max_ips_per_user")
-        explanation = _policy_t(
-            "policy_explanation_max_ips_per_user",
-            limit=limit,
-            observed=observed,
-        )
-
-    elif rule_type == "max_streams_per_user":
-        observed = len(involved)
-        limit_label = _policy_t("policy_limit_label_max_streams_per_user")
-        explanation = _policy_t(
-            "policy_explanation_max_streams_per_user",
-            limit=limit,
-            observed=observed,
-        )
-
-    elif rule_type == "max_streams_per_ip":
-        observed = len(involved)
-        limit_label = _policy_t("policy_limit_label_max_streams_per_ip")
-        explanation = _policy_t(
-            "policy_explanation_max_streams_per_ip",
-            limit=limit,
-            observed=observed,
-            ip=target_ip or "unknown",
-        )
-
-    elif rule_type == "max_streams_per_server":
-        observed = len(involved)
-        limit_label = _policy_t("policy_limit_label_max_streams_per_server")
-        explanation = _policy_t(
-            "policy_explanation_max_streams_per_server",
-            limit=limit,
-            observed=observed,
-        )
-
-    elif rule_type in {"max_transcodes_per_server", "max_transcodes_global"}:
-        observed = sum(int(s.get("is_transcode") or 0) for s in involved)
-        limit_label = _policy_t("policy_limit_label_max_transcodes")
-        explanation = _policy_t(
-            "policy_explanation_max_transcodes",
-            limit=limit,
-            observed=observed,
-        )
-
-    elif rule_type == "max_bitrate_kbps":
-        observed = ""
-        limit_label = _policy_t("policy_limit_label_max_bitrate")
-        explanation = _policy_t(
-            "policy_explanation_max_bitrate",
-            limit=limit,
-        )
-
-    elif rule_type == "ban_4k_transcode":
-        observed = ""
-        limit_label = _policy_t("policy_limit_label_ban_4k_transcode")
-        explanation = _policy_t("policy_explanation_ban_4k_transcode")
-
-    else:
-        observed = len(involved)
-        limit_label = _policy_t("policy_limit_label_unknown")
-        explanation = _policy_t(
-            "policy_explanation_unknown",
-            rule_type=rule_type or "unknown",
-        )
-
-    policy_translation_key = "subscription_expired" if rule.get("system_tag") == "expired_subscription" else (rule_type or "unknown")
-    policy_translation_variables = {
-        "limit": limit,
-        "value": observed,
-        "observed": observed,
-        "ip": target_ip or "unknown",
-        "rule_type": rule_type or "unknown",
-    }
-    policy_limit_label_key = f"limit_label_{policy_translation_key}"
-    if policy_translation_key == "subscription_expired":
-        policy_limit_label_key = "limit_label_max_streams_per_user"
-
-    others = [
-        s for s in involved
-        if str(s.get("session_key") or "") != target_session_key
-    ]
-
-    return {
-        "policy_rule_type": rule_type,
-        "policy_limit": limit,
-        "policy_limit_label": limit_label,
-        "policy_observed": observed,
-        "policy_explanation": explanation,
-        "policy_reason_key": policy_translation_key,
-        "policy_reason_variables": policy_translation_variables,
-        "policy_explanation_key": policy_translation_key,
-        "policy_explanation_variables": policy_translation_variables,
-        "policy_limit_label_key": policy_limit_label_key,
-        "policy_limit_label_variables": policy_translation_variables,
-
-        "maximum_streams": limit if "streams" in rule_type else "",
-        "maximum_ips": limit if "ips" in rule_type else "",
-
-        "stream_count": len(involved),
-        "ip_count": len(unique_ips),
-
-        "active_streams_count": len(involved),
-        "active_streams": "\n".join(f"- {summary(s)}" for s in involved) or "None",
-
-        "active_ips_count": len(unique_ips),
-        "active_ips": "\n".join(f"- {ip}" for ip in unique_ips) or "None",
-
-        "active_devices_count": len(unique_devices),
-        "active_devices": "\n".join(f"- {device}" for device in unique_devices) or "None",
-
-        "stream_killed": summary(target),
-        "other_streams_count": len(others),
-        "other_streams": "\n".join(f"- {summary(s)}" for s in others) or "None",
-        "all_streams": "\n".join(f"- {summary(s)}" for s in involved) or "None",
-    }
 
 
 def _queue_stream_blocked_notification(
@@ -1920,110 +597,22 @@ def _queue_stream_blocked_notification(
     kill_reason_for_client: str,
     related_sessions: list[dict] | None = None,
 ) -> None:
-    vodum_user_id = target.get("vodum_user_id")
-    if vodum_user_id is None:
-        return
-
-    try:
-        vodum_user_id = int(vodum_user_id)
-    except Exception:
-        return
-
-    tpl = _db.query_one(
-        """
-        SELECT id
-        FROM comm_templates
-        WHERE key = 'stream_blocked'
-          AND enabled = 1
-        LIMIT 1
-        """
+    queue_stream_blocked_notification(
+        _db,
+        task_id=task_id,
+        policy=policy,
+        server_row=server_row,
+        target=target,
+        reason=reason,
+        kill_reason_for_client=kill_reason_for_client,
+        policy_context_builder=lambda: _notification_policy_context(policy, target, related_sessions),
     )
-
-    if not tpl:
-        return
-
-    server_id = target.get("server_id") or server_row.get("id")
-    provider = str(target.get("provider") or server_row.get("type") or "plex").strip().lower()
-    if provider not in ("plex", "jellyfin"):
-        provider = "plex"
-
-    media_title = _media_title_from_session(target)
-    blocked_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    policy_reason = kill_reason_for_client or reason or "Policy violation"
-    policy_context = _notification_policy_context(policy, target, related_sessions)
-
-    payload = {
-        "trigger_event": "stream_blocked",
-        "policy_id": policy.get("id"),
-        "policy_name": _policy_display_name(policy),
-        "policy_reason": policy_reason,
-        "reason": reason or "",
-        "media_title": media_title,
-        "server_name": server_row.get("name") or "",
-        "client_name": target.get("client_name") or target.get("client_product") or "",
-        "device_name": target.get("device") or target.get("client_product") or "",
-        "blocked_at": blocked_at,
-        "session_key": target.get("session_key") or "",
-        "server_id": server_id,
-        "provider": provider,
-        **policy_context,
-    }
-
-    dedupe_key = (
-        f"stream_blocked:"
-        f"policy:{policy.get('id')}:"
-        f"user:{vodum_user_id}:"
-        f"server:{server_id}:"
-        f"session:{target.get('session_key')}:"
-        f"at:{int(time.time())}"
-    )
-
-    try:
-        schedule_template_notification(
-            db=_db,
-            template_id=int(tpl["id"]),
-            user_id=vodum_user_id,
-            provider=provider,
-            server_id=int(server_id) if server_id is not None else None,
-            send_at_modifier=None,
-            payload=payload,
-            dedupe_key=dedupe_key,
-            max_attempts=10,
-        )
-        enqueue_named_task(_db, "send_expiration_emails")
-
-        if is_debug_mode_enabled():
-            logger.debug(
-                "[stream_enforcer] stream_blocked notification queued "
-                f"user={vodum_user_id} policy={policy.get('id')} server={server_id}"
-            )
-
-    except Exception as e:
-        logger.warning(
-            f"[TASK {task_id}] stream_enforcer: failed to queue stream_blocked notification: {e}",
-            exc_info=True,
-        )
-
-
-def _warn_session(server_row, session_key, title, text, timeout_ms: int = 8000):
-    provider = get_provider(server_row)
-    try:
-        return provider.send_session_message(session_key, title, text, timeout_ms=timeout_ms)
-    except TypeError:
-        # fallback if provider signature is older
-        return provider.send_session_message(session_key, title, text)
 
 
 
 
 def _load_server(server_id: int) -> Optional[dict]:
-    r = _db.query_one("""
-        SELECT id, type, url, local_url, public_url, token, server_identifier, settings_json
-        FROM servers
-        WHERE id=?
-        LIMIT 1
-    """, (server_id,))
-    return dict(r) if r else None
+    return load_server(_db, server_id)
 
 
 def _recheck_violation(policy: dict, violation: dict) -> Optional[dict]:
@@ -2032,182 +621,7 @@ def _recheck_violation(policy: dict, violation: dict) -> Optional[dict]:
     sessions = _load_live_sessions()
     v2 = _evaluate_policy(policy, sessions)
 
-    t_user = violation["target_user"]
-    same_actor = []
-    for x in v2:
-        if x["kind"] != violation["kind"] or x["target_user"] != t_user:
-            continue
-        same_actor.append(x)
-        if x["server_id"] == violation["server_id"]:
-            return x
-
-    # Pour les limites utilisateur/globales, la session choisie peut avoir
-    # basculé sur un autre serveur pendant le délai. Les acteurs synthétiques
-    # des règles strictement serveur ne doivent en revanche jamais traverser.
-    synthetic_actor = str(t_user[1] if len(t_user) > 1 else "") in {
-        "server", "4k", "bitrate", "device",
-    }
-    if same_actor and not synthetic_actor:
-        return same_actor[0]
-    return None
-
-def _parse_sql_datetime(value):
-    if not value:
-        return None
-
-    try:
-        return datetime.fromisoformat(str(value))
-    except Exception:
-        pass
-
-    try:
-        return datetime.strptime(str(value), "%Y-%m-%d %H:%M:%S")
-    except Exception:
-        return None
-
-
-def _set_stream_enforcer_interval(seconds: int):
-    seconds = int(seconds)
-
-    _db.execute(
-        """
-        UPDATE tasks
-        SET
-            schedule_mode = 'interval',
-            interval_seconds = ?,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE name = 'stream_enforcer'
-        """,
-        (seconds,)
-    )
-
-
-def _get_stream_enforcer_interval() -> int:
-    row = _db.query_one(
-        """
-        SELECT interval_seconds
-        FROM tasks
-        WHERE name = 'stream_enforcer'
-        LIMIT 1
-        """
-    )
-
-    if not row:
-        return STREAM_ENFORCER_NORMAL_INTERVAL_SECONDS
-
-    try:
-        return int(row["interval_seconds"] or STREAM_ENFORCER_NORMAL_INTERVAL_SECONDS)
-    except Exception:
-        return STREAM_ENFORCER_NORMAL_INTERVAL_SECONDS
-
-
-def _set_stream_enforcer_boost_until(until_dt: datetime):
-    _db.execute(
-        """
-        UPDATE settings
-        SET stream_enforcer_boost_until = ?
-        WHERE id = 1
-        """,
-        (until_dt.strftime("%Y-%m-%d %H:%M:%S"),)
-    )
-
-
-def _clear_stream_enforcer_boost_until():
-    _db.execute(
-        """
-        UPDATE settings
-        SET stream_enforcer_boost_until = NULL
-        WHERE id = 1
-        """
-    )
-
-
-def _get_stream_enforcer_boost_until():
-    row = _db.query_one(
-        """
-        SELECT stream_enforcer_boost_until
-        FROM settings
-        WHERE id = 1
-        LIMIT 1
-        """
-    )
-
-    if not row:
-        return None
-
-    return _parse_sql_datetime(row["stream_enforcer_boost_until"])
-
-
-def _refresh_stream_enforcer_boost_state(task_id: int):
-    """
-    Au début de chaque run :
-    - si boost actif => intervalle 15s
-    - si boost expiré => retour 60s
-    """
-    boost_until = _get_stream_enforcer_boost_until()
-    now = datetime.now()
-
-    if boost_until and boost_until > now:
-        if _get_stream_enforcer_interval() != STREAM_ENFORCER_BOOST_INTERVAL_SECONDS:
-            _set_stream_enforcer_interval(STREAM_ENFORCER_BOOST_INTERVAL_SECONDS)
-            logger.warning(
-                f"[TASK {task_id}] stream_enforcer boost active until {boost_until} "
-                f"-> interval={STREAM_ENFORCER_BOOST_INTERVAL_SECONDS}s"
-            )
-        return
-
-    if boost_until and boost_until <= now:
-        _clear_stream_enforcer_boost_until()
-
-    if _get_stream_enforcer_interval() != STREAM_ENFORCER_NORMAL_INTERVAL_SECONDS:
-        _set_stream_enforcer_interval(STREAM_ENFORCER_NORMAL_INTERVAL_SECONDS)
-        logger.warning(
-            f"[TASK {task_id}] stream_enforcer boost expired "
-            f"-> interval={STREAM_ENFORCER_NORMAL_INTERVAL_SECONDS}s"
-        )
-
-
-def _maybe_boost_stream_enforcer_after_expired_kill(task_id: int, policy_id: int, vodum_user_id: Optional[int]):
-    """
-    Si un user expiré se fait tuer plusieurs fois rapidement,
-    on accélère temporairement stream_enforcer.
-    """
-    if vodum_user_id is None:
-        return
-
-    row = _db.query_one(
-        """
-        SELECT COUNT(*) AS cnt
-        FROM stream_enforcements
-        WHERE policy_id = ?
-          AND vodum_user_id = ?
-          AND action = 'kill'
-          AND datetime(created_at) >= datetime('now', ?)
-        """,
-        (
-            int(policy_id),
-            int(vodum_user_id),
-            f"-{int(STREAM_ENFORCER_BOOST_WINDOW_MINUTES)} minutes",
-        )
-    )
-
-    kill_count = int(row["cnt"] or 0) if row else 0
-
-    if kill_count < STREAM_ENFORCER_BOOST_KILL_THRESHOLD:
-        return
-
-    boost_until = datetime.now() + timedelta(minutes=STREAM_ENFORCER_BOOST_DURATION_MINUTES)
-
-    _set_stream_enforcer_boost_until(boost_until)
-    _set_stream_enforcer_interval(STREAM_ENFORCER_BOOST_INTERVAL_SECONDS)
-
-    logger.warning(
-        f"[TASK {task_id}] stream_enforcer boost enabled: "
-        f"user={vodum_user_id} policy={policy_id} "
-        f"kills={kill_count}/{STREAM_ENFORCER_BOOST_WINDOW_MINUTES}min "
-        f"interval={STREAM_ENFORCER_BOOST_INTERVAL_SECONDS}s "
-        f"until={boost_until.strftime('%Y-%m-%d %H:%M:%S')}"
-    )
+    return select_rechecked_violation(violation, v2)
 
 # -------------------------
 # Task entrypoint
@@ -2219,7 +633,7 @@ def run(task_id: int, db):
     ✅ DO NOT instantiate DBManager here
     """
     _set_db(db)
-    _refresh_stream_enforcer_boost_state(task_id)
+    refresh_boost_state(_db, task_id)
 
     if is_debug_mode_enabled():
         logger.debug(f"[TASK {task_id}] stream_enforcer: start")
@@ -2361,7 +775,8 @@ def run(task_id: int, db):
                     f"is_transcode={target.get('is_transcode')} bitrate={target.get('bitrate')}"
                 )
 
-                _maybe_boost_stream_enforcer_after_expired_kill(
+                maybe_boost_after_expired_kill(
+                    _db,
                     task_id,
                     policy_id,
                     user_vodum_id,

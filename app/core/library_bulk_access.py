@@ -4,6 +4,12 @@ from __future__ import annotations
 
 import json
 
+from tasks_engine import (
+    enable_and_run_task_by_name,
+    force_task_run,
+    mark_auto_enable_dirty,
+)
+
 try:
     from core.media_jobs import insert_plex_media_job
 except ModuleNotFoundError:  # pragma: no cover - direct package imports in tests
@@ -15,6 +21,24 @@ class BulkAccessError(ValueError):
         super().__init__(flash_key)
         self.flash_key = flash_key
         self.category = category
+
+
+def wake_bulk_access_worker(result: dict, operation: str, logger) -> bool:
+    started = True
+    try:
+        enable_and_run_task_by_name("apply_plex_access_updates")
+    except Exception:
+        started = False
+        logger.exception(
+            "Bulk library %s persisted but Plex worker startup failed | "
+            "server_id=%s | changed_users=%s",
+            operation,
+            result.get("server_id"),
+            result.get("changed_users"),
+        )
+    mark_auto_enable_dirty()
+    force_task_run("apply_plex_access_updates")
+    return started
 
 
 def normalize_library_ids(values, *, limit: int = 500) -> list[int]:

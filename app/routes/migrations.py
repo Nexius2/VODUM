@@ -1,12 +1,10 @@
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from flask import Response, flash, jsonify, redirect, render_template, request, url_for
 
 from core.migrations.analysis import (
-    SUPPORTED_PROVIDERS,
     analyze_migration,
-    is_server_online,
     migration_pair_blocker,
     migration_workspace_blocker,
 )
@@ -21,6 +19,17 @@ from core.migrations.lifecycle import (
 )
 from core.migrations.phase4 import export_migration_plan, import_migration_plan
 from core.migrations.phase3 import remove_validated_source_access, rollback_destination_access, rollback_source_access
+from core.migrations.reporting import build_migration_report
+from core.migrations.repository import get_campaign, load_report_users
+from core.migrations.page_data import (
+    enrich_campaign_users,
+    load_campaign_detail_relations,
+    mapping_overrides_from_form,
+    migration_campaign_overview,
+    normalize_campaign_detail,
+    online_migration_servers,
+    paginate_campaign_users,
+)
 from tasks_engine import enable_and_run_task_by_name
 from secret_store import decrypt_secret
 from web.helpers import add_log, get_db, table_exists
@@ -29,121 +38,11 @@ from logging_utils import get_logger
 
 logger = get_logger("migrations")
 
-MIGRATION_CAMPAIGN_DETAIL_COLUMNS = """
-              mc.id,
-              mc.name,
-              mc.source_server_id,
-              mc.destination_server_id,
-              mc.migration_type,
-              mc.migration_mode,
-              mc.intent,
-              mc.status,
-              mc.options_json,
-              mc.library_mapping_json,
-              mc.analysis_json,
-              mc.scheduled_at,
-              mc.batch_size,
-              mc.created_at,
-              mc.updated_at,
-              mc.started_at,
-              mc.completed_at
-"""
-
-MIGRATION_USER_DETAIL_COLUMNS = """
-                  mu.id,
-                  mu.campaign_id,
-                  mu.vodum_user_id,
-                  mu.source_media_user_id,
-                  mu.destination_media_user_id,
-                  mu.status,
-                  mu.eligibility,
-                  mu.blockers_json,
-                  mu.options_json,
-                  mu.source_snapshot_json,
-                  mu.result_json,
-                  mu.attempts,
-                  mu.last_error,
-                  mu.created_at,
-                  mu.updated_at,
-                  mu.started_at,
-                  mu.completed_at
-"""
-
-MIGRATION_LIBRARY_MAPPING_COLUMNS = """
-                  mlm.id,
-                  mlm.campaign_id,
-                  mlm.source_library_id,
-                  mlm.destination_library_id,
-                  mlm.mapping_status,
-                  mlm.created_at,
-                  mlm.updated_at
-"""
-
-def _online_migration_servers(db) -> list[dict]:
-    return [
-        dict(row)
-        for row in db.query(
-            """
-            SELECT id, name, type, status, last_checked
-            FROM servers
-            ORDER BY lower(name), id
-            """
-        )
-        if str(row["type"] or "").strip().lower() in SUPPORTED_PROVIDERS
-        and is_server_online(row["status"])
-    ]
-
-
-def _mapping_overrides_from_form(prefix: str = "library_mapping_") -> dict[int, list[int]]:
-    overrides: dict[int, list[int]] = {}
-    for key in request.form.keys():
-        if not key.startswith(prefix):
-            continue
-        try:
-            source_library_id = int(key[len(prefix):])
-        except (TypeError, ValueError):
-            continue
-        destination_ids = []
-        for value in request.form.getlist(key):
-            try:
-                if str(value).strip():
-                    destination_ids.append(int(value))
-            except (TypeError, ValueError):
-                continue
-        overrides[source_library_id] = sorted(set(destination_ids))
-    return overrides
-
-
-def _group_mapping_rows(rows: list[dict]) -> list[dict]:
-    groups: dict[int, dict] = {}
-    for row in rows:
-        source_id = int(row["source_library_id"])
-        group = groups.setdefault(source_id, {
-            "source_library_id": source_id,
-            "source_name": row.get("source_name"),
-            "source_type": row.get("source_type"),
-            "mapping_status": row.get("mapping_status"),
-            "destination_library_ids": [],
-            "destinations": [],
-        })
-        if row.get("destination_library_id"):
-            destination_id = int(row["destination_library_id"])
-            if destination_id not in group["destination_library_ids"]:
-                group["destination_library_ids"].append(destination_id)
-                group["destinations"].append({
-                    "id": destination_id,
-                    "name": row.get("destination_name"),
-                    "type": row.get("destination_type"),
-                })
-                group["mapping_status"] = "mapped"
-    return list(groups.values())
-
-
 def register(app):
     @app.get("/migrations")
     def migrations_page():
         db = get_db()
-        servers = _online_migration_servers(db)
+        servers = online_migration_servers(db)
         workspace_blocker = migration_workspace_blocker(db, servers)
         incompatible_servers = {
             str(server["id"]): [
@@ -169,63 +68,10 @@ def register(app):
                 if not selection_blocker:
                     analysis_error = str(exc)
 
-        campaign_counts = {
-            "active": 0,
-            "completed": 0,
-            "needs_attention": 0,
-            "waiting_users": 0,
-            "blocked_users": 0,
-        }
-        campaign_rows = []
-        campaigns = []
-        if table_exists(db, "migration_campaigns"):
-            campaign_rows = db.query(
-                """
-                SELECT status, COUNT(*) AS total
-                FROM migration_campaigns
-                GROUP BY status
-                """
-            )
-            campaigns = [
-                dict(row)
-                for row in db.query(
-                    """
-                    SELECT
-                      mc.id, mc.name, mc.migration_type, mc.migration_mode,
-                      mc.status, mc.created_at,
-                      source.name AS source_name,
-                      destination.name AS destination_name,
-                      COUNT(DISTINCT mu.id) AS users_count
-                    FROM migration_campaigns mc
-                    JOIN servers source ON source.id = mc.source_server_id
-                    JOIN servers destination ON destination.id = mc.destination_server_id
-                    LEFT JOIN migration_users mu ON mu.campaign_id = mc.id
-                    GROUP BY mc.id
-                    ORDER BY mc.updated_at DESC, mc.id DESC
-                    LIMIT 20
-                    """
-                )
-            ]
-            user_counts = db.query_one(
-                """
-                SELECT
-                  SUM(CASE WHEN status IN ('waiting_acceptance','waiting_validation') THEN 1 ELSE 0 END) AS waiting_users,
-                  SUM(CASE WHEN eligibility='blocked' THEN 1 ELSE 0 END) AS blocked_users
-                FROM migration_users
-                """
-            )
-            if user_counts:
-                campaign_counts["waiting_users"] = int(user_counts["waiting_users"] or 0)
-                campaign_counts["blocked_users"] = int(user_counts["blocked_users"] or 0)
-        for row in campaign_rows:
-            status = str(row["status"] or "")
-            total = int(row["total"] or 0)
-            if status == "completed":
-                campaign_counts["completed"] += total
-            elif status in ("needs_attention", "failed"):
-                campaign_counts["needs_attention"] += total
-            elif status in ("scheduled", "running", "paused", "waiting_users"):
-                campaign_counts["active"] += total
+        campaign_counts, campaigns = migration_campaign_overview(
+            db,
+            schema_available=table_exists(db, "migration_campaigns"),
+        )
 
         return render_template(
             "migrations/migrations.html",
@@ -245,7 +91,7 @@ def register(app):
     @app.post("/migrations/drafts")
     def migration_draft_create():
         db = get_db()
-        servers = _online_migration_servers(db)
+        servers = online_migration_servers(db)
         if migration_workspace_blocker(db, servers):
             flash("migration_not_available", "warning")
             return redirect(url_for("migrations_page"))
@@ -260,7 +106,7 @@ def register(app):
             flash(f"migration_blocker.{pair_blocker}", "error")
             return redirect(url_for("migrations_page"))
 
-        mapping_overrides = _mapping_overrides_from_form()
+        mapping_overrides = mapping_overrides_from_form(request.form)
 
         try:
             analysis = analyze_migration(db, source_id, destination_id, mapping_overrides)
@@ -348,210 +194,36 @@ def register(app):
     @app.get("/migrations/<int:campaign_id>")
     def migration_campaign_detail(campaign_id: int):
         db = get_db()
-        users_page = max(request.args.get("users_page", 1, type=int), 1)
-        users_per_page = request.args.get("users_per_page", 20, type=int)
-        if users_per_page not in (20, 50, 100):
-            users_per_page = 20
-        campaign_row = db.query_one(
-            f"""
-            SELECT
-{MIGRATION_CAMPAIGN_DETAIL_COLUMNS},
-              source.name AS source_name,
-              source.type AS source_type,
-              destination.name AS destination_name,
-              destination.type AS destination_type
-            FROM migration_campaigns mc
-            JOIN servers source ON source.id = mc.source_server_id
-            JOIN servers destination ON destination.id = mc.destination_server_id
-            WHERE mc.id = ?
-            """,
-            (campaign_id,),
-        )
+        requested_users_page = request.args.get("users_page", 1, type=int)
+        requested_users_per_page = request.args.get("users_per_page", 20, type=int)
+        campaign_row = get_campaign(db, campaign_id, with_server_details=True)
         if not campaign_row:
             flash("migration_campaign_not_found", "error")
             return redirect(url_for("migrations_page"))
 
-        campaign = dict(campaign_row)
-        try:
-            campaign_options = json.loads(campaign.get("options_json") or "{}")
-        except Exception:
-            campaign_options = {}
-        campaign["safety_delay_days"] = max(0, int(campaign_options.get("safety_delay_days", 7)))
-        campaign["jellyfin_password_strategy"] = str(campaign_options.get("jellyfin_password_strategy") or "generated")
-        campaign["jellyfin_temp_password_configured"] = bool(campaign_options.get("jellyfin_temp_password"))
-        campaign["jellyfin_auto_deliver_credentials"] = bool(campaign_options.get("jellyfin_auto_deliver_credentials"))
-        scheduled_raw = str(campaign.get("scheduled_at") or "")
-        campaign["scheduled_at_input"] = (
-            f"{scheduled_raw[:10]}T{scheduled_raw[11:16]}"
-            if len(scheduled_raw) >= 16 and scheduled_raw[10:11] == " "
-            else scheduled_raw[:16]
+        campaign = normalize_campaign_detail(campaign_row)
+        users, mapping_groups, destination_libraries = load_campaign_detail_relations(
+            db,
+            campaign_id,
+            campaign["destination_server_id"],
         )
-        users = [
-            dict(row)
-            for row in db.query(
-                f"""
-                SELECT
-{MIGRATION_USER_DETAIL_COLUMNS}, vu.username, vu.email, vu.status AS vodum_status
-                FROM migration_users mu
-                JOIN vodum_users vu ON vu.id = mu.vodum_user_id
-                WHERE mu.campaign_id = ?
-                ORDER BY
-                  CASE mu.eligibility
-                    WHEN 'blocked' THEN 0
-                    WHEN 'ready' THEN 1
-                    ELSE 2
-                  END,
-                  lower(COALESCE(vu.username, '')),
-                  mu.id
-                """,
-                (campaign_id,),
-            )
-        ]
-        mappings = [
-            dict(row)
-            for row in db.query(
-                f"""
-                SELECT
-{MIGRATION_LIBRARY_MAPPING_COLUMNS},
-                  source.name AS source_name,
-                  source.type AS source_type,
-                  destination.name AS destination_name,
-                  destination.type AS destination_type
-                FROM migration_library_mappings mlm
-                JOIN libraries source ON source.id = mlm.source_library_id
-                LEFT JOIN libraries destination ON destination.id = mlm.destination_library_id
-                WHERE mlm.campaign_id = ?
-                ORDER BY lower(source.name), mlm.id
-                """,
-                (campaign_id,),
-            )
-        ]
-        destination_libraries = [
-            dict(row)
-            for row in db.query(
-                "SELECT id,name,type,section_id FROM libraries WHERE server_id=? ORDER BY lower(name),id",
-                (campaign["destination_server_id"],),
-            )
-        ]
-        mapping_groups = _group_mapping_rows(mappings)
-        source_libraries_by_id = {int(group["source_library_id"]): group for group in mapping_groups}
-        summary = {
-            "total": len(users),
-            "ready": sum(1 for user in users if user["eligibility"] == "ready"),
-            "blocked": sum(1 for user in users if user["eligibility"] == "blocked"),
-            "already_present": sum(1 for user in users if user["eligibility"] == "already_present"),
-            "unmapped": sum(1 for mapping in mapping_groups if not mapping["destination_library_ids"]),
-            "failed": sum(1 for user in users if user["status"] == "failed"),
-            "excluded": sum(1 for user in users if user["status"] == "excluded"),
-        }
-        for user in users:
-            try:
-                user["blockers"] = json.loads(user.get("blockers_json") or "[]")
-            except Exception:
-                user["blockers"] = []
-            try:
-                result = json.loads(user.get("result_json") or "{}")
-            except Exception:
-                result = {}
-            try:
-                user_options = json.loads(user.get("options_json") or "{}")
-            except Exception:
-                user_options = {}
-            try:
-                source_snapshot = json.loads(user.get("source_snapshot_json") or "{}")
-            except Exception:
-                source_snapshot = {}
-            source_library_ids = []
-            for ids in (source_snapshot.get("source_access") or {}).values():
-                for library_id in ids or []:
-                    try:
-                        source_library_ids.append(int(library_id))
-                    except (TypeError, ValueError):
-                        pass
-            user["source_library_ids"] = sorted(set(source_library_ids))
-            user["source_libraries"] = [
-                source_libraries_by_id[library_id]
-                for library_id in user["source_library_ids"]
-                if library_id in source_libraries_by_id
-            ]
-            raw_user_overrides = user_options.get("library_mapping_overrides") or {}
-            user["library_mapping_overrides"] = {}
-            if isinstance(raw_user_overrides, dict):
-                for source_id, destination_ids in raw_user_overrides.items():
-                    if not str(source_id).isdigit():
-                        continue
-                    parsed_destinations = []
-                    for destination_id in destination_ids or []:
-                        try:
-                            parsed_destinations.append(int(destination_id))
-                        except (TypeError, ValueError):
-                            continue
-                    user["library_mapping_overrides"][int(source_id)] = sorted(set(parsed_destinations))
-            user["has_credentials"] = bool(result.get("encrypted_generated_password"))
-            user["plex_invited_at"] = result.get("plex_invited_at")
-            user["plex_last_checked_at"] = result.get("plex_last_checked_at")
-            user["plex_accepted_at"] = result.get("plex_accepted_at")
-            user["plex_last_reminder_at"] = result.get("plex_last_reminder_at")
-            user["plex_reminder_count"] = int(result.get("plex_reminder_count") or 0)
-            user["destination_validated_at"] = result.get("destination_validated_at")
-            user["destination_rollback_requested_at"] = result.get("destination_rollback_requested_at")
-            user["destination_rolled_back_at"] = result.get("destination_rolled_back_at")
-            user["destination_library_ids_added"] = [
-                int(library_id)
-                for library_id in result.get("destination_library_ids_added", [])
-                if str(library_id).isdigit()
-            ]
-            user["destination_rollback_job_status"] = result.get("destination_rollback_job_status")
-            user["destination_rollback_job_error"] = result.get("destination_rollback_job_error")
-            user["source_removed_at"] = result.get("source_removed_at")
-            user["source_removal_requested_at"] = result.get("source_removal_requested_at")
-            user["source_restored_at"] = result.get("source_restored_at")
-            user["source_restoration_requested_at"] = result.get("source_restoration_requested_at")
-            user["source_removal_job_status"] = result.get("source_removal_job_status")
-            user["source_removal_job_error"] = result.get("source_removal_job_error")
-            user["source_restoration_job_status"] = result.get("source_restoration_job_status")
-            user["source_restoration_job_error"] = result.get("source_restoration_job_error")
-            user["destination_validation_method"] = result.get("destination_validation_method")
-            user["credentials_delivery_queued_at"] = result.get("credentials_delivery_queued_at")
-            user["credentials_delivery_template_id"] = result.get("credentials_delivery_template_id")
-            user["credentials_delivery_skipped_reason"] = result.get("credentials_delivery_skipped_reason")
-            user["source_removal_available_at"] = None
-            if user["destination_validated_at"]:
-                try:
-                    user["source_removal_available_at"] = (
-                        datetime.strptime(user["destination_validated_at"][:19], "%Y-%m-%d %H:%M:%S")
-                        + timedelta(days=campaign["safety_delay_days"])
-                    ).strftime("%Y-%m-%d %H:%M:%S")
-                except Exception:
-                    pass
-        summary["validated"] = sum(1 for user in users if user.get("destination_validated_at"))
-        summary["destination_rollback_requested"] = sum(1 for user in users if user.get("destination_rollback_requested_at"))
-        summary["destination_rolled_back"] = sum(1 for user in users if user.get("destination_rolled_back_at"))
-        summary["destination_rollback_available"] = sum(
-            1 for user in users
-            if user.get("destination_media_user_id")
-            and user.get("destination_library_ids_added")
-            and not user.get("destination_rollback_requested_at")
-            and not user.get("destination_rolled_back_at")
-        )
-        summary["source_removed"] = sum(1 for user in users if user.get("source_removed_at"))
-        summary["source_removal_requested"] = sum(1 for user in users if user.get("source_removal_requested_at"))
-        summary["removal_ready"] = sum(
-            1 for user in users
-            if user.get("source_removal_available_at")
-            and user["source_removal_available_at"] <= datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-            and not user.get("source_removed_at")
-            and not (
-                user.get("source_removal_requested_at")
-                and user.get("source_removal_job_status") in ("queued", "running", "success")
-            )
+        summary = enrich_campaign_users(
+            users,
+            mapping_groups,
+            safety_delay_days=campaign["safety_delay_days"],
         )
 
-        users_total = len(users)
-        users_total_pages = max((users_total + users_per_page - 1) // users_per_page, 1)
-        users_page = min(users_page, users_total_pages)
-        users_offset = (users_page - 1) * users_per_page
-        visible_users = users[users_offset:users_offset + users_per_page]
+        (
+            visible_users,
+            users_page,
+            users_per_page,
+            users_total,
+            users_total_pages,
+        ) = paginate_campaign_users(
+            users,
+            requested_page=requested_users_page,
+            requested_per_page=requested_users_per_page,
+        )
 
         return render_template(
             "migrations/campaign_detail.html",
@@ -575,7 +247,7 @@ def register(app):
                 db,
                 campaign_id,
                 name=request.form.get("name") or "",
-                mapping_overrides=_mapping_overrides_from_form(),
+                mapping_overrides=mapping_overrides_from_form(request.form),
                 safety_delay_days=request.form.get("safety_delay_days", type=int) if request.form.get("safety_delay_days", type=int) is not None else 7,
                 scheduled_at=request.form.get("scheduled_at") or "",
                 batch_size=request.form.get("batch_size", type=int) or 10,
@@ -770,7 +442,7 @@ def register(app):
             options = json.loads(row["options_json"] or "{}")
         except Exception:
             options = {}
-        overrides = _mapping_overrides_from_form(prefix="user_library_mapping_")
+        overrides = mapping_overrides_from_form(request.form, prefix="user_library_mapping_")
         options["library_mapping_overrides"] = {
             str(source_id): destination_ids
             for source_id, destination_ids in sorted(overrides.items())
@@ -939,64 +611,11 @@ def register(app):
     @app.get("/migrations/<int:campaign_id>/report")
     def migration_campaign_report(campaign_id: int):
         db = get_db()
-        campaign = db.query_one(
-            f"""
-            SELECT
-{MIGRATION_CAMPAIGN_DETAIL_COLUMNS}
-            FROM migration_campaigns mc
-            WHERE mc.id = ?
-            """,
-            (campaign_id,),
-        )
+        campaign = get_campaign(db, campaign_id)
         if not campaign:
             return jsonify({"ok": False, "error": "not_found"}), 404
-        users = [dict(row) for row in db.query(
-            "SELECT id,vodum_user_id,status,eligibility,attempts,last_error,result_json,source_snapshot_json FROM migration_users WHERE campaign_id=? ORDER BY id",
-            (campaign_id,),
-        )]
-        for user in users:
-            try:
-                result = json.loads(user.get("result_json") or "{}")
-            except Exception:
-                result = {}
-            result.pop("encrypted_generated_password", None)
-            user["result"] = result
-            user.pop("result_json", None)
-        status_counts = {}
-        report_summary = {
-            "users": len(users),
-            "statuses": status_counts,
-            "validated": 0,
-            "source_removal_requested": 0,
-            "source_removed": 0,
-            "source_restored": 0,
-            "destination_rollback_requested": 0,
-            "destination_rolled_back": 0,
-            "provider_job_errors": 0,
-        }
-        for user in users:
-            status_counts[user["status"]] = status_counts.get(user["status"], 0) + 1
-            result = user.get("result") or {}
-            report_summary["validated"] += int(bool(result.get("destination_validated_at")))
-            report_summary["source_removal_requested"] += int(bool(result.get("source_removal_requested_at")))
-            report_summary["source_removed"] += int(bool(result.get("source_removed_at")))
-            report_summary["source_restored"] += int(bool(result.get("source_restored_at")))
-            report_summary["destination_rollback_requested"] += int(bool(result.get("destination_rollback_requested_at")))
-            report_summary["destination_rolled_back"] += int(bool(result.get("destination_rolled_back_at")))
-            report_summary["provider_job_errors"] += int(
-                bool(
-                    result.get("source_removal_job_error")
-                    or result.get("source_restoration_job_error")
-                    or result.get("destination_rollback_job_error")
-                )
-            )
-        return jsonify({
-            "ok": True,
-            "generated_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
-            "campaign": dict(campaign),
-            "summary": report_summary,
-            "users": users,
-        })
+        users = load_report_users(db, campaign_id)
+        return jsonify(build_migration_report(campaign, users))
 
     @app.post("/migrations/<int:campaign_id>/users/<int:migration_user_id>/credentials")
     def migration_user_credentials(campaign_id: int, migration_user_id: int):
