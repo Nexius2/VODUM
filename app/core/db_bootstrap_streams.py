@@ -73,7 +73,7 @@ def ensure_stream_enforcement_schema(
           session_key TEXT,
           vodum_user_id INTEGER,
           external_user_id TEXT,
-          action TEXT NOT NULL CHECK (action IN ('warn','kill')),
+          action TEXT NOT NULL CHECK (action IN ('warn','kill','kill_failed')),
           reason TEXT,
           account_username TEXT,
           ips_json TEXT,
@@ -90,5 +90,51 @@ def ensure_stream_enforcement_schema(
     ensure_column(cursor, "stream_enforcements", "account_username", "TEXT")
     ensure_column(cursor, "stream_enforcements", "ips_json", "TEXT")
     ensure_column(cursor, "stream_enforcements", "details_json", "TEXT")
+
+    cursor.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='stream_enforcements'"
+    )
+    schema_row = cursor.fetchone()
+    schema_sql = str(schema_row[0] or "") if schema_row else ""
+    if "kill_failed" not in schema_sql:
+        cursor.execute(
+            "ALTER TABLE stream_enforcements "
+            "RENAME TO stream_enforcements_legacy_action"
+        )
+        cursor.execute("""
+        CREATE TABLE stream_enforcements (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          policy_id INTEGER NOT NULL,
+          server_id INTEGER NOT NULL,
+          provider TEXT NOT NULL CHECK (provider IN ('plex','jellyfin')),
+          session_key TEXT,
+          vodum_user_id INTEGER,
+          external_user_id TEXT,
+          action TEXT NOT NULL CHECK (action IN ('warn','kill','kill_failed')),
+          reason TEXT,
+          account_username TEXT,
+          ips_json TEXT,
+          details_json TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(policy_id) REFERENCES stream_policies(id) ON DELETE CASCADE,
+          FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE
+        )
+        """)
+        cursor.execute("""
+        INSERT INTO stream_enforcements(
+          id, policy_id, server_id, provider, session_key, vodum_user_id,
+          external_user_id, action, reason, account_username, ips_json,
+          details_json, created_at
+        )
+        SELECT
+          id, policy_id, server_id, provider, session_key, vodum_user_id,
+          external_user_id, action, reason, account_username, ips_json,
+          details_json, created_at
+        FROM stream_enforcements_legacy_action
+        """)
+        cursor.execute("DROP TABLE stream_enforcements_legacy_action")
+        conn.commit()
+
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_stream_enforcements_time ON stream_enforcements(created_at)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_stream_enforcements_vodum_user_created ON stream_enforcements(vodum_user_id, created_at)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_stream_enforcements_external_user_created ON stream_enforcements(external_user_id, created_at)")

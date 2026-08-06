@@ -32,6 +32,7 @@ from core.stream_enforcement_store import (
     log_enforcement,
     upsert_state,
     already_warned_recently,
+    already_killed_recently,
 )
 from core.stream_notification_delivery import (
     media_title_from_session as _media_title_from_session,
@@ -114,6 +115,15 @@ def _load_live_sessions(stable_seconds: Optional[int] = None) -> List[dict]:
     if stable_seconds is None:
         stable_seconds = LIVE_STABLE_SECONDS
     return load_live_sessions(_db, LIVE_WINDOW_SECONDS, stable_seconds)
+
+
+def _already_killed_recently(
+    policy_id: int, server_id: int, vodum_user_id: Optional[int],
+    external_user_id: str, minutes: int = 5,
+) -> bool:
+    return already_killed_recently(
+        _db, policy_id, server_id, vodum_user_id, external_user_id, minutes
+    )
 
 
 def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
@@ -615,8 +625,11 @@ def _load_server(server_id: int) -> Optional[dict]:
     return load_server(_db, server_id)
 
 
-def _recheck_violation(policy: dict, violation: dict) -> Optional[dict]:
-    time.sleep(RECHECK_DELAY_SECONDS)
+def _recheck_violation(
+    policy: dict, violation: dict, delay_seconds: float = RECHECK_DELAY_SECONDS
+) -> Optional[dict]:
+    if delay_seconds > 0:
+        time.sleep(delay_seconds)
 
     sessions = _load_live_sessions()
     v2 = _evaluate_policy(policy, sessions)
@@ -791,6 +804,12 @@ def run(task_id: int, db):
 
             continue
 
+        # A Plex player may automatically recreate a session after terminate.
+        # Do not grant another full warning delay to a just-stopped actor.
+        recently_killed = _already_killed_recently(
+            policy_id, server_id, user_vodum_id, user_ext, minutes=5
+        )
+
         # 1) WARN (une fois) + recheck 30s
         if not _already_warned_recently(policy_id, server_id, user_vodum_id, user_ext, minutes=5):
             warned_ok = False
@@ -822,7 +841,9 @@ def run(task_id: int, db):
 
 
         # 2) recheck 30s -> si toujours violation -> KILL
-        rechecked_violation = _recheck_violation(policy, v)
+        rechecked_violation = _recheck_violation(
+            policy, v, delay_seconds=0 if recently_killed else RECHECK_DELAY_SECONDS
+        )
         if not rechecked_violation:
             if is_debug_mode_enabled():
                 logger.debug(f"[TASK {task_id}] stream_enforcer: violation cleared after recheck (policy={policy_id} server={server_id})")

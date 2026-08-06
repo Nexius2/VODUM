@@ -791,5 +791,4 @@ def ensure_communications_schema(conn, cursor, *, table_exists, ensure_column) -
             except Exception:
                 pass
     except Exception as e:
-        print(f"âš ï¸ Communications migration skipped: {e}")
-
+        print(f"⚠️ Communications migration skipped: {e}")

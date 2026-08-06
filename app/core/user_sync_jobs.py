@@ -70,12 +70,12 @@ def queue_plex_share_settings_sync(db, user_id: int, server_id: int, reason: str
 
 def force_queue_full_plex_sync_for_user(db, user_id: int, reason: str = "admin_force_resync"):
     """
-    RecrÃ©e un job 'sync' complet par serveur Plex liÃ©.
+    Recrée un job 'sync' complet par serveur Plex lié.
 
     Important :
     on passe par _insert_plex_media_job() pour annuler proprement
-    les anciens jobs actifs du mÃªme user/server, au lieu de supprimer
-    brutalement des jobs Ã©ventuellement en cours.
+    les anciens jobs actifs du même user/server, au lieu de supprimer
+    brutalement des jobs éventuellement en cours.
     """
     rows = db.query(
         """
