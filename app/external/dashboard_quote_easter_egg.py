@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from core.plex_rate_limit import wait_for_plex_slot
 import requests
-from flask import current_app, request, session, url_for
+from flask import request, session, url_for
 
 from db_manager import DBManager
 from logging_utils import get_logger
@@ -334,6 +334,13 @@ def _resolve_on_plex(server, media_type, imdb, tmdb):
                     "backdrop_item_id": None,
                 }
 
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            logger.warning(
+                "[PLEX] Lookup unavailable on server=%s url=%s: %s",
+                server.get("name"),
+                url,
+                exc,
+            )
         except Exception:
             logger.exception(
                 f"[PLEX] Lookup failed on server={server.get('name')} url={url}"

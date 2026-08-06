@@ -5,7 +5,6 @@ from logging_utils import get_logger
 import xml.etree.ElementTree as ET
 from plexapi.exceptions import BadRequest
 from core.providers.plex_users import plex_invite_and_share
-import re
 import requests
 from core.plex_rate_limit import install_plex_rate_limit
 from core.plex_connection import find_working_plex_base_url
@@ -26,6 +25,15 @@ from core.plex_access_jobs import (
 from core.plex_access_runtime import (
     install_plex_http_logger,
     log_updatefriend_payload,
+)
+from core.plex_share_xml import (
+    get_shared_servers_for_machine,
+    plex_title_to_id_map,
+)
+from core.plex_share_identity import (
+    extract_already_shared_username,
+    find_shared_server_id_for_user,
+    find_shared_server_state_for_user,
 )
 
 logger = get_logger("apply_plex_access_updates")
@@ -96,25 +104,7 @@ def _plex_title_to_id_map(account, machine_id: str) -> dict:
     Récupère un mapping {title -> id} depuis:
     GET https://plex.tv/api/servers/<machine_id>
     """
-    url = f"https://plex.tv/api/servers/{machine_id}"
-    resp = account.query(url, account._session.get)
-
-    root = None
-    if hasattr(resp, "findall"):
-        root = resp
-    else:
-        try:
-            root = ET.fromstring(resp)
-        except Exception:
-            raise RuntimeError("Unable to parse Plex server sections XML")
-
-    m = {}
-    for sec in root.findall(".//Section"):
-        title = sec.attrib.get("title")
-        sid = sec.attrib.get("id")
-        if title and sid:
-            m[title] = sid
-    return m
+    return plex_title_to_id_map(account, machine_id)
 
 
 def _find_shared_server_id_for_machine(plex_user, machine_id: str):
@@ -132,62 +122,7 @@ def _get_shared_servers_for_machine(account, machine_id: str):
     GET https://plex.tv/api/servers/<machine_id>/shared_servers
     Returns list of dicts: {id, username, email, userID, section_ids}
     """
-    url = f"https://plex.tv/api/servers/{machine_id}/shared_servers"
-    resp = account.query(url, account._session.get)
-
-    if isinstance(resp, ET.Element):
-        root = resp
-    else:
-        xml_text = None
-        if hasattr(resp, "text") and isinstance(resp.text, str):
-            xml_text = resp.text
-        elif isinstance(resp, (str, bytes)):
-            xml_text = resp.decode() if isinstance(resp, bytes) else resp
-        else:
-            try:
-                xml_text = ET.tostring(resp).decode("utf-8")
-            except Exception:
-                xml_text = str(resp)
-
-        root = ET.fromstring(xml_text)
-
-    out = []
-    for ss in root.findall(".//SharedServer"):
-        section_ids = []
-
-        raw_section_ids = (
-            ss.attrib.get("librarySectionIDs")
-            or ss.attrib.get("librarySectionIds")
-            or ss.attrib.get("library_section_ids")
-            or ""
-        )
-        for part in str(raw_section_ids).replace(";", ",").split(","):
-            part = part.strip()
-            if part.isdigit():
-                section_ids.append(int(part))
-
-        for child in list(ss):
-            child_id = (
-                child.attrib.get("id")
-                or child.attrib.get("key")
-                or child.attrib.get("librarySectionID")
-                or child.attrib.get("librarySectionId")
-            )
-            if child_id and str(child_id).isdigit():
-                section_ids.append(int(child_id))
-
-        out.append(
-            {
-                "id": ss.attrib.get("id"),
-                "username": ss.attrib.get("username"),
-                "email": ss.attrib.get("email"),
-                "userID": ss.attrib.get("userID") or ss.attrib.get("userId"),
-                "invitedId": ss.attrib.get("invitedId") or ss.attrib.get("invitedID") or ss.attrib.get("invited_id"),
-                "section_ids": sorted(set(section_ids)),
-            }
-        )
-
-    return out
+    return get_shared_servers_for_machine(account, machine_id)
 
 
 def _find_shared_server_id_for_user_on_machine(account, machine_id: str, plex_user_obj):
@@ -200,54 +135,14 @@ def _find_shared_server_id_for_user_on_machine(account, machine_id: str, plex_us
     - title (au cas où username soit vide côté objet Plex)
     Le tout en comparaison insensible à la casse.
     """
-    def norm(v):
-        return str(v or "").strip()
-
-    def norm_lower(v):
-        return norm(v).lower()
-
-    target_uid = norm(getattr(plex_user_obj, "id", None))
-    target_username = norm_lower(getattr(plex_user_obj, "username", None))
-    target_email = norm_lower(getattr(plex_user_obj, "email", None))
-    target_title = norm_lower(getattr(plex_user_obj, "title", None))
-
-    shared = _get_shared_servers_for_machine(account, machine_id)
-
-    for ss in shared:
-        ss_id = ss.get("id")
-        ss_uid = norm(ss.get("userID"))
-        ss_invited = norm(ss.get("invitedId"))
-        ss_username = norm_lower(ss.get("username"))
-        ss_email = norm_lower(ss.get("email"))
-
-        if target_uid and (ss_uid == target_uid or ss_invited == target_uid):
-            return ss_id
-
-        if target_username and ss_username == target_username:
-            return ss_id
-
-        if target_email and ss_email == target_email:
-            return ss_id
-
-        if target_title and ss_username == target_title:
-            return ss_id
-
-    return None
+    return find_shared_server_id_for_user(account, machine_id, plex_user_obj)
 
 def _find_shared_server_state_for_user_on_machine(account, machine_id: str, plex_user_obj):
     """
     Retourne l'état Plex actuel du partage pour CE user sur CE serveur.
     Utilisé pour logger le diff réel avant modification.
     """
-    shared_id = _find_shared_server_id_for_user_on_machine(account, machine_id, plex_user_obj)
-    if not shared_id:
-        return None
-
-    for ss in _get_shared_servers_for_machine(account, machine_id):
-        if str(ss.get("id") or "").strip() == str(shared_id):
-            return ss
-
-    return {"id": shared_id, "section_ids": []}
+    return find_shared_server_state_for_user(account, machine_id, plex_user_obj)
 
 
 def _log_access_diff(action: str, *, vodum_user_id, media_user_id, server_id, machine_id, shared_server_id, current_section_ids, expected_section_ids):
@@ -271,11 +166,7 @@ def _extract_already_shared_username(error_message: str) -> str | None:
     Extrait le username depuis:
     "You're already sharing this server with adrienferret. Please edit your existing share."
     """
-    msg = str(error_message or "")
-    m = re.search(r"already sharing this server with\s+([^.<>]+)", msg, re.IGNORECASE)
-    if not m:
-        return None
-    return m.group(1).strip().lower() or None
+    return extract_already_shared_username(error_message)
 
 def _ensure_shared_server(account, machine_id: str, plex_user_obj, section_ids: list):
     """

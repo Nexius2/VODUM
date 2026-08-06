@@ -291,7 +291,7 @@ def sync_plex_user_library_access(db, plex, server):
     server_id = server["id"]
     server_name = server["name"]
 
-    # 1ï¸âƒ£ Mapping libraries du serveur
+    # 1. Mapping libraries du serveur
     libraries = db.query(
         """
         SELECT id, section_id

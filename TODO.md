@@ -3,7 +3,7 @@
 Ce fichier contient uniquement le travail restant. Les changements termines
 sont documentes dans `changelog.md`.
 
-Derniere mise a jour: 2026-07-22
+Derniere mise a jour: 2026-08-02
 
 ## Principes de suivi
 
@@ -65,7 +65,15 @@ Derniere mise a jour: 2026-07-22
   instantanés de modèles d'abonnement est désormais centralisée hors de
   `subscriptions_page.py`, qui réutilise le service commun existant. La
   sélection des serveurs de migration et la préparation des correspondances
-  de bibliothèques sont sorties de `migrations.py`. Les fragments SQL de
+  de bibliothèques sont sorties de `migrations.py`. Le chargement des campagnes
+  récentes et l'agrégation de leurs compteurs sont maintenant dans le même
+  service de page, tout comme l'enrichissement des utilisateurs et le résumé
+  de la page de détail, la normalisation des options de campagne et la
+  pagination des utilisateurs. Les lectures des utilisateurs, mappings et
+  bibliothèques destination de cette page y sont également centralisées. La
+  construction sécurisée du rapport de campagne est isolée dans un service
+  dédié. Les colonnes et lectures de campagne partagées avec ce rapport sont
+  regroupées dans un référentiel Migrations. Les fragments SQL de
   chargement et la normalisation des types de bibliothèques sont désormais
   centralisés hors de `servers.py`, repassé sous 1000 lignes. La découverte de
   la base et du serveur Plex associé est sortie de `import_tautulli.py`. La
@@ -80,7 +88,64 @@ Derniere mise a jour: 2026-07-22
   et la sélection des modèles Communications sont centralisés hors de
   `communications_engine.py`, lui aussi repassé sous 1000 lignes. Les appels
   HTTP de découverte utilisateur et de comptage des bibliothèques Jellyfin sont
-  isolés hors de `sync_jellyfin.py`, désormais sous 1000 lignes.
+  isolés hors de `sync_jellyfin.py`, désormais sous 1000 lignes. La réplication
+  des options Plex entre serveurs de même propriétaire est sortie de
+  `users_detail.py` vers un service utilisateur testé. La lecture du formulaire,
+  la persistance de ces options et la création dédupliquée des jobs de
+  synchronisation Plex utilisent désormais ce même service. La modification
+  administrative des parrains et la normalisation des overrides de profil
+  sont également isolées de `users_detail.py` dans des services testés. Les
+  lectures partagées du profil/réglages/providers ainsi que les requêtes des
+  comptes serveur et bibliothèques accessibles sont regroupées dans un
+  référentiel dédié. Dans la tâche d'accès Plex, le parsing XML des sections et
+  partages ainsi que l'identification robuste du partage utilisateur sont
+  maintenant isolés dans des services provider testés. La construction des
+  requêtes HTTP Jellyfin, leur authentification, la découverte des serveurs et
+  la sélection de leur URL sont également sorties de `sync_jellyfin.py`. La
+  normalisation du rôle, de la date de création et de l'avatar utilisateur,
+  puis la persistance du payload Jellyfin complet, sont centralisées dans un
+  service de métadonnées. L'initialisation de l'expiration au premier accès et
+  le matching des profils VODUM/placeholder par username sont aussi isolés de
+  la tâche dans des services testés. Les écritures des bibliothèques, de l'état
+  des comptes média et de leurs accès par serveur sont regroupées dans un
+  référentiel de synchronisation Jellyfin.
+  La suppression serveur utilise désormais un service dédié pour ses lots SQL,
+  son garde de concurrence atomique, la lecture de sa cible et le lancement
+  normalisé de son thread. L'ordre complet des suppressions directes et des
+  relations jusqu'au commit final est également sorti du traitement de fond;
+  leur orchestration et la fermeture sûre de la connexion sont centralisées.
+  L'ouverture configurée et l'ordre des compteurs de journal sont aussi dans le
+  service. Les journaux, erreurs, fermeture et libération du garde sont enfin
+  orchestrés par le worker dédié; la route ne garde qu'un adaptateur de thread.
+  Les listes Serveurs et Bibliothèques délèguent maintenant leurs requêtes,
+  agrégats et tris validés au service de page commun. Le détail serveur lui
+  délègue aussi le comptage et le chargement paginé de ses bibliothèques et
+  utilisateurs média, ainsi que le chargement de son enregistrement principal.
+  Le comptage global de la liste Bibliothèques est également centralisé.
+  Le workflow de synchronisation serveur délègue désormais la lecture de la
+  cible, la sélection des utilisateurs Plex éligibles, la construction des
+  contrats de jobs, leur insertion dédupliquée, le réveil tolérant du worker et
+  le résultat métier à un service dédié; la route ne conserve que le flux HTTP.
+  La création serveur délègue maintenant la résolution du type de formulaire et
+  la normalisation de l'URL Plex/Jellyfin à des fonctions pures testées. La
+  sauvegarde réutilise la même résolution du type et la création délègue aussi
+  la forme optionnelle de ses paramètres Tautulli. La sérialisation/chiffrement
+  des secrets et l'insertion SQL complète de la création sont centralisés dans
+  un service d'administration serveur. Le commit de compatibilité et la mise en
+  file tolérante de la découverte y sont également isolés. L'activation avant
+  commit, les signaux après commit et le résultat UI de création sont désormais
+  centralisés tout en conservant leur ordre transactionnel. La sauvegarde
+  délègue maintenant la lecture des secrets existants et son UPDATE complet au
+  même service d'administration. Le décodage tolérant des paramètres et leur
+  fusion Tautulli/`verify_tls` avec conservation des secrets y sont aussi isolés.
+  Leur sérialisation/chiffrement final et les signaux post-UPDATE sont désormais
+  centralisés; la route de sauvegarde ne conserve que le flux HTTP.
+  Les routes d'accès en masse délèguent aussi le réveil tolérant du worker Plex
+  et leurs journaux contextualisés au service de bibliothèques existant.
+  Les types supportés et les erreurs d'URL de création sont enfin validés par le
+  service de formulaire commun à la création et à la sauvegarde.
+  La lecture complète des champs de création et de sauvegarde y est également
+  centralisée, avec nettoyage des imports de route devenus inutiles.
 - [~] Uniformiser les acces DB applicatifs restants. Les connexions SQLite de
   bootstrap, config, logs, restauration et suppression serveur passent deja
   par `open_sqlite_connection`.

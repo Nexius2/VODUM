@@ -195,6 +195,20 @@ class PlexProvider(BaseProvider):
             if find_session_id(refreshed) is None:
                 return True
 
+            # Plex can acknowledge the request while briefly ignoring it
+            # during a timeline transition. Retry the command, but keep the
+            # session disappearance above as the only success criterion.
+            if attempt < 4:
+                try:
+                    self._request("GET", "/status/sessions/terminate", params=params)
+                except Exception:
+                    log.debug(
+                        "Retrying Plex terminate failed session_key=%s session_id=%s",
+                        session_key,
+                        target_session_id,
+                        exc_info=True,
+                    )
+
         log.warning(
             "Plex accepted terminate request but session is still active "
             f"session_key={session_key} session_id={target_session_id}"

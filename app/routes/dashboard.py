@@ -171,7 +171,7 @@ def register(app):
         # --------------------------
         latest_logs = []
 
-        lines = read_last_logs(30)  # on lit plus large, on filtre aprÃƒÂ¨s
+        lines = read_last_logs(30)  # on lit plus large, on filtre après
         ALLOWED_LEVELS = {"INFO", "ERROR", "CRITICAL"}
 
         for line in lines:

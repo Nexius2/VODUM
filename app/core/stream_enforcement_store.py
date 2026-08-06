@@ -71,3 +71,20 @@ def already_warned_recently(
         f"-{int(minutes)} minutes",
     ))
     return bool(row)
+
+
+def already_killed_recently(
+    db, policy_id: int, server_id: int, vodum_user_id: Optional[int],
+    external_user_id: str, minutes: int = 5,
+) -> bool:
+    """Return whether this actor was verifiably stopped very recently."""
+    row = db.query_one("""
+        SELECT 1 FROM stream_enforcement_state
+        WHERE policy_id=? AND server_id=? AND actor_key=?
+          AND killed_at IS NOT NULL
+          AND datetime(killed_at) >= datetime('now', ?) LIMIT 1
+    """, (
+        policy_id, server_id, actor_key(vodum_user_id, external_user_id),
+        f"-{int(minutes)} minutes",
+    ))
+    return bool(row)

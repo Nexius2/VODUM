@@ -3,7 +3,7 @@ import threading
 import time
 import websocket
 
-from logging_utils import get_logger
+from logging_utils import get_logger, is_debug_mode_enabled
 from db_manager import DBManager
 from config import Config
 
@@ -17,6 +17,7 @@ class PlexWebsocketClient:
         self.ws = None
         self.db = DBManager(Config.DATABASE_PATH)
         self.last_refresh_ts = 0
+        self._last_logged_session_count = None
         self._refresh_lock = threading.Lock()
 
     def start(self):
@@ -123,18 +124,45 @@ class PlexWebsocketClient:
                 provider="plex",
             )
             self._enqueue_stream_enforcer_if_live(report)
+            self._log_refresh_result(report)
 
-            logger.info(
-                f"Refreshed {report.get('sessions_seen', 0)} live sessions "
-                f"for {self.server['name']}"
+        except Exception as exc:
+            # Log the first successful refresh after recovery even when the
+            # number of sessions happens to be unchanged.
+            self._last_logged_session_count = None
+            # An unavailable Plex server is an expected operational state.  The
+            # collector already marks it down and enables its cooldown, so do
+            # not turn the propagated connection failure into an ERROR with a
+            # full traceback in the regular logs.
+            logger.warning(
+                "Plex server %s is temporarily unreachable: %s",
+                self.server["name"],
+                str(exc),
             )
-
-        except Exception:
-            logger.exception(
-                f"Unable to refresh live sessions for {self.server['name']}"
-            )
+            if is_debug_mode_enabled():
+                logger.debug(
+                    "Unable to refresh live sessions for %s",
+                    self.server["name"],
+                    exc_info=True,
+                )
         finally:
             self._refresh_lock.release()
+
+    def _log_refresh_result(self, report: dict):
+        sessions_seen = int((report or {}).get("sessions_seen") or 0)
+        events = int((report or {}).get("events") or 0)
+        previous_count = getattr(self, "_last_logged_session_count", None)
+        message = "Refreshed %s live sessions for %s"
+
+        # Keep routine websocket heartbeats out of INFO.  A refresh remains
+        # visible when monitoring starts, the session count changes, or the
+        # collector detects a playback event (start/pause/resume/stop).
+        if previous_count is None or sessions_seen != previous_count or events > 0:
+            logger.info(message, sessions_seen, self.server["name"])
+        else:
+            logger.debug(message, sessions_seen, self.server["name"])
+
+        self._last_logged_session_count = sessions_seen
 
     def _enqueue_stream_enforcer_if_live(self, report: dict):
         try:

@@ -100,7 +100,7 @@ def ensure_discord_schema(conn, cursor, *, table_exists, ensure_column) -> None:
             "Hello {username} 🙂 Just a reminder: your subscription expires on {expiration_date} ({days_left} day(s) left).",
         ),
         "fin": (
-            "âš ï¸ Subscription expired",
+            "⚠️ Subscription expired",
             "Hi {username}. Your subscription expired on {expiration_date}. Please contact me to renew it.",
         ),
     }

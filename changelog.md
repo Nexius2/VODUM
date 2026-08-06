@@ -1,5 +1,139 @@
 # Changelog
 
+- Correction de deux erreurs visibles dans les logs : migration idempotente de
+  `stream_enforcements` pour accepter `kill_failed` sans perdre l'historique,
+  et déclassement des timeouts Plex du visuel Dashboard en avertissements sans
+  traceback; import mort associé supprimé.
+- Deux lots P3 Servers : lecture complète des formulaires de création puis de
+  sauvegarde centralisée, avec normalisations et valeurs optionnelles inchangées
+  et suppression des imports de route devenus morts.
+- Deux lots P3 Servers : validation commune des types Plex/Jellyfin puis
+  classification des erreurs d'URL de création extraites des routes, avec ordre
+  protocole/`web`, messages et normalisation préalable inchangés.
+- Deux lots P3 Servers : post-traitements des ajouts puis retraits massifs de
+  bibliothèques mutualisés dans le service d'accès, avec démarrage tolérant,
+  journaux `grant`/`removal` et signaux du worker toujours exécutés.
+- Deux lots P3 Servers : sérialisation/chiffrement final des paramètres et du
+  token de sauvegarde, puis réveil post-UPDATE extraits de la route, avec ordre,
+  conservation des secrets et propagation des erreurs inchangés.
+- Audit statique complet après les extractions P3 Servers : installation et
+  exécution de Ruff/Pyflakes, suppression du `lastrowid` devenu inutilisé,
+  puis validation des 42 audits, des smokes et de la suite complète.
+- Deux lots P3 Servers : décodage compatible du `settings_json` puis fusion des
+  paramètres Tautulli/`verify_tls` extraits de la sauvegarde, avec conservation
+  des secrets et du comportement historique des JSON valides non objets.
+- Deux lots P3 Servers : lecture des secrets existants puis UPDATE complet de la
+  sauvegarde déplacés vers le service d'administration, avec colonnes, valeurs,
+  identifiant et position de la fusion des secrets inchangés.
+- Deux lots P3 Servers : activation/réveil des tâches de création séparés autour
+  du commit, puis sélection du message provider centralisée, avec ordre
+  transactionnel et catégories de notification strictement préservés.
+- Deux lots P3 Servers : commit de création compatible avec les wrappers sans
+  commit, puis mise en file tolérante de la découverte extraits de la route,
+  avec ordre et comportements d'erreur/journalisation inchangés.
+- Deux lots P3 Servers : préparation chiffrée des paramètres/token puis INSERT
+  complet de création déplacés vers le service d'administration, avec JSON,
+  ordre des colonnes, curseur et statut initial `unknown` inchangés.
+- Deux lots P3 Servers : normalisation du type mutualisée avec la sauvegarde,
+  puis construction des paramètres Tautulli optionnels extraite de la création,
+  avec valeurs absentes et structure JSON historique préservées.
+- Deux lots P3 Servers : résolution normalisée du type de serveur puis nettoyage
+  des URL de base Plex/Jellyfin extraits de la création, avec priorité des champs
+  historiques et traitement des suffixes `/web` strictement préservés.
+- Deux lots P3 Servers : journal de succès complet puis cycle de vie du worker
+  de suppression centralisés dans le service, avec séquence succès/erreur,
+  fermeture et libération du garde garanties; la route devient un adaptateur.
+- Deux lots P3 Servers : ouverture configurée de la connexion SQLite du thread
+  et construction ordonnée des douze compteurs du journal final centralisées,
+  avec délais, mode multithread et positions du format strictement préservés.
+- Deux lots P3 Servers : orchestration des phases SQL de suppression et fusion
+  de leurs compteurs, puis fermeture sûre de la connexion extraites du thread,
+  avec ordre, taille de lot et tolérance aux erreurs de fermeture préservés.
+- Deux lots P3 Servers : suppressions par lots des neuf tables directement
+  rattachées au serveur, puis chaîne ordonnée accès/bibliothèques/comptes média
+  et serveur extraites du thread, avec compteurs et commits préservés.
+- Deux lots P3 Servers : lecture de la cible de suppression et lancement du
+  thread d'arrière-plan extraits de la route, avec cible, arguments, mode daemon
+  et nom du thread strictement préservés.
+- Deux lots P3 Servers : réveil tolérant du worker de mises à jour Plex et
+  sélection du message final de synchronisation extraits de la route, qui ne
+  conserve plus que les redirections et notifications HTTP de ce workflow.
+- Deux lots P3 Servers : construction des clés/payloads de synchronisation Plex
+  puis insertion et comptage des jobs extraits de la route, avec sélection du
+  compte média préféré, déduplication et arguments d'insertion inchangés.
+- Deux lots P3 Servers : lecture de la cible de synchronisation et sélection
+  distincte des utilisateurs Plex ayant un accès sur le même serveur extraites
+  de la route, avec filtres, jointures et paramètres SQL préservés.
+- Deux lots P3 Servers : comptage global de la liste Bibliothèques et lecture
+  de l'enregistrement principal du détail serveur déplacés vers le service de
+  page, avec colonnes, paramètres et normalisation des totaux inchangés.
+- Deux lots P3 Servers : comptage et page agrégée des bibliothèques du détail
+  serveur centralisés sans requête superflue, puis comptage distinct et page
+  triée des utilisateurs média déplacés vers le service de page, avec contrats
+  SQL et pagination préservés.
+- Deux lots P3 Servers : chargement agrégé de la liste Serveurs et snapshot des
+  suppressions centralisés avec suppression d'une double lecture sous verrou,
+  puis validation des tris et requête paginée Bibliothèques déplacées dans le
+  service de page, avec imports morts nettoyés et contrats SQL testés.
+- Deux lots P3 Servers : boucle de suppression SQL par lots extraite de la
+  route, puis revendication/libération atomique des suppressions serveur
+  centralisée dans le même service avec tests des commits et de l'idempotence.
+- Deux lots P3 Jellyfin : upsert des bibliothèques extrait de la tâche, puis
+  persistance de l'état des comptes média et remplacement borné des accès par
+  serveur regroupés dans un référentiel SQL avec tests de scope et de payload.
+- Deux lots P3 Jellyfin : initialisation de l'expiration au premier accès
+  déplacée dans un service d'abonnement, puis détection des placeholders et
+  classement du meilleur profil VODUM par username extraits de la tâche, avec
+  date et requêtes de ranking testées de façon déterministe.
+- Deux lots P3 Jellyfin : extraction des métadonnées rôle/date/avatar hors de
+  `sync_jellyfin.py`, puis persistance du JSON utilisateur complet déplacée
+  dans le même service avec conservation des `COALESCE` et tests SQL dédiés.
+- Correction des dernières séquences de mojibaké détectées dans le code Python :
+  commentaires et docstrings Users/Plex, message de migration Communications et
+  titre Discord d'expiration restaurés en UTF-8, avec audit global sans résidu.
+  L'audit différentiel du bootstrap déclare explicitement cette unique réparation
+  de seed afin de continuer à détecter toute autre divergence ancien/nouveau.
+- Deux lots P3 Jellyfin : construction des URLs et lecture JSON authentifiée
+  extraites de `sync_jellyfin.py`, puis découverte des serveurs et priorité des
+  URLs de connexion déplacées dans le runtime provider, avec timeout, headers,
+  querystrings et cooldown couverts par des tests de contrat.
+- Deux lots P3 Plex : parsing XML du catalogue de sections et des partages
+  serveur extrait de `apply_plex_access_updates.py`, puis matching robuste du
+  partage utilisateur et lecture de son état déplacés dans un service
+  d'identité, avec façades historiques et variantes Plex conservées.
+- Deux lots P3 Users : lectures communes du profil, des réglages, providers et
+  données de parrainage regroupées dans un référentiel, puis requêtes des
+  comptes représentatifs par serveur et des bibliothèques accessibles sorties
+  de la route avec maintien des optimisations conditionnelles par onglet.
+- Deux lots P3 Users : cycle administratif de changement/annulation/création
+  des parrainages extrait de la route de détail, puis normalisation des
+  overrides d'expiration, de streams et de notifications centralisée dans un
+  service de formulaire, avec contrats métier et cas limites testés.
+- Deux lots P3 Users : lecture/persistance des options Plex du formulaire de
+  détail centralisée dans le service utilisateur, puis sélection des serveurs,
+  création dédupliquée des jobs de synchronisation et réveil protégé du worker
+  extraits de la route, avec tests des valeurs et payloads conservés.
+- Lot P3 Users : réplication des six options de partage Plex entre serveurs de
+  même propriétaire extraite de la route de détail vers un service dédié, avec
+  conservation des données JSON non concernées et tests des garde-fous.
+- Lot P3 Migrations : colonnes de campagne et lectures partagées entre page de
+  détail et rapport déplacées dans un référentiel dédié, avec variantes de
+  jointures serveur et paramètres SQL couvertes par des tests de contrat.
+- Lot P3 Migrations : construction du rapport JSON déplacée dans un service
+  dédié, avec copie des lignes source, agrégation des états et test explicite
+  de non-divulgation du mot de passe Jellyfin chiffré.
+- Lot P3 Migrations : colonnes et lectures SQL des utilisateurs, mappings et
+  bibliothèques destination de la page de détail centralisées dans le service
+  de page, avec contrôle des paramètres, du regroupement et de l'ordre d'appel.
+- Lot P3 Migrations : normalisation des options de campagne et de la date
+  planifiée, puis pagination bornée des utilisateurs, déplacées de la route de
+  détail vers le service de page avec tests des valeurs limites.
+- Lot P3 Migrations : décodage et enrichissement des utilisateurs d'une
+  campagne, calcul des disponibilités de retrait/rollback et résumé de la page
+  de détail déplacés vers le service de page, avec horloge de test injectable.
+- Lot P3 Migrations : chargement des campagnes récentes et calcul des compteurs
+  de statut/utilisateurs extraits de `routes/migrations.py` vers le service de
+  page commun, avec conservation du contrat du template et tests dédiés.
 - Correction d'une régression du découpage des notifications d'expiration :
   l'alias `_safe_int` utilisé par la tâche est désormais réimporté depuis le
   service de sélection, avec un test de contrat dédié.
