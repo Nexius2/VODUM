@@ -1974,5 +1974,20 @@
   "operations_media_jobs": "Media jobs",
   "operations_recent_incidents": "Recent incidents",
   "providers": "Providers",
-  "queued": "Queued"
+  "queued": "Queued",
+  "provider_accounts": "Provider accounts",
+  "provider_presence_all": "All",
+  "provider_presence_present": "Present",
+  "provider_presence_removed": "Removed",
+  "force_access_resync": "Force access resync",
+  "force_access_resync_confirm": "Force a full Plex access resync for this user?",
+  "user_no_provider_associations_help": "This user has no Plex/Jellyfin server associations yet. You can still merge users to regroup identities.",
+  "provider_removed_badge": "Removed from provider",
+  "provider_removed_notice": "This account is no longer present on the provider.",
+  "provider_checked_at": "Checked",
+  "provider_removed_delete_confirm": "Delete this removed provider account locally? Historical monitoring records will be preserved.",
+  "provider_removed_delete_local": "Delete locally",
+  "provider_removed_deleted_local": "Removed provider account deleted locally",
+  "provider_account_not_removed": "This provider account is still active and cannot be deleted locally.",
+  "provider_account_protected": "This owner or administrator provider account is protected."
 }

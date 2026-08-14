@@ -26,7 +26,6 @@ from communications_engine import (
     fetch_template_attachments,
     get_localized_template_content,
     localize_communication_context,
-    SendAttempt,
     available_channels,
     schedule_template_notification,
 )
@@ -856,7 +855,6 @@ def run(task_id: int | None = None, db=None):
         )
 
         today = date.today()
-        sent_users_ok = 0
         sent_users_failed = 0
 
         task_logs(task_id, "info", f"{len(users)} Users analyzed")

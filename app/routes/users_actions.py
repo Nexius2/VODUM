@@ -1,21 +1,22 @@
 # Auto-split from app.py (keep URLs/endpoints intact)
-import json
-
 from flask import request, redirect, url_for, flash, jsonify
 
 from logging_utils import get_logger
 from tasks_engine import enable_and_run_task_by_name
 
 from web.helpers import get_db
-from .users_list import merge_vodum_users
-from core.media_jobs import insert_plex_media_job, insert_jellyfin_media_job
+from core.user_merge import merge_vodum_users
 from core.user_sync_jobs import (
     force_queue_full_jellyfin_sync_for_user,
     force_queue_full_plex_sync_for_user,
-    get_preferred_plex_media_user_id,
-    queue_plex_share_settings_sync,
 )
-from core.provider_presence import build_user_delete_check, get_user_deletion_protection
+from core.provider_presence import (
+    build_user_delete_check,
+    delete_removed_media_account,
+    get_user_deletion_protection,
+)
+from core.user_library_access import toggle_user_library_access
+from core.user_plex_options import update_single_plex_share_option
 
 
 task_logger = get_logger("tasks_ui")
@@ -75,65 +76,43 @@ def _delete_vodum_user_everywhere(db, user_id: int) -> bool:
             cur.close()
 
 def register(app):
+    @app.route("/users/<int:user_id>/media-accounts/<int:media_user_id>/delete-removed", methods=["POST"])
+    def delete_removed_provider_account(user_id, media_user_id):
+        db = get_db()
+        result = delete_removed_media_account(db, user_id, media_user_id)
+        if result.get("deleted"):
+            task_logger.warning(
+                "[MEDIA ACCOUNT DELETE] user_id=%s media_user_id=%s provider=%s",
+                user_id,
+                media_user_id,
+                result.get("provider"),
+            )
+            flash("provider_removed_deleted_local", "success")
+        else:
+            flash(result.get("reason") or "delete_user_failed", "error")
+        return redirect(url_for("user_detail", user_id=user_id, tab="access"))
+
     @app.route("/users/<int:user_id>/plex/share/filter", methods=["POST"])
     def update_plex_share_filter(user_id):
         db = get_db()
         form = request.form
-
         server_id = int(form.get("server_id") or 0)
         media_user_id = int(form.get("media_user_id") or 0)
         field = (form.get("field") or "").strip()
         value = (form.get("value") or "").strip()
-
-        allowed_fields = {"filterMovies", "filterTelevision", "filterMusic"}
-        if field not in allowed_fields:
-            flash("invalid_field", "error")
-            return redirect(url_for("user_detail", user_id=user_id, tab="access"))
-
-        mu = db.query_one(
-            """
-            SELECT mu.id, mu.details_json
-            FROM media_users mu
-            JOIN servers s ON s.id = mu.server_id
-            WHERE mu.id = ?
-              AND mu.vodum_user_id = ?
-              AND mu.server_id = ?
-              AND s.type = 'plex'
-              AND mu.type = 'plex'
-            """,
-            (media_user_id, user_id, server_id),
-        )
-        if not mu:
-            flash("media_user_not_found", "error")
-            return redirect(url_for("user_detail", user_id=user_id))
-
-        try:
-            details = json.loads(mu["details_json"] or "{}")
-        except Exception:
-            details = {}
-        if not isinstance(details, dict):
-            details = {}
-
-        plex_share = details.get("plex_share", {})
-        if not isinstance(plex_share, dict):
-            plex_share = {}
-
-        plex_share[field] = value
-        details["plex_share"] = plex_share
-
-        db.execute(
-            "UPDATE media_users SET details_json = ? WHERE id = ?",
-            (json.dumps(details, ensure_ascii=False), int(mu["id"])),
-        )
-
-        queue_plex_share_settings_sync(
+        result = update_single_plex_share_option(
             db,
-            user_id=user_id,
+            vodum_user_id=user_id,
             server_id=server_id,
-            reason=f"plex_share_filter_{field}",
+            media_user_id=media_user_id,
+            field=field,
+            value=value,
+            option_type="filter",
             wake_task=enable_and_run_task_by_name,
         )
-
+        if not result["ok"]:
+            flash(result["reason"], "error")
+            return redirect(url_for("user_detail", user_id=user_id, tab="access"))
         flash("user_saved", "success")
         return redirect(url_for("user_detail", user_id=user_id, tab="access"))
 
@@ -150,60 +129,19 @@ def register(app):
         vals = form.getlist("value")
         v = vals[-1] if vals else "0"
 
-        truthy = {"1", "true", "on", "yes"}
-        new_val = 1 if str(v).strip().lower() in truthy else 0
-
-        allowed_fields = {"allowSync", "allowCameraUpload", "allowChannels"}
-        if field not in allowed_fields:
-            flash("invalid_field", "error")
-            return redirect(url_for("user_detail", user_id=user_id))
-
-        # sécurité: s'assurer que ce media_user appartient bien au user_id + server_id
-        mu = db.query_one(
-            """
-            SELECT mu.id, mu.details_json
-            FROM media_users mu
-            JOIN servers s ON s.id = mu.server_id
-            WHERE mu.id = ?
-              AND mu.vodum_user_id = ?
-              AND mu.server_id = ?
-              AND s.type = 'plex'
-              AND mu.type = 'plex'
-            """,
-            (media_user_id, user_id, server_id),
-        )
-        if not mu:
-            flash("media_user_not_found", "error")
-            return redirect(url_for("user_detail", user_id=user_id))
-
-        # load json
-        try:
-            details = json.loads(mu["details_json"] or "{}")
-        except Exception:
-            details = {}
-        if not isinstance(details, dict):
-            details = {}
-
-        plex_share = details.get("plex_share", {})
-        if not isinstance(plex_share, dict):
-            plex_share = {}
-
-        plex_share[field] = new_val
-        details["plex_share"] = plex_share
-
-        db.execute(
-            "UPDATE media_users SET details_json = ? WHERE id = ?",
-            (json.dumps(details, ensure_ascii=False), int(mu["id"])),
-        )
-
-        queue_plex_share_settings_sync(
+        result = update_single_plex_share_option(
             db,
-            user_id=user_id,
+            vodum_user_id=user_id,
             server_id=server_id,
-            reason=f"plex_share_option_{field}",
+            media_user_id=media_user_id,
+            field=field,
+            value=v,
+            option_type="toggle",
             wake_task=enable_and_run_task_by_name,
         )
-
+        if not result["ok"]:
+            flash(result["reason"], "error")
+            return redirect(url_for("user_detail", user_id=user_id, tab="access"))
         flash("user_saved", "success")
         return redirect(url_for("user_detail", user_id=user_id, tab="access"))
 
@@ -280,235 +218,23 @@ def register(app):
 
     @app.route("/users/<int:user_id>/toggle_library", methods=["POST"])
     def user_toggle_library(user_id):
-        db = get_db()
-
         library_id = request.form.get("library_id", type=int)
         if not library_id:
             flash("invalid_library", "error")
             return redirect(url_for("user_detail", user_id=user_id))
 
-        user_row = db.query_one(
-            "SELECT id, status FROM vodum_users WHERE id = ?",
-            (user_id,),
+        result = toggle_user_library_access(
+            get_db(),
+            user_id=user_id,
+            library_id=library_id,
+            wake_task=enable_and_run_task_by_name,
+            logger=task_logger,
         )
-        if not user_row:
-            flash("invalid_user", "error")
-            return redirect(url_for("user_detail", user_id=user_id))
-
-        if (user_row["status"] or "").strip().lower() == "expired":
-            task_logger.info(
-                f"[ACCESS REQUEST BLOCKED] user_id={user_id} "
-                f"library_id={library_id} reason=expired_user"
-            )
-            flash("expired", "error")
-            return redirect(url_for("user_detail", user_id=user_id, tab="access"))
-
-        # --------------------------------------------------
-        # Récup library + server (pour savoir sur quel serveur on agit)
-        # --------------------------------------------------
-        lib = db.query_one(
-            "SELECT id, server_id, name FROM libraries WHERE id = ?",
-            (library_id,),
+        flash(
+            result.get("message") if result["ok"] else result["reason"],
+            "success" if result["ok"] else "error",
         )
-        if not lib:
-            flash("invalid_library", "error")
-            return redirect(url_for("user_detail", user_id=user_id))
-
-        server = db.query_one(
-            "SELECT id, type, name FROM servers WHERE id = ?",
-            (lib["server_id"],),
-        )
-        if not server:
-            flash("server_not_found", "error")
-            return redirect(url_for("user_detail", user_id=user_id))
-
-        # --------------------------------------------------
-        # IMPORTANT : on ne doit toggler QUE les media_users
-        # de CE serveur (sinon tu peux lier une lib Plex à un compte Jellyfin)
-        # --------------------------------------------------
-        media_users = db.query(
-            """
-            SELECT id
-            FROM media_users
-            WHERE vodum_user_id = ?
-              AND server_id = ?
-            """,
-            (user_id, lib["server_id"]),
-        )
-        if not media_users:
-            flash("no_media_accounts_for_user", "error")
-            return redirect(url_for("user_detail", user_id=user_id))
-
-        media_user_ids = [mu["id"] for mu in media_users]
-        placeholders = ",".join("?" * len(media_user_ids))
-
-        # --------------------------------------------------
-        # Vérifier si l'accès existe déjà
-        # --------------------------------------------------
-        exists = db.query_one(
-            f"""
-            SELECT 1
-            FROM media_user_libraries
-            WHERE library_id = ?
-              AND media_user_id IN ({placeholders})
-            LIMIT 1
-            """,
-            (library_id, *media_user_ids),
-        )
-
-        removed = False
-
-        # --------------------------------------------------
-        # TOGGLE en DB
-        # --------------------------------------------------
-        if exists:
-            db.execute(
-                f"""
-                DELETE FROM media_user_libraries
-                WHERE library_id = ?
-                  AND media_user_id IN ({placeholders})
-                """,
-                (library_id, *media_user_ids),
-            )
-            removed = True
-            flash("library_access_removed", "success")
-        else:
-            for mid in media_user_ids:
-                db.execute(
-                    """
-                    INSERT OR IGNORE INTO media_user_libraries(media_user_id, library_id)
-                    VALUES (?, ?)
-                    """,
-                    (mid, library_id),
-                )
-            flash("library_access_added", "success")
-
-        # --------------------------------------------------
-        # Création d'un job pour apply_plex_access_updates
-        # -> uniquement si serveur Plex (pour Jellyfin on fera plus tard)
-        # --------------------------------------------------
-        if server["type"] == "plex":
-            preferred_media_user_id = get_preferred_plex_media_user_id(
-                db,
-                user_id,
-                lib["server_id"],
-            )
-
-            # Combien de libs restent pour CE user sur CE serveur ?
-            remaining = db.query_one(
-                f"""
-                SELECT COUNT(DISTINCT mul.library_id) AS c
-                FROM media_user_libraries mul
-                JOIN libraries l ON l.id = mul.library_id
-                WHERE mul.media_user_id IN ({placeholders})
-                  AND l.server_id = ?
-                """,
-                (*media_user_ids, lib["server_id"]),
-            )
-            remaining_count = int(remaining["c"] or 0)
-
-            # --------------------------------------------------
-            # Choix de l'action:
-            # - Ajout d'une bibliothèque => grant (équivalent plex_api_share.py --add --libraries X)
-            # - Retrait d'une bibliothèque => sync (réapplique la liste DB), ou revoke si plus rien
-            # --------------------------------------------------
-            if removed and remaining_count == 0:
-                action = "revoke"
-                job_library_id = None
-                dedupe_key = f"plex:revoke:server={lib['server_id']}:user={user_id}"
-            elif removed:
-                action = "sync"
-                job_library_id = None
-                dedupe_key = f"plex:sync:server={lib['server_id']}:user={user_id}"
-            else:
-                action = "grant"
-                job_library_id = library_id
-                dedupe_key = f"plex:grant:server={lib['server_id']}:user={user_id}:lib={library_id}"
-
-            payload = {
-                "reason": "library_toggle",
-                "library_id": library_id,
-                "library_name": lib["name"],
-                "removed": removed,
-                "remaining_count": remaining_count,
-                "preferred_media_user_id": preferred_media_user_id,
-            }
-
-            inserted = insert_plex_media_job(
-                db,
-                action=action,
-                vodum_user_id=user_id,
-                server_id=lib["server_id"],
-                library_id=job_library_id,
-                dedupe_key=dedupe_key,
-                payload=payload,
-            )
-
-            if inserted:
-                task_logger.info(
-                    f"[MEDIA JOB CREATED] provider=plex action={action} "
-                    f"user_id={user_id} server_id={lib['server_id']} "
-                    f"library_id={job_library_id} preferred_media_user_id={preferred_media_user_id}"
-                )
-
-            # Activer + queue la tâche apply_plex_access_updates
-            try:
-                enable_and_run_task_by_name("apply_plex_access_updates")
-            except Exception:
-                # pas bloquant si enqueue échoue, le scheduler le prendra plus tard
-                task_logger.exception(
-                    "Plex access job persisted but worker startup failed | user_id=%s | server_id=%s",
-                    user_id,
-                    lib["server_id"],
-                )
-
-        elif server["type"] == "jellyfin":
-            action = "sync"
-            job_library_id = None
-            dedupe_key = f"jellyfin:sync:server={lib['server_id']}:user={user_id}"
-
-            payload = {
-                "reason": "library_toggle",
-                "toggled_library_id": library_id,
-                "toggled_library_name": lib["name"],
-                "removed": removed,
-            }
-
-            inserted = insert_jellyfin_media_job(
-                db,
-                action=action,
-                vodum_user_id=user_id,
-                server_id=lib["server_id"],
-                library_id=job_library_id,
-                dedupe_key=dedupe_key,
-                payload=payload,
-            )
-
-            if inserted:
-                task_logger.info(
-                    f"[MEDIA JOB CREATED] provider=jellyfin action={action} "
-                    f"user_id={user_id} server_id={lib['server_id']} "
-                    f"library_id={job_library_id}"
-                )
-
-            try:
-                enable_and_run_task_by_name("apply_jellyfin_access_updates")
-            except Exception:
-                task_logger.exception(
-                    "Jellyfin access job persisted but worker startup failed | user_id=%s | server_id=%s",
-                    user_id,
-                    lib["server_id"],
-                )
-
-
-
-
-
-
-
         return redirect(url_for("user_detail", user_id=user_id, tab="access"))
-
-
     @app.route("/users/<int:user_id>/force_resync_access", methods=["POST"])
     def force_resync_access(user_id):
         db = get_db()

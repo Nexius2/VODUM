@@ -26,7 +26,8 @@ Derniere mise a jour: 2026-08-02
 
 - [~] Reduire les dependances globales entre routes, taches et providers.
 - [~] Deplacer la logique provider restante des routes et templates vers les
-  services et les taches.
+  services et les taches. Le worker d'acces Jellyfin reutilise maintenant le
+  service provider commun pour lire et mettre a jour les policies de dossiers.
 - [~] Continuer a decouper les fichiers de plus de 1000 lignes, notamment
   `db_bootstrap.py` et `stream_enforcer.py`. Les schemas des modeles d'accueil,
   de Discord, des cadeaux d'abonnement, du Monitoring temps reel, de son
@@ -145,12 +146,32 @@ Derniere mise a jour: 2026-08-02
   Les types supportés et les erreurs d'URL de création sont enfin validés par le
   service de formulaire commun à la création et à la sauvegarde.
   La lecture complète des champs de création et de sauvegarde y est également
-  centralisée, avec nettoyage des imports de route devenus inutiles.
-- [~] Uniformiser les acces DB applicatifs restants. Les connexions SQLite de
-  bootstrap, config, logs, restauration et suppression serveur passent deja
-  par `open_sqlite_connection`.
-- [~] Supprimer le code mort apres une passe outillee dediee.
-
+  centralisée, avec nettoyage des imports de route devenus inutiles. Côté
+  abonnements, la recherche/pagination des utilisateurs ainsi que le chargement
+  et la préparation des policies sont maintenant isolés dans le service de
+  données de page. Les données communes des onglets et le cycle
+  duplication/activation/suppression des modèles sont également sortis de la
+  route. Dans les routes Users, les mises à jour unitaires des options de
+  partage Plex et le toggle d'accès aux bibliothèques Plex/Jellyfin sont
+  désormais portés par des services dédiés. Dans Migrations, la validation
+  manuelle et la réconciliation d'invitations, puis l'orchestration des trois
+  opérations d'accès de phase 3, sont également sorties de la route. Dans
+  l'assistant Setup, la persistance de la progression et le workflow de
+  validation/création des serveurs sont maintenant centralisés hors de la
+  couche HTTP. Sa navigation conditionnelle et la préparation sécurisée des
+  données de rendu sont également extraites, ce qui termine les six lots P3
+  planifiés sur Subscriptions, Users, Migrations et Setup.
+  Contrôle global effectué après clôture : les 396 tests, tous les validateurs
+  métier, le bootstrap d'une base neuve avec intégrité/FK, les contrats des
+  routes et protections CSRF, les catalogues de traduction, la compilation et
+  les imports dans la disposition Docker passent. Le validateur historique de
+  création serveur a été adapté à la nouvelle frontière route/service afin que
+  la CI protège réellement cette extraction.
+  Une seconde passe en exécution réelle a couvert le parcours Setup, les pages
+  Dashboard, Subscriptions, Users, Migrations et Monitoring Policies, ainsi que
+  la duplication et la suppression d'une formule sur une base temporaire. Elle
+  a permis de corriger les dernières chaînes mojibake et plusieurs statuts non
+  traduits; un audit UTF-8 reproductible est maintenant inclus au projet.
 ### Exceptions GET autorisees
 
 - `GET /api/monitoring/poster/<server_id>`: proxy authentifie de posters et
@@ -162,6 +183,10 @@ Derniere mise a jour: 2026-08-02
 - [ ] Definir le cycle de vie complet des comptes provider marques `removed`:
   affichage et filtres dans l'interface, restauration/reassociation si le compte
   reapparait, conservation de l'historique et suppression locale controlee.
+  Le cycle Jellyfin couvre maintenant le marquage centralise, le retour a
+  `present`, l'affichage et le filtre dans l'onglet Acces, ainsi que la
+  suppression locale reservee aux comptes confirmes absents avec conservation
+  de l'historique. Il reste a appliquer le meme contrat aux comptes Plex.
 - [ ] Formaliser un registre de capacites migrations par provider avant
   d'ajouter d'autres providers. Le registre providers actuel couvre surtout le
   monitoring/enforcement Plex/Jellyfin.

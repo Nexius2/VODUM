@@ -34,7 +34,7 @@ def validate_and_upgrade_core_schema(
 
     for table in REQUIRED_TABLES:
         if not table_exists(cursor, table):
-            raise RuntimeError(f"âŒ ERROR: table '{table}' does not exist ! "
+            raise RuntimeError(f"❌ ERROR: table '{table}' does not exist ! "
                                f"-> Check that tables.sql has been imported correctly.")
 
     ensure_column(cursor, "servers", "server_version", "TEXT DEFAULT NULL")

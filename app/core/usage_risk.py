@@ -1,6 +1,5 @@
 import ipaddress
 import json
-import re
 
 
 FIXED_DEVICE_KEYWORDS = (
@@ -163,6 +162,7 @@ def _suggest_subscription(db, current_template_id, current_value, needed_streams
 
         max_streams = 0
         max_ips = 0
+        has_ip_limit = False
 
         try:
             policies = json.loads(tpl.get("policies_json") or "[]")
@@ -173,7 +173,7 @@ def _suggest_subscription(db, current_template_id, current_value, needed_streams
             if not isinstance(policy, dict):
                 continue
 
-            if _safe_int(policy.get("is_enabled"), 1) != 1:
+            if str(policy.get("is_enabled", "1")) != "1":
                 continue
 
             rule_type = (policy.get("rule_type") or "").strip()
@@ -183,10 +183,18 @@ def _suggest_subscription(db, current_template_id, current_value, needed_streams
                 max_streams = max(max_streams, _safe_int(rule.get("max"), 0))
 
             if rule_type == "max_ips_per_user":
+                has_ip_limit = True
                 max_ips = max(max_ips, _safe_int(rule.get("max"), 0))
 
         streams_ok = max_streams >= needed_streams if needed_streams > 0 else True
-        ips_ok = max_ips >= needed_ips if needed_ips > 0 else True
+        # A plan without an enabled max_ips_per_user policy has no IP ceiling.
+        # Treating the missing rule as max_ips=0 made unlimited plans impossible
+        # to recommend to any user with observed public IPs.
+        ips_ok = (
+            not has_ip_limit
+            or needed_ips <= 0
+            or max_ips >= needed_ips
+        )
 
         if streams_ok and ips_ok:
             candidates.append(tpl)

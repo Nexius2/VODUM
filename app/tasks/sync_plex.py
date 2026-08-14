@@ -1,17 +1,16 @@
 
 import time
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Set, Tuple, Optional
+from typing import Dict, Any, Set, Tuple
 
 import xml.etree.ElementTree as ET
 import json
 
 from logging_utils import get_logger, is_debug_mode_enabled
 from tasks_engine import task_logs
-from plexapi.server import PlexServer  
 from core.plex_rate_limit import wait_for_plex_slot
 from core.plex_connection import plex_candidate_base_urls, find_working_plex_base_url
-from core.server_cooldown import should_skip_unreachable_server, mark_server_unreachable, clear_server_cooldown
+from core.server_cooldown import should_skip_unreachable_server
 from core.http_security import plex_server_http_session
 from core.providers.plex_invitation_state import (
     merge_accepted_plex_media_user,
@@ -408,12 +407,10 @@ def sync_plex_user_library_access(db, plex, server):
             continue
 
         desired_library_ids = set()
-        has_access = False
 
         # ✅ OWNER : toutes les libraries du serveur
         if role == "owner":
             desired_library_ids = {int(lib_id) for lib_id in lib_map.values()}
-            has_access = bool(desired_library_ids)
 
         else:
             # logique normale basée sur l'API Plex
@@ -438,7 +435,6 @@ def sync_plex_user_library_access(db, plex, server):
                     continue
                 desired_library_ids.add(int(lib_id))
 
-            has_access = bool(desired_library_ids)
 
         before_ids, added_ids, removed_ids = _apply_media_user_library_diff_for_server(
             db,
@@ -673,7 +669,6 @@ def sync_users_from_api(db) -> None:
         username = data["username"]
         email = data["email"] or None
         avatar = data["avatar"]
-        plex_role = data["plex_role"]
 
 
 

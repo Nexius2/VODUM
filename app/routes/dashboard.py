@@ -1,9 +1,6 @@
 # Auto-split from app.py (keep URLs/endpoints intact)
 from core.monitoring.artwork import enrich_live_session_artwork
-from core.usage_risk import build_usage_risk_report
-from core.dashboard_servers import dashboard_server_preview
 from core.dashboard_usage_risk import build_usage_risk_trend
-from core.aggregate_cache import cached_aggregate
 from core.dashboard_now_playing import build_now_playing_fragment_key, load_dashboard_now_playing
 from core.dashboard_widgets import (
     get_dashboard_next_tasks,
@@ -11,8 +8,6 @@ from core.dashboard_widgets import (
     get_dashboard_subscription_summary,
     get_dashboard_usage_risk,
 )
-from collections import Counter
-from datetime import datetime, timedelta
 from flask import render_template, redirect, url_for, make_response
 
 from logging_utils import read_last_logs

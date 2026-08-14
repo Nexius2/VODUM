@@ -77,11 +77,6 @@ def read_artwork_cache(cache_key: str, *, allow_stale: bool = False) -> dict | N
     if is_stale and not allow_stale:
         return None
 
-    try:
-        meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    except Exception:
-        meta = {}
-
     return {
         "path": img_path,
         "content_type": detected_content_type,

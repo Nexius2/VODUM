@@ -1,4 +1,3 @@
-import json
 import time
 from typing import Dict, List, Optional, Tuple
 
@@ -9,15 +8,15 @@ from core.stream_policy_utils import (
     loads_json as _loads_json,
     is_strict_expired_subscription_policy as _is_strict_expired_subscription_policy,
     jellyfin_session_id_from_target as _jellyfin_session_id_from_target,
-    actor_key as _actor_key,
-    session_started_ts as _session_started_ts,
+    actor_key as _actor_key,  # noqa: F401 - compatibility facade
+    session_started_ts as _session_started_ts,  # noqa: F401 - compatibility facade
     pick_kill_target as _pick_kill_target,
     is_global_policy as _is_global_policy,
     normalize_user_key as _normalize_user_key,
     is_local_ip as _is_local_ip,
-    is_ip_literal as _is_ip_literal,
-    best_account_username as _best_account_username,
-    same_actor_reference as _same_actor_reference,
+    is_ip_literal as _is_ip_literal,  # noqa: F401 - compatibility facade
+    best_account_username as _best_account_username,  # noqa: F401 - compatibility facade
+    same_actor_reference as _same_actor_reference,  # noqa: F401 - compatibility facade
 )
 from core.stream_enforcer_boost import refresh_boost_state, maybe_boost_after_expired_kill
 from core.stream_enforcement_snapshot import build_enforcement_snapshot as _build_enforcement_snapshot
@@ -32,15 +31,16 @@ from core.stream_enforcement_store import (
     log_enforcement,
     upsert_state,
     already_warned_recently,
+    already_killed_recently,
 )
 from core.stream_notification_delivery import (
-    media_title_from_session as _media_title_from_session,
-    policy_display_name as _policy_display_name,
+    media_title_from_session as _media_title_from_session,  # noqa: F401 - compatibility facade
+    policy_display_name as _policy_display_name,  # noqa: F401 - compatibility facade
     queue_stream_blocked_notification,
 )
 from core.stream_notification_context import build_notification_policy_context
 from core.stream_household_dedupe import (
-    RECENT_SESSION_CACHE as _RECENT_SESSION_CACHE,
+    RECENT_SESSION_CACHE as _RECENT_SESSION_CACHE,  # noqa: F401 - compatibility facade
     deduplicate_household_sessions as _deduplicate_household_sessions,
 )
 from core.stream_provider_actions import (
@@ -52,15 +52,17 @@ from core.stream_violation_recheck import select_rechecked_violation
 from core.stream_session_diagnostics import log_sessions as _debug_log_sessions
 from core.stream_enforcer_config import (
     LIVE_WINDOW_SECONDS, LIVE_STABLE_SECONDS, RECHECK_DELAY_SECONDS,
-    JELLYFIN_KILL_MESSAGE_SPAM_COUNT, JELLYFIN_KILL_MESSAGE_SPAM_SLEEP,
+    JELLYFIN_KILL_MESSAGE_SPAM_COUNT,  # noqa: F401 - compatibility facade
+    JELLYFIN_KILL_MESSAGE_SPAM_SLEEP,  # noqa: F401 - compatibility facade
     JELLYFIN_KILL_MESSAGE_TIMEOUT_MS, JELLYFIN_PRE_KILL_DURATION_SECONDS,
-    JELLYFIN_PRE_KILL_INTERVAL_SECONDS, HOUSEHOLD_MEMORY_SECONDS,
+    JELLYFIN_PRE_KILL_INTERVAL_SECONDS,
+    HOUSEHOLD_MEMORY_SECONDS,  # noqa: F401 - compatibility facade
     HOUSEHOLD_MEDIA_GRACE_SECONDS,
 )
 from core.stream_session_identity import (
-    extract_machine_identifier as _extract_machine_identifier,
-    household_match_score as _household_match_score,
-    is_probable_same_household as _is_probable_same_household,
+    extract_machine_identifier as _extract_machine_identifier,  # noqa: F401 - compatibility facade
+    household_match_score as _household_match_score,  # noqa: F401 - compatibility facade
+    is_probable_same_household as _is_probable_same_household,  # noqa: F401 - compatibility facade
 )
 
 
@@ -82,11 +84,11 @@ def _set_db(db):
 # Compatibility aliases: caches remain externally accessible while their
 # implementation now lives outside the task module.
 from core.stream_sync_dedupe import (
-    STREAM_SYNC_GRACE_CACHE as _STREAM_SYNC_GRACE_CACHE,
+    STREAM_SYNC_GRACE_CACHE as _STREAM_SYNC_GRACE_CACHE,  # noqa: F401 - compatibility facade
     deduplicate_user_stream_sessions as _deduplicate_user_stream_sessions,
 )
 from core.stream_ip_transition_grace import (
-    IP_GRACE_CACHE as _IP_GRACE_CACHE,
+    IP_GRACE_CACHE as _IP_GRACE_CACHE,  # noqa: F401 - compatibility facade
     should_grace_coherent_ip_switch as _should_grace_coherent_ip_switch,
 )
 
@@ -114,6 +116,15 @@ def _load_live_sessions(stable_seconds: Optional[int] = None) -> List[dict]:
     if stable_seconds is None:
         stable_seconds = LIVE_STABLE_SECONDS
     return load_live_sessions(_db, LIVE_WINDOW_SECONDS, stable_seconds)
+
+
+def _already_killed_recently(
+    policy_id: int, server_id: int, vodum_user_id: Optional[int],
+    external_user_id: str, minutes: int = 5,
+) -> bool:
+    return already_killed_recently(
+        _db, policy_id, server_id, vodum_user_id, external_user_id, minutes
+    )
 
 
 def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
@@ -615,8 +626,11 @@ def _load_server(server_id: int) -> Optional[dict]:
     return load_server(_db, server_id)
 
 
-def _recheck_violation(policy: dict, violation: dict) -> Optional[dict]:
-    time.sleep(RECHECK_DELAY_SECONDS)
+def _recheck_violation(
+    policy: dict, violation: dict, delay_seconds: float = RECHECK_DELAY_SECONDS
+) -> Optional[dict]:
+    if delay_seconds > 0:
+        time.sleep(delay_seconds)
 
     sessions = _load_live_sessions()
     v2 = _evaluate_policy(policy, sessions)
@@ -791,6 +805,12 @@ def run(task_id: int, db):
 
             continue
 
+        # A Plex player may automatically recreate a session after terminate.
+        # Do not grant another full warning delay to a just-stopped actor.
+        recently_killed = _already_killed_recently(
+            policy_id, server_id, user_vodum_id, user_ext, minutes=5
+        )
+
         # 1) WARN (une fois) + recheck 30s
         if not _already_warned_recently(policy_id, server_id, user_vodum_id, user_ext, minutes=5):
             warned_ok = False
@@ -822,7 +842,9 @@ def run(task_id: int, db):
 
 
         # 2) recheck 30s -> si toujours violation -> KILL
-        rechecked_violation = _recheck_violation(policy, v)
+        rechecked_violation = _recheck_violation(
+            policy, v, delay_seconds=0 if recently_killed else RECHECK_DELAY_SECONDS
+        )
         if not rechecked_violation:
             if is_debug_mode_enabled():
                 logger.debug(f"[TASK {task_id}] stream_enforcer: violation cleared after recheck (policy={policy_id} server={server_id})")

@@ -1,553 +1,122 @@
 # Changelog
 
-- Correction de deux erreurs visibles dans les logs : migration idempotente de
-  `stream_enforcements` pour accepter `kill_failed` sans perdre l'historique,
-  et déclassement des timeouts Plex du visuel Dashboard en avertissements sans
-  traceback; import mort associé supprimé.
-- Deux lots P3 Servers : lecture complète des formulaires de création puis de
-  sauvegarde centralisée, avec normalisations et valeurs optionnelles inchangées
-  et suppression des imports de route devenus morts.
-- Deux lots P3 Servers : validation commune des types Plex/Jellyfin puis
-  classification des erreurs d'URL de création extraites des routes, avec ordre
-  protocole/`web`, messages et normalisation préalable inchangés.
-- Deux lots P3 Servers : post-traitements des ajouts puis retraits massifs de
-  bibliothèques mutualisés dans le service d'accès, avec démarrage tolérant,
-  journaux `grant`/`removal` et signaux du worker toujours exécutés.
-- Deux lots P3 Servers : sérialisation/chiffrement final des paramètres et du
-  token de sauvegarde, puis réveil post-UPDATE extraits de la route, avec ordre,
-  conservation des secrets et propagation des erreurs inchangés.
-- Audit statique complet après les extractions P3 Servers : installation et
-  exécution de Ruff/Pyflakes, suppression du `lastrowid` devenu inutilisé,
-  puis validation des 42 audits, des smokes et de la suite complète.
-- Deux lots P3 Servers : décodage compatible du `settings_json` puis fusion des
-  paramètres Tautulli/`verify_tls` extraits de la sauvegarde, avec conservation
-  des secrets et du comportement historique des JSON valides non objets.
-- Deux lots P3 Servers : lecture des secrets existants puis UPDATE complet de la
-  sauvegarde déplacés vers le service d'administration, avec colonnes, valeurs,
-  identifiant et position de la fusion des secrets inchangés.
-- Deux lots P3 Servers : activation/réveil des tâches de création séparés autour
-  du commit, puis sélection du message provider centralisée, avec ordre
-  transactionnel et catégories de notification strictement préservés.
-- Deux lots P3 Servers : commit de création compatible avec les wrappers sans
-  commit, puis mise en file tolérante de la découverte extraits de la route,
-  avec ordre et comportements d'erreur/journalisation inchangés.
-- Deux lots P3 Servers : préparation chiffrée des paramètres/token puis INSERT
-  complet de création déplacés vers le service d'administration, avec JSON,
-  ordre des colonnes, curseur et statut initial `unknown` inchangés.
-- Deux lots P3 Servers : normalisation du type mutualisée avec la sauvegarde,
-  puis construction des paramètres Tautulli optionnels extraite de la création,
-  avec valeurs absentes et structure JSON historique préservées.
-- Deux lots P3 Servers : résolution normalisée du type de serveur puis nettoyage
-  des URL de base Plex/Jellyfin extraits de la création, avec priorité des champs
-  historiques et traitement des suffixes `/web` strictement préservés.
-- Deux lots P3 Servers : journal de succès complet puis cycle de vie du worker
-  de suppression centralisés dans le service, avec séquence succès/erreur,
-  fermeture et libération du garde garanties; la route devient un adaptateur.
-- Deux lots P3 Servers : ouverture configurée de la connexion SQLite du thread
-  et construction ordonnée des douze compteurs du journal final centralisées,
-  avec délais, mode multithread et positions du format strictement préservés.
-- Deux lots P3 Servers : orchestration des phases SQL de suppression et fusion
-  de leurs compteurs, puis fermeture sûre de la connexion extraites du thread,
-  avec ordre, taille de lot et tolérance aux erreurs de fermeture préservés.
-- Deux lots P3 Servers : suppressions par lots des neuf tables directement
-  rattachées au serveur, puis chaîne ordonnée accès/bibliothèques/comptes média
-  et serveur extraites du thread, avec compteurs et commits préservés.
-- Deux lots P3 Servers : lecture de la cible de suppression et lancement du
-  thread d'arrière-plan extraits de la route, avec cible, arguments, mode daemon
-  et nom du thread strictement préservés.
-- Deux lots P3 Servers : réveil tolérant du worker de mises à jour Plex et
-  sélection du message final de synchronisation extraits de la route, qui ne
-  conserve plus que les redirections et notifications HTTP de ce workflow.
-- Deux lots P3 Servers : construction des clés/payloads de synchronisation Plex
-  puis insertion et comptage des jobs extraits de la route, avec sélection du
-  compte média préféré, déduplication et arguments d'insertion inchangés.
-- Deux lots P3 Servers : lecture de la cible de synchronisation et sélection
-  distincte des utilisateurs Plex ayant un accès sur le même serveur extraites
-  de la route, avec filtres, jointures et paramètres SQL préservés.
-- Deux lots P3 Servers : comptage global de la liste Bibliothèques et lecture
-  de l'enregistrement principal du détail serveur déplacés vers le service de
-  page, avec colonnes, paramètres et normalisation des totaux inchangés.
-- Deux lots P3 Servers : comptage et page agrégée des bibliothèques du détail
-  serveur centralisés sans requête superflue, puis comptage distinct et page
-  triée des utilisateurs média déplacés vers le service de page, avec contrats
-  SQL et pagination préservés.
-- Deux lots P3 Servers : chargement agrégé de la liste Serveurs et snapshot des
-  suppressions centralisés avec suppression d'une double lecture sous verrou,
-  puis validation des tris et requête paginée Bibliothèques déplacées dans le
-  service de page, avec imports morts nettoyés et contrats SQL testés.
-- Deux lots P3 Servers : boucle de suppression SQL par lots extraite de la
-  route, puis revendication/libération atomique des suppressions serveur
-  centralisée dans le même service avec tests des commits et de l'idempotence.
-- Deux lots P3 Jellyfin : upsert des bibliothèques extrait de la tâche, puis
-  persistance de l'état des comptes média et remplacement borné des accès par
-  serveur regroupés dans un référentiel SQL avec tests de scope et de payload.
-- Deux lots P3 Jellyfin : initialisation de l'expiration au premier accès
-  déplacée dans un service d'abonnement, puis détection des placeholders et
-  classement du meilleur profil VODUM par username extraits de la tâche, avec
-  date et requêtes de ranking testées de façon déterministe.
-- Deux lots P3 Jellyfin : extraction des métadonnées rôle/date/avatar hors de
-  `sync_jellyfin.py`, puis persistance du JSON utilisateur complet déplacée
-  dans le même service avec conservation des `COALESCE` et tests SQL dédiés.
-- Correction des dernières séquences de mojibaké détectées dans le code Python :
-  commentaires et docstrings Users/Plex, message de migration Communications et
-  titre Discord d'expiration restaurés en UTF-8, avec audit global sans résidu.
-  L'audit différentiel du bootstrap déclare explicitement cette unique réparation
-  de seed afin de continuer à détecter toute autre divergence ancien/nouveau.
-- Deux lots P3 Jellyfin : construction des URLs et lecture JSON authentifiée
-  extraites de `sync_jellyfin.py`, puis découverte des serveurs et priorité des
-  URLs de connexion déplacées dans le runtime provider, avec timeout, headers,
-  querystrings et cooldown couverts par des tests de contrat.
-- Deux lots P3 Plex : parsing XML du catalogue de sections et des partages
-  serveur extrait de `apply_plex_access_updates.py`, puis matching robuste du
-  partage utilisateur et lecture de son état déplacés dans un service
-  d'identité, avec façades historiques et variantes Plex conservées.
-- Deux lots P3 Users : lectures communes du profil, des réglages, providers et
-  données de parrainage regroupées dans un référentiel, puis requêtes des
-  comptes représentatifs par serveur et des bibliothèques accessibles sorties
-  de la route avec maintien des optimisations conditionnelles par onglet.
-- Deux lots P3 Users : cycle administratif de changement/annulation/création
-  des parrainages extrait de la route de détail, puis normalisation des
-  overrides d'expiration, de streams et de notifications centralisée dans un
-  service de formulaire, avec contrats métier et cas limites testés.
-- Deux lots P3 Users : lecture/persistance des options Plex du formulaire de
-  détail centralisée dans le service utilisateur, puis sélection des serveurs,
-  création dédupliquée des jobs de synchronisation et réveil protégé du worker
-  extraits de la route, avec tests des valeurs et payloads conservés.
-- Lot P3 Users : réplication des six options de partage Plex entre serveurs de
-  même propriétaire extraite de la route de détail vers un service dédié, avec
-  conservation des données JSON non concernées et tests des garde-fous.
-- Lot P3 Migrations : colonnes de campagne et lectures partagées entre page de
-  détail et rapport déplacées dans un référentiel dédié, avec variantes de
-  jointures serveur et paramètres SQL couvertes par des tests de contrat.
-- Lot P3 Migrations : construction du rapport JSON déplacée dans un service
-  dédié, avec copie des lignes source, agrégation des états et test explicite
-  de non-divulgation du mot de passe Jellyfin chiffré.
-- Lot P3 Migrations : colonnes et lectures SQL des utilisateurs, mappings et
-  bibliothèques destination de la page de détail centralisées dans le service
-  de page, avec contrôle des paramètres, du regroupement et de l'ordre d'appel.
-- Lot P3 Migrations : normalisation des options de campagne et de la date
-  planifiée, puis pagination bornée des utilisateurs, déplacées de la route de
-  détail vers le service de page avec tests des valeurs limites.
-- Lot P3 Migrations : décodage et enrichissement des utilisateurs d'une
-  campagne, calcul des disponibilités de retrait/rollback et résumé de la page
-  de détail déplacés vers le service de page, avec horloge de test injectable.
-- Lot P3 Migrations : chargement des campagnes récentes et calcul des compteurs
-  de statut/utilisateurs extraits de `routes/migrations.py` vers le service de
-  page commun, avec conservation du contrat du template et tests dédiés.
-- Correction d'une régression du découpage des notifications d'expiration :
-  l'alias `_safe_int` utilisé par la tâche est désormais réimporté depuis le
-  service de sélection, avec un test de contrat dédié.
-- Lot P3 synchronisation Jellyfin : sélection des utilisateurs techniques et
-  comptage des éléments de bibliothèques déplacés dans `core/jellyfin_http.py`,
-  avec conservation des fallbacks par utilisateur. `sync_jellyfin.py` repasse
-  sous 1000 lignes.
-- Lot P3 Subscriptions et Communications : parsing/validation des politiques et
-  restauration des modèles d'abonnement déplacés vers des modules core; ranking
-  et sélection des modèles Communications extraits dans
-  `core/communication_template_selection.py`. `subscriptions_page.py` et
-  `communications_engine.py` repassent sous 1000 lignes.
-- Lot P3 Users : fusion et prévisualisation déplacées de `routes/users_list.py`
-  vers `core/user_merge.py`; snapshots d'abonnement mutualisés; emails de
-  bienvenue et provisionnement des comptes Plex/Jellyfin extraits du blueprint
-  vers `core/user_welcome_email.py` et `core/user_provider_provisioning.py`.
-  Les deux anciens fichiers Users repassent sous 1000 lignes.
-- Lot P3 parallèle sur deux tâches volumineuses : validation, découverte du
-  serveur et rapprochement des bibliothèques Tautulli déplacés dans
-  `core/tautulli_discovery.py`, puis sélection des modèles et fenêtres
-  d'expiration isolée dans `core/expiration_template_selection.py`.
-  `tasks/send_expiration_emails.py` repasse sous 1000 lignes.
-- Lot P3 parallèle sur les routes Migrations et Servers : sélection des
-  serveurs disponibles et préparation des correspondances de bibliothèques
-  déplacées dans `core/migrations/page_data.py`, puis centralisation des
-  colonnes SQL et des types de bibliothèques dans `core/server_page_queries.py`.
-  `routes/servers.py` repasse sous 1000 lignes.
-- Nouveau lot P3 mené en parallèle sur deux routes volumineuses : calcul des
-  suggestions de fusion déplacé de `routes/users_list.py` vers un module core
-  testé, et suppression de la logique d'instantanés d'abonnement dupliquée dans
-  `routes/subscriptions_page.py` au profit du service commun existant.
-- Sixième lot P3 en deux déplacements sur `routes/communications.py` : routes
-  de liste paginée et de détail de l'historique regroupées dans
-  `communications_history.py`. Le fichier principal repasse sous 1000 lignes.
-- Cinquième lot P3 en deux extractions sur `routes/communications.py` : lecture
-  et rendu du détail d'historique déplacés dans le service de pages, puis
-  préparation de la configuration avec masquage des secrets et résumé de file.
-- Quatrième lot P3 en deux extractions sur `routes/communications.py` : chargement
-  de la page Campagnes et chargement paginé de la page Modèles déplacés dans un
-  service commun, pièces jointes et traductions comprises.
-- Troisième lot P3 en deux opérations sur `routes/communications.py` : parsing
-  sécurisé du formulaire de configuration extrait, puis suppression du rendu
-  d'historique local devenu mort après son déplacement dans le service dédié.
-- Deuxième lot P3 en deux extractions sur `routes/communications.py` : règles
-  de déclenchement/délai des modèles centralisées, puis persistance commune des
-  pièces jointes de campagnes et modèles avec conservation du schéma existant.
-- Nouveau lot P3 en deux extractions sur `routes/communications.py` : rendu des
-  messages d'historique déplacé dans un service dédié, puis isolation de la
-  normalisation des clés/secrets et des traductions administrables de modèles.
-- Suppression des avertissements Python sur `datetime.utcnow()` dans les deux
-  écritures de présence provider Jellyfin, avec horodatage UTC conscient du
-  fuseau et conservation exacte du format ISO à la seconde terminé par `Z`.
-- Grande passe de non-régression après les découpages P3 : cartographie des
-  fonctions et constantes historiques, parité différentielle du bootstrap,
-  suite complète et audits applicatifs. Mise à jour des validateurs
-  Communications, catalogue des tâches et sécurité de file afin qu'ils suivent
-  les nouveaux modules plutôt que les anciens fichiers monolithiques.
-  Actualisation également des fixtures des quatre phases Migrations et du
-  contrôle UI/configuration pour refléter les schémas et services actuels.
-- Dix-neuvième lot P3 en deux extractions sur `stream_enforcer.py` : contexte complet
-  des notifications de blocage (limites, sessions, IP, appareils et variables
-  traduisibles), puis mémoire de déduplication des sessions du foyer, avec les
-  façades et caches historiques conservés.
-- Dix-huitième lot P3 en deux extractions sur `stream_enforcer.py` : isolation
-  du cache de déduplication des lectures synchronisées et du cache de grâce des
-  transitions cohérentes d'IP, avec alias conservés pour la compatibilité et
-  suppression des deux anciennes implémentations locales devenues mortes.
-- Dix-septième lot P3 en deux extractions sur `stream_enforcer.py` : déplacement
-  de l'identité et de la chronologie des endpoints dans les utilitaires de
-  session, puis isolation des familles de médias et clés de transition d'IP.
-- Seizième lot P3 en deux extractions sur `stream_enforcer.py` : centralisation
-  des délais, fenêtres et paramètres Jellyfin, puis déplacement du diagnostic
-  détaillé des sessions dans un module indépendant sans modifier les valeurs.
-- Quinzième lot P3 en deux extractions sur `stream_enforcer.py` : isolation des
-  règles de scope global/serveur/utilisateur et des overrides VIP, puis
-  déplacement de la sélection des violations après recontrôle avec maintien de
-  l'interdiction de bascule serveur pour les acteurs synthétiques.
-- Quatorzième lot P3 en deux extractions sur `stream_enforcer.py` : livraison
-  des notifications `stream_blocked` déplacée dans un service dédié, puis
-  isolation des actions provider d'avertissement et d'arrêt avec conservation
-  du fallback pour les anciennes signatures de message.
-- Treizième lot P3 en deux extractions sur `stream_enforcer.py` : regroupement
-  des lectures SQL de politiques, sessions, serveurs et overrides dans un
-  référentiel, puis isolation du journal et de l'état persistant des actions
-  d'enforcement tout en conservant les points d'appel historiques de la tâche.
-- Douzième lot P3 en deux extractions sur `stream_enforcer.py` : construction
-  des instantanés complets d'enforcement isolée, puis déplacement de la lecture
-  des résolutions Plex/Jellyfin dans un module de métadonnées sans changer les
-  formats JSON enregistrés ni les règles de détection 4K.
-- Onzième lot P3 en deux extractions sur `stream_enforcer.py` : déplacement des
-  utilitaires purs de politiques, acteurs, adresses et sélection de cible, puis
-  isolation du pilotage du mode accéléré et de sa persistance en base.
-- Dixième lot P3 en deux extractions sur `stream_enforcer.py` : traduction des
-  messages de politique isolée dans un service dédié, puis déplacement des
-  comparaisons de sessions, appareils, sous-réseaux et foyers probables sans
-  modifier les seuils ni les fonctions internes historiques.
-- Audit de non-régression du découpage P3 : ajout d'un comparateur différentiel
-  ancien/nouveau bootstrap sur bases neuves et existantes. Correction associée
-  du téléchargement anonymisé des logs avec les enregistrements simplifiés.
-- Neuvième lot P3 de découpage du bootstrap : extraction complète du schéma et
-  des migrations historiques Communications, ainsi que du catalogue
-  d'amorçage des tâches. `db_bootstrap.py` repasse sous 1000 lignes.
-- Huitième lot P3 de découpage du bootstrap : extraction de l'amorçage des
-  modèles Communications unifiés et des anciens modèles email conservés pour
-  compatibilité, sans modifier leurs contenus ni leurs délais.
-- Septième lot P3 de découpage du bootstrap : extraction de l'initialisation
-  des réglages de base et de la migration chiffrée des secrets Communications
-  et serveurs dans deux modules indépendants.
-- Sixième lot P3 de découpage du bootstrap : extraction de l'application du
-  réglage CRON global et de la migration du modèle Usage Risk, avec nettoyage
-  des doublons de modèles de communication strictement équivalents.
-- Cinquième lot P3 de découpage du bootstrap : déplacement de l'amorçage des
-  modèles d'accueil Plex/Jellyfin et de la migration versionnée des horaires de
-  tâches, avec conservation des horaires personnalisés par l'administrateur.
-- Quatrième lot P3 de découpage du bootstrap : extraction de la normalisation
-  des anciens types de média et de la création des index applicatifs utilisés
-  par les recherches, l'historique et les suppressions serveur.
-- Troisième lot P3 de découpage du bootstrap : les sessions et événements
-  Monitoring, ainsi que la mise à niveau de la file des jobs média et de leurs
-  colonnes associées, sont déplacés dans deux modules dédiés.
-- Deuxième lot P3 de découpage du bootstrap : extraction du schéma des cadeaux
-  d'abonnement et du schéma d'historique Monitoring, y compris sa déduplication
-  et ses agrégats quotidiens, dans deux modules dédiés et idempotents.
-- Correction de la confiance 2FA locale pendant 30 jours : la page de
-  connexion ne rend plus le code temporaire obligatoire lorsque le cookie de
-  confiance local est encore valide.
-- Nouveau lot P3 de découpage du bootstrap : le schéma des modèles d'email
-  d'accueil et le schéma/migration Discord sont extraits de `db_bootstrap.py`
-  dans deux modules dédiés, sans modifier leur ordre d'initialisation.
-- Refactor Monitoring P3 : extraction complète des classements Libraries et
-  des statistiques de l'onglet Servers hors de la route
-  `monitoring_overview.py`, avec conservation des requêtes et des contrats de
-  rendu existants.
-- Stabilisation de la suite de tests : import tardif de l'aide DB du widget
-  Now Playing et dates relatives pour la couverture des statistiques
-  quotidiennes. Les fins de ligne sont désormais normalisées par
-  `.gitattributes`.
-- Premier découpage de `db_bootstrap.py` : création et mise à niveau des tables
-  de politiques et d'enforcements de streaming déplacées dans un module dédié,
-  avec test SQLite d'idempotence.
-- Extraction des tables techniques Tautulli et Monitoring depuis
-  `db_bootstrap.py`, avec validation SQLite des colonnes historiques et index.
-- Extraction des fondations des campagnes de migration depuis
-  `db_bootstrap.py` : campagnes, utilisateurs, étapes et correspondances de
-  bibliothèques sont désormais initialisés par un module dédié testé.
-- Migration du mode de planification des tâches extraite de
-  `db_bootstrap.py`, avec validation des intervalles des workers récurrents.
-- Validation et mise à niveau des tables principales extraites de
-  `db_bootstrap.py`, notamment les colonnes serveur, comptes média et réglages.
-- Schéma de l'historique des recommandations Usage Risk déplacé dans un module
-  dédié avec contrôle SQLite de son idempotence.
-- Réglages, parrainages et reconstruction de l'ancienne contrainte de statuts
-  extraits de `db_bootstrap.py`, avec vérification de la conservation des
-  données existantes.
-- Journal des événements de parrainage extrait dans un module de bootstrap
-  dédié et testé sur SQLite.
-- Migration des statuts et colonnes de profil utilisateur extraite de
-  `db_bootstrap.py`, avec test de reconstruction d'une ancienne table et de
-  conservation des comptes.
-- Schéma et amorçage initial des modèles d'abonnement extraits dans un module
-  dédié ; les modèles supprimés volontairement ne sont plus recréés lors des
-  initialisations suivantes.
-- Colonnes obligatoires des tâches et réglages, ainsi que la table de
-  protection anti-bruteforce, extraites de `db_bootstrap.py` et testées de
-  manière idempotente.
-
-## 2026-07-19 - P3 monitoring
-
-- Optimisation du loader global de navigation : affichage differe a 180 ms,
-  exclusion des interactions HTMX, fermeture defensive en fin de requete et
-  suppression du flou plein ecran couteux.
-- Extraction de la collecte et de la persistance des statistiques CPU/RAM
-  serveur vers `core/monitoring/resource_stats.py`; le collecteur repasse sous
-  1000 lignes et le parsing XML Plex est couvert par des tests unitaires.
-- Extraction de la resolution et de la presentation des politiques actives du
-  detail User vers `core/user_active_policies.py`, sans dependance Flask.
-- Extraction de la pagination email/Discord, du tri et des libelles de
-  l'historique du detail User vers `core/user_notification_history.py`.
-- Extraction de l'application et du nettoyage des snapshots de templates
-  d'abonnement vers `core/user_subscription_snapshots.py`.
-- Extraction du contexte profil du detail User (verrou owner/admin, alias,
-  parrainages, dates et options Plex) vers `core/user_profile_context.py`;
-  `users_detail.py` repasse sous 1000 lignes.
-- Extraction de la resolution des comptes Plex et de la synchronisation des
-  identites invitees acceptees vers `core/plex_access_identity.py`.
-- Extraction du nettoyage des jobs Plex, de la selection du compte media et de
-  la lecture des options de partage vers `core/plex_access_jobs.py`.
-- Extraction des diagnostics HTTP et des logs de payload Plex vers
-  `core/plex_access_runtime.py`; suppression de trois helpers de pilotage morts
-  et passage de `apply_plex_access_updates.py` sous 1000 lignes.
-- Extraction de la regle du mode d'import vers `core/plex_sync_config.py`,
-  mutualisation de la detection des invitations Plex en attente et suppression
-  de trois helpers sans appel dans `sync_plex.py`.
-- Extraction du client XML Plex.tv utilise pour le compte administrateur, les
-  utilisateurs et les shared servers vers `core/plex_sync_api.py`.
-- Extraction de l'orchestration globale de synchronisation des serveurs,
-  bibliotheques et acces Plex vers `core/plex_sync_orchestrator.py`.
-- Extraction du comptage des sections et de l'application des diffs d'acces
-  aux bibliotheques vers `core/plex_library_access.py`.
-- Extraction du rapprochement global et de l'upsert du proprietaire de chaque
-  serveur Plex vers `core/plex_owner_sync.py`.
-- Extraction de la decouverte et de la reconciliation des bibliotheques vers
-  `core/plex_library_sync.py`; `sync_plex.py` repasse sous 1000 lignes.
-- Centralisation de la collecte, persistance, lecture et application des
-  statistiques CPU/RAM dans `core/monitoring/resource_stats.py`.
-- Extraction des endpoints JSON de detail et d'historique des enforcements
-  Monitoring vers `routes/monitoring_enforcements.py`, sans changement d'URL.
-- Extraction du contexte serveurs Monitoring et des donnees Now Playing vers
-  `core/monitoring/overview_servers.py` et `overview_live.py`.
-- Extraction de l'activite recente et du contexte Usage Risk vers
-  `core/monitoring/overview_activity.py` et `overview_usage_risk.py`.
-- Extraction des parametres, du tri, du formatage et de la pagination de
-  l'onglet Users Monitoring vers `core/monitoring/overview_users.py`.
-- Restauration du helper de compatibilite Plex pour l'activation differee des
-  abonnements, detectee par la passe de validation globale.
-- Clarification des libelles CRON de la page Tasks : les listes regulieres
-  affichent maintenant simplement leur frequence et les minutes fixes utilisent
-  une formulation naturelle dans les cinq langues de l'interface.
-- Extraction du comptage filtre de l'onglet Users Monitoring vers
-  `core/monitoring/overview_users.py`, avec correction d'un suffixe SQL parasite
-  qui pouvait casser une recherche utilisateur.
-- Extraction de la requete agregee de la liste Users Monitoring vers
-  `core/monitoring/overview_users.py`, avec test SQLite du filtrage, du
-  dedoublonnage des lectures et du formatage.
-- Extraction de la pagination des enforcements Monitoring Policies vers
-  `core/monitoring/overview_policies.py`, avec bornage de la page et des tailles
-  autorisees.
-- Extraction du catalogue Monitoring Policies, du decodage des regles JSON et
-  des compteurs systeme/verrouillage/abonnement vers
-  `core/monitoring/overview_policies.py`.
-- Extraction des statistiques du dashboard Monitoring Policies et des fenetres
-  d'enforcement 24 heures/7 jours vers `core/monitoring/overview_policies.py`.
-- Extraction des repartitions Monitoring Policies par scope, provider et type
-  de regle vers `core/monitoring/overview_policies.py`.
-- Extraction du classement des utilisateurs touches par les enforcements,
-  avec resolution des identites Vodum/Plex, vers
-  `core/monitoring/overview_policies.py`.
-- Extraction de la liste paginee des enforcements recents et de la resolution
-  de leur libelle utilisateur vers `core/monitoring/overview_policies.py`.
-- Extraction du regroupement des enforcements par acteur et de l'etat des
-  sessions suivies vers `core/monitoring/overview_policies.py`.
-- Extraction de la chronologie warn/kill Monitoring Policies sur 30 jours,
-  avec remplissage des jours sans evenement; l'onglet est desormais decouple
-  de ses requetes metier.
-- Extraction complete de l'onglet Monitoring History vers
-  `core/monitoring/overview_history.py`, avec test SQLite des filtres, du tri,
-  du formatage et de la pagination.
-- Extraction des parametres, du tri securise et de la pagination de l'onglet
-  Monitoring Libraries vers `core/monitoring/overview_libraries.py`.
-- Extraction de la table agregee Monitoring Libraries, du comptage des acces
-  hors proprietaire et du formatage des durees vers
-  `core/monitoring/overview_libraries.py`, avec test SQLite reel.
-- Extraction de la liste des utilisateurs du filtre Monitoring Libraries et de
-  ses libelles de repli vers `core/monitoring/overview_libraries.py`.
-- Extraction de la construction parametree des filtres de periode et
-  d'utilisateur du classement Monitoring Libraries vers
-  `core/monitoring/overview_libraries.py`.
-
-## 2026-07-16 - P3 architecture, premier lot
-
-- Finalisation du decoupage de `tasks_engine.py`, ramene sous 1000 lignes: suppression des anciennes implementations inatteignables et extraction de la configuration des taches et du cycle de vie scheduler dans `core/tasks/`.
-- Suppression d'un ancien helper dashboard inutilise et de ses constantes SQL, sans changement d'URL ni de contrat de template.
-- Extraction des requetes et agregations de widgets dashboard dans un service read-only dedie.
-- Extraction des regles pures de validation des retours et timeouts de taches hors de `tasks_engine.py`.
-- Extraction des signaux thread-safe du scheduler (execution forcee et auto-configuration) avec tests de deduplication et consommation unique.
-- Extraction des decisions pures du tick scheduler: parsing des dates, compteurs, retries, occupation et echeances forcees.
-- Extraction de la file FIFO des sequences de taches avec attribution thread-safe d'un worker unique.
-- Remplacement du verrou et du booleen globaux du worker principal par une attribution thread-safe testee en concurrence.
-- Extraction de l'orchestration des sequences de taches et de leur attente bloquante hors de `tasks_engine.py`.
-- Extraction du premier noyau de regles pures d'auto-activation des taches.
-- Extraction du passage complet d'auto-activation Monitoring, providers, workers d'acces, Stream Enforcer et expiry dans un service dedie.
-- Extraction du cycle d'execution des taches dans un runner injectable et teste, tout en conservant `run_task` comme facade publique.
-- Extraction du tick scheduler complet dans un service testable separe de la boucle de sommeil.
-- Centralisation de la selection du compte Plex prefere et des jobs de resynchronisation utilisateur Plex/Jellyfin dans un service partage.
-- Centralisation du contrat de pagination web et migration initiale des routes Users et Servers.
-- Uniformisation des dernieres connexions SQLite applicatives directes (validation Backup et import Tautulli) via la factory commune en lecture seule.
-- Retrait du widget dashboard Operations health, juge redondant et peu clair, ainsi que de son endpoint et service devenus inutiles.
-
-## 2026-07-16 - P6 logs et diagnostic, premier lot
-
-- Les valeurs sensibles presentes dans les tracebacks sont maintenant anonymisees hors mode debug, comme celles du message principal.
-- La page Logs et le telechargement couvrent desormais le fichier actif et les cinq rotations conservees.
-- Les tracebacks multilignes restent groupes avec leur evenement ERROR/CRITICAL pour le filtrage et l'affichage.
-- Le telechargement anonymise force maintenant la protection des emails, tokens et IP meme lorsque le mode debug est actif.
-- Les exceptions non gerees des requetes Flask et des threads Python sont maintenant capturees dans `app.log` avec traceback et contexte stable.
-- Ajout des traces techniques manquantes derriere plusieurs erreurs UI Backup, Communications, Discord et Subscriptions, avec contexte non sensible.
-- Les jobs d'acces Plex/Jellyfin persistes mais non demarres et les pannes de geolocalisation Monitoring sont maintenant visibles dans les logs.
-- Correction du filtre initial de la page Logs qui masquait les WARNING, ERROR et CRITICAL hors mode debug; ajout du filtre CRITICAL explicite.
-- Ajout de compteurs cliquables par severite sur toute la retention des logs, avec acces direct aux incidents ERROR et CRITICAL.
-- Ajout d'un audit AST reproductible des handlers silencieux et couverture groupee des erreurs techniques Users, Servers, Migrations et Tasks.
-- Cloture P6: erreurs de lecture visibles, configuration du handler idempotente et validation automatisee des modes normal/debug sans doublons.
-- Ouverture differee du fichier de log afin qu'un volume temporairement indisponible ne bloque pas l'import des taches et du moteur de coupure.
-
-## 2026-07-16 - P2 monitoring materialise
-
-- Ajout de `monitoring_daily_stats`, table reconstructible d'agregats quotidiens.
-- Ajout de la tache quotidienne `materialize_monitoring_daily_stats` avec backfill glissant de 31 jours.
-- Lecture prioritaire des statistiques et tops utilisateurs compacts par l'overview Monitoring, avec fallback historique.
-- Ajout de l'index compose Referrals valide par `EXPLAIN QUERY PLAN`; rejet documente des index Users inutilisables avec la recherche `%terme%`.
-- Ajout d'une synthese d'exploitation au dashboard: providers, files de taches/jobs, incidents recents et niveau d'action.
-
-## 2026-07-16 - Cloture P1 UI/performance
-
-- Finalisation des fragments dashboard, paginations 20/50/100, modales chargees a la demande et skeletons stables.
-- Ajout des traductions generiques de chargement, nouvelle tentative et taille de page dans les cinq langues UI.
-- Validation finale de la syntaxe, des routes, templates, modales, paginations et tests de non-regression.
-- Correction du dimensionnement des graphiques Monitoring sur les ecrans mobiles haute densite.
-- Ajout d'un indicateur global pendant les navigations et chargements HTMX perceptibles.
-- Barre laterale desktop fixee a la fenetre sur toute sa hauteur, avec defilement interne du menu.
-
-All notable changes to Vodum will be documented in this file.
-
----
-
-## Unreleased
-
-- Complete the targeted skeleton pass with a stable Usage Risk dashboard placeholder and a viewport-sized User detail Monitoring iframe skeleton with a ten-second error fallback.
-
-- Limit Migration campaign detail rendering to configurable 20/50/100-user pages while retaining campaign-wide eligibility, validation, rollback, and removal summary counts.
-
-- Paginate Communications Templates server-side at 20/50/100 rows, preserving the selected editor language and current list page when opening a template.
-
-- Make Subscriptions tab data lazy at the route level so Applications users, Gift candidates, templates, servers, and settings are queried only by consuming tabs, and add 20/50/100 pagination to Applications.
-
-- Load full Monitoring Policy enforcement snapshots only when an event row is opened, keeping large session/IP/rule JSON payloads out of the main paginated table.
-
-- Load sent Communications History message bodies and metadata only when opening a row, reducing table HTML and avoiding rendering every message body during page load; queued entries retain their inline transient details.
-
-- Add configurable 20/50/100 server-side pagination to Communications History and preserve its trigger filter and sort order through every navigation link.
-
-- Make Monitoring Policies enforcement history configurable at 20/50/100 server-paginated rows while preserving the selected size across navigation.
-
-- Add configurable 20/50/100 server-side page sizes to Users and Referrals, preserve the choice through pagination/archive links, and avoid loading referral settings/stats or subscription setup data outside the consuming tab.
-
-- Make User detail tab loading data-aware: communication history, access libraries and merge candidates, general referral/risk/policy data, monitoring identity, and enriched media accounts are now queried only for the tab that consumes them.
-
-- Keep the asynchronously loaded dashboard stream/subscription summary card stretched to the same row height as the Users card without imposing a fixed mobile height.
-
-- Move the multi-server dashboard list and seven-day peak-stream calculation out of the initial page render into a timeout-protected fragment.
-
-- Defer the expensive dashboard Usage Risk report and trend calculation to an independent fragment so it no longer delays the initial dashboard response.
-
-- Load the dashboard stream-enforcement and subscription summary through an independent HTMX fragment with a stable skeleton, timeout fallback, and its detail modal bundled with the fragment.
-
-- Standardize full-screen application dialogs through the shared modal manager with a top-right close icon, backdrop-click closing, Escape handling, focus restoration, and support for dynamically loaded modals.
-
-- Revalidate policy violations against the current session and server immediately before enforcement, and confirm actual playback disappearance after Plex and Jellyfin stop requests.
-
-- Prevent false usage-risk upgrade emails by counting distinct blocked sessions instead of repeated enforcement rows and by sending only recommendations still present in the freshly recalculated report.
-
-- Restore scrolling in Monitoring policy enforcement modals by constraining the complete panel to the viewport and making its content area a real flex scroll container.
-
-- Audit long dialogs and add viewport-bounded scrolling to Monitoring IP details, Communications History, Settings security, login reset, subscription gifts, User deletion/password, and Create User modals.
-
-- Remove the global intrinsic table width and duplicate mobile `display:block` rules that made Monitoring Policies shrink on desktop and pushed Communications History columns outside its card.
-
-- Allow the dedicated `/login/artwork/` proxy through the authentication guard so anonymous login pages receive image bytes instead of a redirect back to HTML.
-
-- Remove the easter-egg quote text from the login form, keep the media backdrop behind desktop login, and use only the real portrait poster behind mobile login.
-
-- Keep the last valid login artwork visible across midnight and application startup until the daily easter-egg cache refresh completes.
-
-- Preserve the lifetime-toggle global handler after extracting the Subscriptions editor, and keep the User email panel collapsed state stable across responsive resize changes.
-
-- Move the final inline business script, the Subscriptions template editor, into `static/js/pages/subscriptions-template-editor.js` with translations supplied through JSON configuration.
-
-- Move the User merge selection, preview, confirmation, and access-field synchronization into `static/js/pages/user-detail.js`, using safe DOM rendering for preview values.
-
-- Move the Subscriptions policies table filters, pagination, bulk selection, and delete confirmation into `static/js/pages/subscriptions.js`.
-
-- Fix the Subscriptions template editor JavaScript identifiers so translated labels can no longer alter function names and break non-English pages.
-
-- Add an eight-second timeout and stable error fallback to the dashboard Now Playing and Next Tasks widgets.
-
-- Move the User detail lifetime/server expiration override behavior out of the inline template into `static/js/pages/user-detail.js`.
-
-- Move the User detail referrer picker into `static/js/pages/user-detail.js` and build candidate rows with safe DOM text nodes.
-
-- Move the User detail Jellyfin password modal into `static/js/pages/user-detail.js` and render server responses as plain text.
-
-- Consolidate the User access Plex, Jellyfin, and email collapsible panels in `static/js/pages/user-detail.js`.
-
-- Centralize the User detail notification order controls in `static/js/app.js` and remove the inline partial script.
-
-- Centralize the Users/Plex form debounce helper in `static/js/app.js` and remove the inline duplicate from the user servers partial.
-
-- Move the Subscriptions settings expiry/stream-blocked checkbox sync out of the inline template into `static/js/pages/subscriptions.js`.
-
-- Move the dashboard Now Playing stable-swap handler out of inline template/header blocks and keep it in `static/js/pages/dashboard.js`.
-
-- Move Servers detail/libraries, Settings notification order, and Backup Tautulli import behavior out of inline templates into page JavaScript files.
-
-- Move Subscriptions application/template confirmation behavior and plan summaries out of inline templates into `static/js/pages/subscriptions.js`.
-
-- Move Users filters, referrals bulk-selection, and Create User modal behavior out of the template into `static/js/pages/users.js`.
-
-- Fix mobile login easter egg artwork loading before authentication, and avoid repainting the dashboard sentence artwork when HTMX receives identical content.
-
-- Add the daily easter egg visual to the login screen, using the media backdrop on desktop browsers and the poster on mobile.
-
-- Improve mobile layouts for Subscriptions and Monitoring policy dialogs by stacking narrow action areas, relaxing dense grids, and constraining large modal content on small screens.
-
-- Improve mobile layouts for Logs, Servers, and Communications modals by stacking action bars and constraining large dialogs on small screens.
-
-- Add dashboard quote rotation so available easter eggs are not repeated until the eligible set has been exhausted, and allow `tv` entries to resolve as shows.
-
-- Add French cinema easter egg quotes for Les Visiteurs, Taxi, Les Trois Fr?res, and Ast?rix & Ob?lix: Mission Cl?op?tre.
-
-- Improve Users and User detail mobile layouts by stacking dense label/value grids and modal action rows on narrow screens.
-
-- Make Monitoring Now Playing cards fluid on small screens so the 380px desktop card minimum no longer creates mobile overflow.
-
-- Improve Monitoring user detail on mobile by stacking chart legends and reducing metric grids to one column on narrow screens.
-
-- Improve the dashboard Usage Risk card on mobile by stacking the metric and chart on small screens.
-
-- Improve mobile action, form, and modal resilience by wrapping action groups and constraining fixed-width controls only on small screens.
+- Fiabilisation du suivi Plex en temps réel : les rafraîchissements websocket
+  répétitifs sans changement passent en niveau debug, tandis que le démarrage,
+  les changements de nombre de sessions et les événements de lecture restent
+  visibles en information.
+- Les indisponibilités temporaires d'un serveur Plex sont désormais consignées
+  comme avertissements sans traceback dans les logs normaux, avec le détail
+  complet conservé lorsque le mode debug est actif.
+- Renforcement de l'arrêt des lectures Plex : lorsqu'une première demande de
+  terminaison est acceptée mais que la session reste visible pendant une
+  transition, VODUM réessaie la commande et ne considère l'arrêt réussi
+  qu'après la disparition effective de la session.
+- Mémorisation des arrêts récents par policy, serveur et utilisateur afin de
+  gérer correctement les sessions automatiquement recréées par un lecteur et
+  de réévaluer immédiatement une récidive sans accorder un nouveau délai
+  complet d'avertissement.
+- Correction du comptage des flux Plex lors du remplacement d'une session :
+  plusieurs sessions cohérentes correspondant au même appareil, endpoint et
+  contenu restent comptées comme une seule lecture pendant tout leur
+  chevauchement, au lieu de devenir artificiellement plusieurs flux après deux
+  cycles.
+- Conservation de la détection des usages réels : deux contenus différents sur
+  un endpoint faiblement identifié ne sont pas fusionnés indéfiniment et
+  continuent à compter comme des lectures distinctes après la grâce prévue.
+- Correction des recommandations d'abonnement : l'absence de policy active
+  `max_ips_per_user` signifie désormais que le forfait possède un nombre d'IP
+  illimité, au lieu d'être interprétée comme une capacité de zéro IP.
+- Les policies IP désactivées sont maintenant réellement ignorées pendant le
+  calcul des abonnements suggérés; une limite IP explicitement activée reste
+  pleinement appliquée.
+- Les forfaits supérieurs sans plafond IP, notamment le forfait Famille,
+  peuvent ainsi être suggérés aux utilisateurs dépassant les capacités IP des
+  forfaits Base ou Plus, sous réserve des seuils d'arrêts, de flux, de valeur et
+  de cooldown déjà configurés.
+- Clôture de l'uniformisation des accès SQLite applicatifs après audit : toutes
+  les ouvertures directes restantes dans `app` passent désormais par le helper
+  commun, à l'exception de l'implémentation centrale elle-même.
+- Première passe outillée de nettoyage du code mort : suppression de 31 imports
+  inutilisés dans les pages principales, services Plex/Jellyfin, helpers web,
+  sauvegarde et assistant de configuration, sans retirer les alias de
+  compatibilité encore consommés par les tests et intégrations historiques.
+- Finalisation de la passe de code mort avec 25 imports supplémentaires et sept
+  variables sans effet retirés des tâches de synchronisation, d'expiration, de
+  monitoring et de création utilisateur. Les façades historiques de
+  `stream_enforcer` sont désormais annotées explicitement et l'audit Ruff des
+  imports, symboles et variables inutilisés ne remonte plus aucune erreur.
+- Centralisation de l'application des restrictions de dossiers Jellyfin dans le
+  service provider commun : le worker d'accès conserve son contexte HTTP, ses
+  timeouts et son fallback POST vers PUT sans maintenir une seconde logique
+  active de mise à jour des policies.
+- Première étape du cycle de vie des comptes Jellyfin supprimés : le marquage
+  `removed` est centralisé dans le référentiel de synchronisation et les comptes
+  retrouvés lors d'un sync repassent explicitement à l'état `present`, avec
+  identifiant provider et date de contrôle actualisés.
+- Affichage de l'état provider dans l'onglet Accès utilisateur : les comptes
+  Jellyfin disparus portent désormais un badge `Removed from provider`, leur
+  dernière date de contrôle est visible et les cartes peuvent être filtrées
+  entre comptes présents et supprimés.
+- Ajout d'une suppression locale contrôlée des comptes provider absents :
+  l'action POST vérifie l'appartenance à l'utilisateur et exige l'état
+  `removed`, protège les rôles owner/admin et s'appuie sur les clés étrangères
+  existantes pour conserver les événements et historiques en les détachant du
+  compte local supprimé.
+- Traduction complète en français, anglais, allemand, espagnol et italien des
+  nouveaux filtres, statuts, confirmations et retours d'action du cycle de vie
+  des comptes provider supprimés.
+- Passe de contrôle après refactor : suppression de l'ancienne implémentation
+  Jellyfin restée en doublon derrière le service provider commun, avec
+  conservation d'un simple alias de compatibilité pour les intégrations
+  historiques.
+- Correction des imports de fusion utilisateur après le nettoyage du code
+  mort : les routes d'action et de détail importent maintenant directement les
+  services `user_merge` et `user_merge_suggestions`. Un smoke test reproduisant
+  la disposition Python plate de l'image Docker protège désormais le démarrage
+  Waitress contre ce type de rupture.
+- Deux premiers lots de finalisation P3 sur les abonnements : la recherche et
+  la pagination des utilisateurs auxquels appliquer un forfait, puis le
+  chargement et la préparation des policies pour la liste et l'éditeur, sont
+  sortis de `subscriptions_page.py` vers un service de données testé. Les
+  bornes de pagination et les payloads JSON non objets sont traités de façon
+  déterministe.
+- Deux lots P3 supplémentaires sur les abonnements : les données communes des
+  onglets (réglages, serveurs, utilisateurs cadeaux et catalogue des forfaits)
+  sont chargées par le service de page, tandis que la duplication, l'activation
+  et la suppression des modèles sont centralisées dans un service
+  d'administration testé, avec désaffectation des utilisateurs avant
+  suppression conservée.
+- Deux lots P3 Users : la validation, la persistance JSON et la mise en file des
+  options de partage Plex unitaires sont centralisées dans le service des
+  options utilisateur. Le toggle d'une bibliothèque est sorti de la route vers
+  un service d'accès commun Plex/Jellyfin qui conserve le blocage des comptes
+  expirés, le scope strict au serveur, les actions grant/sync/revoke, la
+  déduplication des jobs et le réveil tolérant des workers.
+- Deux lots P3 Migrations : la relance manuelle de la réconciliation des
+  invitations et la validation d'une destination sont sorties de la route. Les
+  suppressions/restaurations d'accès source et le rollback destination partagent
+  maintenant une orchestration testée qui valide le nom de campagne, interdit
+  la suppression en mode copie, choisit le worker du provider et réveille
+  ensuite le worker Migrations dans l'ordre historique.
+- Deux lots P3 Setup : la lecture, le décodage et la persistance bornée de
+  l'état de l'assistant sont centralisés dans un service. La validation puis la
+  création chiffrée des serveurs Plex/Jellyfin, l'activation des tâches, le
+  lancement de la découverte et le comptage strict des serveurs validés par
+  l'assistant sont également sortis de la route et couverts par des tests.
+- Deux derniers lots P3 Setup : les règles de navigation et de saut des étapes
+  optionnelles, puis le chargement complet des données de rendu sont extraits
+  de la route. Les secrets SMTP, OAuth et Discord restent masqués dans le
+  contexte du template, avec couverture des transitions et du marquage des
+  serveurs validés. Cette série de six lots P3 est terminée.
+- Contrôle fonctionnel global après les extractions P3 : 396 tests, tous les
+  validateurs métier, le bootstrap et l'intégrité d'une base neuve, les routes,
+  l'authentification, les protections CSRF, les traductions, la compilation et
+  les imports Docker sont validés. Le contrôle de création serveur a été mis à
+  jour pour suivre la nouvelle frontière route/service et éviter un faux échec
+  de CI.
+- Audit approfondi en exécution réelle : parcours de l'assistant Setup, du
+  Dashboard, des abonnements, utilisateurs, migrations et policies, puis test
+  du cycle duplication/suppression d'une formule sur une base isolée. Correction
+  des dernières chaînes UTF-8 corrompues dans les abonnements, citations et
+  messages de bootstrap, ainsi que de statuts restés en anglais dans plusieurs
+  catalogues. Un audit d'encodage permanent empêche désormais leur retour.

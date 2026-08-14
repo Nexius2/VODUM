@@ -9,20 +9,15 @@ from flask import Blueprint, jsonify, request, g
 
 from db_manager import DBManager
 from logging_utils import get_logger
-from mailing_utils import build_user_context, render_mail
 from notifications_utils import is_email_ready
 
 from communications_engine import (
-    send_to_user,
-    fetch_template_attachments,
-    record_history,
     schedule_template_notification,
     select_comm_template_for_user,
 )
 from core.user_provider_provisioning import provision_provider_account
 from core.media_jobs import insert_jellyfin_media_job, insert_plex_media_job
 from core.user_subscription_snapshots import apply_template_snapshot
-from core.user_welcome_email import get_welcome_template, send_email_via_settings
 from tasks_engine import auto_enable_stream_enforcer
 from secret_store import (
     find_plex_server_ids_by_token,
@@ -466,8 +461,6 @@ def api_users_create():
 
     settings = db.query_one("SELECT id, mail_from, smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_auth_method, smtp_oauth_access_token, email_history_retention_years, disable_on_expiry, delete_after_expiry_days, send_reminders, preavis_days, reminder_days, default_language, timezone, admin_email, contact_email, admin_password_hash, auth_enabled, admin_totp_enabled, admin_totp_secret, wizard_active, wizard_completed, wizard_step, wizard_state_json, web_secure_cookies, web_cookie_samesite, web_trust_proxy, enable_cron_jobs, default_expiration_days, default_subscription_days, maintenance_mode, debug_mode, backup_retention_days, backup_retention_count, data_retention_years, brand_name, notifications_order, user_notifications_can_override, notifications_send_mode, expiry_mode, warn_then_disable_days, discord_enabled, discord_bot_token, discord_bot_id, mailing_enabled, skip_never_used_accounts, plex_user_import_mode, enable_anonymous_telemetry, telemetry_instance_id, telemetry_last_sent_at, task_defaults_version, stream_enforcer_boost_until, usage_risk_enabled, usage_risk_send_upgrade_suggestions, usage_risk_send_stream_blocked_message, usage_risk_min_kills_before_suggestion, usage_risk_analysis_window_days, usage_risk_suggestion_cooldown_days, usage_risk_medium_threshold, usage_risk_high_threshold FROM settings WHERE id = 1")
     settings = dict(settings) if settings else {}
-    smtp_ok = is_smtp_ready(settings)
-
     for block in server_blocks:
         log.info(f"[CREATE USER] processing block: {block}")
         print(f"[CREATE USER STDOUT] processing block: {block}", flush=True)
