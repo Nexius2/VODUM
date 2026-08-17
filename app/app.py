@@ -4,8 +4,7 @@ import json
 import hmac
 import secrets
 import time
-from datetime import datetime, timezone, timedelta
-from zoneinfo import ZoneInfo  # kept for backward compat in other imports
+from datetime import timedelta
 from flask import Flask, g, request, session, abort
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -13,7 +12,6 @@ from config import Config
 from logging_utils import get_logger
 task_logger = get_logger("app")
 from db_manager import DBManager, open_sqlite_connection
-from core.backup import BackupConfig
 from core.session_security import VodumSessionInterface
 from core.i18n import init_i18n
 from core.repair.plex_media_users_repair import run_repair_if_needed
@@ -29,7 +27,7 @@ from utils.version import load_app_version
 from api.subscriptions import subscriptions_api
 from blueprints.users import users_bp
 
-from web.helpers import get_db, scheduler_db_provider, table_exists, add_log, close_db
+from web.helpers import get_db, table_exists, close_db
 from web.filters import inject_brand_name, safe_datetime, cron_human, tz_filter, browser_datetime, utc_iso
 from web.security import ip_in_networks
 

@@ -1,6 +1,5 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, List
 
-import requests
 from plexapi.server import PlexServer
 
 from logging_utils import get_logger

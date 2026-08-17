@@ -105,13 +105,19 @@
 			</th>
             <th class="text-left px-4 py-3">{{ t("usage_risk_suggested_subscription") }}</th>
             <th class="text-left px-4 py-3">{{ t("usage_risk_last_activity") }}</th>
-            <th class="text-right px-4 py-3">{{ t("details") }}</th>
           </tr>
         </thead>
 
         <tbody class="divide-y divide-slate-800">
           {% for row in usage_risk_report.rows %}
-            <tr class="hover:bg-slate-800/40">
+            <tr
+              role="button"
+              tabindex="0"
+              aria-expanded="false"
+              aria-controls="usage-risk-detail-{{ loop.index }}"
+              data-usage-risk-toggle="usage-risk-detail-{{ loop.index }}"
+              class="cursor-pointer transition-all duration-200 hover:bg-slate-800/40 hover:ring-1 hover:ring-primary/50 hover:shadow-lg hover:shadow-primary/10 focus:outline-none focus:bg-slate-800/40 focus:ring-2 focus:ring-primary/40"
+            >
               <td class="px-4 py-3 whitespace-nowrap min-w-[90px]">
                 {% if row.risk_level == 'high' %}
                   <span class="inline-flex items-center gap-2 text-rose-400 font-semibold">● {{ t("high") }}</span>
@@ -166,19 +172,10 @@
               <td class="px-4 py-3 text-slate-400">
                 {{ row.last_activity or "—" }}
               </td>
-
-              <td class="px-4 py-3 text-right">
-                <button
-                  type="button"
-                  data-usage-risk-toggle="usage-risk-detail-{{ loop.index }}"
-                  class="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-950 hover:bg-slate-800 text-xs text-slate-200">
-                  {{ t("usage_risk_view_details") }}
-                </button>
-              </td>
             </tr>
 
             <tr id="usage-risk-detail-{{ loop.index }}" class="hidden bg-slate-950/60">
-              <td colspan="8" class="px-4 py-5">
+              <td colspan="7" class="px-4 py-5">
                 <div class="grid grid-cols-1 xl:grid-cols-4 gap-4">
 
                   <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
@@ -312,7 +309,7 @@
             </tr>
           {% else %}
             <tr>
-              <td colspan="8" class="px-4 py-8 text-center text-slate-500">
+              <td colspan="7" class="px-4 py-8 text-center text-slate-500">
                 {{ t("usage_risk_no_cases") }}
               </td>
             </tr>

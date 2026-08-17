@@ -1,11 +1,8 @@
-import json
 from datetime import datetime, timedelta
 from plexapi.server import PlexServer
 from logging_utils import get_logger
 import xml.etree.ElementTree as ET
 from plexapi.exceptions import BadRequest
-from core.providers.plex_users import plex_invite_and_share
-import requests
 from core.plex_rate_limit import install_plex_rate_limit
 from core.plex_connection import find_working_plex_base_url
 from core.server_cooldown import should_skip_unreachable_server

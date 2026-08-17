@@ -1,5 +1,4 @@
 from typing import Any, Dict, List
-import requests
 from core.plex_rate_limit import install_plex_rate_limit
 from logging_utils import get_logger
 from core.plex_connection import find_working_plex_base_url

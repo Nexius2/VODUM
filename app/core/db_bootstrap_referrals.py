@@ -247,7 +247,7 @@ def ensure_referral_schema(
             print("✅ user_referrals CHECK constraint migrated")
 
     except Exception as e:
-        print(f"âŒ Failed migrating user_referrals constraint: {e}")
+        print(f"❌ Failed migrating user_referrals constraint: {e}")
 
     ensure_column(cursor, "user_referral_settings", "auto_expire_pending", "INTEGER NOT NULL DEFAULT 1")
     ensure_column(cursor, "user_referral_settings", "auto_archive_rewarded", "INTEGER NOT NULL DEFAULT 1")

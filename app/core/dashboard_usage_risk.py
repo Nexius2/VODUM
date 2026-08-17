@@ -67,7 +67,6 @@ def build_usage_risk_trend(
     values[-1] = max(0, int(current_count or 0))
 
     width = 240.0
-    height = 88.0
     top = 8.0
     bottom = 78.0
     max_value = max(max(values), 1)

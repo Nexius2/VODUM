@@ -92,7 +92,7 @@ def ensure_discord_schema(conn, cursor, *, table_exists, ensure_column) -> None:
 
     defaults = {
         "preavis": (
-            "â³ Subscription expiring soon",
+            "⏳ Subscription expiring soon",
             "Hi {username}! You have {days_left} day(s) left. Your subscription expires on {expiration_date}.",
         ),
         "relance": (

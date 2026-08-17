@@ -18,7 +18,6 @@ from tasks_engine import (
 )
 from web.helpers import get_db, table_exists, add_log
 from web.security import get_client_ip
-from secret_store import decrypt_communication_settings
 from notifications_utils import is_email_ready
 
 task_logger = get_logger("tasks_ui")

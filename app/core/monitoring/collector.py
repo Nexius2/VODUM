@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 import requests
 import time
@@ -18,7 +18,7 @@ from core.monitoring.resource_stats import (
 )
 from core.providers.registry import get_provider
 from logging_utils import get_logger, is_debug_mode_enabled
-from core.server_cooldown import mark_server_unreachable, clear_server_cooldown, should_skip_unreachable_server
+from core.server_cooldown import mark_server_unreachable, should_skip_unreachable_server
 
 logger = get_logger("monitoring.collector")
 

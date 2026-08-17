@@ -1,7 +1,10 @@
 import json
 
 from core.media_jobs import insert_plex_media_job
-from core.user_sync_jobs import get_preferred_plex_media_user_id
+from core.user_sync_jobs import (
+    get_preferred_plex_media_user_id,
+    queue_plex_share_settings_sync,
+)
 from secret_store import find_plex_server_ids_by_token
 from tasks_engine import enable_and_run_task_by_name
 
@@ -11,6 +14,79 @@ REPLICATED_PLEX_SHARE_KEYS = (
     "filterMovies", "filterTelevision", "filterMusic",
 )
 TRUTHY_FORM_VALUES = {"1", "true", "on", "yes"}
+PLEX_SHARE_FILTER_FIELDS = {"filterMovies", "filterTelevision", "filterMusic"}
+PLEX_SHARE_TOGGLE_FIELDS = {"allowSync", "allowCameraUpload", "allowChannels"}
+
+
+def update_single_plex_share_option(
+    db,
+    *,
+    vodum_user_id: int,
+    server_id: int,
+    media_user_id: int,
+    field: str,
+    value,
+    option_type: str,
+    wake_task=enable_and_run_task_by_name,
+) -> dict:
+    allowed_fields = (
+        PLEX_SHARE_FILTER_FIELDS
+        if option_type == "filter"
+        else PLEX_SHARE_TOGGLE_FIELDS
+        if option_type == "toggle"
+        else set()
+    )
+    if field not in allowed_fields:
+        return {"ok": False, "reason": "invalid_field"}
+
+    media_user = db.query_one(
+        """
+        SELECT mu.id, mu.details_json
+        FROM media_users mu
+        JOIN servers s ON s.id = mu.server_id
+        WHERE mu.id = ?
+          AND mu.vodum_user_id = ?
+          AND mu.server_id = ?
+          AND s.type = 'plex'
+          AND mu.type = 'plex'
+        """,
+        (media_user_id, vodum_user_id, server_id),
+    )
+    if not media_user:
+        return {"ok": False, "reason": "media_user_not_found"}
+
+    try:
+        details = json.loads(media_user["details_json"] or "{}")
+    except (TypeError, ValueError):
+        details = {}
+    if not isinstance(details, dict):
+        details = {}
+    plex_share = details.get("plex_share") or {}
+    if not isinstance(plex_share, dict):
+        plex_share = {}
+
+    if option_type == "toggle":
+        value = 1 if str(value).strip().lower() in TRUTHY_FORM_VALUES else 0
+    else:
+        value = str(value or "").strip()
+    plex_share[field] = value
+    details["plex_share"] = plex_share
+    db.execute(
+        "UPDATE media_users SET details_json = ? WHERE id = ?",
+        (json.dumps(details, ensure_ascii=False), int(media_user["id"])),
+    )
+    queue_plex_share_settings_sync(
+        db,
+        user_id=vodum_user_id,
+        server_id=server_id,
+        reason=(
+            f"plex_share_filter_{field}"
+            if option_type == "filter"
+            else f"plex_share_option_{field}"
+        ),
+        wake_task=wake_task,
+    )
+    return {"ok": True, "value": value}
 
 
 def queue_user_plex_option_syncs(db, vodum_user_id: int, *, task_logger) -> int:

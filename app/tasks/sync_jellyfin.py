@@ -1,8 +1,6 @@
 from typing import Any, Dict, List, Optional, Tuple
 
-import json
 import requests
-from datetime import datetime, timezone
 
 from logging_utils import get_logger, is_debug_mode_enabled
 from core.server_cooldown import should_skip_unreachable_server, mark_server_unreachable, clear_server_cooldown
@@ -11,7 +9,6 @@ from core.jellyfin_http import (
     _jellyfin_library_total_items,
     _jellyfin_library_total_items_no_user,
     _jellyfin_list_user_ids,
-    _jellyfin_pick_user_id,
 )
 from core.jellyfin_runtime import (
     build_jellyfin_api_url,
@@ -31,6 +28,8 @@ from core.jellyfin_vodum_user_matching import (
     pick_best_vodum_user_for_username,
 )
 from core.jellyfin_sync_repository import (
+    mark_jellyfin_media_user_removed,
+    mark_jellyfin_media_user_present,
     replace_jellyfin_library_access,
     set_jellyfin_media_user_state,
     upsert_jellyfin_library,
@@ -673,6 +672,8 @@ def _sync_users_and_policies_for_server(
             last_seen_at=last_seen_at,
         )
 
+        mark_jellyfin_media_user_present(db, media_user_id, jellyfin_id)
+
         _refresh_shared_libraries_for_server(
             db, media_user_id, server_id, allowed_db_lib_ids
         )
@@ -696,24 +697,7 @@ def _sync_users_and_policies_for_server(
         external_user_id = str(account.get("external_user_id") or "").strip()
         if external_user_id in seen_jellyfin_ids:
             continue
-        details = {}
-        try:
-            parsed = json.loads(account.get("details_json") or "{}")
-            if isinstance(parsed, dict):
-                details = parsed
-        except (TypeError, ValueError):
-            pass
-        details.update(
-            {
-                "provider_presence": "removed",
-                "provider_presence_external_user_id": external_user_id,
-                "provider_presence_checked_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            }
-        )
-        db.execute(
-            "UPDATE media_users SET details_json = ? WHERE id = ?",
-            (json.dumps(details, ensure_ascii=False), int(account["id"])),
-        )
+        mark_jellyfin_media_user_removed(db, int(account["id"]), external_user_id)
         removed_count += 1
 
     if removed_count:

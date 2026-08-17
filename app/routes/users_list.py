@@ -11,8 +11,7 @@ from logging_utils import get_logger
 from web.helpers import get_db
 from web.pagination import normalize_page, normalize_page_size, page_bounds
 from core.referral_bulk import bulk_update_referrals, normalize_referral_ids
-from core.user_merge import build_merge_preview, merge_vodum_users
-from core.user_merge_suggestions import get_merge_suggestions
+from core.user_merge import build_merge_preview
 
 task_logger = get_logger("tasks_ui")
 USER_LIST_COLUMNS = """

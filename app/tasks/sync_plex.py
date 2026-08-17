@@ -1,17 +1,16 @@
 
 import time
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Set, Tuple, Optional
+from typing import Dict, Any, Set, Tuple
 
 import xml.etree.ElementTree as ET
 import json
 
 from logging_utils import get_logger, is_debug_mode_enabled
 from tasks_engine import task_logs
-from plexapi.server import PlexServer  
 from core.plex_rate_limit import wait_for_plex_slot
 from core.plex_connection import plex_candidate_base_urls, find_working_plex_base_url
-from core.server_cooldown import should_skip_unreachable_server, mark_server_unreachable, clear_server_cooldown
+from core.server_cooldown import should_skip_unreachable_server
 from core.http_security import plex_server_http_session
 from core.providers.plex_invitation_state import (
     merge_accepted_plex_media_user,
@@ -33,6 +32,10 @@ from core.plex_library_access import (
 )
 from core.plex_owner_sync import sync_plex_owner_for_server
 from core.plex_library_sync import plex_get_libraries, sync_plex_libraries
+from core.plex_sync_repository import (
+    preserve_plex_presence_metadata,
+    reconcile_plex_media_user_presence,
+)
 
 # ---------------------------------------------------------------------------
 # CONFIG & LOGGER
@@ -408,12 +411,10 @@ def sync_plex_user_library_access(db, plex, server):
             continue
 
         desired_library_ids = set()
-        has_access = False
 
         # ✅ OWNER : toutes les libraries du serveur
         if role == "owner":
             desired_library_ids = {int(lib_id) for lib_id in lib_map.values()}
-            has_access = bool(desired_library_ids)
 
         else:
             # logique normale basée sur l'API Plex
@@ -438,7 +439,6 @@ def sync_plex_user_library_access(db, plex, server):
                     continue
                 desired_library_ids.add(int(lib_id))
 
-            has_access = bool(desired_library_ids)
 
         before_ids, added_ids, removed_ids = _apply_media_user_library_diff_for_server(
             db,
@@ -519,6 +519,7 @@ def sync_users_from_api(db) -> None:
     # ----------------------------------------------------
     users_data: Dict[str, Dict[str, Any]] = {}
     servers_ok = 0
+    verified_server_ids: Set[int] = set()
 
     def merge_user(dst: Dict[str, Any], src: Dict[str, Any]) -> Dict[str, Any]:
         # Identité : garder le plus complet
@@ -615,6 +616,7 @@ def sync_users_from_api(db) -> None:
             continue
 
         servers_ok += 1
+        verified_server_ids.add(int(srv["id"]))
         log.info(f"[SYNC USERS] {srv['name']}: {len(data)} retrieved user(s)")
 
         for plex_id, u in data.items():
@@ -673,7 +675,6 @@ def sync_users_from_api(db) -> None:
         username = data["username"]
         email = data["email"] or None
         avatar = data["avatar"]
-        plex_role = data["plex_role"]
 
 
 
@@ -785,7 +786,7 @@ def sync_users_from_api(db) -> None:
 
             row_mu = db.query_one(
                 """
-                SELECT id
+                SELECT id, details_json
                 FROM media_users
                 WHERE server_id = ?
                   AND external_user_id = ?
@@ -796,7 +797,7 @@ def sync_users_from_api(db) -> None:
 
             pending_mu = db.query_one(
                 """
-                SELECT id
+                SELECT id, details_json
                 FROM media_users
                 WHERE server_id = ?
                   AND type = 'plex'
@@ -831,6 +832,10 @@ def sync_users_from_api(db) -> None:
                 )
 
             if row_mu:
+                details_json = preserve_plex_presence_metadata(
+                    details_json,
+                    row_mu["details_json"],
+                )
                 db.execute(
                     """
                     UPDATE media_users
@@ -886,6 +891,17 @@ def sync_users_from_api(db) -> None:
                     f"[SYNC USERS] New media_user created id={cur_mu.lastrowid} "
                     f"(server_id={server_id}, plex_id={plex_id})"
                 )
+
+    presence_counts = reconcile_plex_media_user_presence(
+        db,
+        seen_media_pairs,
+        verified_server_ids,
+    )
+    if presence_counts["removed"] or presence_counts["present"]:
+        log.warning(
+            "[SYNC USERS] Plex account presence reconciled: "
+            f"removed={presence_counts['removed']} present={presence_counts['present']}"
+        )
 
     log.info(
         f"=== [SYNC USERS] Finished : users_uniques={len(seen_plex_ids)}, liens_media_users={len(seen_media_pairs)} ==="

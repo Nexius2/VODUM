@@ -1,7 +1,6 @@
 import os
 import re
 import smtplib
-from datetime import datetime, timezone
 from email.message import EmailMessage
 from typing import Optional
 
@@ -9,7 +8,7 @@ from flask import g, current_app
 
 from db_manager import DBManager
 from logging_utils import get_logger, is_debug_mode_enabled
-from core.i18n import init_i18n, get_translator
+from core.i18n import init_i18n
 from core.backup import BackupConfig
 from secret_store import decrypt_communication_settings
 from email_sender import authenticate_smtp

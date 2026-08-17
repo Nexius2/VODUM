@@ -6,20 +6,13 @@ import re
 from collections import Counter
 from typing import Any
 
+from core.migrations.capabilities import (
+    SUPPORTED_MIGRATION_PROVIDERS,
+    get_migration_provider_capabilities,
+)
 
-PROVIDER_CAPABILITIES = {
-    "plex": {
-        "account_mode": "invite",
-        "requires_email": True,
-        "supports_library_access": True,
-    },
-    "jellyfin": {
-        "account_mode": "create_local",
-        "requires_email": False,
-        "supports_library_access": True,
-    },
-}
-SUPPORTED_PROVIDERS = set(PROVIDER_CAPABILITIES)
+
+SUPPORTED_PROVIDERS = SUPPORTED_MIGRATION_PROVIDERS
 
 
 def _dict(row: Any) -> dict:
@@ -132,10 +125,11 @@ def detect_migration_mode(db, source: dict, destination: dict) -> dict:
             "same_plex_owner": same_owner,
         }
 
+    destination_capabilities = get_migration_provider_capabilities(destination_type)
     return {
         "migration_type": migration_type,
-        "mode": "invite" if destination_type == "plex" else "create_local",
-        "requires_email": destination_type == "plex",
+        "mode": destination_capabilities.account_mode,
+        "requires_email": destination_capabilities.requires_email,
         "same_plex_owner": False,
     }
 
@@ -144,11 +138,11 @@ def migration_policy_compatibility(source: dict, destination: dict) -> list[dict
     """Describe which VODUM and provider policies remain valid after migration."""
     source_type = _clean(source.get("type")).lower()
     destination_type = _clean(destination.get("type")).lower()
-    destination_capabilities = PROVIDER_CAPABILITIES.get(destination_type, {})
+    destination_capabilities = get_migration_provider_capabilities(destination_type)
     return [
         {
             "policy": "library_access",
-            "status": "supported" if destination_capabilities.get("supports_library_access") else "unsupported",
+            "status": "supported" if destination_capabilities.supports_library_access else "unsupported",
         },
         {"policy": "vodum_subscription", "status": "preserved"},
         {"policy": "vodum_stream_policies", "status": "preserved"},

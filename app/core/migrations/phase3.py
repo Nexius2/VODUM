@@ -7,6 +7,10 @@ from datetime import datetime, timedelta, timezone
 
 from core.media_jobs import insert_jellyfin_media_job, insert_plex_media_job
 from core.migrations.analysis import is_server_online
+from core.migrations.capabilities import (
+    get_migration_provider_capabilities,
+    migration_access_action,
+)
 
 
 def _json_dict(raw) -> dict:
@@ -79,9 +83,14 @@ def _queue_access_sync(
         },
         "cancel_reason": f"Canceled because a newer migration {scope} access operation was queued",
     }
-    if provider == "plex":
+    capabilities = get_migration_provider_capabilities(provider)
+    if not capabilities.supports_library_access:
+        raise ValueError(f"Migration access jobs are unsupported for provider: {capabilities.provider}")
+    if capabilities.provider == "plex":
         return insert_plex_media_job(**kwargs), dedupe_key
-    return insert_jellyfin_media_job(**kwargs), dedupe_key
+    if capabilities.provider == "jellyfin":
+        return insert_jellyfin_media_job(**kwargs), dedupe_key
+    raise ValueError(f"No migration access job adapter for provider: {capabilities.provider}")
 
 
 def _queue_source_sync(db, *, provider: str, action: str, campaign_id: int, migration_user_id: int, vodum_user_id: int, server_id: int) -> tuple[bool, str]:
@@ -241,6 +250,9 @@ def remove_validated_source_access(db, campaign_id: int) -> dict:
         raise ValueError("Source server not found.")
     if not is_server_online(source.get("status")):
         raise ValueError("Source server must be online.")
+    source_capabilities = get_migration_provider_capabilities(source.get("type"))
+    if not source_capabilities.supports_source_access_removal:
+        raise ValueError(f"Source access removal is unsupported for provider: {source_capabilities.provider}")
     safety_delay_days = max(0, int(_campaign_options(campaign).get("safety_delay_days", 7)))
 
     rows = db.query(
@@ -285,8 +297,8 @@ def remove_validated_source_access(db, campaign_id: int) -> dict:
         )
         inserted, job_key = _queue_source_sync(
             db,
-            provider=str(source["type"]).lower(),
-            action="revoke" if str(source["type"]).lower() == "plex" else "sync",
+            provider=source_capabilities.provider,
+            action=migration_access_action(source_capabilities.provider, has_remaining_access=False),
             campaign_id=campaign_id,
             migration_user_id=int(user["id"]),
             vodum_user_id=int(user["vodum_user_id"]),
@@ -328,6 +340,9 @@ def rollback_destination_access(db, campaign_id: int) -> dict:
         raise ValueError("Destination server not found.")
     if not is_server_online(destination.get("status")):
         raise ValueError("Destination server must be online.")
+    destination_capabilities = get_migration_provider_capabilities(destination.get("type"))
+    if not destination_capabilities.supports_access_rollback:
+        raise ValueError(f"Destination rollback is unsupported for provider: {destination_capabilities.provider}")
 
     rolled_back = queued = skipped = 0
     for raw in db.query("SELECT id, campaign_id, vodum_user_id, source_media_user_id, destination_media_user_id, status, eligibility, blockers_json, options_json, source_snapshot_json, result_json, attempts, last_error, created_at, updated_at, started_at, completed_at FROM migration_users WHERE campaign_id=? ORDER BY id", (campaign_id,)):
@@ -362,10 +377,13 @@ def rollback_destination_access(db, campaign_id: int) -> dict:
             (int(media_user_id), *removable_library_ids),
         )
         remaining_library_ids = _current_destination_library_ids(db, int(media_user_id), int(destination["id"]))
-        action = "revoke" if str(destination["type"]).lower() == "plex" and not remaining_library_ids else "sync"
+        action = migration_access_action(
+            destination_capabilities.provider,
+            has_remaining_access=bool(remaining_library_ids),
+        )
         inserted, job_key = _queue_destination_sync(
             db,
-            provider=str(destination["type"]).lower(),
+            provider=destination_capabilities.provider,
             action=action,
             campaign_id=campaign_id,
             migration_user_id=int(user["id"]),
@@ -395,6 +413,9 @@ def rollback_source_access(db, campaign_id: int) -> dict:
         raise ValueError("Source server not found.")
     if not is_server_online(source.get("status")):
         raise ValueError("Source server must be online.")
+    source_capabilities = get_migration_provider_capabilities(source.get("type"))
+    if not source_capabilities.supports_access_rollback:
+        raise ValueError(f"Source rollback is unsupported for provider: {source_capabilities.provider}")
     restored = queued = skipped = 0
     for raw in db.query("SELECT id, campaign_id, vodum_user_id, source_media_user_id, destination_media_user_id, status, eligibility, blockers_json, options_json, source_snapshot_json, result_json, attempts, last_error, created_at, updated_at, started_at, completed_at FROM migration_users WHERE campaign_id=? ORDER BY id", (campaign_id,)):
         user = dict(raw)
@@ -412,7 +433,7 @@ def rollback_source_access(db, campaign_id: int) -> dict:
                 )
         inserted, job_key = _queue_source_sync(
             db,
-            provider=str(source["type"]).lower(),
+            provider=source_capabilities.provider,
             action="sync",
             campaign_id=campaign_id,
             migration_user_id=int(user["id"]),

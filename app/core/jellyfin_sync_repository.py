@@ -1,4 +1,36 @@
 import json
+from datetime import datetime, timezone
+
+
+def set_jellyfin_media_user_presence(
+    db, media_user_id: int, external_user_id: str, presence: str,
+) -> None:
+    row = db.query_one("SELECT details_json FROM media_users WHERE id = ?", (int(media_user_id),))
+    details = {}
+    if row and row["details_json"]:
+        try:
+            parsed = json.loads(row["details_json"])
+            if isinstance(parsed, dict):
+                details = parsed
+        except (TypeError, ValueError):
+            pass
+    details.update({
+        "provider_presence": str(presence),
+        "provider_presence_external_user_id": str(external_user_id or ""),
+        "provider_presence_checked_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    })
+    db.execute(
+        "UPDATE media_users SET details_json = ? WHERE id = ?",
+        (json.dumps(details, ensure_ascii=False), int(media_user_id)),
+    )
+
+
+def mark_jellyfin_media_user_removed(db, media_user_id: int, external_user_id: str) -> None:
+    set_jellyfin_media_user_presence(db, media_user_id, external_user_id, "removed")
+
+
+def mark_jellyfin_media_user_present(db, media_user_id: int, external_user_id: str) -> None:
+    set_jellyfin_media_user_presence(db, media_user_id, external_user_id, "present")
 
 
 def upsert_jellyfin_library(db, server_id, section_id, name, library_type) -> int:

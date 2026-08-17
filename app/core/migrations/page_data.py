@@ -203,6 +203,12 @@ def enrich_campaign_users(
             "source_restoration_job_error", "destination_validation_method",
             "credentials_delivery_queued_at", "credentials_delivery_template_id",
             "credentials_delivery_skipped_reason",
+            "destination_created_at", "credentials_pending_delivery",
+            "credentials_expires_at", "credentials_revealed_at",
+            "credentials_expired_at",
+            "credentials_delivery_status", "credentials_delivered_at",
+            "credentials_delivery_channels", "credentials_delivery_failed_at",
+            "credentials_delivery_error",
         ):
             user[field] = result.get(field)
         user["plex_reminder_count"] = int(result.get("plex_reminder_count") or 0)

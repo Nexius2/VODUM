@@ -1,6 +1,5 @@
 # Auto-split from app.py (keep URLs/endpoints intact)
 import json
-import math
 
 from flask import render_template, request, redirect, url_for, flash
 
@@ -17,62 +16,20 @@ from core.subscription_template_policies import (
     validate_subscription_template_policy_limits,
 )
 from core.default_subscription_templates import restore_default_subscription_templates
+from core.subscription_page_data import (
+    SUBSCRIPTION_SETTINGS_COLUMNS,
+    load_subscription_application_users,
+    load_subscription_page_catalog,
+    load_subscription_policy_context,
+)
+from core.subscription_template_admin import (
+    delete_subscription_template,
+    duplicate_subscription_template,
+    toggle_subscription_template,
+)
 
 
 logger = get_logger("subscriptions")
-
-SUBSCRIPTION_SETTINGS_COLUMNS = """
-    default_subscription_days,
-    delete_after_expiry_days,
-    expiry_mode,
-    warn_then_disable_days,
-    usage_risk_enabled,
-    usage_risk_send_upgrade_suggestions,
-    usage_risk_send_stream_blocked_message,
-    usage_risk_min_kills_before_suggestion,
-    usage_risk_analysis_window_days,
-    usage_risk_suggestion_cooldown_days,
-    usage_risk_medium_threshold,
-    usage_risk_high_threshold,
-    subscription_plans_enabled_only,
-    enable_cron_jobs
-"""
-
-STREAM_POLICY_PAGE_COLUMNS = """
-                  p.id,
-                  p.rule_type,
-                  p.scope_type,
-                  p.scope_id,
-                  p.provider,
-                  p.server_id,
-                  p.priority,
-                  p.is_enabled,
-                  p.rule_value_json
-"""
-
-STREAM_POLICY_EDITOR_COLUMNS = """
-            id,
-            rule_type,
-            scope_type,
-            scope_id,
-            provider,
-            server_id,
-            priority,
-            is_enabled,
-            rule_value_json
-"""
-
-SUBSCRIPTION_TEMPLATE_DUPLICATE_COLUMNS = """
-            id,
-            name,
-            notes,
-            duration_days,
-            subscription_value,
-            is_enabled,
-            is_lifetime,
-            policies_json
-"""
-
 
 def register(app):
     @app.route("/subscriptions", methods=["GET"])
@@ -82,227 +39,47 @@ def register(app):
         if tab not in ("templates", "applications", "policies", "gifts", "settings"):
             tab = "templates"
 
-        settings = db.query_one(f"SELECT {SUBSCRIPTION_SETTINGS_COLUMNS} FROM settings WHERE id = 1") if tab in ("templates", "settings") else None
-        settings = dict(settings) if settings else {}
-
-        servers = db.query("SELECT id, name, type FROM servers ORDER BY name") or [] if tab in ("templates", "applications", "policies", "gifts") else []
-
-        gift_users = db.query("""
-            SELECT
-              vu.id,
-              vu.username,
-              vu.firstname,
-              vu.lastname,
-              vu.email,
-              vu.second_email,
-              vu.discord_name,
-              vu.status,
-              (
-                SELECT GROUP_CONCAT(
-                  COALESCE(mu.username, '') || ' ' || COALESCE(mu.email, ''),
-                  ' '
-                )
-                FROM media_users mu
-                WHERE mu.vodum_user_id = vu.id
-              ) AS media_search
-            FROM vodum_users vu
-            WHERE vu.status IN ('active', 'pre_expired', 'reminder')
-              AND EXISTS (
-                SELECT 1
-                FROM media_users mu
-                WHERE mu.vodum_user_id = vu.id
-              )
-            ORDER BY LOWER(COALESCE(vu.username, '')) ASC, vu.id ASC
-        """) or [] if tab == "gifts" else []
-
-        gift_users = [dict(row) for row in gift_users]
-
-        templates = db.query("""
-            SELECT
-              id,
-              name,
-              notes,
-              duration_days,
-              subscription_value,
-              is_default,
-              is_enabled,
-              is_lifetime,
-              policies_json,
-              created_at,
-              updated_at
-            FROM subscription_templates
-            ORDER BY is_default DESC, name
-        """) or [] if tab in ("templates", "applications") else []
-        templates = [dict(t) for t in templates]
-        for t in templates:
-            try:
-                t['policies_count'] = len(json.loads(t.get('policies_json') or '[]'))
-            except Exception:
-                t['policies_count'] = 0
-
-        enabled_templates = [t for t in templates if int(t.get("is_enabled") or 0) == 1]
+        catalog = load_subscription_page_catalog(db, tab=tab)
+        settings = catalog["settings"]
+        servers = catalog["servers"]
+        gift_users = catalog["gift_users"]
+        templates = catalog["templates"]
+        enabled_templates = catalog["enabled_templates"]
 
         # Users list for applications tab (paginated)
         applications_page = max(request.args.get("applications_page", 1, type=int), 1)
         applications_per_page = request.args.get("applications_per_page", 20, type=int)
-        if applications_per_page not in (20, 50, 100):
-            applications_per_page = 20
-        applications_offset = (applications_page - 1) * applications_per_page
         applications_search = " ".join(
             (request.args.get("applications_q") or "").split()
         ).strip()
-
-        applications_where = []
-        applications_params = []
-
-        if applications_search:
-            like = f"%{applications_search}%"
-            applications_where.append("""
-                (
-                    COALESCE(vu.username, '') LIKE ?
-                    OR COALESCE(vu.email, '') LIKE ?
-                    OR COALESCE(vu.second_email, '') LIKE ?
-                    OR COALESCE(vu.firstname, '') LIKE ?
-                    OR COALESCE(vu.lastname, '') LIKE ?
-                    OR COALESCE(vu.notes, '') LIKE ?
-                    OR COALESCE(vu.discord_name, '') LIKE ?
-                    OR COALESCE(vu.status, '') LIKE ?
-                    OR COALESCE(st.name, '') LIKE ?
-                    OR CAST(vu.id AS TEXT) LIKE ?
-                    OR EXISTS (
-                        SELECT 1
-                        FROM media_users mu_search
-                        WHERE mu_search.vodum_user_id = vu.id
-                          AND (
-                            COALESCE(mu_search.username, '') LIKE ?
-                            OR COALESCE(mu_search.email, '') LIKE ?
-                          )
-                    )
-                )
-            """)
-            applications_params.extend([
-                like,  # vu.username
-                like,  # vu.email
-                like,  # vu.second_email
-                like,  # vu.firstname
-                like,  # vu.lastname
-                like,  # vu.notes
-                like,  # vu.discord_name
-                like,  # vu.status
-                like,  # subscription template name
-                like,  # vu.id
-                like,  # media_users.username
-                like,  # media_users.email
-            ])
-
-        users_query = """
-            SELECT
-              vu.id,
-              vu.username,
-              vu.email,
-              vu.second_email,
-              vu.firstname,
-              vu.lastname,
-              vu.notes,
-              vu.discord_name,
-              vu.status,
-              vu.subscription_template_id,
-              vu.max_streams_override,
-              st.name AS subscription_template_name,
-              (
-                SELECT GROUP_CONCAT(
-                  COALESCE(mu.username, '') || ' ' || COALESCE(mu.email, ''),
-                  ' '
-                )
-                FROM media_users mu
-                WHERE mu.vodum_user_id = vu.id
-              ) AS media_search
-            FROM vodum_users vu
-            LEFT JOIN subscription_templates st ON st.id = vu.subscription_template_id
-        """
-
-        count_query = """
-            SELECT COUNT(*) AS total
-            FROM vodum_users vu
-            LEFT JOIN subscription_templates st ON st.id = vu.subscription_template_id
-        """
-
-        if applications_where:
-            where_sql = " WHERE " + " AND ".join(applications_where)
-            users_query += where_sql
-            count_query += where_sql
-
-        users_query += """
-            ORDER BY LOWER(COALESCE(vu.username, '')) ASC, vu.id ASC
-            LIMIT ? OFFSET ?
-        """
-
         applications_total_users = 0
         applications_total_pages = 1
         users = []
         if tab == "applications":
-            total_row = db.query_one(count_query, tuple(applications_params)) or {"total": 0}
-            applications_total_users = int(total_row["total"] or 0)
-            applications_total_pages = max(math.ceil(applications_total_users / applications_per_page), 1)
-            if applications_page > applications_total_pages:
-                applications_page = applications_total_pages
-                applications_offset = (applications_page - 1) * applications_per_page
-            users = [dict(u) for u in (db.query(
-                users_query,
-                tuple(applications_params + [applications_per_page, applications_offset])
-            ) or [])]
+            application_context = load_subscription_application_users(
+                db,
+                page=applications_page,
+                per_page=applications_per_page,
+                search=applications_search,
+            )
+            users = application_context["users"]
+            applications_page = application_context["page"]
+            applications_per_page = application_context["per_page"]
+            applications_search = application_context["search"]
+            applications_total_users = application_context["total_users"]
+            applications_total_pages = application_context["total_pages"]
 
         policies = []
         edit_policy = None
 
         if tab == "policies":
-            policies = db.query(f"""
-                SELECT
-{STREAM_POLICY_PAGE_COLUMNS},
-                  s.name AS server_name,
-                  vu.username AS scope_username,
-                  vu.firstname AS scope_firstname,
-                  vu.lastname AS scope_lastname,
-                  vu.email AS scope_email,
-                  vu.second_email AS scope_second_email,
-                  vu.discord_name AS scope_discord_name,
-                  (
-                    SELECT GROUP_CONCAT(
-                      COALESCE(mu.username, '') || ' ' || COALESCE(mu.email, ''),
-                      ' '
-                    )
-                    FROM media_users mu
-                    WHERE mu.vodum_user_id = vu.id
-                  ) AS scope_media_search
-                FROM stream_policies p
-                LEFT JOIN servers s
-                  ON s.id = p.server_id
-                LEFT JOIN vodum_users vu
-                  ON (p.scope_type = 'user' AND vu.id = p.scope_id)
-                ORDER BY p.is_enabled DESC, p.priority ASC, p.id DESC
-            """) or []
-
-            policies = [dict(r) for r in policies]
-
-            for p in policies:
-                try:
-                    p["_rule"] = json.loads(p.get("rule_value_json") or "{}")
-                except Exception:
-                    p["_rule"] = {}
-                p["_is_system"] = bool(p["_rule"].get("system_tag"))
-                p["_is_locked"] = bool(p["_rule"].get("locked"))
-                p["_subscription_name"] = p["_rule"].get("subscription_name") or ""
-
             edit_policy_id = request.args.get("edit_policy_id", type=int)
-            if edit_policy_id:
-                ep = db.query_one(f"SELECT {STREAM_POLICY_EDITOR_COLUMNS} FROM stream_policies WHERE id = ?", (edit_policy_id,))
-                if ep:
-                    ep = dict(ep)
-                    try:
-                        ep["_rule"] = json.loads(ep.get("rule_value_json") or "{}")
-                    except Exception:
-                        ep["_rule"] = {}
-                    edit_policy = ep
+            policy_context = load_subscription_policy_context(
+                db,
+                edit_policy_id=edit_policy_id,
+            )
+            policies = policy_context["policies"]
+            edit_policy = policy_context["edit_policy"]
 
         return render_template(
             "subscriptions/subscriptions.html",
@@ -711,45 +488,15 @@ def register(app):
     @app.post("/subscriptions/templates/<int:template_id>/duplicate")
     def subscription_templates_duplicate(template_id: int):
         db = get_db()
-        tpl = db.query_one(f"SELECT {SUBSCRIPTION_TEMPLATE_DUPLICATE_COLUMNS} FROM subscription_templates WHERE id=?", (template_id,))
-        if not tpl:
-            flash("subscription_template_not_found", "error")
+        result = duplicate_subscription_template(db, template_id)
+        if not result["ok"]:
+            flash(result["reason"], "error")
             return redirect(url_for("subscriptions", tab="templates"))
-
-        tpl = dict(tpl)
-        base_name = (tpl.get("name") or "Template").strip()
-        new_name = f"{base_name} - Copy"
-        # Ensure unique name
-        i = 2
-        while db.query_one("SELECT id FROM subscription_templates WHERE name = ?", (new_name,)):
-            new_name = f"{base_name} - Copy {i}"
-            i += 1
-
-        db.execute(
-            """
-            INSERT INTO subscription_templates(
-              name,
-              notes,
-              duration_days,
-              subscription_value,
-              is_default,
-              is_enabled,
-              is_lifetime,
-              policies_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                new_name,
-                tpl.get("notes") or "",
-                tpl.get("duration_days") or 30,
-                tpl.get("subscription_value") or 0,
-                0,
-                int(tpl.get("is_enabled") or 0),
-                int(tpl.get("is_lifetime") or 0),
-                tpl.get("policies_json") or "[]",
-            ),
+        add_log(
+            "info",
+            "subscriptions",
+            f"Template duplicated: {result['base_name']} -> {result['new_name']}",
         )
-        add_log("info", "subscriptions", f"Template duplicated: {base_name} -> {new_name}")
         flash("subscription_template_duplicated", "success")
         return redirect(url_for("subscriptions", tab="templates"))
 
@@ -767,33 +514,16 @@ def register(app):
     def subscription_templates_toggle(template_id: int):
         db = get_db()
 
-        tpl = db.query_one(
-            "SELECT id, name, is_enabled, is_default FROM subscription_templates WHERE id = ?",
-            (template_id,),
-        )
-
-        if not tpl:
-            flash("subscription_template_not_found", "error")
+        result = toggle_subscription_template(db, template_id)
+        if not result["ok"]:
+            flash(result["reason"], "error")
             return redirect(url_for("subscriptions", tab="templates"))
-
-        tpl = dict(tpl)
-        new_enabled = 0 if int(tpl.get("is_enabled") or 0) == 1 else 1
-
-        db.execute(
-            """
-            UPDATE subscription_templates
-            SET is_enabled = ?,
-                is_default = CASE WHEN ? = 0 THEN 0 ELSE is_default END,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """,
-            (new_enabled, new_enabled, template_id),
-        )
 
         add_log(
             "info",
             "subscriptions",
-            f"Template {'enabled' if new_enabled else 'disabled'}: {tpl.get('name')} (id={template_id})"
+            f"Template {'enabled' if result['enabled'] else 'disabled'}: "
+            f"{result['name']} (id={template_id})",
         )
 
         flash("subscription_template_saved", "success")
@@ -802,18 +532,15 @@ def register(app):
     @app.post("/subscriptions/templates/<int:template_id>/delete")
     def subscription_templates_delete(template_id: int):
         db = get_db()
-        tpl = db.query_one("SELECT id, name FROM subscription_templates WHERE id=?", (template_id,))
-        if not tpl:
-            flash("subscription_template_not_found", "error")
+        result = delete_subscription_template(db, template_id)
+        if not result["ok"]:
+            flash(result["reason"], "error")
             return redirect(url_for("subscriptions", tab="templates"))
-
-        tpl = dict(tpl)
-        name = tpl.get("name") or f"#{template_id}"
-
-        # Unassign users (keep snapshot policies as-is)
-        db.execute("UPDATE vodum_users SET subscription_template_id=NULL WHERE subscription_template_id=?", (template_id,))
-        db.execute("DELETE FROM subscription_templates WHERE id=?", (template_id,))
-        add_log("info", "subscriptions", f"Template deleted: {name} (id={template_id})")
+        add_log(
+            "info",
+            "subscriptions",
+            f"Template deleted: {result['name']} (id={template_id})",
+        )
         flash("subscription_template_deleted", "success")
         return redirect(url_for("subscriptions", tab="templates"))
 

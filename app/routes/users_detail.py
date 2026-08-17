@@ -1,5 +1,4 @@
 # Auto-split from app.py (keep URLs/endpoints intact)
-import json
 
 from flask import render_template, request, redirect, url_for, flash, jsonify
 
@@ -7,7 +6,7 @@ from logging_utils import get_logger, is_debug_mode_enabled
 from tasks_engine import auto_enable_stream_enforcer
 
 from web.helpers import get_db, add_log
-from .users_list import get_merge_suggestions
+from core.user_merge_suggestions import get_merge_suggestions
 from api.subscriptions import update_user_expiration
 from core.user_credentials import change_jellyfin_password
 from core.usage_risk import build_usage_risk_for_user
@@ -475,5 +474,4 @@ def register(app):
             referral_stats=referral_stats,
             referred_users=referred_users,
         )
-
 

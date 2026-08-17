@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 from core.app_paths import imports_dir as get_imports_dir
 

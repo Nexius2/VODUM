@@ -6,6 +6,7 @@ import json
 from datetime import datetime, timezone
 
 from core.migrations.drafts import create_migration_draft
+from core.migrations.capabilities import get_migration_provider_capabilities
 
 
 PLAN_FORMAT = "vodum-migration-plan"
@@ -89,6 +90,7 @@ def export_migration_plan(db, campaign_id: int) -> dict:
 
 def _resolve_server(db, ref: dict) -> dict:
     provider = str(ref.get("type") or "").strip().lower()
+    get_migration_provider_capabilities(provider)
     identifier = str(ref.get("server_identifier") or "").strip()
     name = str(ref.get("name") or "").strip()
     if identifier:
@@ -137,6 +139,8 @@ def import_migration_plan(db, plan: dict, *, name_override: str = "") -> int:
         raise ValueError("A migration plan cannot target its source server.")
     mappings: dict[int, list[int]] = {}
     for item in plan.get("library_mappings") or []:
+        if not isinstance(item, dict):
+            raise ValueError("Migration plan library mappings must be objects.")
         source_library_id = _resolve_library(db, int(source["id"]), item.get("source"))
         if source_library_id is None:
             continue

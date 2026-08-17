@@ -204,3 +204,32 @@ def build_user_delete_check(db, user_id: int) -> dict | None:
         **protection,
         **totals, "will_return_on_sync": will_return, "items": items,
     }
+
+
+def delete_removed_media_account(db, user_id: int, media_user_id: int) -> dict:
+    """Delete one local provider account only after it was marked removed."""
+    row = db.query_one(
+        """
+        SELECT id, vodum_user_id, type, role, details_json
+        FROM media_users
+        WHERE id = ? AND vodum_user_id = ?
+        """,
+        (int(media_user_id), int(user_id)),
+    )
+    if not row:
+        return {"deleted": False, "reason": "media_user_not_found"}
+
+    account = dict(row)
+    details = _json_dict(account.get("details_json"))
+    if str(details.get("provider_presence") or "").lower() != "removed":
+        return {"deleted": False, "reason": "provider_account_not_removed"}
+    if str(account.get("role") or "").lower() in {"owner", "admin"}:
+        return {"deleted": False, "reason": "provider_account_protected"}
+
+    db.execute("DELETE FROM media_users WHERE id = ?", (int(media_user_id),))
+    return {
+        "deleted": True,
+        "reason": "",
+        "provider": str(account.get("type") or "").lower(),
+        "media_user_id": int(media_user_id),
+    }

@@ -5,6 +5,10 @@ from logging_utils import get_logger
 from tasks_engine import task_logs
 from core.migrations.execution import process_migration_user, refresh_campaign_status
 from core.migrations.phase3 import reconcile_destination_usage, reconcile_source_jobs
+from core.migrations.credentials import (
+    expire_credentials_delivery,
+    reconcile_credentials_delivery,
+)
 
 
 log = get_logger("migration_worker")
@@ -27,9 +31,14 @@ def _cleanup_expired_credentials(db) -> int:
         expires_at = str(result.get("credentials_expires_at") or "")
         if not expires_at or expires_at > now:
             continue
+        delivery_job_key = str(result.get("credentials_delivery_job_key") or "").strip()
+        if delivery_job_key:
+            expire_credentials_delivery(db, delivery_job_key)
         result.pop("encrypted_generated_password", None)
+        result.pop("credentials_delivery_job_key", None)
         result["credentials_expired_at"] = now
         result["credentials_pending_delivery"] = False
+        result["credentials_delivery_status"] = "expired"
         db.execute(
             "UPDATE migration_users SET result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
             (json.dumps(result), row["id"]),
@@ -42,6 +51,7 @@ def run(task_id: int, db):
     task_logs(task_id, "start", "Migration worker started")
     usage_validated = reconcile_destination_usage(db)
     jobs_reconciled = reconcile_source_jobs(db)
+    deliveries_reconciled = reconcile_credentials_delivery(db)
     credentials_cleaned = _cleanup_expired_credentials(db)
     db.execute(
         """
@@ -161,6 +171,7 @@ def run(task_id: int, db):
         "failed": failed,
         "usage_validated": usage_validated,
         "jobs_reconciled": jobs_reconciled,
+        "deliveries_reconciled": deliveries_reconciled,
         "credentials_cleaned": credentials_cleaned,
     }
     task_logs(task_id, "info", "Migration worker finished", details=result)

@@ -29,6 +29,10 @@ docker-data/
 test/
 tests/
 tools/
+!tools/
+tools/*
+!tools/smoke_docker_imports.py
+!tools/audit_text_encoding.py
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/

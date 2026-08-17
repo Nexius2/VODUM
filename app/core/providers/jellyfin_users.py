@@ -1,7 +1,5 @@
-import json
 from typing import Any, Dict, List, Optional
 
-import requests
 
 from logging_utils import get_logger
 from core.http_security import server_http_session
@@ -208,3 +206,31 @@ def jellyfin_reset_password_required(
         r2.raise_for_status()
     except Exception as e:
         log.warning(f"Jellyfin: cannot set RequirePasswordChange (ignored): {e}")
+
+
+def jellyfin_apply_enabled_folders(
+    http,
+    base_url: str,
+    api_key: str,
+    jellyfin_user_id: str,
+    enabled_folders: List[str],
+) -> None:
+    """Apply folder restrictions using an already configured HTTP context."""
+    response = http.get(
+        f"{base_url}/Users/{jellyfin_user_id}",
+        headers=_headers(api_key),
+        timeout=20,
+    )
+    response.raise_for_status()
+    user_obj = response.json() if response.content else {}
+    policy = user_obj.get("Policy") or {}
+    if not isinstance(policy, dict):
+        policy = {}
+
+    policy["EnableAllFolders"] = False
+    policy["EnabledFolders"] = [str(value) for value in (enabled_folders or [])]
+    url = f"{base_url}/Users/{jellyfin_user_id}/Policy"
+    updated = http.post(url, json=policy, headers=_headers(api_key), timeout=20)
+    if updated.status_code in (405, 415):
+        updated = http.put(url, json=policy, headers=_headers(api_key), timeout=20)
+    updated.raise_for_status()

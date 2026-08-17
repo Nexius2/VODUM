@@ -159,12 +159,29 @@
 
   function initUsageRiskToggles(root) {
     const scope = root && root.querySelectorAll ? root : document;
-    scope.querySelectorAll("[data-usage-risk-toggle]").forEach((button) => {
-      if (button.dataset.vodumBound === "1") return;
-      button.dataset.vodumBound = "1";
-      button.addEventListener("click", () => {
-        const target = document.getElementById(button.dataset.usageRiskToggle || "");
-        if (target) target.classList.toggle("hidden");
+    scope.querySelectorAll("[data-usage-risk-toggle]").forEach((trigger) => {
+      if (trigger.dataset.vodumBound === "1") return;
+      trigger.dataset.vodumBound = "1";
+
+      const toggleDetail = () => {
+        const target = document.getElementById(trigger.dataset.usageRiskToggle || "");
+        if (!target) return;
+
+        const expanded = target.classList.contains("hidden");
+        target.classList.toggle("hidden", !expanded);
+        trigger.setAttribute("aria-expanded", expanded ? "true" : "false");
+        trigger.classList.toggle("bg-slate-800/40", expanded);
+      };
+
+      trigger.addEventListener("click", (event) => {
+        if (event.target.closest("a, button, input, select, textarea")) return;
+        toggleDetail();
+      });
+
+      trigger.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        toggleDetail();
       });
     });
   }

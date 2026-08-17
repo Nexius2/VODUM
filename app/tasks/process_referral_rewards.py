@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from db_manager import DBManager
 from logging_utils import get_logger

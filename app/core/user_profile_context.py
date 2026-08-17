@@ -63,6 +63,8 @@ def enrich_media_servers(rows):
                 "filter_movies": "",
                 "filter_television": "",
                 "filter_music": "",
+                "provider_presence": "present",
+                "provider_presence_checked_at": "",
             }
         )
         try:
@@ -71,6 +73,13 @@ def enrich_media_servers(rows):
             details = {}
         if not isinstance(details, dict):
             details = {}
+
+        server["provider_presence"] = (
+            str(details.get("provider_presence") or "present").strip().lower()
+        )
+        server["provider_presence_checked_at"] = str(
+            details.get("provider_presence_checked_at") or ""
+        )
 
         if server.get("media_type") == "plex":
             plex_share = details.get("plex_share", {})

@@ -1,5 +1,4 @@
 from core.tasks.scheduler_rules import (
-    normalize_counter,
     parse_scheduler_datetime,
     retry_is_pending,
     scheduled_run_is_due,

@@ -2,7 +2,7 @@
 import os
 import json
 import re
-from typing import Dict, Callable, Optional, Tuple
+from typing import Dict, Callable, Tuple
 
 DEFAULT_BRAND_FALLBACK = "Vodum"
 
