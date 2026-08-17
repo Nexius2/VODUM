@@ -10,6 +10,15 @@ from core.migrations.analysis import (
 )
 from core.migrations.drafts import create_migration_draft, delete_migration_draft, update_migration_draft
 from core.migrations.execution import refresh_campaign_status
+from core.migrations.credentials import (
+    complete_credentials_delivery,
+    expire_credentials_delivery,
+)
+from core.migrations.admin_actions import (
+    request_invitation_reconciliation,
+    run_migration_access_operation,
+    validate_migration_destination,
+)
 from core.migrations.lifecycle import (
     conflicting_active_users,
     pause_campaign,
@@ -18,7 +27,6 @@ from core.migrations.lifecycle import (
     set_user_excluded,
 )
 from core.migrations.phase4 import export_migration_plan, import_migration_plan
-from core.migrations.phase3 import remove_validated_source_access, rollback_destination_access, rollback_source_access
 from core.migrations.reporting import build_migration_report
 from core.migrations.repository import get_campaign, load_report_users
 from core.migrations.page_data import (
@@ -479,135 +487,77 @@ def register(app):
 
     @app.post("/migrations/<int:campaign_id>/check-invitations")
     def migration_campaign_check_invitations(campaign_id: int):
-        db = get_db()
-        campaign = db.query_one(
-            "SELECT id, status FROM migration_campaigns WHERE id=?",
-            (campaign_id,),
+        result = request_invitation_reconciliation(
+            get_db(),
+            campaign_id,
+            wake_task=enable_and_run_task_by_name,
         )
-        if not campaign:
-            flash("migration_campaign_not_found", "error")
+        if not result["ok"]:
+            flash(result["reason"], "error")
             return redirect(url_for("migrations_page"))
-        db.execute(
-            """
-            UPDATE migration_users
-            SET updated_at=datetime('now','-11 minutes')
-            WHERE campaign_id=? AND status='waiting_acceptance'
-            """,
-            (campaign_id,),
+        add_log(
+            "info",
+            "migrations",
+            f"Manual Plex invitation reconciliation requested: campaign_id={campaign_id}",
         )
-        enable_and_run_task_by_name("migration_worker")
-        add_log("info", "migrations", f"Manual Plex invitation reconciliation requested: campaign_id={campaign_id}")
         flash("migration_invitation_check_started", "success")
         return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
 
     @app.post("/migrations/<int:campaign_id>/users/<int:migration_user_id>/validate")
     def migration_user_validate(campaign_id: int, migration_user_id: int):
-        db = get_db()
-        row = db.query_one(
-            "SELECT status,result_json FROM migration_users WHERE id=? AND campaign_id=?",
-            (migration_user_id, campaign_id),
-        )
-        if not row or row["status"] != "waiting_validation":
-            flash("migration_validation_not_available", "error")
-            return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
-        try:
-            result = json.loads(row["result_json"] or "{}")
-        except Exception:
-            result = {}
-        result["destination_validated_at"] = result.get("destination_validated_at") or datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-        result["destination_validation_method"] = result.get("destination_validation_method") or "manual"
-        db.execute(
-            "UPDATE migration_users SET status='completed',result_json=?,completed_at=COALESCE(completed_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP WHERE id=?",
-            (json.dumps(result), migration_user_id),
-        )
-        refresh_campaign_status(db, campaign_id)
-        add_log("warning", "migrations", f"Migration destination manually validated: campaign_id={campaign_id} migration_user_id={migration_user_id}")
-        flash("migration_destination_validated", "success")
+        result = validate_migration_destination(get_db(), campaign_id, migration_user_id)
+        if not result["ok"]:
+            flash(result["reason"], "error")
+        else:
+            add_log(
+                "warning",
+                "migrations",
+                "Migration destination manually validated: "
+                f"campaign_id={campaign_id} migration_user_id={migration_user_id}",
+            )
+            flash("migration_destination_validated", "success")
         return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
 
-    def _phase3_confirmed_campaign(db, campaign_id: int):
-        campaign = db.query_one("SELECT id,name,source_server_id,destination_server_id,intent FROM migration_campaigns WHERE id=?", (campaign_id,))
-        if not campaign:
-            return None
-        if (request.form.get("confirmation") or "").strip() != (campaign["name"] or "").strip():
-            return False
-        return campaign
+    def _run_access_operation(campaign_id: int, operation: str):
+        result = run_migration_access_operation(
+            get_db(),
+            campaign_id,
+            confirmation=request.form.get("confirmation") or "",
+            operation=operation,
+            wake_task=enable_and_run_task_by_name,
+        )
+        if not result["ok"]:
+            level = "error" if result.get("exception") else "warning"
+            add_log(
+                level,
+                "migrations",
+                f"Migration access operation rejected: campaign_id={campaign_id} "
+                f"operation={operation} reason={result['reason']}",
+            )
+            flash(result["reason"], "error")
+            if result["reason"] == "migration_campaign_not_found":
+                return redirect(url_for("migrations_page"))
+            return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
+        add_log(
+            "warning",
+            "migrations",
+            f"Migration access operation requested: campaign_id={campaign_id} "
+            f"operation={operation} result={result['result']}",
+        )
+        flash(result["message"], "success")
+        return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
 
     @app.post("/migrations/<int:campaign_id>/remove-source-access")
     def migration_remove_source_access(campaign_id: int):
-        db = get_db()
-        campaign = _phase3_confirmed_campaign(db, campaign_id)
-        if campaign is None:
-            flash("migration_campaign_not_found", "error")
-            return redirect(url_for("migrations_page"))
-        if campaign is False:
-            flash("migration_confirmation_mismatch", "error")
-            return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
-        if campaign["intent"] == "copy":
-            flash("migration_copy_has_no_source_removal", "error")
-            return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
-        try:
-            result = remove_validated_source_access(db, campaign_id)
-        except Exception as exc:
-            add_log("error", "migrations", f"Migration source access removal failed: campaign_id={campaign_id} error={exc}")
-            flash(str(exc), "error")
-            return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
-        source = db.query_one("SELECT type FROM servers WHERE id=?", (campaign["source_server_id"],))
-        if result["queued"] and source:
-            enable_and_run_task_by_name("apply_plex_access_updates" if source["type"] == "plex" else "apply_jellyfin_access_updates")
-            enable_and_run_task_by_name("migration_worker")
-        add_log("warning", "migrations", f"Migration source access removal requested: campaign_id={campaign_id} result={result}")
-        flash("migration_source_removal_requested", "success")
-        return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
+        return _run_access_operation(campaign_id, "remove_source")
 
     @app.post("/migrations/<int:campaign_id>/rollback-source-access")
     def migration_rollback_source_access(campaign_id: int):
-        db = get_db()
-        campaign = _phase3_confirmed_campaign(db, campaign_id)
-        if campaign is None:
-            flash("migration_campaign_not_found", "error")
-            return redirect(url_for("migrations_page"))
-        if campaign is False:
-            flash("migration_confirmation_mismatch", "error")
-            return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
-        try:
-            result = rollback_source_access(db, campaign_id)
-        except Exception as exc:
-            add_log("error", "migrations", f"Migration source access rollback failed: campaign_id={campaign_id} error={exc}")
-            flash(str(exc), "error")
-            return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
-        source = db.query_one("SELECT type FROM servers WHERE id=?", (campaign["source_server_id"],))
-        if result["queued"] and source:
-            enable_and_run_task_by_name("apply_plex_access_updates" if source["type"] == "plex" else "apply_jellyfin_access_updates")
-            enable_and_run_task_by_name("migration_worker")
-        add_log("warning", "migrations", f"Migration source access rollback requested: campaign_id={campaign_id} result={result}")
-        flash("migration_source_rollback_requested", "success")
-        return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
+        return _run_access_operation(campaign_id, "rollback_source")
 
     @app.post("/migrations/<int:campaign_id>/rollback-destination-access")
     def migration_rollback_destination_access(campaign_id: int):
-        db = get_db()
-        campaign = _phase3_confirmed_campaign(db, campaign_id)
-        if campaign is None:
-            flash("migration_campaign_not_found", "error")
-            return redirect(url_for("migrations_page"))
-        if campaign is False:
-            flash("migration_confirmation_mismatch", "error")
-            return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
-        try:
-            result = rollback_destination_access(db, campaign_id)
-        except Exception as exc:
-            add_log("error", "migrations", f"Migration destination access rollback failed: campaign_id={campaign_id} error={exc}")
-            flash(str(exc), "error")
-            return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
-        destination = db.query_one("SELECT type FROM servers WHERE id=?", (campaign["destination_server_id"],))
-        if result["queued"] and destination:
-            enable_and_run_task_by_name("apply_plex_access_updates" if destination["type"] == "plex" else "apply_jellyfin_access_updates")
-            enable_and_run_task_by_name("migration_worker")
-        add_log("warning", "migrations", f"Migration destination access rollback requested: campaign_id={campaign_id} result={result}")
-        flash("migration_destination_rollback_requested", "success")
-        return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
-
+        return _run_access_operation(campaign_id, "rollback_destination")
     @app.get("/migrations/<int:campaign_id>/report")
     def migration_campaign_report(campaign_id: int):
         db = get_db()
@@ -640,14 +590,27 @@ def register(app):
             return jsonify({"ok": False, "error": "credentials_unavailable"}), 404
         expires_at = str(result.get("credentials_expires_at") or "")
         if expires_at and expires_at <= datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"):
+            delivery_job_key = str(result.get("credentials_delivery_job_key") or "").strip()
+            if delivery_job_key:
+                expire_credentials_delivery(db, delivery_job_key)
             result.pop("encrypted_generated_password", None)
+            result.pop("credentials_delivery_job_key", None)
             result["credentials_expired_at"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
             result["credentials_pending_delivery"] = False
+            result["credentials_delivery_status"] = "expired"
             db.execute("UPDATE migration_users SET result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (json.dumps(result), migration_user_id))
             return jsonify({"ok": False, "error": "credentials_expired"}), 410
         password = decrypt_secret(encrypted)
-        result["credentials_revealed_at"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        revealed_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        delivery_job_key = str(result.get("credentials_delivery_job_key") or "").strip()
+        if delivery_job_key:
+            complete_credentials_delivery(db, delivery_job_key, channels="manual")
+        result["credentials_revealed_at"] = revealed_at
+        result["credentials_delivered_at"] = revealed_at
+        result["credentials_delivery_channels"] = "manual"
+        result["credentials_delivery_status"] = "sent"
         result["credentials_pending_delivery"] = False
+        result.pop("encrypted_generated_password", None)
         db.execute("UPDATE migration_users SET result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (json.dumps(result), migration_user_id))
         add_log(
             "warning",

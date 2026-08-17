@@ -14,7 +14,7 @@ from core.communications.rules import (
     find_enabled_template_duplicate,
     normalize_campaign_targets,
 )
-from web.helpers import get_db, add_log, send_email_via_settings
+from web.helpers import get_db, add_log
 from email_sender import send_email
 from discord_utils import validate_discord_bot_token
 from secret_store import decrypt_secret

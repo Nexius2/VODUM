@@ -1,54 +1,47 @@
 from __future__ import annotations
 
-import json
-import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
-from core.app_paths import imports_dir as get_imports_dir
 
+from core.app_paths import imports_dir as get_imports_dir
+from core.auth_totp import verify_totp_code
+from core.i18n import get_available_languages
+from core.setup_wizard_navigation import (
+    display_setup_step as _display_step,
+)
+from core.setup_wizard_navigation import (
+    next_setup_step as _next_step,
+)
+from core.setup_wizard_navigation import (
+    previous_setup_step as _previous_step,
+)
+from core.setup_wizard_navigation import (
+    setup_communications_available as _communications_available,
+)
+from core.setup_wizard_page_data import load_setup_wizard_page_data
+from core.setup_wizard_servers import (
+    count_validated_setup_servers,
+    create_setup_media_server,
+)
+from core.setup_wizard_state import (
+    decode_setup_wizard_state as _state,
+)
+from core.setup_wizard_state import (
+    load_setup_wizard_settings as _settings,
+)
+from core.setup_wizard_state import (
+    save_setup_wizard_progress as _save,
+)
+from core.smtp_settings import normalize_smtp_auth_method
 from flask import flash, redirect, render_template, request, session, url_for
+from secret_store import encrypt_secret
+from tasks_engine import enable_and_run_task_by_name
+from web.helpers import get_db
 from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
 
-from core.i18n import get_available_languages
-from core.server_validation import validate_media_server
-from core.auth_totp import generate_totp_secret, provisioning_uri, verify_totp_code
-from secret_store import encrypt_secret, encrypt_server_settings_json
-from core.smtp_settings import normalize_smtp_auth_method
-from tasks_engine import enable_and_run_task_by_name, enqueue_server_discovery_sequence, ensure_tasks_enabled
-from web.helpers import get_db
-
-
 TOTAL_STEPS = 10
 SUPPORTED_LANGUAGES = {"en", "fr", "es", "de", "it"}
-
-SETUP_WIZARD_SETTINGS_COLUMNS = """
-    wizard_step,
-    wizard_state_json,
-    wizard_active,
-    wizard_completed,
-    admin_email,
-    default_language,
-    timezone,
-    mailing_enabled,
-    mail_from,
-    smtp_host,
-    smtp_port,
-    smtp_tls,
-    smtp_user,
-    smtp_pass,
-    smtp_auth_method,
-    smtp_oauth_access_token,
-    discord_enabled,
-    discord_bot_token,
-    notifications_send_mode,
-    reminder_days,
-    preavis_days,
-    expiry_mode,
-    usage_risk_enabled,
-    usage_risk_send_upgrade_suggestions,
-    usage_risk_min_kills_before_suggestion
-"""
 
 COPY = {
     "en": {
@@ -108,85 +101,6 @@ COPY = {
 }
 
 
-def _settings(db) -> dict:
-    return dict(db.query_one(f"SELECT {SETUP_WIZARD_SETTINGS_COLUMNS} FROM settings WHERE id = 1") or {})
-
-
-def _state(settings: dict) -> dict:
-    try:
-        value = json.loads(settings.get("wizard_state_json") or "{}")
-        return value if isinstance(value, dict) else {}
-    except Exception:
-        return {}
-
-
-def _save(db, *, step: int | None = None, state: dict | None = None, active: int | None = None, completed: int | None = None):
-    current = _settings(db)
-    db.execute(
-        """
-        UPDATE settings SET
-          wizard_step = ?,
-          wizard_state_json = ?,
-          wizard_active = ?,
-          wizard_completed = ?
-        WHERE id = 1
-        """,
-        (
-            max(1, min(TOTAL_STEPS, int(step if step is not None else current.get("wizard_step") or 1))),
-            json.dumps(state if state is not None else _state(current)),
-            int(active if active is not None else current.get("wizard_active") or 0),
-            int(completed if completed is not None else current.get("wizard_completed") or 0),
-        ),
-    )
-
-
-def _communications_available(settings: dict, state: dict) -> bool:
-    if state.get("communications") == "skipped":
-        return False
-    return bool(int(settings.get("mailing_enabled") or 0) or int(settings.get("discord_enabled") or 0))
-
-
-def _step_available(db, step: int, state: dict, settings: dict | None = None) -> bool:
-    settings = settings or _settings(db)
-    if step == 6:
-        return _communications_available(settings, state)
-
-    subscriptions = int((db.query_one("SELECT COUNT(*) AS cnt FROM subscription_templates") or {"cnt": 0})["cnt"] or 0)
-    if step in (8, 9) and (subscriptions == 0 or state.get("subscriptions") == "skipped"):
-        return False
-    if step == 9:
-        users = int((db.query_one("SELECT COUNT(*) AS cnt FROM vodum_users") or {"cnt": 0})["cnt"] or 0)
-        return users > 0
-    return True
-
-
-def _next_step(db, current_step: int, state: dict, settings: dict | None = None) -> int:
-    settings = settings or _settings(db)
-    for candidate in range(current_step + 1, TOTAL_STEPS + 1):
-        if _step_available(db, candidate, state, settings):
-            return candidate
-        if candidate == 6:
-            state["messages"] = "skipped"
-        elif candidate == 8:
-            state["subscription_settings"] = "skipped"
-        elif candidate == 9:
-            state["assignment"] = "skipped"
-    return TOTAL_STEPS
-
-
-def _previous_step(db, current_step: int, state: dict, settings: dict | None = None) -> int:
-    settings = settings or _settings(db)
-    for candidate in range(current_step - 1, 0, -1):
-        if _step_available(db, candidate, state, settings):
-            return candidate
-    return 1
-
-
-def _display_step(db, settings: dict, state: dict) -> int:
-    step = max(1, min(TOTAL_STEPS, int(settings.get("wizard_step") or 1)))
-    return step if _step_available(db, step, state, settings) else _next_step(db, step, state, settings)
-
-
 def _validated_server_ids(state: dict) -> set[int]:
     result = set()
     for value in state.get("validated_server_ids") or []:
@@ -221,7 +135,8 @@ def register(app):
                         return redirect(url_for("setup_wizard"))
                     imports_dir = get_imports_dir()
                     imports_dir.mkdir(parents=True, exist_ok=True)
-                    path = imports_dir / f"restore_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}{suffix}"
+                    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+                    path = imports_dir / f"restore_{timestamp}{suffix}"
                     upload.save(path)
                     (imports_dir / "restore_request_path.txt").write_text(str(path), encoding="utf-8")
                     if not enable_and_run_task_by_name("restore_backup"):
@@ -280,72 +195,41 @@ def register(app):
 
             elif step == 4:
                 if action == "add_server":
-                    server_type = (request.form.get("server_type") or "").strip().lower()
-                    url = (
-                        request.form.get("media_server_base_address")
-                        or request.form.get("server_url")
-                        or request.form.get("url")
-                        or ""
-                    ).strip().rstrip("/")
-                    token = (
-                        request.form.get("media_server_access_token")
-                        or request.form.get("server_token")
-                        or request.form.get("token")
-                        or ""
-                    ).strip()
-                    if server_type not in {"plex", "jellyfin"} or not url.startswith(("http://", "https://")) or not token:
-                        flash("Provider, URL and token are required.", "error")
-                        return redirect(url_for("setup_wizard"))
-                    candidate = {"url": url, "local_url": None, "public_url": None, "settings_json": '{"verify_tls": true}'}
-                    result = validate_media_server(server_type, url, token, server=candidate)
-                    if result[0] != "up":
-                        flash(f"Connection failed: {result[3]}", "error")
-                        return redirect(url_for("setup_wizard"))
-                    cursor = db.execute(
-                        """
-                        INSERT INTO servers(name,type,server_identifier,url,token,settings_json,status,server_version)
-                        VALUES(?,?,?,?,?,?,?,?)
-                        """,
-                        (
-                            result[1] or server_type.upper(),
-                            server_type,
-                            result[2] or str(uuid.uuid4()),
-                            url,
-                            encrypt_secret(token),
-                            encrypt_server_settings_json('{"verify_tls": true}'),
-                            "up",
-                            result[3],
+                    result = create_setup_media_server(
+                        db,
+                        server_type=request.form.get("server_type") or "",
+                        url=(
+                            request.form.get("media_server_base_address")
+                            or request.form.get("server_url")
+                            or request.form.get("url")
+                            or ""
+                        ),
+                        token=(
+                            request.form.get("media_server_access_token")
+                            or request.form.get("server_token")
+                            or request.form.get("token")
+                            or ""
                         ),
                     )
-                    server_id = int(cursor.lastrowid)
-                    if server_type == "plex":
-                        ensure_tasks_enabled(["check_servers", "sync_plex", "update_user_status"])
-                    elif server_type == "jellyfin":
-                        ensure_tasks_enabled(["check_servers", "sync_jellyfin", "update_user_status"])
-                    else:
-                        ensure_tasks_enabled(["check_servers", "update_user_status"])
-
-                    enqueue_server_discovery_sequence(server_type)
+                    if not result["ok"]:
+                        message = (
+                            "Provider, URL and token are required."
+                            if result["reason"] == "setup_server_fields_required"
+                            else f"Connection failed: {result.get('detail') or ''}"
+                        )
+                        flash(message, "error")
+                        return redirect(url_for("setup_wizard"))
                     state["media_server"] = "configured"
                     validated_ids = _validated_server_ids(state)
-                    validated_ids.add(server_id)
+                    validated_ids.add(result["server_id"])
                     state["validated_server_ids"] = sorted(validated_ids)
                     _save(db, step=4, state=state, active=1)
-                    flash("Connection successful. Synchronization started in the background.", "success")
+                    flash(
+                        "Connection successful. Synchronization started in the background.",
+                        "success",
+                    )
                     return redirect(url_for("setup_wizard"))
-                validated_ids = _validated_server_ids(state)
-                validated_count = 0
-                if validated_ids:
-                    placeholders = ",".join("?" for _ in validated_ids)
-                    row = db.query_one(
-                        f"SELECT COUNT(*) AS cnt FROM servers WHERE id IN ({placeholders})",
-                        tuple(sorted(validated_ids)),
-                    )
-                    validated_count = int((row or {"cnt": 0})["cnt"] or 0)
-                elif state.get("media_server") == "configured":
-                    validated_count = int(
-                        (db.query_one("SELECT COUNT(*) AS cnt FROM servers") or {"cnt": 0})["cnt"] or 0
-                    )
+                validated_count = count_validated_setup_servers(db, state)
                 if validated_count < 1:
                     flash(COPY.get(session.get("lang"), COPY["en"])["required"], "error")
                     return redirect(url_for("setup_wizard"))
@@ -519,59 +403,16 @@ def register(app):
 
         settings = _settings(db)
         state = _state(settings)
-        validated_ids = _validated_server_ids(state)
-        servers = [dict(x) for x in (db.query("SELECT id,name,type,url,status FROM servers ORDER BY id") or [])]
-        for server in servers:
-            server["wizard_validated"] = (
-                int(server["id"]) in validated_ids
-                or (not validated_ids and state.get("media_server") == "configured")
-            )
-        subscription_count = int((db.query_one("SELECT COUNT(*) AS cnt FROM subscription_templates") or {"cnt": 0})["cnt"] or 0)
-        user_count = int((db.query_one("SELECT COUNT(*) AS cnt FROM vodum_users") or {"cnt": 0})["cnt"] or 0)
-        sync_running = bool(db.query_one("SELECT id FROM tasks WHERE name IN ('sync_plex','sync_jellyfin') AND status IN ('queued','running') LIMIT 1"))
+        page_data = load_setup_wizard_page_data(db, settings, state)
         communications_available = _communications_available(settings, state)
-        communication_settings = dict(settings)
-        communication_settings["smtp_pass_configured"] = bool(communication_settings.get("smtp_pass"))
-        communication_settings["smtp_oauth_access_token_configured"] = bool(communication_settings.get("smtp_oauth_access_token"))
-        communication_settings["discord_bot_token_configured"] = bool(communication_settings.get("discord_bot_token"))
-        communication_settings["smtp_pass"] = ""
-        communication_settings["smtp_oauth_access_token"] = ""
-        communication_settings["discord_bot_token"] = ""
-        wizard_templates = [
-            dict(row) for row in (db.query(
-                """
-                SELECT id,key,name,enabled,subject,body FROM comm_templates
-                WHERE key IN ('default_relance','default_fin','stream_blocked','usage_risk_upgrade_suggestion')
-                ORDER BY CASE key
-                  WHEN 'default_relance' THEN 1 WHEN 'default_fin' THEN 2
-                  WHEN 'stream_blocked' THEN 3 ELSE 4 END
-                """
-            ) or [])
-        ]
-        subscription_templates = [
-            dict(row) for row in (db.query(
-                "SELECT id,name,duration_days,is_lifetime,is_enabled FROM subscription_templates ORDER BY is_default DESC,name"
-            ) or [])
-        ]
-        wizard_users = [
-            dict(row) for row in (db.query(
-                """
-                SELECT u.id,u.username,u.email,u.subscription_template_id,st.name AS subscription_name
-                FROM vodum_users u
-                LEFT JOIN subscription_templates st ON st.id=u.subscription_template_id
-                ORDER BY COALESCE(u.username,u.email),u.id LIMIT 500
-                """
-            ) or [])
-        ]
         lang = session.get("lang") or settings.get("default_language") or "en"
         return render_template(
             "setup/wizard.html",
             step=step, total_steps=TOTAL_STEPS, copy=COPY.get(lang, COPY["en"]),
-            state=state, settings=settings, servers=servers,
-            languages=get_available_languages(), subscription_count=subscription_count,
-            user_count=user_count, sync_running=sync_running, communication_settings=communication_settings,
-            wizard_templates=wizard_templates, subscription_templates=subscription_templates, wizard_users=wizard_users,
+            state=state, settings=settings,
+            languages=get_available_languages(),
             communications_available=communications_available,
+            **page_data,
         )
 
     @app.get("/setup")
@@ -583,5 +424,3 @@ def register(app):
         db = get_db()
         _save(db, step=1, state={}, active=1, completed=0)
         return redirect(url_for("setup_wizard"))
-
-

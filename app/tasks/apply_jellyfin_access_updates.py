@@ -1,10 +1,11 @@
 import json
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import requests
 from core.server_cooldown import should_skip_unreachable_server
 from core.http_security import server_http_session
+from core.jellyfin_sync_repository import mark_jellyfin_media_user_removed
+from core.providers.jellyfin_users import jellyfin_apply_enabled_folders
 from logging_utils import get_logger
 
 logger = get_logger("apply_jellyfin_access_updates")
@@ -38,65 +39,7 @@ def _get_jellyfin_api_key(server_row: Dict[str, Any]) -> str:
     return token
 
 
-def _jf_get_user(http, base_url: str, api_key: str, jf_user_id: str) -> Dict[str, Any]:
-    url = f"{base_url}/Users/{jf_user_id}"
-    r = http.get(url, headers={"X-Emby-Token": api_key}, timeout=20)
-    r.raise_for_status()
-    return r.json()
-
-
-def _jf_set_policy(http, base_url: str, api_key: str, jf_user_id: str, policy: Dict[str, Any]) -> None:
-    url = f"{base_url}/Users/{jf_user_id}/Policy"
-
-    # IMPORTANT: envoyer du vrai JSON avec Content-Type: application/json
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "X-Emby-Token": api_key,
-    }
-
-    # `json=` force requests à sérialiser en JSON + bon header
-    r = http.post(url, json=policy, headers=headers, timeout=20)
-
-    # Certains serveurs/versions acceptent PUT plutôt que POST.
-    # Si POST n'est pas accepté, on tente PUT.
-    if r.status_code in (405, 415):
-        r = http.put(url, json=policy, headers=headers, timeout=20)
-
-    r.raise_for_status()
-
-
-
-def _apply_policy_enabled_folders(
-    http,
-    base_url: str,
-    api_key: str,
-    jf_user_id: str,
-    enabled_folders: List[str],
-) -> None:
-    """
-    Apply library restrictions by forcing:
-      - EnableAllFolders = False
-      - EnabledFolders = [folderIds]
-    """
-    user_obj = _jf_get_user(http, base_url, api_key, jf_user_id)
-    policy = user_obj.get("Policy") or {}
-    if not isinstance(policy, dict):
-        policy = {}
-
-    before_all = policy.get("EnableAllFolders")
-    before_folders = policy.get("EnabledFolders")
-
-    policy["EnableAllFolders"] = False
-    policy["EnabledFolders"] = enabled_folders
-
-    logger.info(
-        f"Jellyfin policy update user={jf_user_id}: "
-        f"EnableAllFolders {before_all} -> {policy['EnableAllFolders']}, "
-        f"EnabledFolders {before_folders} -> {enabled_folders}"
-    )
-
-    _jf_set_policy(http, base_url, api_key, jf_user_id, policy)
+_apply_policy_enabled_folders = jellyfin_apply_enabled_folders
 
 
 # ---------------------------------------------------------------------
@@ -144,30 +87,7 @@ def _mark_success(db, job_id: int) -> None:
 
 
 def _mark_jellyfin_account_removed(db, media_user_id: int, jf_user_id: str) -> None:
-    row = db.query_one(
-        "SELECT details_json FROM media_users WHERE id = ?",
-        (media_user_id,),
-    )
-    details: Dict[str, Any] = {}
-    if row and row["details_json"]:
-        try:
-            parsed = json.loads(row["details_json"])
-            if isinstance(parsed, dict):
-                details = parsed
-        except (TypeError, ValueError):
-            pass
-
-    details.update(
-        {
-            "provider_presence": "removed",
-            "provider_presence_external_user_id": jf_user_id,
-            "provider_presence_checked_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        }
-    )
-    db.execute(
-        "UPDATE media_users SET details_json = ? WHERE id = ?",
-        (json.dumps(details, ensure_ascii=False), media_user_id),
-    )
+    return mark_jellyfin_media_user_removed(db, media_user_id, jf_user_id)
 
 
 def _mark_failure(db, job_id: int, err: str) -> None:
@@ -290,12 +210,12 @@ def _process_job(db, job: Dict[str, Any]) -> None:
             continue
 
         try:
-            _apply_policy_enabled_folders(http, base_url, api_key, jf_user_id, enabled_folders)
+            jellyfin_apply_enabled_folders(http, base_url, api_key, jf_user_id, enabled_folders)
         except requests.HTTPError as exc:
             response = getattr(exc, "response", None)
             if response is None or response.status_code != 404:
                 raise
-            _mark_jellyfin_account_removed(db, int(acc["id"]), jf_user_id)
+            mark_jellyfin_media_user_removed(db, int(acc["id"]), jf_user_id)
             logger.warning(
                 f"Jellyfin account marked removed: media_user_id={acc['id']} "
                 f"vodum_user_id={vodum_user_id} server_id={server_id} "

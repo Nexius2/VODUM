@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from logging_utils import get_logger
 from core.monitoring.collector import collect_sessions
 

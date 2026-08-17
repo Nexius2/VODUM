@@ -1,7 +1,6 @@
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from flask import current_app
 from markupsafe import Markup, escape
 
 from web.helpers import get_db

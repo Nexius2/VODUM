@@ -116,6 +116,8 @@ def _schedule_jellyfin_credentials_delivery(
     enqueue_named_task(db, "send_expiration_emails")
     result["credentials_delivery_queued_at"] = result.get("credentials_delivery_queued_at") or _utc_now()
     result["credentials_delivery_template_id"] = int(template["id"])
+    result["credentials_delivery_job_key"] = dedupe_key
+    result["credentials_delivery_status"] = "pending"
     result.pop("credentials_delivery_skipped_reason", None)
     return result
 

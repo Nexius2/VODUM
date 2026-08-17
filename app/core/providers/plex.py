@@ -257,7 +257,6 @@ class PlexProvider(BaseProvider):
 
         sessions: List[Dict[str, Any]] = []
         for node in root:
-            media_type = node.tag.lower()
             session_key = node.attrib.get("sessionKey") or node.attrib.get("sessionId") or node.attrib.get("key")
             rating_key = node.attrib.get("ratingKey")
 

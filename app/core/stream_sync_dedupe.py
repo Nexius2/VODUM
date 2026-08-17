@@ -2,7 +2,7 @@ import time
 
 from logging_utils import get_logger, is_debug_mode_enabled
 from core.stream_enforcer_config import HOUSEHOLD_MEMORY_SECONDS, STREAM_SYNC_GRACE_RUNS, STREAM_SYNC_TRANSITION_SECONDS
-from core.stream_media_transition import media_family_key
+from core.stream_media_transition import is_coherent_media_transition, media_family_key
 from core.stream_session_identity import session_endpoint_identity, session_sort_key, session_time_delta_seconds
 
 
@@ -48,6 +48,22 @@ def deduplicate_user_stream_sessions(policy: dict, user_key, sessions: list[dict
             kept.append(representative)
             if is_debug_mode_enabled():
                 logger.debug("[stream_sync_dedupe] merged same machine | policy=%s | user=%s | endpoint=%s | sessions=%s", policy_id, user_key, endpoint_key, len(endpoint_sessions))
+            continue
+        # Plex can replace a playback session while leaving the previous row
+        # visible for a short time.  When the endpoint and media are coherent,
+        # this is one playback transition, not several simultaneous streams.
+        # Keep deduplicating for the whole overlap instead of counting every
+        # stale replacement after the generic two-run grace expires.
+        if is_coherent_media_transition(endpoint_sessions):
+            kept.append(representative)
+            if is_debug_mode_enabled():
+                logger.debug(
+                    "[stream_sync_dedupe] merged coherent playback replacements | policy=%s | user=%s | endpoint=%s | sessions=%s",
+                    policy_id,
+                    user_key,
+                    endpoint_key,
+                    len(endpoint_sessions),
+                )
             continue
         max_delta = max(session_time_delta_seconds(representative, session) for session in endpoint_sessions[1:])
         if max_delta > STREAM_SYNC_TRANSITION_SECONDS:

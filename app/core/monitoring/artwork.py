@@ -457,7 +457,6 @@ def _resolve_row_artwork(row, db=None, table_name=None):
 
     row = dict(row)
     server_id = _safe_int(row.get("server_id"))
-    scope = _artwork_scope(row)
     provider = (row.get("provider") or "").strip().lower()
 
     current_poster_json = row.get("poster_ref_json")
