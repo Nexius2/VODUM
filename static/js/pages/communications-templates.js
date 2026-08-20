@@ -164,6 +164,25 @@
     });
   }
 
+  function bindDiscordCounter() {
+    const body = document.getElementById("template_body");
+    const counter = document.getElementById("template_discord_counter");
+    if (!body || !counter) return;
+
+    const refresh = function () {
+      const count = body.value.length;
+      const parts = Math.max(1, Math.ceil(count / 1900));
+      counter.textContent = (counter.dataset.label || "{count} · Discord: {parts}")
+        .replace("{count}", String(count))
+        .replace("{parts}", String(parts));
+      counter.classList.toggle("text-amber-300", parts > 1);
+      counter.classList.toggle("text-slate-500", parts <= 1);
+    };
+
+    body.addEventListener("input", refresh);
+    refresh();
+  }
+
   function bindRowLinks() {
     document.querySelectorAll("tr[data-href]").forEach(function (row) {
       if (row.dataset.boundRowClick === "1") {
@@ -226,6 +245,7 @@
   document.addEventListener("DOMContentLoaded", function () {
     const config = readConfig();
     bindTemplateForm(config);
+    bindDiscordCounter();
     bindHelpModals();
     bindRowLinks();
     bindDeleteModal();

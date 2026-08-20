@@ -1,6 +1,7 @@
 import json
 from datetime import datetime, timezone
 
+from core.migrations.capabilities import get_migration_provider_capabilities
 from core.migrations.execution import refresh_campaign_status
 from core.migrations.phase3 import (
     remove_validated_source_access,
@@ -105,22 +106,23 @@ def run_migration_access_operation(
     if not selected:
         raise ValueError(f"Unsupported migration access operation: {operation}")
     handler, server_key, success_message = selected
+    server = db.query_one(
+        "SELECT type FROM servers WHERE id = ?",
+        (campaign[server_key],),
+    )
+    capabilities = None
+    if server:
+        try:
+            capabilities = get_migration_provider_capabilities(server["type"])
+        except ValueError as exc:
+            return {"ok": False, "reason": str(exc), "exception": exc}
     try:
         result = handler(db, campaign_id)
     except Exception as exc:
         return {"ok": False, "reason": str(exc), "exception": exc}
 
-    server = db.query_one(
-        "SELECT type FROM servers WHERE id = ?",
-        (campaign[server_key],),
-    )
-    if result.get("queued") and server:
-        provider_task = (
-            "apply_plex_access_updates"
-            if server["type"] == "plex"
-            else "apply_jellyfin_access_updates"
-        )
-        wake_task(provider_task)
+    if result.get("queued") and capabilities:
+        wake_task(capabilities.access_worker_task)
         wake_task("migration_worker")
     return {
         "ok": True,

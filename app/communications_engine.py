@@ -113,6 +113,7 @@ class SendAttempt:
     channel: str  # 'email'|'discord'
     status: str   # 'sent'|'failed'
     error: Optional[str] = None
+    retryable: bool = True
 
 
 def available_channels(db, settings: Dict, user: Dict) -> Dict[str, bool]:
@@ -800,13 +801,19 @@ def send_to_user(
     order = effective_notifications_order(s, u)
 
     channels_to_try: List[str] = []
+    attempts: List[SendAttempt] = []
 
     if forced_channels:
         for ch in forced_channels:
             ch = (ch or "").strip().lower()
-            if ch in ("email", "discord") and avail.get(ch):
+            if ch not in ("email", "discord"):
+                continue
+            if avail.get(ch):
                 if ch not in channels_to_try:
                     channels_to_try.append(ch)
+            else:
+                error = "Email channel is unavailable" if ch == "email" else "Discord channel is unavailable"
+                attempts.append(SendAttempt(channel=ch, status="failed", error=error, retryable=False))
     else:
         # In "first" mode, we must try channels IN ORDER until one succeeds.
         # In "all" mode, we try all available channels.
@@ -818,10 +825,8 @@ def send_to_user(
             if avail.get(ch) and ch not in channels_to_try:
                 channels_to_try.append(ch)
 
-    if not channels_to_try:
-        return [SendAttempt(channel="system", status="failed", error="No channel available")]
-
-    attempts: List[SendAttempt] = []
+    if not channels_to_try and not attempts:
+        return [SendAttempt(channel="system", status="failed", error="No channel available", retryable=False)]
 
     # enrich discord token once
     s2 = enrich_discord_settings(db, s) if db is not None else s
@@ -834,7 +839,7 @@ def send_to_user(
                     recipients.append(r)
 
             if not recipients:
-                attempts.append(SendAttempt(channel="email", status="failed", error="User has no email"))
+                attempts.append(SendAttempt(channel="email", status="failed", error="User has no email", retryable=False))
                 continue
 
             ok_any = False
@@ -868,14 +873,21 @@ def send_to_user(
             token = (s2.get("discord_bot_token_effective") or s2.get("discord_bot_token") or "").strip()
 
             if not discord_user_id:
-                attempts.append(SendAttempt(channel="discord", status="failed", error="User has no discord_user_id"))
+                attempts.append(SendAttempt(channel="discord", status="failed", error="User has no discord_user_id", retryable=False))
                 continue
 
             try:
                 send_discord_dm(token, discord_user_id, body)
                 attempts.append(SendAttempt(channel="discord", status="sent", error=None))
             except DiscordSendError as e:
-                attempts.append(SendAttempt(channel="discord", status="failed", error=str(e)[:1000]))
+                attempts.append(
+                    SendAttempt(
+                        channel="discord",
+                        status="failed",
+                        error=e.diagnostic()[:1000],
+                        retryable=e.retryable,
+                    )
+                )
             except Exception as e:
                 attempts.append(SendAttempt(channel="discord", status="failed", error=str(e)[:1000]))
 

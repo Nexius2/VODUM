@@ -20,6 +20,7 @@ from core.media_jobs import insert_jellyfin_media_job, insert_plex_media_job
 from core.user_subscription_snapshots import apply_template_snapshot
 from tasks_engine import auto_enable_stream_enforcer
 from secret_store import (
+    decrypt_server_record,
     find_plex_server_ids_by_token,
     find_plex_servers_by_token,
 )
@@ -104,7 +105,10 @@ def api_servers():
         """
     )
 
-    servers = [dict(r) for r in rows]
+    # Tokens are encrypted independently in the database.  Decrypt each record
+    # before grouping, otherwise two servers owned by the same Plex account have
+    # different ciphertexts and are no longer detected as linked.
+    servers = [decrypt_server_record(r) for r in rows]
 
     # Group Plex servers by token (same admin/token concept in your DB)
     plex_groups = {}
@@ -146,7 +150,7 @@ def api_server_libraries(server_id: int):
     if not server:
         return jsonify([])
 
-    server = dict(server)
+    server = decrypt_server_record(server)
     provider = (server.get("type") or "").lower()
 
     server_ids = [server_id]
@@ -312,7 +316,10 @@ def api_users_create():
         srv = db.query_one("SELECT id, name, server_identifier, type, url, local_url, public_url, token, settings_json, server_version, unavailable_since, cooldown_until, last_failure, last_checked, status FROM servers WHERE id = ?", (sid,))
         if not srv:
             return jsonify({"ok": False, "error": f"Server not found (id={sid})"}), 400
-        servers_by_id[sid] = dict(srv)
+        # Keep the working copy decrypted: linked Plex server discovery compares
+        # the selected token with the decrypted tokens returned by secret_store.
+        srv = decrypt_server_record(srv)
+        servers_by_id[sid] = srv
 
         lib_ids = block.get("library_ids") or []
         if not isinstance(lib_ids, list):
@@ -320,11 +327,11 @@ def api_users_create():
 
         if lib_ids:
             # If Plex: allow libraries from linked servers (same token)
-            srv_type = (dict(srv).get("type") or "").lower()
+            srv_type = (srv.get("type") or "").lower()
             allowed_server_ids = [sid]
 
             if srv_type == "plex":
-                tok = (dict(srv).get("token") or "")
+                tok = (srv.get("token") or "")
                 if tok:
                     allowed_server_ids = find_plex_server_ids_by_token(db, tok) or [sid]
 

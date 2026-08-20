@@ -202,6 +202,29 @@ def _suggest_subscription(db, current_template_id, current_value, needed_streams
     return candidates[0] if candidates else None
 
 
+def _subscription_ip_limit(policies_json):
+    """Return the enabled IP allowance, or None when the plan is unlimited."""
+    try:
+        policies = json.loads(policies_json or "[]")
+    except Exception:
+        policies = []
+
+    limits = []
+    for policy in policies:
+        if not isinstance(policy, dict):
+            continue
+        if str(policy.get("is_enabled", "1")) != "1":
+            continue
+        if (policy.get("rule_type") or "").strip() != "max_ips_per_user":
+            continue
+        rule = policy.get("rule") if isinstance(policy.get("rule"), dict) else {}
+        maximum = _safe_int(rule.get("max"), 0)
+        if maximum > 0:
+            limits.append(maximum)
+
+    return max(limits) if limits else None
+
+
 def _extract_session_identity(sess):
     label = _device_label(sess)
     ip = str(sess.get("ip") or "").strip()
@@ -237,6 +260,15 @@ def _score_usage_item(item, min_kills):
     repeated_max_streams_user = _safe_int(item["rules"].get("max_streams_per_user"), 0)
     repeated_high_rules = repeated_max_ips + repeated_max_streams_user
 
+    # Direct callers historically had a one-IP baseline. Production report
+    # items always provide this key; None explicitly means an unlimited plan.
+    allowed_ips = item.get("allowed_ips", 1)
+    if allowed_ips is not None:
+        allowed_ips = max(1, _safe_int(allowed_ips, 1))
+
+    ips_over_plan = allowed_ips is not None and distinct_ips > allowed_ips
+    fixed_devices_over_plan = allowed_ips is not None and fixed_devices > allowed_ips
+
     score = 0
     reasons = []
     reason_items = []
@@ -245,13 +277,15 @@ def _score_usage_item(item, min_kills):
         reasons.append(text)
         reason_items.append({"code": code, **params})
 
-    if distinct_ips >= 2:
-        pts = min(30, 8 + (distinct_ips * 7))
+    if ips_over_plan:
+        excess_ips = distinct_ips - allowed_ips
+        pts = min(30, 15 + (excess_ips * 7))
         score += pts
         add_reason(f"{distinct_ips} public IPs", "public_ips", count=distinct_ips)
 
-    if fixed_devices >= 1:
-        pts = min(24, fixed_devices * 10)
+    if fixed_devices_over_plan:
+        excess_devices = fixed_devices - allowed_ips
+        pts = min(24, 10 + ((excess_devices - 1) * 7))
         score += pts
         add_reason(
             f"{fixed_devices} fixed device{'s' if fixed_devices > 1 else ''}",
@@ -259,7 +293,7 @@ def _score_usage_item(item, min_kills):
             count=fixed_devices,
         )
 
-    if fixed_devices >= 2:
+    if fixed_devices_over_plan:
         score += 20
         add_reason("multiple fixed devices", "multiple_fixed_devices")
 
@@ -268,14 +302,18 @@ def _score_usage_item(item, min_kills):
         unique_pair_ips = {pair.split(" @ ", 1)[1] for pair in fixed_ip_pairs if " @ " in pair}
         unique_pair_devices = {pair.split(" @ ", 1)[0] for pair in fixed_ip_pairs if " @ " in pair}
 
-        if len(unique_pair_ips) >= 2 and len(unique_pair_devices) >= 2:
+        if (
+            allowed_ips is not None
+            and len(unique_pair_ips) > allowed_ips
+            and len(unique_pair_devices) >= 2
+        ):
             score += 40
             add_reason(
                 "fixed devices linked to different public IPs",
                 "fixed_devices_different_ips",
             )
 
-    if distinct_ips >= 2 and fixed_devices >= 2:
+    if ips_over_plan and fixed_devices >= 2:
         score += 22
         add_reason("multi-household pattern likely", "multi_household")
 
@@ -498,7 +536,8 @@ def build_usage_risk_report(db, filters=None, persist_history=True):
           vu.email,
           vu.subscription_template_id,
           st.name AS subscription_name,
-          st.subscription_value
+          st.subscription_value,
+          st.policies_json AS subscription_policies_json
         FROM stream_enforcements e
         LEFT JOIN stream_policies p ON p.id = e.policy_id
         LEFT JOIN servers s ON s.id = e.server_id
@@ -532,6 +571,7 @@ def build_usage_risk_report(db, filters=None, persist_history=True):
                 "subscription_template_id": row.get("subscription_template_id"),
                 "subscription_name": row.get("subscription_name") or "—",
                 "subscription_value": _safe_float(row.get("subscription_value"), 0),
+                "allowed_ips": _subscription_ip_limit(row.get("subscription_policies_json")),
                 "last_activity": row.get("created_at"),
                 "kills_7d": 0,
                 "kills_30d": 0,
@@ -681,6 +721,7 @@ def build_usage_risk_report(db, filters=None, persist_history=True):
             "username": item["username"],
             "email": item["email"],
             "subscription_name": item["subscription_name"],
+            "subscription_ip_limit": item["allowed_ips"],
             "risk_level": level,
             "risk_color": _risk_color(level),
             "risk_score": score,

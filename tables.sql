@@ -1000,6 +1000,7 @@ CREATE TABLE IF NOT EXISTS comm_templates (
   -- subscription targeting
   subscription_scope TEXT NOT NULL DEFAULT 'none' CHECK(subscription_scope IN ('none','all','specific')),
   subscription_template_id INTEGER DEFAULT NULL,
+  delivery_channels TEXT NOT NULL DEFAULT 'inherit' CHECK(delivery_channels IN ('inherit','email','discord','all')),
 
   -- expiration flow
   days_before INTEGER DEFAULT NULL,
@@ -1106,6 +1107,7 @@ CREATE TABLE IF NOT EXISTS comm_campaigns (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   sent_at TIMESTAMP,
+  delivery_channels TEXT NOT NULL DEFAULT 'inherit' CHECK(delivery_channels IN ('inherit','email','discord','all')),
   FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE SET NULL
 );
 
@@ -1338,4 +1340,3 @@ CREATE TABLE IF NOT EXISTS migration_library_mappings (
   FOREIGN KEY(destination_library_id) REFERENCES libraries(id) ON DELETE RESTRICT
 );
 CREATE INDEX IF NOT EXISTS idx_migration_library_mappings_campaign ON migration_library_mappings(campaign_id, mapping_status);
-

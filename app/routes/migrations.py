@@ -10,6 +10,10 @@ from core.migrations.analysis import (
 )
 from core.migrations.drafts import create_migration_draft, delete_migration_draft, update_migration_draft
 from core.migrations.execution import refresh_campaign_status
+from core.migrations.credentials import (
+    complete_credentials_delivery,
+    expire_credentials_delivery,
+)
 from core.migrations.admin_actions import (
     request_invitation_reconciliation,
     run_migration_access_operation,
@@ -586,14 +590,27 @@ def register(app):
             return jsonify({"ok": False, "error": "credentials_unavailable"}), 404
         expires_at = str(result.get("credentials_expires_at") or "")
         if expires_at and expires_at <= datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"):
+            delivery_job_key = str(result.get("credentials_delivery_job_key") or "").strip()
+            if delivery_job_key:
+                expire_credentials_delivery(db, delivery_job_key)
             result.pop("encrypted_generated_password", None)
+            result.pop("credentials_delivery_job_key", None)
             result["credentials_expired_at"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
             result["credentials_pending_delivery"] = False
+            result["credentials_delivery_status"] = "expired"
             db.execute("UPDATE migration_users SET result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (json.dumps(result), migration_user_id))
             return jsonify({"ok": False, "error": "credentials_expired"}), 410
         password = decrypt_secret(encrypted)
-        result["credentials_revealed_at"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        revealed_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        delivery_job_key = str(result.get("credentials_delivery_job_key") or "").strip()
+        if delivery_job_key:
+            complete_credentials_delivery(db, delivery_job_key, channels="manual")
+        result["credentials_revealed_at"] = revealed_at
+        result["credentials_delivered_at"] = revealed_at
+        result["credentials_delivery_channels"] = "manual"
+        result["credentials_delivery_status"] = "sent"
         result["credentials_pending_delivery"] = False
+        result.pop("encrypted_generated_password", None)
         db.execute("UPDATE migration_users SET result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (json.dumps(result), migration_user_id))
         add_log(
             "warning",

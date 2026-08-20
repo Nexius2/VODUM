@@ -3,10 +3,20 @@ import requests
 from secret_store import decrypt_secret
 
 DISCORD_API = "https://discord.com/api/v10"
+DISCORD_SAFE_MESSAGE_LENGTH = 1900
 
 
 class DiscordSendError(Exception):
-    pass
+    def __init__(self, code: str, message: str, *, retryable: bool, status_code: int | None = None):
+        super().__init__(message)
+        self.code = code
+        self.retryable = retryable
+        self.status_code = status_code
+
+    def diagnostic(self) -> str:
+        retry_kind = "temporary" if self.retryable else "permanent"
+        status = f", HTTP {self.status_code}" if self.status_code else ""
+        return f"Discord [{self.code}, {retry_kind}{status}]: {self}"
 
 def _as_dict(row_or_dict):
     if row_or_dict is None:
@@ -174,56 +184,110 @@ def _sleep_from_429(resp: requests.Response) -> None:
     time.sleep(max(0.2, retry_after))
 
 
+def _discord_response_error(stage: str, response: requests.Response) -> DiscordSendError:
+    status = int(response.status_code or 0)
+    if status == 401:
+        return DiscordSendError("invalid_token", "The Discord bot token is invalid", retryable=False, status_code=status)
+    if status == 403:
+        return DiscordSendError("dm_forbidden", "Discord refused the direct message", retryable=False, status_code=status)
+    if status == 404:
+        return DiscordSendError("recipient_not_found", "The Discord recipient or channel was not found", retryable=False, status_code=status)
+    if status == 429:
+        return DiscordSendError("rate_limited", "Discord rate limit retries were exhausted", retryable=True, status_code=status)
+    if status >= 500:
+        return DiscordSendError("service_unavailable", "Discord is temporarily unavailable", retryable=True, status_code=status)
+    return DiscordSendError(
+        "api_error",
+        f"Discord rejected the {stage} request",
+        retryable=False,
+        status_code=status or None,
+    )
+
+
+def _discord_post(url: str, *, headers: dict, payload: dict) -> requests.Response:
+    try:
+        return requests.post(url, headers=headers, json=payload, timeout=30)
+    except requests.RequestException as exc:
+        raise DiscordSendError(
+            "network_error",
+            "Unable to reach Discord",
+            retryable=True,
+        ) from exc
+
+
+def split_discord_content(content: str, limit: int = DISCORD_SAFE_MESSAGE_LENGTH) -> list[str]:
+    """Split content without data loss, preferring paragraph or line boundaries."""
+    remaining = str(content or "")
+    if not remaining:
+        return []
+
+    limit = max(1, int(limit or DISCORD_SAFE_MESSAGE_LENGTH))
+    parts = []
+    while len(remaining) > limit:
+        split_at = remaining.rfind("\n", 0, limit + 1)
+        if split_at < max(1, limit // 2):
+            split_at = limit
+        else:
+            split_at += 1
+        parts.append(remaining[:split_at])
+        remaining = remaining[split_at:]
+    if remaining:
+        parts.append(remaining)
+    return parts
+
+
 def send_discord_dm(bot_token: str, recipient_user_id: str, content: str, max_retries: int = 4) -> None:
     bot_token = (bot_token or "").strip()
     recipient_user_id = (recipient_user_id or "").strip()
 
     if not bot_token:
-        raise DiscordSendError("Missing Discord bot token")
+        raise DiscordSendError("missing_token", "Missing Discord bot token", retryable=False)
     if not recipient_user_id:
-        raise DiscordSendError("Missing recipient discord_user_id")
+        raise DiscordSendError("missing_recipient", "Missing recipient Discord user ID", retryable=False)
     if not content:
         return
 
     headers = _auth_headers(bot_token)
 
     # 1) Create/open DM channel
-    r = requests.post(
-        f"{DISCORD_API}/users/@me/channels",
-        headers=headers,
-        json={"recipient_id": recipient_user_id},
-        timeout=30,
-    )
-    if r.status_code == 429:
-        _sleep_from_429(r)
-        r = requests.post(
+    r = None
+    for _ in range(max(1, max_retries)):
+        r = _discord_post(
             f"{DISCORD_API}/users/@me/channels",
             headers=headers,
-            json={"recipient_id": recipient_user_id},
-            timeout=30,
+            payload={"recipient_id": recipient_user_id},
         )
+        if r.status_code != 429:
+            break
+        _sleep_from_429(r)
 
     if r.status_code >= 300:
-        raise DiscordSendError(f"DM channel create failed: {r.status_code} {r.text}")
+        raise _discord_response_error("DM channel creation", r)
 
     channel_id = (r.json() or {}).get("id")
     if not channel_id:
-        raise DiscordSendError("No channel_id returned by Discord")
+        raise DiscordSendError("invalid_response", "Discord returned no DM channel ID", retryable=True)
 
-    # 2) Send message (rate-limit friendly)
-    payload = {"content": content[:1900]}
-    for _ in range(max_retries):
-        s = requests.post(
-            f"{DISCORD_API}/channels/{channel_id}/messages",
-            headers=headers,
-            json=payload,
-            timeout=30,
-        )
-        if s.status_code == 429:
-            _sleep_from_429(s)
-            continue
-        if s.status_code >= 300:
-            raise DiscordSendError(f"Message send failed: {s.status_code} {s.text}")
-        return
-
-    raise DiscordSendError("Rate limit: max retries reached")
+    # 2) Send every part without silently truncating long template output.
+    parts = split_discord_content(content)
+    for part_index, part in enumerate(parts, start=1):
+        payload = {"content": part}
+        for _ in range(max(1, max_retries)):
+            s = _discord_post(
+                f"{DISCORD_API}/channels/{channel_id}/messages",
+                headers=headers,
+                payload=payload,
+            )
+            if s.status_code == 429:
+                _sleep_from_429(s)
+                continue
+            if s.status_code >= 300:
+                raise _discord_response_error(f"message delivery (part {part_index}/{len(parts)})", s)
+            break
+        else:
+            raise DiscordSendError(
+                "rate_limited",
+                f"Discord rate limit retries were exhausted on message part {part_index}/{len(parts)}",
+                retryable=True,
+                status_code=429,
+            )

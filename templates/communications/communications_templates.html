@@ -181,6 +181,18 @@
 		</div>
 
       <div class="text-xs">
+        <label class="block mb-1">{{ t('comm_delivery_channels') }}</label>
+        {% set template_channels = loaded_template.delivery_channels if loaded_template and loaded_template.delivery_channels else 'inherit' %}
+        <select name="delivery_channels" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+          <option value="inherit" {% if template_channels == 'inherit' %}selected{% endif %}>{{ t('comm_delivery_inherit') }}</option>
+          <option value="email" {% if template_channels == 'email' %}selected{% endif %}>{{ t('email') }}</option>
+          <option value="discord" {% if template_channels == 'discord' %}selected{% endif %}>{{ t('discord') }}</option>
+          <option value="all" {% if template_channels == 'all' %}selected{% endif %}>{{ t('comm_delivery_all') }}</option>
+        </select>
+        <p class="mt-1 text-[11px] text-slate-500">{{ t('comm_delivery_help') }}</p>
+      </div>
+
+      <div class="text-xs">
         <label class="block mb-1">{{ t('subject') }}</label>
         <input type="text" name="subject" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs" value="{{ loaded_template.subject if loaded_template else '' }}" required>
         <p class="mt-1 text-[11px] text-slate-500">{{ t('comm_subject_help') }}</p>
@@ -188,7 +200,8 @@
 
       <div class="text-xs">
         <label class="block mb-1">{{ t('body') }}</label>
-        <textarea name="body" rows="14" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-2 text-xs resize-none" required>{{ loaded_template.body if loaded_template else '' }}</textarea>
+        <textarea id="template_body" name="body" rows="14" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-2 text-xs resize-none" required>{{ loaded_template.body if loaded_template else '' }}</textarea>
+        <div id="template_discord_counter" data-label="{{ t('comm_discord_body_counter') }}" class="mt-1 text-[11px] text-slate-500"></div>
         <div class="mt-2">
           <button type="button"
                   id="commVarsHelpBtn"
