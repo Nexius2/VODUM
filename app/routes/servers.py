@@ -2,7 +2,7 @@
 import uuid
 import threading
 from flask import (
-    render_template, request, redirect, url_for, flash, current_app,
+    render_template, request, redirect, url_for, flash, current_app, session,
 )
 
 from logging_utils import get_logger
@@ -61,6 +61,9 @@ from core.server_admin import (
     wake_new_server_tasks,
     wake_updated_server_tasks,
 )
+from core.admin_auth_identities import get_admin_auth_identity
+from core.plex_server_discovery import automatic_plex_suggestions
+from routes.plex_auth import get_or_recover_plex_discovery_token
 
 server_delete_logger = get_logger("server_delete")
 logger = get_logger("servers")
@@ -151,12 +154,31 @@ def register(app):
             SERVER_DELETE_IN_PROGRESS,
         )
 
+        plex_identity = get_admin_auth_identity(db, "plex")
+        plex_suggestions = []
+        if plex_identity and int(plex_identity.get("is_active") or 0) == 1:
+            try:
+                account_token = get_or_recover_plex_discovery_token(db, plex_identity)
+                if account_token:
+                    plex_suggestions, discovery_context = automatic_plex_suggestions(
+                        db,
+                        provider_subject=plex_identity["provider_subject"],
+                        account_token=account_token,
+                        context=session.get("vodum_plex_discovery"),
+                        return_to="servers",
+                    )
+                    session["vodum_plex_discovery"] = discovery_context
+            except Exception:
+                logger.warning("Automatic Plex server suggestions unavailable")
+
         return render_template(
             "servers/servers.html",
             servers=servers,
             deleting_server_ids=deleting_server_ids,
             active_page="servers",
             active_tab="servers",
+            plex_auth_identity=plex_identity,
+            plex_suggestions=plex_suggestions,
         )
 
 

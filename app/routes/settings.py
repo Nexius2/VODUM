@@ -13,6 +13,7 @@ from tasks_engine import apply_cron_master_switch, sync_expiry_tasks_from_settin
 from web.helpers import get_db, add_log
 from secret_store import encryption_key_status, encrypt_secret
 from core.auth_totp import generate_totp_secret, provisioning_uri, verify_totp_code
+from core.admin_auth_identities import get_admin_auth_identity, sync_local_admin_identity
 
 settings_logger = get_logger("settings")
 
@@ -58,6 +59,10 @@ def register(app):
             return redirect("/")
 
         settings = dict(settings)
+        plex_auth_identity = get_admin_auth_identity(db, "plex")
+        plex_auth_config = db.query_one(
+            "SELECT plex_require_vodum_totp FROM admin_accounts WHERE id = 1"
+        )
         totp_enabled = int(settings.get("admin_totp_enabled") or 0) == 1
         pending_totp_secret = "" if totp_enabled else generate_totp_secret()
         pending_totp_uri = provisioning_uri(pending_totp_secret, settings.get("admin_email") or "admin") if pending_totp_secret else ""
@@ -72,6 +77,11 @@ def register(app):
             encryption_key_status=encryption_key_status(),
             pending_totp_secret=pending_totp_secret,
             pending_totp_uri=pending_totp_uri,
+            plex_auth_identity=plex_auth_identity,
+            plex_require_vodum_totp=(
+                int(plex_auth_config["plex_require_vodum_totp"] or 0) == 1
+                if plex_auth_config else False
+            ),
         )
 
     @app.route("/settings/save", methods=["POST"])
@@ -423,6 +433,21 @@ def register(app):
             WHERE id = 1
             """,
             params,
+        )
+        sync_local_admin_identity(db, admin_email)
+
+        db.execute(
+            """
+            UPDATE admin_accounts
+            SET plex_require_vodum_totp = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = 1
+            """,
+            (
+                1
+                if requested_totp
+                and request.form.get("plex_require_vodum_totp") == "1"
+                else 0,
+            ),
         )
 
         session["vodum_admin_email"] = admin_email

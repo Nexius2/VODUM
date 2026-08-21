@@ -8,6 +8,9 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css', v=g.app_version|default('dev')) }}">
 </head>
 <body class="min-h-screen bg-slate-950 text-slate-100">
+  {% if request.args.get('resume') in ('plex', 'wizard') %}
+  <script>history.replaceState({}, document.title, {{ url_for('setup_wizard')|tojson }});</script>
+  {% endif %}
   <main class="max-w-4xl mx-auto px-4 py-10">
     <header class="mb-8">
       <div class="flex items-center justify-between gap-4 mb-3">
@@ -60,8 +63,19 @@
       {% elif step == 2 %}
         <h2 class="text-xl font-semibold mb-2">{{ copy.admin }}</h2>
         <p class="text-sm text-slate-400 mb-6">{{ t("wizard.admin_intro") }}</p>
-        <form method="post" class="space-y-4">
+        <form method="post" class="space-y-4" data-admin-auth-choice>
           <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+          <div class="grid gap-3 md:grid-cols-2">
+            <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-amber-700 bg-amber-950/20 p-4">
+              <input type="radio" name="admin_auth_method" value="plex" checked class="mt-0.5 h-4 w-4">
+              <span><span class="block font-medium text-amber-200">{{ t("wizard_admin_use_plex") }}</span><span class="mt-1 block text-xs text-slate-400">{{ t("wizard_admin_use_plex_help") }}</span></span>
+            </label>
+            <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-700 p-4">
+              <input type="radio" name="admin_auth_method" value="local" class="mt-0.5 h-4 w-4">
+              <span><span class="block font-medium">{{ t("wizard_admin_use_local") }}</span><span class="mt-1 block text-xs text-slate-400">{{ t("wizard_admin_use_local_help") }}</span></span>
+            </label>
+          </div>
+          <div class="hidden space-y-4 rounded-xl border border-slate-700 p-4" data-local-admin-fields>
           <label class="block text-sm">Administrator email
             <input name="email" type="email" required value="{{ settings.admin_email or '' }}" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
           </label>
@@ -92,12 +106,42 @@
               </label>
             </div>
             <code class="block text-[11px] text-slate-500 break-all">{{ wizard_totp_uri }}</code>
-          </div>          {% include "setup/_nav.html" %}
+          </div>
+          </div>
+          {% include "setup/_nav.html" %}
         </form>
+        <script>
+          (() => {
+            const form = document.querySelector('[data-admin-auth-choice]');
+            const localFields = form?.querySelector('[data-local-admin-fields]');
+            const sync = () => {
+              const local = form?.querySelector('[name="admin_auth_method"]:checked')?.value === 'local';
+              localFields?.classList.toggle('hidden', !local);
+              localFields?.querySelectorAll('input').forEach((input) => {
+                if (input.name === 'email' || input.name === 'password' || input.name === 'confirm_password') input.required = local;
+              });
+            };
+            form?.querySelectorAll('[name="admin_auth_method"]').forEach((radio) => radio.addEventListener('change', sync));
+            sync();
+          })();
+        </script>
 
       {% elif step == 3 %}
         <h2 class="text-xl font-semibold mb-2">{{ copy.localization }}</h2>
         <p class="text-sm text-slate-400 mb-6">{{ t("wizard.general_intro") }}</p>
+        <div class="mb-6 rounded-xl border border-slate-700 bg-slate-950/50 p-5">
+          <div class="font-semibold">{{ t("wizard_plex_auth_title") }}</div>
+          {% if plex_auth_identity and plex_auth_identity.is_active %}
+            <p class="mt-2 text-sm text-emerald-300">{{ plex_auth_identity.display_name or plex_auth_identity.display_email or plex_auth_identity.provider_subject }}</p>
+            <p class="mt-1 text-xs text-slate-500">{{ t("wizard_plex_auth_linked_help") }}</p>
+          {% else %}
+            <p class="mt-2 text-sm text-slate-400">{{ t("wizard_plex_auth_help") }}</p>
+            <form method="post" action="{{ url_for('plex_auth_wizard_link_start') }}" class="mt-4">
+              <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+              <button class="w-full px-4 py-3 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-sm font-medium md:w-auto">{{ t("plex_auth_use_account_action") }}</button>
+            </form>
+          {% endif %}
+        </div>
         <form method="post" class="space-y-4">
           <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
           <label class="block text-sm">Language
@@ -115,6 +159,10 @@
         <h2 class="text-xl font-semibold mb-2">{{ copy.servers }}</h2>
         <p class="text-sm text-slate-400">{{ copy.required }}</p>
         <p class="text-xs text-indigo-300 mt-2 mb-6">{{ copy.sync }}</p>
+        {% if plex_suggestions %}
+          {% set plex_suggestions_return_to = "wizard" %}
+          {% include "servers/_plex_suggestions.html" %}
+        {% endif %}
         <form method="post" autocomplete="off" class="grid md:grid-cols-2 gap-4 mb-6">
           <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
           <input type="text" name="wizard_fake_username" autocomplete="username" tabindex="-1" aria-hidden="true" class="hidden">
@@ -240,17 +288,42 @@
       {% elif step == 7 %}
         <h2 class="text-xl font-semibold mb-2">{{ copy.subscriptions }}</h2>
         <p class="text-sm text-slate-400 mb-6">{{ t("wizard.plans_intro") }}</p>
-        <form method="post" class="rounded-xl border border-slate-700 p-5 grid md:grid-cols-2 gap-4 mb-6">
+        <form method="post" class="rounded-xl border border-indigo-700/60 bg-indigo-950/10 p-5 grid md:grid-cols-2 gap-4 mb-6">
           <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="template_id" value="">
           <label class="text-sm">{{ t("wizard.plan_name") }}<input name="name" required placeholder="Standard" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
           <label class="text-sm">{{ t("wizard.duration_days") }}<input name="duration_days" type="number" min="1" value="30" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
           <label class="text-sm md:col-span-2">{{ t("notes") }}<input name="notes" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
-          <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="is_lifetime" value="1"> {{ t("lifetime_subscription") }}</label>
-          <button name="action" value="add_subscription" class="md:col-span-2 px-4 py-2 rounded-lg bg-indigo-700 text-sm">{{ t("wizard.create_subscription") }}</button>
+          <label class="text-sm">{{ t("subscription_value") }}<input name="subscription_value" type="number" min="0" step="any" value="0" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2"></label>
+          <div class="flex flex-wrap items-center gap-4 text-sm"><label class="flex gap-2"><input type="checkbox" name="is_default" value="1"> {{ t("set_as_default") }}</label><label class="flex gap-2"><input type="checkbox" name="is_enabled" value="1" checked> {{ t("enabled") }}</label><label class="flex gap-2"><input type="checkbox" name="is_lifetime" value="1"> {{ t("lifetime_subscription") }}</label></div>
+          <details class="md:col-span-2 rounded-lg border border-slate-700 p-4"><summary class="cursor-pointer font-medium">{{ t("subscription_plan_rules") }}</summary>
+            <div class="mt-4 grid md:grid-cols-2 gap-4 text-sm">
+              <div class="rounded border border-slate-800 p-3"><label class="flex gap-2 font-medium"><input type="checkbox" name="streams_enabled" value="1"> {{ t("subscription_limit_streams") }}</label><input name="streams_max" type="number" min="1" value="2" class="mt-2 w-full bg-slate-950 border border-slate-700 rounded px-3 py-2"><select name="streams_selector" class="mt-2 w-full bg-slate-950 border border-slate-700 rounded px-3 py-2"><option value="kill_newest">{{ t("policies_selector_kill_newest") }}</option><option value="kill_oldest">{{ t("policies_selector_kill_oldest") }}</option><option value="kill_transcoding_first">{{ t("policies_selector_kill_transcoding") }}</option></select><label class="mt-2 flex gap-2"><input type="checkbox" name="streams_lan" value="1"> {{ t("policies_allow_local_ip") }}</label></div>
+              <div class="rounded border border-slate-800 p-3"><label class="flex gap-2 font-medium"><input type="checkbox" name="ips_enabled" value="1"> {{ t("subscription_ip_addresses") }}</label><input name="ips_max" type="number" min="1" value="1" class="mt-2 w-full bg-slate-950 border border-slate-700 rounded px-3 py-2"><select name="ips_selector" class="mt-2 w-full bg-slate-950 border border-slate-700 rounded px-3 py-2"><option value="kill_newest">{{ t("policies_selector_kill_newest") }}</option><option value="kill_oldest">{{ t("policies_selector_kill_oldest") }}</option><option value="kill_transcoding_first">{{ t("policies_selector_kill_transcoding") }}</option></select><label class="mt-2 flex gap-2"><input type="checkbox" name="ips_lan" value="1"> {{ t("policies_allow_local_ip") }}</label></div>
+              <div class="rounded border border-slate-800 p-3"><label class="flex gap-2 font-medium"><input type="checkbox" name="bitrate_enabled" value="1"> {{ t("bitrate") }}</label><input name="bitrate_max" type="number" min="1" value="20000" class="mt-2 w-full bg-slate-950 border border-slate-700 rounded px-3 py-2"></div>
+              <div class="rounded border border-slate-800 p-3"><label class="flex gap-2 font-medium"><input type="checkbox" name="devices_enabled" value="1"> {{ t("subscription_allowed_devices") }}</label><input name="devices_allowed" placeholder="{{ t('subscription_devices_placeholder') }}" class="mt-2 w-full bg-slate-950 border border-slate-700 rounded px-3 py-2"></div>
+            </div>
+          </details>
+          <button name="action" value="save_subscription" class="md:col-span-2 px-4 py-2 rounded-lg bg-indigo-700 text-sm">{{ t("wizard.create_subscription") }}</button>
         </form>
-        <div class="space-y-2">
+        <div class="space-y-3">
           {% for template in subscription_templates %}
-            <div class="flex justify-between rounded-lg bg-slate-950 border border-slate-800 px-4 py-3 text-sm"><span>{{ template.name }}</span><span class="text-slate-400">{{ 'Lifetime' if template.is_lifetime else (template.duration_days ~ ' days') }}</span></div>
+            {% set streams = template.simple_policies.get('max_streams_per_user') %}{% set ips = template.simple_policies.get('max_ips_per_user') %}{% set bitrate = template.simple_policies.get('max_bitrate_kbps') %}{% set devices = template.simple_policies.get('device_allowlist') %}
+            <details class="rounded-lg bg-slate-950 border border-slate-800 p-4 text-sm"><summary class="cursor-pointer flex justify-between gap-4"><span class="font-medium">{{ template.name }}</span><span class="text-slate-400">{{ t('edit') }} · {{ t('lifetime_subscription') if template.is_lifetime else (template.duration_days ~ ' ' ~ t('days')) }}</span></summary>
+              <form method="post" class="mt-4 grid md:grid-cols-2 gap-4">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token }}"><input type="hidden" name="template_id" value="{{ template.id }}">
+                <label>{{ t('name') }}<input name="name" required value="{{ template.name }}" class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-3 py-2"></label><label>{{ t('duration_days') }}<input name="duration_days" type="number" min="1" value="{{ template.duration_days or 30 }}" class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-3 py-2"></label>
+                <label class="md:col-span-2">{{ t('notes') }}<input name="notes" value="{{ template.notes or '' }}" class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-3 py-2"></label><label>{{ t('subscription_value') }}<input name="subscription_value" type="number" min="0" step="any" value="{{ template.subscription_value or 0 }}" class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-3 py-2"></label>
+                <div class="flex flex-wrap gap-4 items-center"><label class="flex gap-2"><input type="checkbox" name="is_default" value="1" {% if template.is_default %}checked{% endif %}> {{ t('set_as_default') }}</label><label class="flex gap-2"><input type="checkbox" name="is_enabled" value="1" {% if template.is_enabled %}checked{% endif %}> {{ t('enabled') }}</label><label class="flex gap-2"><input type="checkbox" name="is_lifetime" value="1" {% if template.is_lifetime %}checked{% endif %}> {{ t('lifetime_subscription') }}</label></div>
+                <details class="md:col-span-2 border border-slate-800 rounded p-3"><summary class="cursor-pointer">{{ t('subscription_plan_rules') }}</summary><div class="mt-3 grid md:grid-cols-2 gap-3">
+                  <div><label class="flex gap-2"><input type="checkbox" name="streams_enabled" value="1" {% if streams %}checked{% endif %}> {{ t('subscription_limit_streams') }}</label><input name="streams_max" type="number" min="1" value="{{ streams.max if streams else 2 }}" class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1"><select name="streams_selector" class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1">{% for value in ['kill_newest','kill_oldest','kill_transcoding_first'] %}<option value="{{ value }}" {% if streams and streams.selector == value %}selected{% endif %}>{{ t('policies_selector_kill_oldest') if value == 'kill_oldest' else (t('policies_selector_kill_transcoding') if value == 'kill_transcoding_first' else t('policies_selector_kill_newest')) }}</option>{% endfor %}</select><label class="mt-1 flex gap-2"><input type="checkbox" name="streams_lan" value="1" {% if streams and streams.allow_local_ip %}checked{% endif %}> {{ t('policies_allow_local_ip') }}</label></div>
+                  <div><label class="flex gap-2"><input type="checkbox" name="ips_enabled" value="1" {% if ips %}checked{% endif %}> {{ t('subscription_ip_addresses') }}</label><input name="ips_max" type="number" min="1" value="{{ ips.max if ips else 1 }}" class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1"><select name="ips_selector" class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1">{% for value in ['kill_newest','kill_oldest','kill_transcoding_first'] %}<option value="{{ value }}" {% if ips and ips.selector == value %}selected{% endif %}>{{ t('policies_selector_kill_oldest') if value == 'kill_oldest' else (t('policies_selector_kill_transcoding') if value == 'kill_transcoding_first' else t('policies_selector_kill_newest')) }}</option>{% endfor %}</select><label class="mt-1 flex gap-2"><input type="checkbox" name="ips_lan" value="1" {% if ips and ips.allow_local_ip %}checked{% endif %}> {{ t('policies_allow_local_ip') }}</label></div>
+                  <div><label class="flex gap-2"><input type="checkbox" name="bitrate_enabled" value="1" {% if bitrate %}checked{% endif %}> {{ t('bitrate') }}</label><input name="bitrate_max" type="number" min="1" value="{{ bitrate.max_kbps if bitrate else 20000 }}" class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1"></div>
+                  <div><label class="flex gap-2"><input type="checkbox" name="devices_enabled" value="1" {% if devices %}checked{% endif %}> {{ t('subscription_allowed_devices') }}</label><input name="devices_allowed" value="{{ devices.allowed|join(', ') if devices else '' }}" class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1"></div>
+                </div></details>
+                <button name="action" value="save_subscription" class="md:col-span-2 px-4 py-2 rounded bg-indigo-700">{{ t('save') }}</button>
+              </form>
+            </details>
           {% endfor %}
         </div>
         <form method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token }}"><div class="flex justify-between gap-3 mt-6"><button name="action" value="back" class="px-4 py-2 rounded-lg bg-slate-800 text-sm">{{ copy.back }}</button><div class="flex gap-3"><button name="action" value="skip" class="px-4 py-2 rounded-lg bg-slate-700 text-sm">{{ copy.skip }}</button><button name="action" value="continue" class="px-4 py-2 rounded-lg bg-indigo-700 text-sm">{{ copy.continue }}</button></div></div></form>
@@ -308,6 +381,7 @@
         {% else %}
         <div class="space-y-2 my-6 text-sm">
           <div>✓ {{ t("wizard.admin_created") }}</div>
+          <div>✓ Plex authentication {{ state.get('plex_auth', 'skipped') }}</div>
           <div>✓ {{ servers|length }} media server(s) configured</div>
           <div>✓ {{ t("wizard.sync_started") }}</div>
           <div>✓ Communications {{ state.get('communications', 'skipped') }}</div>

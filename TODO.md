@@ -3,7 +3,7 @@
 Ce fichier contient uniquement le travail restant. Les changements termines
 sont documentes dans `changelog.md`.
 
-Derniere mise a jour: 2026-08-17
+Derniere mise a jour: 2026-08-21
 
 ## Principes de suivi
 
@@ -25,9 +25,12 @@ Derniere mise a jour: 2026-08-17
 
 ## P8 - Partie utilisateur et ouverture externe
 
-- [ ] Permettre au compte admin de se connecter via un compte Plex. ( voir aussi pour le wizard et la premiere connexion)
-- [ ] Dans l'ajout d'un serveur Plex, proposer la recherche automatique des serveurs lies
-  au compte Plex selectionne comme methode de connexion.
+- [ ] Valider manuellement l'authentification admin Plex sur une installation
+  neuve et une installation existante : indisponibilite Plex, changement de
+  compte, deliaison, connexion locale de secours et option de double 2FA.
+- [ ] Valider manuellement la suggestion de serveurs depuis le wizard et la
+  page Serveurs avec plusieurs serveurs possedes/partages, des connexions
+  locales, publiques et relay, Plex indisponible et un serveur deja configure.
 - [ ] Creer un acces web utilisateur configurable depuis un nouveau menu admin.
   - Login possible via compte admin, Plex, Jellyfin ou email standard.
   - Donner a l'utilisateur acces a son profil, son abonnement, les informations

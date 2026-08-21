@@ -35,7 +35,34 @@
         </button>
       </div>
     </div>
-    <div class="rounded-lg border {% if encryption_key_status.ok %}border-emerald-800/60 bg-emerald-950/20{% else %}border-rose-800/60 bg-rose-950/20{% endif %} p-3">
+    <div data-testid="plex-auth-settings-card" class="rounded-lg border {% if plex_auth_identity %}border-emerald-800/60 bg-emerald-950/20{% else %}border-indigo-800/60 bg-indigo-950/20{% endif %} p-3">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="text-sm text-slate-200">{{ t("plex_auth_settings_card_title") }}</div>
+            <span class="rounded-full border px-2 py-0.5 text-[11px] {% if plex_auth_identity %}border-emerald-700 text-emerald-300{% else %}border-slate-700 text-slate-400{% endif %}">
+              {{ t("plex_auth_status_linked") if plex_auth_identity else t("plex_auth_status_not_linked") }}
+            </span>
+          </div>
+          <div class="text-xs text-slate-400 mt-1">
+            {% if plex_auth_identity %}
+              {{ plex_auth_identity.display_name or plex_auth_identity.display_email or plex_auth_identity.provider_subject }}
+            {% else %}
+              {{ t("plex_auth_settings_card_help") }}
+            {% endif %}
+          </div>
+        </div>
+        <div class="flex shrink-0 flex-wrap gap-2 self-start sm:self-center">
+          <button type="submit" form="plex-auth-link-form" class="inline-flex items-center justify-center whitespace-nowrap rounded-lg bg-indigo-700 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-600">
+            {{ t("plex_auth_replace_action") if plex_auth_identity else t("plex_auth_connect_short_action") }}
+          </button>
+          {% if plex_auth_identity %}
+            <button type="submit" form="plex-auth-unlink-form" class="inline-flex items-center justify-center whitespace-nowrap rounded-lg bg-slate-700 px-3 py-2 text-xs text-white hover:bg-slate-600">{{ t("plex_auth_unlink_action") }}</button>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div data-testid="encryption-key-status-card" class="rounded-lg border {% if encryption_key_status.ok %}border-emerald-800/60 bg-emerald-950/20{% else %}border-rose-800/60 bg-rose-950/20{% endif %} p-3">
       <div class="flex items-center justify-between gap-3">
         <span class="text-sm text-slate-200">{{ t("encryption_key_status") }}</span>
         <span class="text-xs font-semibold {% if encryption_key_status.ok %}text-emerald-300{% else %}text-rose-300{% endif %}">
@@ -152,4 +179,3 @@
 
   </div>
 </div>
-
