@@ -1,5 +1,9 @@
 # Changelog
 
+- Dans Settings, la carte de connexion administrateur Plex est maintenant
+  masquée lorsqu'aucun serveur Plex n'est configuré. Les installations
+  exclusivement Jellyfin ne voient donc plus cette proposition; le wizard et
+  la méthode de connexion Plex déjà configurée restent inchangés.
 - L'étape Abonnements du wizard devient un véritable éditeur : les forfaits
   existants peuvent être ouverts et modifiés au lieu d'être seulement listés.
   Création et modification couvrent désormais les mêmes critères principaux que

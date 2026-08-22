@@ -60,6 +60,9 @@ def register(app):
 
         settings = dict(settings)
         plex_auth_identity = get_admin_auth_identity(db, "plex")
+        plex_server_configured = bool(db.query_one(
+            "SELECT id FROM servers WHERE LOWER(TRIM(type))='plex' LIMIT 1"
+        ))
         plex_auth_config = db.query_one(
             "SELECT plex_require_vodum_totp FROM admin_accounts WHERE id = 1"
         )
@@ -78,6 +81,7 @@ def register(app):
             pending_totp_secret=pending_totp_secret,
             pending_totp_uri=pending_totp_uri,
             plex_auth_identity=plex_auth_identity,
+            plex_server_configured=plex_server_configured,
             plex_require_vodum_totp=(
                 int(plex_auth_config["plex_require_vodum_totp"] or 0) == 1
                 if plex_auth_config else False

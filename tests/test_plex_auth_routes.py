@@ -27,6 +27,7 @@ class FakeDb:
     def __init__(self):
         self.executed = []
         self.require_totp = 0
+        self.server_count = 0
         self.settings = {
             "admin_password_hash": generate_password_hash("local-password"),
             "admin_totp_enabled": 0,
@@ -34,6 +35,8 @@ class FakeDb:
         }
 
     def query_one(self, sql, params=()):
+        if "COUNT(*) AS cnt FROM servers" in sql:
+            return {"cnt": self.server_count}
         if "FROM settings" in sql:
             return self.settings
         if "FROM admin_accounts" in sql:
@@ -196,6 +199,16 @@ class PlexAuthRouteTests(unittest.TestCase):
         self.assertIn("vodum_wizard_internal_redirect", setup_route)
         self.assertIn('_save(db, step=1, state=state, active=1)', setup_route)
         self.assertIn('name="admin_auth_method"', dockerfile)
+
+    def test_settings_hides_plex_card_without_plex_server_but_wizard_is_unchanged(self):
+        settings_route = (APP_DIR / "routes" / "settings.py").read_text(encoding="utf-8")
+        settings_card = (APP_DIR.parent / "templates" / "settings" / "partials" / "_settings_system.html").read_text(encoding="utf-8")
+        wizard = (APP_DIR.parent / "templates" / "setup" / "wizard.html").read_text(encoding="utf-8")
+        self.assertIn("plex_server_configured", settings_route)
+        self.assertIn("LOWER(TRIM(type))='plex'", settings_route)
+        self.assertIn("{% if plex_server_configured %}", settings_card)
+        self.assertIn('name="admin_auth_method"', wizard)
+        self.assertNotIn("plex_server_configured", wizard)
 
     def test_global_auth_guard_does_not_intercept_fresh_wizard_plex_callback(self):
         auth_guard = (APP_DIR / "routes" / "tasks.py").read_text(encoding="utf-8")
@@ -520,6 +533,31 @@ class PlexAuthRouteTests(unittest.TestCase):
             self.assertTrue(browser_session["vodum_logged_in"])
             self.assertEqual("admin@example.test", browser_session["vodum_admin_email"])
             self.assertNotIn(plex_auth.PENDING_LOGIN_KEY, browser_session)
+
+    def test_plex_login_repairs_stale_wizard_flag_on_configured_instance(self):
+        linked = {"id": 7, "provider_subject": "plex-42", "is_active": 1}
+        self.db.server_count = 1
+        self.db.settings.update({
+            "admin_email": "admin@example.test",
+            "wizard_active": 1,
+            "wizard_completed": 0,
+        })
+        client = self.app.test_client()
+        with patch.object(plex_auth, "get_db", return_value=self.db), patch.object(
+            plex_auth, "_client", return_value=FakeClient()
+        ), patch.object(plex_auth, "get_admin_auth_identity", return_value=linked):
+            client.post("/auth/plex/login")
+            with client.session_transaction() as browser_session:
+                state = browser_session["vodum_plex_auth_flow"]["state"]
+            callback = client.get(
+                "/auth/plex/login/callback", query_string={"state": state}
+            )
+
+        self.assertEqual("/", callback.location)
+        self.assertTrue(any(
+            "wizard_active = 0, wizard_completed = 1" in sql
+            for sql, _params in self.db.executed
+        ))
 
     def test_plex_login_rejects_another_plex_account(self):
         linked = {"id": 7, "provider_subject": "different", "is_active": 1}

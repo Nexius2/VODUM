@@ -35,6 +35,7 @@
         </button>
       </div>
     </div>
+    {% if plex_server_configured %}
     <div data-testid="plex-auth-settings-card" class="rounded-lg border {% if plex_auth_identity %}border-emerald-800/60 bg-emerald-950/20{% else %}border-indigo-800/60 bg-indigo-950/20{% endif %} p-3">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -62,6 +63,7 @@
         </div>
       </div>
     </div>
+    {% endif %}
     <div data-testid="encryption-key-status-card" class="rounded-lg border {% if encryption_key_status.ok %}border-emerald-800/60 bg-emerald-950/20{% else %}border-rose-800/60 bg-rose-950/20{% endif %} p-3">
       <div class="flex items-center justify-between gap-3">
         <span class="text-sm text-slate-200">{{ t("encryption_key_status") }}</span>

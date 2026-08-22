@@ -205,8 +205,25 @@ def main() -> int:
         settings_response = client.get("/settings")
         assert settings_response.status_code == 200
         settings_html = settings_response.get_data(as_text=True)
+        assert 'data-testid="plex-auth-settings-card"' not in settings_html, (
+            "The Plex sign-in card must stay hidden when only Jellyfin servers are configured"
+        )
+
+        connection = sqlite3.connect(db_path)
+        connection.execute(
+            """
+            INSERT INTO servers(name, server_identifier, type, url, status)
+            VALUES ('Audit Plex', 'audit-plex', 'plex', 'http://127.0.0.1:9', 'offline')
+            """
+        )
+        connection.commit()
+        connection.close()
+
+        settings_response = client.get("/settings")
+        assert settings_response.status_code == 200
+        settings_html = settings_response.get_data(as_text=True)
         assert 'data-testid="plex-auth-settings-card"' in settings_html, (
-            "The rendered settings page does not contain the dedicated Plex sign-in card"
+            "The Plex sign-in card must be rendered when a Plex server is configured"
         )
         assert 'action="/auth/plex/link"' in settings_html
         settings_form_start = settings_html.index('id="settings-form"')
@@ -224,6 +241,11 @@ def main() -> int:
         assert 'name="totp_code"' not in plex_card_html
         admin_modal_html = settings_html.split('id="admin-security-modal"', 1)[1]
         assert 'action="/auth/plex/link"' not in admin_modal_html
+
+        connection = sqlite3.connect(db_path)
+        connection.execute("DELETE FROM servers WHERE server_identifier = 'audit-plex'")
+        connection.commit()
+        connection.close()
 
         checked, failures = _assert_no_server_errors(client, app)
         assert not failures, f"GET routes returned 5xx: {failures}"

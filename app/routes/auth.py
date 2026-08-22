@@ -21,6 +21,7 @@ from core.auth_local_trust import (
     is_valid_local_totp_trust,
     set_local_totp_trust_cookie,
 )
+from core.setup_wizard_state import should_resume_setup_wizard
 
 auth_logger = get_logger("auth")
 
@@ -549,7 +550,7 @@ def register(app):
         session["vodum_admin_email"] = email
         session.permanent = True
 
-        if int(s.get("wizard_active") or 0) == 1:
+        if should_resume_setup_wizard(db, s):
             auth_logger.info("AUTH login ok; resuming installation wizard for email=%s", email)
             response = redirect(url_for("setup_wizard", resume="wizard"))
         else:

@@ -42,7 +42,12 @@ from core.plex_server_discovery import (
     store_discovery,
 )
 from core.setup_wizard_servers import create_setup_media_server, record_setup_media_servers
-from core.setup_wizard_state import decode_setup_wizard_state, load_setup_wizard_settings, save_setup_wizard_progress
+from core.setup_wizard_state import (
+    decode_setup_wizard_state,
+    load_setup_wizard_settings,
+    save_setup_wizard_progress,
+    should_resume_setup_wizard,
+)
 from logging_utils import get_logger
 from secret_store import decrypt_secret, encrypt_secret
 from web.helpers import get_db
@@ -164,7 +169,7 @@ def _open_admin_session(settings: dict):
     session["vodum_logged_in"] = True
     session["vodum_admin_email"] = settings.get("admin_email") or ""
     session.permanent = True
-    if int(settings.get("wizard_active") or 0) == 1:
+    if should_resume_setup_wizard(get_db(), settings):
         return redirect(url_for("setup_wizard", resume="wizard"))
     return redirect(url_for("dashboard"))
 
