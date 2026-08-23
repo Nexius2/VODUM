@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block header_title %}{{ t("plex_auth_totp_title") }}{% endblock %}
+{% block header_subtitle %}{{ t("plex_auth_totp_help") }}{% endblock %}
+
+{% block content %}
+<div class="max-w-md rounded-xl border border-slate-700 bg-slate-900 p-6">
+  <form method="post" action="{{ url_for('plex_auth_login_totp') }}" class="space-y-4">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+    <label class="block text-sm text-slate-300">
+      {{ t("totp_code") }}
+      <input type="text" name="totp_code" required inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" autofocus class="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+    </label>
+    <button class="w-full px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-sm">{{ t("common.login") }}</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% set active_page = "servers" %}
+
+{% block header_title %}{{ t("plex_discovery_title") }}{% endblock %}
+{% block header_subtitle %}{{ t("plex_discovery_help") }}{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-5xl space-y-5">
+  <div class="rounded-xl border border-sky-900/60 bg-sky-950/20 p-4 text-sm text-sky-200">
+    {{ t("plex_discovery_consent_notice") }}
+  </div>
+
+  <form method="post" action="{{ url_for('plex_discovery_add') }}" class="space-y-4">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+    {% if candidates %}
+      <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {% for candidate in candidates %}
+          <article class="rounded-xl border p-4 {% if candidate.selectable %}border-slate-700 bg-slate-900 hover:border-indigo-600{% else %}border-slate-800 bg-slate-900/60 opacity-70{% endif %}">
+            <div class="flex items-start gap-3">
+              <input id="candidate-{{ candidate.id }}" type="checkbox" name="candidate_id" value="{{ candidate.id }}" {% if not candidate.selectable %}disabled{% endif %} class="mt-1 h-4 w-4 rounded border-slate-600 bg-slate-800">
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <label for="candidate-{{ candidate.id }}" class="font-medium text-white {% if candidate.selectable %}cursor-pointer{% endif %}">{{ candidate.name }}</label>
+                  <span class="rounded-full border px-2 py-0.5 text-[11px] {% if candidate.is_owned %}border-emerald-700 text-emerald-300{% else %}border-amber-700 text-amber-300{% endif %}">
+                    {{ t("plex_discovery_owned") if candidate.is_owned else t("plex_discovery_shared") }}
+                  </span>
+                  {% if candidate.already_added %}<span class="rounded-full border border-slate-600 px-2 py-0.5 text-[11px] text-slate-400">{{ t("plex_discovery_already_added") }}</span>{% endif %}
+                </div>
+                <div class="mt-2 text-xs text-slate-400">{{ t("plex_discovery_online") if candidate.presence else t("plex_discovery_offline") }}</div>
+                {% if candidate.connections %}
+                  <label for="preferred-url-{{ candidate.id }}" class="mt-3 block text-xs text-slate-400">{{ t("plex_discovery_preferred_url") }}</label>
+                  <select id="preferred-url-{{ candidate.id }}" name="preferred_url_{{ candidate.id }}" {% if not candidate.selectable %}disabled{% endif %} class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 font-mono text-xs text-slate-200">
+                    {% for connection in candidate.connections %}
+                      <option value="{{ connection.uri }}">{{ "relay" if connection.relay else ("local" if connection.local else "public") }} · {{ connection.protocol }} — {{ connection.uri }}</option>
+                    {% endfor %}
+                  </select>
+                {% endif %}
+                {% if not candidate.selectable and not candidate.already_added %}<p class="mt-2 text-xs text-amber-300">{{ t("plex_discovery_insufficient") }}</p>{% endif %}
+              </div>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+      <p class="text-xs text-slate-500">{{ t("plex_discovery_none_selected") }}</p>
+    {% else %}
+      <div class="rounded-xl border border-slate-800 bg-slate-900 p-6 text-center text-slate-400">{{ t("plex_discovery_empty") }}</div>
+    {% endif %}
+    <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+      <a href="{{ wizard_resume_url if return_to == 'wizard' else url_for('servers_list') }}" class="rounded-lg bg-slate-800 px-4 py-2.5 text-center text-sm text-slate-300 hover:bg-slate-700">{{ t("cancel") }}</a>
+      {% if candidates %}<button class="rounded-lg bg-indigo-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-600">{{ t("plex_discovery_add_selected") }}</button>{% endif %}
+    </div>
+  </form>
+</div>
+{% endblock %}

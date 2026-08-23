@@ -17,6 +17,18 @@ COPY static/ /app/static/
 COPY translations/ /app/translations/
 COPY migrations/ /app/migrations/
 
+# Fail the image build if the dedicated Plex sign-in UI is missing from the
+# Docker context. This prevents an apparently successful rebuild from shipping
+# stale settings templates.
+RUN grep -Fq 'data-testid="plex-auth-settings-card"' /app/templates/settings/partials/_settings_system.html \
+    && grep -Fq 'form="plex-auth-link-form"' /app/templates/settings/partials/_settings_system.html \
+    && grep -Fq "url_for('plex_auth_link_start')" /app/templates/settings/settings.html \
+    && grep -Fq 'name="admin_auth_method"' /app/templates/setup/wizard.html \
+    && grep -Fq 'wizard_admin_use_plex_help' /app/templates/setup/wizard.html \
+    && grep -Fq 'include "servers/_plex_suggestions.html"' /app/templates/servers/servers.html \
+    && grep -Fq 'include "servers/_plex_suggestions.html"' /app/templates/setup/wizard.html \
+    && grep -Fq "preferred_url_" /app/templates/servers/plex_discovery.html
+
 # SQL seeds
 COPY tables.sql /app/tables.sql
 #COPY default_data.sql /app/default_data.sql

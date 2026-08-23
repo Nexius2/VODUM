@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import json
+import time
 from pathlib import Path
 
 from core.app_paths import imports_dir as get_imports_dir
@@ -33,6 +35,7 @@ from core.setup_wizard_state import (
     save_setup_wizard_progress as _save,
 )
 from core.smtp_settings import normalize_smtp_auth_method
+from core.subscription_template_policies import validate_subscription_template_policy_limits
 from flask import flash, redirect, render_template, request, session, url_for
 from secret_store import encrypt_secret
 from tasks_engine import enable_and_run_task_by_name
@@ -111,12 +114,58 @@ def _validated_server_ids(state: dict) -> set[int]:
     return result
 
 
+def _wizard_subscription_policies(form) -> list[dict]:
+    policies = []
+    selectors = {"kill_newest", "kill_oldest", "kill_transcoding_first"}
+    for prefix, rule_type, default_max in (("streams", "max_streams_per_user", 2), ("ips", "max_ips_per_user", 1)):
+        if form.get(f"{prefix}_enabled") != "1":
+            continue
+        try:
+            maximum = max(1, int(form.get(f"{prefix}_max") or default_max))
+        except ValueError:
+            maximum = default_max
+        selector = form.get(f"{prefix}_selector") or "kill_newest"
+        if selector not in selectors:
+            selector = "kill_newest"
+        policies.append({"rule_type": rule_type, "provider": None, "server_id": None,
+                         "is_enabled": 1, "priority": 100,
+                         "rule": {"max": maximum, "selector": selector,
+                                  "allow_local_ip": form.get(f"{prefix}_lan") == "1"}})
+    if form.get("bitrate_enabled") == "1":
+        try:
+            maximum = max(1, int(form.get("bitrate_max") or 20000))
+        except ValueError:
+            maximum = 20000
+        policies.append({"rule_type": "max_bitrate_kbps", "provider": None, "server_id": None,
+                         "is_enabled": 1, "priority": 100, "rule": {"max_kbps": maximum}})
+    devices = [item.strip() for item in (form.get("devices_allowed") or "").split(",") if item.strip()]
+    if form.get("devices_enabled") == "1" and devices:
+        policies.append({"rule_type": "device_allowlist", "provider": None, "server_id": None,
+                         "is_enabled": 1, "priority": 100, "rule": {"allowed": devices}})
+    return policies
+
+
+def continue_setup_wizard():
+    """Redirect after a wizard action without treating it as a fresh page load."""
+    session["vodum_wizard_internal_redirect"] = True
+    return redirect(url_for("setup_wizard"))
+
+
 def register(app):
     @app.post("/setup")
     def setup_wizard():
         db = get_db()
         settings = _settings(db)
         state = _state(settings)
+        resume_from_internal_action = request.args.get("resume") in {"plex", "wizard"}
+        internal_redirect = session.pop("vodum_wizard_internal_redirect", False)
+        if request.method == "GET" and not (internal_redirect or resume_from_internal_action):
+            # A direct visit or browser refresh must always expose the restore/new
+            # installation choice again. Keep the accumulated state and entered
+            # settings; only reset the displayed navigation position.
+            if int(settings.get("wizard_active") or 0) == 1 and int(settings.get("wizard_step") or 1) != 1:
+                _save(db, step=1, state=state, active=1)
+                settings = _settings(db)
         step = _display_step(db, settings, state)
 
         if request.method == "POST":
@@ -124,7 +173,7 @@ def register(app):
 
             if action == "back":
                 _save(db, step=_previous_step(db, step, state, settings), state=state, active=1)
-                return redirect(url_for("setup_wizard"))
+                return continue_setup_wizard()
 
             if step == 1:
                 if action == "restore":
@@ -132,7 +181,7 @@ def register(app):
                     suffix = Path(secure_filename(upload.filename or "")).suffix.lower() if upload else ""
                     if not upload or suffix not in {".zip", ".sqlite", ".db"}:
                         flash("Please select a valid VODUM backup.", "error")
-                        return redirect(url_for("setup_wizard"))
+                        return continue_setup_wizard()
                     imports_dir = get_imports_dir()
                     imports_dir.mkdir(parents=True, exist_ok=True)
                     timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
@@ -141,19 +190,26 @@ def register(app):
                     (imports_dir / "restore_request_path.txt").write_text(str(path), encoding="utf-8")
                     if not enable_and_run_task_by_name("restore_backup"):
                         flash("Restore could not be queued.", "error")
-                        return redirect(url_for("setup_wizard"))
+                        return continue_setup_wizard()
                     state["restore"] = "queued"
                     _save(db, step=10, state=state, active=0, completed=1)
-                    return redirect(url_for("setup_wizard"))
+                    return continue_setup_wizard()
                 state["instance"] = "new"
 
             elif step == 2:
+                auth_method = (request.form.get("admin_auth_method") or "plex").strip().lower()
+                if auth_method == "plex":
+                    state["administrator"] = "plex_pending"
+                    _save(db, step=3, state=state, active=1)
+                    from routes.plex_auth import start_wizard_plex_link
+                    return start_wizard_plex_link(db)
+
                 email = (request.form.get("email") or "").strip().lower()
                 password = request.form.get("password") or ""
                 confirm = request.form.get("confirm_password") or ""
                 if not email or "@" not in email or len(password) < 8 or password != confirm:
                     flash("Enter a valid email and matching password of at least 8 characters.", "error")
-                    return redirect(url_for("setup_wizard"))
+                    return continue_setup_wizard()
 
                 totp_enabled = request.form.get("admin_totp_enabled") == "1"
                 totp_secret = None
@@ -162,7 +218,7 @@ def register(app):
                     totp_code = request.form.get("totp_code") or ""
                     if not pending_secret or not verify_totp_code(pending_secret, totp_code):
                         flash("Invalid two-factor authentication code.", "error")
-                        return redirect(url_for("setup_wizard"))
+                        return continue_setup_wizard()
                     totp_secret = encrypt_secret(pending_secret)
 
                 db.execute(
@@ -178,9 +234,12 @@ def register(app):
                     """,
                     (email, email, generate_password_hash(password), 1 if totp_enabled else 0, totp_secret),
                 )
+                from core.admin_auth_identities import sync_local_admin_identity
+                sync_local_admin_identity(db, email)
                 session.clear()
                 session["vodum_logged_in"] = True
                 session["vodum_admin_email"] = email
+                session["vodum_local_reauth_at"] = int(time.time())
                 session.permanent = True
                 state["administrator"] = "created"
 
@@ -192,6 +251,13 @@ def register(app):
                 session["lang"] = lang
                 db.execute("UPDATE settings SET default_language=?, timezone=? WHERE id=1", (lang, timezone))
                 state["localization"] = "configured"
+                try:
+                    from core.admin_auth_identities import get_admin_auth_identity
+                    state["plex_auth"] = (
+                        "linked" if get_admin_auth_identity(db, "plex") else "skipped"
+                    )
+                except Exception:
+                    state["plex_auth"] = "skipped"
 
             elif step == 4:
                 if action == "add_server":
@@ -218,7 +284,7 @@ def register(app):
                             else f"Connection failed: {result.get('detail') or ''}"
                         )
                         flash(message, "error")
-                        return redirect(url_for("setup_wizard"))
+                        return continue_setup_wizard()
                     state["media_server"] = "configured"
                     validated_ids = _validated_server_ids(state)
                     validated_ids.add(result["server_id"])
@@ -228,11 +294,11 @@ def register(app):
                         "Connection successful. Synchronization started in the background.",
                         "success",
                     )
-                    return redirect(url_for("setup_wizard"))
+                    return continue_setup_wizard()
                 validated_count = count_validated_setup_servers(db, state)
                 if validated_count < 1:
                     flash(COPY.get(session.get("lang"), COPY["en"])["required"], "error")
-                    return redirect(url_for("setup_wizard"))
+                    return continue_setup_wizard()
 
             elif step == 5:
                 if action == "save_communications":
@@ -262,10 +328,10 @@ def register(app):
                     smtp_secret = smtp_oauth_access_token if smtp_auth_method == "oauth2" else smtp_pass
                     if mailing_enabled and (not smtp_host or not mail_from or not smtp_secret):
                         flash("Email requires an SMTP server, sender address and authentication secret.", "error")
-                        return redirect(url_for("setup_wizard"))
+                        return continue_setup_wizard()
                     if discord_enabled and not discord_token:
                         flash("Discord requires a bot token.", "error")
-                        return redirect(url_for("setup_wizard"))
+                        return continue_setup_wizard()
                     send_mode = (request.form.get("notifications_send_mode") or "first").strip().lower()
                     if send_mode not in {"first", "all"}:
                         send_mode = "first"
@@ -273,7 +339,7 @@ def register(app):
                         smtp_port = int(request.form.get("smtp_port") or 587)
                     except ValueError:
                         flash("SMTP port must be a number.", "error")
-                        return redirect(url_for("setup_wizard"))
+                        return continue_setup_wizard()
                     db.execute(
                         """
                         UPDATE settings SET mailing_enabled=?, mail_from=?, smtp_host=?, smtp_port=?,
@@ -300,7 +366,7 @@ def register(app):
                     state["communications"] = "configured" if mailing_enabled or discord_enabled else "skipped"
                     _save(db, step=5, state=state, active=1)
                     flash("Communication settings saved.", "success")
-                    return redirect(url_for("setup_wizard"))
+                    return continue_setup_wizard()
                 state["communications"] = "skipped" if action == "skip" else state.get("communications", "reviewed")
 
             elif step == 6:
@@ -310,7 +376,7 @@ def register(app):
                     body = (request.form.get("body") or "").strip()
                     if not template_id.isdigit() or not subject or not body:
                         flash("Subject and message are required.", "error")
-                        return redirect(url_for("setup_wizard"))
+                        return continue_setup_wizard()
                     db.execute(
                         "UPDATE comm_templates SET enabled=?, subject=?, body=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
                         (1 if request.form.get("enabled") == "1" else 0, subject, body, int(template_id)),
@@ -318,35 +384,71 @@ def register(app):
                     state["messages"] = "configured"
                     _save(db, step=6, state=state, active=1)
                     flash("Message template saved.", "success")
-                    return redirect(url_for("setup_wizard"))
+                    return continue_setup_wizard()
                 state["messages"] = "skipped" if action == "skip" else state.get("messages", "reviewed")
 
             elif step == 7:
-                if action == "add_subscription":
+                if action == "save_subscription":
+                    template_id_raw = (request.form.get("template_id") or "").strip()
+                    template_id = int(template_id_raw) if template_id_raw.isdigit() else None
                     name = (request.form.get("name") or "").strip()
                     is_lifetime = 1 if request.form.get("is_lifetime") == "1" else 0
                     try:
                         duration_days = max(1, int(request.form.get("duration_days") or 30))
                     except ValueError:
                         flash("Duration must be a number.", "error")
-                        return redirect(url_for("setup_wizard"))
+                        return continue_setup_wizard()
                     if not name:
                         flash("Subscription name is required.", "error")
-                        return redirect(url_for("setup_wizard"))
-                    if db.query_one("SELECT id FROM subscription_templates WHERE name=?", (name,)):
+                        return continue_setup_wizard()
+                    if db.query_one("SELECT id FROM subscription_templates WHERE name=? AND (? IS NULL OR id!=?)", (name, template_id, template_id)):
                         flash("A subscription with this name already exists.", "error")
-                        return redirect(url_for("setup_wizard"))
-                    db.execute(
-                        """
-                        INSERT INTO subscription_templates(name,notes,duration_days,subscription_value,is_default,is_enabled,is_lifetime,policies_json)
-                        VALUES(?,?,?,?,0,1,?,'[]')
-                        """,
-                        (name, (request.form.get("notes") or "").strip(), duration_days, 0, is_lifetime),
-                    )
+                        return continue_setup_wizard()
+                    if is_lifetime:
+                        duration_days = 0
+                    try:
+                        subscription_value = max(0, float(request.form.get("subscription_value") or 0))
+                    except ValueError:
+                        subscription_value = 0
+                    policies = _wizard_subscription_policies(request.form)
+                    existing_template = None
+                    if template_id:
+                        existing_template = db.query_one(
+                            "SELECT id,policies_json FROM subscription_templates WHERE id=?",
+                            (template_id,),
+                        )
+                        if not existing_template:
+                            flash("Subscription not found.", "error")
+                            return continue_setup_wizard()
+                        try:
+                            existing_policies = json.loads(existing_template["policies_json"] or "[]")
+                        except (TypeError, ValueError):
+                            existing_policies = []
+                        simple_types = {"max_streams_per_user", "max_ips_per_user", "max_bitrate_kbps", "device_allowlist"}
+                        policies = [
+                            policy for policy in existing_policies
+                            if isinstance(policy, dict) and policy.get("rule_type") not in simple_types
+                        ] + policies
+                    policy_error = validate_subscription_template_policy_limits(policies)
+                    if policy_error:
+                        flash(policy_error, "error")
+                        return continue_setup_wizard()
+                    is_default = 1 if request.form.get("is_default") == "1" else 0
+                    is_enabled = 1 if request.form.get("is_enabled") == "1" else 0
+                    values = (name, (request.form.get("notes") or "").strip(), duration_days,
+                              subscription_value, is_default, is_enabled, is_lifetime, json.dumps(policies))
+                    if template_id:
+                        db.execute("UPDATE subscription_templates SET name=?,notes=?,duration_days=?,subscription_value=?,is_default=?,is_enabled=?,is_lifetime=?,policies_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (*values, template_id))
+                    else:
+                        db.execute("INSERT INTO subscription_templates(name,notes,duration_days,subscription_value,is_default,is_enabled,is_lifetime,policies_json) VALUES(?,?,?,?,?,?,?,?)", values)
+                    if is_default:
+                        saved = db.query_one("SELECT id FROM subscription_templates WHERE name=?", (name,))
+                        if saved:
+                            db.execute("UPDATE subscription_templates SET is_default=CASE WHEN id=? THEN 1 ELSE 0 END", (int(saved["id"]),))
                     state["subscriptions"] = "configured"
                     _save(db, step=7, state=state, active=1)
-                    flash("Subscription created.", "success")
-                    return redirect(url_for("setup_wizard"))
+                    flash("Subscription saved.", "success")
+                    return continue_setup_wizard()
                 state["subscriptions"] = "skipped" if action == "skip" else state.get("subscriptions", "reviewed")
 
             elif step == 8:
@@ -356,7 +458,7 @@ def register(app):
                     min_kills = max(1, int(request.form.get("min_kills") or 3))
                 except ValueError:
                     flash("Invalid numeric value.", "error")
-                    return redirect(url_for("setup_wizard"))
+                    return continue_setup_wizard()
                 db.execute(
                     """
                     UPDATE settings SET reminder_days=?, preavis_days=?, expiry_mode=?,
@@ -378,10 +480,10 @@ def register(app):
                     user_ids = [int(value) for value in request.form.getlist("user_ids") if value.isdigit()]
                     if not template_id.isdigit() or not user_ids:
                         flash("Select a subscription and at least one user.", "error")
-                        return redirect(url_for("setup_wizard"))
+                        return continue_setup_wizard()
                     if not db.query_one("SELECT id FROM subscription_templates WHERE id=? AND is_enabled=1", (int(template_id),)):
                         flash("Selected subscription is not available.", "error")
-                        return redirect(url_for("setup_wizard"))
+                        return continue_setup_wizard()
                     from blueprints.users import _apply_subscription_template_snapshot
 
                     for user_id in user_ids:
@@ -389,7 +491,7 @@ def register(app):
                     state["assignment"] = "configured"
                     _save(db, step=9, state=state, active=1)
                     flash(f"Subscription assigned to {len(user_ids)} user(s).", "success")
-                    return redirect(url_for("setup_wizard"))
+                    return continue_setup_wizard()
                 state["assignment"] = "skipped" if action == "skip" else state.get("assignment", "reviewed")
 
             elif step == 10:
@@ -399,11 +501,36 @@ def register(app):
             settings = _settings(db)
             next_step = _next_step(db, step, state, settings)
             _save(db, step=next_step, state=state, active=1)
-            return redirect(url_for("setup_wizard"))
+            return continue_setup_wizard()
 
         settings = _settings(db)
         state = _state(settings)
         page_data = load_setup_wizard_page_data(db, settings, state)
+        try:
+            from core.admin_auth_identities import get_admin_auth_identity
+            from routes.plex_auth import get_or_recover_plex_discovery_token
+            page_data["plex_auth_identity"] = get_admin_auth_identity(db, "plex")
+            page_data["plex_suggestions"] = []
+            identity = page_data["plex_auth_identity"]
+            if step == 4 and identity and int(identity.get("is_active") or 0) == 1:
+                from core.plex_server_discovery import PlexDiscoveryError, automatic_plex_suggestions
+                account_token = get_or_recover_plex_discovery_token(db, identity)
+                if account_token:
+                    try:
+                        suggestions, discovery_context = automatic_plex_suggestions(
+                            db,
+                            provider_subject=identity["provider_subject"],
+                            account_token=account_token,
+                            context=session.get("vodum_plex_discovery"),
+                            return_to="wizard",
+                        )
+                        page_data["plex_suggestions"] = suggestions
+                        session["vodum_plex_discovery"] = discovery_context
+                    except (PlexDiscoveryError, ValueError):
+                        pass
+        except Exception:
+            page_data["plex_auth_identity"] = None
+            page_data["plex_suggestions"] = []
         communications_available = _communications_available(settings, state)
         lang = session.get("lang") or settings.get("default_language") or "en"
         return render_template(

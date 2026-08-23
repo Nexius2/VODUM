@@ -1,3 +1,6 @@
+import json
+
+
 def _validated_server_ids(state: dict) -> set[int]:
     result = set()
     for value in state.get("validated_server_ids") or []:
@@ -42,6 +45,13 @@ def load_setup_wizard_page_data(db, settings: dict, state: dict) -> dict:
     )
 
     communication_settings = dict(settings)
+    plex_admin_email = str(settings.get("admin_email") or "").strip()
+    if state.get("administrator") == "plex" and "@" in plex_admin_email:
+        if not str(communication_settings.get("smtp_user") or "").strip():
+            communication_settings["smtp_user"] = plex_admin_email
+        current_sender = str(communication_settings.get("mail_from") or "").strip()
+        if not current_sender or current_sender.casefold() == "noreply@example.com":
+            communication_settings["mail_from"] = plex_admin_email
     for secret_name in (
         "smtp_pass",
         "smtp_oauth_access_token",
@@ -71,12 +81,21 @@ def load_setup_wizard_page_data(db, settings: dict, state: dict) -> dict:
         dict(row)
         for row in (
             db.query(
-                "SELECT id,name,duration_days,is_lifetime,is_enabled "
+                "SELECT id,name,notes,duration_days,subscription_value,is_default,is_enabled,is_lifetime,policies_json "
                 "FROM subscription_templates ORDER BY is_default DESC,name"
             )
             or []
         )
     ]
+    for template in subscription_templates:
+        try:
+            policies = json.loads(template.get("policies_json") or "[]")
+        except (TypeError, ValueError):
+            policies = []
+        template["simple_policies"] = {
+            policy["rule_type"]: policy.get("rule") or {}
+            for policy in policies if isinstance(policy, dict) and policy.get("rule_type")
+        } if isinstance(policies, list) else {}
     wizard_users = [
         dict(row)
         for row in (

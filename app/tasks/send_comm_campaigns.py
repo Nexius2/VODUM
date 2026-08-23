@@ -9,6 +9,7 @@ from communications_engine import (
     available_channels,
 )
 from core.communications.campaign_recovery import recover_campaigns
+from core.communication_channels import explicit_delivery_channels
 
 log = get_logger("send_comm_campaigns")
 
@@ -85,6 +86,7 @@ def _send_test_campaign(db, settings: dict, campaign: dict) -> bool:
         subject=campaign.get("subject") or "",
         body=campaign.get("body") or "",
         attachments=attachments,
+        forced_channels=["email"],
     )
 
     for att in attempts:
@@ -102,18 +104,7 @@ def _send_test_campaign(db, settings: dict, campaign: dict) -> bool:
             },
         )
 
-    mode = _send_mode(settings)
-    required_channels = _required_channels(db, settings, fake_user)
-
-    if mode == "all":
-        sent_channels = {
-            (att.channel or "").strip()
-            for att in attempts
-            if att.status == "sent"
-        }
-        ok = all(ch in sent_channels for ch in required_channels) if required_channels else True
-    else:
-        ok = any(att.status == "sent" for att in attempts)
+    ok = any(att.status == "sent" and att.channel == "email" for att in attempts)
 
     db.execute(
         """
@@ -193,7 +184,7 @@ def run(task_id: int, db):
 
         test_campaign_rows = db.query(
             """
-            SELECT id, name, subject, body, server_id, status, is_test
+            SELECT id, name, subject, body, server_id, status, is_test, delivery_channels
             FROM comm_campaigns
             WHERE is_test = 1
               AND status = 'pending'
@@ -220,6 +211,7 @@ def run(task_id: int, db):
               c.subject,
               c.body,
               c.server_id,
+              c.delivery_channels,
               c.status AS campaign_status
             FROM comm_campaign_targets ct
             JOIN comm_campaigns c ON c.id = ct.campaign_id
@@ -345,10 +337,11 @@ def run(task_id: int, db):
 
             attachments = fetch_campaign_attachments(db, campaign_id)
             already_sent_channels = _split_channels(row.get("channels_sent"))
-            mode = _send_mode(settings)
-            required_channels = _required_channels(db, settings, user)
+            selected_channels = explicit_delivery_channels(row.get("delivery_channels"))
+            mode = "all" if selected_channels is not None else _send_mode(settings)
+            required_channels = list(selected_channels or _required_channels(db, settings, user))
 
-            if mode == "all":
+            if selected_channels is not None or mode == "all":
                 missing_channels = [ch for ch in required_channels if ch not in already_sent_channels]
                 if not missing_channels and required_channels:
                     db.execute(
@@ -426,6 +419,9 @@ def run(task_id: int, db):
                 next_attempt = int(row.get("attempt_count") or 0) + 1
                 max_attempts = int(row.get("max_attempts") or 10)
                 err = "; ".join([a.error for a in attempts if a.error])[:1000] if attempts else "No channel available"
+                has_retryable_failure = any(a.status == "failed" and a.retryable for a in attempts)
+                if not has_retryable_failure:
+                    next_attempt = max_attempts
                 if next_attempt >= max_attempts:
                     db.execute(
                         """

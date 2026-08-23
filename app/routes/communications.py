@@ -23,6 +23,7 @@ from core.communication_template_admin import (
     upsert_template_translation as _upsert_template_translation,
 )
 from core.communication_template_rules import normalize_template_rules
+from core.communication_channels import normalize_delivery_channels
 from core.communication_attachments import store_communication_attachments
 from core.communication_configuration_form import parse_communication_configuration
 from core.communication_page_data import (
@@ -68,6 +69,7 @@ COMM_CAMPAIGN_EDITOR_COLUMNS = """
     trigger_provider,
     subscription_scope,
     subscription_template_id,
+    delivery_channels,
     status,
     is_test,
     created_at,
@@ -83,6 +85,7 @@ COMM_CAMPAIGN_LIST_COLUMNS = """
                 c.trigger_provider,
                 c.subscription_scope,
                 c.subscription_template_id,
+                c.delivery_channels,
                 c.is_test,
                 c.status,
                 c.created_at,
@@ -98,6 +101,7 @@ COMM_TEMPLATE_EDITOR_COLUMNS = """
     expiration_change_direction,
     subscription_scope,
     subscription_template_id,
+    delivery_channels,
     days_before,
     days_after,
     subject,
@@ -115,6 +119,7 @@ COMM_TEMPLATE_LIST_COLUMNS = """
               ct.trigger_provider,
               ct.subscription_scope,
               ct.subscription_template_id,
+              ct.delivery_channels,
               ct.days_before,
               ct.days_after,
               COALESCE(ctl.subject, ct.subject) AS subject
@@ -168,6 +173,7 @@ def register(app):
             raw_server_id = (request.form.get("server_id") or "").strip()
             server_id = _as_int(raw_server_id, None) if raw_server_id else None
             is_test = 1 if request.form.get("is_test") == "1" else 0
+            delivery_channels = normalize_delivery_channels(request.form.get("delivery_channels"))
             trigger_provider, subscription_scope, subscription_template_id = normalize_campaign_targets(db, request.form)
 
             if not name or not subject or not body:
@@ -189,12 +195,13 @@ def register(app):
                     trigger_provider,
                     subscription_scope,
                     subscription_template_id,
+                    delivery_channels,
                     status,
                     is_test,
                     created_at,
                     updated_at
                 )
-                VALUES(?, ?, ?, ?, ?, ?, ?, 'draft', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """,
                 (
                     name,
@@ -204,6 +211,7 @@ def register(app):
                     trigger_provider,
                     subscription_scope,
                     subscription_template_id,
+                    delivery_channels,
                     is_test,
                 ),
             )
@@ -223,6 +231,7 @@ def register(app):
             raw_server_id = (request.form.get("server_id") or "").strip()
             server_id = _as_int(raw_server_id, None) if raw_server_id else None
             is_test = 1 if request.form.get("is_test") == "1" else 0
+            delivery_channels = normalize_delivery_channels(request.form.get("delivery_channels"))
             trigger_provider, subscription_scope, subscription_template_id = normalize_campaign_targets(db, request.form)
 
             if not cid:
@@ -248,6 +257,7 @@ def register(app):
                     trigger_provider = ?,
                     subscription_scope = ?,
                     subscription_template_id = ?,
+                    delivery_channels = ?,
                     is_test = ?,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
@@ -260,6 +270,7 @@ def register(app):
                     trigger_provider,
                     subscription_scope,
                     subscription_template_id,
+                    delivery_channels,
                     is_test,
                     cid,
                 ),
@@ -404,6 +415,7 @@ def register(app):
             subject = (request.form.get("subject") or "").strip()
             body = (request.form.get("body") or "").strip()
             enabled = 1 if request.form.get("enabled") == "1" else 0
+            delivery_channels = normalize_delivery_channels(request.form.get("delivery_channels"))
 
             key = _sanitize_key(request.form.get("key") or "")
             if not key:
@@ -458,16 +470,18 @@ def register(app):
                     key, name, enabled,
                     trigger_event, trigger_provider, expiration_change_direction,
                     subscription_scope, subscription_template_id,
+                    delivery_channels,
                     days_before, days_after,
                     subject, body,
                     created_at, updated_at
                 )
-                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """,
                 (
                     key, name, enabled,
                     trigger_event, trigger_provider, expiration_change_direction,
                     subscription_scope, subscription_template_id,
+                    delivery_channels,
                     days_before, days_after,
                     subject, body,
                 ),
@@ -522,6 +536,7 @@ def register(app):
             subject = (request.form.get("subject") or "").strip()
             body = (request.form.get("body") or "").strip()
             enabled = 1 if request.form.get("enabled") == "1" else 0
+            delivery_channels = normalize_delivery_channels(request.form.get("delivery_channels"))
 
             if stream_blocked_required:
                 enabled = 1
@@ -590,6 +605,7 @@ def register(app):
                 SET key=?, name=?, enabled=?,
                     trigger_event=?, trigger_provider=?, expiration_change_direction=?,
                     subscription_scope=?, subscription_template_id=?,
+                    delivery_channels=?,
                     days_before=?, days_after=?,
                     subject=?, body=?,
                     updated_at=CURRENT_TIMESTAMP
@@ -599,6 +615,7 @@ def register(app):
                     key, name, enabled,
                     trigger_event, trigger_provider, expiration_change_direction,
                     subscription_scope, subscription_template_id,
+                    delivery_channels,
                     days_before, days_after,
                     legacy_subject, legacy_body,
                     tid,
