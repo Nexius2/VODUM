@@ -1,4 +1,23 @@
 (function communicationsCampaignsPage() {
+  function bindDiscordCounter() {
+    const body = document.getElementById("campaign_body");
+    const counter = document.getElementById("campaign_discord_counter");
+    if (!body || !counter) return;
+
+    const refresh = function () {
+      const count = body.value.length;
+      const parts = Math.max(1, Math.ceil(count / 1900));
+      counter.textContent = (counter.dataset.label || "{count} · Discord: {parts}")
+        .replace("{count}", String(count))
+        .replace("{parts}", String(parts));
+      counter.classList.toggle("text-amber-300", parts > 1);
+      counter.classList.toggle("text-slate-500", parts <= 1);
+    };
+
+    body.addEventListener("input", refresh);
+    refresh();
+  }
+
   function getDeleteModal() {
     return document.getElementById("deleteModal");
   }
@@ -36,6 +55,7 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
+    bindDiscordCounter();
     const testSwitch = document.getElementById("campaign_test_switch");
     const hiddenTest = document.getElementById("is_test");
     if (testSwitch && hiddenTest) {

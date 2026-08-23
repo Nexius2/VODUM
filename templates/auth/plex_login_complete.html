@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block header_title %}{{ t("plex_auth_login_complete_title") }}{% endblock %}
+{% block header_subtitle %}{{ t("plex_auth_login_complete_help") }}{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-md rounded-xl border border-slate-700 bg-slate-900 p-6">
+  <form method="post" action="{{ url_for('plex_auth_login_complete') }}">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+    <button autofocus class="w-full rounded bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-sm text-white">
+      {{ t("plex_auth_login_complete_action") }}
+    </button>
+  </form>
+</div>
+{% endblock %}

@@ -21,6 +21,7 @@ from core.auth_local_trust import (
     is_valid_local_totp_trust,
     set_local_totp_trust_cookie,
 )
+from core.setup_wizard_state import should_resume_setup_wizard
 
 auth_logger = get_logger("auth")
 
@@ -389,6 +390,16 @@ def register(app):
         )
         s = dict(s) if s else {"admin_email": "", "admin_password_hash": None}
 
+        try:
+            plex_identity = db.query_one(
+                """
+                SELECT id FROM admin_auth_identities
+                WHERE admin_account_id = 1 AND provider = 'plex' AND is_active = 1
+                """
+            )
+        except Exception:
+            plex_identity = None
+
         if not (s.get("admin_password_hash") or "").strip():
             return redirect(url_for("setup_admin"))
 
@@ -418,6 +429,7 @@ def register(app):
             totp_required=totp_enabled and not local_totp_trusted,
             next_url=safe_redirect_target(request.args.get("next"), ""),
             login_quote_visual=_build_login_quote_visual_safe(),
+            plex_login_available=plex_identity is not None,
         )
 
     @app.get("/login/artwork/<kind>")
@@ -538,9 +550,9 @@ def register(app):
         session["vodum_admin_email"] = email
         session.permanent = True
 
-        if int(s.get("wizard_active") or 0) == 1:
+        if should_resume_setup_wizard(db, s):
             auth_logger.info("AUTH login ok; resuming installation wizard for email=%s", email)
-            response = redirect(url_for("setup_wizard"))
+            response = redirect(url_for("setup_wizard", resume="wizard"))
         else:
             next_url = safe_redirect_target(
                 request.form.get("next") or request.args.get("next"),
@@ -582,6 +594,7 @@ def register(app):
             "/login",
             "/logout",
             "/setup-admin",
+            "/auth/plex/",
         )
 
         if request.path.startswith(allowed_prefixes):
@@ -597,13 +610,13 @@ def register(app):
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='servers'"
             )
             if not exists:
-                return redirect(url_for("setup_wizard"))
+                return redirect(url_for("setup_wizard", resume="wizard"))
         except Exception:
             return
 
         row = db.query_one("SELECT COUNT(*) AS cnt FROM servers")
         if row and int(row["cnt"] or 0) == 0:
-            return redirect(url_for("setup_wizard"))
+            return redirect(url_for("setup_wizard", resume="wizard"))
 
     @app.before_request
     def maintenance_guard():
@@ -614,6 +627,7 @@ def register(app):
             "/login",
             "/logout",
             "/setup-admin",
+            "/auth/plex/login",
         )
 
         if request.path.startswith(allowed_prefixes) or request.path in ("/favicon.ico",):

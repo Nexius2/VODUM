@@ -224,10 +224,21 @@ def get_translator(settings: Optional[dict] = None):
         )
         translations = {}
 
+    fallback_translations = {}
+    if lang != "en":
+        try:
+            fallback_translations = load_language_dict("en")
+        except Exception as e:
+            logger.error(
+                "[i18n] Erreur chargement du dictionnaire anglais de secours: %s",
+                e,
+                exc_info=True,
+            )
+
     def _translate(key: str):
         if not key:
             return ""
-        return translations.get(key, key)
+        return translations.get(key, fallback_translations.get(key, key))
 
     return _translate
 

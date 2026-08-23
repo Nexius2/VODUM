@@ -38,6 +38,28 @@ def load_setup_wizard_settings(db) -> dict:
     return dict(row or {})
 
 
+def should_resume_setup_wizard(db, settings: dict) -> bool:
+    """Decide whether an authenticated admin still needs initial setup."""
+    if int(settings.get("wizard_active") or 0) != 1:
+        return False
+    if int(settings.get("wizard_completed") or 0) == 1:
+        db.execute("UPDATE settings SET wizard_active = 0 WHERE id = 1")
+        settings["wizard_active"] = 0
+        return False
+
+    row = db.query_one("SELECT COUNT(*) AS cnt FROM servers")
+    if row and int(row["cnt"] or 0) > 0:
+        # A server is durable evidence of an already configured instance. Repair
+        # stale flags so every later authentication path reaches the dashboard.
+        db.execute(
+            "UPDATE settings SET wizard_active = 0, wizard_completed = 1 WHERE id = 1"
+        )
+        settings["wizard_active"] = 0
+        settings["wizard_completed"] = 1
+        return False
+    return True
+
+
 def decode_setup_wizard_state(settings: dict) -> dict:
     try:
         value = json.loads(settings.get("wizard_state_json") or "{}")

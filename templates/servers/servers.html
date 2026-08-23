@@ -33,6 +33,12 @@
           {{ t("servers_connect_help") }}
         </p>
 
+        {% if plex_suggestions %}
+          {% set plex_suggestions_return_to = "servers" %}
+          {% include "servers/_plex_suggestions.html" %}
+          <div class="mb-5 flex items-center gap-3 text-xs text-slate-500"><span class="h-px flex-1 bg-slate-800"></span>{{ t("plex_discovery_or_manual") }}<span class="h-px flex-1 bg-slate-800"></span></div>
+        {% endif %}
+
         <form method="post" action="{{ url_for('server_create') }}"
               class="grid grid-cols-1 gap-3 text-sm">
 
@@ -98,6 +104,11 @@
 
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 min-h-[320px] h-full">
     <h2 class="text-sm font-semibold mb-3">{{ t("add_server") }}</h2>
+
+    {% if plex_suggestions %}
+      {% set plex_suggestions_return_to = "servers" %}
+      {% include "servers/_plex_suggestions.html" %}
+    {% endif %}
 
     <form method="post" action="{{ url_for('server_create') }}"
           class="grid grid-cols-1 gap-3 text-sm">

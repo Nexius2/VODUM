@@ -1,0 +1,34 @@
+{% if plex_suggestions %}
+  <section class="mb-5 rounded-xl border border-amber-800/60 bg-amber-950/20 p-4">
+    <h3 class="text-sm font-semibold text-amber-200">{{ t("plex_discovery_available_title") }}</h3>
+    <p class="mt-1 text-xs text-slate-400">{{ t("plex_discovery_available_help") }}</p>
+    <form method="post" action="{{ url_for('plex_discovery_add') }}" class="mt-4 space-y-3">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+      {% if plex_suggestions_return_to == "wizard" %}<input type="hidden" name="return_to" value="wizard">{% endif %}
+      {% for candidate in plex_suggestions %}
+        <article class="rounded-lg border border-slate-700 bg-slate-950/70 p-3">
+          <div class="flex items-start gap-3">
+            <input id="suggestion-{{ candidate.id }}" type="checkbox" name="candidate_id" value="{{ candidate.id }}" {% if not candidate.selectable %}disabled{% endif %} class="mt-1 h-4 w-4 rounded border-slate-600 bg-slate-800">
+            <div class="min-w-0 flex-1">
+              <label for="suggestion-{{ candidate.id }}" class="text-sm font-medium text-white {% if candidate.selectable %}cursor-pointer{% endif %}">{{ candidate.name }}</label>
+              <div class="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-400">
+                <span>{{ t("plex_discovery_owned") if candidate.is_owned else t("plex_discovery_shared") }}</span>
+                <span>·</span>
+                <span>{{ t("plex_discovery_online") if candidate.presence else t("plex_discovery_offline") }}</span>
+              </div>
+              {% if candidate.connections %}
+                <select name="preferred_url_{{ candidate.id }}" {% if not candidate.selectable %}disabled{% endif %} class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 font-mono text-[11px] text-slate-200">
+                  {% for connection in candidate.connections %}
+                    <option value="{{ connection.uri }}">{{ "relay" if connection.relay else ("local" if connection.local else "public") }} · {{ connection.uri }}</option>
+                  {% endfor %}
+                </select>
+              {% endif %}
+              {% if not candidate.selectable %}<p class="mt-2 text-xs text-amber-300">{{ t("plex_discovery_insufficient") }}</p>{% endif %}
+            </div>
+          </div>
+        </article>
+      {% endfor %}
+      <button class="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-amber-400">{{ t("plex_discovery_add_selected") }}</button>
+    </form>
+  </section>
+{% endif %}

@@ -235,12 +235,27 @@ def register(app):
     def _get_auth_settings():
         db = get_db()
         row = db.query_one(
-            "SELECT admin_email, admin_password_hash, auth_enabled FROM settings WHERE id = 1"
+            """
+            SELECT s.admin_email, s.admin_password_hash, s.auth_enabled,
+                   EXISTS(
+                       SELECT 1 FROM admin_auth_identities i
+                       WHERE i.admin_account_id=1
+                         AND i.provider='plex'
+                         AND i.is_active=1
+                   ) AS plex_auth_configured
+            FROM settings s WHERE s.id = 1
+            """
         )
-        return dict(row) if row else {"admin_email": "", "admin_password_hash": None, "auth_enabled": 1}
+        return dict(row) if row else {
+            "admin_email": "", "admin_password_hash": None,
+            "auth_enabled": 1, "plex_auth_configured": 0,
+        }
 
     def _is_auth_configured(s: dict) -> bool:
-        return bool((s.get("admin_password_hash") or "").strip())
+        return bool(
+            (s.get("admin_password_hash") or "").strip()
+            or int(s.get("plex_auth_configured") or 0) == 1
+        )
 
     def _is_logged_in() -> bool:
         return session.get("vodum_logged_in") is True
@@ -305,7 +320,22 @@ def register(app):
 
 
         # pages auth accessibles
-        auth_pages = ("/login", "/login/submit", "/logout", "/setup-admin", "/setup-admin/save")
+        auth_pages = (
+            "/login",
+            "/login/submit",
+            "/logout",
+            "/setup-admin",
+            "/setup-admin/save",
+            "/auth/plex/login",
+            "/auth/plex/login/callback",
+            "/auth/plex/login/totp",
+            # A Plex-only fresh installation has no local password/session yet.
+            # These endpoints perform their own one-shot state, expiry and
+            # wizard-active checks and therefore must reach the Plex route.
+            "/auth/plex/wizard-link",
+            "/auth/plex/link/callback",
+            "/auth/plex/link/confirm",
+        )
         if request.path.startswith("/setup"):
             if not configured or _is_logged_in():
                 return

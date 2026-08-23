@@ -1,0 +1,80 @@
+<div id="plex-auth-modal" data-settings-modal-backdrop class="hidden fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-0 sm:p-4" aria-hidden="true">
+  <div class="vodum-modal-viewport flex h-[100dvh] w-full max-w-2xl flex-col overflow-hidden rounded-none border border-slate-700 bg-slate-900 sm:h-auto sm:rounded-xl">
+    <div class="flex shrink-0 items-start justify-between border-b border-slate-800 px-4 py-4 sm:px-6 sm:py-5">
+      <div>
+        <h3 class="text-lg font-semibold text-white">{{ t("plex_auth_modal_title") }}</h3>
+        <p class="mt-1 text-xs text-slate-400">{{ t("plex_auth_modal_help") }}</p>
+      </div>
+      <button type="button" data-vodum-modal-close data-settings-modal-close="plex-auth-modal" class="text-slate-400 hover:text-white text-xs leading-none">{{ t("common.close") }}</button>
+    </div>
+
+    <div class="vodum-modal-scroll flex-1 px-4 py-4 sm:px-6 sm:py-5">
+      <form id="plex-auth-link-form" method="post" action="{{ url_for('plex_auth_link_start') }}" class="rounded-lg border border-slate-700 bg-slate-950 p-4">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="text-sm font-medium text-white">{{ t("plex_auth_link_title") }}</div>
+          <span class="rounded-full border px-2.5 py-1 text-xs {% if plex_auth_identity %}border-emerald-700 bg-emerald-950/60 text-emerald-300{% else %}border-slate-700 bg-slate-900 text-slate-400{% endif %}">
+            {{ t("plex_auth_status_linked") if plex_auth_identity else t("plex_auth_status_not_linked") }}
+          </span>
+        </div>
+        {% if plex_auth_identity %}
+          <p class="mt-3 text-xs text-slate-400">{{ t("plex_auth_linked_account") }}</p>
+          <p class="mt-1 text-sm font-medium text-emerald-300">{{ plex_auth_identity.display_name or plex_auth_identity.display_email or plex_auth_identity.provider_subject }}</p>
+          {% if plex_auth_identity.display_email %}<p class="text-xs text-slate-500">{{ plex_auth_identity.display_email }}</p>{% endif %}
+        {% else %}
+          <p class="mt-2 text-sm text-slate-300">{{ t("plex_auth_link_benefit") }}</p>
+          <p class="mt-2 rounded-md border border-sky-900/70 bg-sky-950/30 px-3 py-2 text-xs leading-relaxed text-sky-200">{{ t("plex_auth_link_scope_notice") }}</p>
+        {% endif %}
+
+        <div class="mt-4 border-t border-slate-800 pt-4">
+          <div class="flex items-center gap-2 text-sm font-medium text-slate-200">
+            <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs text-white">1</span>
+            {{ t("plex_auth_step_verify") }}
+          </div>
+          <p class="ml-0 mt-2 text-xs leading-relaxed text-slate-400 sm:ml-8">{{ t("plex_auth_security_reason") }}</p>
+          <p class="ml-0 mt-2 rounded-md border border-amber-900/70 bg-amber-950/30 px-3 py-2 text-xs font-medium leading-relaxed text-amber-200 sm:ml-8">{{ t("plex_auth_credentials_private") }}</p>
+          <div class="mt-3 grid grid-cols-1 gap-3 sm:ml-8 sm:grid-cols-2">
+            <label class="block">
+              <span class="mb-1 block text-xs text-slate-400">{{ t("plex_auth_local_password_label") }}</span>
+              <input type="password" name="current_password" required autocomplete="current-password" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+            </label>
+            {% if settings.admin_totp_enabled %}
+              <label class="block">
+                <span class="mb-1 block text-xs text-slate-400">{{ t("plex_auth_local_totp_label") }}</span>
+                <input type="text" name="totp_code" required inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+              </label>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="mt-4 border-t border-slate-800 pt-4">
+          <div class="flex items-center gap-2 text-sm font-medium text-slate-200">
+            <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs text-white">2</span>
+            {{ t("plex_auth_step_plex") }}
+          </div>
+          <p class="ml-0 mt-2 text-xs leading-relaxed text-slate-500 sm:ml-8">{{ t("plex_auth_redirect_help") }}</p>
+          <button name="action" value="{{ 'replace' if plex_auth_identity else 'link' }}" class="mt-3 flex w-full items-center justify-center rounded bg-indigo-700 px-4 py-3 text-sm font-medium text-white hover:bg-indigo-600 sm:ml-8 sm:w-auto">
+            {{ t("plex_auth_replace_action") if plex_auth_identity else t("plex_auth_verify_open_action") }}
+            <span aria-hidden="true" class="ml-2">→</span>
+          </button>
+        </div>
+      </form>
+
+      {% if plex_auth_identity %}
+        <form method="post" action="{{ url_for('plex_auth_unlink') }}" class="mt-4 rounded-lg border border-red-900/60 bg-red-950/20 p-4">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+          <p class="text-xs text-slate-400">{{ t("plex_auth_unlink_help") }}</p>
+          <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <input type="password" name="current_password" required autocomplete="current-password" placeholder="{{ t('current_password') }}" class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+            {% if settings.admin_totp_enabled %}<input type="text" name="totp_code" required inputmode="numeric" autocomplete="one-time-code" placeholder="{{ t('totp_code') }}" class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">{% endif %}
+          </div>
+          <button class="mt-3 px-3 py-2 rounded bg-red-800 hover:bg-red-700 text-sm text-white">{{ t("plex_auth_unlink_action") }}</button>
+        </form>
+      {% endif %}
+    </div>
+
+    <div class="flex shrink-0 justify-end border-t border-slate-700 bg-slate-900 px-4 py-3 sm:px-6 sm:py-4">
+      <button type="button" data-vodum-modal-close data-settings-modal-close="plex-auth-modal" class="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 text-sm">{{ t("common.close") }}</button>
+    </div>
+  </div>
+</div>

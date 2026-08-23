@@ -20,6 +20,7 @@ def ensure_communications_schema(conn, cursor, *, table_exists, ensure_column) -
             days_after INTEGER DEFAULT NULL,
             subscription_scope TEXT NOT NULL DEFAULT 'none' CHECK(subscription_scope IN ('none','all','specific')),
             subscription_template_id INTEGER DEFAULT NULL,
+            delivery_channels TEXT NOT NULL DEFAULT 'inherit' CHECK(delivery_channels IN ('inherit','email','discord','all')),
             FOREIGN KEY(subscription_template_id) REFERENCES subscription_templates(id) ON DELETE SET NULL
         );
         """)
@@ -51,6 +52,7 @@ def ensure_communications_schema(conn, cursor, *, table_exists, ensure_column) -
         "TEXT NOT NULL DEFAULT 'none' CHECK(subscription_scope IN ('none','all','specific'))",
     )
     ensure_column(cursor, "comm_templates", "subscription_template_id", "INTEGER DEFAULT NULL")
+    ensure_column(cursor, "comm_templates", "delivery_channels", "TEXT NOT NULL DEFAULT 'inherit'")
 
     if not table_exists(cursor, "comm_template_translations"):
         print("Creating table: comm_template_translations")
@@ -121,6 +123,7 @@ def ensure_communications_schema(conn, cursor, *, table_exists, ensure_column) -
             days_after INTEGER DEFAULT NULL,
             subscription_scope TEXT NOT NULL DEFAULT 'none' CHECK(subscription_scope IN ('none','all','specific')),
             subscription_template_id INTEGER DEFAULT NULL,
+            delivery_channels TEXT NOT NULL DEFAULT 'inherit' CHECK(delivery_channels IN ('inherit','email','discord','all')),
             FOREIGN KEY(subscription_template_id) REFERENCES subscription_templates(id) ON DELETE SET NULL
         );
         """)
@@ -130,7 +133,7 @@ def ensure_communications_schema(conn, cursor, *, table_exists, ensure_column) -
             id, key, name, enabled, days_before, subject, body,
             created_at, updated_at, trigger_event, trigger_provider,
             expiration_change_direction, days_after,
-            subscription_scope, subscription_template_id
+            subscription_scope, subscription_template_id, delivery_channels
         )
         SELECT
             id, key, name, enabled, days_before, subject, body,
@@ -138,7 +141,8 @@ def ensure_communications_schema(conn, cursor, *, table_exists, ensure_column) -
             'all',
             days_after,
             COALESCE(subscription_scope, 'none'),
-            subscription_template_id
+            subscription_template_id,
+            COALESCE(delivery_channels, 'inherit')
         FROM comm_templates_old
         """)
 
@@ -340,6 +344,7 @@ def ensure_communications_schema(conn, cursor, *, table_exists, ensure_column) -
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             sent_at TIMESTAMP,
+            delivery_channels TEXT NOT NULL DEFAULT 'inherit' CHECK(delivery_channels IN ('inherit','email','discord','all')),
             FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE SET NULL
         );
         """)
@@ -348,6 +353,7 @@ def ensure_communications_schema(conn, cursor, *, table_exists, ensure_column) -
     ensure_column(cursor, "comm_campaigns", "trigger_provider", "TEXT DEFAULT 'all'")
     ensure_column(cursor, "comm_campaigns", "subscription_scope", "TEXT DEFAULT 'none'")
     ensure_column(cursor, "comm_campaigns", "subscription_template_id", "INTEGER DEFAULT NULL")
+    ensure_column(cursor, "comm_campaigns", "delivery_channels", "TEXT NOT NULL DEFAULT 'inherit'")
 
     cursor.execute("""
         UPDATE comm_campaigns
@@ -666,9 +672,15 @@ def ensure_communications_schema(conn, cursor, *, table_exists, ensure_column) -
                         days_before = relance_days
 
                 name = k.capitalize()
+                if e_body and d_body:
+                    delivery_channels = "all"
+                elif d_body:
+                    delivery_channels = "discord"
+                else:
+                    delivery_channels = "email"
                 cursor.execute(
-                    "INSERT INTO comm_templates(key, name, enabled, days_before, subject, body) VALUES(?, ?, 1, ?, ?, ?)",
-                    (k, name, days_before, subject, body),
+                    "INSERT INTO comm_templates(key, name, enabled, days_before, subject, body, delivery_channels) VALUES(?, ?, 1, ?, ?, ?, ?)",
+                    (k, name, days_before, subject, body, delivery_channels),
                 )
 
             conn.commit()
@@ -687,7 +699,7 @@ def ensure_communications_schema(conn, cursor, *, table_exists, ensure_column) -
                     name = (subject or f"Mail campaign #{mid}")[:120]
                     sent_at = finished_at
                     cursor.execute(
-                        "INSERT INTO comm_campaigns(name, subject, body, server_id, status, is_test, created_at, updated_at, sent_at) VALUES(?,?,?,?,?,?,COALESCE(?,CURRENT_TIMESTAMP),COALESCE(?,CURRENT_TIMESTAMP),?)",
+                        "INSERT INTO comm_campaigns(name, subject, body, server_id, status, is_test, created_at, updated_at, sent_at, delivery_channels) VALUES(?,?,?,?,?,?,COALESCE(?,CURRENT_TIMESTAMP),COALESCE(?,CURRENT_TIMESTAMP),?, 'email')",
                         (name, subject or "", body or "", server_id, status or "pending", int(is_test or 0), created_at, created_at, sent_at),
                     )
 
@@ -703,7 +715,7 @@ def ensure_communications_schema(conn, cursor, *, table_exists, ensure_column) -
                     elif st == "failed":
                         st = "error"
                     cursor.execute(
-                        "INSERT INTO comm_campaigns(name, subject, body, server_id, status, is_test, created_at, updated_at, sent_at) VALUES(?,?,?,?,?,?,COALESCE(?,CURRENT_TIMESTAMP),COALESCE(?,CURRENT_TIMESTAMP),?)",
+                        "INSERT INTO comm_campaigns(name, subject, body, server_id, status, is_test, created_at, updated_at, sent_at, delivery_channels) VALUES(?,?,?,?,?,?,COALESCE(?,CURRENT_TIMESTAMP),COALESCE(?,CURRENT_TIMESTAMP),?, 'discord')",
                         (name, subject, body or "", server_id, st or "pending", int(is_test or 0), created_at, created_at, sent_at),
                     )
 

@@ -38,6 +38,7 @@ from core.expiration_template_selection import (
     pick_expiration_template as _pick_expiration_template,
     safe_int as _safe_int,
 )
+from core.communication_channels import explicit_delivery_channels
 #from email_sender import send_email
 from mailing_utils import build_user_context, render_mail
 
@@ -191,7 +192,8 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
           t.key AS template_key,
           t.subject,
           t.body,
-          t.trigger_event
+          t.trigger_event,
+          t.delivery_channels
         FROM comm_scheduled q
         JOIN comm_templates t ON t.id = q.template_id
         WHERE t.enabled = 1
@@ -333,10 +335,11 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
         )
         attachments = fetch_template_attachments(db, tpl_id)
 
-        forced_channels = None
-        required_channels = _required_channels_for_scheduled(db, settings, user, trigger_event)
+        selected_channels = explicit_delivery_channels(q.get("delivery_channels"))
+        forced_channels = selected_channels
+        required_channels = list(selected_channels or _required_channels_for_scheduled(db, settings, user, trigger_event))
 
-        if required_channels:
+        if forced_channels is not None or required_channels:
             missing = [ch for ch in required_channels if ch not in already_sent_channels]
             forced_channels = missing
             if not forced_channels:
@@ -425,7 +428,7 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
                             (uid, template_key, exp_iso),
                         )
 
-        mode = _send_mode(settings)
+        mode = "all" if selected_channels is not None else _send_mode(settings)
         skipped_only = bool(attempts) and all(a.status == "skipped" for a in attempts)
 
         if skipped_only:
@@ -506,6 +509,9 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
             next_attempt = int(q.get("attempt_count") or 0) + 1
             max_attempts = int(q.get("max_attempts") or 10)
             err = "; ".join([a.error for a in attempts if a.error])[:1000] if attempts else "No channel available"
+            has_retryable_failure = any(a.status == "failed" and a.retryable for a in attempts)
+            if not has_retryable_failure:
+                next_attempt = max_attempts
 
             if next_attempt >= max_attempts:
                 db.execute(
