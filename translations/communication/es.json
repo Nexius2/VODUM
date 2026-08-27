@@ -21,5 +21,14 @@
     "limit_label_max_bitrate": "Bitrate máximo",
     "limit_label_ban_4k_transcode": "Transcodificación 4K bloqueada",
     "limit_label_unknown": "Límite de la política"
+  },
+  "portal": {
+    "invitation": {"subject": "Invitacion a tu portal VODUM", "body": "Hola {username},\n\nActiva tu cuenta con este enlace de un solo uso, valido durante 7 dias:\n{url}"},
+    "password_reset": {"subject": "Restablece tu contrasena de VODUM", "body": "Utiliza este enlace de un solo uso durante la proxima hora:\n{url}"},
+    "authentication_changed": {"subject": "Tu autenticacion de VODUM fue restablecida", "body": "Hola {username},\n\nUn administrador restablecio tus metodos de acceso. Se requiere una nueva invitacion."},
+    "suspended": {"subject": "Tu acceso al portal VODUM fue suspendido", "body": "Hola {username},\n\nTu acceso al portal fue suspendido. Contacta con soporte si es necesario."},
+    "reactivated": {"subject": "Tu acceso al portal VODUM fue reactivado", "body": "Hola {username},\n\nTu acceso al portal fue reactivado."},
+    "new_login": {"subject": "Nuevo acceso a tu portal VODUM", "body": "Hola {username},\n\nSe registro un nuevo acceso a tu cuenta. Restablece tu contrasena si no fuiste tu."},
+    "direct_message": {"subject": "Nuevo mensaje en tu portal VODUM", "body": "Hola {username},\n\nHas recibido un nuevo mensaje de un administrador. Inicia sesion en tu portal para leerlo."}
   }
 }

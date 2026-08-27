@@ -242,6 +242,38 @@
     });
   }
 
+  function bindTemplateTest() {
+    const button = document.getElementById("commTemplateTestBtn");
+    const status = document.getElementById("commTemplateTestStatus");
+    if (!button || !status) return;
+    const form = button.closest("form");
+    button.addEventListener("click", async function () {
+      const data = new FormData(form);
+      data.set("action", "test");
+      button.disabled = true;
+      status.textContent = button.dataset.sendingLabel || "…";
+      status.className = "self-center text-xs text-slate-400";
+      try {
+        const testUrl = button.dataset.testUrl || form.getAttribute("action");
+        const response = await fetch(testUrl, {method: "POST", body: data, headers: {Accept: "application/json"}});
+        const raw = await response.text();
+        let payload;
+        try {
+          payload = JSON.parse(raw);
+        } catch (_) {
+          payload = {ok: false, error: response.status === 403 ? (button.dataset.csrfError || "Request rejected (CSRF). Refresh the page and try again.") : `HTTP ${response.status}`};
+        }
+        status.textContent = payload.message || payload.error || `HTTP ${response.status}`;
+        status.className = `self-center text-xs ${response.ok && payload.ok ? "text-emerald-300" : "text-rose-300"}`;
+      } catch (error) {
+        status.textContent = error.message || String(error);
+        status.className = "self-center text-xs text-rose-300";
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     const config = readConfig();
     bindTemplateForm(config);
@@ -249,5 +281,6 @@
     bindHelpModals();
     bindRowLinks();
     bindDeleteModal();
+    bindTemplateTest();
   });
 })();

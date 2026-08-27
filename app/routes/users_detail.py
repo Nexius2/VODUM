@@ -434,7 +434,6 @@ def register(app):
 
         usage_risk = build_usage_risk_for_user(db, user_id) if tab == "general" else {}
         expiration_lock = load_expiration_lock(db, user_id) if tab == "general" else None
-        
         return render_template(
             "users/user_detail.html",
             user=user,
@@ -474,4 +473,3 @@ def register(app):
             referral_stats=referral_stats,
             referred_users=referred_users,
         )
-

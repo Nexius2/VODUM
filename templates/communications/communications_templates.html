@@ -39,6 +39,7 @@
     </div>
 
     <form method="post" action="{{ url_for('communications_templates_action') }}" enctype="multipart/form-data" class="space-y-4">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="action" id="commTemplateFormAction" value="{% if loaded_template %}save{% else %}create{% endif %}">
       <input type="hidden" name="template_id" value="{{ loaded_template.id if loaded_template else '' }}">
       <input type="hidden" name="enabled" id="template_enabled" value="{{ 1 if stream_blocked_enabled_locked or (loaded_template and loaded_template.enabled) or (not loaded_template) else 0 }}">
@@ -266,8 +267,12 @@
                   <div class="space-y-2 text-xs">
                     <div><code class="break-all text-primary">{server_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_server_name_desc") }}</div></div>
                     <div><code class="break-all text-primary">{server_url}</code><div class="text-slate-400 mt-1">{{ t("comm_var_server_url_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{portal_login_url}</code><div class="text-slate-400 mt-1">{{ t("comm_var_portal_login_url_desc") }}</div></div>
                     <div><code class="break-all text-primary">{login_username}</code><div class="text-slate-400 mt-1">{{ t("comm_var_login_username_desc") }}</div></div>
                     <div><code class="break-all text-primary">{temporary_password}</code><div class="text-slate-400 mt-1">{{ t("comm_var_temporary_password_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{provider_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_provider_name_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{player_download_url}</code><div class="text-slate-400 mt-1">{{ t("comm_var_player_download_url_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{player_help_url}</code><div class="text-slate-400 mt-1">{{ t("comm_var_player_help_url_desc") }}</div></div>
                   </div>
                 </div>
 
@@ -341,6 +346,10 @@
 
       <div class="flex flex-wrap gap-2">
         <button type="submit" class="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-dark text-xs font-medium">{{ t('save') if loaded_template else t('create') }}</button>
+        <button type="button" id="commTemplateTestBtn" data-test-url="{{ url_for('communications_templates_action') }}" data-sending-label="{{ t('comm_test_sending') }}" class="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium transition-colors hover:bg-slate-700 disabled:cursor-wait disabled:opacity-60">
+          {{ t('test') }}
+        </button>
+        <span id="commTemplateTestStatus" class="self-center text-xs text-slate-400" role="status" aria-live="polite"></span>
 
         {% if loaded_template and not stream_blocked_locked %}
           <button type="button"

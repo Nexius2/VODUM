@@ -22,6 +22,8 @@ from core.auth_local_trust import (
     set_local_totp_trust_cookie,
 )
 from core.setup_wizard_state import should_resume_setup_wizard
+from core.auth_principal import bind_request_principal, open_admin_session
+from core.turnstile import turnstile_config, verify_turnstile
 
 auth_logger = get_logger("auth")
 
@@ -291,6 +293,7 @@ def _login_locked_response(email: str, client_ip: str, remaining_seconds: int):
 
 
 def register(app):
+    app.before_request(bind_request_principal)
     @app.route("/setup-admin", methods=["GET"])
     def setup_admin():
         return redirect(url_for("setup_wizard"))
@@ -365,10 +368,7 @@ def register(app):
             (email, email, pwd_hash),
         )
 
-        session.clear()
-        session["vodum_logged_in"] = True
-        session["vodum_admin_email"] = email
-        session.permanent = True
+        open_admin_session(session, email, auth_level="password")
 
         # ensuite seulement, si aucun serveur -> page serveurs
         row = db.query_one("SELECT COUNT(*) AS cnt FROM servers")
@@ -383,7 +383,8 @@ def register(app):
         s = db.query_one(
             """
             SELECT admin_email, admin_password_hash, admin_totp_enabled,
-                   admin_totp_secret, admin_totp_local_trust_enabled
+                   admin_totp_secret,admin_totp_local_trust_enabled,turnstile_enabled,
+                   turnstile_site_key,turnstile_secret_key,turnstile_mode,turnstile_protect_admin,turnstile_protect_portal
             FROM settings
             WHERE id = 1
             """
@@ -430,6 +431,7 @@ def register(app):
             next_url=safe_redirect_target(request.args.get("next"), ""),
             login_quote_visual=_build_login_quote_visual_safe(),
             plex_login_available=plex_identity is not None,
+            turnstile=turnstile_config(s),
         )
 
     @app.get("/login/artwork/<kind>")
@@ -492,7 +494,7 @@ def register(app):
     @app.route("/login/submit", methods=["POST"])
     def login_submit():
         db = get_db()
-        s = db.query_one("SELECT admin_email, admin_password_hash, admin_totp_enabled, admin_totp_secret, admin_totp_local_trust_enabled, wizard_active FROM settings WHERE id = 1")
+        s = db.query_one("SELECT admin_email,admin_password_hash,admin_totp_enabled,admin_totp_secret,admin_totp_local_trust_enabled,wizard_active,turnstile_enabled,turnstile_site_key,turnstile_secret_key,turnstile_mode,turnstile_protect_admin,turnstile_protect_portal FROM settings WHERE id = 1")
         s = dict(s) if s else {"admin_email": "", "admin_password_hash": None}
 
         if not (s.get("admin_password_hash") or "").strip():
@@ -502,6 +504,12 @@ def register(app):
         email = (request.form.get("email") or "").strip().lower()
         password = request.form.get("password") or ""
         client_ip = _client_ip()
+        turnstile = turnstile_config(s)
+        if turnstile["enabled"] and turnstile["protect_admin"]:
+            challenge = verify_turnstile(s, request.form.get("cf-turnstile-response") or "", remote_ip=client_ip, hostname=request.host)
+            if not challenge["ok"]:
+                flash(get_translator()("turnstile_verification_failed"), "error")
+                return redirect(url_for("login"))
 
         locked_ip, remaining_ip = _is_login_locked(db, "ip", client_ip, now)
         if locked_ip:
@@ -545,10 +553,8 @@ def register(app):
         _reset_failed_login(db, "ip", client_ip)
         _reset_failed_login(db, "email", email)
 
-        session.clear()
-        session["vodum_logged_in"] = True
-        session["vodum_admin_email"] = email
-        session.permanent = True
+        auth_level = "password_totp" if int(s.get("admin_totp_enabled") or 0) == 1 else "password"
+        open_admin_session(session, email, auth_level=auth_level)
 
         if should_resume_setup_wizard(db, s):
             auth_logger.info("AUTH login ok; resuming installation wizard for email=%s", email)
@@ -637,6 +643,8 @@ def register(app):
             db = get_db()
             row = db.query_one("SELECT maintenance_mode FROM settings WHERE id = 1")
             if row and int(row["maintenance_mode"] or 0) == 1:
+                if request.path.startswith("/portal") or request.path.startswith("/api/portal/"):
+                    return render_template("portal/auth_message.html", message_key="portal_maintenance"), 503
                 return (
                     render_template("maintenance.html", active_page="settings"),
                     503,

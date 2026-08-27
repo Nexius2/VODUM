@@ -48,6 +48,7 @@ from core.stream_provider_actions import (
     warn_session as _warn_session,
 )
 from core.stream_policy_scope import has_vip_override, policy_applies as _policy_applies
+from core.stream_policy_resolution import sessions_for_policy
 from core.stream_violation_recheck import select_rechecked_violation
 from core.stream_session_diagnostics import log_sessions as _debug_log_sessions
 from core.stream_enforcer_config import (
@@ -71,6 +72,7 @@ logger = get_logger("stream_enforcer")
 # DBManager injected by tasks_engine (do not instantiate DBManager in task modules)
 _db = None
 _USER_STREAM_OVERRIDES: Dict[int, int] = {}
+_ENABLED_POLICIES: List[dict] = []
 
 def _policy_t(key: str, **kwargs) -> str:
     return translate_policy(_db, key, **kwargs)
@@ -633,7 +635,8 @@ def _recheck_violation(
         time.sleep(delay_seconds)
 
     sessions = _load_live_sessions()
-    v2 = _evaluate_policy(policy, sessions)
+    effective_sessions = sessions_for_policy(policy, _ENABLED_POLICIES, sessions)
+    v2 = _evaluate_policy(policy, effective_sessions)
 
     return select_rechecked_violation(violation, v2)
 
@@ -653,6 +656,8 @@ def run(task_id: int, db):
         logger.debug(f"[TASK {task_id}] stream_enforcer: start")
 
     policies = _load_enabled_policies()
+    global _ENABLED_POLICIES
+    _ENABLED_POLICIES = policies
     global _USER_STREAM_OVERRIDES
     _USER_STREAM_OVERRIDES = _load_user_stream_overrides()
     if is_debug_mode_enabled():
@@ -685,9 +690,10 @@ def run(task_id: int, db):
     violations: List[dict] = []
     for p in policies:
         if _is_strict_expired_subscription_policy(p):
-            violations.extend(_evaluate_policy(p, fresh_live_sessions))
+            policy_sessions = sessions_for_policy(p, policies, fresh_live_sessions)
         else:
-            violations.extend(_evaluate_policy(p, live_sessions))
+            policy_sessions = sessions_for_policy(p, policies, live_sessions)
+        violations.extend(_evaluate_policy(p, policy_sessions))
 
     if not violations:
         if is_debug_mode_enabled():

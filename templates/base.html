@@ -31,6 +31,8 @@
 </head>
 
 <body class="bg-slate-950 text-slate-100">
+  {% set brand_length = (app_brand_name or '')|length %}
+  {% set brand_text_size = 'text-xl' if brand_length <= 20 else ('text-base' if brand_length <= 32 else ('text-sm' if brand_length <= 44 else 'text-xs')) %}
   <svg aria-hidden="true" class="hidden">
     <symbol id="vodum-icon-dashboard" viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
     <symbol id="vodum-icon-tv" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 21h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
@@ -51,9 +53,9 @@
     <!-- Mobile top bar -->
     <div class="md:hidden sticky top-0 z-40 h-14 bg-slate-950/95 border-b border-slate-800 backdrop-blur flex items-center justify-between px-4">
       <a href="{{ url_for('dashboard') }}"
-         class="rounded-lg text-lg font-bold tracking-tight transition-colors hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
+         class="flex min-w-0 flex-1 items-center justify-start gap-3 rounded-lg {{ brand_text_size }} font-bold leading-tight tracking-tight transition-colors hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
          aria-label="{{ t('dashboard') }}">
-        {{ app_brand_name }}
+        {% if portal_logo_url %}<img src="{{ portal_logo_url }}" alt="" class="h-8 w-8 shrink-0 rounded object-contain">{% endif %}<span class="min-w-0 truncate">{{ app_brand_name }}</span>
       </a>
       <button id="mobileMenuOpen"
               type="button"
@@ -69,9 +71,9 @@
       <div class="absolute left-0 top-0 h-full w-72 max-w-[85vw] bg-slate-900 border-r border-slate-800 flex flex-col">
         <div class="h-14 flex items-center justify-between px-4 border-b border-slate-800">
           <a href="{{ url_for('dashboard') }}"
-             class="rounded-lg text-lg font-bold tracking-tight transition-colors hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
+             class="flex min-w-0 flex-1 items-center justify-start gap-3 rounded-lg {{ brand_text_size }} font-bold leading-tight tracking-tight transition-colors hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
              aria-label="{{ t('dashboard') }}">
-            {{ app_brand_name }}
+            {% if portal_logo_url %}<img src="{{ portal_logo_url }}" alt="" class="h-8 w-8 shrink-0 rounded object-contain">{% endif %}<span class="min-w-0 truncate">{{ app_brand_name }}</span>
           </a>
           <button id="mobileMenuClose"
                   type="button"
@@ -90,9 +92,9 @@
       <!-- Header -->
       <div class="h-16 flex items-center px-4 border-b border-slate-800">
         <a href="{{ url_for('dashboard') }}"
-           class="rounded-lg text-xl font-bold tracking-tight transition-colors hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
+           class="flex min-w-0 flex-1 items-center justify-start gap-3 rounded-lg {{ brand_text_size }} font-bold leading-tight tracking-tight transition-colors hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
            aria-label="{{ t('dashboard') }}">
-          {{ app_brand_name }}
+          {% if portal_logo_url %}<img src="{{ portal_logo_url }}" alt="" class="h-9 w-9 shrink-0 rounded object-contain">{% endif %}<span class="min-w-0 truncate">{{ app_brand_name }}</span>
         </a>
       </div>
 
@@ -150,6 +152,12 @@
            class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='settings' }}">
           <svg class="mr-2 h-4 w-4 shrink-0" aria-hidden="true"><use href="#vodum-icon-settings"></use></svg>
           {{ t("settings") }}
+        </a>
+
+        <a href="{{ url_for('portal_settings_page') }}"
+           class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='portal_settings' }}">
+          <svg class="mr-2 h-4 w-4 shrink-0" aria-hidden="true"><use href="#vodum-icon-users"></use></svg>
+          {{ t("portal_users") }}
         </a>
 
         <a href="{{ url_for('logs_page') }}"

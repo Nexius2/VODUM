@@ -20,6 +20,7 @@ GLOBAL_TEMPLATE_SETTINGS_COLUMNS = """
     backup_retention_count,
     backup_retention_days,
     brand_name,
+    portal_logo_url,
     contact_email,
     communication_language,
     data_retention_years,
@@ -83,9 +84,11 @@ def load_language_dict(lang_code: str) -> dict:
     lang_dir = current_app.config.get("LANG_DIR") or os.path.join(current_app.root_path, "..", "translations", "ui")
     json_path = os.path.abspath(os.path.join(lang_dir, f"{lang_code}.json"))
 
+    legacy_lang_dir = os.path.join(current_app.root_path, "..", "lang")
+    legacy_json_path = os.path.abspath(os.path.join(legacy_lang_dir, f"{lang_code}.json"))
+
     if not os.path.exists(json_path):
-        legacy_lang_dir = os.path.join(current_app.root_path, "..", "lang")
-        json_path = os.path.abspath(os.path.join(legacy_lang_dir, f"{lang_code}.json"))
+        json_path = legacy_json_path
 
     if not os.path.exists(json_path):
         logger.warning(f"[i18n] Fichier de langue introuvable: {json_path}")
@@ -102,6 +105,15 @@ def load_language_dict(lang_code: str) -> dict:
                 logger.debug(
                     f"[i18n] {len(translations)} traductions chargées depuis fichier ({lang_code})"
                 )
+
+        # Portal strings still live in the legacy catalogue. Merge missing keys
+        # so the main UI catalogue remains authoritative without showing raw keys.
+        if json_path != legacy_json_path and os.path.exists(legacy_json_path):
+            with open(legacy_json_path, "r", encoding="utf-8") as legacy_file:
+                legacy_data = json.load(legacy_file)
+            if isinstance(legacy_data, dict):
+                for key, value in legacy_data.items():
+                    translations.setdefault(key, value)
 
     except Exception as e:
         logger.error(
@@ -160,11 +172,9 @@ def get_available_languages():
 
 def _resolve_active_language(settings: Optional[dict] = None) -> str:
     """
-    Priorité :
-    1. session["lang"]            -> choix manuel courant
-    2. settings.default_language  -> choix manuel enregistré dans les options
-    3. langue du navigateur       -> fallback auto
-    4. en
+    Priorité commune : choix manuel de session. Ensuite, le portail utilise la
+    langue du navigateur par défaut, tandis que l'administration conserve la
+    langue configurée dans ses réglages.
     """
     logger = get_logger("i18n")
     available_langs = tuple(get_available_languages().keys())
@@ -174,7 +184,13 @@ def _resolve_active_language(settings: Optional[dict] = None) -> str:
         return session_lang
 
     default_lang = (settings or {}).get("default_language")
-    if default_lang in available_langs:
+    is_portal_request = False
+    try:
+        is_portal_request = request.path == "/portal" or request.path.startswith("/portal/")
+    except Exception:
+        pass
+
+    if not is_portal_request and default_lang in available_langs:
         return default_lang
 
     browser_lang = None
@@ -185,6 +201,9 @@ def _resolve_active_language(settings: Optional[dict] = None) -> str:
 
     if browser_lang in available_langs:
         return browser_lang
+
+    if default_lang in available_langs:
+        return default_lang
 
     if "en" in available_langs:
         return "en"
@@ -268,6 +287,7 @@ def init_i18n(app, get_db: Callable[[], object]) -> None:
             "t": get_translator(settings),
             "settings": settings,
             "active_lang": lang,
+            "portal_logo_url": settings.get("portal_logo_url"),
         }
 
     @app.route("/set_language", methods=["POST"])

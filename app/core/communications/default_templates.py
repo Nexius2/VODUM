@@ -114,7 +114,7 @@ DEFAULT_COMM_TEMPLATES = [
         "days_before": None,
         "days_after": 0,
         "subject": "Welcome - your account is ready",
-        "body": "Hello {username},\n\nYour account has been created successfully.\n\nLogin email: {email}\n\nHow to get started:\n- Open Plex or Jellyfin\n- Sign in with your account\n- Accept the library share invitation if prompted\n\nSubscription expiration date: {expiration_date}\n\nBest regards,\n{brand_name}\n",
+        "body": "Hello {username},\n\nYour {provider_name} account has been created successfully.\n\nServer: {server_name}\nAddress: {server_url}\nLogin: {login_username}\n\nGet the official player:\n{player_download_url}\n\nConfiguration help:\n{player_help_url}\n\nSign in and accept the library share invitation if prompted.\n\nSubscription expiration date: {expiration_date}\n\nBest regards,\n{brand_name}\n",
     },
 ]
 

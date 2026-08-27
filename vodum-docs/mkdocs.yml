@@ -63,6 +63,8 @@ nav:
       - Backup & Import: backup.md
       - Settings: settings.md
       - Tasks: tasks.md
+      - User portal: user-portal.md
+      - User portal API: portal-api.md
       - Logs: logs.md
   - Technical:
       - Configuration: configuration.md

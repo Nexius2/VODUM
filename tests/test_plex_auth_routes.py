@@ -409,8 +409,8 @@ class PlexAuthRouteTests(unittest.TestCase):
                 confirmed = client.post("/auth/plex/link/confirm")
         self.assertEqual("/setup?resume=plex", confirmed.location)
         with client.session_transaction() as browser_session:
-            self.assertIs(browser_session.get("vodum_logged_in"), True)
-            self.assertEqual("owner@example.test", browser_session.get("vodum_admin_email"))
+            self.assertEqual("admin", browser_session["vodum_principal"]["role"])
+            self.assertEqual("owner@example.test", browser_session["vodum_principal"]["email"])
 
     def test_fresh_wizard_callback_survives_lost_browser_session(self):
         client = self.app.test_client()
@@ -530,8 +530,8 @@ class PlexAuthRouteTests(unittest.TestCase):
             )
         self.assertEqual("/", callback.location)
         with client.session_transaction() as browser_session:
-            self.assertTrue(browser_session["vodum_logged_in"])
-            self.assertEqual("admin@example.test", browser_session["vodum_admin_email"])
+            self.assertEqual("admin", browser_session["vodum_principal"]["role"])
+            self.assertEqual("admin@example.test", browser_session["vodum_principal"]["email"])
             self.assertNotIn(plex_auth.PENDING_LOGIN_KEY, browser_session)
 
     def test_plex_login_repairs_stale_wizard_flag_on_configured_instance(self):
@@ -606,7 +606,7 @@ class PlexAuthRouteTests(unittest.TestCase):
                 )
         self.assertEqual("/", completed.location)
         with client.session_transaction() as browser_session:
-            self.assertTrue(browser_session["vodum_logged_in"])
+            self.assertEqual("admin", browser_session["vodum_principal"]["role"])
 
 
 if __name__ == "__main__":

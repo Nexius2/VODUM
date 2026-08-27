@@ -86,6 +86,23 @@ def jellyfin_create_user(
     return user
 
 
+def jellyfin_update_username(server_row: Dict[str, Any], jellyfin_user_id: str, username: str) -> bool:
+    normalized = str(username or "").strip()
+    if not normalized or len(normalized) > 100:
+        raise ValueError("Jellyfin: invalid username")
+    base = _pick_base_url(server_row); api_key = _api_key(server_row)
+    http = server_http_session(server_row)
+    response = http.get(f"{base}/Users/{jellyfin_user_id}", headers=_headers(api_key), timeout=20)
+    response.raise_for_status(); user = response.json() if response.content else {}
+    if str(user.get("Name") or "").strip() == normalized:
+        return False
+    user["Name"] = normalized
+    updated = http.post(f"{base}/Users/{jellyfin_user_id}", json=user, headers=_headers(api_key), timeout=20)
+    if updated.status_code in (405, 415):
+        updated = http.put(f"{base}/Users/{jellyfin_user_id}", json=user, headers=_headers(api_key), timeout=20)
+    updated.raise_for_status(); return True
+
+
 def jellyfin_set_password(
     server_row: Dict[str, Any],
     jellyfin_user_id: str,

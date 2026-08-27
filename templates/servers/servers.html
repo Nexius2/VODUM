@@ -33,12 +33,6 @@
           {{ t("servers_connect_help") }}
         </p>
 
-        {% if plex_suggestions %}
-          {% set plex_suggestions_return_to = "servers" %}
-          {% include "servers/_plex_suggestions.html" %}
-          <div class="mb-5 flex items-center gap-3 text-xs text-slate-500"><span class="h-px flex-1 bg-slate-800"></span>{{ t("plex_discovery_or_manual") }}<span class="h-px flex-1 bg-slate-800"></span></div>
-        {% endif %}
-
         <form method="post" action="{{ url_for('server_create') }}"
               class="grid grid-cols-1 gap-3 text-sm">
 
@@ -79,6 +73,11 @@
           </button>
 
         </form>
+        {% if plex_suggestions %}
+          <div class="my-5 flex items-center gap-3 text-xs text-slate-500"><span class="h-px flex-1 bg-slate-800"></span>{{ t("plex_discovery_or_manual") }}<span class="h-px flex-1 bg-slate-800"></span></div>
+          {% set plex_suggestions_return_to = "servers" %}
+          {% include "servers/_plex_suggestions.html" %}
+        {% endif %}
       </div>
 
       <div class="bg-slate-950 border border-slate-800 rounded-xl p-6">
@@ -104,11 +103,6 @@
 
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 min-h-[320px] h-full">
     <h2 class="text-sm font-semibold mb-3">{{ t("add_server") }}</h2>
-
-    {% if plex_suggestions %}
-      {% set plex_suggestions_return_to = "servers" %}
-      {% include "servers/_plex_suggestions.html" %}
-    {% endif %}
 
     <form method="post" action="{{ url_for('server_create') }}"
           class="grid grid-cols-1 gap-3 text-sm">
@@ -150,6 +144,11 @@
       </button>
 
     </form>
+    {% if plex_suggestions %}
+      <div class="my-5 h-px bg-slate-800"></div>
+      {% set plex_suggestions_return_to = "servers" %}
+      {% include "servers/_plex_suggestions.html" %}
+    {% endif %}
   </div>
 
 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" style="grid-auto-rows:1fr;">

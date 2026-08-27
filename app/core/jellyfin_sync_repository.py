@@ -23,6 +23,8 @@ def set_jellyfin_media_user_presence(
         "UPDATE media_users SET details_json = ? WHERE id = ?",
         (json.dumps(details, ensure_ascii=False), int(media_user_id)),
     )
+    from core.portal_provider_identity_state import reconcile_portal_provider_identity
+    reconcile_portal_provider_identity(db, int(media_user_id))
 
 
 def mark_jellyfin_media_user_removed(db, media_user_id: int, external_user_id: str) -> None:

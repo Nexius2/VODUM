@@ -28,7 +28,7 @@ class I18nRequestLanguageTests(unittest.TestCase):
         self.app.secret_key = "test"
         self.app.config["LANG_DIR"] = str(ROOT / "translations" / "ui")
 
-    def test_translator_without_settings_uses_ui_language_before_browser_language(self):
+    def test_admin_uses_configured_language_before_browser_language(self):
         class FakeDB:
             def query_one(self, *_args, **_kwargs):
                 return {"default_language": "en"}
@@ -39,6 +39,11 @@ class I18nRequestLanguageTests(unittest.TestCase):
         with self.app.test_request_context("/communications/configuration/action", headers={"Accept-Language": "fr"}):
             with patch.dict(sys.modules, {"web.helpers": helpers}):
                 self.assertEqual(i18n.get_translator()("comm_retry_scheduled_success"), "Retry scheduled.")
+
+    def test_portal_uses_browser_language_before_admin_setting(self):
+        with self.app.test_request_context("/portal/login", headers={"Accept-Language": "fr-FR,fr;q=0.9"}):
+            translator = i18n.get_translator({"default_language": "en"})
+            self.assertEqual(translator("comm_retry_scheduled_success"), "Nouvelle tentative programmée.")
 
     def test_missing_active_language_key_falls_back_to_english(self):
         english = {"fallback.only": "English fallback"}

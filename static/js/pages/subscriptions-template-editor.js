@@ -102,10 +102,12 @@
   function updateLifetimeDurationState() {
     const lifetime = document.getElementById("tpl_is_lifetime");
     const duration = document.getElementById("tpl_duration_days");
+    const hidden = document.getElementById("tpl_hide_from_portal");
 
     if (!lifetime || !duration) return;
 
     if (lifetime.checked) {
+      if (hidden && lifetime.dataset.previousChecked !== "1") hidden.checked = true;
       duration.dataset.previousValue = duration.value || "30";
       duration.value = "";
       duration.disabled = true;
@@ -120,6 +122,7 @@
         duration.value = duration.dataset.previousValue || "30";
       }
     }
+    lifetime.dataset.previousChecked = lifetime.checked ? "1" : "0";
   }
 
   function resetTemplateEditor() {
@@ -131,6 +134,8 @@
     document.getElementById("tpl_is_default").checked = false;
     document.getElementById("tpl_is_enabled").checked = true;
     document.getElementById("tpl_is_lifetime").checked = false;
+    document.getElementById("tpl_hide_from_portal").checked = false;
+    document.getElementById("tpl_is_lifetime").dataset.previousChecked = "0";
     updateLifetimeDurationState();
     TEMPLATE_POLICIES = [];
     EDIT_INDEX = null;
@@ -509,6 +514,8 @@
     document.getElementById("tpl_is_default").checked = String(tpl.is_default || "0") === "1";
     document.getElementById("tpl_is_enabled").checked = String(tpl.is_enabled ?? 1) === "1";
     document.getElementById("tpl_is_lifetime").checked = String(tpl.is_lifetime || "0") === "1";
+    document.getElementById("tpl_hide_from_portal").checked = String(tpl.hide_from_portal || "0") === "1";
+    document.getElementById("tpl_is_lifetime").dataset.previousChecked = String(tpl.is_lifetime || "0") === "1" ? "1" : "0";
     updateLifetimeDurationState();
 
     TEMPLATE_POLICIES = [];
