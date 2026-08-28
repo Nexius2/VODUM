@@ -2309,6 +2309,8 @@
   "portal_quick_messages_help": "Abilita le conversazioni dirette tra utenti e amministratori.",
   "portal_quick_messages_available_soon": "La messaggistica diretta è attiva.",
   "portal_messages": "Messaggi",
+  "portal_show_previous_messages": "Visualizza i messaggi precedenti",
+  "portal_show_recent_messages": "Mostra solo gli ultimi 6 messaggi",
   "communications.inbox": "Posta in arrivo",
   "communications.campaigns": "Campagne",
   "communications.templates": "Modelli",
