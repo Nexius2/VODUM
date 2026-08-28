@@ -60,7 +60,7 @@
         </div>
 
         <div class="text-sm">
-          <label class="block text-xs text-slate-400 mb-1">{{ t("subscription_value") }}</label>
+          <label class="block text-xs text-slate-400 mb-1">{{ t("subscription_value") }} ({{ settings.subscription_currency or 'EUR' }})</label>
           <input type="text"
                  name="subscription_value"
                  id="tpl_subscription_value"
@@ -98,6 +98,11 @@
                      class="rounded border-slate-700 bg-slate-900"
                      onchange="updateLifetimeDurationState()">
               {{ t("lifetime_subscription") }}
+            </label>
+            <label class="inline-flex items-center gap-2 text-xs text-slate-300 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2">
+              <input type="checkbox" name="hide_from_portal" id="tpl_hide_from_portal" value="1" class="rounded border-slate-700 bg-slate-900">
+              {{ t("subscription_hide_from_portal") }}
+              <span class="relative inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-800 text-[10px] text-slate-400 cursor-help group">?<span class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-72 -translate-x-1/2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-normal text-slate-200 opacity-0 shadow-xl transition-opacity group-hover:opacity-100">{{ t("subscription_hide_from_portal_help") }}</span></span>
             </label>
           </div>
 

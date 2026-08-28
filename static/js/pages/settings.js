@@ -121,6 +121,14 @@
     renderTotpQrCode();
     initTotpDependencies();
     initNotificationOrder();
+    document.querySelectorAll("[data-logo-input]").forEach((input) => {
+      if (input.dataset.logoReady === "1") return;
+      input.dataset.logoReady = "1";
+      input.addEventListener("change", () => {
+        const filename = input.closest("div")?.querySelector("[data-logo-filename]");
+        if (filename) filename.textContent = input.files?.[0]?.name || filename.dataset.emptyLabel || "";
+      });
+    });
   }
 
   document.addEventListener("DOMContentLoaded", initSettingsPage);

@@ -812,7 +812,8 @@ def run(task_id, db):
                     if int(settings_d.get("mailing_enabled") or 0) == 1:
                         to_email = (settings_d.get("contact_email") or "").strip()
                         if to_email:
-                            subject = "VODUM - Tautulli import completed"
+                            brand_name = str(settings_d.get("brand_name") or "VODUM").strip()
+                            subject = f"{brand_name} - Tautulli import completed"
                             body = "Import completed successfully.\n\n" + json.dumps(payload, indent=2, ensure_ascii=False)
                             ok, err2 = send_email(subject, body, to_email, settings_d)
                             if not ok:

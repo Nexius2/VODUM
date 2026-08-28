@@ -21,5 +21,14 @@
     "limit_label_max_bitrate": "Maximum bitrate",
     "limit_label_ban_4k_transcode": "4K transcode blocked",
     "limit_label_unknown": "Policy limit"
+  },
+  "portal": {
+    "invitation": {"subject": "Your {brand_name} portal invitation", "body": "Hello {username},\n\nActivate your account using this single-use link within 7 days:\n{url}"},
+    "password_reset": {"subject": "Reset your {brand_name} portal password", "body": "Use this single-use link within one hour:\n{url}"},
+    "authentication_changed": {"subject": "Your {brand_name} authentication was reset", "body": "Hello {username},\n\nAn administrator reset your portal login methods. A new invitation is required.\n\n{portal_login_url}"},
+    "suspended": {"subject": "Your {brand_name} portal access was suspended", "body": "Hello {username},\n\nYour portal access has been suspended. Contact support if needed."},
+    "reactivated": {"subject": "Your {brand_name} portal access was reactivated", "body": "Hello {username},\n\nYour portal access has been reactivated.\n\n{portal_login_url}"},
+    "new_login": {"subject": "New login to your {brand_name} portal", "body": "Hello {username},\n\nA new login to your portal account was recorded. Reset your password if this was not you.\n\n{portal_login_url}"},
+    "direct_message": {"subject": "New message in your {brand_name} portal", "body": "Hello {username},\n\nYou received a new message from an administrator. Sign in to your portal to read it.\n\n{portal_login_url}"}
   }
 }

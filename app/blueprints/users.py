@@ -24,6 +24,7 @@ from secret_store import (
     find_plex_server_ids_by_token,
     find_plex_servers_by_token,
 )
+from core.provider_onboarding import provider_onboarding_links
 
 log = get_logger("users_create")
 
@@ -501,6 +502,7 @@ def api_users_create():
                 libs,
                 username,
                 email,
+                vodum_user_id=vodum_user_id,
             )
 
         except Exception as e:
@@ -521,26 +523,30 @@ def api_users_create():
         # (j’ai laissé volontairement le reste identique pour que tu puisses coller sans te perdre)
 
         if provider == "jellyfin":
-            cur2 = db.execute(
-                """
-                INSERT INTO media_users(server_id, vodum_user_id, external_user_id, username, email, type, details_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    server_id,
-                    vodum_user_id,
-                    external_user_id,
-                    server_username or username,
-                    email or None,
-                    provider,
-                    json.dumps(details_json) if details_json else None,
-                ),
-            )
-            media_user_id = cur2.lastrowid
-            try:
-                cur2.close()
-            except Exception:
-                pass
+            existing_media_user_id = details_json.pop("_existing_media_user_id", None)
+            if existing_media_user_id:
+                media_user_id = int(existing_media_user_id)
+            else:
+                cur2 = db.execute(
+                    """
+                    INSERT INTO media_users(server_id, vodum_user_id, external_user_id, username, email, type, details_json)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        server_id,
+                        vodum_user_id,
+                        external_user_id,
+                        server_username or username,
+                        email or None,
+                        provider,
+                        json.dumps(details_json) if details_json else None,
+                    ),
+                )
+                media_user_id = cur2.lastrowid
+                try:
+                    cur2.close()
+                except Exception:
+                    pass
 
             if external_user_id:
                 db.execute(
@@ -786,6 +792,10 @@ def api_users_create():
                             "firstname": firstname,
                             "lastname": lastname,
                             "email": email,
+                            "server_name": server.get("name") or "",
+                            "server_url": server.get("public_url") or server.get("url") or server.get("local_url") or "",
+                            "login_username": server_username or username,
+                            **provider_onboarding_links(provider),
                         }
 
                         if days_after is not None and days_after > 0:

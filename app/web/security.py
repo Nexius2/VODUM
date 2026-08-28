@@ -1,7 +1,14 @@
 from __future__ import annotations
 
 import ipaddress
+import hmac
 from urllib.parse import urljoin, urlsplit
+
+
+def csrf_tokens_match(sent_token: str | None, session_token: str | None) -> bool:
+    sent = str(sent_token or "").strip()
+    stored = str(session_token or "").strip()
+    return bool(sent and stored and hmac.compare_digest(sent, stored))
 
 
 def get_client_ip() -> str:

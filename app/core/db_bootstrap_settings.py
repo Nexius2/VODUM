@@ -39,6 +39,7 @@ def upgrade_task_settings_auth_schema(
     # 2.1 Vérifier colonnes SETTINGS (migrations légères)
     # -------------------------------------------------
     ensure_column(cursor, "settings", "brand_name", "TEXT DEFAULT NULL")
+    ensure_column(cursor, "settings", "subscription_currency", "TEXT NOT NULL DEFAULT 'EUR'")
     ensure_column(cursor, "settings", "email_history_retention_years", "INTEGER DEFAULT 2")
     ensure_column(cursor, "settings", "backup_retention_days", "INTEGER DEFAULT 30")
     ensure_column(cursor, "settings", "backup_retention_count", "INTEGER DEFAULT 10")

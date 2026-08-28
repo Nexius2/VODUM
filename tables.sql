@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS vodum_users (
 
     -- Notifications
     notifications_order_override TEXT DEFAULT NULL,
+    preferred_language TEXT DEFAULT NULL,
 
 	-- Per-user expiratin date override
 	expiration_date_override INTEGER DEFAULT 0,
@@ -85,6 +86,142 @@ CREATE INDEX IF NOT EXISTS idx_user_identities_vodum
 ON user_identities(vodum_user_id);
 CREATE INDEX IF NOT EXISTS idx_user_identities_server
 ON user_identities(server_id);
+
+-----------------------------------------------------------------------
+-- USER PORTAL AUTHENTICATION FOUNDATION
+-----------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS portal_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    vodum_user_id INTEGER NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'invited'
+        CHECK(status IN ('invited','active','suspended','deleted')),
+    email_verified_at TIMESTAMP,
+    last_login_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(vodum_user_id) REFERENCES vodum_users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS portal_roles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT,
+    is_system INTEGER NOT NULL DEFAULT 0 CHECK(is_system IN (0, 1)),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS portal_account_roles (
+    portal_account_id INTEGER NOT NULL,
+    role_id INTEGER NOT NULL,
+    granted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(portal_account_id, role_id),
+    FOREIGN KEY(portal_account_id) REFERENCES portal_accounts(id) ON DELETE CASCADE,
+    FOREIGN KEY(role_id) REFERENCES portal_roles(id) ON DELETE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS portal_auth_identities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    portal_account_id INTEGER NOT NULL,
+    provider TEXT NOT NULL CHECK(provider IN ('local','plex','jellyfin')),
+    provider_server_id INTEGER,
+    provider_subject TEXT NOT NULL,
+    normalized_identifier TEXT,
+    password_hash TEXT,
+    is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
+    revoked_at TIMESTAMP,
+    revoke_reason TEXT,
+    verified_at TIMESTAMP,
+    last_login_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(portal_account_id) REFERENCES portal_accounts(id) ON DELETE CASCADE,
+    FOREIGN KEY(provider_server_id) REFERENCES servers(id) ON DELETE CASCADE,
+    CHECK(
+        (provider = 'jellyfin' AND provider_server_id IS NOT NULL)
+        OR (provider != 'jellyfin' AND provider_server_id IS NULL)
+    )
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_portal_identity_global_subject
+ON portal_auth_identities(provider, provider_subject)
+WHERE provider_server_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_portal_identity_server_subject
+ON portal_auth_identities(provider, provider_server_id, provider_subject)
+WHERE provider_server_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_portal_identity_local_identifier
+ON portal_auth_identities(normalized_identifier)
+WHERE provider = 'local' AND normalized_identifier IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_portal_identities_account_active
+ON portal_auth_identities(portal_account_id, is_active);
+
+CREATE TABLE IF NOT EXISTS portal_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    portal_account_id INTEGER NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL,
+    revoked_at TIMESTAMP,
+    revoke_reason TEXT,
+    FOREIGN KEY(portal_account_id) REFERENCES portal_accounts(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_portal_sessions_account_active
+ON portal_sessions(portal_account_id, revoked_at, expires_at);
+CREATE INDEX IF NOT EXISTS idx_portal_sessions_expiry
+ON portal_sessions(expires_at);
+
+CREATE TABLE IF NOT EXISTS portal_account_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    portal_account_id INTEGER NOT NULL,
+    purpose TEXT NOT NULL
+        CHECK(purpose IN ('invitation','password_reset','email_verification')),
+    token_hash TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL,
+    used_at TIMESTAMP,
+    revoked_at TIMESTAMP,
+    FOREIGN KEY(portal_account_id) REFERENCES portal_accounts(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_portal_tokens_account_purpose
+ON portal_account_tokens(portal_account_id, purpose, used_at, revoked_at);
+CREATE INDEX IF NOT EXISTS idx_portal_tokens_expiry
+ON portal_account_tokens(expires_at);
+
+CREATE TABLE IF NOT EXISTS portal_login_attempts (
+    scope TEXT NOT NULL CHECK(scope IN ('ip','email')),
+    scope_hash TEXT NOT NULL,
+    failed_attempts INTEGER NOT NULL DEFAULT 0,
+    first_failed_at TIMESTAMP,
+    last_failed_at TIMESTAMP,
+    locked_until TIMESTAMP,
+    PRIMARY KEY(scope, scope_hash)
+);
+CREATE INDEX IF NOT EXISTS idx_portal_login_attempts_lock
+ON portal_login_attempts(locked_until);
+
+CREATE TABLE IF NOT EXISTS portal_request_limits (
+    scope_hash TEXT PRIMARY KEY,
+    window_started_at TIMESTAMP NOT NULL,
+    request_count INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS portal_audit_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    portal_account_id INTEGER,
+    event_type TEXT NOT NULL,
+    outcome TEXT NOT NULL CHECK(outcome IN ('success','failure','blocked')),
+    ip_hash TEXT,
+    user_agent_hash TEXT,
+    details_json TEXT NOT NULL DEFAULT (json_object()),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(portal_account_id) REFERENCES portal_accounts(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_portal_audit_account_created
+ON portal_audit_events(portal_account_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_portal_audit_type_created
+ON portal_audit_events(event_type, created_at DESC);
 
 -----------------------------------------------------------------------
 --  TABLE USERS (media servers only)
@@ -299,9 +436,40 @@ CREATE TABLE IF NOT EXISTS settings (
     web_secure_cookies INTEGER DEFAULT 0,
     web_cookie_samesite TEXT DEFAULT 'Lax',
     web_trust_proxy INTEGER DEFAULT 0,
+    portal_enabled INTEGER NOT NULL DEFAULT 0,
+    portal_local_test_enabled INTEGER NOT NULL DEFAULT 0,
+    portal_public_url TEXT DEFAULT NULL,
+    portal_support_email TEXT DEFAULT NULL,
+    portal_allowed_hostname TEXT DEFAULT NULL,
+    portal_brand_name TEXT DEFAULT NULL,
+    portal_logo_url TEXT DEFAULT NULL,
+    portal_terms_url TEXT DEFAULT NULL,
+    portal_privacy_url TEXT DEFAULT NULL,
+    portal_show_subscription INTEGER NOT NULL DEFAULT 1,
+    portal_show_media_access INTEGER NOT NULL DEFAULT 1,
+    portal_show_monitoring INTEGER NOT NULL DEFAULT 1,
+    portal_show_support INTEGER NOT NULL DEFAULT 1,
+    portal_show_payment INTEGER NOT NULL DEFAULT 0,
+    portal_payment_url TEXT DEFAULT NULL,
+    portal_payment_label TEXT DEFAULT NULL,
+    portal_local_auth_enabled INTEGER NOT NULL DEFAULT 0,
+    portal_plex_auth_enabled INTEGER NOT NULL DEFAULT 0,
+    portal_jellyfin_auth_enabled INTEGER NOT NULL DEFAULT 0,
+    portal_password_min_length INTEGER NOT NULL DEFAULT 8,
+    portal_password_require_upper INTEGER NOT NULL DEFAULT 0,
+    portal_password_require_lower INTEGER NOT NULL DEFAULT 0,
+    portal_password_require_digit INTEGER NOT NULL DEFAULT 0,
+    portal_password_require_symbol INTEGER NOT NULL DEFAULT 0,
+    turnstile_enabled INTEGER NOT NULL DEFAULT 0,
+    turnstile_site_key TEXT,
+    turnstile_secret_key TEXT,
+    turnstile_mode TEXT NOT NULL DEFAULT 'compact',
+    turnstile_protect_portal INTEGER NOT NULL DEFAULT 0,
+    turnstile_protect_admin INTEGER NOT NULL DEFAULT 0,
 
     enable_cron_jobs INTEGER DEFAULT 1,
     default_expiration_days INTEGER DEFAULT 90,
+    subscription_currency TEXT NOT NULL DEFAULT 'EUR',
     default_subscription_days INTEGER DEFAULT 90,
 
     maintenance_mode INTEGER DEFAULT 0,
@@ -393,6 +561,7 @@ CREATE TABLE IF NOT EXISTS subscription_templates (
     is_default INTEGER DEFAULT 0,
     is_enabled INTEGER DEFAULT 1,
     is_lifetime INTEGER DEFAULT 0,
+    hide_from_portal INTEGER NOT NULL DEFAULT 0,
     policies_json TEXT NOT NULL DEFAULT '[]',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

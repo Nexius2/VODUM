@@ -21,5 +21,14 @@
     "limit_label_max_bitrate": "Débit maximum",
     "limit_label_ban_4k_transcode": "Transcodage 4K bloqué",
     "limit_label_unknown": "Limite de la règle"
+  },
+  "portal": {
+    "invitation": {"subject": "Votre invitation au portail {brand_name}", "body": "Bonjour {username},\n\nActivez votre compte avec ce lien a usage unique valable 7 jours :\n{url}"},
+    "password_reset": {"subject": "Reinitialisation de votre mot de passe {brand_name}", "body": "Utilisez ce lien a usage unique dans l'heure :\n{url}"},
+    "authentication_changed": {"subject": "Votre authentification {brand_name} a ete reinitialisee", "body": "Bonjour {username},\n\nUn administrateur a reinitialise vos methodes de connexion. Une nouvelle invitation est necessaire.\n\n{portal_login_url}"},
+    "suspended": {"subject": "Votre acces au portail {brand_name} a ete suspendu", "body": "Bonjour {username},\n\nVotre acces au portail a ete suspendu. Contactez le support si necessaire."},
+    "reactivated": {"subject": "Votre acces au portail {brand_name} a ete reactive", "body": "Bonjour {username},\n\nVotre acces au portail a ete reactive.\n\n{portal_login_url}"},
+    "new_login": {"subject": "Nouvelle connexion a votre portail {brand_name}", "body": "Bonjour {username},\n\nUne nouvelle connexion a votre compte a ete enregistree. Reinitialisez votre mot de passe si ce n'etait pas vous.\n\n{portal_login_url}"},
+    "direct_message": {"subject": "Nouveau message dans votre portail {brand_name}", "body": "Bonjour {username},\n\nVous avez recu un nouveau message d'un administrateur. Connectez-vous a votre portail pour le lire.\n\n{portal_login_url}"}
   }
 }

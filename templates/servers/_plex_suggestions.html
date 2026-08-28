@@ -1,5 +1,5 @@
 {% if plex_suggestions %}
-  <section class="mb-5 rounded-xl border border-amber-800/60 bg-amber-950/20 p-4">
+  <section class="mb-5 mt-5 rounded-xl border border-amber-800/60 bg-amber-950/20 p-4" style="margin-top: 1.25rem;">
     <h3 class="text-sm font-semibold text-amber-200">{{ t("plex_discovery_available_title") }}</h3>
     <p class="mt-1 text-xs text-slate-400">{{ t("plex_discovery_available_help") }}</p>
     <form method="post" action="{{ url_for('plex_discovery_add') }}" class="mt-4 space-y-3">

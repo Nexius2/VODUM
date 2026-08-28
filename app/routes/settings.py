@@ -1,8 +1,10 @@
 # Auto-split from app.py (keep URLs/endpoints intact)
 import json
+import os
+from pathlib import Path
 
 from flask import (
-    render_template, g, request, redirect, url_for, flash, session, current_app,
+    render_template, g, request, redirect, url_for, flash, session, current_app, send_file,
 )
 
 from logging_utils import get_logger, update_debug_mode_cache
@@ -14,6 +16,10 @@ from web.helpers import get_db, add_log
 from secret_store import encryption_key_status, encrypt_secret
 from core.auth_totp import generate_totp_secret, provisioning_uri, verify_totp_code
 from core.admin_auth_identities import get_admin_auth_identity, sync_local_admin_identity
+from core.auth_principal import update_admin_principal_email
+from core.auth_principal import admin_required
+from core.turnstile import verify_turnstile
+from web.security import get_client_ip
 
 settings_logger = get_logger("settings")
 
@@ -24,6 +30,7 @@ SETTINGS_PAGE_COLUMNS = """
     admin_email,
     contact_email,
     brand_name,
+    portal_logo_url,
     default_subscription_days,
     delete_after_expiry_days,
     expiry_mode,
@@ -40,10 +47,43 @@ SETTINGS_PAGE_COLUMNS = """
     enable_anonymous_telemetry,
     admin_totp_enabled,
     admin_totp_local_trust_enabled
+    ,turnstile_enabled,turnstile_site_key,turnstile_secret_key,turnstile_mode,turnstile_protect_portal,turnstile_protect_admin
 """
 
 
 def register(app):
+    def _branding_directory():
+        return Path(current_app.config["DATABASE_PATH"]).resolve().parent / "branding"
+
+    @app.get("/branding/logo")
+    def branding_logo():
+        row = get_db().query_one("SELECT portal_logo_url FROM settings WHERE id=1")
+        directory = _branding_directory()
+        matches = list(directory.glob("logo.*")) if directory.exists() else []
+        if not row or row["portal_logo_url"] != "/branding/logo" or not matches:
+            return "", 404
+        response = send_file(matches[0], conditional=True, max_age=86400)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        return response
+
+    @app.post("/settings/turnstile/test")
+    @admin_required
+    def settings_turnstile_test():
+        db = get_db()
+        settings = db.query_one(
+            "SELECT turnstile_enabled,turnstile_site_key,turnstile_secret_key,turnstile_mode,"
+            "turnstile_protect_portal,turnstile_protect_admin FROM settings WHERE id=1"
+        )
+        result = verify_turnstile(
+            settings, request.form.get("cf-turnstile-response") or "",
+            remote_ip=get_client_ip(), hostname=request.host,
+        )
+        if result.get("reason") == "verified":
+            flash(get_translator()("turnstile_test_success"), "success")
+        else:
+            flash(get_translator()("turnstile_test_failed"), "error")
+        return redirect(url_for("settings_page"))
+
     @app.route("/settings", methods=["GET"])
     def settings_page():
         db = get_db()
@@ -184,6 +224,7 @@ def register(app):
                 settings["reminder_days"],
             ),
             "brand_name": request.form.get("brand_name", settings.get("brand_name")),
+            "portal_logo_url": settings.get("portal_logo_url"),
 
             "expiry_mode": expiry_mode,
             "warn_then_disable_days": warn_then_disable_days,
@@ -199,6 +240,31 @@ def register(app):
             ),
             "web_trust_proxy": 1 if request.form.get("web_trust_proxy") == "1" else 0,
         }
+
+        logo = request.files.get("brand_logo")
+        if logo and logo.filename:
+            raw = logo.stream.read(2 * 1024 * 1024 + 1)
+            signatures = ((b"\x89PNG\r\n\x1a\n", ".png"), (b"\xff\xd8\xff", ".jpg"), (b"GIF87a", ".gif"), (b"GIF89a", ".gif"))
+            extension = next((ext for signature, ext in signatures if raw.startswith(signature)), None)
+            if raw.startswith(b"RIFF") and raw[8:12] == b"WEBP":
+                extension = ".webp"
+            if len(raw) > 2 * 1024 * 1024 or not extension:
+                flash(get_translator()("settings_logo_invalid"), "error")
+                return redirect(url_for("settings_page"))
+            directory = _branding_directory()
+            directory.mkdir(parents=True, exist_ok=True)
+            temporary = directory / f".logo{extension}.uploading"
+            temporary.write_bytes(raw)
+            for old in directory.glob("logo.*"):
+                old.unlink(missing_ok=True)
+            os.replace(temporary, directory / f"logo{extension}")
+            new_values["portal_logo_url"] = "/branding/logo"
+        elif request.form.get("remove_brand_logo") == "1":
+            directory = _branding_directory()
+            if directory.exists():
+                for old in directory.glob("logo.*"):
+                    old.unlink(missing_ok=True)
+            new_values["portal_logo_url"] = None
 
         # --------------------------------------------------
         # Conversions INT (uniformes)
@@ -232,6 +298,7 @@ def register(app):
                 timezone = :timezone,
                 contact_email = :contact_email,
                 brand_name = :brand_name,
+                portal_logo_url = :portal_logo_url,
                 default_subscription_days = :default_subscription_days,
                 delete_after_expiry_days = :delete_after_expiry_days,
                 expiry_mode = :expiry_mode,
@@ -360,7 +427,8 @@ def register(app):
         db = get_db()
         settings = db.query_one(
             """
-            SELECT admin_email, admin_password_hash, admin_totp_enabled, admin_totp_secret, admin_totp_local_trust_enabled
+            SELECT admin_email,admin_password_hash,admin_totp_enabled,admin_totp_secret,admin_totp_local_trust_enabled,
+                   turnstile_enabled,turnstile_site_key,turnstile_secret_key,turnstile_mode,turnstile_protect_portal,turnstile_protect_admin
             FROM settings
             WHERE id = 1
             """
@@ -394,7 +462,19 @@ def register(app):
             "admin_totp_enabled": int(settings.get("admin_totp_enabled") or 0),
             "admin_totp_secret": settings.get("admin_totp_secret"),
             "admin_totp_local_trust_enabled": int(settings.get("admin_totp_local_trust_enabled") or 0),
+            "turnstile_enabled": 1 if request.form.get("turnstile_enabled") == "1" else 0,
+            "turnstile_site_key": str(request.form.get("turnstile_site_key") or "").strip() or None,
+            "turnstile_secret_key": settings.get("turnstile_secret_key"),
+            "turnstile_mode": request.form.get("turnstile_mode") if request.form.get("turnstile_mode") in {"compact", "invisible"} else "compact",
+            "turnstile_protect_portal": 1 if request.form.get("turnstile_protect_portal") == "1" else 0,
+            "turnstile_protect_admin": 1 if request.form.get("turnstile_protect_admin") == "1" else 0,
         }
+        submitted_turnstile_secret = str(request.form.get("turnstile_secret_key") or "").strip()
+        if submitted_turnstile_secret:
+            params["turnstile_secret_key"] = encrypt_secret(submitted_turnstile_secret)
+        if params["turnstile_enabled"] and (not params["turnstile_site_key"] or not params["turnstile_secret_key"]):
+            flash(get_translator()("turnstile_configuration_incomplete"), "error")
+            return redirect(url_for("settings_page"))
 
         if new_password or confirm_password:
             if len(new_password) < 8:
@@ -433,6 +513,9 @@ def register(app):
                 admin_totp_enabled = :admin_totp_enabled,
                 admin_totp_secret = :admin_totp_secret,
                 admin_totp_local_trust_enabled = :admin_totp_local_trust_enabled
+                ,turnstile_enabled=:turnstile_enabled,turnstile_site_key=:turnstile_site_key,
+                turnstile_secret_key=:turnstile_secret_key,turnstile_mode=:turnstile_mode,
+                turnstile_protect_portal=:turnstile_protect_portal,turnstile_protect_admin=:turnstile_protect_admin
                 {password_update_sql}
             WHERE id = 1
             """,
@@ -454,7 +537,7 @@ def register(app):
             ),
         )
 
-        session["vodum_admin_email"] = admin_email
+        update_admin_principal_email(session, admin_email)
         flash(get_translator()("settings_security_saved"), "success")
         return redirect(url_for("settings_page"))
     @app.route("/settings/<section>", methods=["GET"])

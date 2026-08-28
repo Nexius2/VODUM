@@ -47,6 +47,7 @@ def validate_and_upgrade_core_schema(
     # Jellyfin stored password (1 password per media account/server)
     ensure_column(cursor, "media_users", "stored_password", "TEXT DEFAULT NULL")
     ensure_column(cursor, "media_users", "preferred_language", "TEXT DEFAULT NULL")
+    ensure_column(cursor, "vodum_users", "preferred_language", "TEXT DEFAULT NULL")
     # Vodum only needs the Jellyfin admin token to replace a user's password.
     # Purge legacy plaintext passwords; new password changes also leave this NULL.
     cursor.execute(

@@ -1,0 +1,3 @@
+{% extends "portal/base.html" %}
+{% block title %}{{ t("portal_error_title") }} - {{ app_brand_name }}{% endblock %}
+{% block content %}<section class="mx-auto max-w-xl rounded-xl border border-red-900/60 bg-slate-900 p-8 text-center" role="alert"><h1 class="text-xl font-semibold">{{ t("portal_error_title") }}</h1><p class="mt-3 text-sm text-slate-400">{{ t(message_key) }}</p><a href="{{ url_for('portal_home') }}" class="mt-6 inline-block rounded bg-slate-700 px-4 py-2">{{ t("portal_return_home") }}</a></section>{% endblock %}

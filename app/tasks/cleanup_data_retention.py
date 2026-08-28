@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 from tasks_engine import task_logs
 from logging_utils import get_logger
+from core.portal_privacy import cleanup_portal_retention
 
 log = get_logger("cleanup_data_retention")
 
@@ -79,6 +80,8 @@ def run(task_id: int, db):
     _del("DELETE FROM media_events WHERE ts < ?", (cutoff_iso,), "media_events")
     _del("DELETE FROM media_jobs WHERE created_at < ?", (cutoff_iso,), "media_jobs")
     _del("DELETE FROM tautulli_import_jobs WHERE created_at < ?", (cutoff_iso,), "tautulli_import_jobs")
+    portal_deleted = cleanup_portal_retention(db, cutoff_iso)
+    task_logs(task_id, "info", f"portal_retention={portal_deleted}")
 
     task_logs(task_id, "success", f"Cleanup finished. total_deleted={total_deleted}")
     log.info(f"=== CLEANUP DATA RETENTION : DONE (total_deleted={total_deleted}) ===")

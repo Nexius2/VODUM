@@ -6,7 +6,6 @@ import secrets
 import time
 from datetime import timedelta
 from flask import Flask, g, request, session, abort
-from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import Config
 from logging_utils import get_logger
@@ -22,6 +21,7 @@ from core.error_reporting import (
     install_thread_exception_logging,
     register_flask_exception_logging,
 )
+from core.proxy_security import ConditionalProxyFix
 from utils.version import load_app_version
 
 from api.subscriptions import subscriptions_api
@@ -29,7 +29,7 @@ from blueprints.users import users_bp
 
 from web.helpers import get_db, table_exists, close_db
 from web.filters import inject_brand_name, safe_datetime, cron_human, tz_filter, browser_datetime, utc_iso
-from web.security import ip_in_networks
+from web.security import csrf_tokens_match, ip_in_networks
 
 
 task_logger = get_logger("tasks_ui")
@@ -40,27 +40,6 @@ performance_logger = get_logger("performance")
 
 
 _I18N_CACHE: dict[str, dict] = {}
-
-class ConditionalProxyFix:
-    """
-    Applique ProxyFix uniquement si enabled_getter() retourne True.
-    Permet d'activer/désactiver dynamiquement le trust proxy via les settings.
-    """
-    def __init__(self, wsgi_app, enabled_getter, trusted_networks_getter):
-        self._raw_app = wsgi_app
-        self._proxy_app = ProxyFix(wsgi_app, x_for=1, x_proto=1, x_host=1)
-        self._enabled_getter = enabled_getter
-        self._trusted_networks_getter = trusted_networks_getter
-
-    def __call__(self, environ, start_response):
-        peer_ip = environ.get("REMOTE_ADDR")
-        if (
-            self._enabled_getter()
-            and ip_in_networks(peer_ip, self._trusted_networks_getter())
-        ):
-            return self._proxy_app(environ, start_response)
-        return self._raw_app(environ, start_response)
-
 
 def _env_bool(name: str) -> bool | None:
     raw = os.environ.get(name)
@@ -360,11 +339,7 @@ def create_app():
 
         session_token = (session.get("_csrf_token") or "").strip()
 
-        if (
-            not sent_token
-            or not session_token
-            or not hmac.compare_digest(sent_token, session_token)
-        ):
+        if not csrf_tokens_match(sent_token, session_token):
             abort(403)
 
     # Trust proxy :
@@ -433,6 +408,11 @@ def create_app():
         if route_timing_enabled:
             g.route_started_at = time.perf_counter()
 
+    @app.before_request
+    def limit_portal_request_size():
+        if (request.path.startswith("/portal") or request.path.startswith("/api/portal/")) and (request.content_length or 0) > 64 * 1024:
+            abort(413)
+
     @app.after_request
     def log_slow_route(response):
         started_at = getattr(g, "route_started_at", None)
@@ -479,6 +459,9 @@ def create_app():
                 "Strict-Transport-Security",
                 "max-age=31536000; includeSubDomains"
             )
+        if request.path.startswith("/portal") or request.path.startswith("/api/portal/"):
+            response.headers.setdefault("Cache-Control", "no-store")
+            response.headers.setdefault("Content-Security-Policy", "default-src 'self'; img-src 'self' data: https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; base-uri 'self'; form-action 'self'; frame-ancestors 'self'")
 
         return response
 

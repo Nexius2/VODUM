@@ -672,7 +672,11 @@ def _sync_users_and_policies_for_server(
             last_seen_at=last_seen_at,
         )
 
-        mark_jellyfin_media_user_present(db, media_user_id, jellyfin_id)
+        if bool(policy.get("IsDisabled")):
+            from core.jellyfin_sync_repository import set_jellyfin_media_user_presence
+            set_jellyfin_media_user_presence(db, media_user_id, jellyfin_id, "disabled")
+        else:
+            mark_jellyfin_media_user_present(db, media_user_id, jellyfin_id)
 
         _refresh_shared_libraries_for_server(
             db, media_user_id, server_id, allowed_db_lib_ids

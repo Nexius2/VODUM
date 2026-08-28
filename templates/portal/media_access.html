@@ -1,0 +1,14 @@
+{% extends "portal/base.html" %}
+{% block title %}{{ t("portal_media_access") }} - {{ app_brand_name }}{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-semibold">{{ t("portal_media_access") }}</h1>
+<p class="mt-1 text-sm text-slate-400">{{ t("portal_media_access_help") }}</p>
+{% if accounts %}<div class="mt-6 grid gap-4 md:grid-cols-2">{% for account in accounts %}
+  <article class="rounded-xl border border-slate-800 bg-slate-900 p-6">
+    <div class="flex items-start justify-between gap-4"><div><h2 class="font-semibold">{{ account.server_name }}</h2><p class="text-sm text-slate-400">{{ account.type|capitalize }} · {{ account.username }}</p></div><span class="rounded bg-slate-800 px-2 py-1 text-xs">{{ t(account.invitation_status) }}</span></div>
+    <h3 class="mt-5 text-sm font-semibold">{{ t("libraries") }}</h3>
+    {% if account.libraries %}<ul class="mt-2 space-y-1 text-sm text-slate-300">{% for library in account.libraries %}<li>{{ library.name }}</li>{% endfor %}</ul>{% else %}<p class="mt-2 text-sm text-slate-500">{{ t("portal_no_libraries") }}</p>{% endif %}
+    {% if account.type == 'jellyfin' %}<form method="post" action="{{ url_for('portal_media_profile_save', media_user_id=account.id) }}" class="mt-5 flex gap-2"><input type="hidden" name="_csrf_token" value="{{ csrf_token }}"><input name="username" value="{{ account.username }}" maxlength="100" required class="min-w-0 flex-1 rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm"><button class="rounded bg-cyan-800 px-3 py-2 text-sm">{{ t("save") }}</button></form>{% endif %}
+  </article>
+{% endfor %}</div>{% else %}<div class="mt-6">{% set empty_title='portal_no_media_access' %}{% set empty_help='portal_no_media_access_help' %}{% include 'portal/_empty_state.html' %}</div>{% endif %}
+{% endblock %}

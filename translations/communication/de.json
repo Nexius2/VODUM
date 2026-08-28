@@ -21,5 +21,14 @@
     "limit_label_max_bitrate": "Maximale Bitrate",
     "limit_label_ban_4k_transcode": "4K-Transkodierung blockiert",
     "limit_label_unknown": "Richtlinienlimit"
+  },
+  "portal": {
+    "invitation": {"subject": "Einladung zu Ihrem {brand_name}-Portal", "body": "Hallo {username},\n\nAktivieren Sie Ihr Konto mit diesem 7 Tage gueltigen Einmal-Link:\n{url}"},
+    "password_reset": {"subject": "{brand_name}-Passwort zuruecksetzen", "body": "Verwenden Sie diesen Einmal-Link innerhalb einer Stunde:\n{url}"},
+    "authentication_changed": {"subject": "Ihre {brand_name}-Anmeldung wurde zurueckgesetzt", "body": "Hallo {username},\n\nEin Administrator hat Ihre Anmeldemethoden zurueckgesetzt. Eine neue Einladung ist erforderlich.\n\n{portal_login_url}"},
+    "suspended": {"subject": "Ihr {brand_name}-Portalzugang wurde gesperrt", "body": "Hallo {username},\n\nIhr Portalzugang wurde gesperrt. Kontaktieren Sie bei Bedarf den Support."},
+    "reactivated": {"subject": "Ihr {brand_name}-Portalzugang wurde reaktiviert", "body": "Hallo {username},\n\nIhr Portalzugang wurde reaktiviert.\n\n{portal_login_url}"},
+    "new_login": {"subject": "Neue Anmeldung in Ihrem {brand_name}-Portal", "body": "Hallo {username},\n\nEine neue Anmeldung wurde registriert. Setzen Sie Ihr Passwort zurueck, falls Sie dies nicht waren.\n\n{portal_login_url}"},
+    "direct_message": {"subject": "Neue Nachricht in Ihrem {brand_name}-Portal", "body": "Hallo {username},\n\nSie haben eine neue Nachricht von einem Administrator erhalten. Melden Sie sich in Ihrem Portal an, um sie zu lesen.\n\n{portal_login_url}"}
   }
 }

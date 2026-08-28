@@ -1,0 +1,24 @@
+{% extends "portal/base.html" %}
+{% block title %}{{ t('portal_view_my_user_profile') }} · {{ portal_brand_name or app_brand_name }}{% endblock %}
+{% block content %}
+<div class="mb-6 rounded-lg border border-amber-700/60 bg-amber-950/30 px-4 py-3 text-sm text-amber-100">{{ t('portal_admin_preview_readonly') }}</div>
+<div class="grid gap-6 lg:grid-cols-3">
+  <section class="rounded-xl border border-slate-800 bg-slate-900 p-5 lg:col-span-2">
+    <h1 class="text-xl font-semibold">{{ profile.firstname or profile.username or profile.email }}</h1>
+    <p class="mt-1 text-sm text-slate-400">{{ profile.email or t('not_available') }}</p>
+    <dl class="mt-6 grid gap-4 sm:grid-cols-2">
+      <div><dt class="text-xs text-slate-500">{{ t('status') }}</dt><dd class="mt-1">{{ profile.status or t('not_available') }}</dd></div>
+      <div><dt class="text-xs text-slate-500">{{ t('portal_subscription') }}</dt><dd class="mt-1">{{ home.user.subscription_name or t('not_available') }}</dd></div>
+      <div><dt class="text-xs text-slate-500">{{ t('first_name') }}</dt><dd class="mt-1">{{ profile.firstname or t('not_available') }}</dd></div>
+      <div><dt class="text-xs text-slate-500">{{ t('last_name') }}</dt><dd class="mt-1">{{ profile.lastname or t('not_available') }}</dd></div>
+      <div><dt class="text-xs text-slate-500">{{ t('preferred_language') }}</dt><dd class="mt-1">{{ profile.preferred_language or t('not_available') }}</dd></div>
+      <div><dt class="text-xs text-slate-500">{{ t('expiration_date') }}</dt><dd class="mt-1">{{ home.user.expiration_date or t('not_available') }}</dd></div>
+    </dl>
+  </section>
+  <aside class="space-y-4">
+    <div class="rounded-xl border border-slate-800 bg-slate-900 p-5"><div class="text-2xl font-semibold">{{ home.server_count }}</div><div class="text-sm text-slate-400">{{ t('servers') }}</div></div>
+    <div class="rounded-xl border border-slate-800 bg-slate-900 p-5"><div class="text-2xl font-semibold">{{ home.library_count }}</div><div class="text-sm text-slate-400">{{ t('libraries') }}</div></div>
+  </aside>
+</div>
+<section class="mt-6 rounded-xl border border-slate-800 bg-slate-900 p-5"><h2 class="font-semibold">{{ t('portal_media_access') }}</h2><div class="mt-4 grid gap-3 md:grid-cols-2">{% for account in media_accounts %}<div class="rounded border border-slate-700 bg-slate-800 p-4"><div class="font-medium">{{ account.server_name }}</div><div class="mt-1 text-sm text-slate-400">{{ account.type|upper }} · {{ account.username or t('not_available') }}</div><div class="mt-2 text-xs text-slate-500">{{ account.libraries|length }} {{ t('libraries') }}</div></div>{% else %}<p class="text-sm text-slate-400">{{ t('not_available') }}</p>{% endfor %}</div></section>
+{% endblock %}

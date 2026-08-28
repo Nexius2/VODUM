@@ -3,6 +3,7 @@ import threading
 import logging
 from typing import Any, Iterable, Optional
 import os
+from contextlib import contextmanager
 
 from secret_store import decrypt_server_record
 
@@ -127,6 +128,21 @@ class DBManager:
                 cur.close()
                 raise
 
+    @contextmanager
+    def transaction(self):
+        """Yield one cursor while holding the connection lock for an atomic unit."""
+        with self._lock:
+            cursor = self.conn.cursor()
+            try:
+                cursor.execute("BEGIN IMMEDIATE")
+                yield cursor
+                self.conn.commit()
+            except Exception:
+                self.conn.rollback()
+                raise
+            finally:
+                cursor.close()
+
     def executemany(
         self,
         sql: str,
@@ -204,5 +220,4 @@ class DBManager:
             "DBManager connection closed + cache entry removed for %s",
             getattr(self, "db_path", "<unknown>"),
         )
-
 

@@ -16,6 +16,11 @@ from core.admin_auth_identities import (
     unlink_admin_auth_identity,
 )
 from core.auth_totp import verify_totp_code
+from core.auth_principal import current_principal, open_admin_session, principal_has_role
+
+
+def _admin_authenticated() -> bool:
+    return principal_has_role(current_principal(), "admin")
 from core.plex_auth_client import (
     PlexAuthorizationIncomplete,
     PlexAuthClient,
@@ -165,10 +170,7 @@ def _client(db) -> PlexAuthClient:
 
 
 def _open_admin_session(settings: dict):
-    session.clear()
-    session["vodum_logged_in"] = True
-    session["vodum_admin_email"] = settings.get("admin_email") or ""
-    session.permanent = True
+    open_admin_session(session, settings.get("admin_email") or "", auth_level="plex")
     if should_resume_setup_wizard(get_db(), settings):
         return redirect(url_for("setup_wizard", resume="wizard"))
     return redirect(url_for("dashboard"))
@@ -339,7 +341,7 @@ def start_wizard_plex_link(db):
 def register(app):
     @app.post("/auth/plex/discovery/start")
     def plex_discovery_start():
-        if session.get("vodum_logged_in") is not True:
+        if not _admin_authenticated():
             return redirect(url_for("login"))
         db = get_db()
         linked = get_admin_auth_identity(db, "plex")
@@ -374,7 +376,7 @@ def register(app):
 
     @app.get("/auth/plex/discovery/callback")
     def plex_discovery_callback():
-        if session.get("vodum_logged_in") is not True:
+        if not _admin_authenticated():
             return redirect(url_for("login"))
         db = get_db()
         state = request.args.get("state") or ""
@@ -431,7 +433,7 @@ def register(app):
 
     @app.get("/auth/plex/discovery/results")
     def plex_discovery_results():
-        if session.get("vodum_logged_in") is not True:
+        if not _admin_authenticated():
             return redirect(url_for("login"))
         context = session.get(DISCOVERY_SESSION_KEY) or {}
         db = get_db()
@@ -470,7 +472,7 @@ def register(app):
 
     @app.post("/auth/plex/discovery/add")
     def plex_discovery_add():
-        if session.get("vodum_logged_in") is not True:
+        if not _admin_authenticated():
             return redirect(url_for("login"))
         context = session.get(DISCOVERY_SESSION_KEY) or {}
         db = get_db()
@@ -538,7 +540,7 @@ def register(app):
             int(wizard_settings.get("wizard_active") or 0) == 1
             and wizard_state.get("administrator") == "plex_pending"
         )
-        if session.get("vodum_logged_in") is not True and not wizard_authorized:
+        if not _admin_authenticated() and not wizard_authorized:
             return redirect(url_for("login"))
         return start_wizard_plex_link(db)
 
@@ -663,7 +665,7 @@ def register(app):
 
     @app.post("/auth/plex/link")
     def plex_auth_link_start():
-        if session.get("vodum_logged_in") is not True:
+        if not _admin_authenticated():
             return redirect(url_for("login"))
         db = get_db()
         if _plex_locked(db):
@@ -706,7 +708,7 @@ def register(app):
         ) or _wizard_flow_matches(db, returned_state)
         wizard_settings = load_setup_wizard_settings(db)
         wizard_authorized = wizard_return and int(wizard_settings.get("wizard_active") or 0) == 1
-        if session.get("vodum_logged_in") is not True and not wizard_authorized:
+        if not _admin_authenticated() and not wizard_authorized:
             return redirect(url_for("login"))
         if _plex_locked(db, state=returned_state):
             flash("plex_auth_rate_limited", "error")
@@ -761,7 +763,7 @@ def register(app):
         return_to_wizard = pending.get("return_to_wizard") is True
         wizard_settings = load_setup_wizard_settings(get_db())
         wizard_authorized = return_to_wizard and int(wizard_settings.get("wizard_active") or 0) == 1
-        if session.get("vodum_logged_in") is not True and not wizard_authorized:
+        if not _admin_authenticated() and not wizard_authorized:
             return redirect(url_for("login"))
         session.pop(PENDING_IDENTITY_KEY, None)
         try:
@@ -805,13 +807,7 @@ def register(app):
             state["administrator"] = "plex"
             state["plex_auth"] = "linked"
             save_setup_wizard_progress(db, step=3, state=state, active=1)
-            active_lang = session.get("lang")
-            session.clear()
-            session["vodum_logged_in"] = True
-            session["vodum_admin_email"] = admin_email
-            if active_lang:
-                session["lang"] = active_lang
-            session.permanent = True
+            open_admin_session(session, admin_email, auth_level="plex")
         flash("plex_auth_linked", "success")
         if return_to_wizard:
             return _redirect_after_wizard_link()
@@ -819,7 +815,7 @@ def register(app):
 
     @app.post("/auth/plex/unlink")
     def plex_auth_unlink():
-        if session.get("vodum_logged_in") is not True:
+        if not _admin_authenticated():
             return redirect(url_for("login"))
         db = get_db()
         removed = unlink_admin_auth_identity(db, provider="plex")
