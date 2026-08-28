@@ -225,10 +225,22 @@ def register(app):
         if not support:
             return _portal_error("portal_account_missing")
         conversation = conversation_for_user(db, user_id) if support.get("quick_messages_enabled") else None
-        messages = list_messages(db, conversation["id"]) if conversation and conversation.get("id") else []
+        all_messages = list_messages(db, conversation["id"]) if conversation and conversation.get("id") else []
+        show_message_history = request.args.get("messages") == "all"
+        has_older_messages = len(all_messages) > 6
+        messages = all_messages if show_message_history else all_messages[-6:]
         if conversation and conversation.get("id"):
             mark_read(db, conversation["id"], "user")
-        return render_template("portal/support.html", support=support, conversation=conversation, messages=messages, **ui, active_portal_page="support")
+        return render_template(
+            "portal/support.html",
+            support=support,
+            conversation=conversation,
+            messages=messages,
+            has_older_messages=has_older_messages,
+            show_message_history=show_message_history,
+            **ui,
+            active_portal_page="support",
+        )
 
     @app.post("/portal/support/messages")
     @portal_login_required

@@ -2309,6 +2309,8 @@
   "portal_quick_messages_help": "Activa las conversaciones directas entre usuarios y administradores.",
   "portal_quick_messages_available_soon": "La mensajería directa está activada.",
   "portal_messages": "Mensajes",
+  "portal_show_previous_messages": "Ver mensajes anteriores",
+  "portal_show_recent_messages": "Mostrar solo los 6 mensajes más recientes",
   "communications.inbox": "Bandeja de entrada",
   "communications.campaigns": "Campañas",
   "communications.templates": "Plantillas",

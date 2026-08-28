@@ -18,6 +18,12 @@ class VodumSessionInterface(SecureCookieSessionInterface):
 
     def get_cookie_samesite(self, app):
         value = super().get_cookie_samesite(app)
+        # Plex authentication leaves VODUM for app.plex.tv, then returns through
+        # a top-level GET callback. A Strict cookie is not sent on that
+        # cross-site return, so the PIN/state stored in the session is lost.
+        # Emit the flow-start response as Lax without weakening other sessions.
+        if request.endpoint in {"portal_plex_start", "portal_plex_link_start"}:
+            return "Lax"
         if value == "None" and not request.is_secure:
             return "Lax"
         return value
