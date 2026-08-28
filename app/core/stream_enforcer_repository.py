@@ -35,6 +35,7 @@ def load_live_sessions(db, window_seconds: int, stable_seconds: int) -> List[dic
     rows = db.query("""
         SELECT ms.server_id, LOWER(TRIM(s.type)) AS provider, ms.session_key,
           ms.media_user_id, ms.external_user_id, mu.vodum_user_id,
+          vu.subscription_template_id,
           mu.username AS media_username, ms.media_key, ms.media_type, ms.title,
           ms.grandparent_title, ms.parent_title, ms.state, ms.progress_ms,
           ms.duration_ms, ms.is_transcode, ms.bitrate, ms.device, ms.client_name,
@@ -42,6 +43,7 @@ def load_live_sessions(db, window_seconds: int, stable_seconds: int) -> List[dic
         FROM media_sessions ms
         JOIN servers s ON s.id = ms.server_id
         LEFT JOIN media_users mu ON mu.id = ms.media_user_id
+        LEFT JOIN vodum_users vu ON vu.id = mu.vodum_user_id
         WHERE LOWER(TRIM(s.type)) IN ('plex','jellyfin')
           AND COALESCE(s.status, '') != 'down'
           AND (s.cooldown_until IS NULL OR s.cooldown_until <= CURRENT_TIMESTAMP)

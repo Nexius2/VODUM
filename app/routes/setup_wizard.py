@@ -7,6 +7,7 @@ from pathlib import Path
 
 from core.app_paths import imports_dir as get_imports_dir
 from core.auth_totp import verify_totp_code
+from core.auth_principal import open_admin_session
 from core.i18n import get_available_languages
 from core.setup_wizard_navigation import (
     display_setup_step as _display_step,
@@ -236,11 +237,8 @@ def register(app):
                 )
                 from core.admin_auth_identities import sync_local_admin_identity
                 sync_local_admin_identity(db, email)
-                session.clear()
-                session["vodum_logged_in"] = True
-                session["vodum_admin_email"] = email
+                open_admin_session(session, email, auth_level="password_totp" if totp_enabled else "password")
                 session["vodum_local_reauth_at"] = int(time.time())
-                session.permanent = True
                 state["administrator"] = "created"
 
             elif step == 3:

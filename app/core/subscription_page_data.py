@@ -1,6 +1,8 @@
 import json
 import math
 
+from core.subscription_value_format import format_subscription_value
+
 
 SUBSCRIPTION_SETTINGS_COLUMNS = """
     default_subscription_days,
@@ -16,6 +18,7 @@ SUBSCRIPTION_SETTINGS_COLUMNS = """
     usage_risk_medium_threshold,
     usage_risk_high_threshold,
     subscription_plans_enabled_only,
+    subscription_currency,
     enable_cron_jobs
 """
 
@@ -105,6 +108,7 @@ def load_subscription_page_catalog(db, *, tab: str) -> dict:
               is_default,
               is_enabled,
               is_lifetime,
+              hide_from_portal,
               policies_json,
               created_at,
               updated_at
@@ -113,6 +117,9 @@ def load_subscription_page_catalog(db, *, tab: str) -> dict:
         """) or []
     templates = [dict(row) for row in templates]
     for template in templates:
+        template["subscription_value"] = format_subscription_value(
+            template.get("subscription_value")
+        )
         try:
             policies = json.loads(template.get("policies_json") or "[]")
             template["policies_count"] = len(policies) if isinstance(policies, list) else 0

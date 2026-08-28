@@ -12,7 +12,7 @@
 {% endblock %}
 
 {% block content %}
-<form method="POST" action="{{ url_for('settings_save') }}" id="settings-form" class="grid grid-cols-1 xl:grid-cols-2 gap-8">
+<form method="POST" action="{{ url_for('settings_save') }}" enctype="multipart/form-data" id="settings-form" class="grid grid-cols-1 xl:grid-cols-2 gap-8">
 
   {% include "settings/partials/_settings_general.html" %}
   {% include "settings/partials/_settings_system.html" %}
@@ -125,6 +125,14 @@
             <span class="block text-xs text-slate-500 mt-1">{{ t("plex_auth_require_vodum_totp_help") }}</span>
           </span>
         </label>
+        <div class="mt-5 border-t border-slate-800 pt-5 space-y-4">
+          <label class="flex items-start gap-3 text-sm"><input type="checkbox" name="turnstile_enabled" value="1" {% if settings.turnstile_enabled %}checked{% endif %} class="mt-0.5"><span><span class="block text-slate-200">{{ t("turnstile_title") }}</span><span class="block text-xs text-slate-500">{{ t("turnstile_help") }}</span></span></label>
+          <div class="grid gap-4 md:grid-cols-2"><label class="text-sm text-slate-300">{{ t("turnstile_site_key") }}<input name="turnstile_site_key" value="{{ settings.turnstile_site_key or '' }}" class="mt-1 w-full rounded border border-slate-700 bg-slate-800 px-3 py-2"></label><label class="text-sm text-slate-300">{{ t("turnstile_secret_key") }}<input type="password" name="turnstile_secret_key" placeholder="{{ '••••••••' if settings.turnstile_secret_key else '' }}" autocomplete="new-password" class="mt-1 w-full rounded border border-slate-700 bg-slate-800 px-3 py-2"></label></div>
+          <div class="grid gap-4 md:grid-cols-2"><label class="text-sm text-slate-300">{{ t("turnstile_mode") }}<select name="turnstile_mode" class="mt-1 w-full rounded border border-slate-700 bg-slate-800 px-3 py-2"><option value="compact" {% if settings.turnstile_mode=='compact' %}selected{% endif %}>compact</option><option value="invisible" {% if settings.turnstile_mode=='invisible' %}selected{% endif %}>invisible</option></select></label><label class="mt-6 flex items-center gap-2 text-sm"><input type="checkbox" name="turnstile_protect_portal" value="1" {% if settings.turnstile_protect_portal %}checked{% endif %}>{{ t("turnstile_protect_portal") }}</label></div>
+          <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="turnstile_protect_admin" value="1" {% if settings.turnstile_protect_admin %}checked{% endif %}>{{ t("turnstile_protect_admin") }}</label>
+          <p class="text-xs text-slate-500">{{ t("turnstile_local_recovery") }}</p>
+          {% if settings.turnstile_enabled and settings.turnstile_site_key and settings.turnstile_secret_key %}<div class="cf-turnstile" data-sitekey="{{ settings.turnstile_site_key }}" data-size="compact"></div><button type="submit" formmethod="post" formaction="{{ url_for('settings_turnstile_test') }}" class="rounded bg-slate-700 px-3 py-2 text-sm">{{ t("turnstile_test") }}</button>{% endif %}
+        </div>
       </div>
 
     </form>
@@ -140,5 +148,6 @@
 {% block scripts %}
   {{ super() }}
   <script src="{{ url_for('static', filename='vendor/qrcode/qrcode.min.js', v=g.app_version|default('dev')) }}"></script>
+  {% if settings.turnstile_enabled %}<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>{% endif %}
   <script src="{{ url_for('static', filename='js/pages/settings.js', v=g.app_version|default('dev')) }}"></script>
 {% endblock %}

@@ -838,8 +838,10 @@
         </button>
 
 		<button type="submit"
+				id="confirmDeleteUserBtn"
 				formaction="{{ url_for('user_delete', user_id=user.id) }}"
 				formmethod="post"
+				disabled
 				class="px-4 py-2 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-sm">
 		  {{ t("delete_user_confirm_cta") if t("delete_user_confirm_cta") != "delete_user_confirm_cta" else "Yes, delete locally" }}
 		</button>

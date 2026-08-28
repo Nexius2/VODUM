@@ -44,6 +44,14 @@
           </p>
         </div>
 
+        <div>
+          <label class="block text-sm mb-1 text-slate-300">{{ t("subscription_currency") }}</label>
+          <select name="subscription_currency" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+            {% for code in ['EUR','USD','GBP','CHF','CAD','AUD','NZD','JPY','CNY','SEK','NOK','DKK','PLN','CZK'] %}<option value="{{ code }}" {% if (settings.subscription_currency or 'EUR') == code %}selected{% endif %}>{{ code }}</option>{% endfor %}
+          </select>
+          <p class="text-xs text-slate-500 mt-1">{{ t("subscription_currency_help") }}</p>
+        </div>
+
       </div>
 
       <div class="mt-8 pt-6 border-t border-slate-800">

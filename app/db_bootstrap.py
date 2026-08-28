@@ -30,6 +30,7 @@ from core.db_bootstrap_email_defaults import seed_legacy_email_templates
 from core.db_bootstrap_communications import ensure_communications_schema
 from core.db_bootstrap_task_catalog import seed_default_tasks
 from core.db_bootstrap_admin_auth import ensure_admin_auth_schema
+from core.db_bootstrap_portal import ensure_portal_foundation_schema
 
 
 # Bootstrap messages contain Unicode symbols. Some host consoles (notably
@@ -108,6 +109,13 @@ def run_migrations():
         conn,
         cursor,
         table_exists=table_exists,
+    )
+
+    ensure_portal_foundation_schema(
+        conn,
+        cursor,
+        table_exists=table_exists,
+        ensure_column=ensure_column,
     )
 
     migrate_task_scheduler_mode(

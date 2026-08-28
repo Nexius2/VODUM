@@ -9,6 +9,13 @@
 Automatic backup and cleanup tasks enforce configured age and file-count
 retention. Database integrity diagnostics are visible on the page.
 
+Portal accounts, identities, sessions, tokens and audit events live in the main
+database and are therefore included in every full backup and restored atomically
+with it. A personal-data erasure affects the live database and future backups;
+older backups may still contain the erased data until normal backup retention
+deletes them. Restoring such a backup restores that historical state, so operators
+must reapply any erasure request after a rollback when legally required.
+
 ## Restore
 
 Select an existing backup or upload `.zip`, `.db` or `.sqlite`. VODUM validates

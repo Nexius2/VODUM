@@ -145,6 +145,10 @@ def register(app):
         usage_risk_enabled = 1 if request.form.get("usage_risk_enabled") == "1" else 0
         usage_risk_send_upgrade_suggestions = 1 if request.form.get("usage_risk_send_upgrade_suggestions") == "1" else 0
         usage_risk_send_stream_blocked_message = 1 if request.form.get("usage_risk_send_stream_blocked_message") == "1" else 0
+        subscription_currency = (request.form.get("subscription_currency") or settings.get("subscription_currency") or "EUR").strip().upper()
+        allowed_currencies = {"EUR", "USD", "GBP", "CHF", "CAD", "AUD", "NZD", "JPY", "CNY", "SEK", "NOK", "DKK", "PLN", "CZK"}
+        if subscription_currency not in allowed_currencies:
+            subscription_currency = "EUR"
 
         if expiry_mode in ("warn_only", "warn_then_disable"):
             usage_risk_send_stream_blocked_message = 1
@@ -241,7 +245,8 @@ def register(app):
                 usage_risk_analysis_window_days = ?,
                 usage_risk_suggestion_cooldown_days = ?,
                 usage_risk_medium_threshold = ?,
-                usage_risk_high_threshold = ?
+                usage_risk_high_threshold = ?,
+                subscription_currency = ?
             WHERE id = 1
             """,
             (
@@ -258,6 +263,7 @@ def register(app):
                 usage_risk_suggestion_cooldown_days,
                 usage_risk_medium_threshold,
                 usage_risk_high_threshold,
+                subscription_currency,
             ),
         )
 
@@ -371,6 +377,7 @@ def register(app):
         is_default = 1 if request.form.get("is_default") == "1" else 0
         is_enabled = 1 if request.form.get("is_enabled") == "1" else 0
         is_lifetime = 1 if request.form.get("is_lifetime") == "1" else 0
+        hide_from_portal = 1 if request.form.get("hide_from_portal") == "1" else 0
 
         if is_lifetime:
             duration_days = 0
@@ -413,11 +420,12 @@ def register(app):
                   is_default=?,
                   is_enabled=?,
                   is_lifetime=?,
+                  hide_from_portal=?,
                   policies_json=?,
                   updated_at=CURRENT_TIMESTAMP
                 WHERE id=?
                 """,
-                (name, notes, duration_days, subscription_value, is_default, is_enabled, is_lifetime, json.dumps(clean), template_id),
+                (name, notes, duration_days, subscription_value, is_default, is_enabled, is_lifetime, hide_from_portal, json.dumps(clean), template_id),
             )
             refreshed = 0
             assigned_users = db.query(
@@ -464,10 +472,11 @@ def register(app):
                   is_default,
                   is_enabled,
                   is_lifetime,
+                  hide_from_portal,
                   policies_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (name, notes, duration_days, subscription_value, is_default, is_enabled, is_lifetime, json.dumps(clean)),
+                (name, notes, duration_days, subscription_value, is_default, is_enabled, is_lifetime, hide_from_portal, json.dumps(clean)),
             )
             add_log("info", "subscriptions", f"Template created: {name}")
             flash("subscription_template_created", "success")

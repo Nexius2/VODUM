@@ -13,7 +13,7 @@ from notifications_utils import effective_notifications_order, is_email_ready
 from discord_utils import enrich_discord_settings, is_discord_ready, send_discord_dm, DiscordSendError
 from email_sender import send_email
 from tasks_engine import enqueue_task
-from mailing_utils import build_user_context, render_mail
+from mailing_utils import build_portal_login_url, build_user_context, render_mail
 from core.communication_i18n import (
     resolve_communication_language,
     resolve_generated_payload_text,
@@ -768,6 +768,14 @@ def send_to_user(
         or s.get("app_name")
         or "VODUM"
     )
+    portal_public_url = s.get("portal_public_url")
+    if not portal_public_url and db is not None:
+        try:
+            portal_row = db.query_one("SELECT portal_public_url FROM settings WHERE id=1")
+            portal_public_url = dict(portal_row).get("portal_public_url") if portal_row else None
+        except Exception:
+            portal_public_url = None
+    render_input["portal_login_url"] = build_portal_login_url(portal_public_url)
 
     render_context = build_user_context(render_input)
     subject = render_mail(subject or "", render_context)

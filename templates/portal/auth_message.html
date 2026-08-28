@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="{{ active_lang or 'en' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{ t('portal_error_title') }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/vodum.css', v=g.app_version|default('dev')) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css', v=g.app_version|default('dev')) }}">
+</head>
+<body class="bg-slate-950 text-slate-100 login-visual-page">
+  {% if login_quote_visual %}<div class="login-visual-layer" aria-hidden="true">{% if login_quote_visual.backdrop_url %}<img src="{{ login_quote_visual.backdrop_url }}" alt="" class="login-visual-bg login-visual-backdrop">{% endif %}{% if login_quote_visual.poster_url %}<img src="{{ login_quote_visual.poster_url }}" alt="" class="login-visual-bg login-visual-poster">{% endif %}<div class="login-visual-vignette"></div></div>{% endif %}
+  <div class="login-visual-content flex min-h-screen items-center justify-center p-4">
+    <main class="login-card w-full max-w-md rounded-xl border border-slate-800 bg-slate-900 p-6 text-center">
+      {% if portal_logo_url %}<img src="{{ portal_logo_url }}" alt="" class="mx-auto mb-4 h-12 w-12 rounded-lg object-contain">{% endif %}
+      <h1 class="text-xl font-semibold">{{ t('portal_error_title') }}</h1>
+      <p class="mt-3 text-sm text-slate-300">{{ t(message_key) }}</p>
+      <a href="{{ url_for('portal_login') }}" class="mt-6 inline-block rounded bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark">{{ t('portal_return_login') }}</a>
+    </main>
+  </div>
+</body>
+</html>

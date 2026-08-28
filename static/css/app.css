@@ -81,6 +81,38 @@ main {
   min-width: 0;
 }
 
+/* Portal content can contain administrator-defined names, emails and messages.
+   Keep long unbroken values inside their cards at desktop and mobile widths. */
+.portal-shell,
+.portal-shell main,
+.portal-shell section,
+.portal-shell article,
+.portal-shell form,
+.portal-shell dl,
+.portal-shell div {
+  min-width: 0;
+}
+
+.portal-shell :where(h1, h2, h3, p, a, span, dt, dd, li, label) {
+  overflow-wrap: anywhere;
+}
+
+.portal-shell :where(input, select, textarea) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.portal-shell :where(canvas, img, svg, video) {
+  max-width: 100%;
+}
+
+.portal-monitoring-legend-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 img,
 video,
 canvas,
@@ -459,4 +491,36 @@ svg {
   .login-card {
     max-width: min(100%, 28rem);
   }
+}
+/* User portal settings: checks above on narrow screens, dedicated right rail on desktop. */
+.portal-settings-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "checks" "main";
+  align-items: start;
+  gap: 1.5rem;
+  width: 100%;
+}
+.portal-settings-main { grid-area: main; }
+.portal-settings-checks { grid-area: checks; }
+.portal-readiness-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: .5rem;
+}
+@media (min-width: 40rem) and (max-width: 79.999rem) {
+  .portal-readiness-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 80rem) {
+  .portal-settings-layout {
+    grid-template-columns: minmax(0, 56rem) minmax(20rem, 1fr);
+    grid-template-areas: "main checks";
+  }
+  .portal-settings-checks {
+    position: sticky;
+    top: 1.5rem;
+  }
+}
+@media (min-width: 105rem) {
+  .portal-readiness-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

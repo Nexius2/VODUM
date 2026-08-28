@@ -52,6 +52,7 @@
                       {{ t("lifetime_subscription") }}
                     </span>
                   {% endif %}
+                  {% if tpl.hide_from_portal %}<span class="inline-flex px-2 py-0.5 rounded-full bg-slate-700/50 text-slate-300 text-[11px]">{{ t("subscription_hidden_from_portal") }}</span>{% endif %}
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3 text-xs">
@@ -67,7 +68,7 @@
                   </div>
                   <div class="rounded-lg bg-slate-900 border border-slate-800 px-3 py-2">
                     <div class="text-slate-500">{{ t("subscription_value") }}</div>
-                    <div class="text-slate-200 font-semibold mt-0.5">{{ tpl.subscription_value if tpl.subscription_value is not none else '—' }}</div>
+                    <div class="text-slate-200 font-semibold mt-0.5">{% if tpl.subscription_value is not none %}{{ tpl.subscription_value }} {{ settings.subscription_currency or 'EUR' }}{% else %}—{% endif %}</div>
                   </div>
                 </div>
 

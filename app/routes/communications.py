@@ -1,6 +1,6 @@
 # Unified Communications UI (Email + Discord)
 
-from flask import render_template, request, redirect, url_for, flash
+from flask import render_template, request, redirect, url_for, flash, jsonify
 
 from core.i18n import get_translator
 from core.communication_i18n import communication_language_options, normalize_communication_language
@@ -408,6 +408,28 @@ def register(app):
 
         action = (request.form.get("action") or "").strip().lower()
         selected_language = _selected_template_language(settings)
+
+        if action == "test":
+            subject = (request.form.get("subject") or "").strip()
+            body = (request.form.get("body") or "").strip()
+            if not subject or not body:
+                return jsonify({"ok": False, "error": t("comm_missing_fields")}), 400
+            test_settings = db.query_one(
+                f"SELECT {COMM_CONFIG_SETTINGS_COLUMNS}, admin_email, contact_email FROM settings WHERE id = 1"
+            )
+            test_settings = dict(test_settings) if test_settings else {}
+            to_email = (
+                (test_settings.get("contact_email") or "").strip()
+                or (test_settings.get("admin_email") or "").strip()
+                or (test_settings.get("mail_from") or "").strip()
+            )
+            if not to_email:
+                return jsonify({"ok": False, "error": t("comm_missing_admin_email_short")}), 400
+            ok, error = send_email(subject, body, to_email, test_settings)
+            if not ok:
+                return jsonify({"ok": False, "error": error or t("comm_email_send_failed_short")}), 502
+            add_log("info", "communications", "Communication template test email sent")
+            return jsonify({"ok": True, "message": t("comm_template_test_sent").format(email=to_email)})
 
         # Create
         if action == "create":

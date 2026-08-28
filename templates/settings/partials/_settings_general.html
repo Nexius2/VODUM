@@ -53,6 +53,19 @@
       <p class="text-xs text-slate-400 mt-1">{{ t("brand_name_hint") }}</p>
     </div>
 
+<div class="pt-4 border-t border-slate-800">
+  <label class="block text-sm mb-1 text-slate-300">{{ t('settings_brand_logo') }}</label>
+  {% if settings.portal_logo_url %}<div class="mb-3 flex items-center gap-3"><img src="{{ settings.portal_logo_url }}" alt="" class="h-14 w-14 rounded border border-slate-700 bg-slate-950 object-contain"><label class="flex items-center gap-2 text-xs text-slate-400"><input type="checkbox" name="remove_brand_logo" value="1">{{ t('settings_remove_logo') }}</label></div>{% endif %}
+  <div class="flex flex-wrap items-center gap-3">
+    <label class="inline-flex cursor-pointer items-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow hover:bg-primary-dark focus-within:ring-2 focus-within:ring-primary/50">
+      <span>{{ t('settings_choose_logo') }}</span>
+      <input type="file" name="brand_logo" accept="image/png,image/jpeg,image/gif,image/webp" class="sr-only" data-logo-input>
+    </label>
+    <span data-logo-filename data-empty-label="{{ t('settings_no_logo_selected') }}" class="text-sm text-slate-400">{{ t('settings_no_logo_selected') }}</span>
+  </div>
+  <p class="mt-1 text-xs text-slate-500">{{ t('settings_brand_logo_help') }}</p>
+</div>
+
 <!-- Anonymous telemetry -->
 <div class="pt-4 border-t border-slate-800">
 

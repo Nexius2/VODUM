@@ -6,6 +6,7 @@ SUBSCRIPTION_TEMPLATE_DUPLICATE_COLUMNS = """
     subscription_value,
     is_enabled,
     is_lifetime,
+    hide_from_portal,
     policies_json
 """
 
@@ -40,8 +41,9 @@ def duplicate_subscription_template(db, template_id: int) -> dict:
           is_default,
           is_enabled,
           is_lifetime,
+          hide_from_portal,
           policies_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             new_name,
@@ -51,6 +53,7 @@ def duplicate_subscription_template(db, template_id: int) -> dict:
             0,
             int(template.get("is_enabled") or 0),
             int(template.get("is_lifetime") or 0),
+            int(template.get("hide_from_portal") or 0),
             template.get("policies_json") or "[]",
         ),
     )

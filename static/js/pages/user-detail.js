@@ -219,6 +219,103 @@
     });
   }
 
+  function bindDeleteUserModal() {
+    const modal = document.getElementById("deleteUserModal");
+    const openButton = document.getElementById("openDeleteUserModalBtn");
+    const closeButton = document.getElementById("closeDeleteUserModalBtn");
+    const cancelButton = document.getElementById("cancelDeleteUserModalBtn");
+    const confirmButton = document.getElementById("confirmDeleteUserBtn");
+    const loading = document.getElementById("deleteUserCheckLoading");
+    const errorBox = document.getElementById("deleteUserCheckError");
+    const infoBox = document.getElementById("deleteUserInfoBox");
+    const returnWarning = document.getElementById("deleteUserReturnWarning");
+    const noReturnInfo = document.getElementById("deleteUserNoReturnInfo");
+
+    if (!modal || !openButton || !confirmButton || !loading || !errorBox || !infoBox || !returnWarning || !noReturnInfo) return;
+    if (modal.dataset.vodumBound === "1") return;
+    modal.dataset.vodumBound = "1";
+
+    let checkRequest = null;
+
+    function resetState() {
+      checkRequest?.abort();
+      checkRequest = null;
+      confirmButton.disabled = true;
+      loading.classList.add("hidden");
+      [errorBox, infoBox, returnWarning, noReturnInfo].forEach((element) => {
+        element.classList.add("hidden");
+        element.textContent = "";
+      });
+    }
+
+    function closeModal() {
+      modal.classList.add("hidden");
+      resetState();
+    }
+
+    function deleteCheckUrl() {
+      const url = new URL(confirmButton.formAction, window.location.origin);
+      url.pathname = `${url.pathname.replace(/\/$/, "")}/check`;
+      return url;
+    }
+
+    async function openModal() {
+      resetState();
+      modal.classList.remove("hidden");
+      loading.classList.remove("hidden");
+
+      const request = new AbortController();
+      checkRequest = request;
+      try {
+        const response = await fetch(deleteCheckUrl(), {
+          headers: { Accept: "application/json" },
+          signal: request.signal,
+        });
+        const data = await response.json();
+        if (!response.ok || data.ok === false) throw new Error(data.error || `HTTP ${response.status}`);
+        if (checkRequest !== request) return;
+
+        const linkedCount = Number(data.linked_accounts_total || 0);
+        const existingCount = Number(data.still_exists_total || 0);
+        const pendingCount = Number(data.pending_total || 0);
+        const unknownCount = Number(data.unknown_total || 0);
+        infoBox.textContent = `Linked media accounts: ${linkedCount}. Still on a platform: ${existingCount}. Pending: ${pendingCount}. Unknown: ${unknownCount}.`;
+        infoBox.classList.remove("hidden");
+
+        if (data.will_return_on_sync === true) {
+          returnWarning.textContent = "This deletion is local to VODUM. Because the user still exists on Plex or Jellyfin, they may return during the next sync.";
+          returnWarning.classList.remove("hidden");
+        } else {
+          noReturnInfo.textContent = "No linked account currently indicates that this user will return during the next Plex or Jellyfin sync.";
+          noReturnInfo.classList.remove("hidden");
+        }
+
+        if (data.can_delete === false) {
+          errorBox.textContent = data.blocked_reason || "This user cannot be deleted.";
+          errorBox.classList.remove("hidden");
+          confirmButton.disabled = true;
+        } else {
+          confirmButton.disabled = false;
+        }
+      } catch (error) {
+        if (error.name === "AbortError" || checkRequest !== request) return;
+        errorBox.textContent = `Unable to verify whether this user can be deleted: ${error.message || error}`;
+        errorBox.classList.remove("hidden");
+        confirmButton.disabled = true;
+      } finally {
+        if (checkRequest === request) {
+          checkRequest = null;
+          loading.classList.add("hidden");
+        }
+      }
+    }
+
+    openButton.addEventListener("click", openModal);
+    closeButton?.addEventListener("click", closeModal);
+    cancelButton?.addEventListener("click", closeModal);
+    modal.querySelector(".absolute.inset-0")?.addEventListener("click", closeModal);
+  }
+
   function bindAccessCollapsibles() {
     const config = readJsonConfig("user-access-config");
     const moreText = config.collapse_show_more || "Show more";
@@ -489,6 +586,7 @@
     bindExpirationOverride();
     bindReferrerPicker();
     bindJellyfinPasswordModal();
+    bindDeleteUserModal();
     bindAccessCollapsibles();
     bindUserMerge();
     bindMonitoringFrameSkeleton();

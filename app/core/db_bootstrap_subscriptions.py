@@ -11,6 +11,10 @@ def ensure_subscription_template_schema(
     # -------------------------------------------------
     # 1.3 Subscription templates (NEW)
     # -------------------------------------------------
+    existing_columns = set()
+    if table_exists(cursor, "subscription_templates"):
+        cursor.execute("PRAGMA table_info(subscription_templates)")
+        existing_columns = {row[1] for row in cursor.fetchall()}
     if not table_exists(cursor, "subscription_templates"):
         print("🛠 Creating table: subscription_templates")
         cursor.execute("""
@@ -32,6 +36,9 @@ def ensure_subscription_template_schema(
     ensure_column(cursor, "subscription_templates", "is_default", "INTEGER DEFAULT 0")
     ensure_column(cursor, "subscription_templates", "is_enabled", "INTEGER DEFAULT 1")
     ensure_column(cursor, "subscription_templates", "is_lifetime", "INTEGER DEFAULT 0")
+    ensure_column(cursor, "subscription_templates", "hide_from_portal", "INTEGER NOT NULL DEFAULT 0")
+    if "hide_from_portal" not in existing_columns:
+        cursor.execute("UPDATE subscription_templates SET hide_from_portal=1 WHERE is_lifetime=1")
     conn.commit()
 
     # Seed marker: default subscription templates must be inserted only once.

@@ -8,6 +8,7 @@ ALLOWED_VARS = {
     "expiration_date",
     "days_left",
     "brand_name",
+    "portal_login_url",
 
     "firstname",
     "lastname",
@@ -15,6 +16,9 @@ ALLOWED_VARS = {
     "server_url",
     "login_username",
     "temporary_password",
+    "provider_name",
+    "player_download_url",
+    "player_help_url",
 
     "subscription_name",
     "subscription_value",
@@ -84,6 +88,17 @@ def _fmt_value(value):
     return str(value)
 
 
+def build_portal_login_url(public_url: str | None) -> str:
+    base = str(public_url or "").strip().rstrip("/")
+    if not base:
+        return ""
+    if base.endswith("/portal/login"):
+        return base
+    if base.endswith("/portal"):
+        return f"{base}/login"
+    return f"{base}/portal/login"
+
+
 def build_user_context(user: dict):
     today = date.today()
 
@@ -110,6 +125,8 @@ def build_user_context(user: dict):
         or ""
     )
 
+    portal_login_url = user.get("portal_login_url") or build_portal_login_url(user.get("portal_public_url"))
+
     return {
         "username": username,
         "firstusername": firstname or username,
@@ -117,6 +134,7 @@ def build_user_context(user: dict):
         "expiration_date": str(expiration) if expiration else "",
         "days_left": days_left,
         "brand_name": user.get("brand_name", "") or "VODUM",
+        "portal_login_url": portal_login_url,
 
         "firstname": firstname,
         "lastname": user.get("lastname", "") or "",
@@ -124,6 +142,9 @@ def build_user_context(user: dict):
         "server_url": user.get("server_url", "") or "",
         "login_username": user.get("login_username", "") or username,
         "temporary_password": user.get("temporary_password", "") or "",
+        "provider_name": user.get("provider_name", "") or "",
+        "player_download_url": user.get("player_download_url", "") or "",
+        "player_help_url": user.get("player_help_url", "") or "",
 
         "subscription_name": subscription_name,
         "subscription_value": subscription_value,

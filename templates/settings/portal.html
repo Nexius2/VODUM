@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% set active_page = "portal_settings" %}
+
+{% block header_title %}{{ t("portal_users") }}{% endblock %}
+{% block header_subtitle %}{{ t("portal_settings_subtitle") }}{% endblock %}
+
+{% block header_actions %}
+<button type="submit" form="portal-settings-form" class="px-4 py-2 bg-primary hover:bg-primary-dark rounded text-white text-sm">{{ t("save") }}</button>
+{% endblock %}
+
+{% block content %}
+<form id="portal-settings-form" method="post" action="{{ url_for('portal_settings_save') }}" class="portal-settings-layout">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+  <div class="portal-settings-main min-w-0 space-y-6">
+  <section class="rounded-xl border border-slate-800 bg-slate-900 p-5 space-y-5">
+    <div>
+      <div>
+        <h2 class="font-semibold text-slate-100">{{ t("portal_access") }}</h2>
+        <p class="mt-1 text-sm text-slate-400">{{ t("portal_access_help") }}</p>
+      </div>
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-slate-300 mb-1.5">{{ t("portal_public_url") }}</label>
+      <input name="portal_public_url" type="url" value="{{ settings.portal_public_url or '' }}" placeholder="https://portal.example.com" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" data-portal-public-url>
+      <p class="mt-2 text-xs text-slate-500">{{ t('portal_public_url_help') }}</p>
+      <div class="mt-3 flex flex-col gap-2 rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between" data-portal-login-address>
+        <div class="min-w-0"><span class="block text-xs font-medium text-slate-400">{{ t('portal_user_login_url') }}</span><a href="{{ portal_login_url or '#' }}" target="_blank" rel="noopener" class="mt-0.5 block truncate text-sm text-cyan-300 transition-colors hover:text-cyan-200 hover:underline" data-portal-login-link>{{ portal_login_url or '—' }}</a></div>
+        <a href="{{ portal_login_url or '#' }}" target="_blank" rel="noopener" class="shrink-0 rounded bg-slate-700 px-3 py-1.5 text-center text-xs font-medium text-slate-100 transition-colors hover:bg-slate-600" data-portal-login-open>{{ t('portal_open_login') }} <span aria-hidden="true">↗</span></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="rounded-xl border border-slate-800 bg-slate-900 p-5">
+    <h2 class="font-semibold text-slate-100">{{ t("portal_login_methods") }}</h2>
+    <p class="mt-1 mb-4 text-sm text-slate-400">{{ t("portal_login_methods_help") }}</p>
+    <div class="grid gap-3 sm:grid-cols-3">
+      {% for field, label in [('portal_local_auth_enabled', 'portal_login_local'), ('portal_plex_auth_enabled', 'portal_login_plex'), ('portal_jellyfin_auth_enabled', 'portal_login_jellyfin')] %}
+        <label class="flex min-h-20 cursor-pointer items-start justify-between gap-4 rounded-lg border border-slate-700 bg-slate-800/60 p-4 transition-colors hover:border-slate-600 hover:bg-slate-800">
+          <span><span class="block text-sm font-medium text-slate-100">{{ t(label) }}</span><span class="mt-1 block text-xs text-slate-500">{{ t(label ~ '_help') }}</span></span>
+          <input type="checkbox" name="{{ field }}" value="1" {% if settings[field] %}checked{% endif %} class="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-600" {% if field == 'portal_local_auth_enabled' %}data-portal-local-auth{% endif %}>
+        </label>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section id="portal-password-policy" class="rounded-xl border border-slate-800 bg-slate-900 p-5 {% if not settings.portal_local_auth_enabled %}hidden{% endif %}">
+    <h2 class="font-semibold text-slate-100">{{ t('portal_password_policy') }}</h2>
+    <p class="mt-1 text-sm text-slate-400">{{ t('portal_password_policy_help') }}</p>
+    <div class="mt-5 grid gap-4 md:grid-cols-[12rem_1fr]">
+      <label class="rounded-lg border border-slate-700 bg-slate-950 p-4 text-sm"><span class="block font-medium text-slate-200">{{ t('portal_password_min_length') }}</span><span class="mt-1 block text-xs text-slate-500">{{ t('portal_password_min_length_help') }}</span><input type="number" min="8" max="128" name="portal_password_min_length" value="{{ settings.portal_password_min_length or 8 }}" class="mt-3 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-lg font-semibold"></label>
+      <div class="grid gap-3 sm:grid-cols-2">{% for field,label in [('portal_password_require_upper','portal_password_upper'),('portal_password_require_lower','portal_password_lower'),('portal_password_require_digit','portal_password_digit'),('portal_password_require_symbol','portal_password_symbol')] %}<label class="flex cursor-pointer items-center justify-between gap-4 rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm transition-colors hover:border-slate-600 hover:bg-slate-800"><span>{{ t(label) }}</span><input type="checkbox" name="{{ field }}" value="1" {% if settings[field] %}checked{% endif %} class="h-4 w-4 shrink-0 rounded border-slate-600"></label>{% endfor %}</div>
+    </div>
+  </section>
+
+  <section class="rounded-xl border border-slate-800 bg-slate-900 p-5"><h2 class="font-semibold text-slate-100">{{ t("portal_visible_sections") }}</h2><p class="mt-1 text-sm text-slate-400">{{ t('portal_visible_sections_help') }}</p><div class="mt-4 grid gap-3 sm:grid-cols-2">{% for field,label in [('portal_show_subscription','portal_subscription'),('portal_show_media_access','portal_media_access'),('portal_show_monitoring','portal_monitoring'),('portal_show_support','portal_support')] %}<label class="flex cursor-pointer items-center justify-between gap-4 rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm transition-colors hover:border-slate-600 hover:bg-slate-800"><span>{{ t(label) }}</span><input type="checkbox" name="{{ field }}" value="1" {% if settings[field] %}checked{% endif %} class="h-4 w-4 shrink-0 rounded border-slate-600" {% if field == 'portal_show_support' %}data-portal-support-toggle{% endif %}></label>{% endfor %}<div class="flex cursor-not-allowed items-center justify-between gap-4 rounded-lg border border-dashed border-slate-700/60 bg-slate-950/40 px-4 py-3 text-sm text-slate-500" title="{{ t('portal_payment_coming_soon') }}" aria-disabled="true"><span>{{ t('portal_payment_title') }} <span class="ml-2 rounded-full border border-slate-700 px-2 py-0.5 text-[10px] uppercase tracking-wide">{{ t('portal_coming_soon') }}</span></span><input type="checkbox" disabled aria-disabled="true" class="h-4 w-4 shrink-0 cursor-not-allowed rounded border-slate-700 bg-slate-800 opacity-50"></div></div></section>
+
+  <section data-portal-support-settings class="rounded-xl border border-slate-800 bg-slate-900 p-5 {% if not settings.portal_show_support %}hidden{% endif %}">
+    <div><h2 class="font-semibold text-slate-100">{{ t('portal_support_settings_title') }}</h2><p class="mt-1 text-sm text-slate-400">{{ t('portal_support_settings_help') }}</p></div>
+    <label class="mt-5 block text-sm text-slate-300">{{ t('portal_support_intro_label') }}<textarea name="portal_support_content" rows="6" maxlength="5000" placeholder="{{ t('portal_help_content') }}" class="mt-1.5 w-full resize-y rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm leading-relaxed">{{ settings.portal_support_content or '' }}</textarea><span class="mt-1.5 block text-xs text-slate-500">{{ t('portal_support_intro_help') }}</span></label>
+    <label class="mt-5 flex cursor-pointer items-start justify-between gap-4 rounded-lg border border-slate-700 bg-slate-800/60 p-4 transition-colors hover:border-slate-600 hover:bg-slate-800"><span><span class="block text-sm font-medium text-slate-100">{{ t('portal_show_support_email') }}</span><span class="mt-1 block text-xs text-slate-500">{{ t('portal_show_support_email_help') }}</span></span><input type="checkbox" name="portal_show_support_email" value="1" {% if settings.portal_show_support_email %}checked{% endif %} class="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-600"></label>
+    <label class="mt-5 flex cursor-pointer items-start justify-between gap-4 rounded-lg border border-slate-700 bg-slate-800/60 p-4 transition-colors hover:border-slate-600 hover:bg-slate-800"><span><span class="block text-sm font-medium text-slate-100">{{ t('portal_quick_messages') }}</span><span class="mt-1 block text-xs text-slate-500">{{ t('portal_quick_messages_help') }}</span></span><input type="checkbox" name="portal_quick_messages_enabled" value="1" {% if settings.portal_quick_messages_enabled %}checked{% endif %} class="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-600"></label>
+  </section>
+
+  </div>
+  <aside class="portal-settings-checks rounded-xl border border-slate-800 bg-slate-900 p-5" aria-labelledby="portal-readiness-title">
+    <div class="flex items-start justify-between gap-4"><div><h2 id="portal-readiness-title" class="font-semibold text-slate-100">{{ t('portal_readiness_title') }}</h2><p class="mt-1 text-sm text-slate-400">{{ t('portal_readiness_help') }}</p></div><label class="flex shrink-0 items-center gap-2 text-sm {% if not portal_runtime_ready %}cursor-not-allowed opacity-50{% else %}cursor-pointer{% endif %}"><input type="checkbox" name="portal_enabled" value="1" {% if settings.portal_enabled %}checked{% endif %} {% if not portal_runtime_ready %}disabled{% endif %}>{{ t('portal_enable') }}</label></div>
+    {% if not portal_runtime_ready %}<div class="mt-4 rounded-lg border border-amber-600/40 bg-amber-950/30 px-4 py-3 text-sm text-amber-200" role="alert">{{ t("portal_activation_not_ready") }}</div>{% endif %}
+    <div class="portal-readiness-grid mt-4">
+      {% for key, ok in portal_readiness.checks.items() %}<div class="rounded border px-3 py-2 text-xs {{ 'border-emerald-700 text-emerald-300' if ok else 'border-rose-800 text-rose-300' }}">{{ '✓' if ok else '✕' }} {{ t('portal_check_' ~ key) }}</div>{% endfor %}
+    </div>
+  </aside>
+</form>
+<section class="mt-6 max-w-4xl rounded-xl border border-slate-800 bg-slate-900 p-5">
+  <h2 class="font-semibold text-slate-100">{{ t('portal_user_preview') }}</h2>
+  <p class="mt-1 text-sm text-slate-400">{{ t('portal_user_preview_help') }}</p>
+  <div class="relative mt-4" data-user-preview-search data-search-url="{{ url_for('portal_admin_user_search') }}" data-preview-template="{{ url_for('portal_admin_user_preview', user_id=999999999, page='home') }}">
+    <div class="flex flex-col gap-3 sm:flex-row"><input type="search" autocomplete="off" placeholder="{{ t('portal_search_user') }}" class="min-w-0 flex-1 rounded border border-slate-700 bg-slate-800 px-3 py-2" data-user-search><button type="button" disabled class="rounded bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-primary-dark hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-slate-900 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:shadow-none" data-user-preview-button>{{ t('portal_view_user_portal') }} <span aria-hidden="true">→</span></button></div>
+    <div class="absolute z-30 mt-1 hidden max-h-72 w-full overflow-y-auto rounded border border-slate-700 bg-slate-800 shadow-xl sm:w-[calc(100%-12rem)]" data-user-results></div>
+  </div>
+</section>
+<script>
+(() => { const root=document.querySelector('[data-user-preview-search]'); if(!root)return; const input=root.querySelector('[data-user-search]'), results=root.querySelector('[data-user-results]'), button=root.querySelector('[data-user-preview-button]'); let selected=null,timer;
+const label=u=>[u.username,[u.firstname,u.lastname].filter(Boolean).join(' '),u.email].filter(Boolean).join(' — ');
+const hide=()=>{results.classList.add('hidden');results.replaceChildren();};
+input.addEventListener('input',()=>{selected=null;button.disabled=true;clearTimeout(timer);const q=input.value.trim();if(q.length<2){hide();return;}timer=setTimeout(async()=>{const response=await fetch(root.dataset.searchUrl+'?q='+encodeURIComponent(q),{headers:{Accept:'application/json'}});const data=await response.json();results.replaceChildren();for(const user of data.users){const option=document.createElement('button');option.type='button';option.className='block w-full px-3 py-2 text-left text-sm hover:bg-slate-700';option.textContent=label(user);option.addEventListener('click',()=>{selected=user;input.value=label(user);button.disabled=false;hide();});results.append(option);}results.classList.toggle('hidden',!data.users.length);},250);});
+button.addEventListener('click',()=>{if(selected)location.href=root.dataset.previewTemplate.replace('999999999',String(selected.id));});document.addEventListener('click',event=>{if(!root.contains(event.target))hide();}); })();
+(() => { const toggle=document.querySelector('[data-portal-local-auth]'), policy=document.getElementById('portal-password-policy'); if(!toggle||!policy)return; const update=()=>policy.classList.toggle('hidden',!toggle.checked); toggle.addEventListener('change',update); update(); })();
+(() => { const toggle=document.querySelector('[data-portal-support-toggle]'), settings=document.querySelector('[data-portal-support-settings]'); if(!toggle||!settings)return; const update=()=>settings.classList.toggle('hidden',!toggle.checked); toggle.addEventListener('change',update); update(); })();
+(() => { const input=document.querySelector('[data-portal-public-url]'), link=document.querySelector('[data-portal-login-link]'), open=document.querySelector('[data-portal-login-open]'); if(!input||!link||!open)return;
+const loginUrl=value=>{try{const url=new URL(value.trim());let path=url.pathname.replace(/\/+$/,'');if(!path.endsWith('/portal/login'))path=path.endsWith('/portal')?path+'/login':path+'/portal/login';url.pathname=path;url.search='';url.hash='';return url.toString().replace(/\/$/,'');}catch{return '';}};
+const update=()=>{const value=loginUrl(input.value),href=value||'#';link.textContent=value||'—';link.href=href;open.href=href;link.classList.toggle('pointer-events-none',!value);open.classList.toggle('pointer-events-none',!value);open.classList.toggle('opacity-50',!value);};input.addEventListener('input',update);update(); })();
+</script>
+{% endblock %}

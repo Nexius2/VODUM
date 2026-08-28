@@ -167,7 +167,7 @@ def ensure_communications_schema(conn, cursor, *, table_exists, ensure_column) -
     stream_blocked_subject = "Playback blocked"
     stream_blocked_body = (
         "Hello {firstusername},\n\n"
-        "Your playback has been stopped by VODUM.\n\n"
+        "Your playback has been stopped by {brand_name}.\n\n"
         "Reason: {policy_reason}\n"
         "Stream killed: {stream_killed}\n"
         "Rule usage: {policy_observed} / {policy_limit}\n"

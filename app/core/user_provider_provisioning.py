@@ -8,12 +8,13 @@ from core.providers.jellyfin_users import (
 from core.providers.plex_invitation_state import plex_invite_state_payload
 from core.providers.plex_users import plex_invite_and_share
 from secret_store import find_plex_servers_by_token
+import json
 
 
 log = get_logger("users_create")
 
 
-def provision_provider_account(db, server, block, libraries, username, email):
+def provision_provider_account(db, server, block, libraries, username, email, *, vodum_user_id=None):
     server_id = int(server["id"])
     provider = (server.get("type") or "").lower()
     details_json = {}
@@ -21,12 +22,19 @@ def provision_provider_account(db, server, block, libraries, username, email):
     if provider == "jellyfin":
         existing = db.query_one(
             """
-            SELECT 1 FROM media_users
+            SELECT id,vodum_user_id,external_user_id,username,details_json FROM media_users
             WHERE server_id = ? AND type = 'jellyfin' AND lower(username) = lower(?)
             """,
             (server_id, username),
         )
         if existing:
+            if vodum_user_id is not None and existing["vodum_user_id"] is not None and int(existing["vodum_user_id"]) == int(vodum_user_id):
+                try:
+                    existing_details = json.loads(existing["details_json"] or "{}")
+                except (TypeError, ValueError):
+                    existing_details = {}
+                existing_details["_existing_media_user_id"] = int(existing["id"])
+                return existing["external_user_id"], existing["username"], existing_details
             raise RuntimeError(f"Jellyfin: username already exists on server '{server.get('name')}'")
         created = jellyfin_create_user(server, username)
         external_user_id = str(created.get("Id"))

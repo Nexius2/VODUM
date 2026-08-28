@@ -92,6 +92,7 @@
                    required>
           </div>
         {% endif %}
+        {% if turnstile and turnstile.enabled and turnstile.protect_admin %}<div class="cf-turnstile" data-sitekey="{{ turnstile.site_key }}" data-size="{{ turnstile.mode }}"></div><script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>{% endif %}
         <button class="w-full px-4 py-2 bg-indigo-500 hover:bg-indigo-600 rounded text-white text-sm">
           {{ t("common.login") }}
         </button>

@@ -16,6 +16,48 @@ TELEMETRY_URL = "https://vodum-telemetry.vodum-project.workers.dev/api/ingest"
 log = get_logger("telemetry")
 _SEND_LOCK = threading.Lock()
 
+# Only aggregate numeric values, boolean feature flags and tightly allow-listed
+# enums belong here. Never add names, addresses, URLs, IPs, tokens or free text.
+TELEMETRY_PAYLOAD_KEYS = frozenset({
+    "instance_id", "schema_version", "version", "platform", "runtime_platform",
+    "container", "virtualized", "python_version", "docker", "managed_users",
+    "total_users", "expired_users", "pending_users", "plex_servers",
+    "jellyfin_servers", "libraries", "subscription_plans", "active_policies",
+    "total_policies", "portal_accounts", "active_portal_accounts",
+    "playback_sessions_30d", "communications_sent_30d", "policy_stops_30d",
+    "enabled_tasks", "subscriptions_enabled", "discord_enabled", "mail_enabled",
+    "policies_enabled", "debug_enabled", "automatic_backups_enabled",
+    "usage_risk_enabled", "auth_enabled", "portal_enabled",
+    "portal_local_auth_enabled", "portal_plex_auth_enabled",
+    "portal_jellyfin_auth_enabled", "turnstile_enabled",
+    "quick_messages_enabled", "cron_enabled",
+    "maintenance_enabled", "default_language", "expiry_mode",
+    "update_pending_days",
+})
+
+FORBIDDEN_TELEMETRY_KEY_TOKENS = frozenset({
+    "email", "name", "url", "host", "ip", "token", "secret", "password",
+    "title", "message", "body", "username", "domain",
+})
+
+
+def validate_anonymous_payload(payload):
+    """Fail closed if a future change tries to export identifying data."""
+    keys = set(payload)
+    if not keys <= TELEMETRY_PAYLOAD_KEYS:
+        raise ValueError(f"unsupported telemetry fields: {sorted(keys - TELEMETRY_PAYLOAD_KEYS)}")
+    unsafe = [key for key in keys if set(key.lower().split("_")) & FORBIDDEN_TELEMETRY_KEY_TOKENS]
+    if unsafe:
+        raise ValueError(f"potentially identifying telemetry fields: {sorted(unsafe)}")
+    if any(isinstance(value, (dict, list, tuple, set)) for value in payload.values()):
+        raise ValueError("nested telemetry values are not allowed")
+    return payload
+
+
+def _aggregate(db, sql, params=()):
+    row = db.query_one(sql, params)
+    return dict(row) if row else {}
+
 
 def get_or_create_instance_id(db):
     row = db.query_one(
@@ -90,6 +132,7 @@ def run(task_id: int, db: DBManager):
         if not settings:
             log.warning("Telemetry aborted: settings row not found")
             return {"success": False, "reason": "settings_missing"}
+        settings = dict(settings)
 
         if int(settings["enable_anonymous_telemetry"] or 0) != 1:
             return {"success": True, "skipped": True, "reason": "disabled"}
@@ -158,6 +201,32 @@ def run(task_id: int, db: DBManager):
         automatic_backups = db.query_one(
             "SELECT enabled FROM tasks WHERE name='auto_backup'"
         )
+
+        user_stats = _aggregate(db, """
+            SELECT COUNT(*) AS total_users,
+                   SUM(CASE WHEN status='expired' THEN 1 ELSE 0 END) AS expired_users,
+                   SUM(CASE WHEN status='pending_invite' THEN 1 ELSE 0 END) AS pending_users
+            FROM vodum_users
+        """)
+        inventory = _aggregate(db, """
+            SELECT (SELECT COUNT(*) FROM libraries) AS libraries,
+                   (SELECT COUNT(*) FROM subscription_templates) AS subscription_plans,
+                   (SELECT COUNT(*) FROM stream_policies) AS total_policies,
+                   (SELECT COUNT(*) FROM portal_accounts) AS portal_accounts,
+                   (SELECT COUNT(*) FROM portal_accounts WHERE status='active') AS active_portal_accounts,
+                   (SELECT COUNT(*) FROM tasks WHERE enabled=1) AS enabled_tasks
+        """)
+        recent_usage = _aggregate(db, """
+            SELECT (SELECT COUNT(*) FROM media_session_history WHERE started_at >= datetime('now','-30 day')) AS playback_sessions_30d,
+                   (SELECT COUNT(*) FROM comm_history WHERE status='sent' AND sent_at >= datetime('now','-30 day')) AS communications_sent_30d,
+                   (SELECT COUNT(*) FROM stream_enforcements WHERE created_at >= datetime('now','-30 day')) AS policy_stops_30d
+        """)
+        portal_settings = _aggregate(db, """
+            SELECT portal_enabled,portal_local_auth_enabled,portal_plex_auth_enabled,
+                   portal_jellyfin_auth_enabled,turnstile_enabled,
+                   portal_quick_messages_enabled
+            FROM settings WHERE id=1
+        """)
         
         version = load_app_version()
         update_pending_days = 0
@@ -192,9 +261,9 @@ def run(task_id: int, db: DBManager):
 
         platform_info = detect_platform()
 
-        payload = {
+        payload = validate_anonymous_payload({
             "instance_id": instance_id,
-            "schema_version": 1,
+            "schema_version": 2,
             "version": version,
             "platform": platform.system().lower(),
             "runtime_platform": platform_info["platform"],
@@ -203,8 +272,21 @@ def run(task_id: int, db: DBManager):
             "python_version": ".".join(platform.python_version_tuple()[:2]),
             "docker": True,
             "managed_users": users["total"] if users else 0,
+            "total_users": int(user_stats.get("total_users") or 0),
+            "expired_users": int(user_stats.get("expired_users") or 0),
+            "pending_users": int(user_stats.get("pending_users") or 0),
             "plex_servers": plex_servers["total"] if plex_servers else 0,
             "jellyfin_servers": jellyfin_servers["total"] if jellyfin_servers else 0,
+            "libraries": int(inventory.get("libraries") or 0),
+            "subscription_plans": int(inventory.get("subscription_plans") or 0),
+            "active_policies": active_policies["total"] if active_policies else 0,
+            "total_policies": int(inventory.get("total_policies") or 0),
+            "portal_accounts": int(inventory.get("portal_accounts") or 0),
+            "active_portal_accounts": int(inventory.get("active_portal_accounts") or 0),
+            "playback_sessions_30d": int(recent_usage.get("playback_sessions_30d") or 0),
+            "communications_sent_30d": int(recent_usage.get("communications_sent_30d") or 0),
+            "policy_stops_30d": int(recent_usage.get("policy_stops_30d") or 0),
+            "enabled_tasks": int(inventory.get("enabled_tasks") or 0),
             "subscriptions_enabled": 1 if active_subscriptions and active_subscriptions["total"] > 0 else 0,
             "discord_enabled": 1 if settings["discord_enabled"] else 0,
             "mail_enabled": 1 if settings["mailing_enabled"] else 0,
@@ -213,8 +295,18 @@ def run(task_id: int, db: DBManager):
             "automatic_backups_enabled": 1 if automatic_backups and automatic_backups["enabled"] else 0,
             "usage_risk_enabled": 1 if settings["usage_risk_enabled"] else 0,
             "auth_enabled": 1 if settings["auth_enabled"] else 0,
+            "portal_enabled": 1 if portal_settings.get("portal_enabled") else 0,
+            "portal_local_auth_enabled": 1 if portal_settings.get("portal_local_auth_enabled") else 0,
+            "portal_plex_auth_enabled": 1 if portal_settings.get("portal_plex_auth_enabled") else 0,
+            "portal_jellyfin_auth_enabled": 1 if portal_settings.get("portal_jellyfin_auth_enabled") else 0,
+            "turnstile_enabled": 1 if portal_settings.get("turnstile_enabled") else 0,
+            "quick_messages_enabled": 1 if portal_settings.get("portal_quick_messages_enabled") else 0,
+            "cron_enabled": 1 if settings.get("enable_cron_jobs") else 0,
+            "maintenance_enabled": 1 if settings.get("maintenance_mode") else 0,
+            "default_language": str(settings.get("default_language") or "unknown").lower() if str(settings.get("default_language") or "").lower() in {"en", "fr", "es", "de", "it"} else "unknown",
+            "expiry_mode": str(settings.get("expiry_mode") or "none").lower() if str(settings.get("expiry_mode") or "").lower() in {"none", "warn_only", "warn_then_disable", "disable"} else "unknown",
             "update_pending_days": update_pending_days,
-        }
+        })
         log.info(
             "Telemetry sending aggregate payload "
             f"(version={version}, fields={','.join(sorted(payload))})"

@@ -19,6 +19,14 @@ from tasks_engine import (
 from web.helpers import get_db, table_exists, add_log
 from web.security import get_client_ip
 from notifications_utils import is_email_ready
+from core.auth_principal import (
+    SESSION_PRINCIPAL_KEY,
+    current_principal,
+    principal_has_role,
+    validate_portal_principal,
+)
+from core.route_access_policy import classify_route_path
+from core.portal_account_state import effective_portal_account_state, state_message
 
 task_logger = get_logger("tasks_ui")
 security_logger = get_logger("security")
@@ -237,6 +245,7 @@ def register(app):
         row = db.query_one(
             """
             SELECT s.admin_email, s.admin_password_hash, s.auth_enabled,
+                   s.portal_public_url,
                    EXISTS(
                        SELECT 1 FROM admin_auth_identities i
                        WHERE i.admin_account_id=1
@@ -258,7 +267,7 @@ def register(app):
         )
 
     def _is_logged_in() -> bool:
-        return session.get("vodum_logged_in") is True
+        return principal_has_role(current_principal(), "admin")
 
     def _ip_allowed(remote_ip: str) -> bool:
         # Permet de désactiver le filtrage si besoin 
@@ -299,13 +308,20 @@ def register(app):
             abort(403)
 
         s = _get_auth_settings()
+        access_scope = classify_route_path(request.path)
+        if access_scope in {"portal", "portal_auth"}:
+            from urllib.parse import urlsplit
+            expected_host = str(urlsplit(str(s.get("portal_public_url") or "")).hostname or "").lower().rstrip(".")
+            request_host = (request.host or "").split(":", 1)[0].lower().rstrip(".")
+            if expected_host and request_host != expected_host:
+                abort(404)
 
         # assets toujours OK
         # Login artwork is intentionally proxied through a dedicated public
         # endpoint so the unauthenticated login page can load it. The proxy
         # only accepts poster/backdrop and never exposes provider credentials.
         always_allowed_prefixes = ("/static", "/set_language", "/health", "/login/artwork/")
-        if request.path.startswith(always_allowed_prefixes) or request.path in ("/favicon.ico",):
+        if access_scope == "public":
             return
 
         # si auth désactivée -> open bar
@@ -316,6 +332,28 @@ def register(app):
             return
 
         configured = _is_auth_configured(s)
+
+        # Portal authentication remains isolated from first-run administration.
+        # An unconfigured admin must never redirect a portal visitor into setup.
+        if access_scope in {"portal", "portal_auth"}:
+            if access_scope == "portal_auth":
+                return
+            principal = current_principal()
+            if not principal:
+                return redirect(f"/portal/login?next={request.path}")
+            if principal.get("role") not in {"admin", "user"}:
+                abort(403)
+            if principal.get("role") == "user" and not validate_portal_principal(get_db(), principal):
+                account = get_db().query_one(
+                    "SELECT pa.status,vu.status AS user_status FROM portal_accounts pa "
+                    "JOIN vodum_users vu ON vu.id=pa.vodum_user_id WHERE pa.id=?",
+                    (int(principal.get("account_id") or 0),),
+                )
+                if account:
+                    flash(state_message(effective_portal_account_state(account["status"], account["user_status"])), "error")
+                session.pop(SESSION_PRINCIPAL_KEY, None)
+                return redirect(f"/portal/login?next={request.path}")
+            return
 
 
 
@@ -336,7 +374,7 @@ def register(app):
             "/auth/plex/link/callback",
             "/auth/plex/link/confirm",
         )
-        if request.path.startswith("/setup"):
+        if access_scope == "setup":
             if not configured or _is_logged_in():
                 return
             return redirect(url_for("login", next=request.path))
@@ -349,9 +387,13 @@ def register(app):
         if not configured:
             return redirect(url_for("setup_admin"))
 
-        # Si configuré => login obligatoire pour UI
-        if not _is_logged_in():
+        principal = current_principal()
+
+        # Toutes les routes non classees sont admin par defaut.
+        if not principal:
             return redirect(url_for("login", next=request.path))
+        if not principal_has_role(principal, "admin"):
+            abort(403)
 
 
 
