@@ -35,3 +35,7 @@ class BaseProvider:
 
     def terminate_session(self, session_key: str, reason: str = "") -> bool:
         raise NotImplementedError
+
+    def refresh_library(self, section_id: str) -> bool:
+        """Ask the media server to rescan a library."""
+        raise NotImplementedError

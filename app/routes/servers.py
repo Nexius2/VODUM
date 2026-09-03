@@ -33,6 +33,7 @@ from core.server_deletion import (
     run_server_deletion_worker,
     start_server_deletion_thread,
 )
+from core.library_refresh import LibraryRefreshError, refresh_library
 from core.server_sync import (
     enqueue_plex_server_sync_jobs,
     load_plex_sync_user_ids,
@@ -543,6 +544,24 @@ def register(app):
         wake_bulk_access_worker(result, "removal", logger)
 
         flash(result["message"], "success")
+        return redirect(url_for("libraries_list"))
+
+    @app.route("/servers/libraries/<int:library_id>/refresh", methods=["POST"])
+    def refresh_server_library(library_id):
+        try:
+            provider_name = refresh_library(get_db(), library_id)
+        except LibraryRefreshError as exc:
+            flash(exc.flash_key, "error")
+        except Exception:
+            logger.exception("Library refresh failed (library_id=%s)", library_id)
+            flash("library_refresh_failed", "error")
+        else:
+            flash(
+                "jellyfin_library_refresh_started"
+                if provider_name == "jellyfin"
+                else "library_refresh_started",
+                "success",
+            )
         return redirect(url_for("libraries_list"))
 
 

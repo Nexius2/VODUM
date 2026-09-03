@@ -128,7 +128,7 @@ class AnonymizeFilter(logging.Filter):
     )
 
     TOKEN_REGEX = re.compile(
-        r'(?i)\b(x-plex-token|token|authorization|bearer)\b\s*[:=]\s*[a-z0-9\-._]+'
+        r'(?i)\b(x-plex-token|token|authorization|bearer|password|secret|api[_-]?key)\b\s*[:=]\s*[^\s,;&]+'
     )
 
     BEARER_REGEX = re.compile(

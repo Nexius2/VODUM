@@ -867,6 +867,10 @@
           <input id="cu_second_email" type="email" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" placeholder="backup@mail.com">
         </div>
         <div>
+          <label class="text-xs text-slate-400">{{ t("phone") }}</label>
+          <input id="cu_phone" type="tel" maxlength="24" autocomplete="tel" inputmode="tel" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" placeholder="+33 6 12 34 56 78">
+        </div>
+        <div>
           <label class="text-xs text-slate-400">{{ t("username") }}</label>
           <input id="cu_username" type="text" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" placeholder="{{ t('username') }}">
           <div class="text-xs text-slate-500 mt-1">{{ t("users_username_empty_help") }}</div>

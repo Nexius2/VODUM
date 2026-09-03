@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 
-PUBLIC_PREFIXES = ("/static", "/branding/", "/set_language", "/health", "/login/artwork/")
-PUBLIC_EXACT = frozenset({"/favicon.ico"})
+PUBLIC_PREFIXES = ("/static/", "/branding/", "/login/artwork/")
+PUBLIC_EXACT = frozenset({"/favicon.ico", "/health", "/set_language"})
 ADMIN_AUTH_EXACT = frozenset(
     {
         "/login", "/login/submit", "/logout", "/setup-admin",
@@ -25,7 +25,7 @@ def classify_route_path(path: str) -> str:
         return "public"
     if normalized in ADMIN_AUTH_EXACT:
         return "admin_auth"
-    if normalized.startswith("/setup") or normalized in SETUP_FLOW_EXACT:
+    if normalized == "/setup" or normalized.startswith("/setup/") or normalized in SETUP_FLOW_EXACT:
         return "setup"
     if normalized.startswith("/api/portal/"):
         return "portal"
@@ -35,6 +35,7 @@ def classify_route_path(path: str) -> str:
             "/portal/activate", "/portal/activate/submit",
             "/portal/forgot", "/portal/forgot/submit",
             "/portal/reset", "/portal/reset/submit",
+            "/portal/auth/jellyfin",
             "/portal/auth/plex", "/portal/auth/plex/callback",
             "/portal/auth/plex/confirm",
         }:

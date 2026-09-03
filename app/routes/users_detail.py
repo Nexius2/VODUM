@@ -26,6 +26,7 @@ from core.user_profile_context import (
 from core.user_plex_options import apply_user_plex_options, queue_user_plex_option_syncs
 from core.user_referral_admin import update_user_referrer
 from core.user_profile_form import normalize_user_profile_overrides
+from core.user_phone import normalize_phone
 from core.user_detail_repository import (
     load_referral_admin_data,
     load_user_access_rows,
@@ -102,8 +103,12 @@ def register(app):
         firstname       = (form.get("firstname") or "").strip() or user.get("firstname")
         lastname        = (form.get("lastname") or "").strip() or user.get("lastname")
         second_email    = (form.get("second_email") or "").strip() or user.get("second_email")
+        try:
+            phone = normalize_phone(form.get("phone")) if "phone" in form else user.get("phone")
+        except ValueError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("user_detail", user_id=user_id, tab="general"))
         raw_exp = (form.get("expiration_date") or "").strip()
-        raw_ren = (form.get("renewal_date") or "").strip()
 
         # Keep existing values by default (do NOT wipe on parse failure)
         expiration_date = user.get("expiration_date")
@@ -118,12 +123,6 @@ def register(app):
             else:
                 flash("invalid_expiration_date_format", "error")
 
-        if raw_ren:
-            parsed = normalize_profile_date(raw_ren)
-            if parsed is not None:
-                renewal_date = parsed
-            else:
-                flash("invalid_renewal_date_format", "error")
         renewal_method  = (form.get("renewal_method") or "").strip() or user.get("renewal_method")
 
         subscription_template_id_raw = (form.get("subscription_template_id") or "").strip()
@@ -190,7 +189,7 @@ def register(app):
             """
             UPDATE vodum_users
             SET username = ?,
-                firstname = ?, lastname = ?, second_email = ?,
+                firstname = ?, lastname = ?, second_email = ?, phone = ?,
                 renewal_date = ?, renewal_method = ?, notes = ?,
                 max_streams_override = ?,
                 expiration_date_override = ?,
@@ -199,7 +198,7 @@ def register(app):
             """,
             (
                 username,
-                firstname, lastname, second_email,
+                firstname, lastname, second_email, phone,
                 renewal_date, renewal_method, notes,
                 max_streams_override,
                 expiration_date_override,

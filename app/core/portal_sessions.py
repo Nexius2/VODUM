@@ -49,10 +49,13 @@ def create_portal_session(db, portal_account_id: int, *, now=None, ttl=None) -> 
     return {"session_id": int(row["id"]), "token": token, "expires_at": row["expires_at"]}
 
 
-def validate_portal_session(db, session_id: int, token: str, *, now=None, touch=True) -> dict | None:
+def validate_portal_session(db, session_id: int, token: str, *, now=None, touch=True, ttl=None) -> dict | None:
     if not token:
         return None
     now = now or _utcnow()
+    ttl = DEFAULT_SESSION_TTL if ttl is None else ttl
+    if ttl <= timedelta(0):
+        return None
     row = db.query_one(
         """
         SELECT ps.id, ps.portal_account_id, ps.token_hash, ps.last_seen_at,
@@ -70,18 +73,28 @@ def validate_portal_session(db, session_id: int, token: str, *, now=None, touch=
     expected = str(row["token_hash"] or "")
     if not secrets.compare_digest(expected, hash_session_token(token)):
         return None
-    expires_at = datetime.fromisoformat(str(row["expires_at"]).replace("Z", "+00:00"))
+    try:
+        expires_at = datetime.fromisoformat(
+            str(row["expires_at"]).replace("Z", "+00:00")
+        )
+        last_seen = datetime.fromisoformat(
+            str(row["last_seen_at"]).replace("Z", "+00:00")
+        )
+    except (TypeError, ValueError):
+        return None
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
     if expires_at <= now:
         return None
-    last_seen = datetime.fromisoformat(str(row["last_seen_at"]).replace("Z", "+00:00"))
     if last_seen.tzinfo is None:
         last_seen = last_seen.replace(tzinfo=timezone.utc)
     if touch and now - last_seen >= LAST_SEEN_WRITE_INTERVAL:
         db.execute(
-            "UPDATE portal_sessions SET last_seen_at = ? WHERE id = ? AND revoked_at IS NULL",
-            (_sql_datetime(now), int(row["id"])),
+            "UPDATE portal_sessions SET last_seen_at=?,expires_at=? "
+            "WHERE id=? AND revoked_at IS NULL",
+            (
+                _sql_datetime(now), _sql_datetime(now + ttl), int(row["id"]),
+            ),
         )
     return {
         "session_id": int(row["id"]),

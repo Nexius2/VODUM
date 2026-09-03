@@ -16,7 +16,7 @@ services:
       - ./backups:/appdata/backups
 
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:5000/ >/dev/null || exit 1"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=5).read()"]
       interval: 240s
       timeout: 8s
       retries: 5

@@ -6,7 +6,7 @@ import secrets
 import time
 from datetime import datetime, timezone
 
-from flask import flash, redirect, render_template, request, session, url_for
+from flask import current_app, flash, redirect, render_template, request, session, url_for
 from core.admin_auth_identities import (
     AdminIdentityConflict,
     get_admin_auth_discovery_token,
@@ -170,7 +170,10 @@ def _client(db) -> PlexAuthClient:
 
 
 def _open_admin_session(settings: dict):
-    open_admin_session(session, settings.get("admin_email") or "", auth_level="plex")
+    open_admin_session(
+        session, settings.get("admin_email") or "", auth_level="plex", db=get_db(),
+        session_ttl=current_app.permanent_session_lifetime,
+    )
     if should_resume_setup_wizard(get_db(), settings):
         return redirect(url_for("setup_wizard", resume="wizard"))
     return redirect(url_for("dashboard"))
@@ -807,7 +810,10 @@ def register(app):
             state["administrator"] = "plex"
             state["plex_auth"] = "linked"
             save_setup_wizard_progress(db, step=3, state=state, active=1)
-            open_admin_session(session, admin_email, auth_level="plex")
+            open_admin_session(
+                session, admin_email, auth_level="plex", db=db,
+                session_ttl=current_app.permanent_session_lifetime,
+            )
         flash("plex_auth_linked", "success")
         if return_to_wizard:
             return _redirect_after_wizard_link()

@@ -13,8 +13,11 @@ class VodumSessionInterface(SecureCookieSessionInterface):
     """
 
     def get_cookie_secure(self, app):
-        configured_secure = bool(app.config.get("SESSION_COOKIE_SECURE", False))
-        return configured_secure and request.is_secure
+        # Every cookie created through an HTTPS request must be Secure.  The
+        # request scheme is trustworthy only after ConditionalProxyFix has
+        # validated the reverse proxy, so an untrusted X-Forwarded-Proto header
+        # cannot enable these semantics.  Direct LAN HTTP remains supported.
+        return bool(request.is_secure)
 
     def get_cookie_samesite(self, app):
         value = super().get_cookie_samesite(app)

@@ -124,6 +124,13 @@
         <input type="text" name="lastname" value="{{ user.lastname or '' }}"
                class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
       </label>
+
+      <label class="text-sm">
+        {{ t("phone") }}
+        <input type="tel" name="phone" value="{{ user.phone or '' }}" maxlength="24"
+               autocomplete="tel" inputmode="tel"
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+      </label>
     </div>
   </div>
 
@@ -470,11 +477,9 @@
         <label class="text-sm">
           {{ t("renewal_date") }}
           <input type="text"
-                 name="renewal_date"
                  value="{{ user.renewal_date or '' }}"
-                 placeholder="YYYY-MM-DD"
-                 autocomplete="off"
-                 class="vodum-date mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+                 readonly
+                 class="mt-1 w-full cursor-not-allowed bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60">
         </label>
 
         <label class="text-sm sm:col-span-2">

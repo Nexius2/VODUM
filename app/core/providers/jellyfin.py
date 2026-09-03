@@ -81,6 +81,11 @@ class JellyfinProvider(BaseProvider):
 
         raise RuntimeError(f"Jellyfin POST failed. Attempts: {', '.join(errors)}") from last_exc
 
+    def refresh_library(self, section_id: str) -> bool:
+        # Jellyfin exposes a reliable server-wide library scan endpoint. Unlike
+        # Plex, it does not provide an equivalent per-virtual-folder scan call.
+        return self._post_json("/Library/Refresh", {})
+
 
     def send_session_message(self, session_key: str, title: str, text: str, timeout_ms: int = 8000) -> bool:
         session_id = str(session_key).split(":", 1)[0]  # sessionId uniquement

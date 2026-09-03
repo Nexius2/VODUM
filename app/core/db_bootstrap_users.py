@@ -32,6 +32,7 @@ def upgrade_vodum_user_schema(
             lastname TEXT,
             email TEXT,
             second_email TEXT,
+            phone TEXT,
 
             expiration_date TIMESTAMP,
             renewal_method TEXT,
@@ -52,12 +53,12 @@ def upgrade_vodum_user_schema(
 
         cursor.execute("""
         INSERT INTO vodum_users (
-            id, username, firstname, lastname, email, second_email,
+            id, username, firstname, lastname, email, second_email, phone,
             expiration_date, renewal_method, renewal_date, created_at,
             notes, status, last_status, status_changed_at
         )
         SELECT
-            id, username, firstname, lastname, email, second_email,
+            id, username, firstname, lastname, email, second_email, NULL,
             expiration_date, renewal_method, renewal_date, created_at,
             notes, status, last_status, status_changed_at
         FROM vodum_users_old;
@@ -70,6 +71,7 @@ def upgrade_vodum_user_schema(
     # 1.2 vodum_users per-user stream override
     ensure_column(cursor, "vodum_users", "max_streams_override", "INTEGER DEFAULT NULL")
     ensure_column(cursor, "vodum_users", "notifications_order_override", "TEXT DEFAULT NULL")
+    ensure_column(cursor, "vodum_users", "phone", "TEXT DEFAULT NULL")
 
     # vodum_users per-user expiration date override
     ensure_column(cursor, "vodum_users", "expiration_date_override", "INTEGER DEFAULT 0")
@@ -80,6 +82,24 @@ def upgrade_vodum_user_schema(
     ensure_column(cursor, "vodum_users", "referrer_user_id", "INTEGER DEFAULT NULL")
     ensure_column(cursor, "vodum_users", "last_status", "TEXT DEFAULT NULL")
     ensure_column(cursor, "vodum_users", "status_changed_at", "TIMESTAMP DEFAULT NULL")
+
+    # renewal_date records when the contractual expiration date last changed.
+    # A database trigger covers every write path, including imports and background
+    # tasks that update expiration_date directly.
+    cursor.execute("DROP TRIGGER IF EXISTS vodum_users_sync_renewal_after_insert")
+    cursor.execute("DROP TRIGGER IF EXISTS vodum_users_sync_renewal_after_expiration_update")
+    cursor.execute(
+        """
+        CREATE TRIGGER vodum_users_sync_renewal_after_expiration_update
+        AFTER UPDATE OF expiration_date ON vodum_users
+        WHEN NEW.expiration_date IS NOT OLD.expiration_date
+        BEGIN
+            UPDATE vodum_users
+            SET renewal_date = date('now', 'localtime')
+            WHERE id = NEW.id;
+        END
+        """
+    )
 
     # Subscription template assignment
     ensure_column(cursor, "vodum_users", "subscription_template_id", "INTEGER DEFAULT NULL")

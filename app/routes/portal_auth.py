@@ -2,7 +2,7 @@ import secrets
 import time
 from flask import current_app, flash, redirect, render_template, request, session, url_for
 
-from core.auth_principal import SESSION_PRINCIPAL_KEY, open_portal_session
+from core.auth_principal import SESSION_PRINCIPAL_KEY, close_auth_session, open_portal_session
 from core.portal_local_auth import (
     activate_local_invitation,
     authenticate_local_user,
@@ -74,6 +74,30 @@ def _audit_turnstile_failure(db, result):
 def register(app):
     def _portal_available(settings):
         return int(settings.get("portal_enabled") or 0) == 1 or local_portal_test_request_allowed(settings, request.remote_addr or "", request.host)
+
+    @app.before_request
+    def require_enabled_user_portal():
+        if not request.path.startswith("/portal"):
+            return None
+        db = get_db()
+        if _portal_available(_portal_settings(db)):
+            return None
+
+        principal = session.get(SESSION_PRINCIPAL_KEY) or {}
+        if principal.get("role") == "user" and principal.get("portal_session_id"):
+            try:
+                revoke_portal_session(
+                    db, int(principal["portal_session_id"]), reason="portal_disabled"
+                )
+            except Exception:
+                current_app.logger.exception(
+                    "Portal session revocation failed while disabling portal access"
+                )
+        close_auth_session(session)
+        return render_template(
+            "portal/auth_message.html", message_key="portal_unavailable"
+        ), 503
+
     def _plex_client(db):
         row = db.query_one("SELECT plex_client_identifier FROM admin_accounts WHERE id=1")
         identifier = str(row["plex_client_identifier"] or "").strip() if row else ""
@@ -87,7 +111,9 @@ def register(app):
         )
         if not row or not state_allows_portal(row["status"], row["user_status"]):
             return False
-        created = create_portal_session(db, int(row["id"]))
+        created = create_portal_session(
+            db, int(row["id"]), ttl=current_app.permanent_session_lifetime
+        )
         open_portal_session(session, portal_principal(
             portal_account_id=int(row["id"]), vodum_user_id=int(row["vodum_user_id"]),
             session_id=created["session_id"], session_token=created["token"],
@@ -107,18 +133,34 @@ def register(app):
             return render_template("portal/auth_message.html", message_key="portal_unavailable"), 503
         if not portal_request_allowed(db, "jellyfin_login", get_client_ip(), limit=30):
             return render_template("portal/auth_message.html", message_key="portal_login_locked"), 429
+        client_ip = get_client_ip()
+        try:
+            server_id = int(request.form.get("server_id") or 0)
+        except (TypeError, ValueError):
+            server_id = 0
+        username = request.form.get("username") or ""
+        account_scope = f"{server_id}:{username}"
+        if login_locked(db, "ip", client_ip) or login_locked(db, "email", account_scope):
+            record_portal_event(
+                db, "jellyfin_login_locked", "blocked", client_ip=client_ip,
+                user_agent=request.user_agent.string,
+            )
+            return render_template("portal/auth_message.html", message_key="portal_login_locked"), 429
         try:
             identity = authenticate_jellyfin_user(
-                db, int(request.form.get("server_id") or 0),
-                request.form.get("username") or "", request.form.get("password") or "",
+                db, server_id, username, request.form.get("password") or "",
             )
             linked = resolve_jellyfin_portal_account(db, identity)
             if not linked or not _open_plex_portal_session(db, linked):
                 raise JellyfinPortalAuthError("portal_invalid_credentials")
-            record_portal_event(db, "jellyfin_login_success", "success", portal_account_id=int(linked["portal_account_id"]), client_ip=get_client_ip(), user_agent=request.user_agent.string)
+            clear_login_failures(db, "ip", client_ip)
+            clear_login_failures(db, "email", account_scope)
+            record_portal_event(db, "jellyfin_login_success", "success", portal_account_id=int(linked["portal_account_id"]), client_ip=client_ip, user_agent=request.user_agent.string)
             return redirect(url_for("portal_home"))
         except (JellyfinPortalAuthError, ValueError):
-            record_portal_event(db, "jellyfin_login_failed", "failure", client_ip=get_client_ip(), user_agent=request.user_agent.string)
+            register_login_failure(db, "ip", client_ip)
+            register_login_failure(db, "email", account_scope)
+            record_portal_event(db, "jellyfin_login_failed", "failure", client_ip=client_ip, user_agent=request.user_agent.string)
             flash("portal_invalid_credentials", "error")
             return redirect(url_for("portal_login"))
 
@@ -252,7 +294,10 @@ def register(app):
             record_portal_event(db, "login_locked", "blocked", client_ip=client_ip, user_agent=request.user_agent.string)
             flash("portal_login_locked", "error")
             return redirect(url_for("portal_login"))
-        principal = authenticate_local_user(db, email, request.form.get("password") or "")
+        principal = authenticate_local_user(
+            db, email, request.form.get("password") or "",
+            session_ttl=current_app.permanent_session_lifetime,
+        )
         if not principal:
             register_login_failure(db, "ip", client_ip)
             register_login_failure(db, "email", email)
@@ -349,11 +394,17 @@ def register(app):
     @app.post("/portal/logout")
     def portal_logout():
         principal = session.get(SESSION_PRINCIPAL_KEY) or {}
-        if principal.get("role") == "user" and principal.get("portal_session_id"):
-            revoke_portal_session(get_db(), int(principal["portal_session_id"]), reason="logout")
-            record_portal_event(
-                get_db(), "logout", "success", portal_account_id=int(principal["account_id"]),
-                client_ip=get_client_ip(), user_agent=request.user_agent.string,
+        try:
+            if principal.get("role") == "user" and principal.get("portal_session_id"):
+                revoke_portal_session(get_db(), int(principal["portal_session_id"]), reason="logout")
+                record_portal_event(
+                    get_db(), "logout", "success", portal_account_id=int(principal["account_id"]),
+                    client_ip=get_client_ip(), user_agent=request.user_agent.string,
+                )
+        except Exception:
+            current_app.logger.exception(
+                "Portal server-session revocation failed during logout"
             )
-        session.clear()
+        finally:
+            close_auth_session(session)
         return redirect(url_for("portal_login"))

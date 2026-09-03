@@ -1,8 +1,10 @@
 from __future__ import annotations
 import json
+import hashlib
 import requests
 import time
 import xml.etree.ElementTree as ET
+from urllib.parse import quote
 from typing import Any, Dict, List, Optional
 from core.plex_rate_limit import wait_for_plex_slot
 from core.http_security import server_http_session
@@ -18,6 +20,24 @@ class PlexProvider(BaseProvider):
     def __init__(self, server, timeout: int = 15):
         super().__init__(server, timeout=timeout)
         self.http = server_http_session(server)
+
+    def _headers(self) -> dict:
+        token = getattr(self.server, "token", None)
+        stable_source = (
+            f"vodum:{getattr(self.server, 'id', 0)}:"
+            f"{getattr(self.server, 'server_identifier', '')}"
+        )
+        client_identifier = "vodum-" + hashlib.sha256(
+            stable_source.encode("utf-8")
+        ).hexdigest()[:32]
+        return {
+            "X-Plex-Token": token,
+            "X-Plex-Client-Identifier": client_identifier,
+            "X-Plex-Product": "VODUM",
+            "X-Plex-Version": "1",
+            "X-Plex-Device": "Server",
+            "Accept": "application/xml",
+        }
 
     def _candidate_bases(self) -> List[str]:
         """
@@ -66,7 +86,7 @@ class PlexProvider(BaseProvider):
             url = f"{base}{path}"
             try:
                 wait_for_plex_slot(base)
-                r = self.http.get(url, headers={"X-Plex-Token": token}, timeout=self.timeout)
+                r = self.http.get(url, headers=self._headers(), timeout=self.timeout)
                 # on veut une VRAIE réponse du serveur
                 r.raise_for_status()
                 return r.text
@@ -100,7 +120,7 @@ class PlexProvider(BaseProvider):
                     method,
                     url,
                     params=params,
-                    headers={"X-Plex-Token": token},
+                    headers=self._headers(),
                     timeout=self.timeout,
                 )
                 r.raise_for_status()
@@ -112,6 +132,15 @@ class PlexProvider(BaseProvider):
                 continue
 
         raise RuntimeError(f"Plex request failed. Attempts: {', '.join(errors)}") from last_exc
+
+    def refresh_library(self, section_id: str) -> bool:
+        normalized_id = str(section_id or "").strip()
+        if not normalized_id:
+            raise ValueError("Plex library section id is missing")
+        return self._request(
+            "PUT",
+            f"/library/sections/{quote(normalized_id, safe='')}/refresh",
+        )
 
 
     def terminate_session(self, session_key: str, reason: str = "") -> bool:
@@ -186,19 +215,34 @@ class PlexProvider(BaseProvider):
         if not requested:
             return False
 
-        # Plex peut répondre 2xx avant que la session soit retirée. On ne
-        # confirme l'arrêt qu'après disparition effective de la session.
-        for attempt in range(5):
-            if attempt:
-                time.sleep(0.5)
+        # Plex can acknowledge termination before a TV client has actually
+        # stopped. Use a bounded backoff, and re-resolve the nested Session.id
+        # on every poll because some clients recreate it during a timeline
+        # transition while retaining the same sessionKey.
+        verify_delays = (0.0, 1.0, 2.0, 4.0, 8.0)
+        for attempt, delay in enumerate(verify_delays):
+            if delay:
+                time.sleep(delay)
             refreshed = ET.fromstring(self._get("/status/sessions"))
-            if find_session_id(refreshed) is None:
+            current_session_id = find_session_id(refreshed)
+            if current_session_id is None:
                 return True
+
+            if current_session_id != target_session_id:
+                log.info(
+                    "Plex session was recreated during termination "
+                    "session_key=%s old_session_id=%s new_session_id=%s",
+                    session_key,
+                    target_session_id,
+                    current_session_id,
+                )
+                target_session_id = current_session_id
+                params["sessionId"] = target_session_id
 
             # Plex can acknowledge the request while briefly ignoring it
             # during a timeline transition. Retry the command, but keep the
             # session disappearance above as the only success criterion.
-            if attempt < 4:
+            if attempt < len(verify_delays) - 1:
                 try:
                     self._request("GET", "/status/sessions/terminate", params=params)
                 except Exception:

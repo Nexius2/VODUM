@@ -64,6 +64,16 @@
       : t("subscription_templates_add_policy");
   }
 
+  function updatePolicyLanVisibility() {
+    const ruleType = document.getElementById("p_rule_type")?.value;
+    const field = document.getElementById("p_allow_local_ip_field");
+    if (!field) return;
+    const visible = ["max_streams_per_ip", "max_ips_per_user"].includes(ruleType);
+    field.classList.toggle("hidden", !visible);
+    field.classList.toggle("flex", visible);
+    if (!visible) document.getElementById("p_allow_local_ip").checked = false;
+  }
+
   function resetPolicyBuilder() {
     EDIT_INDEX = null;
     document.getElementById("p_rule_type").value = "max_streams_per_user";
@@ -78,6 +88,7 @@
     document.getElementById("p_warn_title").value = t("policies_warn_title_default");
     document.getElementById("p_warn_text").value = t("policies_warn_text_default");
     document.getElementById("p_selector").value = "kill_newest";
+    updatePolicyLanVisibility();
     updatePolicyActionButton();
   }
 
@@ -85,7 +96,6 @@
     document.getElementById("simple_streams_enabled").checked = false;
     document.getElementById("simple_streams_max").value = "2";
     document.getElementById("simple_streams_selector").value = "kill_newest";
-    document.getElementById("simple_streams_lan").checked = false;
 
     document.getElementById("simple_ips_enabled").checked = false;
     document.getElementById("simple_ips_max").value = "1";
@@ -193,7 +203,7 @@
     const baseStreamsRule = getDefaultRule();
     baseStreamsRule.max = parseInt(document.getElementById("simple_streams_max").value || "2", 10) || 2;
     baseStreamsRule.selector = document.getElementById("simple_streams_selector").value || "kill_newest";
-    baseStreamsRule.allow_local_ip = !!document.getElementById("simple_streams_lan").checked;
+    delete baseStreamsRule.allow_local_ip;
     if (document.getElementById("simple_streams_enabled").checked) {
       upsertSimplePolicy("max_streams_per_user", baseStreamsRule);
     } else {
@@ -240,7 +250,6 @@
       document.getElementById("simple_streams_enabled").checked = true;
       document.getElementById("simple_streams_max").value = streams.rule?.max ?? "2";
       document.getElementById("simple_streams_selector").value = streams.rule?.selector || "kill_newest";
-      document.getElementById("simple_streams_lan").checked = !!streams.rule?.allow_local_ip;
     }
 
     const ips = TEMPLATE_POLICIES[findSimplePolicyIndex("max_ips_per_user")];
@@ -287,7 +296,7 @@
       const mv = parseInt(max_value || "1", 10);
       rule.max = isNaN(mv) ? 1 : mv;
     }
-    if (["max_streams_per_user","max_streams_per_ip","max_ips_per_user"].includes(rule_type)) {
+    if (["max_streams_per_ip","max_ips_per_user"].includes(rule_type)) {
       rule.allow_local_ip = !!allow_local_ip;
     }
     if (rule_type === "max_bitrate_kbps") {
@@ -348,6 +357,7 @@
     document.getElementById("p_max_kbps").value = rule.max_kbps ?? "";
     document.getElementById("p_allowed_devices").value = (rule.allowed || []).join(", ");
 
+    updatePolicyLanVisibility();
     updatePolicyActionButton();
     document.getElementById("advanced_policy_editor").scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -402,7 +412,7 @@
     if (rule.max !== undefined && rule.max !== null && rule.max !== "") parts.push(`max=${rule.max}`);
     if (rule.max_kbps !== undefined && rule.max_kbps !== null && rule.max_kbps !== "") parts.push(`max_kbps=${rule.max_kbps}`);
     if (Array.isArray(rule.allowed) && rule.allowed.length) parts.push(`allowed=${rule.allowed.join(", ")}`);
-    if (rule.allow_local_ip) parts.push(t("lan"));
+    if (["max_streams_per_ip", "max_ips_per_user"].includes(p.rule_type) && rule.allow_local_ip) parts.push(t("lan"));
     if (rule.selector) parts.push(`selector=${rule.selector}`);
 
     return parts.length ? parts.join(" • ") : "—";
@@ -535,8 +545,9 @@
   }
 
   document.addEventListener("DOMContentLoaded", () => {
+    document.getElementById("p_rule_type")?.addEventListener("change", updatePolicyLanVisibility);
     [
-      "simple_streams_enabled", "simple_streams_max", "simple_streams_selector", "simple_streams_lan",
+      "simple_streams_enabled", "simple_streams_max", "simple_streams_selector",
       "simple_ips_enabled", "simple_ips_max", "simple_ips_selector", "simple_ips_lan",
       "simple_bitrate_enabled", "simple_bitrate_max",
       "simple_devices_enabled", "simple_devices_allowed"

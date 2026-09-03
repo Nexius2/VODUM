@@ -12,6 +12,8 @@ from logging_utils import get_logger
 task_logger = get_logger("app")
 from db_manager import DBManager, open_sqlite_connection
 from core.session_security import VodumSessionInterface
+from core.csrf_security import csrf_request_guard
+from core.http_security_headers import apply_security_headers
 from core.i18n import init_i18n
 from core.repair.plex_media_users_repair import run_repair_if_needed
 from core.monitoring.plex_websocket import PlexWebsocketClient
@@ -22,6 +24,7 @@ from core.error_reporting import (
     register_flask_exception_logging,
 )
 from core.proxy_security import ConditionalProxyFix
+from core.global_access_guard import register_global_access_guard
 from utils.version import load_app_version
 
 from api.subscriptions import subscriptions_api
@@ -29,7 +32,7 @@ from blueprints.users import users_bp
 
 from web.helpers import get_db, table_exists, close_db
 from web.filters import inject_brand_name, safe_datetime, cron_human, tz_filter, browser_datetime, utc_iso
-from web.security import csrf_tokens_match, ip_in_networks
+from web.security import ip_in_networks
 
 
 task_logger = get_logger("tasks_ui")
@@ -309,6 +312,11 @@ def create_app():
     register_flask_exception_logging(app, get_logger("requests"))
     install_thread_exception_logging(get_logger("threads"))
 
+    @app.get("/health")
+    def health():
+        """Container and reverse-proxy readiness probe."""
+        return {"status": "ok"}
+
     def _get_csrf_token() -> str:
         token = session.get("_csrf_token")
         if not token:
@@ -322,25 +330,7 @@ def create_app():
 
     @app.before_request
     def csrf_guard():
-        # Protège uniquement les méthodes qui modifient l'état
-        if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
-            return
-
-        # Pas utile sur ces endpoints publics / techniques
-        allowed_prefixes = ("/static", "/health")
-        if request.path.startswith(allowed_prefixes) or request.path in ("/favicon.ico",):
-            return
-
-        sent_token = (
-            request.form.get("_csrf_token")
-            or request.headers.get("X-CSRF-Token")
-            or ""
-        ).strip()
-
-        session_token = (session.get("_csrf_token") or "").strip()
-
-        if not csrf_tokens_match(sent_token, session_token):
-            abort(403)
+        return csrf_request_guard()
 
     # Trust proxy :
     # - priorité à la variable d'environnement si elle existe
@@ -449,21 +439,7 @@ def create_app():
 
     @app.after_request
     def add_security_headers(response):
-        response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
-        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-
-        if request.is_secure:
-            response.headers.setdefault(
-                "Strict-Transport-Security",
-                "max-age=31536000; includeSubDomains"
-            )
-        if request.path.startswith("/portal") or request.path.startswith("/api/portal/"):
-            response.headers.setdefault("Cache-Control", "no-store")
-            response.headers.setdefault("Content-Security-Policy", "default-src 'self'; img-src 'self' data: https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; base-uri 'self'; form-action 'self'; frame-ancestors 'self'")
-
-        return response
+        return apply_security_headers(response)
 
     @app.after_request
     def gzip_text_response(response):
@@ -518,6 +494,9 @@ def create_app():
     # Blueprints
     app.register_blueprint(subscriptions_api)
     app.register_blueprint(users_bp)
+
+    # Global access control must not depend on any feature route module.
+    register_global_access_guard(app)
 
     # Routes
     from routes import register_routes

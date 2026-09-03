@@ -211,6 +211,11 @@ def _resolve_active_language(settings: Optional[dict] = None) -> str:
     return available_langs[0]
 
 
+def resolve_active_language(settings: Optional[dict] = None) -> str:
+    """Public resolver for pages that also maintain localized local copy."""
+    return _resolve_active_language(settings)
+
+
 def _load_request_language_settings() -> Optional[dict]:
     if not has_request_context():
         return None

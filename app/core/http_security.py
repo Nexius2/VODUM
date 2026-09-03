@@ -58,6 +58,11 @@ class ConfiguredHostSession(requests.Session):
         self.default_timeout = default_timeout
 
     def request(self, method, url, **kwargs):
+        origin = url_origin(url)
+        if origin is None or origin not in self.allowed_origins:
+            raise requests.exceptions.InvalidURL(
+                f"Refusing request to an unconfigured server origin: {url}"
+            )
         if self.default_timeout is not None:
             kwargs.setdefault("timeout", self.default_timeout)
         return super().request(method, url, **kwargs)

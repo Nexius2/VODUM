@@ -10,7 +10,6 @@ check_servers.py - VERSION TXT LOGGING
 ✓ Compatibilité run(task_id, db=None)
 """
 
-import requests
 import urllib3
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -137,9 +136,9 @@ def plex_get_info(server_row, base_url, token):
 
 
 
-def check_generic_server(url):
+def check_generic_server(server_row, url):
     try:
-        r = requests.get(url, timeout=5)
+        r = server_http_session(server_row).get(url, timeout=5)
         return "up" if r.status_code < 400 else "down"
     except Exception:
         return "down"
@@ -256,7 +255,7 @@ def run(task_id: int, db):
             # SERVEUR GÉNÉRIQUE
             # -----------------------------
             else:
-                status = check_generic_server(base_url)
+                status = check_generic_server(s, base_url)
 
             # -----------------------------
             # Mise à jour DB
@@ -298,4 +297,3 @@ def run(task_id: int, db):
         log.error("Error while check_servers", exc_info=True)
         task_logs(task_id, "error", f"Error check_servers : {e}")
         raise
-

@@ -20,47 +20,71 @@
   {% set active = current_sort == key %}
   <a href="{{ library_sort_url(key) }}" class="inline-flex items-center gap-1 {{ 'text-emerald-300 font-semibold' if active else 'text-slate-400 hover:text-slate-200' }}">
     <span>{{ label }}</span>
-    {% if active %}<span>{{ '&uarr;'|safe if current_order == 'asc' else '&darr;'|safe }}</span>{% else %}<span>&harr;</span>{% endif %}
+    {% if active %}<span>{{ '↑' if current_order == 'asc' else '↓' }}</span>{% else %}<span>↔</span>{% endif %}
   </a>
 {%- endmacro %}
 
-<form method="post" action="{{ url_for('bulk_grant_libraries') }}" id="lib-form">
+<div>
   <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-3">
     <h2 class="text-sm font-semibold">{{ t("all_libraries") }}</h2>
-    <div id="bulk-buttons" class="flex flex-wrap gap-2"></div>
   </div>
 
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
     <table class="w-full text-xs">
       <thead class="bg-slate-950/60 text-slate-400">
         <tr>
-          <th class="px-3 py-2">
-            <input type="checkbox" id="check-all">
-          </th>
           <th class="px-3 py-2 text-left">{{ sortable_header(t("server"), "server") }}</th>
           <th class="px-3 py-2 text-left">{{ sortable_header(t("name"), "name") }}</th>
           <th class="px-3 py-2 text-left">{{ sortable_header(t("type"), "type") }}</th>
           <th class="px-3 py-2 text-left">{{ sortable_header(t("id"), "section_id") }}</th>
           <th class="px-3 py-2 text-left">{{ sortable_header(t("users"), "users") }}</th>
+          <th class="px-3 py-2 text-center">{{ t("actions") }}</th>
         </tr>
       </thead>
       <tbody>
         {% for lib in libraries %}
         <tr class="border-t border-slate-800">
-          <td class="px-3 py-2">
-            <input type="checkbox"
-                   class="lib-check"
-                   data-server="{{ lib.server_id }}"
-                   data-server-name="{{ lib.server_name }}"
-                   data-library-name="{{ lib.name }}"
-                   value="{{ lib.id }}"
-                   name="library_ids">
-          </td>
           <td class="px-3 py-2 font-semibold">{{ lib.server_name }}</td>
           <td class="px-3 py-2">{{ lib.name }}</td>
           <td class="px-3 py-2 text-slate-400">{{ t(lib.type) }}</td>
           <td class="px-3 py-2 font-mono text-[11px]">{{ lib.section_id }}</td>
           <td class="px-3 py-2">{{ lib.users_count }}</td>
+          <td class="px-3 py-2 text-center relative z-[200]">
+            <button type="button"
+                    data-library-menu-toggle="{{ lib.id }}"
+                    aria-label="{{ t('actions') }}"
+                    aria-expanded="false"
+                    class="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-slate-800/80 text-slate-400 hover:text-slate-200 transition">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="5" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="12" cy="19" r="2"></circle>
+              </svg>
+            </button>
+            <div id="library-menu-{{ lib.id }}"
+                 class="hidden absolute right-3 bottom-10 z-[9999] w-64 overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl">
+              <form method="post" action="{{ url_for('bulk_grant_libraries') }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="server_id" value="{{ lib.server_id }}">
+                <input type="hidden" name="library_ids" value="{{ lib.id }}">
+                <button type="submit" class="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-left text-emerald-300 hover:bg-slate-800 transition">
+                  <span aria-hidden="true">+</span><span>{{ t("grant_active_users") }}</span>
+                </button>
+              </form>
+              <button type="button"
+                      data-library-remove="{{ lib.id }}"
+                      data-server-id="{{ lib.server_id }}"
+                      data-server-name="{{ lib.server_name }}"
+                      data-library-name="{{ lib.name }}"
+                      class="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-left text-red-300 hover:bg-slate-800 transition">
+                <span aria-hidden="true">&times;</span><span>{{ t("remove_access_all_users") }}</span>
+              </button>
+              <form method="post" action="{{ url_for('refresh_server_library', library_id=lib.id) }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-left text-sky-300 hover:bg-slate-800 transition">
+                  <span aria-hidden="true">&#8635;</span><span>{{ t("refresh_library") }}</span>
+                </button>
+              </form>
+            </div>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -72,6 +96,12 @@
     {% set pagination = dict(pagination, unit_label=t("libraries")) %}
     {% include "partials/_pagination.html" %}
   </div>
+</div>
+
+<form method="post" action="{{ url_for('bulk_remove_libraries') }}" id="library-remove-form" class="hidden">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="server_id" id="library-remove-server-id">
+  <input type="hidden" name="library_ids" id="library-remove-library-id">
 </form>
 
 <!-- Bulk remove confirm modal -->
@@ -133,17 +163,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script type="application/json" id="servers-libraries-config">
-{{ {
-  "labels": {
-    "grantActiveUsers": t('grant_active_users'),
-    "removeAccessAllUsers": t('remove_access_all_users')
-  },
-  "urls": {
-    "grant": url_for('bulk_grant_libraries'),
-    "remove": url_for('bulk_remove_libraries')
-  }
-}|tojson }}
-</script>
 <script src="{{ url_for('static', filename='js/pages/servers-libraries.js', v=g.app_version|default('dev')) }}"></script>
 {% endblock %}

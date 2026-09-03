@@ -194,7 +194,7 @@
   }
 
   function resetCreateUserForm() {
-    ["cu_email", "cu_second_email", "cu_username", "cu_firstname", "cu_lastname", "cu_notes"].forEach((id) => {
+    ["cu_email", "cu_second_email", "cu_phone", "cu_username", "cu_firstname", "cu_lastname", "cu_notes"].forEach((id) => {
       const input = document.getElementById(id);
       if (input) input.value = "";
     });
@@ -461,6 +461,7 @@
       const payload = {
         email: document.getElementById("cu_email")?.value.trim() || "",
         second_email: document.getElementById("cu_second_email")?.value.trim() || "",
+        phone: document.getElementById("cu_phone")?.value.trim() || "",
         username: document.getElementById("cu_username")?.value.trim() || "",
         firstname: document.getElementById("cu_firstname")?.value.trim() || "",
         lastname: document.getElementById("cu_lastname")?.value.trim() || "",

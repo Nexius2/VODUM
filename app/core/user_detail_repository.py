@@ -1,5 +1,5 @@
 USER_DETAIL_COLUMNS = """
-    id, username, firstname, lastname, email, second_email,
+    id, username, firstname, lastname, email, second_email, phone,
     expiration_date, renewal_method, renewal_date, created_at, notes,
     status, last_status, status_changed_at, max_streams_override,
     notifications_order_override, expiration_date_override, referrer_user_id,

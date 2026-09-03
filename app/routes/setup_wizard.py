@@ -6,9 +6,13 @@ import time
 from pathlib import Path
 
 from core.app_paths import imports_dir as get_imports_dir
-from core.auth_totp import verify_totp_code
+from core.auth_totp import provisioning_uri, verify_totp_code
+from core.auth_totp_enrollment import (
+    consume_totp_enrollment,
+    get_or_begin_totp_enrollment,
+)
 from core.auth_principal import open_admin_session
-from core.i18n import get_available_languages
+from core.i18n import get_available_languages, resolve_active_language
 from core.setup_wizard_navigation import (
     display_setup_step as _display_step,
 )
@@ -37,7 +41,7 @@ from core.setup_wizard_state import (
 )
 from core.smtp_settings import normalize_smtp_auth_method
 from core.subscription_template_policies import validate_subscription_template_policy_limits
-from flask import flash, redirect, render_template, request, session, url_for
+from flask import current_app, flash, redirect, render_template, request, session, url_for
 from secret_store import encrypt_secret
 from tasks_engine import enable_and_run_task_by_name
 from web.helpers import get_db
@@ -128,10 +132,11 @@ def _wizard_subscription_policies(form) -> list[dict]:
         selector = form.get(f"{prefix}_selector") or "kill_newest"
         if selector not in selectors:
             selector = "kill_newest"
+        rule = {"max": maximum, "selector": selector}
+        if rule_type == "max_ips_per_user":
+            rule["allow_local_ip"] = form.get("ips_lan") == "1"
         policies.append({"rule_type": rule_type, "provider": None, "server_id": None,
-                         "is_enabled": 1, "priority": 100,
-                         "rule": {"max": maximum, "selector": selector,
-                                  "allow_local_ip": form.get(f"{prefix}_lan") == "1"}})
+                         "is_enabled": 1, "priority": 100, "rule": rule})
     if form.get("bitrate_enabled") == "1":
         try:
             maximum = max(1, int(form.get("bitrate_max") or 20000))
@@ -158,15 +163,7 @@ def register(app):
         db = get_db()
         settings = _settings(db)
         state = _state(settings)
-        resume_from_internal_action = request.args.get("resume") in {"plex", "wizard"}
-        internal_redirect = session.pop("vodum_wizard_internal_redirect", False)
-        if request.method == "GET" and not (internal_redirect or resume_from_internal_action):
-            # A direct visit or browser refresh must always expose the restore/new
-            # installation choice again. Keep the accumulated state and entered
-            # settings; only reset the displayed navigation position.
-            if int(settings.get("wizard_active") or 0) == 1 and int(settings.get("wizard_step") or 1) != 1:
-                _save(db, step=1, state=state, active=1)
-                settings = _settings(db)
+        session.pop("vodum_wizard_internal_redirect", None)
         step = _display_step(db, settings, state)
 
         if request.method == "POST":
@@ -215,7 +212,7 @@ def register(app):
                 totp_enabled = request.form.get("admin_totp_enabled") == "1"
                 totp_secret = None
                 if totp_enabled:
-                    pending_secret = (request.form.get("pending_totp_secret") or "").strip()
+                    pending_secret = consume_totp_enrollment(session, purpose="setup")
                     totp_code = request.form.get("totp_code") or ""
                     if not pending_secret or not verify_totp_code(pending_secret, totp_code):
                         flash("Invalid two-factor authentication code.", "error")
@@ -237,7 +234,12 @@ def register(app):
                 )
                 from core.admin_auth_identities import sync_local_admin_identity
                 sync_local_admin_identity(db, email)
-                open_admin_session(session, email, auth_level="password_totp" if totp_enabled else "password")
+                open_admin_session(
+                    session, email,
+                    auth_level="password_totp" if totp_enabled else "password",
+                    db=db,
+                    session_ttl=current_app.permanent_session_lifetime,
+                )
                 session["vodum_local_reauth_at"] = int(time.time())
                 state["administrator"] = "created"
 
@@ -362,9 +364,7 @@ def register(app):
                         ),
                     )
                     state["communications"] = "configured" if mailing_enabled or discord_enabled else "skipped"
-                    _save(db, step=5, state=state, active=1)
                     flash("Communication settings saved.", "success")
-                    return continue_setup_wizard()
                 state["communications"] = "skipped" if action == "skip" else state.get("communications", "reviewed")
 
             elif step == 6:
@@ -530,13 +530,26 @@ def register(app):
             page_data["plex_auth_identity"] = None
             page_data["plex_suggestions"] = []
         communications_available = _communications_available(settings, state)
-        lang = session.get("lang") or settings.get("default_language") or "en"
+        lang = resolve_active_language(settings)
+        wizard_totp_secret = (
+            get_or_begin_totp_enrollment(session, purpose="setup")
+            if step == 2 and state.get("administrator") != "plex"
+            else ""
+        )
         return render_template(
             "setup/wizard.html",
             step=step, total_steps=TOTAL_STEPS, copy=COPY.get(lang, COPY["en"]),
             state=state, settings=settings,
             languages=get_available_languages(),
             communications_available=communications_available,
+            wizard_totp_secret=wizard_totp_secret,
+            wizard_totp_uri=(
+                provisioning_uri(
+                    wizard_totp_secret,
+                    settings.get("admin_email") or "admin",
+                )
+                if wizard_totp_secret else ""
+            ),
             **page_data,
         )
 

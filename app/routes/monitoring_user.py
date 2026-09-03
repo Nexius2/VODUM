@@ -766,7 +766,7 @@ def register(app):
             rule["per_server"] = True
 
         # allow local IP bypass (LAN)
-        if rule_type in ("max_streams_per_user", "max_streams_per_ip", "max_ips_per_user"):
+        if rule_type in ("max_streams_per_ip", "max_ips_per_user"):
             rule["allow_local_ip"] = bool(allow_local_ip)
 
         if rule_type == "max_bitrate_kbps":
@@ -909,7 +909,6 @@ def register(app):
     @app.get("/monitoring/policies/<int:policy_id>/edit")
     def stream_policy_edit(policy_id: int):
         return redirect(url_for("monitoring_page", tab="policies", edit_policy_id=policy_id))
-
 
 
 

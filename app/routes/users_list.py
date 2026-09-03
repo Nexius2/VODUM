@@ -313,6 +313,7 @@ def register(app):
                     "COALESCE(u.username,'') LIKE ? OR "
                     "COALESCE(u.email,'') LIKE ? OR "
                     "COALESCE(u.second_email,'') LIKE ? OR "
+                    "COALESCE(u.phone,'') LIKE ? OR "
                     "COALESCE(u.firstname,'') LIKE ? OR "
                     "COALESCE(u.lastname,'') LIKE ? OR "
                     "COALESCE(u.notes,'') LIKE ? OR "
@@ -328,6 +329,7 @@ def register(app):
                     like,  # username
                     like,  # email
                     like,  # second_email
+                    like,  # phone
                     like,  # firstname
                     like,  # lastname
                     like,  # notes

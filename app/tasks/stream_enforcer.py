@@ -212,7 +212,6 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
 
     if rule_type == "max_streams_per_user":
         max_streams = int(rule.get("max", 1))
-        allow_local_ip = bool(rule.get("allow_local_ip", False))
 
         # Group by user:
         # - If policy is explicitly global => count across all servers
@@ -244,11 +243,7 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
                 except Exception:
                     pass
 
-            # Optional LAN bypass: local IP sessions do not count.
             counted_sessions = user_sessions
-            if allow_local_ip:
-                counted_sessions = [s for s in user_sessions if not _is_local_ip((s.get('ip') or '').strip())]
-
             counted_sessions = _deduplicate_user_stream_sessions(policy, user_key, counted_sessions)
 
             defer_probable_switch = should_defer_stream_violation(
@@ -348,7 +343,9 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
             if _should_grace_coherent_ip_switch(policy, user_key, deduped_sessions, ips, max_ips):
                 continue
 
-            # ✅ On tue une session du user (selector), sur le serveur de la session ciblée
+            # An IP-limit violation must be resolved at IP level. Killing only
+            # one stream is insufficient when the excess IP owns several
+            # sessions: another stream on that IP immediately keeps 2 > 1 true.
             candidates = deduped_sessions
             if allow_local_ip:
                 candidates = [s for s in deduped_sessions if not _is_local_ip((s.get('ip') or '').strip())]
@@ -356,7 +353,39 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
                 if not candidates:
                     candidates = deduped_sessions
 
-            target = _pick_kill_target(candidates, selector)
+            sessions_by_ip: Dict[str, List[dict]] = {}
+            for session in candidates:
+                ip = (session.get("ip") or "").strip() or "unknown"
+                if ip == "unknown" and ignore_unknown:
+                    continue
+                sessions_by_ip.setdefault(ip, []).append(session)
+
+            excess_ip_count = max(0, len(sessions_by_ip) - max_ips)
+
+            def ip_rank(item):
+                ip_sessions = item[1]
+                target = _pick_kill_target(ip_sessions, selector)
+                return _session_started_ts(target or {})
+
+            # Keep the oldest-established IP(s); remove the newest excess IPs.
+            # kill_oldest explicitly reverses that choice.
+            reverse = selector != "kill_oldest"
+            ranked_ips = sorted(sessions_by_ip.items(), key=ip_rank, reverse=reverse)
+            excess_ips = {ip for ip, _ in ranked_ips[:excess_ip_count]}
+            # Counting is household-deduplicated, but enforcement must include
+            # every currently live stream on an excess IP. Otherwise a second
+            # stream on the same TV/IP survives and immediately recreates the
+            # violation.
+            kill_targets = [
+                session for session in user_sessions
+                if ((session.get("ip") or "").strip() or "unknown") in excess_ips
+                and not (
+                    allow_local_ip
+                    and _is_local_ip((session.get("ip") or "").strip())
+                )
+            ]
+
+            target = _pick_kill_target(kill_targets, selector)
             if not target:
                 continue
 
@@ -371,6 +400,8 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
                 "provider": provider,
                 "target_user": user_key,
                 "sessions": deduped_sessions,
+                "kill_targets": kill_targets,
+                "excess_ips": sorted(excess_ips),
                 "reason": reason,
                 "selector": selector,
                 "warn_title": warn_title,
@@ -640,6 +671,93 @@ def _recheck_violation(
 
     return select_rechecked_violation(violation, v2)
 
+
+def _kill_violation_targets(
+    task_id: int,
+    policy: dict,
+    violation: dict,
+    targets: List[dict],
+    user_vodum_id: Optional[int],
+    user_ext: str,
+) -> None:
+    """Terminate every live session belonging to an excess IP."""
+    policy_id = int(policy["id"])
+    reason = violation.get("reason") or "policy violation"
+    kill_reason_for_client = violation.get("warn_text") or reason
+    related_sessions = violation.get("sessions") or targets
+    live_sessions = _load_live_sessions()
+
+    for target in targets:
+        server_id = int(target["server_id"])
+        provider_type = target["provider"]
+        server_row = _load_server(server_id)
+        session_key = str(target["session_key"])
+
+        if not server_row:
+            logger.warning(
+                "[TASK %s] stream_enforcer: server %s missing for batch kill session=%s",
+                task_id, server_id, session_key,
+            )
+            continue
+
+        account_username, ips_json, details_json = _build_enforcement_snapshot(
+            target=target,
+            violation_sessions=related_sessions,
+            live_sessions=live_sessions,
+            policy=policy,
+            reason=reason,
+        )
+
+        try:
+            if provider_type == "jellyfin":
+                message_key = _jellyfin_session_id_from_target(target, session_key)
+                _warn_session(
+                    server_row,
+                    message_key,
+                    violation.get("warn_title", "Stream limit"),
+                    violation.get("warn_text", "Limit reached."),
+                    timeout_ms=JELLYFIN_KILL_MESSAGE_TIMEOUT_MS,
+                )
+
+            ok = _kill_session(server_row, session_key, reason=kill_reason_for_client)
+
+            if ok:
+                _queue_stream_blocked_notification(
+                    task_id=task_id,
+                    policy=policy,
+                    server_row=server_row,
+                    target=target,
+                    reason=reason,
+                    kill_reason_for_client=kill_reason_for_client,
+                    related_sessions=related_sessions,
+                )
+
+            _log_enforcement(
+                policy_id, server_id, provider_type, session_key,
+                user_vodum_id, user_ext,
+                "kill" if ok else "kill_failed", reason,
+                account_username=account_username,
+                ips_json=ips_json,
+                details_json=details_json,
+            )
+            _upsert_state(
+                policy_id, server_id, user_vodum_id, user_ext,
+                warned=False, killed=ok, reason=reason,
+            )
+
+            logger.warning(
+                "[TASK %s] [KILL_IP_BATCH] policy=%s server=%s provider=%s "
+                "session=%s ip=%s ok=%s reason=%s",
+                task_id, policy_id, server_id, provider_type,
+                session_key, target.get("ip"), ok, reason,
+            )
+        except Exception as exc:
+            logger.error(
+                "[TASK %s] stream_enforcer: batch kill failed server=%s session=%s: %s",
+                task_id, server_id, session_key, exc,
+                exc_info=True,
+            )
+
 # -------------------------
 # Task entrypoint
 # -------------------------
@@ -716,7 +834,8 @@ def run(task_id: int, db):
 
         sessions = v["sessions"]
         selector = v.get("selector") or "kill_newest"
-        target = _pick_kill_target(sessions, selector)
+        kill_targets = v.get("kill_targets") or []
+        target = _pick_kill_target(kill_targets or sessions, selector)
         if not target:
             continue
 
@@ -861,8 +980,20 @@ def run(task_id: int, db):
         v = rechecked_violation
         sessions = v["sessions"]
         selector = v.get("selector") or "kill_newest"
-        target = _pick_kill_target(sessions, selector)
+        kill_targets = v.get("kill_targets") or []
+        target = _pick_kill_target(kill_targets or sessions, selector)
         if not target:
+            continue
+
+        if len(kill_targets) > 1:
+            _kill_violation_targets(
+                task_id,
+                policy,
+                v,
+                kill_targets,
+                user_vodum_id,
+                user_ext,
+            )
             continue
 
         server_id = int(v["server_id"])

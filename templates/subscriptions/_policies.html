@@ -158,14 +158,16 @@
           {{ t("policies_max_value_help") }}
         </p>
 
-        <label class="mt-3 flex items-center gap-2 text-xs text-slate-300">
-          <input type="checkbox" name="allow_local_ip" value="1"
-                 {% if edit_policy and edit_policy._rule.allow_local_ip %}checked{% endif %}>
-          {{ t("policies_allow_local_ip") }}
-        </label>
-        <p class="text-xs text-slate-500 mt-1">
-          {{ t("policies_allow_local_ip_help") }}
-        </p>
+        <div id="streamPolicyAllowLocalIpField">
+          <label class="mt-3 flex items-center gap-2 text-xs text-slate-300">
+            <input type="checkbox" name="allow_local_ip" value="1"
+                   {% if edit_policy and edit_policy._rule.allow_local_ip %}checked{% endif %}>
+            {{ t("policies_allow_local_ip") }}
+          </label>
+          <p class="text-xs text-slate-500 mt-1">
+            {{ t("policies_allow_local_ip_help") }}
+          </p>
+        </div>
       </div>
 
       <div>
@@ -483,7 +485,7 @@
                   {% if p._rule.selector is defined %}
                     <div class="text-slate-400 text-xs">selector={{ p._rule.selector }}</div>
                   {% endif %}
-                  {% if p._rule.allow_local_ip %}
+                  {% if p.rule_type in ('max_streams_per_ip', 'max_ips_per_user') and p._rule.allow_local_ip %}
                     <div class="text-slate-400 text-xs">local_ip=yes</div>
                   {% endif %}
                   {% if p._rule.allowed is defined and p._rule.allowed %}

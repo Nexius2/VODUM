@@ -132,7 +132,7 @@ def load_portal_home(db, vodum_user_id: int) -> dict | None:
 def load_portal_profile(db, vodum_user_id: int) -> dict | None:
     row = db.query_one(
         """
-        SELECT id,username,firstname,lastname,email,second_email,status,created_at,
+        SELECT id,username,firstname,lastname,email,second_email,phone,status,created_at,
                preferred_language,notifications_order_override,discord_user_id,discord_name
         FROM vodum_users WHERE id=?
         """,
@@ -142,16 +142,27 @@ def load_portal_profile(db, vodum_user_id: int) -> dict | None:
 
 
 def normalize_portal_profile(form) -> tuple[dict, tuple[str, ...]]:
+    from core.user_phone import normalize_phone
+
+    phone_error = None
+    try:
+        phone = normalize_phone(form.get("phone"))
+    except ValueError as exc:
+        phone = None
+        phone_error = str(exc)
     values = {
         "firstname": str(form.get("firstname") or "").strip()[:100] or None,
         "lastname": str(form.get("lastname") or "").strip()[:100] or None,
         "second_email": str(form.get("second_email") or "").strip().lower()[:254] or None,
+        "phone": phone,
         "preferred_language": str(form.get("preferred_language") or "").strip().lower()[:10] or None,
         "notifications_order_override": str(form.get("notifications_order_override") or "").strip().lower() or None,
         "discord_user_id": str(form.get("discord_user_id") or "").strip()[:64] or None,
         "discord_name": str(form.get("discord_name") or "").strip()[:100] or None,
     }
     errors = []
+    if phone_error:
+        errors.append(phone_error)
     email = values["second_email"]
     if email and (" " in email or email.count("@") != 1 or "." not in email.rsplit("@", 1)[1]):
         errors.append("portal_profile_email_invalid")
@@ -164,13 +175,13 @@ def normalize_portal_profile(form) -> tuple[dict, tuple[str, ...]]:
 
 def update_portal_profile(db, vodum_user_id: int, values: dict, *, notifications_can_override=True, discord_enabled=False) -> None:
     db.execute(
-        "UPDATE vodum_users SET firstname=?,lastname=?,second_email=?,preferred_language=?,"
+        "UPDATE vodum_users SET firstname=?,lastname=?,second_email=?,phone=?,preferred_language=?,"
         "notifications_order_override=CASE WHEN ?=1 THEN ? ELSE notifications_order_override END,"
         "discord_user_id=CASE WHEN ?=1 THEN ? ELSE discord_user_id END,"
         "discord_name=CASE WHEN ?=1 THEN ? ELSE discord_name END WHERE id=?",
         (
             values.get("firstname"), values.get("lastname"),
-            values.get("second_email"), values.get("preferred_language"),
+            values.get("second_email"), values.get("phone"), values.get("preferred_language"),
             int(bool(notifications_can_override)), values.get("notifications_order_override"),
             int(bool(discord_enabled)), values.get("discord_user_id"),
             int(bool(discord_enabled)), values.get("discord_name"), int(vodum_user_id),
@@ -184,7 +195,7 @@ def load_portal_subscription(
     row = db.query_one(
         """
         SELECT vu.id,vu.status,vu.created_at,vu.expiration_date,vu.renewal_date,
-               vu.renewal_method,vu.max_streams_override,vu.subscription_template_id,
+               vu.username,vu.renewal_method,vu.max_streams_override,vu.subscription_template_id,
                st.name AS subscription_name,st.notes AS subscription_notes,
                st.duration_days,st.subscription_value,st.is_lifetime,st.policies_json,
                (SELECT portal_payment_url FROM settings WHERE id=1) AS portal_payment_url,
@@ -200,11 +211,24 @@ def load_portal_subscription(
     if not row:
         return None
     subscription = dict(row)
-    # Payment and renewal stay server-side disabled until the feature is complete.
-    subscription["portal_show_payment"] = 0
+    from core.payment_links import load_applicable_payment_links
     subscription["subscription_value"] = format_subscription_value(
         subscription.get("subscription_value")
     )
+    subscription["payment_links"] = load_applicable_payment_links(db, subscription.get("subscription_template_id"), {
+        "username": subscription.get("username"), "user_id": subscription.get("id"),
+        "plan": subscription.get("subscription_name"), "amount": subscription.get("subscription_value"),
+        "currency": subscription.get("subscription_currency"),
+    })
+    subscription["days_remaining"] = None
+    if not subscription.get("is_lifetime"):
+        try:
+            expiration = date.fromisoformat(
+                str(subscription.get("expiration_date") or "")[:10]
+            )
+            subscription["days_remaining"] = max(0, (expiration - date.today()).days)
+        except ValueError:
+            pass
     subscription["limits"] = _subscription_limits(subscription.pop("policies_json", "[]"))
     if subscription.get("max_streams_override") is not None:
         subscription["limits"] = [
@@ -218,8 +242,6 @@ def load_portal_subscription(
     renewal = str(subscription.get("renewal_method") or "").strip()
     parsed = urlsplit(renewal)
     subscription["renewal_url"] = renewal if parsed.scheme == "https" and parsed.netloc else None
-    if subscription.get("portal_payment_url"):
-        subscription["renewal_url"] = subscription["portal_payment_url"]
     plans = []
     if include_available_plans:
         plans = db.query(

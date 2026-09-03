@@ -12,9 +12,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Debug Environment Variables
+      - name: Validate registry credentials
         run: |
-          echo "DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}"
           if [[ -z "${{ secrets.DOCKER_USERNAME }}" ]]; then echo "❌ DOCKER_USERNAME est vide !"; exit 1; fi
           if [[ -z "${{ secrets.DOCKER_PASSWORD }}" ]]; then echo "❌ DOCKER_PASSWORD est vide !"; exit 1; fi
           echo "✅ Les secrets sont bien définis."
@@ -36,7 +35,5 @@ jobs:
         run: |
           docker push nexius2/vodum:latest
           docker push nexius2/vodum:${{ github.sha }}
-          
-            - name: Debug Environment Variables
 
 

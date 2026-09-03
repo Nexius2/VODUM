@@ -229,6 +229,21 @@
     syncStreamBlockedCheckbox();
   }
 
+  function bindPolicyLanVisibility() {
+    const field = document.getElementById("streamPolicyAllowLocalIpField");
+    const select = field?.closest("form")?.querySelector('select[name="rule_type"]');
+    if (!field || !select || select.dataset.vodumLanBound === "1") return;
+    select.dataset.vodumLanBound = "1";
+    const sync = () => {
+      const visible = ["max_streams_per_ip", "max_ips_per_user"].includes(select.value);
+      field.classList.toggle("hidden", !visible);
+      const checkbox = field.querySelector('input[name="allow_local_ip"]');
+      if (checkbox && !visible) checkbox.checked = false;
+    };
+    select.addEventListener("change", sync);
+    sync();
+  }
+
   function readJsonConfig(id) {
     const element = document.getElementById(id);
     if (!element) return {};
@@ -365,6 +380,7 @@
   function initSubscriptionsPage() {
     bindSubscriptionApplyConfirm();
     bindSubscriptionApplicationsFilters();
+    bindPolicyLanVisibility();
     renderPlanSummaries();
     bindPlansEnabledOnly();
     bindTemplateDeleteConfirm();
