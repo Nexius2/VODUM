@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 from logging_utils import get_logger
 
@@ -10,6 +11,14 @@ logger = get_logger("plex_access_identity")
 
 class PendingPlexInvite(RuntimeError):
     """The Plex invitation exists but has not been accepted yet."""
+
+
+class PlexUserNotFound(RuntimeError):
+    """The stored Plex identity no longer exists in the owner's user list."""
+
+
+class PlexUserLookupUnavailable(RuntimeError):
+    """Plex could not provide its user list; this failure may be temporary."""
 
 
 def row_get(row, key, default=None):
@@ -89,10 +98,15 @@ def resolve_plex_user(account, media_user_row):
         normalize,
     )
 
+    list_error = None
     try:
         plex_users = list(account.users())
-    except Exception:
-        logger.exception("Unable to list Plex users via account.users()")
+    except Exception as exc:
+        logger.warning(
+            "Unable to list Plex users via account.users(); trying server shares: %s",
+            exc,
+        )
+        list_error = exc
         plex_users = []
 
     for wanted_values, attribute, normalizer in (
@@ -117,6 +131,10 @@ def resolve_plex_user(account, media_user_row):
             "Plex invite still pending acceptance "
             f"for username={db_username!r}, email={db_email!r}"
         )
+    if list_error is not None:
+        raise PlexUserLookupUnavailable(
+            "Unable to retrieve the Plex owner user list"
+        ) from list_error
     available = [
         {
             "id": normalize(getattr(user, "id", None)),
@@ -126,12 +144,70 @@ def resolve_plex_user(account, media_user_row):
         }
         for user in plex_users
     ]
-    raise RuntimeError(
+    raise PlexUserNotFound(
         "Unable to resolve Plex user from media_users row "
         f"(external_user_id={db_external_id!r}, username={db_username!r}, "
         f"email={db_email!r}). details_json.plex_user={plex_user_details!r}. "
         f"details_json.plex_share={plex_share_details!r}. "
         f"Available Plex users sample={available[:10]}"
+    )
+
+
+def resolve_plex_user_from_shared_servers(shared_servers, media_user_row):
+    """Recover a Plex user from an existing server share without re-inviting it."""
+    details = details_json_as_dict(media_user_row)
+    plex_user_details = details.get("plex_user") or {}
+    plex_share_details = details.get("plex_share") or {}
+    normalize = lambda value: str(value or "").strip()
+    lower = lambda value: normalize(value).lower()
+    candidate_ids = _unique(
+        [row_get(media_user_row, "external_user_id"), plex_user_details.get("id")],
+        normalize,
+    )
+    candidate_emails = _unique(
+        [
+            row_get(media_user_row, "email"),
+            plex_user_details.get("email"),
+            plex_share_details.get("email"),
+        ],
+        lower,
+    )
+    candidate_names = _unique(
+        [
+            row_get(media_user_row, "username"),
+            plex_user_details.get("username"),
+            plex_share_details.get("username"),
+        ],
+        lower,
+    )
+
+    for shared in shared_servers or []:
+        shared_ids = {
+            normalize(shared.get("userID")), normalize(shared.get("invitedId"))
+        } - {""}
+        if (
+            shared_ids.intersection(candidate_ids)
+            or (lower(shared.get("email")) in candidate_emails)
+            or (lower(shared.get("username")) in candidate_names)
+        ):
+            plex_id = (
+                normalize(shared.get("userID"))
+                or normalize(shared.get("invitedId"))
+                or (candidate_ids[0] if candidate_ids else "")
+            )
+            username = normalize(shared.get("username"))
+            return SimpleNamespace(
+                id=plex_id or None,
+                username=username or None,
+                title=username or None,
+                email=normalize(shared.get("email")) or None,
+                thumb=None,
+                servers=[],
+            )
+
+    raise PlexUserNotFound(
+        "Stored Plex user is absent from both the owner user list and this "
+        "server's existing shares"
     )
 
 

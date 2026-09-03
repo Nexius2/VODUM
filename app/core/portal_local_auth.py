@@ -216,7 +216,7 @@ def consume_password_reset(db, token: str, password: str, *, now=None) -> int:
     return account_id
 
 
-def authenticate_local_user(db, email: str, password: str, *, now=None) -> dict | None:
+def authenticate_local_user(db, email: str, password: str, *, now=None, session_ttl=None) -> dict | None:
     normalized = normalize_email(email)
     row = db.query_one(
         """
@@ -232,7 +232,9 @@ def authenticate_local_user(db, email: str, password: str, *, now=None) -> dict 
     )
     if not row or not state_allows_portal(row["account_status"], row["user_status"]) or not check_password_hash(row["password_hash"] or "", str(password or "")):
         return None
-    created = create_portal_session(db, int(row["portal_account_id"]), now=now)
+    created = create_portal_session(
+        db, int(row["portal_account_id"]), now=now, ttl=session_ttl
+    )
     login_at = _sql(now or datetime.now(timezone.utc))
     db.execute(
         "UPDATE portal_auth_identities SET last_login_at=?,updated_at=? WHERE id=?",

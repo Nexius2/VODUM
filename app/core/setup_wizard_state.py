@@ -47,16 +47,23 @@ def should_resume_setup_wizard(db, settings: dict) -> bool:
         settings["wizard_active"] = 0
         return False
 
-    row = db.query_one("SELECT COUNT(*) AS cnt FROM servers")
-    if row and int(row["cnt"] or 0) > 0:
-        # A server is durable evidence of an already configured instance. Repair
-        # stale flags so every later authentication path reaches the dashboard.
-        db.execute(
-            "UPDATE settings SET wizard_active = 0, wizard_completed = 1 WHERE id = 1"
-        )
-        settings["wizard_active"] = 0
-        settings["wizard_completed"] = 1
-        return False
+    # A server is only step 4 for a fresh wizard. However, older configured
+    # installations may have stale wizard flags and no wizard progress at all;
+    # keep repairing that legacy state so they are not forced into onboarding.
+    state = decode_setup_wizard_state(settings)
+    has_fresh_progress = any(
+        state.get(key)
+        for key in ("instance", "administrator", "localization", "media_server")
+    ) or bool(state.get("validated_server_ids"))
+    if not has_fresh_progress:
+        row = db.query_one("SELECT COUNT(*) AS cnt FROM servers")
+        if row and int(row["cnt"] or 0) > 0:
+            db.execute(
+                "UPDATE settings SET wizard_active = 0, wizard_completed = 1 WHERE id = 1"
+            )
+            settings["wizard_active"] = 0
+            settings["wizard_completed"] = 1
+            return False
     return True
 
 

@@ -36,10 +36,17 @@ def portal_principal(*, portal_account_id: int, vodum_user_id: int, session_id: 
     }
 
 
-def open_admin_session(session_store, email: str, *, auth_level: str = "password", preserve_language=True):
+def open_admin_session(session_store, email: str, *, auth_level: str = "password", preserve_language=True, db=None, session_ttl=None):
     language = session_store.get("lang") if preserve_language else None
     session_store.clear()
-    session_store[SESSION_PRINCIPAL_KEY] = admin_principal(email, auth_level=auth_level)
+    principal = admin_principal(email, auth_level=auth_level)
+    if db is not None:
+        from core.admin_sessions import create_admin_session
+
+        server_session = create_admin_session(db, ttl=session_ttl)
+        principal["admin_session_id"] = server_session["session_id"]
+        principal["admin_session_token"] = server_session["token"]
+    session_store[SESSION_PRINCIPAL_KEY] = principal
     if language:
         session_store["lang"] = language
     session_store.permanent = True
@@ -52,6 +59,11 @@ def open_portal_session(session_store, principal: dict, *, preserve_language=Tru
     if language:
         session_store["lang"] = language
     session_store.permanent = True
+
+
+def close_auth_session(session_store) -> None:
+    """Remove every authenticated and pre-authentication value from a session."""
+    session_store.clear()
 
 
 def current_principal(session_store=None) -> dict | None:
@@ -95,7 +107,7 @@ def principal_owns_user(principal: dict | None, vodum_user_id: int) -> bool:
         return False
 
 
-def validate_portal_principal(db, principal: dict | None) -> bool:
+def validate_portal_principal(db, principal: dict | None, *, session_ttl=None) -> bool:
     if not principal_has_role(principal, "user") or principal.get("account_type") != "portal":
         return False
     try:
@@ -105,6 +117,7 @@ def validate_portal_principal(db, principal: dict | None) -> bool:
             db,
             int(principal["portal_session_id"]),
             str(principal["portal_session_token"]),
+            ttl=session_ttl,
         )
         return bool(
             valid
@@ -112,6 +125,25 @@ def validate_portal_principal(db, principal: dict | None) -> bool:
             and int(valid["vodum_user_id"]) == int(principal["vodum_user_id"])
         )
     except (KeyError, TypeError, ValueError):
+        return False
+
+
+def validate_admin_principal(db, principal: dict | None, *, session_ttl=None) -> bool:
+    if not principal_has_role(principal, "admin"):
+        return False
+    session_id = principal.get("admin_session_id")
+    token = principal.get("admin_session_token")
+    if session_id is None or not token:
+        # Pre-revocation cookies cannot be invalidated safely after logout.
+        # Fail closed and require one fresh login after this migration.
+        return False
+    try:
+        from core.admin_sessions import validate_admin_session
+
+        return validate_admin_session(
+            db, int(session_id), str(token), ttl=session_ttl
+        )
+    except (TypeError, ValueError):
         return False
 
 

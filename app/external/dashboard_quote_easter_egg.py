@@ -4,6 +4,7 @@ import random
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
+from core.http_security import server_http_session
 from core.plex_rate_limit import wait_for_plex_slot
 import requests
 from flask import request, session, url_for
@@ -284,7 +285,7 @@ def _resolve_on_plex(server, media_type, imdb, tmdb):
             logger.info(f"[PLEX] Lookup on server={server.get('name')} url={url}")
 
             wait_for_plex_slot(base)
-            r = requests.get(url, params=params, timeout=20)
+            r = server_http_session(server).get(url, params=params, timeout=20)
             r.raise_for_status()
 
             root = ET.fromstring(r.text)
@@ -366,6 +367,7 @@ def _resolve_on_jellyfin(server, media_type, imdb, tmdb):
 
     for base in bases:
         start_index = 0
+        http = server_http_session(server)
 
         while True:
             url = f"{base}/Items"
@@ -382,7 +384,7 @@ def _resolve_on_jellyfin(server, media_type, imdb, tmdb):
                     f"[JELLYFIN] Lookup on server={server.get('name')} url={url} start_index={start_index}"
                 )
 
-                r = requests.get(url, headers=headers, params=params, timeout=30)
+                r = http.get(url, headers=headers, params=params, timeout=30)
                 r.raise_for_status()
 
                 data = r.json() or {}

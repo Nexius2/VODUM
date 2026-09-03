@@ -14,7 +14,11 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from tasks_engine import apply_cron_master_switch, sync_expiry_tasks_from_settings, force_task_run, mark_auto_enable_dirty
 from web.helpers import get_db, add_log
 from secret_store import encryption_key_status, encrypt_secret
-from core.auth_totp import generate_totp_secret, provisioning_uri, verify_totp_code
+from core.auth_totp import provisioning_uri, verify_totp_code
+from core.auth_totp_enrollment import (
+    consume_totp_enrollment,
+    get_or_begin_totp_enrollment,
+)
 from core.admin_auth_identities import get_admin_auth_identity, sync_local_admin_identity
 from core.auth_principal import update_admin_principal_email
 from core.auth_principal import admin_required
@@ -107,7 +111,11 @@ def register(app):
             "SELECT plex_require_vodum_totp FROM admin_accounts WHERE id = 1"
         )
         totp_enabled = int(settings.get("admin_totp_enabled") or 0) == 1
-        pending_totp_secret = "" if totp_enabled else generate_totp_secret()
+        pending_totp_secret = (
+            "" if totp_enabled else get_or_begin_totp_enrollment(
+                session, purpose="settings"
+            )
+        )
         pending_totp_uri = provisioning_uri(pending_totp_secret, settings.get("admin_email") or "admin") if pending_totp_secret else ""
 
         return render_template(
@@ -491,7 +499,7 @@ def register(app):
         requested_local_trust = request.form.get("admin_totp_local_trust_enabled") == "1"
 
         if requested_totp and not current_totp:
-            pending_secret = (request.form.get("pending_totp_secret") or "").strip()
+            pending_secret = consume_totp_enrollment(session, purpose="settings")
             totp_code = request.form.get("totp_code") or ""
             if not pending_secret or not verify_totp_code(pending_secret, totp_code):
                 flash(get_translator()("settings_totp_invalid"), "error")

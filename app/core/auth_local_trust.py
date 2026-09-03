@@ -9,6 +9,15 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 LOCAL_TOTP_COOKIE_NAME = "vodum_local_2fa_trust"
 LOCAL_TOTP_TRUST_DAYS = 30
 LOCAL_TOTP_TRUST_SECONDS = LOCAL_TOTP_TRUST_DAYS * 24 * 60 * 60
+LOCAL_TOTP_TRUST_NETWORKS = tuple(
+    ipaddress.ip_network(value)
+    for value in (
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "fc00::/7",
+    )
+)
 
 
 def is_local_client_ip(ip_value: str | None) -> bool:
@@ -16,7 +25,11 @@ def is_local_client_ip(ip_value: str | None) -> bool:
         ip = ipaddress.ip_address((ip_value or "").strip())
     except ValueError:
         return False
-    return bool(ip.is_private or ip.is_loopback or ip.is_link_local)
+    return bool(
+        ip.is_loopback
+        or ip.is_link_local
+        or any(ip in network for network in LOCAL_TOTP_TRUST_NETWORKS)
+    )
 
 
 def _secret_fingerprint(stored_totp_secret: Any) -> str:

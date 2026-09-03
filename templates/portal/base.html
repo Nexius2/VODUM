@@ -35,6 +35,7 @@
     {% with messages=get_flashed_messages(with_categories=true) %}{% for category,msg in messages %}<div class="mb-4 rounded border {{ 'border-red-800' if category == 'error' else 'border-slate-700' }} bg-slate-900 px-4 py-3 text-sm" role="{{ 'alert' if category == 'error' else 'status' }}">{{ t(msg) }}</div>{% endfor %}{% endwith %}
     {% block content %}{% endblock %}
   </main>
-  {% if admin_preview %}<script>document.querySelectorAll('[data-admin-preview] form').forEach(form=>form.addEventListener('submit',event=>event.preventDefault()));</script>{% endif %}
+  <script src="{{ url_for('static', filename='js/pages/portal-base.js', v=g.app_version|default('dev')) }}"></script>
+  {% block scripts %}{% endblock %}
   {% if portal_terms_url or portal_privacy_url %}<footer class="mx-auto flex max-w-6xl gap-4 px-4 py-6 text-xs text-slate-500">{% if portal_terms_url %}<a href="{{ portal_terms_url }}" rel="noopener noreferrer">{{ t('portal_terms') }}</a>{% endif %}{% if portal_privacy_url %}<a href="{{ portal_privacy_url }}" rel="noopener noreferrer">{{ t('portal_privacy') }}</a>{% endif %}</footer>{% endif %}
 </body></html>

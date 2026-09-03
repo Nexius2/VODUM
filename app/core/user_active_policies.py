@@ -135,7 +135,9 @@ def load_active_policies_for_user(db, vodum_user_id: int):
         selector = rule.get("selector")
         if selector:
             value_parts.append(f"selector={selector}")
-        if rule.get("allow_local_ip") or rule.get("local_ip"):
+        if policy.get("rule_type") in {"max_streams_per_ip", "max_ips_per_user"} and (
+            rule.get("allow_local_ip") or rule.get("local_ip")
+        ):
             value_parts.append("local_ip=yes")
 
         policies.append(

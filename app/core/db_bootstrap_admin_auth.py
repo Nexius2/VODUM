@@ -51,6 +51,38 @@ def ensure_admin_auth_schema(conn, cursor, *, table_exists):
         (str(uuid.uuid4()),),
     )
 
+    if not table_exists(cursor, "admin_sessions"):
+        cursor.execute(
+            """
+            CREATE TABLE admin_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                admin_account_id INTEGER NOT NULL DEFAULT 1,
+                token_hash TEXT NOT NULL UNIQUE,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                last_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMP NOT NULL,
+                revoked_at TIMESTAMP,
+                revoke_reason TEXT,
+                FOREIGN KEY(admin_account_id) REFERENCES admin_accounts(id)
+                    ON DELETE CASCADE
+            )
+            """
+        )
+    cursor.execute("PRAGMA table_info(admin_sessions)")
+    admin_session_columns = {row[1] for row in cursor.fetchall()}
+    if "last_seen_at" not in admin_session_columns:
+        cursor.execute("ALTER TABLE admin_sessions ADD COLUMN last_seen_at TIMESTAMP")
+        cursor.execute(
+            "UPDATE admin_sessions SET last_seen_at=COALESCE(last_seen_at,created_at)"
+        )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_admin_sessions_active "
+        "ON admin_sessions(admin_account_id,revoked_at,expires_at)"
+    )
+    cursor.execute(
+        "DELETE FROM admin_sessions WHERE expires_at < datetime('now','-7 days')"
+    )
+
     if not table_exists(cursor, "admin_auth_identities"):
         cursor.execute(
             """

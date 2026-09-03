@@ -147,13 +147,16 @@ def register(app):
         try:
             backup_path = _resolve_backup_path(filename)
 
-            return send_file(
+            response = send_file(
                 backup_path,
                 as_attachment=True,
                 download_name=backup_path.name,
                 mimetype="application/octet-stream",
                 max_age=0,
             )
+            response.headers["Cache-Control"] = "private, no-store, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            return response
 
         except Exception as e:
             settings_logger.warning("Backup download failed for %r: %s", filename, e, exc_info=True)
@@ -427,7 +430,12 @@ def register(app):
     def api_backup_list():
         backup_cfg = get_backup_cfg()
         backups = list_backups(backup_cfg)
-        return {"backups": backups}
+        return {
+            "backups": [
+                {key: value for key, value in backup.items() if key != "path"}
+                for backup in backups
+            ]
+        }
 
     @app.route("/backup", methods=["GET"])
     def backup_page():

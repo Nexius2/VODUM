@@ -25,6 +25,7 @@ from secret_store import (
     find_plex_servers_by_token,
 )
 from core.provider_onboarding import provider_onboarding_links
+from core.user_phone import normalize_phone
 
 log = get_logger("users_create")
 
@@ -198,6 +199,7 @@ def api_referrer_candidates():
                 OR COALESCE(u.username,'') LIKE ?
                 OR COALESCE(u.email,'') LIKE ?
                 OR COALESCE(u.second_email,'') LIKE ?
+                OR COALESCE(u.phone,'') LIKE ?
                 OR COALESCE(u.firstname,'') LIKE ?
                 OR COALESCE(u.lastname,'') LIKE ?
                 OR COALESCE(u.discord_name,'') LIKE ?
@@ -215,7 +217,7 @@ def api_referrer_candidates():
         ORDER BY u.username ASC
         LIMIT 50
         """,
-        (q, like, like, like, like, like, like, like, like),
+        (q, like, like, like, like, like, like, like, like, like),
     ) or []
 
     return jsonify([dict(r) for r in rows])
@@ -229,6 +231,10 @@ def api_users_create():
 
     email = (payload.get("email") or "").strip()
     second_email = (payload.get("second_email") or "").strip()
+    try:
+        phone = normalize_phone(payload.get("phone"))
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
     username = (payload.get("username") or "").strip() or (email.split("@", 1)[0] if email else "")
     firstname = (payload.get("firstname") or "").strip()
     lastname = (payload.get("lastname") or "").strip()
@@ -361,13 +367,13 @@ def api_users_create():
             """
             INSERT INTO vodum_users(
                 username, firstname, lastname,
-                email, second_email,
+                email, second_email, phone,
                 expiration_date,
                 renewal_method, renewal_date,
                 notes, status,
                 referrer_user_id
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 vodum_username,
@@ -375,6 +381,7 @@ def api_users_create():
                 lastname,
                 email or None,
                 second_email or None,
+                phone,
                 expiration_date,
                 renewal_method,
                 renewal_date,

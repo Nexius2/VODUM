@@ -1,11 +1,8 @@
 # Auto-split from app.py (keep URLs/endpoints intact)
-import os
 import json
-import ipaddress
 
 from flask import (
-    render_template, request, redirect, url_for, flash, session,
-    jsonify, abort,
+    render_template, request, redirect, url_for, flash, jsonify,
 )
 
 from logging_utils import get_logger, is_debug_mode_enabled
@@ -17,19 +14,9 @@ from tasks_engine import (
     mark_task_queue_failed,
 )
 from web.helpers import get_db, table_exists, add_log
-from web.security import get_client_ip
 from notifications_utils import is_email_ready
-from core.auth_principal import (
-    SESSION_PRINCIPAL_KEY,
-    current_principal,
-    principal_has_role,
-    validate_portal_principal,
-)
-from core.route_access_policy import classify_route_path
-from core.portal_account_state import effective_portal_account_state, state_message
 
 task_logger = get_logger("tasks_ui")
-security_logger = get_logger("security")
 
 TASKS_PAGE_COLUMNS = """
     id,
@@ -234,167 +221,6 @@ def register(app):
             "stats_json": j.get("stats_json"),
             "last_error": j.get("last_error"),
         })
-
-
-
-    # -----------------------------
-    # AUTH (admin) - guard global
-    # -----------------------------
-    def _get_auth_settings():
-        db = get_db()
-        row = db.query_one(
-            """
-            SELECT s.admin_email, s.admin_password_hash, s.auth_enabled,
-                   s.portal_public_url,
-                   EXISTS(
-                       SELECT 1 FROM admin_auth_identities i
-                       WHERE i.admin_account_id=1
-                         AND i.provider='plex'
-                         AND i.is_active=1
-                   ) AS plex_auth_configured
-            FROM settings s WHERE s.id = 1
-            """
-        )
-        return dict(row) if row else {
-            "admin_email": "", "admin_password_hash": None,
-            "auth_enabled": 1, "plex_auth_configured": 0,
-        }
-
-    def _is_auth_configured(s: dict) -> bool:
-        return bool(
-            (s.get("admin_password_hash") or "").strip()
-            or int(s.get("plex_auth_configured") or 0) == 1
-        )
-
-    def _is_logged_in() -> bool:
-        return principal_has_role(current_principal(), "admin")
-
-    def _ip_allowed(remote_ip: str) -> bool:
-        # Permet de désactiver le filtrage si besoin 
-        if (os.environ.get("VODUM_IP_FILTER") or "1").strip() in ("0", "false", "False", "no", "NO"):
-            return True
-
-        # ✅ Valeur par défaut 
-        default_allowed = "127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
-
-        allowed = (os.environ.get("VODUM_ALLOWED_NETS") or default_allowed).strip()
-
-        try:
-            ip = ipaddress.ip_address(remote_ip)
-        except Exception:
-            return False
-
-        for part in allowed.split(","):
-            part = part.strip()
-            if not part:
-                continue
-            try:
-                net = ipaddress.ip_network(part, strict=False)
-                if ip in net:
-                    return True
-            except Exception:
-                continue
-
-        return False
-
-
-
-    @app.before_request
-    def auth_guard():
-        # 🔒 Filtrage IP
-        client_ip = get_client_ip()
-        if not _ip_allowed(client_ip):
-            security_logger.warning("Blocked request | ip=%s | path=%s", client_ip, request.path)
-            abort(403)
-
-        s = _get_auth_settings()
-        access_scope = classify_route_path(request.path)
-        if access_scope in {"portal", "portal_auth"}:
-            from urllib.parse import urlsplit
-            expected_host = str(urlsplit(str(s.get("portal_public_url") or "")).hostname or "").lower().rstrip(".")
-            request_host = (request.host or "").split(":", 1)[0].lower().rstrip(".")
-            if expected_host and request_host != expected_host:
-                abort(404)
-
-        # assets toujours OK
-        # Login artwork is intentionally proxied through a dedicated public
-        # endpoint so the unauthenticated login page can load it. The proxy
-        # only accepts poster/backdrop and never exposes provider credentials.
-        always_allowed_prefixes = ("/static", "/set_language", "/health", "/login/artwork/")
-        if access_scope == "public":
-            return
-
-        # si auth désactivée -> open bar
-        auth_enabled = s.get("auth_enabled")
-
-        # ⚠️ s.get("auth_enabled") peut valoir 0 (falsy). On ne doit PAS le remplacer par 1 via un "or".
-        if int(1 if auth_enabled is None else auth_enabled) == 0:
-            return
-
-        configured = _is_auth_configured(s)
-
-        # Portal authentication remains isolated from first-run administration.
-        # An unconfigured admin must never redirect a portal visitor into setup.
-        if access_scope in {"portal", "portal_auth"}:
-            if access_scope == "portal_auth":
-                return
-            principal = current_principal()
-            if not principal:
-                return redirect(f"/portal/login?next={request.path}")
-            if principal.get("role") not in {"admin", "user"}:
-                abort(403)
-            if principal.get("role") == "user" and not validate_portal_principal(get_db(), principal):
-                account = get_db().query_one(
-                    "SELECT pa.status,vu.status AS user_status FROM portal_accounts pa "
-                    "JOIN vodum_users vu ON vu.id=pa.vodum_user_id WHERE pa.id=?",
-                    (int(principal.get("account_id") or 0),),
-                )
-                if account:
-                    flash(state_message(effective_portal_account_state(account["status"], account["user_status"])), "error")
-                session.pop(SESSION_PRINCIPAL_KEY, None)
-                return redirect(f"/portal/login?next={request.path}")
-            return
-
-
-
-        # pages auth accessibles
-        auth_pages = (
-            "/login",
-            "/login/submit",
-            "/logout",
-            "/setup-admin",
-            "/setup-admin/save",
-            "/auth/plex/login",
-            "/auth/plex/login/callback",
-            "/auth/plex/login/totp",
-            # A Plex-only fresh installation has no local password/session yet.
-            # These endpoints perform their own one-shot state, expiry and
-            # wizard-active checks and therefore must reach the Plex route.
-            "/auth/plex/wizard-link",
-            "/auth/plex/link/callback",
-            "/auth/plex/link/confirm",
-        )
-        if access_scope == "setup":
-            if not configured or _is_logged_in():
-                return
-            return redirect(url_for("login", next=request.path))
-        if request.path in auth_pages:
-            if request.path in ("/login", "/login/submit") and not configured:
-                return redirect(url_for("setup_admin"))
-            return
-
-        # Si pas configuré => forcer setup admin pour toute UI
-        if not configured:
-            return redirect(url_for("setup_admin"))
-
-        principal = current_principal()
-
-        # Toutes les routes non classees sont admin par defaut.
-        if not principal:
-            return redirect(url_for("login", next=request.path))
-        if not principal_has_role(principal, "admin"):
-            abort(403)
-
 
 
 

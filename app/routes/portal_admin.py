@@ -15,6 +15,7 @@ from core.portal_page_data import (
 )
 from core.portal_auth_methods import list_auth_methods
 from core.portal_messages import add_message, list_messages, mark_read, notify_user_of_admin_reply
+from core.payment_links import load_payment_links_admin, save_payment_links
 from core.i18n import get_available_languages
 from web.helpers import add_log, get_db, send_email_via_settings
 
@@ -32,7 +33,7 @@ PORTAL_SETTINGS_COLUMNS = """
     portal_jellyfin_auth_enabled
 """
 PORTAL_READINESS_COLUMNS = """
-    portal_enabled,portal_public_url,portal_allowed_hostname,brand_name,contact_email,
+    portal_enabled,portal_public_url,portal_allowed_hostname,brand_name,contact_email,debug_mode,
     portal_show_subscription,portal_show_media_access,portal_show_monitoring,portal_show_support,portal_show_payment,
     portal_support_content,portal_show_support_email,portal_quick_messages_enabled,
     portal_payment_url,portal_payment_label,
@@ -44,22 +45,33 @@ PORTAL_READINESS_COLUMNS = """
 
 
 def register(app):
+    def portal_is_enabled(db) -> bool:
+        row = db.query_one("SELECT portal_enabled FROM settings WHERE id=1")
+        return bool(row and int(row["portal_enabled"] or 0) == 1)
+
     @app.context_processor
     def portal_message_badge_context():
         if not request.path.startswith("/communications"):
             return {}
         try:
-            row = get_db().query_one(
+            db = get_db()
+            enabled = portal_is_enabled(db)
+            row = db.query_one(
                 "SELECT COUNT(*) AS cnt FROM portal_messages WHERE sender_type='user' AND read_by_admin=0"
-            )
+            ) if enabled else None
         except Exception:
-            return {}
-        return {"unread_total": int(row["cnt"] or 0) if row else 0}
+            return {"portal_enabled": False, "unread_total": 0}
+        return {
+            "portal_enabled": enabled,
+            "unread_total": int(row["cnt"] or 0) if row else 0,
+        }
 
     @app.get("/communications/messages")
     @admin_required
     def portal_messages_admin_page():
         db = get_db()
+        if not portal_is_enabled(db):
+            return redirect(url_for("communications_campaigns_page"))
         conversations = [dict(row) for row in (db.query(
             """SELECT c.id,c.status,c.updated_at,vu.id AS vodum_user_id,vu.username,vu.email,
                       SUM(CASE WHEN m.sender_type='user' AND m.read_by_admin=0 THEN 1 ELSE 0 END) AS unread,
@@ -85,6 +97,8 @@ def register(app):
     @admin_required
     def portal_messages_admin_reply(conversation_id):
         db = get_db()
+        if not portal_is_enabled(db):
+            return redirect(url_for("communications_campaigns_page"))
         if not db.query_one("SELECT id FROM portal_conversations WHERE id=?", (conversation_id,)):
             flash("portal_message_conversation_missing", "error")
             return redirect(url_for("portal_messages_admin_page"))
@@ -193,7 +207,28 @@ def register(app):
             portal_runtime_ready=readiness["ready"],
             portal_readiness=readiness,
             portal_login_url=f"{public_url}/portal/login" if public_url else "",
+            payment_links=load_payment_links_admin(db),
         )
+
+    @app.post("/settings/portal/payments")
+    @admin_required
+    def portal_payment_settings_save():
+        db = get_db()
+        experimental = db.query_one(
+            "SELECT debug_mode,portal_show_payment FROM settings WHERE id=1"
+        )
+        if not experimental or not int(experimental["debug_mode"] or 0) or not int(experimental["portal_show_payment"] or 0):
+            flash("payment_experimental_unavailable", "error")
+            return redirect(url_for("portal_settings_page"))
+        errors = save_payment_links(db, request.form)
+        if errors:
+            translator = get_translator()
+            for error in errors:
+                flash(translator(error), "error")
+            return redirect(url_for("portal_settings_page") + "#portal-payments")
+        add_log("info", "settings", "Portal external renewal links updated")
+        flash("payment_settings_saved", "success")
+        return redirect(url_for("portal_settings_page") + "#portal-payments")
 
     @app.get("/settings/portal/users/search")
     @admin_required
@@ -204,10 +239,10 @@ def register(app):
             return jsonify({"users": []})
         pattern = f"%{term}%"
         rows = db.query(
-            "SELECT id,username,email,firstname,lastname FROM vodum_users "
-            "WHERE username LIKE ? OR email LIKE ? OR firstname LIKE ? OR lastname LIKE ? "
+            "SELECT id,username,email,firstname,lastname,phone FROM vodum_users "
+            "WHERE username LIKE ? OR email LIKE ? OR firstname LIKE ? OR lastname LIKE ? OR phone LIKE ? "
             "ORDER BY LOWER(COALESCE(username,email,firstname,'')),id LIMIT 20",
-            (pattern, pattern, pattern, pattern),
+            (pattern, pattern, pattern, pattern, pattern),
         ) or []
         return jsonify({"users": [dict(row) for row in rows]})
 
@@ -222,7 +257,9 @@ def register(app):
             return redirect(url_for("portal_settings_page"))
         settings = dict(db.query_one(
             "SELECT brand_name,portal_logo_url,portal_show_subscription,portal_show_media_access,"
-            "portal_show_monitoring,portal_show_support,user_notifications_can_override "
+            "portal_show_monitoring,portal_show_support,user_notifications_can_override,"
+            "discord_enabled,discord_bot_id,discord_bot_token,mailing_enabled,mail_from,smtp_host,"
+            "smtp_port,smtp_user,smtp_pass,smtp_auth_method,smtp_oauth_access_token "
             "FROM settings WHERE id=1"
         ) or {})
         features = {
@@ -239,12 +276,15 @@ def register(app):
         if page == "home":
             return render_template("portal/home.html", **home, **common, active_portal_page="home")
         if page == "profile":
+            from routes.portal import _profile_communication_state
+            notifications_can_override, discord_enabled = _profile_communication_state(db, settings)
             account = db.query_one("SELECT id FROM portal_accounts WHERE vodum_user_id=?", (int(user_id),))
             auth_methods = list_auth_methods(db, int(account["id"])) if account else []
             servers = [dict(row) for row in (db.query("SELECT id,name FROM servers WHERE LOWER(type)='jellyfin' ORDER BY name,id") or [])]
             return render_template("portal/profile.html", profile=profile, auth_methods=auth_methods,
                 jellyfin_servers=servers, recently_reauthenticated=False, languages=get_available_languages(),
-                notifications_can_override=bool(settings.get("user_notifications_can_override")),
+                notifications_can_override=notifications_can_override,
+                discord_enabled=discord_enabled,
                 **common, active_portal_page="profile")
         if page == "subscription" and features["subscription"]:
             return render_template("portal/subscription.html", subscription=load_portal_subscription(db, user_id), **common, active_portal_page="subscription")
@@ -265,11 +305,16 @@ def register(app):
         current = get_db().query_one(
             f"SELECT {PORTAL_READINESS_COLUMNS} FROM settings WHERE id = 1"
         )
-        preview = normalize_portal_settings(request.form, activation_ready=True)
+        debug_mode = bool(current and int(current["debug_mode"] or 0) == 1)
+        preview = normalize_portal_settings(
+            request.form, activation_ready=True, debug_mode=debug_mode
+        )
         candidate = dict(current or {})
         candidate.update(preview.values)
         readiness = evaluate_portal_readiness(candidate, trusted_proxy_networks=current_app.config.get("TRUSTED_PROXY_NETS", ""))
-        result = normalize_portal_settings(request.form, activation_ready=readiness["ready"])
+        result = normalize_portal_settings(
+            request.form, activation_ready=readiness["ready"], debug_mode=debug_mode
+        )
         if result.errors:
             translator = get_translator()
             for error in result.errors:

@@ -15,37 +15,26 @@ def deduplicate_household_sessions(sessions: List[dict]) -> List[dict]:
 
     cleanup_recent_session_cache()
 
-    enriched_sessions = []
+    # Only sessions returned by the current live-session query may participate
+    # in policy counts.  The former implementation appended entries kept in
+    # RECENT_SESSION_CACHE for up to five minutes.  Those historical entries
+    # could keep an IP violation alive after Plex had already removed the
+    # session, causing repeated attempts to terminate a session that no longer
+    # existed.
+    current_sessions = []
     seen_session_keys = set()
 
     for sess in sessions:
-        session_key = str(sess.get("session_key") or "")
-
-        if session_key and session_key not in seen_session_keys:
-            enriched_sessions.append(sess)
-            seen_session_keys.add(session_key)
-
-        user_key = str(
-            sess.get("vodum_user_id")
-            or sess.get("external_user_id")
-            or "unknown"
+        session_key = (
+            int(sess.get("server_id") or 0),
+            str(sess.get("session_key") or ""),
         )
 
-        previous = RECENT_SESSION_CACHE.get(user_key, [])
+        if session_key[1] and session_key not in seen_session_keys:
+            current_sessions.append(sess)
+            seen_session_keys.add(session_key)
 
-        for old_sess in previous:
-            old_key = str(old_sess.get("session_key") or "")
-
-            # Avoid reprocessing same session repeatedly
-            if old_key and old_key in seen_session_keys:
-                continue
-
-            enriched_sessions.append(old_sess)
-
-            if old_key:
-                seen_session_keys.add(old_key)
-
-    for sess in enriched_sessions:
+    for sess in current_sessions:
         duplicate = False
 
         for existing in kept:
@@ -117,4 +106,3 @@ def cleanup_recent_session_cache():
                 )
 
             RECENT_SESSION_CACHE.pop(user_key, None)
-

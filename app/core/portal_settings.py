@@ -17,7 +17,7 @@ def _valid_email(value: str) -> bool:
     return bool(local and "." in domain and not domain.startswith("."))
 
 
-def normalize_portal_settings(form, *, activation_ready=False) -> PortalSettingsResult:
+def normalize_portal_settings(form, *, activation_ready=False, debug_mode=False) -> PortalSettingsResult:
     public_url = str(form.get("portal_public_url") or "").strip().rstrip("/")
     parsed_public = urlsplit(public_url) if public_url else None
     allowed_hostname = parsed_public.hostname if parsed_public else None
@@ -41,8 +41,8 @@ def normalize_portal_settings(form, *, activation_ready=False) -> PortalSettings
         "portal_support_content": support_content or None,
         "portal_show_support_email": 1 if form.get("portal_show_support_email") == "1" else 0,
         "portal_quick_messages_enabled": 1 if form.get("portal_quick_messages_enabled") == "1" else 0,
-        # Reserved for a future implementation; never expose the unfinished portal section.
-        "portal_show_payment": 0,
+        # Experimental: the switch cannot be persisted outside debug mode.
+        "portal_show_payment": 1 if debug_mode and form.get("portal_show_payment") == "1" else 0,
         "portal_payment_url": payment_url or None,
         "portal_payment_label": payment_label or None,
         "portal_local_auth_enabled": 1 if form.get("portal_local_auth_enabled") == "1" else 0,

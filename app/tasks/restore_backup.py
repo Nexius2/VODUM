@@ -14,8 +14,10 @@ from tasks_engine import prepare_restored_database, task_logs
 from core.archive_safety import validate_zip_limits
 from core.app_paths import imports_dir as get_imports_dir
 from secret_store import (
+    encryption_key_bytes,
     encryption_key_file_path,
     install_encryption_key,
+    validate_database_encryption_key,
     validate_encryption_key,
 )
 
@@ -131,6 +133,7 @@ def _prepare_restore_source(
 
     if suffix in {".sqlite", ".db"}:
         _validate_sqlite_backup(backup_path)
+        validate_database_encryption_key(backup_path, encryption_key_bytes())
         return backup_path, None, None
 
     if suffix != ".zip":
@@ -174,6 +177,8 @@ def _prepare_restore_source(
             extracted_encryption_key.read_bytes(),
             check_environment=True,
         )
+    else:
+        validate_database_encryption_key(extracted_db, encryption_key_bytes())
     return (
         extracted_db,
         extracted_attachments if extracted_attachments.exists() else None,
@@ -181,9 +186,9 @@ def _prepare_restore_source(
     )
 
 
-def _replace_directory(source_dir: Path | None, target_dir: Path) -> None:
+def _replace_directory(source_dir: Path | None, target_dir: Path) -> Path | None:
     if source_dir is None:
-        return
+        return None
 
     tmp_target = target_dir.with_name(target_dir.name + ".restore_tmp")
     previous_target = target_dir.with_name(target_dir.name + ".pre_restore")
@@ -196,13 +201,17 @@ def _replace_directory(source_dir: Path | None, target_dir: Path) -> None:
 
     shutil.copytree(source_dir, tmp_target)
 
-    if target_dir.exists():
-        target_dir.rename(previous_target)
-
-    tmp_target.rename(target_dir)
-
-    if previous_target.exists():
-        shutil.rmtree(previous_target, ignore_errors=True)
+    target_was_moved = False
+    try:
+        if target_dir.exists():
+            target_dir.rename(previous_target)
+            target_was_moved = True
+        tmp_target.rename(target_dir)
+    except Exception:
+        if target_was_moved and previous_target.exists() and not target_dir.exists():
+            previous_target.rename(target_dir)
+        raise
+    return previous_target if previous_target.exists() else None
 
 
 def _safe_restore_from_path(backup_path: Path, db) -> None:
@@ -243,6 +252,11 @@ def _safe_restore_from_path(backup_path: Path, db) -> None:
         if encryption_key_path.exists():
             pre_restore_key_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(str(encryption_key_path), str(pre_restore_key_path))
+
+        attachments_target = appdata_dir / "attachments"
+        attachments_existed = attachments_target.exists()
+        previous_attachments_path = None
+        attachments_swapped = False
 
         try:
             db.close()
@@ -288,7 +302,10 @@ def _safe_restore_from_path(backup_path: Path, db) -> None:
                 )
 
             if restore_attachments_dir is not None:
-                _replace_directory(restore_attachments_dir, appdata_dir / "attachments")
+                previous_attachments_path = _replace_directory(
+                    restore_attachments_dir, attachments_target
+                )
+                attachments_swapped = True
 
             restored_db = DBManager(str(db_path))
             prepare_restored_database(restored_db)
@@ -299,6 +316,9 @@ def _safe_restore_from_path(backup_path: Path, db) -> None:
                 pass
 
             _reset_tasks_engine_db_instance()
+
+            if previous_attachments_path is not None and previous_attachments_path.exists():
+                shutil.rmtree(previous_attachments_path, ignore_errors=True)
 
         except Exception as e:
             log.exception("Post-restore validation/update failed, restoring previous DB")
@@ -316,6 +336,14 @@ def _safe_restore_from_path(backup_path: Path, db) -> None:
                     install_encryption_key(pre_restore_key_path.read_bytes())
                 elif not encryption_key_existed and encryption_key_path.exists():
                     encryption_key_path.unlink()
+
+                if attachments_swapped:
+                    if attachments_target.exists():
+                        shutil.rmtree(attachments_target, ignore_errors=True)
+                    if previous_attachments_path is not None and previous_attachments_path.exists():
+                        previous_attachments_path.rename(attachments_target)
+                    elif attachments_existed:
+                        log.error("Previous attachments directory is unavailable during rollback")
             except Exception:
                 log.exception("Automatic rollback after failed restore also failed")
 
@@ -369,4 +397,3 @@ def run(task_id: int, db):
 
     task_logs(task_id, "success", f"restore_backup completed from {backup_path}")
     return {"status": "success", "backup_path": str(backup_path)}
-

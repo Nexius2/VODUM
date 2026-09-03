@@ -46,7 +46,6 @@
 
     <form id="admin-security-settings-form" method="POST" action="{{ url_for('settings_security_save') }}" class="space-y-5">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
-      <input type="hidden" name="pending_totp_secret" value="{{ pending_totp_secret }}">
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>

@@ -31,6 +31,7 @@ from core.db_bootstrap_communications import ensure_communications_schema
 from core.db_bootstrap_task_catalog import seed_default_tasks
 from core.db_bootstrap_admin_auth import ensure_admin_auth_schema
 from core.db_bootstrap_portal import ensure_portal_foundation_schema
+from core.db_bootstrap_payments import ensure_payment_schema
 
 
 # Bootstrap messages contain Unicode symbols. Some host consoles (notably
@@ -112,6 +113,13 @@ def run_migrations():
     )
 
     ensure_portal_foundation_schema(
+        conn,
+        cursor,
+        table_exists=table_exists,
+        ensure_column=ensure_column,
+    )
+
+    ensure_payment_schema(
         conn,
         cursor,
         table_exists=table_exists,

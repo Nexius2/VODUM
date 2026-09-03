@@ -20,13 +20,17 @@ def normalize_template_policies(policies: list) -> list[dict]:
         rule_type = (policy.get("rule_type") or "").strip()
         if not rule_type:
             continue
+        rule = dict(policy.get("rule")) if isinstance(policy.get("rule"), dict) else {}
+        if rule_type == "max_streams_per_user":
+            rule.pop("allow_local_ip", None)
+            rule.pop("local_ip", None)
         clean.append({
             "rule_type": rule_type,
             "provider": (policy.get("provider") or "").strip() or None,
             "server_id": int(policy["server_id"]) if str(policy.get("server_id", "")).isdigit() else None,
             "is_enabled": 1 if str(policy.get("is_enabled", "1")) == "1" else 0,
             "priority": int(policy.get("priority") or 100),
-            "rule": policy.get("rule") if isinstance(policy.get("rule"), dict) else {},
+            "rule": rule,
         })
     return clean
 

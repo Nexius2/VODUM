@@ -9,7 +9,10 @@ from core.server_cooldown import should_skip_unreachable_server
 from core.http_security import plex_server_http_session
 from core.plex_access_identity import (
     PendingPlexInvite,
+    PlexUserLookupUnavailable,
+    PlexUserNotFound,
     resolve_plex_user,
+    resolve_plex_user_from_shared_servers,
     row_get,
     sync_media_user_identity_from_plex,
 )
@@ -56,15 +59,26 @@ def resolve_or_repair_plex_user(db, server_row, user_row, sections_for_repair):
     except PendingPlexInvite:
         raise
 
-    except Exception:
-        logger.exception(
-            "[PLEX RESOLVE] unable to resolve user without re-inviting "
-            f"media_user_id={row_get(user_row, 'id')!r} "
-            f"username={row_get(user_row, 'username')!r} "
-            f"email={row_get(user_row, 'email')!r} "
-            f"server={row_get(server_row, 'name')!r}"
+    except (PlexUserNotFound, PlexUserLookupUnavailable) as lookup_error:
+        shared_servers = _get_shared_servers_for_machine(
+            account, plex.machineIdentifier
         )
-        raise
+        try:
+            plex_user = resolve_plex_user_from_shared_servers(shared_servers, user_row)
+        except PlexUserNotFound:
+            if isinstance(lookup_error, PlexUserLookupUnavailable):
+                raise lookup_error
+            raise
+        logger.info(
+            "[PLEX RESOLVE] recovered media_user_id=%s from existing share on %s",
+            row_get(user_row, "id"), row_get(server_row, "name"),
+        )
+        sync_media_user_identity_from_plex(db, user_row, plex_user)
+        refreshed = db.query_one(
+            "SELECT id, server_id, vodum_user_id, external_user_id, username, email, avatar, stored_password, type, role, joined_at, accepted_at, raw_json, details_json FROM media_users WHERE id = ?",
+            (row_get(user_row, "id"),),
+        )
+        return plex, account, refreshed or user_row, plex_user
 
 def get_plex(server_row):
 	"""Connexion PlexAPI avec sélection automatique de la bonne URL Plex."""
@@ -404,11 +418,6 @@ def apply_grant_job(db, job):
         logger.info(str(e))
         raise
     except Exception:
-        logger.exception(
-            f"Unable to retrieve/repair MyPlexUser for username={user['username']} "
-            f"external_user_id={row_get(user, 'external_user_id')} "
-            f"email={row_get(user, 'email')}"
-        )
         raise
 
     machine_id = plex.machineIdentifier
@@ -551,11 +560,6 @@ def apply_sync_job(db, job):
         logger.info(str(e))
         raise
     except Exception:
-        logger.exception(
-            f"Unable to retrieve/repair MyPlexUser for username={user['username']} "
-            f"external_user_id={row_get(user, 'external_user_id')} "
-            f"email={row_get(user, 'email')}"
-        )
         raise
 
 
@@ -829,9 +833,16 @@ def run(task_id: int, db):
             max_attempts = int(job["max_attempts"] or 10)
             msg = str(e)
 
-            logger.exception(f"Error while processing job {job_id}: {msg}")
+            terminal_identity_error = isinstance(e, PlexUserNotFound)
+            if terminal_identity_error:
+                logger.warning(
+                    "Plex job %s stopped: stored user no longer exists on server %s",
+                    job_id, job["server_id"],
+                )
+            else:
+                logger.exception(f"Error while processing job {job_id}: {msg}")
 
-            if attempts >= max_attempts:
+            if terminal_identity_error or attempts >= max_attempts:
                 db.execute(
                     """
                     UPDATE media_jobs

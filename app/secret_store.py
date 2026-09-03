@@ -3,12 +3,14 @@ from __future__ import annotations
 import hmac
 import json
 import os
+import re
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
 
 
 SECRET_PREFIX = "enc:v1:"
+ENCRYPTED_TOKEN_PATTERN = re.compile(r"enc:v1:([A-Za-z0-9_-]+={0,2})")
 
 
 class SecretDecryptionError(ValueError):
@@ -99,6 +101,93 @@ def install_encryption_key(key_bytes: bytes) -> Path:
     return key_file
 
 
+def _database_contains_encrypted_secrets() -> bool:
+    db_path = Path(os.environ.get("DATABASE_PATH", "/appdata/database.db"))
+    for candidate in (db_path, Path(str(db_path) + "-wal")):
+        try:
+            with candidate.open("rb") as handle:
+                overlap = b""
+                while chunk := handle.read(1024 * 1024):
+                    combined = overlap + chunk
+                    if SECRET_PREFIX.encode("ascii") in combined:
+                        return True
+                    overlap = combined[-(len(SECRET_PREFIX) - 1):]
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            raise SecretDecryptionError(
+                "Unable to verify the database before creating a new encryption key"
+            ) from exc
+    return False
+
+
+def validate_database_encryption_key(database_path: Path, key_bytes: bytes) -> int:
+    """Prove that every encrypted credential in a candidate DB uses key_bytes."""
+    # Local import avoids the module cycle: db_manager decrypts server records
+    # through this module while also owning the application's SQLite factory.
+    from db_manager import open_sqlite_connection
+
+    validate_encryption_key(key_bytes)
+    cipher = Fernet(key_bytes)
+    checked = 0
+    connection = open_sqlite_connection(str(Path(database_path).resolve()), read_only=True)
+    try:
+        table_columns = {
+            "settings": (
+                "smtp_pass", "smtp_oauth_access_token", "discord_bot_token",
+                "admin_totp_secret", "turnstile_secret_key",
+            ),
+            "servers": ("token", "settings_json"),
+            "discord_bots": ("token",),
+            "admin_auth_identities": ("discovery_token_enc",),
+            "migration_campaigns": ("options_json",),
+            "migration_users": ("options_json", "result_json"),
+        }
+        existing_tables = {
+            row[0] for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        for table, requested_columns in table_columns.items():
+            if table not in existing_tables:
+                continue
+            existing_columns = {
+                row[1] for row in connection.execute(f'PRAGMA table_info("{table}")')
+            }
+            columns = [column for column in requested_columns if column in existing_columns]
+            if not columns:
+                continue
+            projection = ",".join(f'"{column}"' for column in columns)
+            for row in connection.execute(f'SELECT {projection} FROM "{table}"'):
+                for value in row:
+                    for match in ENCRYPTED_TOKEN_PATTERN.finditer(str(value or "")):
+                        try:
+                            cipher.decrypt(match.group(1).encode("ascii"))
+                        except InvalidToken as exc:
+                            raise SecretDecryptionError(
+                                "The restored database contains credentials encrypted "
+                                "with a different VODUM encryption key"
+                            ) from exc
+                        checked += 1
+    finally:
+        connection.close()
+    return checked
+
+
+def _create_key_file(key_file: Path, key: bytes) -> bytes:
+    key_file.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        descriptor = os.open(key_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        existing = key_file.read_text(encoding="ascii").strip()
+        if not existing:
+            raise SecretDecryptionError("VODUM encryption key file is empty")
+        return existing.encode("ascii")
+    with os.fdopen(descriptor, "wb") as handle:
+        handle.write(key)
+    return key
+
+
 def _load_or_create_key() -> bytes:
     env_key = (os.environ.get("VODUM_ENCRYPTION_KEY") or "").strip()
     if env_key:
@@ -112,19 +201,21 @@ def _load_or_create_key() -> bytes:
     except FileNotFoundError:
         pass
 
+    if _database_contains_encrypted_secrets():
+        raise SecretDecryptionError(
+            "VODUM encryption key is missing while encrypted credentials still exist. "
+            "Restore the matching vodum.encryption_key file; no replacement key was created."
+        )
+
     key = Fernet.generate_key()
-    key_file.parent.mkdir(parents=True, exist_ok=True)
-    key_file.write_text(key.decode("ascii"), encoding="ascii")
-    try:
-        os.chmod(key_file, 0o600)
-    except OSError:
-        pass
-    return key
+    return _create_key_file(key_file, key)
 
 
 def _fernet() -> Fernet:
     try:
         return Fernet(_load_or_create_key())
+    except SecretDecryptionError:
+        raise
     except Exception as exc:
         raise SecretDecryptionError(
             "Invalid or unavailable VODUM encryption key"
@@ -249,24 +340,33 @@ def encrypt_communication_secrets(conn) -> int:
     updated = 0
 
     row = conn.execute(
-        "SELECT smtp_pass, smtp_oauth_access_token, discord_bot_token FROM settings WHERE id = 1"
+        "SELECT smtp_pass, smtp_oauth_access_token, discord_bot_token, "
+        "admin_totp_secret, turnstile_secret_key FROM settings WHERE id = 1"
     ).fetchone()
     if row:
         smtp_pass = encrypt_secret(row[0])
         smtp_oauth_access_token = encrypt_secret(row[1])
         discord_token = encrypt_secret(row[2])
+        admin_totp_secret = encrypt_secret(row[3])
+        turnstile_secret_key = encrypt_secret(row[4])
         if (
             smtp_pass != row[0]
             or smtp_oauth_access_token != row[1]
             or discord_token != row[2]
+            or admin_totp_secret != row[3]
+            or turnstile_secret_key != row[4]
         ):
             conn.execute(
                 """
                 UPDATE settings
-                SET smtp_pass = ?, smtp_oauth_access_token = ?, discord_bot_token = ?
+                SET smtp_pass = ?, smtp_oauth_access_token = ?, discord_bot_token = ?,
+                    admin_totp_secret = ?, turnstile_secret_key = ?
                 WHERE id = 1
                 """,
-                (smtp_pass, smtp_oauth_access_token, discord_token),
+                (
+                    smtp_pass, smtp_oauth_access_token, discord_token,
+                    admin_totp_secret, turnstile_secret_key,
+                ),
             )
             updated += 1
 

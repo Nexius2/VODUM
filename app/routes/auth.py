@@ -22,7 +22,7 @@ from core.auth_local_trust import (
     set_local_totp_trust_cookie,
 )
 from core.setup_wizard_state import should_resume_setup_wizard
-from core.auth_principal import bind_request_principal, open_admin_session
+from core.auth_principal import bind_request_principal, close_auth_session, open_admin_session
 from core.turnstile import turnstile_config, verify_turnstile
 
 auth_logger = get_logger("auth")
@@ -42,6 +42,10 @@ AUTH_BRUTEFORCE_MAX_ATTEMPTS = max(1, int(os.environ.get("VODUM_AUTH_MAX_ATTEMPT
 AUTH_BRUTEFORCE_WINDOW_MINUTES = max(1, int(os.environ.get("VODUM_AUTH_WINDOW_MINUTES", "15")))
 AUTH_BRUTEFORCE_LOCK_MINUTES = max(1, int(os.environ.get("VODUM_AUTH_LOCK_MINUTES", "15")))
 AUTH_BRUTEFORCE_ALERT_COOLDOWN_MINUTES = max(1, int(os.environ.get("VODUM_AUTH_ALERT_COOLDOWN_MINUTES", "60")))
+
+# Keep unknown-account attempts on the same expensive password-verification path
+# as known accounts.  This hash is process-local and never authenticates anyone.
+_DUMMY_ADMIN_PASSWORD_HASH = generate_password_hash(os.urandom(32).hex())
 
 
 def _utcnow() -> datetime:
@@ -71,6 +75,15 @@ def _client_ip() -> str:
     - avec trust proxy => ProxyFix l'a déjà corrigée
     """
     return (request.remote_addr or "unknown").strip()
+
+
+def _admin_password_matches(settings: dict, submitted_email: str, password: str) -> bool:
+    expected_email = str(settings.get("admin_email") or "").strip().lower()
+    stored_hash = str(settings.get("admin_password_hash") or "").strip()
+    email_matches = bool(submitted_email and submitted_email == expected_email)
+    candidate_hash = stored_hash if email_matches and stored_hash else _DUMMY_ADMIN_PASSWORD_HASH
+    password_matches = check_password_hash(candidate_hash, password)
+    return email_matches and password_matches
 
 
 def _ensure_login_attempt_row(db, scope: str, scope_value: str) -> None:
@@ -368,7 +381,10 @@ def register(app):
             (email, email, pwd_hash),
         )
 
-        open_admin_session(session, email, auth_level="password")
+        open_admin_session(
+            session, email, auth_level="password", db=db,
+            session_ttl=current_app.permanent_session_lifetime,
+        )
 
         # ensuite seulement, si aucun serveur -> page serveurs
         row = db.query_one("SELECT COUNT(*) AS cnt FROM servers")
@@ -406,7 +422,7 @@ def register(app):
 
         reset_host_example = os.environ.get(
             "VODUM_RESET_FILE_EXAMPLE",
-            "/mnt/user/appdata/VODUM/password.reset"
+            "/path/to/vodum-appdata/password.reset"
         )
         reset_cmd = f'echo "{RESET_MAGIC}" > {reset_host_example}'
 
@@ -520,14 +536,10 @@ def register(app):
             if locked_email:
                 return _login_locked_response(email, client_ip, remaining_email)
 
-        expected_email = (s.get("admin_email") or "").strip().lower()
-        if not email or email != expected_email:
-            _login_failed(db, email, client_ip, "bad_email")
-            flash(get_translator()("auth.invalid_credentials"), "error")
-            return redirect(url_for("login"))
-
-        if not check_password_hash(s["admin_password_hash"], password):
-            _login_failed(db, email, client_ip, "bad_password")
+        if not _admin_password_matches(s, email, password):
+            expected_email = (s.get("admin_email") or "").strip().lower()
+            reason = "bad_password" if email and email == expected_email else "bad_email"
+            _login_failed(db, email, client_ip, reason)
             flash(get_translator()("auth.invalid_credentials"), "error")
             return redirect(url_for("login"))
 
@@ -554,7 +566,10 @@ def register(app):
         _reset_failed_login(db, "email", email)
 
         auth_level = "password_totp" if int(s.get("admin_totp_enabled") or 0) == 1 else "password"
-        open_admin_session(session, email, auth_level=auth_level)
+        open_admin_session(
+            session, email, auth_level=auth_level, db=db,
+            session_ttl=current_app.permanent_session_lifetime,
+        )
 
         if should_resume_setup_wizard(db, s):
             auth_logger.info("AUTH login ok; resuming installation wizard for email=%s", email)
@@ -579,7 +594,18 @@ def register(app):
 
     @app.post("/logout")
     def logout():
-        session.clear()
+        principal = session.get("vodum_principal") or {}
+        try:
+            if principal.get("admin_session_id"):
+                from core.admin_sessions import revoke_admin_session
+
+                revoke_admin_session(
+                    get_db(), int(principal["admin_session_id"]), reason="logout"
+                )
+        except Exception:
+            auth_logger.exception("AUTH server-side logout revocation failed")
+        finally:
+            close_auth_session(session)
         auth_logger.info("AUTH logout ip=%s ua=%s", _client_ip(), request.user_agent.string)
         return redirect(url_for("login"))
 

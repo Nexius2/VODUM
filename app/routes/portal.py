@@ -16,8 +16,22 @@ from core.portal_provider_identity_state import row_media_identity_is_usable
 from core.portal_local_auth import change_local_password
 from core.portal_sessions import revoke_other_portal_sessions
 from core.i18n import get_available_languages
+from discord_utils import enrich_discord_settings, is_discord_ready
+from notifications_utils import is_email_ready
 
 _FEATURE_COLUMNS = {"subscription": "portal_show_subscription", "media": "portal_show_media_access", "monitoring": "portal_show_monitoring", "support": "portal_show_support"}
+
+
+def _profile_communication_state(db, settings: dict) -> tuple[bool, bool]:
+    discord_enabled = bool(int(settings.get("discord_enabled") or 0))
+    email_ready = is_email_ready(settings)
+    discord_ready = is_discord_ready(enrich_discord_settings(db, settings))
+    can_override = bool(
+        int(settings.get("user_notifications_can_override") or 0)
+        and email_ready
+        and discord_ready
+    )
+    return can_override, discord_enabled
 
 
 def _portal_ui(db) -> dict:
@@ -71,8 +85,11 @@ def register(app):
             return _portal_error("portal_account_missing")
         account_id = int(g.auth_principal["account_id"])
         setting = dict(db.query_one(
-            "SELECT user_notifications_can_override,portal_local_auth_enabled,portal_plex_auth_enabled,portal_jellyfin_auth_enabled,discord_enabled FROM settings WHERE id=1"
+            "SELECT user_notifications_can_override,portal_local_auth_enabled,portal_plex_auth_enabled,portal_jellyfin_auth_enabled,"
+            "discord_enabled,discord_bot_id,discord_bot_token,mailing_enabled,mail_from,smtp_host,smtp_port,"
+            "smtp_user,smtp_pass,smtp_auth_method,smtp_oauth_access_token FROM settings WHERE id=1"
         ) or {})
+        notifications_can_override, discord_enabled = _profile_communication_state(db, setting)
         methods = list_auth_methods(db, account_id)
         media_rows = [dict(row) for row in (db.query(
             "SELECT mu.type,mu.server_id,mu.details_json FROM media_users mu WHERE mu.vodum_user_id=?",
@@ -94,7 +111,7 @@ def register(app):
             has_local_auth=has_local, can_link_plex=can_link_plex, can_link_jellyfin=can_link_jellyfin,
             show_auth_management=bool(has_local or can_link_plex or can_link_jellyfin),
             recently_reauthenticated=recently_reauthenticated(session), languages=get_available_languages(),
-            notifications_can_override=True, discord_enabled=bool(int(setting.get("discord_enabled") or 0)),
+            notifications_can_override=notifications_can_override, discord_enabled=discord_enabled,
             **_portal_ui(db), active_portal_page="profile",
         )
 
@@ -143,11 +160,15 @@ def register(app):
             for error in errors:
                 flash(error, "error")
             return redirect(url_for("portal_profile"))
-        setting = db.query_one("SELECT discord_enabled FROM settings WHERE id=1") or {}
-        discord_enabled = bool(int(dict(setting).get("discord_enabled") or 0))
+        setting = dict(db.query_one(
+            "SELECT user_notifications_can_override,discord_enabled,discord_bot_id,discord_bot_token,"
+            "mailing_enabled,mail_from,smtp_host,smtp_port,smtp_user,smtp_pass,smtp_auth_method,"
+            "smtp_oauth_access_token FROM settings WHERE id=1"
+        ) or {})
+        notifications_can_override, discord_enabled = _profile_communication_state(db, setting)
         update_portal_profile(
             db, int(g.auth_principal["vodum_user_id"]), values,
-            notifications_can_override=True, discord_enabled=discord_enabled,
+            notifications_can_override=notifications_can_override, discord_enabled=discord_enabled,
         )
         if values.get("preferred_language"):
             session["lang"] = values["preferred_language"]
