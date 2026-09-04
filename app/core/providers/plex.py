@@ -138,7 +138,7 @@ class PlexProvider(BaseProvider):
         if not normalized_id:
             raise ValueError("Plex library section id is missing")
         return self._request(
-            "PUT",
+            "GET",
             f"/library/sections/{quote(normalized_id, safe='')}/refresh",
         )
 
