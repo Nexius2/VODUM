@@ -9,7 +9,7 @@
     src="{{ url_for('monitoring_user_detail', user_id=monitoring_mu_id, view=mview, embed='1') }}"
     class="w-full"
     style="height: 82vh; border:0; background: transparent;"
-    loading="lazy" data-user-monitoring-iframe>
+    loading="eager" title="{{ t('monitoring') }}" data-user-monitoring-iframe>
   </iframe>
   </div>
 {% else %}

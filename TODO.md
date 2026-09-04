@@ -13,6 +13,11 @@ Derniere mise a jour: 2026-09-01
 - Ajouter des tests de regression aux fonctions sensibles ou exposees sur Internet.
 - Ne jamais enregistrer ni journaliser de secret, token ou donnee bancaire.
 
+## P0 - Bugs & fixes
+
+- [x] dans le profil user, le monitoring ne marche plus.
+- [x] dans servers & libraries, l'action refresh library ne marche pas.
+
 ## P8 - Partie utilisateur et ouverture externe
 
 - [ ] Ajouter l'historique des abonnements lorsqu'un modele de donnees dedie sera

@@ -215,3 +215,10 @@
   cinq langues et régressions ajoutées pour l'absence de lien, les liens
   désactivés, les forfaits masqués déjà attribués, les abonnements à vie et les
   utilisateurs expirés.
+# Corrections P0 — 2026-09-04
+
+- Autorise les iframes locales dans la CSP d’administration et force le chargement
+  du monitoring intégré au profil utilisateur.
+- Le refresh des bibliothèques Plex/Jellyfin est désormais opérationnel depuis
+  `Servers & Libraries` (route POST protégée par CSRF, avec ciblage de la section
+  Plex et scan serveur Jellyfin).
