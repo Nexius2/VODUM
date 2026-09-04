@@ -26,23 +26,8 @@ instance/
 docker-data/
 
 # Test, validation and dev-only folders
-test/
 tests/
-!tests/
-tests/*
-!tests/test_db_bootstrap_admin_auth.py
-!tests/test_plex_auth_client.py
-!tests/test_plex_auth_flow.py
-!tests/test_admin_auth_identities.py
-!tests/test_plex_auth_routes.py
-!tests/test_plex_server_discovery.py
-!tests/test_i18n_request_language.py
 tools/
-!tools/
-tools/*
-!tools/smoke_docker_imports.py
-!tools/smoke_application_runtime.py
-!tools/audit_text_encoding.py
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
