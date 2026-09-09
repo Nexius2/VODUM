@@ -1,3 +1,4 @@
+from core.jellyfin_auth import jellyfin_headers
 from typing import Any, Dict, List, Optional
 
 
@@ -28,13 +29,7 @@ def _api_key(server_row: Dict[str, Any]) -> str:
 
 def _headers(api_key: Optional[str] = None) -> Dict[str, str]:
 
-    headers = {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-    }
-
-    if api_key:
-        headers["X-Emby-Token"] = api_key
+    headers = {**jellyfin_headers(api_key), "Content-Type": "application/json"}
 
     return headers
 
@@ -117,7 +112,11 @@ def jellyfin_set_password(
 
     payload = {
         "CurrentPassword": "",
-        "NewPassword": password,
+        # Jellyfin's UpdateUserPassword DTO calls this field NewPw.
+        # NewPassword is silently ignored by current Jellyfin releases.
+        "NewPw": password,
+        # True selects ResetPassword instead of ChangePassword and ignores NewPw.
+        "ResetPassword": False,
     }
 
     r = server_http_session(server_row).post(
@@ -144,8 +143,6 @@ def jellyfin_set_policy_folders(
     server_row: Dict[str, Any],
     jellyfin_user_id: str,
     enabled_folders: List[str],
-    *,
-    force_password_change: bool = False,
 ) -> None:
     """Apply a minimal policy: restrict EnabledFolders."""
     base = _pick_base_url(server_row)
@@ -181,48 +178,6 @@ def jellyfin_set_policy_folders(
             timeout=20,
         )
     r2.raise_for_status()
-
-
-def jellyfin_reset_password_required(
-    server_row: Dict[str, Any],
-    jellyfin_user_id: str,
-    required: bool,
-) -> None:
-    """Best-effort: mark user as needing password reset if supported by the server."""
-    try:
-        base = _pick_base_url(server_row)
-        api_key = _api_key(server_row)
-        http = server_http_session(server_row)
-        r = http.get(
-            f"{base}/Users/{jellyfin_user_id}",
-            headers=_headers(api_key),
-            timeout=20,
-        )
-        r.raise_for_status()
-        user_obj = r.json() if r.content else {}
-        policy = user_obj.get("Policy") or {}
-        if not isinstance(policy, dict):
-            policy = {}
-
-        policy["RequirePasswordChange"] = bool(required)
-
-        url = f"{base}/Users/{jellyfin_user_id}/Policy"
-        r2 = http.post(
-            url,
-            json=policy,
-            headers=_headers(api_key),
-            timeout=20,
-        )
-        if r2.status_code in (405, 415):
-            r2 = http.put(
-                url,
-                json=policy,
-                headers=_headers(api_key),
-                timeout=20,
-            )
-        r2.raise_for_status()
-    except Exception as e:
-        log.warning(f"Jellyfin: cannot set RequirePasswordChange (ignored): {e}")
 
 
 def jellyfin_apply_enabled_folders(

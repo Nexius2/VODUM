@@ -510,7 +510,7 @@ def register(app):
     @app.route("/login/submit", methods=["POST"])
     def login_submit():
         db = get_db()
-        s = db.query_one("SELECT admin_email,admin_password_hash,admin_totp_enabled,admin_totp_secret,admin_totp_local_trust_enabled,wizard_active,turnstile_enabled,turnstile_site_key,turnstile_secret_key,turnstile_mode,turnstile_protect_admin,turnstile_protect_portal FROM settings WHERE id = 1")
+        s = db.query_one("SELECT admin_email,admin_password_hash,admin_totp_enabled,admin_totp_secret,admin_totp_local_trust_enabled,wizard_active,wizard_completed,wizard_state_json,turnstile_enabled,turnstile_site_key,turnstile_secret_key,turnstile_mode,turnstile_protect_admin,turnstile_protect_portal FROM settings WHERE id = 1")
         s = dict(s) if s else {"admin_email": "", "admin_password_hash": None}
 
         if not (s.get("admin_password_hash") or "").strip():

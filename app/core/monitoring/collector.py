@@ -19,6 +19,7 @@ from core.monitoring.resource_stats import (
 from core.providers.registry import get_provider
 from logging_utils import get_logger, is_debug_mode_enabled
 from core.server_cooldown import mark_server_unreachable, should_skip_unreachable_server
+from core.server_cooldown import authentication_failure_status, mark_server_authentication_failed
 
 logger = get_logger("monitoring.collector")
 
@@ -346,7 +347,7 @@ def collect_sessions_for_server(
             logger.debug("collect_sessions_for_server skipped: server_id=%s in cooldown", server_id)
         return report
         
-    # IMPORTANT : si ça plante (auth/timeout/provider bug), on marque le serveur DOWN
+    # Authentication failures must not be treated as network outages.
     try:
         provider_impl = get_provider(srv)
         prev_map = _fetch_existing_sessions(db, server_id)
@@ -845,6 +846,22 @@ def collect_sessions_for_server(
         return report
 
     except Exception as e:
+        auth_status = authentication_failure_status(e)
+        if auth_status is not None:
+            mark_server_authentication_failed(db, server_id, auth_status)
+            key = (server_id, "authentication", auth_status)
+            now = time.time()
+            if now - _COLLECT_ERROR_LAST_LOG_TS.get(key, 0) >= _COLLECT_ERROR_THROTTLE_SECONDS:
+                _COLLECT_ERROR_LAST_LOG_TS[key] = now
+                logger.warning(
+                    "Monitoring unavailable: server_id=%s is reachable but API authentication "
+                    "was rejected (HTTP %s). Check the configured API key and permissions.",
+                    server_id, auth_status,
+                )
+            report.update(status="up", warning=f"API authentication failed (HTTP {auth_status})",
+                          collection_failed=True)
+            return report
+
         # Throttle des erreurs (sinon spam toutes les X secondes si Jellyfin est down)
         key = (server_id, e.__class__.__name__)
         now = time.time()

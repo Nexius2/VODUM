@@ -1,4 +1,28 @@
 from datetime import datetime, timezone, timedelta
+from requests.exceptions import HTTPError
+
+
+def authentication_failure_status(exc):
+    """Read structured HTTP failures, including wrapped provider exceptions."""
+    seen = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        if isinstance(exc, HTTPError):
+            code = getattr(exc.response, "status_code", None)
+            if code in (401, 403):
+                return code
+        exc = exc.__cause__ or exc.__context__
+    return None
+
+
+def mark_server_authentication_failed(db, server_id, status_code):
+    # An HTTP authentication rejection proves reachability, not API access.
+    db.execute(
+        """UPDATE servers SET status='up', last_checked=CURRENT_TIMESTAMP,
+           cooldown_until=NULL, unavailable_since=NULL, last_failure=? WHERE id=?""",
+        (f"API authentication failed (HTTP {status_code}); check the configured API key and permissions",
+         int(server_id)),
+    )
 
 
 DEFAULT_COOLDOWN_SECONDS = 300

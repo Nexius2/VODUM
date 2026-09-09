@@ -324,10 +324,6 @@
                 <label class="text-xs text-slate-500">${escapeHtml(t("initialPasswordOptional", "Initial password optional"))}</label>
                 <input type="password" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" data-field="jellyfin_password" autocomplete="new-password">
               </div>
-              <label class="flex items-center gap-2 text-sm mt-5">
-                <input type="checkbox" data-field="jellyfin_force_password_change">
-                <span class="text-slate-200">${escapeHtml(t("forcePasswordChange", "Force password change"))}</span>
-              </label>
             </div>
           </div>
 
@@ -419,9 +415,6 @@
     node.querySelectorAll('[data-field="jellyfin_password"]').forEach((input) => {
       input.addEventListener("input", () => { block.jellyfin_password = input.value; });
     });
-    node.querySelectorAll('[data-field="jellyfin_force_password_change"]').forEach((input) => {
-      input.addEventListener("change", () => { block.jellyfin_force_password_change = input.checked; });
-    });
     node.querySelectorAll('[data-field="enqueue_plex_jobs"]').forEach((input) => {
       input.addEventListener("change", () => { block.enqueue_plex_jobs = input.checked; });
     });
@@ -473,7 +466,6 @@
           server_id: block.server_id,
           library_ids: block.library_ids || [],
           jellyfin_password: block.jellyfin_password || "",
-          jellyfin_force_password_change: !!block.jellyfin_force_password_change,
           plex_share: block.plex_share || {},
           enqueue_plex_jobs: !!block.enqueue_plex_jobs,
         })),

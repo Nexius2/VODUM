@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from core.jellyfin_auth import jellyfin_headers
+
 import re
 
 from core.http_security import server_http_session
@@ -120,7 +122,7 @@ def fetch_monitoring_artwork(server: dict, query, timeout: int = 10) -> dict:
             try:
                 response = http.get(
                     base + path,
-                    headers={"X-Emby-Token": token},
+                    headers=jellyfin_headers(token),
                     params={"maxWidth": width, "quality": quality},
                     timeout=timeout,
                 )

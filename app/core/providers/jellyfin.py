@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+from core.jellyfin_auth import jellyfin_headers
+
 import json
 import requests
 import time
+from urllib.parse import quote
 from typing import Any, Dict, List, Optional
 
 from core.providers.base import BaseProvider
 from core.http_security import server_http_session
 from core.monitoring.library_media import jellyfin_library_section_id
+from logging_utils import get_logger
+
+
+log = get_logger("jellyfin")
 
 
 class JellyfinProvider(BaseProvider):
@@ -58,11 +65,7 @@ class JellyfinProvider(BaseProvider):
         if not token:
             raise RuntimeError("Jellyfin API key missing (stored in servers.token)")
 
-        headers = {
-            "X-Emby-Token": token,
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        }
+        headers = {**jellyfin_headers(token), "Content-Type": "application/json"}
 
         last_exc: Optional[Exception] = None
         errors: List[str] = []
@@ -70,8 +73,10 @@ class JellyfinProvider(BaseProvider):
         for base in bases:
             url = self._build_api_url(base, path)
             try:
-                r = self.http.post(url, headers=headers, json=(payload or {}), timeout=self.timeout)
+                r = self.http.post(url, headers=headers, json=(payload or {}), timeout=self.timeout, allow_redirects=False)
                 r.raise_for_status()
+                if not 200 <= r.status_code < 300:
+                    raise RuntimeError("Jellyfin command returned an unexpected HTTP status")
                 return True
             except requests.exceptions.RequestException as e:
                 last_exc = e
@@ -98,27 +103,52 @@ class JellyfinProvider(BaseProvider):
 
 
     def terminate_session(self, session_key: str, reason: str = "") -> bool:
-        session_id = str(session_key).split(":", 1)[0]  # sessionId uniquement
-        requested = self._post_json(f"/Sessions/{session_id}/Playing/Stop", {})
+        session_id, _, expected_item_id = str(session_key or "").strip().partition(":")
+        if not session_id:
+            raise ValueError("Jellyfin session identifier is required")
+
+        # Observe the target first: an obsolete collector row must not stop a
+        # different title now playing on the same client.
+        target = self._session_for_stop(session_id)
+        if target is None or not (target.get("NowPlayingItem") or {}).get("Id"):
+            return False
+        if expected_item_id and str(target["NowPlayingItem"]["Id"]) != expected_item_id:
+            return False
+
+        requested = self._post_json(f"/Sessions/{quote(session_id, safe='')}/Playing/Stop", {})
         if not requested:
             return False
 
         # Une session Jellyfin peut rester connectée après l'arrêt. La coupure
         # est confirmée lorsque cette session n'a plus de NowPlayingItem.
-        for attempt in range(5):
+        for attempt in range(11):
             if attempt:
                 time.sleep(0.5)
-            sessions = self._get_json("/Sessions?EnableRemoteIP=true") or []
-            still_playing = any(
-                str(item.get("Id") or "") == session_id
-                and bool((item.get("NowPlayingItem") or {}).get("Id"))
-                for item in sessions
-                if isinstance(item, dict)
-            )
-            if not still_playing:
+            current = self._session_for_stop(session_id)
+            if current is None or not (current.get("NowPlayingItem") or {}).get("Id"):
                 return True
 
+        log.warning(
+            "Jellyfin stop not confirmed; client control capabilities: remote=%s media=%s",
+            target.get("SupportsRemoteControl"), target.get("SupportsMediaControl"),
+        )
         return False
+
+    def _session_for_stop(self, session_id: str) -> Optional[dict]:
+        sessions = self._get_json("/Sessions?EnableRemoteIP=true")
+        if not isinstance(sessions, list) or any(
+            not isinstance(item, dict) or not item.get("Id") for item in sessions
+        ):
+            raise RuntimeError("Jellyfin returned an invalid session list; stop cannot be verified")
+        for item in sessions:
+            if str(item["Id"]) == session_id:
+                playing = item.get("NowPlayingItem")
+                if playing is not None and (
+                    not isinstance(playing, dict) or (playing and not playing.get("Id"))
+                ):
+                    raise RuntimeError("Jellyfin returned invalid playback state; stop cannot be verified")
+                return item
+        return None
 
 
 
@@ -131,12 +161,10 @@ class JellyfinProvider(BaseProvider):
         if not token:
             raise RuntimeError("Jellyfin API key missing (stored in servers.token)")
 
-        headers = {
-            "X-Emby-Token": token,
-            "Accept": "application/json",
-        }
+        headers = jellyfin_headers(token)
 
         last_exc: Optional[Exception] = None
+        auth_exc: Optional[Exception] = None
         errors: List[str] = []
 
         for base in bases:
@@ -148,11 +176,17 @@ class JellyfinProvider(BaseProvider):
             except requests.exceptions.RequestException as e:
                 last_exc = e
                 code = getattr(getattr(e, "response", None), "status_code", None)
+                if code in (401, 403):
+                    auth_exc = e
                 errors.append(f"{url} -> {code or type(e).__name__}")
                 continue
 
+        if auth_exc is not None:
+            raise RuntimeError(
+                "Jellyfin API authentication rejected; check the configured API key and permissions"
+            ) from auth_exc
         raise RuntimeError(
-            f"Jellyfin unreachable via any URL. Attempts: {', '.join(errors)}"
+            f"Jellyfin API request failed via all URLs. Attempts: {', '.join(errors)}"
         ) from last_exc
 
     @staticmethod

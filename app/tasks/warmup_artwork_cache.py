@@ -6,6 +6,7 @@ warmup_artwork_cache.py
 - Utilise le même resolver artwork que l'interface pour éviter de précharger des références obsolètes.
 """
 
+from core.jellyfin_auth import jellyfin_headers
 import os
 from core.monitoring.artwork import _resolve_row_artwork
 from core.monitoring.artwork_cache import (
@@ -94,7 +95,7 @@ def _fetch_jellyfin(server, ref):
     if image_index not in (None, ""):
         path += f"/{image_index}"
 
-    headers = {"X-Emby-Token": server.get("token")}
+    headers = jellyfin_headers(server.get("token"))
     params = {"maxWidth": width, "quality": quality}
     http = server_http_session(server)
 

@@ -4,6 +4,7 @@ import requests
 
 from logging_utils import get_logger, is_debug_mode_enabled
 from core.server_cooldown import should_skip_unreachable_server, mark_server_unreachable, clear_server_cooldown
+from core.server_cooldown import authentication_failure_status, mark_server_authentication_failed
 from core.http_security import servers_http_session
 from core.jellyfin_http import (
     _jellyfin_library_total_items,
@@ -782,6 +783,14 @@ def run(task_id: int, db):
                 clear_server_cooldown(db, server_id)
 
             except Exception as e:
+                auth_status = authentication_failure_status(e)
+                if auth_status is not None:
+                    mark_server_authentication_failed(db, server_id, auth_status)
+                    logger.warning(
+                        "[SYNC JELLYFIN] server_id=%s reachable but API authentication rejected "
+                        "(HTTP %s); check API key and permissions", server_id, auth_status,
+                    )
+                    continue
                 if is_debug_mode_enabled():
                     logger.error(
                         f"[SYNC JELLYFIN] Libraries FAILED pour {name} : {e}",

@@ -1,7 +1,6 @@
 from logging_utils import get_logger
 from core.providers.jellyfin_users import (
     jellyfin_create_user,
-    jellyfin_reset_password_required,
     jellyfin_set_password,
     jellyfin_set_policy_folders,
 )
@@ -40,20 +39,16 @@ def provision_provider_account(db, server, block, libraries, username, email, *,
         external_user_id = str(created.get("Id"))
         server_username = created.get("Name") or username
         password = (block.get("jellyfin_password") or "").strip()
-        force_change = bool(block.get("jellyfin_force_password_change"))
         if password:
             jellyfin_set_password(server, external_user_id, password)
-            jellyfin_reset_password_required(server, external_user_id, force_change)
         enabled_folders = [str(library["section_id"]) for library in libraries]
         jellyfin_set_policy_folders(
             server,
             external_user_id,
             enabled_folders,
-            force_password_change=force_change,
         )
         details_json["jellyfin"] = {
             "enabled_folders": enabled_folders,
-            "force_password_change": force_change,
         }
         return external_user_id, server_username, details_json
 

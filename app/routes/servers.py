@@ -2,7 +2,7 @@
 import uuid
 import threading
 from flask import (
-    render_template, request, redirect, url_for, flash, current_app, session,
+    render_template, request, redirect, url_for, flash, current_app, session, jsonify,
 )
 
 from logging_utils import get_logger
@@ -63,6 +63,8 @@ from core.server_admin import (
     wake_updated_server_tasks,
 )
 from core.admin_auth_identities import get_admin_auth_identity
+from core.auth_principal import admin_required
+from secret_store import decrypt_secret
 from core.plex_server_discovery import automatic_plex_suggestions
 from routes.plex_auth import get_or_recover_plex_discovery_token
 
@@ -96,6 +98,18 @@ def _background_delete_server(app, db_path, server_id, server_name):
     )
 
 def register(app):
+    @app.route("/servers/<int:server_id>/token", methods=["POST"])
+    @admin_required
+    def server_token_reveal(server_id):
+        row = load_server_secrets(get_db(), server_id)
+        if row is None:
+            response = jsonify(error="server_not_found")
+            response.status_code = 404
+        else:
+            response = jsonify(token=decrypt_secret(row["token"]) or "")
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
     @app.route("/servers/<int:server_id>/sync", methods=["POST"])
     def sync_server(server_id):
         db = get_db()

@@ -604,7 +604,7 @@ def register(app):
                 raise PlexIdentityMismatch("Plex identity does not match the linked account")
             settings = db.query_one(
                 """
-                SELECT admin_email, wizard_active, admin_totp_enabled,
+                SELECT admin_email, wizard_active, wizard_completed, wizard_state_json, admin_totp_enabled,
                        admin_totp_secret
                 FROM settings WHERE id = 1
                 """
@@ -643,7 +643,7 @@ def register(app):
         linked = get_admin_auth_identity(db, "plex")
         settings_row = db.query_one(
             """
-            SELECT admin_email, wizard_active, admin_totp_enabled,
+            SELECT admin_email, wizard_active, wizard_completed, wizard_state_json, admin_totp_enabled,
                    admin_totp_secret
             FROM settings WHERE id = 1
             """

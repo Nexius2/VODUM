@@ -1,3 +1,4 @@
+from core.jellyfin_auth import jellyfin_headers
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
@@ -9,9 +10,7 @@ def build_jellyfin_api_url(base_url: str, path: str) -> str:
 
 
 def get_jellyfin_json(session, url: str, timeout: int = 20, token: str | None = None) -> Any:
-    headers = {"Accept": "application/json"}
-    if token:
-        headers["X-Emby-Token"] = token
+    headers = jellyfin_headers(token)
     response = session.get(url, headers=headers, timeout=timeout)
     response.raise_for_status()
     return response.json()

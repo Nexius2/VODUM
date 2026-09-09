@@ -1,3 +1,4 @@
+from core.jellyfin_auth import jellyfin_headers
 from typing import Any, List
 from urllib.parse import urlsplit, urlunsplit
 
@@ -10,9 +11,7 @@ def _build_api_url(base_url: str, path: str, token: str) -> str:
 
 
 def _get_json(session: Any, url: str, timeout: int = 20, token: str | None = None) -> Any:
-    headers = {"Accept": "application/json"}
-    if token:
-        headers["X-Emby-Token"] = token
+    headers = jellyfin_headers(token)
     response = session.get(url, headers=headers, timeout=timeout)
     response.raise_for_status()
     return response.json()
@@ -74,7 +73,7 @@ def _jellyfin_library_total_items(
         f"{base_url.rstrip('/')}/Users/{user_id}/Items"
         f"?ParentId={library_item_id}&Recursive=true&StartIndex=0&Limit=1&EnableTotalRecordCount=true"
     )
-    r = session.get(url, headers={"X-Emby-Token": token, "Accept": "application/json"}, timeout=timeout)
+    r = session.get(url, headers=jellyfin_headers(token), timeout=timeout)
     r.raise_for_status()
     data = r.json()
 
@@ -93,7 +92,7 @@ def _jellyfin_library_total_items_no_user(
     library_item_id: str,
     timeout: int = 20,
 ) -> int | None:
-    headers = {"X-Emby-Token": token, "Accept": "application/json"}
+    headers = jellyfin_headers(token)
 
     # Tentative 1: /Items/Counts?ParentId=...
     url = _build_api_url(

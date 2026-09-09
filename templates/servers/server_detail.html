@@ -75,6 +75,7 @@
 		<button
 		  type="button"
 		  id="toggle_server_token"
+		  data-token-url="{{ url_for('server_token_reveal', server_id=server.id) }}"
 		  class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 text-sm"
 		  aria-label="Toggle token visibility"
 		>
@@ -82,6 +83,7 @@
 		</button>
 
 	  </div>
+	  <span id="server_token_error" role="status" class="text-xs text-rose-400"></span>
 	</label>
 
 
