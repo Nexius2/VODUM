@@ -711,13 +711,19 @@ def _kill_violation_targets(
         try:
             if provider_type == "jellyfin":
                 message_key = _jellyfin_session_id_from_target(target, session_key)
-                _warn_session(
-                    server_row,
-                    message_key,
-                    violation.get("warn_title", "Stream limit"),
-                    violation.get("warn_text", "Limit reached."),
-                    timeout_ms=JELLYFIN_KILL_MESSAGE_TIMEOUT_MS,
-                )
+                try:
+                    _warn_session(
+                        server_row,
+                        message_key,
+                        violation.get("warn_title", "Stream limit"),
+                        violation.get("warn_text", "Limit reached."),
+                        timeout_ms=JELLYFIN_KILL_MESSAGE_TIMEOUT_MS,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Jellyfin warning failed before stop: server=%s error=%s",
+                        server_id, type(exc).__name__,
+                    )
 
             ok = _kill_session(server_row, session_key, reason=kill_reason_for_client)
 

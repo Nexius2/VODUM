@@ -358,10 +358,8 @@ def _resolve_on_jellyfin(server, media_type, imdb, tmdb):
         return None
 
     item_type = "Movie" if media_type == "movie" else "Series"
-    headers = {
-        "X-Emby-Token": token,
-        "Accept": "application/json",
-    }
+    from core.jellyfin_auth import jellyfin_headers
+    headers = jellyfin_headers(token)
 
     page_size = 200
 

@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-09-07 - P0 Jellyfin : coupure et mot de passe
+
+- Une erreur du message d'avertissement ne bloque plus la coupure groupee.
+- Verification de la session et du titre avant Stop ; aucun arret d'un nouveau
+  titre a partir d'une ancienne ligne du collecteur. Les reponses de sessions
+  invalides et les redirections de commandes ne valent plus succes.
+- Confirmation de l'arret jusqu'a cinq secondes, avec diagnostic des capacites
+  du client si la lecture continue. Aucun changement des droits du compte.
+- Correction de la regression du 06/09 : `ResetPassword=false` laisse Jellyfin
+  appliquer `NewPw` ; `true` choisit une autre branche et ignore ce mot de passe.
+- 33 tests cibles passent ; validation sur clients Jellyfin reels encore a faire.
+
+## 2026-09-06 - Correction du mot de passe Jellyfin
+
+- Remplacement de `NewPassword` par `NewPw`. Le parametre `ResetPassword`
+  introduit dans ce lot a ete corrige le 07/09 (voir ci-dessus).
+- Retrait de l'option « changement de mot de passe obligatoire », non supportée
+  par le modèle de politique Jellyfin.
+
 ## 2026-08-31 - Liens externes de renouvellement du portail
 
 - La piste d'integration directe aux API de paiement a ete abandonnee: VODUM ne

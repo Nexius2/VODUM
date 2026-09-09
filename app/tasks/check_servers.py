@@ -10,6 +10,7 @@ check_servers.py - VERSION TXT LOGGING
 ✓ Compatibilité run(task_id, db=None)
 """
 
+from core.jellyfin_auth import jellyfin_headers
 import urllib3
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -34,6 +35,7 @@ log = get_logger("check_servers")   # Logger TXT haut niveau
 # ------------------------------------------------------------
 
 def jellyfin_get_status(server_row, base_url, token=None):
+    reachable = False
     try:
         http = server_http_session(server_row)
         if is_debug_mode_enabled():
@@ -44,23 +46,38 @@ def jellyfin_get_status(server_row, base_url, token=None):
 
         if r.status_code != 200:
             return ("down", None, None, f"Ping returned {r.status_code}")
+        reachable = True
 
         if token:
             if is_debug_mode_enabled():
                 log.debug(f"[JELLYFIN] info url={base_url}/System/Info (authenticated)")
             r2 = http.get(
                 f"{base_url}/System/Info",
-                headers={"X-Emby-Token": token},
+                headers=jellyfin_headers(token),
                 timeout=5
             )
             if is_debug_mode_enabled():
                 log.debug(f"[JELLYFIN] info status_code={r2.status_code}")
 
+            if r2.status_code != 200:
+                log.warning(
+                    "[JELLYFIN] server #%s reachable, but /System/Info returned HTTP %s; "
+                    "check API credentials/permissions or proxy configuration",
+                    server_row.get("id"), r2.status_code,
+                )
+                return ("up", None, None, None)
+
             try:
                 info = r2.json()
-            except Exception as e:
-                log.error("[JELLYFIN] invalid json from /System/Info", exc_info=True)
-                return ("down", None, None, f"Invalid JSON: {e}")
+                if not isinstance(info, dict):
+                    raise ValueError("Expected a JSON object")
+            except ValueError:
+                log.warning(
+                    "[JELLYFIN] server #%s reachable, but /System/Info returned "
+                    "invalid JSON metadata (HTTP %s); keeping server online",
+                    server_row.get("id"), r2.status_code,
+                )
+                return ("up", None, None, None)
 
             name = info.get("ServerName")
             mid = info.get("Id")
@@ -73,6 +90,13 @@ def jellyfin_get_status(server_row, base_url, token=None):
         return ("up", None, None, None)
 
     except Exception as e:
+        if reachable:
+            log.warning(
+                "[JELLYFIN] server #%s reachable, but /System/Info failed (%s); "
+                "keeping server online",
+                server_row.get("id"), type(e).__name__,
+            )
+            return ("up", None, None, None)
         log.warning(f"[JELLYFIN] unreachable: {e}")
         if is_debug_mode_enabled():
             log.debug("[JELLYFIN] unreachable traceback", exc_info=True)
@@ -242,7 +266,7 @@ def run(task_id: int, db):
                         break
 
                 if status == "up":
-                    server_version = meta
+                    server_version = meta or s.get("server_version")
                     if found_name:
                         new_name = found_name
                     if found_mid and found_mid != machine_id:

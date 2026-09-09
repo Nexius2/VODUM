@@ -132,7 +132,10 @@ def _json_details(raw):
 def _paypal_username(value):
     text = str(value or "").strip().rstrip("/")
     if "/" in text:
-        parsed = urlsplit(text if "://" in text else "https://" + text)
+        try:
+            parsed = urlsplit(text if "://" in text else "https://" + text)
+        except ValueError:
+            return None
         if parsed.hostname not in {"paypal.me", "www.paypal.me"}:
             return None
         text = parsed.path.strip("/").split("/")[0]

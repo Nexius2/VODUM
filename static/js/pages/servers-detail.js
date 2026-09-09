@@ -11,7 +11,29 @@
     if (!input || !btn || btn.dataset.vodumBound === "1") return;
     btn.dataset.vodumBound = "1";
 
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
+      if (!input.value && input.type === "password" && btn.dataset.tokenUrl) {
+        btn.disabled = true;
+        const error = document.getElementById("server_token_error");
+        if (error) error.textContent = "";
+        try {
+          const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
+          const response = await fetch(btn.dataset.tokenUrl, {
+            method: "POST", credentials: "same-origin", cache: "no-store",
+            headers: {"X-CSRF-Token": csrf, "Accept": "application/json"}
+          });
+          if (!response.ok || response.redirected) throw new Error("Token unavailable");
+          const data = await response.json();
+          if (typeof data.token !== "string") throw new Error("Token unavailable");
+          // Do not overwrite a replacement typed while the request was running.
+          if (!input.value) input.value = data.token;
+        } catch (_) {
+          if (error) error.textContent = "Unable to load the saved API key. Reload the page and try again.";
+          return;
+        } finally {
+          btn.disabled = false;
+        }
+      }
       input.type = input.type === "password" ? "text" : "password";
       btn.setAttribute("aria-pressed", input.type === "text" ? "true" : "false");
     });

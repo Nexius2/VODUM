@@ -172,7 +172,10 @@ def update_server(
             public_url = ?,
             token = ?,
             settings_json = ?,
-            status = ?
+            status = ?,
+            cooldown_until = NULL,
+            unavailable_since = NULL,
+            last_failure = NULL
         WHERE id = ?
         """,
         (
