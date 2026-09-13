@@ -19,7 +19,7 @@ _SEND_LOCK = threading.Lock()
 # Only aggregate numeric values, boolean feature flags and tightly allow-listed
 # enums belong here. Never add names, addresses, URLs, IPs, tokens or free text.
 TELEMETRY_PAYLOAD_KEYS = frozenset({
-    "instance_id", "schema_version", "version", "platform", "runtime_platform",
+    "telemetry_enabled", "instance_id", "schema_version", "version", "platform", "runtime_platform",
     "container", "virtualized", "python_version", "docker", "managed_users",
     "total_users", "expired_users", "pending_users", "plex_servers",
     "jellyfin_servers", "libraries", "subscription_plans", "active_policies",
@@ -134,8 +134,7 @@ def run(task_id: int, db: DBManager):
             return {"success": False, "reason": "settings_missing"}
         settings = dict(settings)
 
-        if int(settings["enable_anonymous_telemetry"] or 0) != 1:
-            return {"success": True, "skipped": True, "reason": "disabled"}
+        telemetry_enabled = int(settings["enable_anonymous_telemetry"] or 0) == 1
 
         if not _task_enabled(db):
             return {"success": True, "skipped": True, "reason": "task_disabled"}
@@ -148,6 +147,12 @@ def run(task_id: int, db: DBManager):
                 return {"success": True, "skipped": True, "reason": "rate_limited"}
         except (TypeError, ValueError):
             log.warning("Invalid telemetry_last_sent_at ignored")
+
+        if not telemetry_enabled:
+            return _post_payload(db, {
+                "instance_id": instance_id,
+                "telemetry_enabled": False,
+            }, "VODUM")
 
         users = db.query_one(
             "SELECT COUNT(*) AS total FROM vodum_users WHERE status NOT IN ('expired', 'pending_invite')"
@@ -312,26 +317,7 @@ def run(task_id: int, db: DBManager):
             f"(version={version}, fields={','.join(sorted(payload))})"
         )
 
-        response = requests.post(
-            TELEMETRY_URL,
-            json=payload,
-            timeout=(5, 10),
-            headers={"User-Agent": f"VODUM/{version}"},
-        )
-
-        log.info(f"Telemetry HTTP response: {response.status_code}")
-
-        if 200 <= response.status_code < 300:
-
-            db.execute(
-                "UPDATE settings SET telemetry_last_sent_at = CURRENT_TIMESTAMP WHERE id = 1"
-            )
-
-            log.info("Anonymous telemetry successfully sent")
-            return {"success": True}
-
-        log.warning(f"Telemetry failed with HTTP {response.status_code}")
-        return {"success": False, "reason": "http_error", "status_code": response.status_code}
+        return _post_payload(db, payload, f"VODUM/{version}")
 
     except requests.RequestException as exc:
         log.warning(f"Telemetry network error: {type(exc).__name__}")
@@ -343,3 +329,26 @@ def run(task_id: int, db: DBManager):
         return {"success": False, "reason": "internal_error"}
     finally:
         _SEND_LOCK.release()
+
+
+def _post_payload(db, payload, user_agent):
+    response = requests.post(
+        TELEMETRY_URL,
+        json=validate_anonymous_payload(payload),
+        timeout=(5, 10),
+        headers={"User-Agent": user_agent},
+    )
+
+    log.info(f"Telemetry HTTP response: {response.status_code}")
+
+    if 200 <= response.status_code < 300:
+
+        db.execute(
+            "UPDATE settings SET telemetry_last_sent_at = CURRENT_TIMESTAMP WHERE id = 1"
+        )
+
+        log.info("Anonymous telemetry successfully sent")
+        return {"success": True}
+
+    log.warning(f"Telemetry failed with HTTP {response.status_code}")
+    return {"success": False, "reason": "http_error", "status_code": response.status_code}

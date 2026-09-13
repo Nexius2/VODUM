@@ -328,28 +328,9 @@ def register(app):
         )
         update_debug_mode_cache(bool(new_values["debug_mode"]))
 
-        telemetry_enabled = int(new_values["enable_anonymous_telemetry"] or 0)
-        db.execute(
-            """
-            UPDATE tasks
-            SET enabled=?,
-                status=CASE WHEN ?=1 THEN 'idle' ELSE 'disabled' END,
-                next_run=NULL,
-                updated_at=CURRENT_TIMESTAMP
-            WHERE name='send_telemetry'
-            """,
-            (telemetry_enabled, telemetry_enabled),
-        )
-        if not telemetry_enabled:
-            db.execute(
-                """
-                UPDATE settings
-                SET telemetry_last_sent_at=NULL
-                WHERE id=1
-                """
-            )
+        # Both modes report on the same schedule; the option controls detail.
+        db.execute("UPDATE tasks SET enabled=1, status='idle', next_run=NULL WHERE name='send_telemetry'")
 
-        # Appliquer immédiatement au process Flask courant
         current_app.config["SESSION_COOKIE_SAMESITE"] = new_values["web_cookie_samesite"]
         current_app.config["SESSION_COOKIE_SECURE"] = bool(new_values["web_secure_cookies"]) or (
             new_values["web_cookie_samesite"] == "None"
@@ -390,8 +371,7 @@ def register(app):
         # --------------------------------------------------
         force_task_run("check_mailing_status")
         force_task_run("send_comm_campaigns")
-        if telemetry_enabled:
-            force_task_run("send_telemetry")
+        force_task_run("send_telemetry")
 
         mark_auto_enable_dirty()
 
