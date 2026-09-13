@@ -1,15 +1,14 @@
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
+import time
 
 from logging_utils import get_logger, is_debug_mode_enabled
 from core.server_cooldown import should_skip_unreachable_server, mark_server_unreachable, clear_server_cooldown
 from core.server_cooldown import authentication_failure_status, mark_server_authentication_failed
 from core.http_security import servers_http_session
 from core.jellyfin_http import (
-    _jellyfin_library_total_items,
     _jellyfin_library_total_items_no_user,
-    _jellyfin_list_user_ids,
 )
 from core.jellyfin_runtime import (
     build_jellyfin_api_url,
@@ -425,20 +424,19 @@ def _sync_libraries_for_server(
     Met à jour libraries.item_count SANS dépendre d’un user Jellyfin.
     """
     api_url = _build_api_url(url, "/Library/VirtualFolders", token)
+    started_at = time.monotonic()
     logger.info(f"Jellyfin libraries: GET {api_url}")
 
     data = _get_json(session, api_url, timeout=30, token=token)
     mapping: Dict[str, int] = {}
-    user_ids = _jellyfin_list_user_ids(session, url, token, timeout=20)
 
     if not isinstance(data, list):
-        logger.warning(
-            f"Jellyfin libraries: réponse inattendue (pas une liste) (server_id={server_id})"
-        )
-        return mapping
+        raise ValueError("Jellyfin returned an invalid library list; existing access preserved")
 
     updated_counts = 0
     skipped_counts = 0
+    count_deadline = time.monotonic() + 15
+    counts_unavailable = False
 
     for entry in data:
         if not isinstance(entry, dict):
@@ -458,47 +456,21 @@ def _sync_libraries_for_server(
         lib_db_id = _upsert_library(db, server_id, item_id, name, lib_type)
         mapping[item_id] = lib_db_id
 
-        # 👉 récupération du count SANS user en priorité
-        try:
-            count = _jellyfin_library_total_items_no_user(
-                session,
-                url,
-                token,
-                item_id,
-                timeout=20,
-            )
-        except Exception as e:
-            logger.warning(
-                f"Jellyfin libraries: erreur item_count no-user "
-                f"(ParentId={item_id}, server_id={server_id}): {e}"
-            )
-            count = None
-
-        # Si no-user ne marche pas (None) OU renvoie 0 (souvent "pas de scope"), fallback user-scoped
-        if count is None or count == 0:
-            for uid in user_ids:
-                try:
-                    c2 = _jellyfin_library_total_items(
-                        session,
-                        url,
-                        token,
-                        item_id,
-                        user_id=uid,
-                        timeout=20,
-                    )
-                except Exception:
-                    continue
-
-                # Si on obtient un count exploitable, on le garde
-                if c2 is not None:
-                    # si c2 > 0, c’est clairement bon
-                    if c2 > 0:
-                        count = c2
-                        break
-                    # si c2 == 0, on le garde quand même (lib réellement vide possible),
-                    # mais on continue d’essayer un autre user au cas où.
-                    if count in (None, 0):
-                        count = c2
+        # Optional counts must not multiply timeouts by users and libraries.
+        remaining = count_deadline - time.monotonic()
+        count = None
+        if not counts_unavailable and remaining > 0:
+            try:
+                count = _jellyfin_library_total_items_no_user(
+                    session, url, token, item_id, timeout=min(5, remaining),
+                )
+            except requests.exceptions.RequestException as exc:
+                counts_unavailable = True
+                logger.warning(
+                    "Jellyfin server_id=%s: item counts unavailable (%s); keeping previous "
+                    "counts for this run and continuing user synchronization",
+                    server_id, type(exc).__name__,
+                )
 
         # Si toujours rien → skip
         if count is None:
@@ -515,7 +487,7 @@ def _sync_libraries_for_server(
     logger.info(
         f"Jellyfin libraries: {len(mapping)} importées/mises à jour "
         f"(item_count updated={updated_counts}, skipped={skipped_counts}) "
-        f"(server_id={server_id})"
+        f"(server_id={server_id}, elapsed={time.monotonic() - started_at:.1f}s)"
     )
     return mapping
 
@@ -538,12 +510,12 @@ def _sync_users_and_policies_for_server(
     users_url = _build_api_url(url, "/Users", token)
     logger.info(f"Jellyfin users: GET {users_url}")
 
-    users = _get_json(session, users_url, timeout=30, token=token) or []
+    users = _get_json(session, users_url, timeout=15, token=token)
     processed = 0
     policy_ok = 0
 
-    if not isinstance(users, list):
-        return 0, 0
+    if not isinstance(users, list) or any(not isinstance(u, dict) or not u.get("Id") or not u.get("Name") for u in users):
+        raise ValueError("Jellyfin returned an invalid user list; existing users preserved")
 
     seen_jellyfin_ids = set()
     for u in users:
@@ -588,17 +560,15 @@ def _sync_users_and_policies_for_server(
             )
             continue
 
-        # Policy (plus fiable via /Users/{id})
-        detail_url = _build_api_url(url, f"/Users/{jellyfin_id}", token)
-        try:
-            detail = _get_json(session, detail_url, timeout=30, token=token) or {}
-            policy_ok += 1
-        except Exception as e:
-            logger.warning(
-                f"Impossible de récupérer Policy pour user={username} ({jellyfin_id}) "
-                f"sur server_id={server_id}: {e}"
-            )
-            detail = {}
+        # /Users supplies Policy and metadata in the normal case.
+        detail = u
+        if not isinstance(u.get("Policy"), dict):
+            detail_url = _build_api_url(url, f"/Users/{jellyfin_id}", token)
+            # Abort rather than repeating a timeout for every remaining user.
+            detail = _get_json(session, detail_url, timeout=15, token=token)
+        if not isinstance(detail, dict) or not isinstance(detail.get("Policy"), dict):
+            raise ValueError("Jellyfin user policy unavailable; existing access preserved")
+        policy_ok += 1
 
         # Stockage "max info" : JSON brut + champs utiles (role/joined_at/avatar)
         try:
@@ -747,6 +717,7 @@ def run(task_id: int, db):
 
     try:
         any_success = False
+        failed_servers = []
         skipped_unreachable = 0
         
         for srv in servers:
@@ -784,6 +755,7 @@ def run(task_id: int, db):
 
             except Exception as e:
                 auth_status = authentication_failure_status(e)
+                failed_servers.append(server_id)
                 if auth_status is not None:
                     mark_server_authentication_failed(db, server_id, auth_status)
                     logger.warning(
@@ -816,7 +788,8 @@ def run(task_id: int, db):
                 )
 
             except Exception as e:
-                # ⚠️ Important : on ne raise pas ici
+                failed_servers.append(server_id)
+                # Finish other servers before reporting partial failure.
                 logger.error(
                     f"[SYNC JELLYFIN] Users/Policies FAILED pour {name} "
                     f"(libs OK, counts conservés) : {e}",
@@ -828,6 +801,9 @@ def run(task_id: int, db):
                 logger.warning("[SYNC JELLYFIN] All Jellyfin servers are down or in cooldown; sync skipped.")
                 return
             raise RuntimeError("Aucun serveur Jellyfin n'a pu être synchronisé")
+
+        if failed_servers:
+            raise RuntimeError(f"Jellyfin user synchronization incomplete for server IDs: {failed_servers}; completed data preserved")
 
         logger.info(f"Sync Jellyfin OK — users={total_users}, libraries={total_libraries}")
 

@@ -67,6 +67,9 @@ def validate_and_upgrade_core_schema(
     ensure_column(cursor, "settings", "enable_anonymous_telemetry", "INTEGER DEFAULT 1")
     ensure_column(cursor, "settings", "telemetry_instance_id", "TEXT DEFAULT NULL")
     ensure_column(cursor, "settings", "telemetry_last_sent_at", "TEXT DEFAULT NULL")
+    # Upgrade tasks disabled by the former telemetry option.
+    cursor.execute("UPDATE tasks SET enabled=1, status='idle', next_run=NULL WHERE name='send_telemetry' AND enabled=0 AND EXISTS (SELECT 1 FROM settings WHERE id=1 AND COALESCE(enable_anonymous_telemetry,0)=0)")
+
     ensure_column(cursor, "settings", "task_defaults_version", "INTEGER DEFAULT 0")
     ensure_column(cursor, "settings", "stream_enforcer_boost_until", "TIMESTAMP DEFAULT NULL")
     ensure_column(cursor, "settings", "usage_risk_enabled", "INTEGER DEFAULT 1")

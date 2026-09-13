@@ -94,46 +94,14 @@ def _jellyfin_library_total_items_no_user(
 ) -> int | None:
     headers = jellyfin_headers(token)
 
-    # Tentative 1: /Items/Counts?ParentId=...
-    url = _build_api_url(
-        base_url,
-        f"/Items/Counts?ParentId={library_item_id}&Recursive=true",
-        token,
-    )
-    r = session.get(url, headers=headers, timeout=timeout)
-    if r.status_code == 200:
-        try:
-            data = r.json()
-            # selon versions : ItemCount / Items / TotalCount...
-            for key in ("ItemCount", "Items", "TotalCount", "Count"):
-                if key in data and data[key] is not None:
-                    return int(data[key])
-
-            # fallback Jellyfin courant: MovieCount/SeriesCount/EpisodeCount...
-            summed = 0
-            any_found = False
-            for k, v in data.items():
-                if k.endswith("Count"):
-                    try:
-                        summed += int(v)
-                        any_found = True
-                    except Exception:
-                        pass
-            if any_found:
-                return summed
-
-        except Exception:
-            pass
-
-    # Tentative 2 (fallback): /Items?...EnableTotalRecordCount=true
+    # Query a scoped total directly without loading the library contents.
     url = _build_api_url(
         base_url,
         f"/Items?ParentId={library_item_id}&Recursive=true&StartIndex=0&Limit=1&EnableTotalRecordCount=true",
         token,
     )
     r = session.get(url, headers=headers, timeout=timeout)
-    if r.status_code != 200:
-        return None
+    r.raise_for_status()
 
     try:
         data = r.json()
