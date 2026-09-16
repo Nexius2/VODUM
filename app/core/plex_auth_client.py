@@ -112,12 +112,20 @@ class PlexAuthClient:
             "X-Plex-Version": str(version or "unknown"),
         }
 
+    def _request(self, method: str, url: str, *, operation: str, **kwargs):
+        try:
+            return self.session.request(method, url, timeout=self.timeout, **kwargs)
+        except requests.RequestException as exc:
+            # Transport errors may contain URLs or tokens; expose only the operation.
+            raise PlexServiceUnavailable(f"Plex {operation} unavailable") from exc
+
     def create_pin(self) -> PlexPin:
-        response = self.session.post(
+        response = self._request(
+            "POST",
             f"{PLEX_API_ORIGIN}/api/v2/pins",
+            operation="PIN creation",
             params={"strong": "true"},
             headers=self.headers,
-            timeout=self.timeout,
         )
         payload = _json_object(response, "PIN creation")
         try:
@@ -144,10 +152,11 @@ class PlexAuthClient:
         return PLEX_AUTH_URL + query
 
     def read_pin_token(self, pin_id: int) -> str | None:
-        response = self.session.get(
+        response = self._request(
+            "GET",
             f"{PLEX_API_ORIGIN}/api/v2/pins/{int(pin_id)}",
+            operation="PIN check",
             headers=self.headers,
-            timeout=self.timeout,
         )
         if response.status_code in {404, 410}:
             raise PlexPinExpired("Plex PIN expired or no longer exists")
@@ -179,10 +188,11 @@ class PlexAuthClient:
             raise ValueError("token is required")
         headers = dict(self.headers)
         headers["X-Plex-Token"] = secret
-        response = self.session.get(
+        response = self._request(
+            "GET",
             f"{PLEX_API_ORIGIN}/api/v2/user",
+            operation="identity verification",
             headers=headers,
-            timeout=self.timeout,
         )
         payload = _json_object(response, "identity verification")
         subject = payload.get("id") or payload.get("uuid")

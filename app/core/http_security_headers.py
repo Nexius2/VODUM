@@ -10,12 +10,12 @@ PORTAL_CSP = (
     "script-src 'self' https://challenges.cloudflare.com; "
     "frame-src 'self' https://challenges.cloudflare.com; "
     "connect-src 'self' https://challenges.cloudflare.com; "
-    "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
+    "object-src 'none'; base-uri 'self'; form-action 'self' https://app.plex.tv; frame-ancestors 'self'"
 )
 
 # Some legacy Admin templates still contain inline helpers. Keep those pages
 # operational while constraining scripts, connections, frames and forms to the
-# application and the optional Cloudflare Turnstile widget. Inline code should
+# application, Plex authentication redirects and the optional Cloudflare Turnstile widget. Inline code should
 # progressively be moved to static files so 'unsafe-inline' can later be removed.
 ADMIN_CSP = (
     "default-src 'self'; "
@@ -24,7 +24,7 @@ ADMIN_CSP = (
     "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; "
     "frame-src 'self' https://challenges.cloudflare.com; "
     "connect-src 'self' https://challenges.cloudflare.com; "
-    "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
+    "object-src 'none'; base-uri 'self'; form-action 'self' https://app.plex.tv; frame-ancestors 'self'"
 )
 
 
