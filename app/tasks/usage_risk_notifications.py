@@ -32,7 +32,7 @@ Best regards,
 
 def _safe_int(value, default=0):
     try:
-        return int(value or default)
+        return int(default if value is None or value == "" else value)
     except Exception:
         return default
 

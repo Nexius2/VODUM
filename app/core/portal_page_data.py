@@ -138,7 +138,23 @@ def load_portal_profile(db, vodum_user_id: int) -> dict | None:
         """,
         (int(vodum_user_id),),
     )
-    return dict(row) if row else None
+    if not row:
+        return None
+    profile = dict(row)
+    # Only expose usernames of directly related users, never their contact details.
+    referrer = db.query_one(
+        """SELECT sponsor.username FROM vodum_users owner
+           JOIN vodum_users sponsor ON sponsor.id = owner.referrer_user_id
+           WHERE owner.id = ?""",
+        (int(vodum_user_id),),
+    )
+    profile["referrer"] = dict(referrer) if referrer else None
+    profile["referred_users"] = [dict(item) for item in (db.query(
+        """SELECT username FROM vodum_users WHERE referrer_user_id = ?
+           ORDER BY username COLLATE NOCASE, id""",
+        (int(vodum_user_id),),
+    ) or [])]
+    return profile
 
 
 def normalize_portal_profile(form) -> tuple[dict, tuple[str, ...]]:

@@ -158,10 +158,10 @@ def fetch_shared_server_users(
             plex_id = str(
                 shared.get("userID")
                 or shared.get("userId")
-                or shared.get("id")
                 or ""
             ).strip()
-            if not plex_id:
+            # SharedServer.id identifies the share, never the Plex account.
+            if not plex_id or plex_id == "0":
                 continue
             truthy = lambda value: str(value or "0").lower() in {"1", "true"}
             result[plex_id] = {

@@ -1,6 +1,9 @@
 <section role="link" tabindex="0" data-dashboard-link="{{ url_for('monitoring_page', tab='usage_risk') }}"
   class="bg-slate-900 border border-slate-800 rounded-2xl p-4 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/40">
   <h2 class="mb-3 text-sm font-semibold">{{ t("usage_risk") if t("usage_risk") != "usage_risk" else "Usage risk" }}</h2>
+  {% if usage_risk_dashboard.error %}
+  <div role="alert" class="rounded-xl border border-amber-800 bg-amber-950/40 p-4 text-sm text-amber-300">{{ t("usage_risk") }} : {{ t("error") }}</div>
+  {% else %}
   <div class="mb-3 grid grid-cols-3 gap-2 text-center">
     {% for key, color in [('high','rose'), ('medium','amber'), ('low','emerald')] %}
       <div class="rounded-lg border border-slate-800 bg-slate-950/50 px-2 py-3">
@@ -16,4 +19,5 @@
     </div>
   </div>
   <div class="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><div class="mb-3 text-xs text-slate-400">{{ t("top_reasons") }}</div><div class="space-y-2 text-xs">{% for reason in usage_risk_dashboard.top_reasons %}<div class="flex justify-between gap-3"><span class="truncate text-slate-300">{{ loop.index }}. {{ reason.label }}</span><span class="shrink-0 font-semibold">{{ reason.count }} <span class="text-slate-500">({{ reason.percent }}%)</span></span></div>{% else %}<div class="text-slate-500">{{ t("no_usage_risk_reason_yet") }}</div>{% endfor %}</div></div>
+  {% endif %}
 </section>

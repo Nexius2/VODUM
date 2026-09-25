@@ -8,7 +8,7 @@ from core.portal_page_data import (
     normalize_portal_profile, update_portal_profile,
 )
 from web.helpers import get_db, send_email_via_settings
-from core.portal_messages import add_message, conversation_for_user, list_messages, mark_read, unread_messages_for_user
+from core.portal_messages import add_message, conversation_for_user, message_page, mark_read, unread_messages_for_user
 from core.portal_provider_profile import update_portal_provider_profile
 from core.portal_auth_methods import list_auth_methods, local_reauthentication_valid, recently_reauthenticated, unlink_identity, link_identity
 from core.portal_jellyfin_auth import authenticate_jellyfin_user, JellyfinPortalAuthError
@@ -246,19 +246,16 @@ def register(app):
         if not support:
             return _portal_error("portal_account_missing")
         conversation = conversation_for_user(db, user_id) if support.get("quick_messages_enabled") else None
-        all_messages = list_messages(db, conversation["id"]) if conversation and conversation.get("id") else []
-        show_message_history = request.args.get("messages") == "all"
-        has_older_messages = len(all_messages) > 6
-        messages = all_messages if show_message_history else all_messages[-6:]
+        messages, message_pagination = [], None
         if conversation and conversation.get("id"):
-            mark_read(db, conversation["id"], "user")
+            messages, message_pagination = message_page(db, conversation["id"], request.args.get("page", 1))
+            mark_read(db, conversation["id"], "user", message_ids=[item["id"] for item in messages])
         return render_template(
             "portal/support.html",
             support=support,
             conversation=conversation,
             messages=messages,
-            has_older_messages=has_older_messages,
-            show_message_history=show_message_history,
+            message_pagination=message_pagination,
             **ui,
             active_portal_page="support",
         )

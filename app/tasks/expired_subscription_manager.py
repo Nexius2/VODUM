@@ -20,10 +20,11 @@ from __future__ import annotations
 
 import json
 from datetime import date
-from typing import Dict, Any, Optional, Set, Tuple
+from typing import Dict, Any, Set, Tuple
 
 from tasks_engine import task_logs
 from logging_utils import get_logger
+from core.expiration_rules import parse_expiration_date, eligible_expiration_accounts
 from core.media_jobs import insert_plex_media_job, insert_jellyfin_media_job
 
 log = get_logger("expired_subscription_manager")
@@ -31,43 +32,7 @@ log = get_logger("expired_subscription_manager")
 SYSTEM_TAG = "expired_subscription"
 
 
-def _parse_date(d: Optional[str]) -> Optional[date]:
-    """
-    Accepte:
-      - 'YYYY-MM-DD'
-      - 'YYYY-MM-DDTHH:MM:SS'
-      - 'YYYY-MM-DD HH:MM:SS'
-      - 'DD/MM/YYYY'
-    """
-    if not d:
-        return None
-
-    s = str(d).strip()
-    if not s:
-        return None
-
-    # ISO datetime -> garder uniquement la date
-    if "T" in s:
-        s = s.split("T", 1)[0].strip()
-    if " " in s:
-        # ex: '2026-04-11 00:00:00'
-        s = s.split(" ", 1)[0].strip()
-
-    # format FR
-    if "/" in s:
-        parts = s.split("/")
-        if len(parts) == 3:
-            dd, mm, yyyy = parts[0].zfill(2), parts[1].zfill(2), parts[2]
-            try:
-                return date.fromisoformat(f"{yyyy}-{mm}-{dd}")
-            except Exception:
-                return None
-
-    try:
-        return date.fromisoformat(s)
-    except Exception:
-        return None
-
+_parse_date = parse_expiration_date
 
 
 def _policy_rule(title: str, text: str) -> Dict[str, Any]:
@@ -104,30 +69,11 @@ def _get_settings(db) -> Dict[str, Any]:
 
 
 
-def _find_system_policy_id(db, vodum_user_id: int) -> Optional[int]:
-    rows = db.query(
-        """
-        SELECT id, rule_value_json
-        FROM stream_policies
-        WHERE scope_type='user' AND scope_id=?
-        ORDER BY id DESC
-        """,
-        (vodum_user_id,),
-    )
-    for r in rows:
-        try:
-            rule = json.loads(r["rule_value_json"] or "{}")
-        except Exception:
-            rule = {}
-        if rule.get("system_tag") == SYSTEM_TAG:
-            return int(r["id"])
-    return None
-
-
-def _create_system_policy(db, vodum_user_id: int) -> int:
+def _create_system_policy(db, vodum_user_id: int, account_ids) -> int:
     title = "Subscription expired"
     text = "Your subscription has ended. Please renew to restore access."
     rule = _policy_rule(title, text)
+    rule["expiration_media_user_ids"] = sorted(account_ids)
 
     db.execute(
         """
@@ -166,6 +112,32 @@ def _delete_policy(db, policy_id: int) -> None:
     db.execute("DELETE FROM stream_policies WHERE id=?", (policy_id,))
 
 
+def _sync_system_policy(db, user_id, account_ids):
+    rows = db.query("SELECT id,rule_value_json FROM stream_policies WHERE scope_type='user' AND scope_id=? ORDER BY id", (user_id,)) or []
+    owned = []
+    for row in rows:
+        try:
+            rule = json.loads(row["rule_value_json"] or "{}")
+        except (ValueError, TypeError):
+            continue
+        if isinstance(rule, dict) and rule.get("system_tag") == SYSTEM_TAG:
+            owned.append((row, rule))
+    if not account_ids:
+        for row, _ in owned:
+            _delete_policy(db, int(row["id"]))
+        return 0, len(owned)
+    if not owned:
+        _create_system_policy(db, user_id, account_ids)
+        return 1, 0
+    row, rule = owned[0]
+    if rule.get("expiration_media_user_ids") != sorted(account_ids):
+        rule["expiration_media_user_ids"] = sorted(account_ids)
+        db.execute("UPDATE stream_policies SET rule_value_json=? WHERE id=?", (json.dumps(rule), row["id"]))
+    for duplicate, _ in owned[1:]:
+        _delete_policy(db, int(duplicate["id"]))
+    return 0, len(owned) - 1
+
+
 def _disable_access_for_user(db, vodum_user_id: int) -> Tuple[int, int]:
     """
     Disable access (Plex + Jellyfin) for a single vodum_user.
@@ -183,6 +155,7 @@ def _disable_access_for_user(db, vodum_user_id: int) -> Tuple[int, int]:
         JOIN libraries l ON l.id = mul.library_id
         JOIN servers s_lib ON s_lib.id = l.server_id
         WHERE mu.vodum_user_id = ?
+          AND l.server_id = mu.server_id
           AND LOWER(TRIM(mu.type)) IN ('plex','jellyfin')
           AND LOWER(TRIM(s_mu.type)) = LOWER(TRIM(mu.type))
           AND LOWER(TRIM(s_lib.type)) = LOWER(TRIM(mu.type))
@@ -190,13 +163,16 @@ def _disable_access_for_user(db, vodum_user_id: int) -> Tuple[int, int]:
         (vodum_user_id,),
     )
 
+    eligible_ids = {int(a["id"]) for a in eligible_expiration_accounts(db, vodum_user_id)}
     processed_media = 0
     created_jobs = 0
 
     for r in rows:
         media_user_id = int(r["media_user_id"])
+        if media_user_id not in eligible_ids:
+            continue
         server_id = int(r["server_id"])
-        provider = (r["provider"] or "").strip()
+        provider = (r["provider"] or "").strip().lower()
 
         # Delete libraries for this server only
         db.execute(
@@ -264,7 +240,7 @@ def _cleanup_orphan_system_policies(db) -> int:
             rule = json.loads(r["rule_value_json"] or "{}")
         except Exception:
             rule = {}
-        if rule.get("system_tag") != SYSTEM_TAG:
+        if not isinstance(rule, dict) or rule.get("system_tag") != SYSTEM_TAG:
             continue
 
         try:
@@ -307,7 +283,6 @@ def run(task_id: int, db) -> None:
             """
             SELECT id, username, expiration_date
             FROM vodum_users
-            WHERE expiration_date IS NOT NULL
             """
         ) or []
 
@@ -319,30 +294,15 @@ def run(task_id: int, db) -> None:
         for u in users:
             vodum_user_id = int(u["id"])
 
-            # Toujours calculer policy_id AVANT, car on peut vouloir nettoyer même si la date est invalide
-            policy_id = _find_system_policy_id(db, vodum_user_id)
-
             exp = _parse_date(u["expiration_date"])
-
-            # Si la date est invalide/inparsible, on considère que l'user n'est PAS expiré,
-            # et surtout on évite de laisser une policy "expired_subscription" collée.
-            if not exp:
-                if policy_id:
-                    _delete_policy(db, policy_id)
-                    removed += 1
+            account_ids = []
+            if exp and exp < today:
+                account_ids = [int(a["id"]) for a in eligible_expiration_accounts(db, vodum_user_id)]
+            added, cleared = _sync_system_policy(db, vodum_user_id, account_ids)
+            created += added
+            removed += cleared
+            if not account_ids:
                 continue
-
-            if exp >= today:
-                # renewed (or not expired yet) => remove system policy if any
-                if policy_id:
-                    _delete_policy(db, policy_id)
-                    removed += 1
-                continue
-
-            # expired => ensure policy exists
-            if not policy_id:
-                _create_system_policy(db, vodum_user_id)
-                created += 1
 
             # warn_only = keep the expired_subscription policy forever until renewal.
             # warn_then_disable = keep the warning for X days, then hard revoke access.
@@ -354,10 +314,8 @@ def run(task_id: int, db) -> None:
                 _, created_jobs = _disable_access_for_user(db, vodum_user_id)
                 jobs_created_total += created_jobs
 
-                policy_id2 = _find_system_policy_id(db, vodum_user_id)
-                if policy_id2:
-                    _delete_policy(db, policy_id2)
-                    removed += 1
+                _, cleared = _sync_system_policy(db, vodum_user_id, [])
+                removed += cleared
 
                 disabled_users += 1
 

@@ -1,5 +1,187 @@
 # Changelog
 
+## 2026-09-24 - Alignement Jellyfin sur la version publiée GitHub
+
+- Référence fournie par l'utilisateur : `origin/main`, commit
+  `e5fbc501f061ad0872897af078798b91d7f70b46`, version 26.09.16 b0539.
+- Restauration exacte de `core/jellyfin_auth.py`, `core/jellyfin_http.py` et
+  `tasks/sync_jellyfin.py` depuis cette référence. Ce changement remplace les
+  tentatives précédentes de retour arrière fondées sur le HEAD local d'août.
+- Vérification : les neuf autres fichiers de transport, fournisseurs,
+  monitoring, contrôle serveur et stockage des secrets comparés sont déjà
+  identiques à cette référence. Les modifications d'expiration sont conservées.
+- 44 tests locaux réussis. Cette comparaison explique les écarts introduits
+  par les derniers correctifs, mais ne démontre pas la cause des timeouts
+  initiaux ni l'identité de la configuration et de l'image réellement exécutée.
+
+## 2026-09-24 - Retour au parcours de synchronisation Jellyfin antérieur
+
+- Annulation des changements récents du comptage Jellyfin : restauration de
+  la séquence `/Items/Counts`, puis `/Items`, et des requêtes par utilisateur
+  lorsque le comptage sans utilisateur ne fournit pas de résultat exploitable.
+- Restauration de la lecture dédiée `/Users/{id}` pour les politiques, avec
+  le délai historique de 30 secondes. Conservation de l'arrêt sur réponse
+  invalide ou incomplète pour ne pas effacer des droits ou identités par erreur.
+- Authentification : envoi de la même clé déchiffrée dans `Authorization` et
+  `X-Emby-Token`. Le retour à `X-Emby-Token` seul avait produit des HTTP 401
+  sur les installations signalées ; ce retour est annulé.
+- Retour ciblé construit à partir des fonctions suivies dans Git (6d73efd),
+  sans prétendre restaurer une image exacte du 22 septembre : aucun commit de
+  cette date n'est disponible. Sauvegarde locale préalable dans `.tmp`.
+- Validation : 45 tests locaux réussis, incluant deux serveurs HTTP de test
+  exigeant respectivement chaque format d'authentification, le repli de
+  comptage et la préservation des données lors d'un timeout. Déploiement et
+  fonctionnement sur l'installation réelle non vérifiés depuis ce poste.
+
+## 2026-09-23 - Retour aux requêtes Jellyfin antérieures
+
+- Rétablissement de `X-Emby-Token` pour les appels API Jellyfin, à la place
+  de l'en-tête Authorization introduit récemment. Conservation du déchiffrement
+  des clés enregistrées et de la validation des caractères d'en-tête.
+- Rétablissement de 20 secondes par comptage de bibliothèque au lieu de 5,
+  suppression du budget global de 15 secondes qui pouvait laisser les dernières
+  bibliothèques sans mise à jour. Le premier échec réseau interrompt toujours
+  les comptages suivants et préserve les valeurs précédentes.
+- Maintien des 30 secondes pour les utilisateurs, de la réutilisation des
+  politiques incluses dans leur liste et des protections en cas de réponse
+  incomplète. Les échecs restent signalés.
+- Validation locale : 41 tests réussis, dont un parcours HTTP avec clé chiffrée
+  et le comptage simulé de plusieurs bibliothèques lentes. Retour de compatibilité
+  appliqué ; résolution sur l'installation réelle non vérifiée à distance.
+
+## 2026-09-23 - Diagnostic des lenteurs Jellyfin
+
+- Comparaison optionnelle `--compare-auth` entre l'ancien en-tête
+  `X-Emby-Token` et le nouvel en-tête `Authorization`, sur les mêmes appels
+  utilisateurs/comptage et avec des connexions séparées. Trois tests ciblés
+  réussis ; résultat sur le serveur réel encore nécessaire pour conclure.
+
+- Ajout de `python -m diagnose_jellyfin 7`, à exécuter dans le conteneur VODUM :
+  mesure séparée des utilisateurs, sessions, bibliothèques et d'un comptage,
+  sur les adresses configurées, avec les accès enregistrés.
+- Base ouverte en lecture seule ; aucune modification des comptes. Le rapport
+  affiche les durées, codes HTTP et types d'erreurs, sans adresse, clé API ni
+  contenu des utilisateurs. Deux tests ciblés réussis.
+- Diagnostic ajouté pour poursuivre l'investigation des timeouts signalés ;
+  leur cause sur l'installation réelle n'est pas encore confirmée.
+
+## 2026-09-23 - Correction du délai de synchronisation Jellyfin
+
+- Rétablissement du délai de 30 secondes pour la récupération de la liste des
+  utilisateurs et des politiques individuelles. La réduction à 15 secondes
+  pouvait interrompre la synchronisation de serveurs plus lents ou chargés.
+- Conservation des optimisations de comptage des bibliothèques et de lecture
+  des politiques déjà incluses dans la liste des utilisateurs.
+- Un échec de récupération reste signalé et ne déclenche pas de nettoyage des
+  utilisateurs absents ni de leurs accès sur la base d'une liste incomplète.
+- Validation : 17 tests ciblés réussis, dont une réponse simulée à 20 secondes
+  et la conservation des données lors d'un dépassement du délai. Aucun appel
+  au serveur réel ; le bon déroulement sur celui-ci reste à vérifier.
+
+## 2026-09-23 - Règles d'expiration communes et comptes mixtes
+
+- L'abonnement reste valable pendant toute sa date d'expiration : le statut
+  devient expiré le lendemain, comme les actions de retrait et de suppression.
+- Protections communes pour les abonnements à vie, overrides, propriétaires
+  Plex et administrateurs Jellyfin ; préservation des statuts manuels et
+  exclusion des notifications automatiques d'expiration pour ces fiches.
+- Une invitation Plex en attente exclut uniquement ce compte des blocages et
+  retraits d'accès. Elle ne décale plus l'expiration d'une fiche possédant aussi
+  un compte actif Jellyfin ou Plex. Les règles de lecture ciblent les comptes
+  éligibles et les retraits de bibliothèques restent limités à leur serveur.
+- Nettoyage des anciens blocages système lors d'une exemption ou d'un
+  renouvellement, et suppression des doublons sans modifier les règles manuelles.
+- La suppression complète conserve ses protections plus strictes : toutes les
+  cibles doivent être éligibles et confirmées avant de supprimer la fiche VODUM.
+- Validation : 61 tests ciblés réussis, dont 8 nouveaux scénarios de régression.
+  Appels natifs simulés ; aucun compte réel modifié pendant ces contrôles.
+- Détails : [règles d'expiration](docs/regles-expiration-2026-09-23.md).
+
+## 2026-09-23 - Suppression des utilisateurs après expiration
+
+- Nouvelle option « Supprimer l'utilisateur après expiration » dans Expiration
+  behavior, avec délai configurable de 1 à 3 650 jours. Elle ne bloque pas les
+  lectures pendant le délai et reste désactivée tant qu'elle n'est pas choisie.
+- Suppression native du compte Jellyfin ou retrait des partages des serveurs
+  Plex concernés, puis suppression de la fiche VODUM après confirmation de
+  toutes les cibles. Aucun compte Plex personnel n'est supprimé.
+- Ajout du petit « ? » demandé : sans le mode d'import limité aux utilisateurs
+  partagés, une identité Plex peut être réimportée après sa suppression locale.
+  Aide utilisable au clavier et au clic, traduite dans les cinq langues.
+- Protections des propriétaires, administrateurs, Plex Home, invitations en
+  attente, abonnements à vie et exemptions d'expiration. Relecture de la date
+  et du mode avant suppression, respect de l'arrêt du planificateur.
+- En cas d'échec partiel, conservation de la fiche locale, journalisation et
+  reprise idempotente. Les anciens jobs d'accès en file sont annulés pour ne
+  pas rétablir un partage retiré ; les jobs en cours reportent la suppression.
+- Validation : 35 tests ciblés réussis, dont les deux formulaires et le parcours
+  de suppression sur base temporaire avec le vrai bootstrap. Les appels natifs
+  sont simulés ; aucun compte réel n'a été supprimé.
+- Détails et limites dans `docs/suppression-expiration-2026-09-23.md`.
+
+## 2026-09-23 - Import Plex limité aux partages par défaut
+
+- Le mode `shared_only` devient le défaut pour les nouvelles installations et
+  les paramètres absents ou invalides. Les choix existants valides, notamment
+  `global`, sont conservés lors des mises à jour et des sauvegardes de formulaire
+  qui ne transmettent pas ce champ.
+- Mise à jour des libellés dans les cinq langues : le mode partagé est identifié
+  comme défaut et l'aide précise que changer de mode ne supprime pas les fiches
+  et historiques déjà présents dans VODUM.
+- Correction du parsing Plex : l'identifiant d'un partage n'est plus utilisé
+  comme identifiant utilisateur lorsque `userID`/`userId` manque ou vaut zéro.
+- Vérification sur base temporaire du vrai traitement de synchronisation :
+  utilisateur partagé sur deux serveurs, absence de réimport après retrait du
+  partage et suppression locale, absence de repli vers l'import global et
+  conservation des données locales en cas de réponse vide.
+- Validation : 13 tests ciblés réussis, dont bootstrap initial et répété.
+  Les réponses Plex sont simulées ; aucun compte réel n'a été modifié.
+
+## 2026-09-22 - Cycle de vie : cartographie et réglages d'expiration
+
+- Cartographie des modes d'expiration, suppressions locales, exceptions et
+  renouvellements dans `docs/cycle-vie-utilisateurs-2026-09-22.md`. La TODO
+  précise les écarts à traiter avant les nouvelles actions natives Jellyfin.
+- Retrait du champ « supprimer après X jours », qui n'était relié à aucun
+  traitement. Une explication remplace le champ ; la valeur historique reste
+  conservée en base, sans activer de suppression automatique.
+- Le passage à « aucune action » ou au retrait direct des accès nettoie les
+  anciennes règles système de blocage depuis les deux pages de réglages,
+  sans supprimer les règles manuelles.
+- Les réglages d'abonnement et l'activation automatique respectent désormais
+  l'arrêt du planificateur. Une date d'expiration supprimée ne laisse plus de
+  règle de blocage résiduelle au prochain passage du gestionnaire.
+- Ajout de régressions sur les changements de mode, la préservation des règles
+  manuelles, l'arrêt du planificateur et la suppression de la date d'expiration.
+- Correction complémentaire repérée pendant les tests : le nettoyage des logs
+  accepte les dates anciennes hors de la plage des timestamps Windows.
+- Validation : 28 tests ciblés réussis, contrôle des deux formulaires sur une
+  base temporaire avec le vrai bootstrap et compilation Python réussie.
+
+## 2026-09-22 - Clôture des validations fonctionnelles
+
+- Validations fonctionnelles et sur l'installation réelle considérées comme
+  terminées sur confirmation de l'utilisateur : mots de passe et coupure de
+  lecture Jellyfin, restauration sur une instance neuve et checklist manuelle
+  de publication derrière le reverse proxy HTTPS.
+- Retrait de ces validations de la TODO. Cette clôture ne constitue pas une
+  nouvelle exécution des tests par l'agent ; les audits restant à réaliser et
+  les problèmes identifiés dans les tests automatisés restent à traiter.
+
+## 2026-09-21 - Conservation configurable des logs
+
+- Ajout des réglages de logs dans Settings > Système : conservation de 7, 14,
+  30 ou 90 jours, avec 30 jours par défaut.
+- Plafond de stockage de 50 Mo par défaut, configurable de 5 à 1 000 Mo dans
+  les options avancées. Les fichiers les plus anciens sont supprimés plus tôt
+  si ce plafond est atteint.
+- Nettoyage automatique selon l'âge et la taille, y compris des archives
+  existantes, avec prise en compte des réglages sans redémarrage.
+- Migration automatique des paramètres et traductions en français, anglais,
+  allemand, espagnol et italien.
+- Validation : 17 tests des logs, test de migration et vérification du formulaire
+  avec sauvegarde des réglages et rejet des valeurs invalides.
+
 ## 2026-09-07 - P0 Jellyfin : coupure et mot de passe
 
 - Une erreur du message d'avertissement ne bloque plus la coupure groupee.

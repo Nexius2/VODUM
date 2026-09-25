@@ -44,13 +44,15 @@ def upgrade_task_settings_auth_schema(
     ensure_column(cursor, "settings", "backup_retention_days", "INTEGER DEFAULT 30")
     ensure_column(cursor, "settings", "backup_retention_count", "INTEGER DEFAULT 10")
     ensure_column(cursor, "settings", "data_retention_years", "INTEGER DEFAULT 0")
+    ensure_column(cursor, "settings", "log_retention_days", "INTEGER DEFAULT 30")
+    ensure_column(cursor, "settings", "log_max_size_mb", "INTEGER DEFAULT 50")
     ensure_column(cursor, "settings", "skip_never_used_accounts", "INTEGER DEFAULT 0")
     ensure_column(cursor, "settings", "smtp_auth_method", "TEXT DEFAULT 'password'")
     ensure_column(cursor, "settings", "smtp_oauth_access_token", "TEXT DEFAULT NULL")
     ensure_column(cursor, "settings", "communication_language", "TEXT DEFAULT NULL")
 
     # Plex settings
-    ensure_column(cursor, "settings", "plex_user_import_mode", "TEXT DEFAULT 'global'")
+    ensure_column(cursor, "settings", "plex_user_import_mode", "TEXT DEFAULT 'shared_only'")
 
 
 

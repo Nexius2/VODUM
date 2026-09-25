@@ -99,6 +99,22 @@
       <span class="text-sm text-slate-300">{{ t("debug_mode") }}</span>
     </div>
 
+    <div class="border-t border-slate-800 pt-4 mt-4 space-y-3">
+      <h3 class="text-sm font-semibold text-slate-200">{{ t("logs") }}</h3>
+      <label for="log-retention-days" class="block text-sm text-slate-300">{{ t("log_retention_days") }}</label>
+      <select id="log-retention-days" name="log_retention_days" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+        {% for days in [7, 14, 30, 90] %}
+        <option value="{{ days }}" {% if (settings.log_retention_days or 30) == days %}selected{% endif %}>{{ days }} {{ t("days") }}</option>
+        {% endfor %}
+      </select>
+      <p class="text-xs text-slate-400">{{ t("log_retention_help") }}</p>
+      <details>
+        <summary class="text-sm text-slate-300 cursor-pointer">{{ t("log_retention_advanced") }}</summary>
+        <label for="log-max-size" class="block text-sm text-slate-300 mt-3 mb-2">{{ t("log_max_size_mb") }}</label>
+        <input id="log-max-size" name="log_max_size_mb" type="number" min="5" max="1000" step="1" required value="{{ settings.log_max_size_mb or 50 }}" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+      </details>
+    </div>
+
     <!-- Plex User Import Mode -->
     <div class="pt-4 mt-4 border-t border-slate-800">
       <label class="block text-sm font-medium text-white mb-2">
@@ -118,7 +134,7 @@
 
         <option
           value="shared_only"
-          {% if settings.plex_user_import_mode == 'shared_only' %}selected{% endif %}
+          {% if settings.plex_user_import_mode not in ['global'] %}selected{% endif %}
         >
           {{ t("plex_user_import_mode_shared_only") }}
         </option>

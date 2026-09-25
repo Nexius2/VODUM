@@ -1,5 +1,4 @@
 # Auto-split from app.py (keep URLs/endpoints intact)
-import json
 import os
 from pathlib import Path
 
@@ -7,7 +6,8 @@ from flask import (
     render_template, g, request, redirect, url_for, flash, session, current_app, send_file,
 )
 
-from logging_utils import get_logger, update_debug_mode_cache
+from logging_utils import get_logger, update_debug_mode_cache, handler
+from core.log_retention import validate_log_retention
 from core.i18n import get_translator, get_available_languages
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -44,6 +44,8 @@ SETTINGS_PAGE_COLUMNS = """
     enable_cron_jobs,
     maintenance_mode,
     debug_mode,
+    log_retention_days,
+    log_max_size_mb,
     web_secure_cookies,
     web_cookie_samesite,
     web_trust_proxy,
@@ -141,15 +143,6 @@ def register(app):
         db = get_db()
 
 
-        # plex user gathering mode
-        plex_user_import_mode = request.form.get(
-            "plex_user_import_mode",
-            "global"
-        ).strip().lower()
-
-        if plex_user_import_mode not in ("global", "shared_only"):
-            plex_user_import_mode = "global"
-
         # ------------------------------
         # Charger settings (source unique)
         # ------------------------------
@@ -161,6 +154,12 @@ def register(app):
             return redirect("/")
 
         settings = dict(settings)
+        plex_user_import_mode = str(request.form.get(
+            "plex_user_import_mode", settings.get("plex_user_import_mode") or "shared_only"
+        )).strip().lower()
+        if plex_user_import_mode not in ("global", "shared_only"):
+            plex_user_import_mode = "shared_only"
+
 
         def _sanitize_notifications_order(raw: str) -> str:
             allowed = {"email", "discord"}
@@ -184,8 +183,17 @@ def register(app):
         # Expiration handling (2 exclusive modes)
         # --------------------------------------------------
         expiry_mode = (request.form.get("expiry_mode") or settings.get("expiry_mode") or "none").strip()
-        if expiry_mode not in ("none", "warn_only", "warn_then_disable", "disable"):
+        if expiry_mode not in ("none", "warn_only", "warn_then_disable", "disable", "delete"):
             expiry_mode = "none"
+        if expiry_mode == "delete":
+            try:
+                deletion_delay = int(request.form.get("delete_after_expiry_days", settings.get("delete_after_expiry_days") or 30))
+                if not 1 <= deletion_delay <= 3650:
+                    raise ValueError()
+            except (ValueError, TypeError):
+                flash("subscription_delete_invalid_delay", "error")
+                return redirect(url_for("settings_page"))
+
 
         warn_then_disable_days_raw = (request.form.get("warn_then_disable_days") or settings.get("warn_then_disable_days") or 7)
         try:
@@ -200,9 +208,20 @@ def register(app):
         if expiry_mode not in ("warn_then_disable", "warn_only"):
             warn_then_disable_days = int(settings.get("warn_then_disable_days") or 7)
 
+        try:
+            log_days, log_size = validate_log_retention(
+                request.form.get("log_retention_days", settings.get("log_retention_days", 30)),
+                request.form.get("log_max_size_mb", settings.get("log_max_size_mb", 50)),
+            )
+        except (ValueError, TypeError):
+            flash(get_translator()("log_retention_invalid"), "error")
+            return redirect(url_for("settings_page"))
+
         old_enable_cron_jobs = 1 if int(settings.get("enable_cron_jobs") or 0) == 1 else 0
 
         new_values = {
+            "log_retention_days": log_days,
+            "log_max_size_mb": log_size,
             "default_language": request.form.get(
                 "default_language", settings["default_language"]
             ),
@@ -317,6 +336,8 @@ def register(app):
                 enable_cron_jobs = :enable_cron_jobs,
                 maintenance_mode = :maintenance_mode,
                 debug_mode = :debug_mode,
+                log_retention_days = :log_retention_days,
+                log_max_size_mb = :log_max_size_mb,
                 web_secure_cookies = :web_secure_cookies,
                 web_cookie_samesite = :web_cookie_samesite,
                 web_trust_proxy = :web_trust_proxy,
@@ -327,6 +348,10 @@ def register(app):
             new_values,
         )
         update_debug_mode_cache(bool(new_values["debug_mode"]))
+        try:
+            handler.maintain(force=True)
+        except OSError:
+            settings_logger.exception("Unable to clean application logs")
 
         # Both modes report on the same schedule; the option controls detail.
         db.execute("UPDATE tasks SET enabled=1, status='idle', next_run=NULL WHERE name='send_telemetry'")
@@ -342,29 +367,6 @@ def register(app):
         # --------------------------------------------------
         if old_enable_cron_jobs != new_values["enable_cron_jobs"]:
             apply_cron_master_switch(new_values["enable_cron_jobs"])
-
-        # --------------------------------------------------
-        # Purge immédiate des policies système si on n'est plus en warn_then_disable
-        # (évite d'attendre la prochaine exécution d'une tâche)
-        # --------------------------------------------------
-        if expiry_mode not in ("warn_then_disable", "warn_only"):
-            try:
-                rows = db.query("SELECT id, rule_value_json FROM stream_policies WHERE scope_type='user'") or []
-                purged = 0
-                for r in rows:
-                    try:
-                        rule = json.loads(r["rule_value_json"] or "{}")
-                    except Exception:
-                        rule = {}
-                    if rule.get("system_tag") == "expired_subscription":
-                        db.execute("DELETE FROM stream_policies WHERE id = ?", (int(r["id"]),))
-                        purged += 1
-
-                if purged:
-                    settings_logger.info(f"Purged {purged} expired_subscription system policy(ies) after settings change")
-            except Exception:
-                settings_logger.error("Failed to purge expired_subscription policies after settings change", exc_info=True)
-
 
         # --------------------------------------------------
         # Wakeup tasks impacted by settings changes

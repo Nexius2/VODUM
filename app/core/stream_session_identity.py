@@ -1,4 +1,5 @@
 import ipaddress
+import json
 from datetime import datetime
 
 from logging_utils import get_logger, is_debug_mode_enabled
@@ -43,7 +44,12 @@ def same_media_family(a: dict, b: dict) -> bool:
 
 def extract_machine_identifier(session: dict) -> str:
     try:
-        raw = session.get("_parsed_raw_json") or {}
+        raw = session.get("_parsed_raw_json") or session.get("raw_json") or {}
+        if isinstance(raw, str):
+            raw = json.loads(raw)
+        player = raw.get("Player") or {}
+        if isinstance(player, dict) and player.get("machineIdentifier"):
+            return str(player["machineIdentifier"]).strip().lower()
         for key in ("PlayerMachineIdentifier", "MachineIdentifier", "DeviceId", "ClientIdentifier", "clientIdentifier"):
             value = raw.get(key)
             if value:
@@ -89,7 +95,18 @@ def household_match_score(a: dict, b: dict) -> int:
 
 
 def is_probable_same_household(a: dict, b: dict) -> bool:
-    return household_match_score(a, b) >= HOUSEHOLD_DEVICE_MATCH_SCORE
+    # Product names, matching content and collector timestamps are shared by
+    # unrelated viewers. They cannot establish a common playback endpoint.
+    a_machine, b_machine = extract_machine_identifier(a), extract_machine_identifier(b)
+    if a_machine and b_machine:
+        return a_machine == b_machine
+    a_endpoint, _ = session_endpoint_identity(a)
+    b_endpoint, _ = session_endpoint_identity(b)
+    return bool(
+        a_endpoint and a_endpoint == b_endpoint
+        and same_media_family(a, b)
+        and session_time_delta_seconds(a, b) <= HOUSEHOLD_TRANSITION_SECONDS
+    )
 
 
 def session_endpoint_identity(session: dict) -> tuple[str, bool]:

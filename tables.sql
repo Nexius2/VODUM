@@ -502,7 +502,7 @@ CREATE TABLE IF NOT EXISTS settings (
     mailing_enabled INTEGER DEFAULT 0,
     skip_never_used_accounts INTEGER DEFAULT 0,
 	
-	plex_user_import_mode TEXT DEFAULT 'global',
+	plex_user_import_mode TEXT DEFAULT 'shared_only',
 
 	-- Telemetry
 	enable_anonymous_telemetry INTEGER DEFAULT 1,

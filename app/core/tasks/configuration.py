@@ -1,3 +1,6 @@
+import json
+
+
 class TaskConfigurationService:
     """Persist task enablement without coupling it to scheduler orchestration."""
 
@@ -106,7 +109,21 @@ class TaskConfigurationService:
     def sync_expiry_tasks_from_settings(self, expiry_mode, cron_enabled):
         expiry_mode = (expiry_mode or "none").strip()
         cron_enabled = self._enabled(cron_enabled)
+        # Both settings pages and automatic reconciliation use this path.
+        # Remove only our expiration policies; preserve all manual restrictions.
+        if expiry_mode in ("none", "disable", "delete"):
+            rows = self.db.query(
+                "SELECT id, rule_value_json FROM stream_policies WHERE scope_type='user'"
+            ) or []
+            for row in rows:
+                try:
+                    rule = json.loads(row["rule_value_json"] or "{}")
+                except (ValueError, TypeError):
+                    continue
+                if isinstance(rule, dict) and rule.get("system_tag") == "expired_subscription":
+                    self.db.execute("DELETE FROM stream_policies WHERE id=?", (row["id"],))
         desired = {
+            "delete_expired_users": 1 if expiry_mode == "delete" else 0,
             "disable_expired_users": 1 if expiry_mode == "disable" else 0,
             "expired_subscription_manager": 1 if expiry_mode in ("warn_only", "warn_then_disable") else 0,
         }

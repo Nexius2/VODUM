@@ -337,10 +337,9 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
 
                 ips.add(ip)
 
-            if len(ips) <= max_ips:
-                continue
-
             if _should_grace_coherent_ip_switch(policy, user_key, deduped_sessions, ips, max_ips):
+                continue
+            if len(ips) <= max_ips:
                 continue
 
             # An IP-limit violation must be resolved at IP level. Killing only
@@ -438,6 +437,13 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
 
         for key, ip_sessions in by_key.items():
             counted_ip_sessions = _deduplicate_household_sessions(ip_sessions)
+
+            if should_defer_stream_violation(
+                policy_id=int(policy.get("id") or 0), user_key=("ip", key),
+                sessions=counted_ip_sessions, limit=max_streams,
+                current_count=len(counted_ip_sessions),
+            ):
+                continue
 
             if len(counted_ip_sessions) <= max_streams:
                 continue

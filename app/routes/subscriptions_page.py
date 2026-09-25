@@ -118,8 +118,17 @@ def register(app):
         settings = dict(settings) if settings else {}
 
         expiry_mode = (request.form.get("expiry_mode") or settings.get("expiry_mode") or "none").strip()
-        if expiry_mode not in ("none", "warn_only", "warn_then_disable", "disable"):
+        if expiry_mode not in ("none", "warn_only", "warn_then_disable", "disable", "delete"):
             expiry_mode = "none"
+        if expiry_mode == "delete":
+            try:
+                deletion_delay = int(request.form.get("delete_after_expiry_days", settings.get("delete_after_expiry_days") or 30))
+                if not 1 <= deletion_delay <= 3650:
+                    raise ValueError()
+            except (ValueError, TypeError):
+                flash("subscription_delete_invalid_delay", "error")
+                return redirect(url_for("subscriptions"))
+
 
         try:
             default_subscription_days = int(
@@ -269,7 +278,7 @@ def register(app):
 
         sync_expiry_tasks_from_settings(
             expiry_mode,
-            int(settings.get("enable_cron_jobs") or 1),
+            int(settings.get("enable_cron_jobs") or 0),
         )
 
         if expiry_mode in ("warn_only", "warn_then_disable") or usage_risk_send_stream_blocked_message:
@@ -282,7 +291,8 @@ def register(app):
                 """
             )
 
-            force_task_run("expired_subscription_manager")
+            if int(settings.get("enable_cron_jobs") or 0) and expiry_mode in ("warn_only", "warn_then_disable"):
+                force_task_run("expired_subscription_manager")
 
         if usage_risk_send_upgrade_suggestions:
             db.execute(

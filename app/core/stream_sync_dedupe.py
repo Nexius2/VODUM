@@ -58,6 +58,10 @@ def _transition_state(sessions: list[dict]) -> tuple[set[str], float, float]:
 
 def deduplicate_user_stream_sessions(policy: dict, user_key, sessions: list[dict]) -> list[dict]:
     if len(sessions) < 2:
+        prefix = f"policy:{int(policy.get('id') or 0)}|user:{user_key}|"
+        for key in list(STREAM_SYNC_GRACE_CACHE):
+            if key.startswith(prefix):
+                STREAM_SYNC_GRACE_CACHE.pop(key, None)
         return sessions
     _cleanup_cache()
     groups, passthrough = {}, []
@@ -77,51 +81,21 @@ def deduplicate_user_stream_sessions(policy: dict, user_key, sessions: list[dict
             kept.extend(endpoint_sessions)
             continue
         representative = endpoint_sessions[0]
-        if bucket["strong"]:
-            kept.append(representative)
-            if is_debug_mode_enabled():
-                logger.debug("[stream_sync_dedupe] merged same machine | policy=%s | user=%s | endpoint=%s | sessions=%s", policy_id, user_key, endpoint_key, len(endpoint_sessions))
-            continue
-        # Plex can replace a playback session while leaving the previous row
-        # visible for a short time.  When the endpoint and media are coherent,
-        # this is one playback transition, not several simultaneous streams.
-        # Keep deduplicating for the whole overlap instead of counting every
-        # stale replacement after the generic two-run grace expires.
-        if is_coherent_media_transition(endpoint_sessions):
-            kept.append(representative)
-            if is_debug_mode_enabled():
-                logger.debug(
-                    "[stream_sync_dedupe] merged coherent playback replacements | policy=%s | user=%s | endpoint=%s | sessions=%s",
-                    policy_id,
-                    user_key,
-                    endpoint_key,
-                    len(endpoint_sessions),
-                )
-            continue
-        if not _is_rapid_transition_chain(endpoint_sessions):
+        # Even a strong device ID can expose multiple persistent playbacks.
+        # Only collapse temporarily; count all sessions after the deadline.
+        if not (bucket["strong"] or is_coherent_media_transition(endpoint_sessions)
+                or _is_rapid_transition_chain(endpoint_sessions)):
             kept.extend(endpoint_sessions)
             continue
         key = _grace_key(policy_id, user_key, endpoint_key)
         now = time.time()
         entry = STREAM_SYNC_GRACE_CACHE.get(key)
-        session_keys, earliest_start, latest_start = _transition_state(endpoint_sessions)
-        previous_keys = set((entry or {}).get("session_keys") or ())
-        previous_latest_start = float((entry or {}).get("latest_start") or 0)
-        is_distinct_later_burst = bool(
-            entry
-            and session_keys
-            and previous_keys
-            and session_keys.isdisjoint(previous_keys)
-            and earliest_start - previous_latest_start > STREAM_SYNC_TRANSITION_SECONDS
-        )
-        if entry is None or is_distinct_later_burst:
+        if entry is None:
             entry = {"first_seen": now, "ts": now}
         else:
             entry["ts"] = now
-        entry["session_keys"] = sorted(session_keys)
-        entry["latest_start"] = latest_start
         STREAM_SYNC_GRACE_CACHE[key] = entry
-        elapsed = now - float(entry.get("first_seen") or now)
+        elapsed = now - float(entry["first_seen"])
         if elapsed < STREAM_SYNC_GRACE_SECONDS:
             kept.append(representative)
             logger.info(

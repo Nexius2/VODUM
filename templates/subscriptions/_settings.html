@@ -28,21 +28,7 @@
           >
         </div>
 
-        <div>
-          <label class="block text-sm mb-1 text-slate-300">
-            {{ t("delete_user_after_expiry") }}
-          </label>
-          <input
-            type="number"
-            min="1"
-            name="delete_after_expiry_days"
-            value="{{ settings.delete_after_expiry_days }}"
-            class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm"
-          >
-          <p class="text-xs text-slate-500 mt-1">
-            {{ t("delete_after_expiry_days_help") }}
-          </p>
-        </div>
+
 
         <div>
           <label class="block text-sm mb-1 text-slate-300">{{ t("subscription_currency") }}</label>
@@ -308,6 +294,8 @@
             </div>
           </span>
         </label>
+
+        {% include "subscriptions/_expiry_delete_option.html" %}
 
       </div>
     </div>

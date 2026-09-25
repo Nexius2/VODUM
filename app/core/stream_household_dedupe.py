@@ -3,7 +3,6 @@ from typing import Dict, List
 
 from logging_utils import get_logger, is_debug_mode_enabled
 from core.stream_enforcer_config import HOUSEHOLD_MEMORY_SECONDS
-from core.stream_session_identity import household_match_score, is_probable_same_household
 
 
 logger = get_logger("stream_enforcer")
@@ -11,8 +10,6 @@ RECENT_SESSION_CACHE: Dict[str, List[dict]] = {}
 
 
 def deduplicate_household_sessions(sessions: List[dict]) -> List[dict]:
-    kept = []
-
     cleanup_recent_session_cache()
 
     # Only sessions returned by the current live-session query may participate
@@ -34,55 +31,10 @@ def deduplicate_household_sessions(sessions: List[dict]) -> List[dict]:
             current_sessions.append(sess)
             seen_session_keys.add(session_key)
 
-    for sess in current_sessions:
-        duplicate = False
+    # Preserve independent playback sessions. Endpoint/model similarities
+    # are handled by bounded policy grace, not permanent household merging.
+    return current_sessions
 
-        for existing in kept:
-            if is_probable_same_household(sess, existing):
-                duplicate = True
-
-                if is_debug_mode_enabled():
-                    logger.debug(
-                        "[household_dedupe] merged sessions | user=%s | ip_a=%s | ip_b=%s | device_a=%s | device_b=%s | title_a=%s | title_b=%s | score=%s",
-                        sess.get("media_username") or sess.get("external_user_id"),
-                        sess.get("ip"),
-                        existing.get("ip"),
-                        sess.get("device"),
-                        existing.get("device"),
-                        sess.get("title"),
-                        existing.get("title"),
-                        household_match_score(sess, existing),
-                    )
-
-                break
-
-        if not duplicate:
-            kept.append(sess)
-
-            user_key = str(
-                sess.get("vodum_user_id")
-                or sess.get("external_user_id")
-                or "unknown"
-            )
-
-            cache_entry = dict(sess)
-            cache_entry["_cache_ts"] = time.time()
-
-            RECENT_SESSION_CACHE.setdefault(user_key, []).append(cache_entry)
-
-            # sécurité mémoire
-            if len(RECENT_SESSION_CACHE[user_key]) > 25:
-                RECENT_SESSION_CACHE[user_key] = RECENT_SESSION_CACHE[user_key][-25:]
-
-    if is_debug_mode_enabled():
-        if is_debug_mode_enabled():
-            logger.debug(
-                "[smart_household] dedupe result original=%s kept=%s",
-                len(sessions),
-                len(kept),
-            )
-
-    return kept
 
 def cleanup_recent_session_cache():
     now = time.time()

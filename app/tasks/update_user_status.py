@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-import json
 from datetime import datetime, date, timedelta
 
 from tasks_engine import task_logs
 from logging_utils import get_logger, is_debug_mode_enabled
+from core.expiration_rules import only_pending_plex_accounts, parse_expiration_date, is_expired, load_expiration_accounts, user_is_exempt
 
 
 log = get_logger("update_user_status")
@@ -12,23 +12,6 @@ log = get_logger("update_user_status")
 # ----------------------------------------------------
 # Helpers
 # ----------------------------------------------------
-def _row_value(row, key, default=None):
-    try:
-        return row[key]
-    except Exception:
-        return default
-
-
-def _json_dict_or_empty(raw):
-    if not raw:
-        return {}
-    try:
-        data = json.loads(raw) if isinstance(raw, str) else raw
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
 def _parse_iso_date(value):
     if not value:
         return None
@@ -39,49 +22,7 @@ def _parse_iso_date(value):
 
 
 def _user_has_pending_plex_invite(db, vodum_user_id: int) -> bool:
-    """
-    True si :
-    - le user a au moins un media_user Plex
-    - aucun media_user Plex n'est accepté
-    - au moins un media_user Plex est encore pending
-    """
-    rows = db.query(
-        """
-        SELECT accepted_at, external_user_id, details_json, email, username
-        FROM media_users
-        WHERE vodum_user_id = ?
-          AND type = 'plex'
-        """,
-        (vodum_user_id,),
-    ) or []
-
-    if not rows:
-        return False
-
-    any_accepted = False
-    any_pending = False
-
-    for row in rows:
-        accepted_at = str(_row_value(row, "accepted_at") or "").strip()
-        if accepted_at:
-            any_accepted = True
-            continue
-
-        details = _json_dict_or_empty(_row_value(row, "details_json"))
-        invite_state = details.get("plex_invite_state") or {}
-
-        if isinstance(invite_state, dict) and bool(invite_state.get("is_pending")):
-            any_pending = True
-            continue
-
-        external_user_id = str(_row_value(row, "external_user_id") or "").strip()
-        email = str(_row_value(row, "email") or "").strip()
-        username = str(_row_value(row, "username") or "").strip()
-
-        if not external_user_id and (email or username):
-            any_pending = True
-
-    return any_pending and not any_accepted
+    return only_pending_plex_accounts(db, vodum_user_id)
 
 
 def _compute_pending_invite_expiration(expiration_date, today, default_subscription_days):
@@ -114,13 +55,15 @@ def compute_status(expiration_date, today, preavis_days, reminder_days):
 
     # 2️⃣ Parsing date
     try:
-        exp_date = datetime.strptime(expiration_date, "%Y-%m-%d").date()
+        exp_date = parse_expiration_date(expiration_date)
+        if exp_date is None:
+            return "active"
     except Exception:
         log.warning(f"Date expiration invalide ignorée: {expiration_date}")
         return "active"
 
     # 3️⃣ Expiré
-    if exp_date <= today:
+    if is_expired(exp_date, today):
         return "expired"
 
     delta = (exp_date - today).days
@@ -209,6 +152,7 @@ def run(task_id: int, db):
             LEFT JOIN media_users mu ON mu.vodum_user_id = u.id
             WHERE (u.expiration_date IS NULL OR u.expiration_date = '')
               AND COALESCE(st.is_lifetime, 0) = 0
+              AND COALESCE(u.expiration_date_override, 0) = 0
             GROUP BY u.id
             HAVING COUNT(mu.id) = 0
             """
@@ -219,7 +163,7 @@ def run(task_id: int, db):
             uid = o["id"]
             old_status = o["status"] or "active"
 
-            if old_status == "expired":
+            if old_status in ("expired", "suspended", "unfriended", "disabled", "removed"):
                 continue
 
             db.execute(
@@ -244,18 +188,17 @@ def run(task_id: int, db):
         for user in users:
             uid = user["id"]
             old_status = user["status"]
-            expiration_override = int(user["expiration_date_override"] or 0)
             subscription_is_lifetime = int(user["subscription_is_lifetime"] or 0) == 1
-            expiration_override_enabled = expiration_override == 1 or subscription_is_lifetime
+            expiration_override_enabled = user_is_exempt(user, load_expiration_accounts(db, uid))
             expiration_date = user["expiration_date"]
 
             # Statuts manuels / administratifs :
             # ne jamais les écraser automatiquement avec le calcul de date.
-            if old_status in ("suspended", "unfriended"):
+            if old_status in ("suspended", "unfriended", "disabled", "removed"):
                 continue
 
             # ✅ Cas spécial : invitation Plex encore non acceptée
-            if _user_has_pending_plex_invite(db, uid):
+            if not expiration_override_enabled and _user_has_pending_plex_invite(db, uid):
                 new_expiration = _compute_pending_invite_expiration(
                     expiration_date=expiration_date,
                     today=today,
@@ -313,13 +256,7 @@ def run(task_id: int, db):
 
             if expiration_override_enabled:
                 try:
-                    if expiration_date:
-                        exp_date = datetime.strptime(
-                            expiration_date,
-                            "%Y-%m-%d"
-                        ).date()
-                    else:
-                        exp_date = today
+                    exp_date = parse_expiration_date(expiration_date) or today
 
                     warning_date = exp_date - timedelta(days=preavis_days)
 

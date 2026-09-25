@@ -1,5 +1,18 @@
 from __future__ import annotations
 
+from web.pagination import page_bounds
+
+
+def message_page(db, conversation_id: int, page=1):
+    total = db.query_one("SELECT COUNT(*) AS cnt FROM portal_messages WHERE conversation_id=?", (int(conversation_id),))
+    pagination = page_bounds(page, 6, total["cnt"] if total else 0)
+    messages = [dict(row) for row in db.query(
+        "SELECT id,sender_type,body,created_at FROM portal_messages WHERE conversation_id=? "
+        "ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?",
+        (int(conversation_id), pagination["per_page"], pagination["offset"]),
+    ) or []]
+    return messages, pagination
+
 def conversation_for_user(db, vodum_user_id: int, *, create: bool = False):
     row = db.query_one(
         """SELECT c.id,c.status,c.created_at,c.updated_at,pa.id AS portal_account_id,
@@ -35,10 +48,18 @@ def add_message(db, conversation_id: int, sender_type: str, body: str):
     db.execute("UPDATE portal_conversations SET status='open',updated_at=CURRENT_TIMESTAMP WHERE id=?", (int(conversation_id),))
 
 
-def mark_read(db, conversation_id: int, reader: str):
+def mark_read(db, conversation_id: int, reader: str, *, message_ids=None):
     column = "read_by_admin" if reader == "admin" else "read_by_user"
     sender = "user" if reader == "admin" else "admin"
-    db.execute(f"UPDATE portal_messages SET {column}=1 WHERE conversation_id=? AND sender_type=?", (int(conversation_id), sender))
+    params = [int(conversation_id), sender]
+    restriction = ""
+    if message_ids is not None:
+        ids = [int(value) for value in message_ids]
+        if not ids:
+            return
+        restriction = " AND id IN (" + ",".join("?" for _ in ids) + ")"
+        params.extend(ids)
+    db.execute(f"UPDATE portal_messages SET {column}=1 WHERE conversation_id=? AND sender_type=?{restriction}", tuple(params))
 
 
 def unread_messages_for_user(db, vodum_user_id: int) -> int:

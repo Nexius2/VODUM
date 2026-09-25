@@ -15,6 +15,7 @@ import json
 from datetime import date, datetime
 
 from logging_utils import get_logger
+from core.expiration_rules import only_pending_plex_accounts, user_is_exempt, load_expiration_accounts, parse_expiration_date
 from web.helpers import get_db
 from tasks_engine import task_logs
 from notifications_utils import is_email_ready
@@ -44,67 +45,9 @@ from mailing_utils import build_user_context, render_mail
 
 log = get_logger("send_expiration_emails")
 
-def _row_value(row, key, default=None):
-    try:
-        return row[key]
-    except Exception:
-        return default
-
-
-def _json_dict_or_empty(raw):
-    if not raw:
-        return {}
-    try:
-        data = json.loads(raw) if isinstance(raw, str) else raw
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
 def _user_has_pending_plex_invite(db, vodum_user_id: int) -> bool:
-    """
-    True si :
-    - le user a au moins un media_user Plex
-    - aucun media_user Plex n'est accepté
-    - au moins un media_user Plex est encore pending
-    """
-    rows = db.query(
-        """
-        SELECT accepted_at, external_user_id, details_json, email, username
-        FROM media_users
-        WHERE vodum_user_id = ?
-          AND type = 'plex'
-        """,
-        (vodum_user_id,),
-    ) or []
+    return only_pending_plex_accounts(db, vodum_user_id)
 
-    if not rows:
-        return False
-
-    any_accepted = False
-    any_pending = False
-
-    for row in rows:
-        accepted_at = str(_row_value(row, "accepted_at") or "").strip()
-        if accepted_at:
-            any_accepted = True
-            continue
-
-        details = _json_dict_or_empty(_row_value(row, "details_json"))
-        invite_state = details.get("plex_invite_state") or {}
-
-        if isinstance(invite_state, dict) and bool(invite_state.get("is_pending")):
-            any_pending = True
-            continue
-
-        external_user_id = str(_row_value(row, "external_user_id") or "").strip()
-        email = str(_row_value(row, "email") or "").strip()
-        username = str(_row_value(row, "username") or "").strip()
-
-        if not external_user_id and (email or username):
-            any_pending = True
-
-    return any_pending and not any_accepted
 
 def _parse_payload(payload_raw) -> dict:
     if not payload_raw:
@@ -854,8 +797,10 @@ def run(task_id: int | None = None, db=None):
               u.expiration_date,
               u.discord_user_id,
               u.notifications_order_override,
-              u.subscription_template_id
+              u.subscription_template_id, u.status, u.expiration_date_override,
+              COALESCE(st.is_lifetime,0) AS subscription_is_lifetime
             FROM vodum_users u
+            LEFT JOIN subscription_templates st ON st.id=u.subscription_template_id
             WHERE u.expiration_date IS NOT NULL
             """
         )
@@ -871,11 +816,13 @@ def run(task_id: int | None = None, db=None):
 
             # Ne jamais envoyer de mails d'expiration tant que l'invitation Plex
             # n'est pas réellement acceptée.
+            if user_is_exempt(u, load_expiration_accounts(db, uid)) or str(u.get("status") or "").lower() in ("suspended", "unfriended", "disabled", "removed"):
+                continue
             if _user_has_pending_plex_invite(db, uid):
                 log.info(f"[USER {uid}] pending Plex invite → expiration notifications skipped")
                 continue
 
-            exp = _parse_date_iso(u.get("expiration_date"))
+            exp = parse_expiration_date(u.get("expiration_date"))
             if not exp:
                 continue
 

@@ -1,6 +1,7 @@
 """Read-only data builders for dashboard widgets."""
 
 from collections import Counter
+import logging
 
 from core.aggregate_cache import cached_aggregate
 from core.dashboard_servers import dashboard_server_preview
@@ -149,7 +150,8 @@ def get_dashboard_usage_risk(db):
             ) or []
         dashboard = _build_usage_risk_dashboard(report, history)
     except Exception:
-        pass
+        logging.getLogger(__name__).exception("Usage risk dashboard calculation failed")
+        dashboard["error"] = True
     return summary, dashboard
 
 def get_dashboard_servers(db):
