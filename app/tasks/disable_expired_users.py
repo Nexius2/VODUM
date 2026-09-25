@@ -25,74 +25,13 @@ import json
 
 from tasks_engine import task_logs
 from logging_utils import get_logger
+from core.expiration_rules import eligible_expiration_accounts, is_expired
 from core.media_jobs import insert_plex_media_job, insert_jellyfin_media_job
 
 log = get_logger("disable_expired_users")
 
 SYSTEM_TAG = "expired_subscription"
 
-
-def _row_value(row, key, default=None):
-    try:
-        return row[key]
-    except Exception:
-        return default
-
-
-def _json_dict_or_empty(raw):
-    if not raw:
-        return {}
-    try:
-        data = json.loads(raw) if isinstance(raw, str) else raw
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
-def _user_has_pending_plex_invite(db, vodum_user_id: int) -> bool:
-    """
-    True si :
-    - le user a au moins un media_user Plex
-    - aucun media_user Plex n'est accepté
-    - au moins un media_user Plex est encore pending
-    """
-    rows = db.query(
-        """
-        SELECT accepted_at, external_user_id, details_json, email, username
-        FROM media_users
-        WHERE vodum_user_id = ?
-          AND type = 'plex'
-        """,
-        (vodum_user_id,),
-    ) or []
-
-    if not rows:
-        return False
-
-    any_accepted = False
-    any_pending = False
-
-    for row in rows:
-        accepted_at = str(_row_value(row, "accepted_at") or "").strip()
-        if accepted_at:
-            any_accepted = True
-            continue
-
-        details = _json_dict_or_empty(_row_value(row, "details_json"))
-        invite_state = details.get("plex_invite_state") or {}
-
-        if isinstance(invite_state, dict) and bool(invite_state.get("is_pending")):
-            any_pending = True
-            continue
-
-        external_user_id = str(_row_value(row, "external_user_id") or "").strip()
-        email = str(_row_value(row, "email") or "").strip()
-        username = str(_row_value(row, "username") or "").strip()
-
-        if not external_user_id and (email or username):
-            any_pending = True
-
-    return any_pending and not any_accepted
 
 def _purge_expired_subscription_policies(db) -> int:
     """
@@ -110,7 +49,7 @@ def _purge_expired_subscription_policies(db) -> int:
         except Exception:
             rule = {}
 
-        if rule.get("system_tag") == SYSTEM_TAG:
+        if isinstance(rule, dict) and rule.get("system_tag") == SYSTEM_TAG:
             db.execute("DELETE FROM stream_policies WHERE id = ?", (int(r["id"]),))
             removed += 1
 
@@ -157,6 +96,7 @@ def run(task_id: int, db):
             SELECT DISTINCT
                 vu.id            AS vodum_user_id,
                 vu.username      AS vodum_username,
+                vu.expiration_date,
                 mu.id            AS media_user_id,
                 mu.server_id     AS server_id,
                 mu.type          AS provider
@@ -172,12 +112,11 @@ def run(task_id: int, db):
             JOIN servers s_lib
                 ON s_lib.id = l.server_id
             WHERE vu.expiration_date IS NOT NULL
-              AND date(vu.expiration_date) < date(?)
+              AND l.server_id = mu.server_id
               AND LOWER(TRIM(mu.type)) IN ('plex','jellyfin')
               AND LOWER(TRIM(s_mu.type)) = LOWER(TRIM(mu.type))
               AND LOWER(TRIM(s_lib.type)) = LOWER(TRIM(mu.type))
             """,
-            (today.isoformat(),),
         )
 
         if not rows:
@@ -186,26 +125,29 @@ def run(task_id: int, db):
             task_logs(task_id, "info", msg)
             return
 
-        # Exclure les users Plex encore invités / pending :
-        # ils ne doivent pas être désactivés avant acceptation réelle.
+        # Exemptions apply to the user; pending invitations only to that account.
         filtered_rows = []
-        skipped_pending_invites = set()
-
+        skipped_ineligible = set()
+        eligibility = {}
         for r in rows:
+            if not is_expired(r["expiration_date"], today):
+                continue
             vodum_user_id = int(r["vodum_user_id"])
-            if _user_has_pending_plex_invite(db, vodum_user_id):
-                skipped_pending_invites.add(vodum_user_id)
+            if vodum_user_id not in eligibility:
+                eligibility[vodum_user_id] = {int(a["id"]) for a in eligible_expiration_accounts(db, vodum_user_id)}
+            if int(r["media_user_id"]) not in eligibility[vodum_user_id]:
+                skipped_ineligible.add(vodum_user_id)
                 continue
             filtered_rows.append(r)
 
         rows = filtered_rows
 
         if not rows:
-            msg = "No expired users to disable after pending-invite filtering."
+            msg = "No expired users to disable after eligibility filtering."
             log.info(msg)
-            if skipped_pending_invites:
+            if skipped_ineligible:
                 log.info(
-                    f"Skipped pending Plex invite user(s): {sorted(skipped_pending_invites)}"
+                    f"Skipped exempt users or pending accounts for user(s): {sorted(skipped_ineligible)}"
                 )
             task_logs(task_id, "info", msg)
             return
@@ -213,13 +155,15 @@ def run(task_id: int, db):
         vodum_ids = sorted({r["vodum_user_id"] for r in rows})
         log.info(
             f"{len(vodum_ids)} Expired user(s) to disable "
-            f"(pending Plex invites skipped={len(skipped_pending_invites)})"
+            f"(ineligible users/accounts skipped={len(skipped_ineligible)})"
         )
 
         processed_media = 0
         created_jobs = 0
 
         for r in rows:
+            if not is_expired(r["expiration_date"], today):
+                continue
             vodum_user_id = int(r["vodum_user_id"])
             vodum_username = r["vodum_username"]
             media_user_id = int(r["media_user_id"])

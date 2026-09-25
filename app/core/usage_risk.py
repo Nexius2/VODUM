@@ -1,6 +1,10 @@
 import ipaddress
 import json
 
+from core.stream_session_identity import extract_machine_identifier
+from core.stream_enforcer_repository import load_enabled_policies
+from core.stream_policy_resolution import effective_policies_for_session
+
 
 FIXED_DEVICE_KEYWORDS = (
     "tv",
@@ -56,7 +60,7 @@ HIGH_RISK_RULES = (
 
 def _safe_int(value, default=0):
     try:
-        return int(value or default)
+        return int(default if value is None or value == "" else value)
     except Exception:
         return default
 
@@ -202,27 +206,19 @@ def _suggest_subscription(db, current_template_id, current_value, needed_streams
     return candidates[0] if candidates else None
 
 
-def _subscription_ip_limit(policies_json):
-    """Return the enabled IP allowance, or None when the plan is unlimited."""
-    try:
-        policies = json.loads(policies_json or "[]")
-    except Exception:
-        policies = []
-
+def _effective_ip_limit(policies, context):
+    """Use the same inheritance and user overrides as stream enforcement."""
+    if _safe_int(context.get("max_streams_override"), 0) > 0:
+        return None
     limits = []
-    for policy in policies:
-        if not isinstance(policy, dict):
-            continue
-        if str(policy.get("is_enabled", "1")) != "1":
-            continue
+    for policy in effective_policies_for_session(policies, context):
         if (policy.get("rule_type") or "").strip() != "max_ips_per_user":
             continue
-        rule = policy.get("rule") if isinstance(policy.get("rule"), dict) else {}
-        maximum = _safe_int(rule.get("max"), 0)
+        rule = json.loads(policy.get("rule_value_json") or "{}")
+        maximum = _safe_int(rule.get("max"), 1)
         if maximum > 0:
             limits.append(maximum)
-
-    return max(limits) if limits else None
+    return min(limits) if limits else None
 
 
 def _extract_session_identity(sess):
@@ -230,11 +226,11 @@ def _extract_session_identity(sess):
     ip = str(sess.get("ip") or "").strip()
 
     machine_id = (
-        sess.get("machine_id")
+        extract_machine_identifier(sess)
+        or sess.get("machine_id")
         or sess.get("client_identifier")
         or sess.get("player_uuid")
-        or sess.get("session_id")
-        or label
+        or f"{label}|{ip}"
     )
 
     return {
@@ -249,7 +245,7 @@ def _extract_session_identity(sess):
 
 def _score_usage_item(item, min_kills):
     distinct_ips = len(item["ips"])
-    fixed_devices = len(item["fixed_devices"])
+    fixed_devices = len(item.get("fixed_device_keys", item["fixed_devices"]))
     mobile_devices = len(item["mobile_devices"])
     browser_devices = len(item["browser_devices"])
     kills_7d = item["kills_7d"]
@@ -297,7 +293,7 @@ def _score_usage_item(item, min_kills):
         score += 20
         add_reason("multiple fixed devices", "multiple_fixed_devices")
 
-    fixed_ip_pairs = item["fixed_device_ip_pairs"]
+    fixed_ip_pairs = item.get("fixed_device_identity_ip_pairs", item["fixed_device_ip_pairs"])
     if len(fixed_ip_pairs) >= 2:
         unique_pair_ips = {pair.split(" @ ", 1)[1] for pair in fixed_ip_pairs if " @ " in pair}
         unique_pair_devices = {pair.split(" @ ", 1)[0] for pair in fixed_ip_pairs if " @ " in pair}
@@ -530,11 +526,13 @@ def build_usage_risk_report(db, filters=None, persist_history=True):
           e.ips_json,
           e.details_json,
           e.server_id,
+          e.provider,
           p.rule_type,
           s.name AS server_name,
           vu.username,
           vu.email,
           vu.subscription_template_id,
+          vu.max_streams_override,
           st.name AS subscription_name,
           st.subscription_value,
           st.policies_json AS subscription_policies_json
@@ -551,9 +549,11 @@ def build_usage_risk_report(db, filters=None, persist_history=True):
     ) or []
 
     by_user = {}
+    enabled_policies = load_enabled_policies(db) if rows else []
 
     for row in rows:
         row = dict(row)
+        allowed_ips = _effective_ip_limit(enabled_policies, row)
 
         actor_key = (
             f"vodum:{row.get('vodum_user_id')}"
@@ -571,7 +571,7 @@ def build_usage_risk_report(db, filters=None, persist_history=True):
                 "subscription_template_id": row.get("subscription_template_id"),
                 "subscription_name": row.get("subscription_name") or "—",
                 "subscription_value": _safe_float(row.get("subscription_value"), 0),
-                "allowed_ips": _subscription_ip_limit(row.get("subscription_policies_json")),
+                "allowed_ips": allowed_ips,
                 "last_activity": row.get("created_at"),
                 "kills_7d": 0,
                 "kills_30d": 0,
@@ -580,6 +580,8 @@ def build_usage_risk_report(db, filters=None, persist_history=True):
                 "kills": 0,
                 "ips": set(),
                 "fixed_devices": set(),
+                "fixed_device_keys": set(),
+                "fixed_device_identity_ip_pairs": set(),
                 "mobile_devices": set(),
                 "browser_devices": set(),
                 "fixed_device_ip_pairs": set(),
@@ -587,6 +589,13 @@ def build_usage_risk_report(db, filters=None, persist_history=True):
                 "servers": set(),
             },
         )
+
+        # The report aggregates multiple server/provider contexts. Do not
+        # apply a stricter context's ceiling to usage authorized elsewhere.
+        if allowed_ips is None or item["allowed_ips"] is None:
+            item["allowed_ips"] = None
+        else:
+            item["allowed_ips"] = max(item["allowed_ips"], allowed_ips)
 
         if row.get("created_at") and row.get("created_at") > (item.get("last_activity") or ""):
             item["last_activity"] = row.get("created_at")
@@ -639,8 +648,10 @@ def build_usage_risk_report(db, filters=None, persist_history=True):
 
                     if session_identity["is_fixed"]:
                         item["fixed_devices"].add(label)
+                        item["fixed_device_keys"].add(session_identity["device_key"])
                         if _is_public_ip(ip):
                             item["fixed_device_ip_pairs"].add(f"{label} @ {ip}")
+                            item["fixed_device_identity_ip_pairs"].add(f"{session_identity['device_key']} @ {ip}")
                     elif session_identity["is_mobile"]:
                         item["mobile_devices"].add(label)
                     elif session_identity["is_browser"]:
@@ -689,7 +700,7 @@ def build_usage_risk_report(db, filters=None, persist_history=True):
 
     for item in by_user.values():
         distinct_ips = len(item["ips"])
-        fixed_devices = len(item["fixed_devices"])
+        fixed_devices = len(item["fixed_device_keys"])
         kills_30d = item["kills_30d"] or item["kills"]
 
         score, reasons, reason_items = _score_usage_item(item, min_kills)

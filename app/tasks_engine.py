@@ -371,6 +371,11 @@ def recover_stuck_tasks(max_minutes=30):
 def _watchdog_loop():
     while True:
         recover_stuck_tasks()
+        try:
+            from logging_utils import handler
+            handler.maintain()
+        except OSError:
+            logger.exception("Unable to clean application logs")
         time.sleep(300)
 
 

@@ -2,6 +2,14 @@ def seed_default_tasks(conn, cursor, *, ensure_row) -> None:
     # 3. Injecter les données par défaut
     # -------------------------------------------------
 
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "delete_expired_users",
+        "description": "task_description.delete_expired_users",
+        "schedule": "33 * * * *",
+        "enabled": 0,
+        "status": "disabled",
+    })
+
     # Tâche sync_plex
     ensure_row(cursor, "tasks", "name = :name", {
         "name": "sync_plex",

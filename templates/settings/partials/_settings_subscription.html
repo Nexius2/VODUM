@@ -15,20 +15,7 @@
       >
     </div>
 
-    <!-- Delete after expiration (global cleanup) -->
-    <div>
-      <label class="block text-sm mb-1 text-slate-300">{{ t("delete_user_after_expiry") }}</label>
-      <input
-        type="number"
-        name="delete_after_expiry_days"
-        min="1"
-        value="{{ settings.delete_after_expiry_days }}"
-        class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm"
-      >
-      <p class="text-xs text-slate-500 mt-1">
-        {{ t("delete_after_expiry_days_help") }}
-      </p>
-    </div>
+
 
     <!-- Expiration behavior (exclusive modes) -->
     <div class="space-y-3">
@@ -113,6 +100,7 @@
           <span class="block text-xs text-slate-400 mt-1">{{ t("subscription_expiry_mode_none_help") }}</span>
         </span>
       </label>
+      {% include "subscriptions/_expiry_delete_option.html" %}
     </div>
 
   </div>

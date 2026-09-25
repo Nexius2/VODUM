@@ -66,9 +66,9 @@ class TaskAutoEnableService:
         if not settings:
             return
         mode = str(settings["expiry_mode"] or "none").strip()
-        cron_enabled = int(settings["enable_cron_jobs"] or 1)
+        cron_enabled = int(settings["enable_cron_jobs"] or 0)
         self.sync_expiry(mode, cron_enabled)
-        if mode in ("warn_only", "warn_then_disable"):
+        if cron_enabled and mode in ("warn_only", "warn_then_disable"):
             self.force_run("expired_subscription_manager")
 
     def run_pass(self):

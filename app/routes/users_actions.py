@@ -30,45 +30,10 @@ def _delete_vodum_user_everywhere(db, user_id: int) -> bool:
     with db._lock:
         cur = db.conn.cursor()
         try:
-            cur.execute(
-                "SELECT id FROM vodum_users WHERE id = ?",
-                (user_id,),
-            )
-            row = cur.fetchone()
-            if row is None:
-                return False
-
-            # Tables sans FK utile / nettoyage manuel
-            cur.execute(
-                "DELETE FROM stream_policies WHERE scope_type = 'user' AND scope_id = ?",
-                (user_id,),
-            )
-            cur.execute(
-                "DELETE FROM subscription_gift_run_users WHERE vodum_user_id = ?",
-                (user_id,),
-            )
-            cur.execute(
-                "DELETE FROM stream_enforcement_state WHERE vodum_user_id = ?",
-                (user_id,),
-            )
-            cur.execute(
-                "DELETE FROM stream_enforcements WHERE vodum_user_id = ?",
-                (user_id,),
-            )
-
-            # media_users doit être supprimé avant vodum_users
-            cur.execute(
-                "DELETE FROM media_users WHERE vodum_user_id = ?",
-                (user_id,),
-            )
-
-            cur.execute(
-                "DELETE FROM vodum_users WHERE id = ?",
-                (user_id,),
-            )
-
+            from core.user_deletion import delete_local_user
+            deleted = delete_local_user(cur, user_id)
             db.conn.commit()
-            return True
+            return deleted
         except Exception:
             db.conn.rollback()
             raise

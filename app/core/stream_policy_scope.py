@@ -1,3 +1,4 @@
+import json
 from logging_utils import get_logger, is_debug_mode_enabled
 
 
@@ -14,6 +15,15 @@ def has_vip_override(vodum_user_id, overrides: dict[int, int]) -> bool:
 
 
 def policy_applies(policy: dict, session: dict) -> bool:
+    # System expiration rules target eligible media accounts, not pending invites.
+    try:
+        rule = json.loads(policy.get("rule_value_json") or "{}")
+    except (ValueError, TypeError):
+        rule = {}
+    if isinstance(rule, dict) and rule.get("system_tag") == "expired_subscription" and "expiration_media_user_ids" in rule:
+        ids = rule["expiration_media_user_ids"]
+        if not isinstance(ids, list) or session.get("media_user_id") not in ids:
+            return False
     provider = policy.get("provider")
     if provider and provider != session.get("provider"):
         return False

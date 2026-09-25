@@ -3,7 +3,7 @@
 Ce fichier contient uniquement le travail restant. Les changements termines sont
 documentes dans `changelog.md`.
 
-Derniere mise a jour: 2026-09-07
+Derniere mise a jour: 2026-09-23
 
 ## Principes de suivi
 
@@ -18,35 +18,17 @@ Derniere mise a jour: 2026-09-07
   comportements existants par defaut.
 - Reference technique : [audit Plex/Jellyfin du 6 septembre 2026](docs/audit-couverture-plex-jellyfin-2026-09-06.md).
 
-## P0 - Corrections Jellyfin a traiter en priorite
-
-- [ ] Valider sur une instance representative la creation, la modification et
-  la migration des mots de passe Jellyfin : connexion avec le nouveau secret et
-  refus de l'ancien. Correction du 07/09 : `NewPw` avec `ResetPassword=false` ;
-  `true` selectionnait une reinitialisation ignorant le mot de passe fourni.
-  Si la version intermediaire a ete utilisee, verifier les comptes concernes.
-- [ ] Valider la coupure de lecture sur plusieurs clients Jellyfin (web, TV,
-  mobile) en DirectPlay, DirectStream et transcodage. Les regressions corrigees
-  le 07/09 couvrent l'echec du message avant coupure groupee, les reponses
-  invalides, les redirections HTTP, le ciblage devenu obsolete et la confirmation
-  tardive. La cause exacte du signalement sur l'installation reste a confirmer.
-  Relever version/client, capacites de controle et resultat reel ; un client
-  ignorant Stop doit rester en echec, sans desactivation ou revocation implicite.
-
 ## P1 - Cycle de vie des utilisateurs et fins d'abonnement
 
-- [ ] Cartographier et clarifier les choix existants avant toute extension :
-  suppression locale manuelle, `expiry_mode` (`none`, `warn_only`,
-  `warn_then_disable`, `disable`), delai `warn_then_disable_days`, reglage
-  `delete_after_expiry_days`, exceptions et renouvellement. Verifier le traitement
-  effectivement branche a chaque reglage, pas seulement son libelle.
 - [ ] Pour Jellyfin, proposer trois actions natives distinctes : retirer les
   acces aux bibliotheques, desactiver/reactiver le compte, supprimer le compte
   du serveur. Garder separee la suppression de la fiche VODUM. Preciser le
   compte et les serveurs cibles ainsi que les effets sur les donnees natives.
-- [ ] Etudier le choix de l'action Jellyfin en fin d'abonnement, avec son delai,
-  sans transformer le retrait d'acces actuel en desactivation ou suppression.
-  Conserver les choix existants et proteger proprietaires/administrateurs.
+- [ ] Completer les choix Jellyfin en fin d'abonnement avec la desactivation
+  native reversible (`IsDisabled`) et sa politique de renouvellement.
+  Le retrait d'acces et la suppression native suivie de la suppression VODUM
+  sont disponibles comme modes distincts ; voir
+  [suppression apres expiration](docs/suppression-expiration-2026-09-23.md).
 - [ ] Prevoir le renouvellement et les reprises : ne reactiver que les comptes
   desactives par la politique concernee, conserver un blocage manuel et les
   droits anterieurs ; ne pas recreer silencieusement un compte supprime.
@@ -137,18 +119,16 @@ droits du serveur et l'acces aux sauvegardes ; le ZIP reste un fichier sensible.
   admin et anti-cache des routes deja auditees. Le stockage local seul ne
   protege pas contre le vol du ZIP ou la compromission du serveur.
 - [ ] Clarifier la documentation : secrets chiffres dans la base, mais archive
-  complete non chiffree et autonome. Tester la restauration sur une instance
-  neuve, sans dependance obligatoire a un secret reste sur l'ancien serveur.
+  complete non chiffree et autonome, restaurable sur une instance neuve sans
+  dependance obligatoire a un secret reste sur l'ancien serveur.
 - [ ] En option seulement, etudier la protection des exports/copies hors serveur
   (stockage chiffre ou chiffrement avec secret de recuperation separe), avec
   procedure de restauration testee. Conserver la restauration locale simple.
 
-## Portail utilisateur et validation avant publication
+## Portail utilisateur
 
 - [ ] Ajouter l'historique des abonnements lorsqu'un modele de donnees dedie sera
   disponible.
-- [ ] Executer la checklist manuelle de publication sur une instance representative
-  derriere le reverse proxy HTTPS reel avant toute activation sur Internet.
 
 ## Securite - controles restant a terminer
 

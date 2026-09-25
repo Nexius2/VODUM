@@ -10,6 +10,7 @@ def ensure_base_settings(conn, cursor, *, ensure_row) -> None:
         "smtp_auth_method": "password",
         "smtp_oauth_access_token": None,
         "skip_never_used_accounts": 0,
+        "plex_user_import_mode": "shared_only",
         "default_language": None,
         "timezone": "Europe/Paris",
         "admin_email": "",

@@ -3,7 +3,7 @@ import os
 import re
 import tempfile
 import time
-from logging.handlers import RotatingFileHandler
+from core.log_retention import RetentionFileHandler
 from pathlib import Path
 
 from db_manager import open_sqlite_connection
@@ -26,6 +26,22 @@ LOG_FILE = os.path.join(LOG_DIR, "app.log")
 
 DB_PATH = os.environ.get("DATABASE_PATH") or "/appdata/database.db"
 
+def read_log_retention_policy():
+    conn = None
+    try:
+        conn = open_sqlite_connection(DB_PATH, read_only=True)
+        row = conn.execute("SELECT log_retention_days, log_max_size_mb FROM settings WHERE id=1").fetchone()
+        if row:
+            from core.log_retention import validate_log_retention
+            return validate_log_retention(row[0], row[1])
+    except Exception:
+        pass
+    finally:
+        if conn is not None:
+            conn.close()
+    return 30, 50
+
+
 # Cache debug_mode
 DEBUG_CACHE_TTL = 10  # secondes
 _DEBUG_CACHE = {
@@ -45,13 +61,7 @@ handler = next(
     None,
 )
 if handler is None:
-    handler = RotatingFileHandler(
-        LOG_FILE,
-        maxBytes=5_000_000,
-        backupCount=5,
-        encoding="utf-8",
-        delay=True,
-    )
+    handler = RetentionFileHandler(LOG_FILE, read_log_retention_policy)
     handler._vodum_file_handler = True
     logger.addHandler(handler)
 
@@ -231,8 +241,11 @@ def read_all_logs():
 def read_logs_snapshot():
     lines = []
     errors = []
-    paths = [f"{LOG_FILE}.{index}" for index in range(handler.backupCount, 0, -1)]
-    paths.append(LOG_FILE)
+    try:
+        handler.maintain(force=True)
+    except OSError as exc:
+        errors.append({"path": "app.log", "error": type(exc).__name__})
+    paths = handler.paths()
     for path in paths:
         try:
             with open(path, "r", encoding="utf-8", errors="replace") as f:

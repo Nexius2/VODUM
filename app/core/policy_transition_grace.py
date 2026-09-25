@@ -5,12 +5,14 @@ from __future__ import annotations
 import threading
 import time
 from datetime import datetime, timezone
+from core.stream_session_identity import extract_machine_identifier
 
 
 STREAM_SWITCH_GRACE_SECONDS = 300
 _CACHE_RETENTION_SECONDS = 3600
 _LOCK = threading.RLock()
 _FIRST_SEEN: dict[str, float] = {}
+_LAST_SEEN: dict[str, float] = {}
 
 
 def _clean(value) -> str:
@@ -64,6 +66,33 @@ def _probable_switch_identity(sessions: list[dict]) -> str:
     return ""
 
 
+def _same_actor(first, second):
+    if first.get("vodum_user_id") is not None and second.get("vodum_user_id") is not None:
+        return first["vodum_user_id"] == second["vodum_user_id"]
+    return bool(first.get("external_user_id") and
+                first.get("external_user_id") == second.get("external_user_id") and
+                first.get("server_id") == second.get("server_id"))
+
+
+def _switch_pair(first, second):
+    if not _same_actor(first, second):
+        return False
+    a = " ".join(_clean(first.get(k)) for k in ("device", "client_product"))
+    b = " ".join(_clean(second.get(k)) for k in ("device", "client_product"))
+    same_ip = bool(first.get("ip") and first.get("ip") == second.get("ip"))
+    # Equal model/product on one network is ambiguous, even with different
+    # machine IDs. Give it a deadline, never a permanent merge.
+    same_model = any(first.get(k) and _clean(first[k]) == _clean(second.get(k))
+                     for k in ("device", "client_product"))
+    def mobile(label):
+        fixed = any(word in label for word in ("tv", "shield", "roku", "chromecast", "console", "playstation", "xbox"))
+        return not fixed and any(word in label for word in ("phone", "ipad", "tablet", "android", "mobile"))
+    same_media = bool(_playback_identity(first) and _playback_identity(first) == _playback_identity(second))
+    machine = extract_machine_identifier(first)
+    same_machine = bool(machine and machine == extract_machine_identifier(second))
+    return same_machine or (same_ip and same_model) or mobile(a) or mobile(b) or same_media
+
+
 def should_defer_stream_violation(
     *,
     policy_id: int,
@@ -78,40 +107,42 @@ def should_defer_stream_violation(
     prefix = f"policy:{int(policy_id)}|user:{user_key}|"
 
     with _LOCK:
-        for key, first_seen in list(_FIRST_SEEN.items()):
-            if now - first_seen > _CACHE_RETENTION_SECONDS:
+        for key in list(_FIRST_SEEN):
+            if now - _LAST_SEEN.get(key, _FIRST_SEEN[key]) > _CACHE_RETENTION_SECONDS:
                 _FIRST_SEEN.pop(key, None)
+                _LAST_SEEN.pop(key, None)
 
         # Grace is deliberately narrow: only one stream above the configured
         # limit. A larger overage is treated as a real violation immediately.
-        if current_count <= limit or current_count != limit + 1:
+        if current_count <= limit:
             for key in [key for key in _FIRST_SEEN if key.startswith(prefix)]:
                 _FIRST_SEEN.pop(key, None)
+                _LAST_SEEN.pop(key, None)
             return False
-
-        identity = _probable_switch_identity(sessions)
-        if not identity:
+        if limit <= 0 or current_count != limit + 1:
             return False
-
-        key = f"{prefix}{identity}"
+        key = f"{prefix}overlap"
         first_seen = _FIRST_SEEN.get(key)
         if first_seen is None:
-            starts = [
-                timestamp
-                for timestamp in (
-                    _timestamp(item.get("started_at")) or _timestamp(item.get("last_seen_at"))
-                    for item in sessions
-                    if _playback_identity(item) == identity
-                )
-                if timestamp is not None
-            ]
-            if not starts or not 0 <= now - max(starts) <= STREAM_SWITCH_GRACE_SECONDS:
+            starts = []
+            for index, first in enumerate(sessions):
+                for second in sessions[index + 1:]:
+                    if not _switch_pair(first, second):
+                        continue
+                    pair_starts = [_timestamp(item.get("started_at")) for item in (first, second)]
+                    if all(value is not None for value in pair_starts):
+                        latest = max(pair_starts)
+                        if 0 <= now - latest < STREAM_SWITCH_GRACE_SECONDS:
+                            starts.append(latest)
+            if not starts:
                 return False
-            first_seen = now
+            first_seen = min(starts)
             _FIRST_SEEN[key] = first_seen
+        _LAST_SEEN[key] = now
         return now - first_seen < STREAM_SWITCH_GRACE_SECONDS
 
 
 def reset_stream_transition_grace() -> None:
     with _LOCK:
         _FIRST_SEEN.clear()
+        _LAST_SEEN.clear()
