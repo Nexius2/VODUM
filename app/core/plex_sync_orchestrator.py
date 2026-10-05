@@ -101,7 +101,7 @@ def sync_all_servers(
             from core.http_security import plex_server_http_session
             from core.plex_rate_limit import install_plex_rate_limit
 
-            session = plex_server_http_session(server, default_timeout=20)
+            session = plex_server_http_session(server, default_timeout=20, retry_reads=True)
             install_plex_rate_limit(session, base_url)
             response = session.get(f"{base_url}/identity")
             log.info(

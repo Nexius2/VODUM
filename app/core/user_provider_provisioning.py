@@ -8,6 +8,7 @@ from core.providers.plex_invitation_state import plex_invite_state_payload
 from core.providers.plex_users import plex_invite_and_share
 from secret_store import find_plex_servers_by_token
 import json
+import secrets
 
 
 log = get_logger("users_create")
@@ -38,7 +39,8 @@ def provision_provider_account(db, server, block, libraries, username, email, *,
         created = jellyfin_create_user(server, username)
         external_user_id = str(created.get("Id"))
         server_username = created.get("Name") or username
-        password = (block.get("jellyfin_password") or "").strip()
+        password = (block.get("jellyfin_password") or "").strip() or secrets.token_urlsafe(24)
+        block["jellyfin_password"] = password
         if password:
             jellyfin_set_password(server, external_user_id, password)
         enabled_folders = [str(library["section_id"]) for library in libraries]

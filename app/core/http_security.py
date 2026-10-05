@@ -4,6 +4,7 @@ from urllib.parse import urljoin, urlsplit
 
 import requests
 import json
+import time
 
 
 def url_origin(value: object) -> tuple[str, str, int] | None:
@@ -50,12 +51,13 @@ def server_verify_tls(server) -> bool:
 
 
 class ConfiguredHostSession(requests.Session):
-    def __init__(self, allowed_origins, default_timeout=None):
+    def __init__(self, allowed_origins, default_timeout=None, retry_reads=False):
         super().__init__()
         self.allowed_origins = {
             origin for origin in allowed_origins if origin is not None
         }
         self.default_timeout = default_timeout
+        self.retry_reads = retry_reads
 
     def request(self, method, url, **kwargs):
         origin = url_origin(url)
@@ -65,7 +67,21 @@ class ConfiguredHostSession(requests.Session):
             )
         if self.default_timeout is not None:
             kwargs.setdefault("timeout", self.default_timeout)
-        return super().request(method, url, **kwargs)
+        # Opt in only for read-only workflows: some Plex GET endpoints mutate state.
+        attempts = 3 if self.retry_reads and method.upper() in {"GET", "HEAD"} else 1
+        for attempt in range(attempts):
+            try:
+                response = super().request(method, url, **kwargs)
+            except requests.exceptions.SSLError:
+                raise
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
+                if attempt == attempts - 1:
+                    raise
+            else:
+                if attempt == attempts - 1 or response.status_code not in {502, 503, 504}:
+                    return response
+                response.close()
+            time.sleep(2 ** attempt)
 
     def get_redirect_target(self, response):
         target = super().get_redirect_target(response)
@@ -80,21 +96,22 @@ class ConfiguredHostSession(requests.Session):
         return target
 
 
-def server_http_session(server, allowed_urls=(), default_timeout=None) -> ConfiguredHostSession:
+def server_http_session(server, allowed_urls=(), default_timeout=None, retry_reads=False) -> ConfiguredHostSession:
     origins = server_allowed_origins(server)
     origins.update(
         origin for origin in (url_origin(url) for url in allowed_urls) if origin
     )
-    session = ConfiguredHostSession(origins, default_timeout=default_timeout)
+    session = ConfiguredHostSession(origins, default_timeout=default_timeout, retry_reads=retry_reads)
     session.verify = server_verify_tls(server)
     return session
 
 
-def plex_server_http_session(server, default_timeout=None) -> ConfiguredHostSession:
+def plex_server_http_session(server, default_timeout=None, retry_reads=False) -> ConfiguredHostSession:
     return server_http_session(
         server,
         allowed_urls=("https://plex.tv", "https://app.plex.tv"),
         default_timeout=default_timeout,
+        retry_reads=retry_reads,
     )
 
 

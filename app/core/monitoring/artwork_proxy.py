@@ -5,10 +5,23 @@ from __future__ import annotations
 from core.jellyfin_auth import jellyfin_headers
 
 import re
+from logging_utils import get_logger
 
 from core.http_security import server_http_session
 from core.monitoring.artwork_cache import artwork_cache_key, read_artwork_cache, write_artwork_cache
 from core.plex_rate_limit import wait_for_plex_slot
+
+logger = get_logger("artwork_proxy")
+
+
+def _log_artwork_failure(server, exc):
+    # Do not log exception text or request URLs: they may contain credentials.
+    response = getattr(exc, "response", None)
+    logger.warning(
+        "Artwork fetch failed: provider=%s server_id=%s error=%s http_status=%s",
+        server.get("type"), server.get("id"), type(exc).__name__,
+        getattr(response, "status_code", None),
+    )
 
 
 class ArtworkProxyError(Exception):
@@ -94,7 +107,8 @@ def fetch_monitoring_artwork(server: dict, query, timeout: int = 10) -> dict:
                     response = http.get(base + candidate_path, headers={"X-Plex-Token": token}, timeout=timeout)
                     response.raise_for_status()
                     return _content_result(cache_key, response)
-                except Exception:
+                except Exception as exc:
+                    _log_artwork_failure(server, exc)
                     continue
         stale = _cached_result(cache_key, allow_stale=True)
         if stale:
@@ -128,7 +142,8 @@ def fetch_monitoring_artwork(server: dict, query, timeout: int = 10) -> dict:
                 )
                 response.raise_for_status()
                 return _content_result(cache_key, response)
-            except Exception:
+            except Exception as exc:
+                _log_artwork_failure(server, exc)
                 continue
     stale = _cached_result(cache_key, allow_stale=True)
     if stale:

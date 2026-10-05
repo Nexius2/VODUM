@@ -54,7 +54,7 @@ def seed_welcome_templates(conn, cursor) -> None:
     Server: {server_name}
     URL: {server_url}
     Username: {login_username}
-    Temporary password: {temporary_password}
+    Jellyfin password: {jellyfin_password}
 
     How to log in:
     - Open the URL above (web)

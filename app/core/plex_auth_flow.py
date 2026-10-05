@@ -9,7 +9,7 @@ from typing import MutableMapping
 
 PLEX_FLOW_SESSION_KEY = "vodum_plex_auth_flow"
 PLEX_FLOW_MAX_AGE_SECONDS = 10 * 60
-_ALLOWED_PURPOSES = {"login", "link", "replace", "reauthenticate", "wizard-link", "discover"}
+_ALLOWED_PURPOSES = {"login", "link", "replace", "reauthenticate", "wizard-link", "discover", "activation"}
 
 
 class PlexFlowRejected(ValueError):

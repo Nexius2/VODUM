@@ -1,0 +1,621 @@
+[
+  {
+    "key": "a_team_plan",
+    "media_type": "show",
+    "ids": {
+      "imdb": "tt0084967",
+      "tmdb": "1932"
+    },
+    "quotes": {
+      "en": "I love it when a plan comes together.",
+      "fr": "J'aime bien quand un plan se déroule sans accroc."
+    }
+  },
+  {
+    "key": "dexter_tonight",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0773262",
+      "tmdb": "1405"
+    },
+    "quotes": {
+      "en": "Tonight's the night.",
+      "fr": "Ce soir, c'est le soir."
+    }
+  },
+  {
+    "key": "mrrobot_fsociety",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt4158110",
+      "tmdb": "62560"
+    },
+    "quotes": {
+      "en": "Control is an illusion.",
+      "fr": "Le contrôle est une illusion."
+    }
+  },
+  {
+    "key": "bandofbrothers_grandpa",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0185906",
+      "tmdb": "4613"
+    },
+    "quotes": {
+      "en": "I served in a company of heroes.",
+      "fr": "J'ai servi dans une compagnie de héros."
+    }
+  },
+  {
+    "key": "vikings_valhalla",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt2306299",
+      "tmdb": "44217"
+    },
+    "quotes": {
+      "en": "See you in Valhalla.",
+      "fr": "On se retrouve au Valhalla."
+    }
+  },
+  {
+    "key": "walkingdead_lucille",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt1520211",
+      "tmdb": "1402"
+    },
+    "quotes": {
+      "en": "I hope you got your shittin' pants on... because you are about to shit your pants.",
+      "fr": "J'espère que vous avez mis votre pantalon pour faire caca... parce que vous allez vous faire dessus."
+    }
+  },
+  {
+    "key": "breakingbad_saymyname",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0903747",
+      "tmdb": "1396"
+    },
+    "quotes": {
+      "en": "Say my name.",
+      "fr": "Dis mon nom."
+    }
+  },
+  {
+    "key": "breakingbad_knock",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0903747",
+      "tmdb": "1396"
+    },
+    "quotes": {
+      "en": "I am the one who knocks.",
+      "fr": "C'est moi qui frappe."
+    }
+  },
+  {
+    "key": "got_winter",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0944947",
+      "tmdb": "1399"
+    },
+    "quotes": {
+      "en": "Winter is coming.",
+      "fr": "L'hiver arrive."
+    }
+  },
+  {
+    "key": "got_king",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0944947",
+      "tmdb": "1399"
+    },
+    "quotes": {
+      "en": "The king in the North!",
+      "fr": "Le roi du Nord !"
+    }
+  },
+  {
+    "key": "got_dracarys",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0944947",
+      "tmdb": "1399"
+    },
+    "quotes": {
+      "en": "Dracarys.",
+      "fr": "Dracarys."
+    }
+  },
+  {
+    "key": "got_chaos",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0944947",
+      "tmdb": "1399"
+    },
+    "quotes": {
+      "en": "Chaos is a ladder.",
+      "fr": "Le chaos est une échelle."
+    }
+  },
+  {
+    "key": "office_thats",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0386676",
+      "tmdb": "2316"
+    },
+    "quotes": {
+      "en": "That's what she said.",
+      "fr": "C'est ce qu'elle a dit."
+    }
+  },
+  {
+    "key": "office_bankrupt",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0386676",
+      "tmdb": "2316"
+    },
+    "quotes": {
+      "en": "I declare bankruptcy!",
+      "fr": "Je déclare faillite !"
+    }
+  },
+  {
+    "key": "friends_howyou",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0108778",
+      "tmdb": "1668"
+    },
+    "quotes": {
+      "en": "How you doin'?",
+      "fr": "Alors, ça va ?"
+    }
+  },
+  {
+    "key": "friends_break",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0108778",
+      "tmdb": "1668"
+    },
+    "quotes": {
+      "en": "We were on a break!",
+      "fr": "On faisait une pause !"
+    }
+  },
+  {
+    "key": "simpsons_doh",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0096697",
+      "tmdb": "456"
+    },
+    "quotes": {
+      "en": "D'oh!",
+      "fr": "D'oh !"
+    }
+  },
+  {
+    "key": "simpsons_eatshorts",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0096697",
+      "tmdb": "456"
+    },
+    "quotes": {
+      "en": "Eat my shorts!",
+      "fr": "Mange mon short !"
+    }
+  },
+  {
+    "key": "mandalorian_way",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt8111088",
+      "tmdb": "82856"
+    },
+    "quotes": {
+      "en": "This is the way.",
+      "fr": "Telle est la voie."
+    }
+  },
+  {
+    "key": "mandalorian_baby",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt8111088",
+      "tmdb": "82856"
+    },
+    "quotes": {
+      "en": "I have spoken.",
+      "fr": "J'ai parlé."
+    }
+  },
+  {
+    "key": "lost_notboat",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0411008",
+      "tmdb": "4607"
+    },
+    "quotes": {
+      "en": "We have to go back!",
+      "fr": "On doit y retourner !"
+    }
+  },
+  {
+    "key": "lost_live",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0411008",
+      "tmdb": "4607"
+    },
+    "quotes": {
+      "en": "Live together, die alone.",
+      "fr": "Vivre ensemble ou mourir seuls."
+    }
+  },
+  {
+    "key": "house_everybodylies",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0412142",
+      "tmdb": "1408"
+    },
+    "quotes": {
+      "en": "Everybody lies.",
+      "fr": "Tout le monde ment."
+    }
+  },
+  {
+    "key": "house_lupus",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0412142",
+      "tmdb": "1408"
+    },
+    "quotes": {
+      "en": "It's never lupus.",
+      "fr": "Ce n'est jamais un lupus."
+    }
+  },
+  {
+    "key": "sopranos_family",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0141842",
+      "tmdb": "1398"
+    },
+    "quotes": {
+      "en": "You don't ever admit the existence of this thing.",
+      "fr": "On n'admet jamais l'existence de cette chose."
+    }
+  },
+  {
+    "key": "walkingdead_rick",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt1520211",
+      "tmdb": "1402"
+    },
+    "quotes": {
+      "en": "We are the walking dead.",
+      "fr": "Nous sommes les morts-vivants."
+    }
+  },
+  {
+    "key": "heman_power_grayskull",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0085011",
+      "tmdb": "758"
+    },
+    "quotes": {
+      "en": "By the power of Grayskull, I have the power!",
+      "fr": "Par le pouvoir du crâne ancestral, je détiens la force toute-puissante !"
+    }
+  },
+  {
+    "key": "heman_force_toute_puissante",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0085011",
+      "tmdb": "758"
+    },
+    "quotes": {
+      "en": "I have the power!",
+      "fr": "Je détiens la force toute-puissante !"
+    }
+  },
+  {
+    "key": "walkingdead_corals",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt1520211",
+      "tmdb": "1402"
+    },
+    "quotes": {
+      "en": "Carl!",
+      "fr": "Carl !"
+    }
+  },
+  {
+    "key": "stranger_things_friends",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt4574334",
+      "tmdb": "66732"
+    },
+    "quotes": {
+      "en": "Friends don't lie.",
+      "fr": "Les amis ne mentent pas."
+    }
+  },
+  {
+    "key": "stranger_things_mornings",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt4574334",
+      "tmdb": "66732"
+    },
+    "quotes": {
+      "en": "Mornings are for coffee and contemplation.",
+      "fr": "Le matin c'est pour le café et la réflexion."
+    }
+  },
+  {
+    "key": "bigbang_bazinga",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0898266",
+      "tmdb": "1418"
+    },
+    "quotes": {
+      "en": "Bazinga!",
+      "fr": "Bazinga !"
+    }
+  },
+  {
+    "key": "bigbang_roommate",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0898266",
+      "tmdb": "1418"
+    },
+    "quotes": {
+      "en": "Our babies will be smart and beautiful.",
+      "fr": "Nos bébés seront intelligents et beaux."
+    }
+  },
+  {
+    "key": "brooklyn_noice",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt2467372",
+      "tmdb": "48891"
+    },
+    "quotes": {
+      "en": "Noice.",
+      "fr": "Stylé."
+    }
+  },
+  {
+    "key": "brooklyn_coolcool",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt2467372",
+      "tmdb": "48891"
+    },
+    "quotes": {
+      "en": "Cool cool cool cool cool.",
+      "fr": "Cool cool cool cool cool."
+    }
+  },
+  {
+    "key": "southpark_theykilled",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0121955",
+      "tmdb": "2190"
+    },
+    "quotes": {
+      "en": "Oh my God, they killed Kenny!",
+      "fr": "Oh mon Dieu, ils ont tué Kenny !"
+    }
+  },
+  {
+    "key": "southpark_bastards",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0121955",
+      "tmdb": "2190"
+    },
+    "quotes": {
+      "en": "You bastards!",
+      "fr": "Espèces d'enfoirés !"
+    }
+  },
+  {
+    "key": "doctorwho_allonsy",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0436992",
+      "tmdb": "57243"
+    },
+    "quotes": {
+      "en": "Allons-y!",
+      "fr": "Allons-y !"
+    }
+  },
+  {
+    "key": "doctorwho_geronimo",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0436992",
+      "tmdb": "57243"
+    },
+    "quotes": {
+      "en": "Geronimo!",
+      "fr": "Geronimo !"
+    }
+  },
+  {
+    "key": "peakyblinders_order",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt2442560",
+      "tmdb": "60574"
+    },
+    "quotes": {
+      "en": "By order of the Peaky Blinders.",
+      "fr": "Par ordre des Peaky Blinders."
+    }
+  },
+  {
+    "key": "peakyblinders_family",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt2442560",
+      "tmdb": "60574"
+    },
+    "quotes": {
+      "en": "Family means everything.",
+      "fr": "La famille est tout."
+    }
+  },
+  {
+    "key": "rickmorty_wubbalubba",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt2861424",
+      "tmdb": "60625"
+    },
+    "quotes": {
+      "en": "Wubba lubba dub dub!",
+      "fr": "Wubba lubba dub dub !"
+    }
+  },
+  {
+    "key": "rickmorty_science",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt2861424",
+      "tmdb": "60625"
+    },
+    "quotes": {
+      "en": "Nobody exists on purpose.",
+      "fr": "Personne n'existe pour une raison."
+    }
+  },
+  {
+    "key": "sherlock_elementary",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt1475582",
+      "tmdb": "19885"
+    },
+    "quotes": {
+      "en": "I'm not a psychopath, I'm a high-functioning sociopath.",
+      "fr": "Je ne suis pas un psychopathe, je suis un sociopathe de haut niveau."
+    }
+  },
+  {
+    "key": "sherlock_game",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt1475582",
+      "tmdb": "19885"
+    },
+    "quotes": {
+      "en": "The game is on.",
+      "fr": "La partie est lancée."
+    }
+  },
+  {
+    "key": "westworld_choice",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt0475784",
+      "tmdb": "63247"
+    },
+    "quotes": {
+      "en": "These violent delights have violent ends.",
+      "fr": "Ces plaisirs violents ont des fins violentes."
+    }
+  },
+  {
+    "key": "true_detective_time",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt2356777",
+      "tmdb": "46648"
+    },
+    "quotes": {
+      "en": "Time is a flat circle.",
+      "fr": "Le temps est un cercle plat."
+    }
+  },
+  {
+    "key": "severance_equal",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt11280740"
+    },
+    "quotes": {
+      "en": "Please try to enjoy each fact equally.",
+      "fr": "Essayez d’apprécier chaque information de manière égale."
+    }
+  },
+  {
+    "key": "fallout_okey_dokey",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt12637874"
+    },
+    "quotes": {
+      "en": "Okey dokey!",
+      "fr": "Okey dokey !"
+    }
+  },
+  {
+    "key": "the_bear_chef",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt14452776"
+    },
+    "quotes": {
+      "en": "Yes, chef!",
+      "fr": "Oui, chef !"
+    }
+  },
+  {
+    "key": "andor_one_way_out",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt9253284"
+    },
+    "quotes": {
+      "en": "One way out!",
+      "fr": "Une seule issue !"
+    }
+  },
+  {
+    "key": "the_last_of_us_light",
+    "media_type": "tv",
+    "ids": {
+      "imdb": "tt3581920"
+    },
+    "quotes": {
+      "en": "When you're lost in the darkness, look for the light.",
+      "fr": "Quand tu es perdu dans les ténèbres, cherche la lumière."
+    }
+  }
+]

@@ -3,7 +3,7 @@
 Ce fichier contient uniquement le travail restant. Les changements termines sont
 documentes dans `changelog.md`.
 
-Derniere mise a jour: 2026-09-23
+Derniere mise a jour: 2026-10-05
 
 ## Principes de suivi
 
@@ -118,15 +118,34 @@ droits du serveur et l'acces aux sauvegardes ; le ZIP reste un fichier sensible.
   publique et les acces au volume de sauvegarde, en conservant les protections
   admin et anti-cache des routes deja auditees. Le stockage local seul ne
   protege pas contre le vol du ZIP ou la compromission du serveur.
-- [ ] Clarifier la documentation : secrets chiffres dans la base, mais archive
-  complete non chiffree et autonome, restaurable sur une instance neuve sans
-  dependance obligatoire a un secret reste sur l'ancien serveur.
 - [ ] En option seulement, etudier la protection des exports/copies hors serveur
   (stockage chiffre ou chiffrement avec secret de recuperation separe), avec
   procedure de restauration testee. Conserver la restauration locale simple.
 
+## Dashboard et connexion
+
+- [x] Identifier le HTTP 502 sur l'installation reelle : ancien cache visant
+  JellySerieEmpire hors ligne. Reconstruction lancee, affiche de remplacement
+  The Batman confirmee dans le dashboard.
+- [ ] Deployer et verifier le filtre GUID Plex pour The Office ainsi que le
+  correctif des tentatives hors ecran contre le clignotement.
+- [ ] Valider les affiches des citations sur l'installation reelle : lancer
+  `refresh_dashboard_quote_cache`, controler une serie (The Office) et un film,
+  le dashboard, le fond desktop et l'affiche mobile du login. Verifier aussi la
+  reprise apres indisponibilite d'un serveur ; correctifs et regressions locales
+  documentes dans le changelog du 2026-10-05.
+
 ## Portail utilisateur
 
+- [x] Corriger la sauvegarde de la case d'invitation d'ami et verifier
+  l'activation/desactivation en base ainsi que la lecture par le portail.
+- [ ] Valider les invitations d'amis sur une installation representative :
+  envoi SMTP reel, activation Plex, connexion Jellyfin avec le mot de passe
+  genere et comptes mixtes. Confirmer les acces, forfait, limites, echeance
+  et parrainage copies depuis le compte invitant. Verifier les modeles
+  personnalises avec `{jellyfin_username}` et `{jellyfin_password}`, ainsi
+  que la reprise apres un echec d'envoi. Implementation et tests automatises
+  termines ; voir le changelog du 2026-10-05.
 - [ ] Ajouter l'historique des abonnements lorsqu'un modele de donnees dedie sera
   disponible.
 

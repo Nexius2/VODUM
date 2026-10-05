@@ -165,6 +165,7 @@ def _suggest_subscription(db, current_template_id, current_value, needed_streams
             continue
 
         max_streams = 0
+        has_stream_limit = False
         max_ips = 0
         has_ip_limit = False
 
@@ -184,13 +185,14 @@ def _suggest_subscription(db, current_template_id, current_value, needed_streams
             rule = policy.get("rule") if isinstance(policy.get("rule"), dict) else {}
 
             if rule_type == "max_streams_per_user":
+                has_stream_limit = True
                 max_streams = max(max_streams, _safe_int(rule.get("max"), 0))
 
             if rule_type == "max_ips_per_user":
                 has_ip_limit = True
                 max_ips = max(max_ips, _safe_int(rule.get("max"), 0))
 
-        streams_ok = max_streams >= needed_streams if needed_streams > 0 else True
+        streams_ok = not has_stream_limit or needed_streams <= 0 or max_streams >= needed_streams
         # A plan without an enabled max_ips_per_user policy has no IP ceiling.
         # Treating the missing rule as max_ips=0 made unlimited plans impossible
         # to recommend to any user with observed public IPs.
@@ -669,15 +671,15 @@ def build_usage_risk_report(db, filters=None, persist_history=True):
           END AS actor_key,
           COUNT(DISTINCT CASE
             WHEN e.action = 'kill' AND datetime(e.created_at) >= datetime('now', '-7 days')
-            THEN COALESCE(NULLIF(TRIM(e.session_key), ''), 'row:' || e.id)
+            THEN CAST(e.server_id AS TEXT) || ':' || COALESCE(NULLIF(TRIM(e.session_key), ''), 'row:' || e.id)
           END) AS kills_7d,
           COUNT(DISTINCT CASE
             WHEN e.action = 'kill' AND datetime(e.created_at) >= datetime('now', '-30 days')
-            THEN COALESCE(NULLIF(TRIM(e.session_key), ''), 'row:' || e.id)
+            THEN CAST(e.server_id AS TEXT) || ':' || COALESCE(NULLIF(TRIM(e.session_key), ''), 'row:' || e.id)
           END) AS kills_30d,
           COUNT(DISTINCT CASE
             WHEN e.action = 'kill' AND datetime(e.created_at) >= datetime('now', '-90 days')
-            THEN COALESCE(NULLIF(TRIM(e.session_key), ''), 'row:' || e.id)
+            THEN CAST(e.server_id AS TEXT) || ':' || COALESCE(NULLIF(TRIM(e.session_key), ''), 'row:' || e.id)
           END) AS kills_90d
         FROM stream_enforcements e
         WHERE datetime(e.created_at) >= datetime('now', '-90 days')

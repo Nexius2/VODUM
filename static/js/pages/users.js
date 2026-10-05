@@ -366,6 +366,7 @@
       const server = state.servers.find((candidate) => candidate.id === serverId);
       const provider = (server?.type || "").toLowerCase();
       block.provider = provider;
+      updateUsernameAvailability();
 
       const url = server ? pickUrl(server) : "";
       if (serverUrlLine) serverUrlLine.textContent = url ? `URL: ${url}` : "";
@@ -431,11 +432,22 @@
     return node;
   }
 
+  function updateUsernameAvailability() {
+    const input = document.getElementById('cu_username');
+    if (!input) return;
+    const providers = state.blocks.filter(block => block.server_id).map(block => block.provider);
+    input.disabled = providers.includes('plex') && !providers.includes('jellyfin');
+    if (input.disabled) input.value = '';
+    input.classList.toggle('opacity-50', input.disabled);
+    input.classList.toggle('cursor-not-allowed', input.disabled);
+  }
+
   function addServerBlock() {
     const id = Math.random().toString(16).slice(2);
     const block = { id, server_id: null, library_ids: [], provider: null };
     state.blocks.push(block);
     renderBlock(id);
+    updateUsernameAvailability();
   }
 
   function removeServerBlock(blockId) {
@@ -443,6 +455,7 @@
     const container = document.getElementById("cu_servers_container");
     if (container) container.innerHTML = "";
     state.blocks.forEach((block) => renderBlock(block.id));
+    updateUsernameAvailability();
   }
 
   async function submit() {

@@ -25,7 +25,7 @@ PORTAL_SETTINGS_COLUMNS = """
     portal_local_test_enabled,
     portal_public_url,
     portal_allowed_hostname,
-    portal_show_subscription,portal_show_media_access,portal_show_monitoring,portal_show_support,portal_show_payment,
+    portal_show_invitations,portal_show_subscription,portal_show_media_access,portal_show_monitoring,portal_show_support,portal_show_payment,
     portal_support_content,portal_show_support_email,portal_quick_messages_enabled,
     portal_payment_url,portal_payment_label,
     portal_local_auth_enabled,
@@ -34,7 +34,7 @@ PORTAL_SETTINGS_COLUMNS = """
 """
 PORTAL_READINESS_COLUMNS = """
     portal_enabled,portal_public_url,portal_allowed_hostname,brand_name,contact_email,debug_mode,
-    portal_show_subscription,portal_show_media_access,portal_show_monitoring,portal_show_support,portal_show_payment,
+    portal_show_invitations,portal_show_subscription,portal_show_media_access,portal_show_monitoring,portal_show_support,portal_show_payment,
     portal_support_content,portal_show_support_email,portal_quick_messages_enabled,
     portal_payment_url,portal_payment_label,
     portal_local_auth_enabled,portal_plex_auth_enabled,portal_jellyfin_auth_enabled,
@@ -158,6 +158,17 @@ def register(app):
     @admin_required
     def portal_user_invite(user_id):
         db = get_db()
+        from core.user_activation import send_activation
+        guided = db.query_one('SELECT id FROM user_activations WHERE vodum_user_id=?', (user_id,))
+        if guided:
+            try:
+                send_activation(db, user_id)
+                flash('activation_email_queued', 'success')
+            except ValueError as exc:
+                flash(str(exc), 'error')
+            except Exception:
+                flash('portal_invite_send_failed', 'error')
+            return redirect(url_for('user_detail', user_id=user_id))
         user = db.query_one("SELECT id,email,username FROM vodum_users WHERE id=?", (user_id,))
         settings = db.query_one(
             "SELECT portal_public_url,portal_local_auth_enabled FROM settings WHERE id=1"
@@ -256,7 +267,7 @@ def register(app):
             flash("portal_admin_user_invalid", "error")
             return redirect(url_for("portal_settings_page"))
         settings = dict(db.query_one(
-            "SELECT brand_name,portal_logo_url,portal_show_subscription,portal_show_media_access,"
+            "SELECT brand_name,portal_logo_url,portal_show_invitations,portal_show_subscription,portal_show_media_access,"
             "portal_show_monitoring,portal_show_support,user_notifications_can_override,"
             "discord_enabled,discord_bot_id,discord_bot_token,mailing_enabled,mail_from,smtp_host,"
             "smtp_port,smtp_user,smtp_pass,smtp_auth_method,smtp_oauth_access_token "
@@ -272,6 +283,7 @@ def register(app):
             portal_brand_name=settings.get("brand_name"), portal_logo_url=settings.get("portal_logo_url"),
             portal_terms_url=None, portal_privacy_url=None,
             admin_preview=True, preview_user_id=int(user_id), portal_features=features,
+            portal_invitations_enabled=bool(settings.get("portal_show_invitations")),
         )
         if page == "home":
             return render_template("portal/home.html", **home, **common, active_portal_page="home")
@@ -328,6 +340,7 @@ def register(app):
                 portal_local_test_enabled = :portal_local_test_enabled,
                 portal_public_url = :portal_public_url,
                 portal_allowed_hostname = :portal_allowed_hostname,
+                portal_show_invitations = :portal_show_invitations,
                 portal_show_subscription = :portal_show_subscription,
                 portal_show_media_access = :portal_show_media_access,
                 portal_show_monitoring = :portal_show_monitoring,

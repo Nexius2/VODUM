@@ -140,13 +140,16 @@ class PlexAuthClient:
             expires_in=int(expires_in) if expires_in is not None else None,
         )
 
-    def build_authorization_url(self, pin: PlexPin, forward_url: str) -> str:
+    def build_authorization_url(self, pin: PlexPin, forward_url: str, *, signup: bool = False) -> str:
         query = urlencode(
             {
                 "clientID": self.client_identifier,
                 "code": pin.code,
                 "context[device][product]": self.product,
                 "forwardUrl": _validate_forward_url(forward_url),
+                # Plex Auth's current form consumes these flags; retain PIN and
+                # callback so signing up completes the same authorization flow.
+                **({"signUp": "true", "skipLanding": "true"} if signup else {}),
             }
         )
         return PLEX_AUTH_URL + query

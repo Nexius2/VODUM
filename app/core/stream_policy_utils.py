@@ -72,6 +72,14 @@ def normalize_user_key(session: dict) -> Tuple[Optional[int], str]:
     return session.get("vodum_user_id"), str(session.get("external_user_id") or "")
 
 
+def user_counting_key(session: dict) -> Tuple[Optional[int], str]:
+    """Count linked media accounts together; isolate unmapped server accounts."""
+    user_id, external_id = normalize_user_key(session)
+    if user_id is not None:
+        return user_id, ""
+    return None, f"server:{session.get('server_id')}|external:{external_id}"
+
+
 def is_local_ip(ip: str) -> bool:
     ip = (ip or "").strip()
     if not ip or ip.lower() == "unknown":

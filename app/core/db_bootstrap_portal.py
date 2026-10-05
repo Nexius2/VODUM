@@ -3,6 +3,8 @@ from __future__ import annotations
 
 def ensure_portal_foundation_schema(conn, cursor, *, table_exists, ensure_column):
     """Create the disabled-by-default user portal authentication foundation."""
+    from core.db_bootstrap_activation import ensure_activation_schema
+    ensure_activation_schema(cursor)
     for column, definition in {
         "portal_enabled": "INTEGER NOT NULL DEFAULT 0",
         "portal_local_test_enabled": "INTEGER NOT NULL DEFAULT 0",
@@ -13,6 +15,7 @@ def ensure_portal_foundation_schema(conn, cursor, *, table_exists, ensure_column
         "portal_logo_url": "TEXT DEFAULT NULL",
         "portal_terms_url": "TEXT DEFAULT NULL",
         "portal_privacy_url": "TEXT DEFAULT NULL",
+        "portal_show_invitations": "INTEGER NOT NULL DEFAULT 0",
         "portal_show_subscription": "INTEGER NOT NULL DEFAULT 1",
         "portal_show_media_access": "INTEGER NOT NULL DEFAULT 1",
         "portal_show_monitoring": "INTEGER NOT NULL DEFAULT 1",

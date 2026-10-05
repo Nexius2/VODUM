@@ -4,6 +4,7 @@ import logging
 from typing import Any, Iterable, Optional
 import os
 from contextlib import contextmanager
+from pathlib import Path
 
 from secret_store import decrypt_server_record
 
@@ -28,7 +29,7 @@ def open_sqlite_connection(
     target = db_path
 
     if read_only:
-        target = f"file:{os.path.abspath(db_path)}?mode=ro"
+        target = Path(db_path).absolute().as_uri() + "?mode=ro"
         connect_uri = True
 
     conn = sqlite3.connect(

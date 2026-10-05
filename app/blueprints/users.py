@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 import os
-from flask import Blueprint, jsonify, request, g
+from flask import Blueprint, jsonify, request, g, flash
 
 from db_manager import DBManager
 from logging_utils import get_logger
@@ -26,6 +26,7 @@ from secret_store import (
 )
 from core.provider_onboarding import provider_onboarding_links
 from core.user_phone import normalize_phone
+from core.user_activation import activation_settings, activation_mode, prepare_activation, send_activation
 
 log = get_logger("users_create")
 
@@ -224,8 +225,10 @@ def api_referrer_candidates():
 
 @users_bp.post("/api/users/create")
 def api_users_create():
-    db = get_db()
-    payload = request.get_json(silent=True) or {}
+    return create_user_from_payload(get_db(), request.get_json(silent=True) or {})
+
+
+def create_user_from_payload(db, payload, *, invitation_source=None):
     log.info(f"[CREATE USER] payload received: keys={list(payload.keys())}")
     print(f"[CREATE USER STDOUT] payload received: keys={list(payload.keys())}", flush=True)
 
@@ -306,7 +309,7 @@ def api_users_create():
             return jsonify({"ok": False, "error": "Subscription template not found"}), 400
 
     server_blocks = payload.get("servers") or []
-    if not isinstance(server_blocks, list) or not server_blocks:
+    if not isinstance(server_blocks, list):
         return jsonify({"ok": False, "error": "No server selected"}), 400
 
     if email and not _valid_email(email):
@@ -356,6 +359,17 @@ def api_users_create():
 
             if len(rows) != len(set([int(x) for x in lib_ids])):
                 return jsonify({"ok": False, "error": "One or more libraries do not belong to the selected server or its linked Plex servers"}), 400
+
+    try:
+        guided_mode = activation_mode(activation_settings(db), {s['type'].lower() for s in servers_by_id.values()})
+        if not server_blocks and not guided_mode:
+            return jsonify({"ok": False, "error": "No server selected"}), 400
+        if guided_mode and not _valid_email(email):
+            return jsonify({"ok": False, "error": "portal_invite_email_required"}), 400
+        if guided_mode and any(servers_by_id[int(b['server_id'])]['type'].lower() == 'plex' and not b.get('library_ids') for b in server_blocks):
+            return jsonify({"ok": False, "error": "activation_libraries_required"}), 400
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
 
     initial_status = "active"
     if any((servers_by_id[int(b.get("server_id"))].get("type") or "").lower() == "plex" for b in server_blocks):
@@ -463,7 +477,10 @@ def api_users_create():
                 ),
             )
 
-    if subscription_template_id is not None:
+    if invitation_source is not None:
+        from core.portal_user_invitations import copy_invitation_subscription
+        copy_invitation_subscription(db, int(vodum_user_id), invitation_source)
+    elif subscription_template_id is not None:
         try:
             _apply_subscription_template_snapshot(db, int(vodum_user_id), subscription_template_id)
         except Exception as e:
@@ -473,15 +490,20 @@ def api_users_create():
     created_accounts: List[Dict[str, Any]] = []
     mailing_errors: List[str] = []
     provider_errors: List[str] = []
+    jellyfin_credentials = []
+
+    if guided_mode:
+        prepare_activation(db, int(vodum_user_id), guided_mode, server_blocks, servers_by_id)
 
     settings = db.query_one("SELECT id, mail_from, smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_auth_method, smtp_oauth_access_token, email_history_retention_years, disable_on_expiry, delete_after_expiry_days, send_reminders, preavis_days, reminder_days, default_language, timezone, admin_email, contact_email, admin_password_hash, auth_enabled, admin_totp_enabled, admin_totp_secret, wizard_active, wizard_completed, wizard_step, wizard_state_json, web_secure_cookies, web_cookie_samesite, web_trust_proxy, enable_cron_jobs, default_expiration_days, default_subscription_days, maintenance_mode, debug_mode, backup_retention_days, backup_retention_count, data_retention_years, brand_name, notifications_order, user_notifications_can_override, notifications_send_mode, expiry_mode, warn_then_disable_days, discord_enabled, discord_bot_token, discord_bot_id, mailing_enabled, skip_never_used_accounts, plex_user_import_mode, enable_anonymous_telemetry, telemetry_instance_id, telemetry_last_sent_at, task_defaults_version, stream_enforcer_boost_until, usage_risk_enabled, usage_risk_send_upgrade_suggestions, usage_risk_send_stream_blocked_message, usage_risk_min_kills_before_suggestion, usage_risk_analysis_window_days, usage_risk_suggestion_cooldown_days, usage_risk_medium_threshold, usage_risk_high_threshold FROM settings WHERE id = 1")
     settings = dict(settings) if settings else {}
     for block in server_blocks:
-        log.info(f"[CREATE USER] processing block: {block}")
-        print(f"[CREATE USER STDOUT] processing block: {block}", flush=True)
         server_id = int(block.get("server_id"))
         server = servers_by_id[server_id]
         provider = (server.get("type") or "").lower()
+        if guided_mode and provider == 'plex':
+            # Durable intent replaces early Plex invites; identity is verified first.
+            continue
         library_ids = [int(x) for x in (block.get("library_ids") or [])]
 
         libs = []
@@ -753,6 +775,10 @@ def api_users_create():
                 )
                 continue
 
+        if provider == "jellyfin" and block.get("jellyfin_password"):
+            from core.jellyfin_creation_credentials import encrypted_credential
+            jellyfin_credentials.append(encrypted_credential(server, server_username or username, block["jellyfin_password"]))
+
         # ------------------------------------------------------------
         # USER CREATION NOTIFICATION (EMAIL ONLY, 1 TEMPLATE MAX)
         # Rules:
@@ -761,7 +787,7 @@ def api_users_create():
         # - Only one template is used (first one by id)
         # - days_after > 0 => schedule in comm_scheduled (picked by send_expiration_emails flush)
         # ------------------------------------------------------------
-        if email:
+        if email and not guided_mode:
             try:
                 welcome_gate_key = f"{provider}:{server.get('id')}"
                 if provider == "plex":
@@ -803,6 +829,7 @@ def api_users_create():
                             "server_url": server.get("public_url") or server.get("url") or server.get("local_url") or "",
                             "login_username": server_username or username,
                             **provider_onboarding_links(provider),
+                            "jellyfin_credentials": jellyfin_credentials[-1:] if provider == "jellyfin" else [],
                         }
 
                         if days_after is not None and days_after > 0:
@@ -835,7 +862,17 @@ def api_users_create():
             except Exception as e:
                 mailing_errors.append(f"server_id={server_id}: {e}")
 
-    if not created_accounts:
+    if guided_mode:
+        try:
+            send_activation(db, int(vodum_user_id), jellyfin_credentials=jellyfin_credentials)
+        except ValueError as exc:
+            mailing_errors.append(str(exc))
+        except Exception:
+            mailing_errors.append('portal_invite_send_failed')
+        for error in mailing_errors:
+            flash(error, 'error')
+
+    if not created_accounts and not guided_mode:
         db.execute(
             "UPDATE vodum_users SET status = 'unknown' WHERE id = ?",
             (vodum_user_id,),
@@ -848,5 +885,6 @@ def api_users_create():
             "created_accounts": created_accounts,
             "provider_errors": provider_errors,
             "mailing_errors": mailing_errors,
+            "activation_pending": bool(guided_mode),
         }
     )

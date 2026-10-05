@@ -39,6 +39,7 @@ def export_portal_user_data(db, vodum_user_id: int) -> dict | None:
 
 
 def erase_portal_user_data(db, vodum_user_id: int) -> bool:
+    db.execute('DELETE FROM user_activations WHERE vodum_user_id=?', (int(vodum_user_id),))
     account = db.query_one("SELECT id FROM portal_accounts WHERE vodum_user_id=?", (int(vodum_user_id),))
     if not account:
         return False
@@ -50,6 +51,8 @@ def erase_portal_user_data(db, vodum_user_id: int) -> bool:
 
 
 def cleanup_portal_retention(db, cutoff_iso: str) -> dict:
+    db.execute("UPDATE user_activations SET plex_token=NULL WHERE plex_token_expires<=CAST(strftime('%s','now') AS INTEGER)")
+    db.execute("UPDATE user_activations SET email_token=NULL WHERE expires_at<=CAST(strftime('%s','now') AS INTEGER)")
     deleted = {}
     statements = (
         ("sessions", "DELETE FROM portal_sessions WHERE expires_at<?", (cutoff_iso,)),
