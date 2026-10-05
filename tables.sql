@@ -445,6 +445,7 @@ CREATE TABLE IF NOT EXISTS settings (
     portal_logo_url TEXT DEFAULT NULL,
     portal_terms_url TEXT DEFAULT NULL,
     portal_privacy_url TEXT DEFAULT NULL,
+    portal_show_invitations INTEGER NOT NULL DEFAULT 0,
     portal_show_subscription INTEGER NOT NULL DEFAULT 1,
     portal_show_media_access INTEGER NOT NULL DEFAULT 1,
     portal_show_monitoring INTEGER NOT NULL DEFAULT 1,
@@ -1509,3 +1510,24 @@ CREATE TABLE IF NOT EXISTS migration_library_mappings (
   FOREIGN KEY(destination_library_id) REFERENCES libraries(id) ON DELETE RESTRICT
 );
 CREATE INDEX IF NOT EXISTS idx_migration_library_mappings_campaign ON migration_library_mappings(campaign_id, mapping_status);
+
+
+-- Personal guided user activation
+CREATE TABLE IF NOT EXISTS user_activations (
+            id INTEGER PRIMARY KEY, vodum_user_id INTEGER NOT NULL UNIQUE
+                REFERENCES vodum_users(id) ON DELETE CASCADE,
+            token_hash TEXT UNIQUE, email_token TEXT, expires_at INTEGER NOT NULL,
+            generation INTEGER NOT NULL DEFAULT 1, mode TEXT NOT NULL,
+            expected_email TEXT NOT NULL, plex_subject TEXT,
+            plex_token TEXT, plex_token_expires INTEGER,
+            completed_at INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+CREATE TABLE IF NOT EXISTS user_activation_servers (
+            activation_id INTEGER NOT NULL REFERENCES user_activations(id) ON DELETE CASCADE,
+            server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+            library_ids TEXT NOT NULL, options_json TEXT NOT NULL DEFAULT '{}',
+            state TEXT NOT NULL DEFAULT 'queued', error_key TEXT,
+            lease_until INTEGER NOT NULL DEFAULT 0, lease_id TEXT,
+            PRIMARY KEY(activation_id, server_id)
+        );

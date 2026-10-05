@@ -48,6 +48,12 @@ def register(app):
     def monitoring_page():
         db = get_db()
         tab = request.args.get("tab", "overview")
+        if tab not in {
+            "overview", "now_playing", "policies", "usage_risk", "activity",
+            "history", "libraries", "users", "servers",
+        }:
+            from flask import abort
+            abort(400)
 
         # Une session est consideree "live" si vue dans les 120 dernieres secondes
         live_window_seconds = 300

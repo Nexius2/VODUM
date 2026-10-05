@@ -274,7 +274,7 @@ def register_history_routes(app):
                 "campaign_body": None,
                 "channel_used": r.get("channels_sent") or "",
                 "status": r.get("status") or "pending",
-                "error": r.get("last_error") or r.get("dedupe_key") or "",
+                "error": r.get("last_error") or "",
                 "sent_at": r.get("last_attempt_at") or r.get("send_at"),
                 "send_at": r.get("send_at"),
                 "next_attempt_at": r.get("next_attempt_at"),

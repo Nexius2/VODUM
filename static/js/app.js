@@ -54,12 +54,36 @@ document.addEventListener("DOMContentLoaded", initMobileMenu);
 
 
 
+document.addEventListener("load", (event) => {
+  const image = event.target;
+  if (image instanceof HTMLImageElement && image.classList.contains("js-quote-artwork")) {
+    image.classList.remove("opacity-0");
+  }
+}, true);
+
 document.addEventListener("error", (event) => {
   const image = event.target;
   if (image instanceof HTMLImageElement && image.classList.contains("js-artwork-image")) {
+    const fragment = image.closest("[data-now-playing-fragment]");
+    if (fragment) fragment.dataset.artworkFailed = "1";
     image.remove();
   }
 }, true);
+
+function reconcileQuoteArtwork() {
+  document.querySelectorAll(".js-quote-artwork").forEach((image) => {
+    if (!image.complete) return;
+    if (image.naturalWidth > 0) {
+      image.classList.remove("opacity-0");
+    } else {
+      const fragment = image.closest("[data-now-playing-fragment]");
+      if (fragment) fragment.dataset.artworkFailed = "1";
+      image.remove();
+    }
+  });
+}
+document.addEventListener("DOMContentLoaded", reconcileQuoteArtwork);
+document.addEventListener("htmx:afterSwap", reconcileQuoteArtwork);
 
 
 window.__vodumDebounceSubmit = window.__vodumDebounceSubmit || (() => {
@@ -468,6 +492,7 @@ document.body.addEventListener("htmx:afterSwap", function (event) {
   const activeDelayMs = 2500;
   let timer = null;
   let lastHadActivity = false;
+  let inFlight = false;
 
   function schedule(delayMs) {
     if (timer) window.clearTimeout(timer);
@@ -475,13 +500,18 @@ document.body.addEventListener("htmx:afterSwap", function (event) {
   }
 
   async function refresh() {
+    if (inFlight) return;
+    window.clearTimeout(timer);
     if (document.hidden) {
       schedule(idleDelayMs);
       return;
     }
 
+    inFlight = true;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 10000);
     try {
-      const r = await fetch("/api/tasks/activity", { cache: "no-store" });
+      const r = await fetch("/api/tasks/activity", { cache: "no-store", signal: controller.signal });
       if (!r.ok) throw new Error("bad status");
       const data = await r.json();
       const running = Number(data.running || 0);
@@ -502,6 +532,9 @@ document.body.addEventListener("htmx:afterSwap", function (event) {
     } catch {
       lastHadActivity = false;
       box.classList.add("hidden");
+    } finally {
+      window.clearTimeout(timeout);
+      inFlight = false;
     }
 
     schedule(lastHadActivity ? activeDelayMs : idleDelayMs);
@@ -631,9 +664,6 @@ window.vodumFlash = function(category, message, autoHideMs = 4000) {
     show();
   }, true);
 
-  document.body.addEventListener("htmx:afterRequest", hide);
-  document.body.addEventListener("htmx:sendError", hide);
-  document.body.addEventListener("htmx:timeout", hide);
   window.addEventListener("pageshow", hide);
   window.addEventListener("pagehide", () => clearTimeout(showTimer));
 })();

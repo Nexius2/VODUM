@@ -263,6 +263,11 @@ def register(app):
         except ValueError as exc:
             flash(str(exc), "error")
             return redirect(url_for("portal_activate", token=token))
+        context = session.get('user_activation')
+        if context:
+            get_db().execute('UPDATE user_activations SET token_hash=NULL,email_token=NULL,completed_at=? WHERE id=? AND generation=? AND mode=\'local\' '
+                             'AND vodum_user_id=(SELECT vodum_user_id FROM portal_accounts WHERE id=?)',
+                             (int(time.time()), context.get('id'), context.get('generation'), account_id))
         record_portal_event(get_db(), "account_activated", "success", portal_account_id=account_id)
         flash("portal_account_activated", "success")
         return redirect(url_for("portal_login"))

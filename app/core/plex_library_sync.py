@@ -27,7 +27,7 @@ def plex_get_libraries(server):
     url = f"{base_url}/library/sections"
     try:
         wait_for_plex_slot(base_url)
-        response = plex_server_http_session(server).get(
+        response = plex_server_http_session(server, retry_reads=True).get(
             url,
             headers={
                 "X-Plex-Token": token,
@@ -38,7 +38,8 @@ def plex_get_libraries(server):
         response.raise_for_status()
     except Exception as exc:
         log.error("[SYNC LIBRARIES] Error API %s: %s", url, exc)
-        return []
+        # A failed read is not an empty library list: do not delete stored access.
+        raise
     directories = response.json().get("MediaContainer", {}).get("Directory", [])
     libraries = [
         {
@@ -102,7 +103,7 @@ def sync_plex_libraries(db, server, libraries):
             )
 
     found_ids = set()
-    session = plex_server_http_session(server)
+    session = plex_server_http_session(server, retry_reads=True)
     install_plex_rate_limit(session, base_url)
     for library in libraries:
         section_id = str(library.get("section_id") or "").strip()

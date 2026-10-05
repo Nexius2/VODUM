@@ -37,7 +37,7 @@ log = get_logger("check_servers")   # Logger TXT haut niveau
 def jellyfin_get_status(server_row, base_url, token=None):
     reachable = False
     try:
-        http = server_http_session(server_row)
+        http = server_http_session(server_row, retry_reads=True)
         if is_debug_mode_enabled():
             log.debug(f"[JELLYFIN] ping url={base_url}/System/Ping")
         r = http.get(f"{base_url}/System/Ping", timeout=5)
@@ -123,7 +123,7 @@ def plex_get_info(server_row, base_url, token):
     try:
         if is_debug_mode_enabled():
             log.debug(f"[PLEX] connecting base_url={base_url} token_present={bool(token)}")
-        session = plex_server_http_session(server_row)
+        session = plex_server_http_session(server_row, retry_reads=True)
         response = session.get(
             f"{base_url}/identity",
             headers={"X-Plex-Token": token, "Accept": "application/xml"},
@@ -133,14 +133,20 @@ def plex_get_info(server_row, base_url, token):
             return ("down", None, None, f"Plex identity returned HTTP {response.status_code}")
 
         identity = ET.fromstring(response.content)
-        friendly_name = None
-        root_response = session.get(
-            f"{base_url}/",
-            headers={"X-Plex-Token": token, "Accept": "application/xml"},
-            timeout=5,
-        )
-        if root_response.status_code == 200:
-            friendly_name = ET.fromstring(root_response.content).get("friendlyName")
+        friendly_name = server_row.get("name")
+        try:
+            root_response = session.get(
+                f"{base_url}/",
+                headers={"X-Plex-Token": token, "Accept": "application/xml"},
+                timeout=5,
+            )
+            if root_response.status_code == 200:
+                friendly_name = ET.fromstring(root_response.content).get("friendlyName") or friendly_name
+        except Exception as exc:
+            log.warning(
+                "[PLEX] server #%s reachable, but name lookup failed (%s); keeping server online",
+                server_row.get("id"), type(exc).__name__,
+            )
 
         machine_id = identity.get("machineIdentifier")
         version = identity.get("version")
@@ -162,7 +168,7 @@ def plex_get_info(server_row, base_url, token):
 
 def check_generic_server(server_row, url):
     try:
-        r = server_http_session(server_row).get(url, timeout=5)
+        r = server_http_session(server_row, retry_reads=True).get(url, timeout=5)
         return "up" if r.status_code < 400 else "down"
     except Exception:
         return "down"

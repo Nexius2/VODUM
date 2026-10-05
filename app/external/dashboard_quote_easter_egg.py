@@ -1,6 +1,7 @@
 import json
 import os
 import random
+import tempfile
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
@@ -15,7 +16,7 @@ from logging_utils import get_logger
 
 logger = get_logger("dashboard_quote_easter_egg")
 
-CONFIG_FILE = "cinema_quotes.json"
+CONFIG_FILES = ("movie_quotes.json", "series_quotes.json")
 CACHE_FILE = "dashboard_quote_easter_egg.json"
 
 
@@ -38,11 +39,11 @@ def _today_str():
     return datetime.now().strftime("%Y-%m-%d")
 
 
-def _get_quotes_path():
+def _get_quotes_path(filename):
     here = Path(__file__).resolve()
     candidates = [
-        here.parent.parent / "static" / "easter_eggs" / CONFIG_FILE,
-        here.parent.parent.parent / "static" / "easter_eggs" / CONFIG_FILE,
+        here.parent.parent / "static" / "easter_eggs" / filename,
+        here.parent.parent.parent / "static" / "easter_eggs" / filename,
     ]
 
     for path in candidates:
@@ -53,7 +54,13 @@ def _get_quotes_path():
 
 
 def _load_quotes():
-    path = _get_quotes_path()
+    entries = []
+    for filename in CONFIG_FILES:
+        entries.extend(_load_quotes_file(_get_quotes_path(filename)))
+    return entries
+
+
+def _load_quotes_file(path):
 
     if not path.exists():
         logger.warning(f"Quotes file not found: {path}")
@@ -73,6 +80,23 @@ def _load_quotes():
     except Exception:
         logger.exception(f"Failed to load quotes file: {path}")
         return []
+
+
+def _shuffle_quote_candidates(entries):
+    """Choose a category fairly, then a quote, falling back as pools empty."""
+    pools = {}
+    for entry in entries:
+        category = "movie" if entry.get("media_type") == "movie" else "show"
+        pools.setdefault(category, []).append(entry)
+    for pool in pools.values():
+        random.shuffle(pool)
+    ordered = []
+    while pools:
+        category = random.choice(list(pools))
+        ordered.append(pools[category].pop())
+        if not pools[category]:
+            del pools[category]
+    return ordered
 
 
 def _load_cache():
@@ -101,8 +125,14 @@ def _save_cache(payload):
     path = _get_cache_path()
 
     try:
-        with open(path, "w", encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=os.path.dirname(path), delete=False) as f:
+            temporary_path = f.name
             json.dump(payload, f, ensure_ascii=False, indent=2)
+        try:
+            os.replace(temporary_path, path)
+        finally:
+            if os.path.exists(temporary_path):
+                os.unlink(temporary_path)
 
         logger.info(f"Saved dashboard quote cache: {path}")
 
@@ -276,6 +306,7 @@ def _resolve_on_plex(server, media_type, imdb, tmdb):
         "X-Plex-Token": token,
         "includeGuids": "1",
         "type": plex_type,
+        "guid": f"imdb://{imdb}" if imdb else f"tmdb://{tmdb}",
     }
 
     for base in bases:
@@ -454,6 +485,40 @@ def _resolve_on_jellyfin(server, media_type, imdb, tmdb):
     return None
 
 
+def _verify_quote_artwork(server, resolved):
+    """Use the same proxy/cache as both screens; metadata alone is insufficient."""
+    from core.monitoring.artwork_proxy import fetch_monitoring_artwork
+    mode = resolved.get("poster_mode")
+    if mode == "plex_path" and resolved.get("poster_path"):
+        query = {"path": resolved["poster_path"]}
+    elif mode == "jellyfin_item" and resolved.get("poster_item_id"):
+        query = {"item_id": resolved["poster_item_id"], "image_type": "Primary", "w": "420"}
+    else:
+        return False
+    try:
+        fetch_monitoring_artwork(server, query)
+    except Exception:
+        logger.warning("Quote poster unavailable on server=%s; trying another source", server.get("id"))
+        return False
+    resolved["artwork_verified"] = True
+    # Preload desktop artwork too. An unavailable backdrop must use the poster.
+    if resolved.get("backdrop_mode") == "plex_path" and resolved.get("backdrop_path"):
+        backdrop_query = {"path": resolved["backdrop_path"]}
+    elif resolved.get("backdrop_mode") == "jellyfin_item" and resolved.get("backdrop_item_id"):
+        backdrop_query = {"item_id": resolved["backdrop_item_id"], "image_type": "Backdrop", "w": "1400"}
+    else:
+        backdrop_query = None
+    if backdrop_query:
+        try:
+            fetch_monitoring_artwork(server, backdrop_query)
+        except Exception:
+            backdrop_query = None
+    if not backdrop_query:
+        for suffix in ("mode", "path", "item_id"):
+            resolved["backdrop_" + suffix] = None
+    return True
+
+
 def _resolve_media(entry):
     media_type = str(entry.get("media_type") or "").strip().lower()
     if media_type == "tv":
@@ -478,12 +543,12 @@ def _resolve_media(entry):
 
         if stype == "plex":
             resolved = _resolve_on_plex(server, media_type, imdb, tmdb)
-            if resolved:
+            if resolved and _verify_quote_artwork(server, resolved):
                 return resolved
 
         elif stype == "jellyfin":
             resolved = _resolve_on_jellyfin(server, media_type, imdb, tmdb)
-            if resolved:
+            if resolved and _verify_quote_artwork(server, resolved):
                 return resolved
 
     logger.info(f"No media match found for quote entry: {entry.get('key')}")
@@ -500,13 +565,12 @@ def refresh_dashboard_quote_cache(force=False):
             (cached.get("poster_mode") == "plex_path" and cached.get("server_id") and cached.get("poster_path"))
             or (cached.get("poster_mode") == "jellyfin_item" and cached.get("server_id") and cached.get("poster_item_id"))
         )
-        has_legacy_poster_url = bool(cached.get("poster_url"))
 
-        if not has_new_poster_fields and has_legacy_poster_url:
+        if not has_new_poster_fields or not cached.get("artwork_verified"):
             cache_is_legacy = True
-            logger.warning("Dashboard quote cache is legacy for today -> forcing rebuild")
+            logger.warning("Dashboard quote artwork is unverified or incomplete -> rebuilding cache")
 
-    if not force and cached and cached.get("day") == today and not cache_is_legacy:
+    if not force and cached and cached.get("day") == today and cached.get("none") is not True and not cache_is_legacy:
         logger.info(f"Dashboard quote cache already ready for today ({today})")
         return cached
 
@@ -538,15 +602,25 @@ def refresh_dashboard_quote_cache(force=False):
         _save_cache(payload)
         return payload
 
+    # Repair the existing daily selection before rotating to another quote.
+    if not force and cache_is_legacy and cached and cached.get("day") == today and cached.get("quote_key"):
+        selected = next((entry for entry in candidates if entry.get("key") == cached["quote_key"]), None)
+        resolved = _resolve_media(selected) if selected else None
+        if resolved:
+            repaired = dict(cached)
+            repaired.update(resolved)
+            repaired["none"] = False
+            _save_cache(repaired)
+            return repaired
+
     rotation = _load_rotation(cached)
     seen_keys = rotation.get("seen_keys") or []
     seen_set = set(seen_keys)
 
     unseen_candidates = [entry for entry in candidates if _quote_key(entry) not in seen_set]
-    random.shuffle(unseen_candidates)
+    unseen_candidates = _shuffle_quote_candidates(unseen_candidates)
 
-    retry_candidates = list(candidates)
-    random.shuffle(retry_candidates)
+    retry_candidates = _shuffle_quote_candidates(candidates)
 
     passes = [
         (unseen_candidates, False),
@@ -572,6 +646,7 @@ def refresh_dashboard_quote_cache(force=False):
             payload = {
                 "day": today,
                 "none": False,
+                "artwork_verified": bool(resolved.get("artwork_verified")),
                 "quote_key": entry.get("key"),
                 "phrase": quote_text,
                 "title": resolved.get("title"),
@@ -595,6 +670,9 @@ def refresh_dashboard_quote_cache(force=False):
             )
             return payload
 
+    if cached and cached.get("artwork_verified") and cached.get("none") is not True:
+        logger.warning("No new quote artwork available; preserving last verified quote")
+        return cached
     payload = {
         "day": today,
         "none": True,
@@ -755,8 +833,8 @@ def build_dashboard_quote_card():
         return _build_local_quote_fallback()
 
     if payload.get("day") != _today_str():
-        logger.info("Dashboard quote cache is outdated -> using local quote fallback")
-        return _build_local_quote_fallback()
+        logger.info("Dashboard quote cache is outdated -> keeping last resolved artwork")
+        # Keep the same last resolved artwork as the login screen until refresh.
 
     if payload.get("none") is True:
         logger.info("Dashboard quote cache says no matching media for today -> using local quote fallback")

@@ -40,6 +40,7 @@
     setText("commHistoryModalStatus", data.status || "-");
     setText("commHistoryModalSentAt", window.vodumFormatDateTime ? window.vodumFormatDateTime(data.sent_at || "-") : data.sent_at || "-");
     setText("commHistoryModalError", data.error || "-");
+    document.getElementById('commHistoryModalError')?.parentElement?.classList.toggle('hidden', !data.error);
     setText("commHistoryModalSubject", detailUrl ? (config.loadingLabel || "Loading...") : (data.subject || "-"));
     setText("commHistoryModalBody", detailUrl ? (config.loadingLabel || "Loading...") : (data.body || "-"));
     setText("commHistoryModalMeta", detailUrl ? "{}" : (data.meta_json || "{}"));

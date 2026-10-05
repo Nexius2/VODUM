@@ -30,5 +30,6 @@
     "reactivated": {"subject": "L'accesso al portale {brand_name} e stato riattivato", "body": "Ciao {username},\n\nIl tuo accesso al portale e stato riattivato.\n\n{portal_login_url}"},
     "new_login": {"subject": "Nuovo accesso al portale {brand_name}", "body": "Ciao {username},\n\nE stato registrato un nuovo accesso. Reimposta la password se non eri tu.\n\n{portal_login_url}"},
     "direct_message": {"subject": "Nuovo messaggio nel portale {brand_name}", "body": "Ciao {username},\n\nHai ricevuto un nuovo messaggio da un amministratore. Accedi al portale per leggerlo.\n\n{portal_login_url}"}
-  }
+  },
+  "activation": {"button": "Attiva il mio accesso"}
 }

@@ -32,31 +32,7 @@ def register(app):
             return redirect(url_for("servers_list"))
 
 
-        # --------------------------
-        # USER STATS (legacy: stats)
-        # --------------------------
-        stats = {}
-
-        stats["total_users"] = db.query_one(
-            "SELECT COUNT(*) AS cnt FROM vodum_users"
-        )["cnt"] or 0
-
-        stats["active_users"] = db.query_one(
-            "SELECT COUNT(*) AS cnt FROM vodum_users WHERE status = 'active'"
-        )["cnt"] or 0
-
-        # expiring soon = reminder + pre_expired (legacy view)
-        stats["expiring_soon"] = db.query_one(
-            "SELECT COUNT(*) AS cnt FROM vodum_users WHERE status IN ('pre_expired', 'reminder')"
-        )["cnt"] or 0
-
-        stats["expired_users"] = db.query_one(
-            "SELECT COUNT(*) AS cnt FROM vodum_users WHERE status = 'expired'"
-        )["cnt"] or 0
-
-        # --------------------------
-        # USER STATS (new: users_stats used by dashboard.html)
-        # --------------------------
+        # Collect all user counters in a single table scan.
         row = db.query_one(
             """
             SELECT
@@ -80,64 +56,21 @@ def register(app):
             "expired": int(row.get("expired") or 0),
         }
 
-        # --------------------------
-        # SERVER STATS (tous types)
-        # --------------------------
-        stats["server_types"] = {}
-
-        server_types = db.query(
-            """
-            SELECT DISTINCT type
-            FROM servers
-            WHERE type IS NOT NULL AND type != ''
-            ORDER BY type
-            """
-        )
-
-        for row in server_types:
-            stype = (row["type"] or "").strip().lower()
-
-            total = db.query_one(
-                "SELECT COUNT(*) AS cnt FROM servers WHERE LOWER(TRIM(type)) = ?",
-                (stype,),
-            )["cnt"] or 0
-
-            online = db.query_one(
-                "SELECT COUNT(*) AS cnt FROM servers WHERE LOWER(TRIM(type)) = ? AND LOWER(TRIM(COALESCE(status, 'unknown'))) = 'up'",
-                (stype,),
-            )["cnt"] or 0
-
-            offline = db.query_one(
-                "SELECT COUNT(*) AS cnt FROM servers WHERE LOWER(TRIM(type)) = ? AND LOWER(TRIM(COALESCE(status, 'unknown'))) = 'down'",
-                (stype,),
-            )["cnt"] or 0
-
-            stats["server_types"][stype] = {
-                "total": int(total),
-                "online": int(online),
-                "offline": int(offline),
-            }
-
-
-        # --------------------------
-        # TASK STATS
-        # --------------------------
+        stats = {}
         if table_exists(db, "tasks"):
-            stats["total_tasks"] = db.query_one(
-                "SELECT COUNT(*) AS cnt FROM tasks"
-            )["cnt"] or 0
-
-            stats["active_tasks"] = db.query_one(
-                "SELECT COUNT(*) AS cnt FROM tasks WHERE enabled = 1"
-            )["cnt"] or 0
-
-            stats["error_tasks"] = db.query_one(
-                "SELECT COUNT(*) AS cnt FROM tasks WHERE status = 'error'"
-            )["cnt"] or 0
+            task_stats = db.query_one(
+                """SELECT COUNT(*) AS total,
+                   SUM(CASE WHEN enabled = 1 THEN 1 ELSE 0 END) AS active,
+                   SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS errors
+                   FROM tasks"""
+            )
+            stats = {
+                "total_tasks": int(task_stats["total"] or 0),
+                "active_tasks": int(task_stats["active"] or 0),
+                "error_tasks": int(task_stats["errors"] or 0),
+            }
         else:
-            stats["total_tasks"] = 0
-            stats["active_tasks"] = 0
-            stats["error_tasks"] = 0
+            stats = {"total_tasks": 0, "active_tasks": 0, "error_tasks": 0}
 
         usage_risk_summary = {"high": 0, "medium": 0, "low": 0, "suggested": 0}
         usage_risk_dashboard = {"top_reasons": [], **build_usage_risk_trend([], 0)}

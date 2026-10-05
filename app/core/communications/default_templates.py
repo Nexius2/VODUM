@@ -114,7 +114,7 @@ DEFAULT_COMM_TEMPLATES = [
         "days_before": None,
         "days_after": 0,
         "subject": "Welcome - your account is ready",
-        "body": "Hello {username},\n\nYour {provider_name} account has been created successfully.\n\nServer: {server_name}\nAddress: {server_url}\nLogin: {login_username}\n\nGet the official player:\n{player_download_url}\n\nConfiguration help:\n{player_help_url}\n\nSign in and accept the library share invitation if prompted.\n\nSubscription expiration date: {expiration_date}\n\nBest regards,\n{brand_name}\n",
+        "body": "Hello {username},\n\nYour {provider_name} account has been created successfully.\n\nServer: {server_name}\nAddress: {server_url}\nLogin: {login_username}\n\nJellyfin only (not used for Plex):\nJellyfin username: {jellyfin_username}\nJellyfin password: {jellyfin_password}\n\nGet the official player:\n{player_download_url}\n\nConfiguration help:\n{player_help_url}\n\nSign in and accept the library share invitation if prompted.\n\nSubscription expiration date: {expiration_date}\n\nBest regards,\n{brand_name}\n",
     },
 ]
 
@@ -202,3 +202,21 @@ def force_stream_blocked_template_values(template: dict, *, enabled: int | None 
         forced["enabled"] = int(enabled)
 
     return forced
+
+
+def upgrade_pristine_user_creation_templates(conn, cursor):
+    """Update bundled welcome bodies without changing administrator customizations."""
+    new_body = next(t["body"] for t in DEFAULT_COMM_TEMPLATES if t["key"] == "default_user_creation")
+    old_body = new_body.replace("Jellyfin only (not used for Plex):\nJellyfin username: {jellyfin_username}\nJellyfin password: {jellyfin_password}\n\n", "")
+    legacy_body = (
+        "Hello {username},\n\nYour account has been created successfully.\n\n"
+        "Login email: {email}\n\nHow to get started:\n- Open Plex or Jellyfin\n"
+        "- Sign in with your account\n- Accept the library share invitation if prompted\n\n"
+        "Subscription expiration date: {expiration_date}\n\nBest regards,\n{brand_name}\n"
+    )
+    for previous in (old_body, legacy_body):
+        cursor.execute("SELECT id FROM comm_templates WHERE key IN ('default_user_creation','default_user_creation_restore_default') AND body=?", (previous,))
+        for row in cursor.fetchall():
+            cursor.execute("UPDATE comm_templates SET body=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (new_body, row[0]))
+            cursor.execute("UPDATE comm_template_translations SET body=?,updated_at=CURRENT_TIMESTAMP WHERE template_id=? AND body=?", (new_body, row[0], previous))
+    conn.commit()

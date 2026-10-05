@@ -228,11 +228,28 @@ def read_last_logs(limit=10):
     Retourne les N dernières lignes du fichier de log.
     Centralisé ici pour éviter toute duplication.
     """
+    limit = int(limit)
+    if limit <= 0:
+        return []
     try:
-        with open(LOG_FILE, "r", encoding="utf-8") as f:
-            return f.readlines()[-limit:]
+        # Read backwards in blocks; dashboard cost must not grow with log size.
+        with open(LOG_FILE, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            position = f.tell()
+            chunks = []
+            newline_count = 0
+            while position > 0 and newline_count <= limit:
+                size = min(8192, position)
+                position -= size
+                f.seek(position)
+                chunk = f.read(size)
+                chunks.append(chunk)
+                newline_count += chunk.count(b"\n")
+        tail = b"".join(reversed(chunks)).decode("utf-8", errors="replace")
+        return tail.replace("\r\n", "\n").splitlines(keepends=True)[-limit:]
     except FileNotFoundError:
         return []
+
 
 def read_all_logs():
     return read_logs_snapshot()["lines"]

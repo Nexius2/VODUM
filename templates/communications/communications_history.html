@@ -116,10 +116,10 @@
         {% set modal_payload = {
           "kind": h.kind or "",
           "kind_label": ('Queued template' if h.is_scheduled else (t('template') if h.kind == 'template' else t('campaign'))),
-          "name": (h.template_key if h.kind == 'template' else h.campaign_name) or "",
+          "name": (t(h.template_key) if h.kind == 'template' and h.template_key else h.campaign_name) or "",
           "user": h.user_username or "",
           "channel_used": t(h.channel_used) if h.channel_used else "-",
-          "status": (t('sent') if h.status == 'sent' else (t('failed') if h.status == 'failed' else h.status)),
+          "status": t(h.status),
           "error": h.error or "",
           "sent_at": h.sent_at or "-",
           "subject": h.rendered_subject or "",
@@ -137,11 +137,11 @@
             <div class="flex items-center gap-2 min-w-0">
               {% if h.is_scheduled %}
                 <span class="px-2 py-1 rounded bg-amber-900/40 text-amber-300 shrink-0">Queued</span>
-                <span class="text-slate-400 truncate"><code>{{ h.template_key or '-' }}</code></span>
+                <span class="text-slate-400 truncate">{{ t(h.template_key) if h.template_key else '-' }}</span>
               {% elif h.kind == 'template' %}
                 <span class="px-2 py-1 rounded bg-slate-800 text-slate-200 shrink-0">{{ t('template') }}</span>
                 {% if h.template_key %}
-                  <span class="text-slate-400 truncate"><code>{{ h.template_key }}</code></span>
+                  <span class="text-slate-400 truncate">{{ t(h.template_key) }}</span>
                 {% endif %}
               {% else %}
                 <span class="px-2 py-1 rounded bg-slate-800 text-slate-200 shrink-0">{{ t('campaign') }}</span>
@@ -174,7 +174,7 @@
 
           <td class="px-4 py-3 align-top text-slate-400">
             {% if h.is_scheduled %}
-              <div class="truncate" title="{{ h.error or '-' }}">{{ h.error or '-' }}</div>
+              <div class="truncate" title="{{ t(h.error) if h.error else t('comm_waiting_delivery') }}">{{ t(h.error) if h.error else t('comm_waiting_delivery') }}</div>
               <div class="text-[11px] text-slate-500 mt-1">Attempts {{ h.attempt_count or 0 }} / {{ h.max_attempts or 10 }}{% if h.next_attempt_at %} - next {{ h.next_attempt_at|browser_datetime }}{% endif %}</div>
             {% else %}
               <div class="truncate" title="{{ h.error or '-' }}">{{ h.error or '-' }}</div>

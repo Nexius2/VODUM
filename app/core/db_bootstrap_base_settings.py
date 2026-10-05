@@ -43,6 +43,7 @@ def ensure_base_settings(conn, cursor, *, ensure_row) -> None:
         "portal_logo_url": None,
         "portal_terms_url": None,
         "portal_privacy_url": None,
+        "portal_show_invitations": 0,
         "portal_show_subscription": 1,
         "portal_show_media_access": 1,
         "portal_show_monitoring": 1,

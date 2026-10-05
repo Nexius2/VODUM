@@ -136,6 +136,7 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
           t.subject,
           t.body,
           t.trigger_event,
+          t.trigger_provider AS template_provider,
           t.delivery_channels
         FROM comm_scheduled q
         JOIN comm_templates t ON t.id = q.template_id
@@ -268,6 +269,20 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
             extra_context,
             communication_language,
         )
+        activation_url = None
+        if payload.get('activation_id'):
+            from core.user_activation import activation_delivery_url
+            try:
+                if trigger_event != 'user_creation' or q.get('template_provider') not in ('all', q.get('provider')):
+                    raise ValueError('activation_no_template')
+                activation_url = activation_delivery_url(db, uid, payload)
+            except ValueError as exc:
+                db.execute("UPDATE comm_scheduled SET status='error',attempt_count=max_attempts,last_error=?,next_attempt_at=NULL WHERE id=?", (str(exc), scheduled_id))
+                failed += 1
+                continue
+        from core.jellyfin_creation_credentials import credential_context, redact_credential_context, redact_credential_body
+        if trigger_event == "user_creation":
+            extra_context.update(credential_context(payload, provider=q.get("provider")))
         subject, body = _format_message(
             raw_subject,
             raw_body,
@@ -278,7 +293,13 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
         )
         attachments = fetch_template_attachments(db, tpl_id)
 
+        if activation_url:
+            from core.activation_email import activation_email_body
+            body = activation_email_body(body, activation_url, communication_language)
+
         selected_channels = explicit_delivery_channels(q.get("delivery_channels"))
+        if activation_url:
+            selected_channels = ['email']
         forced_channels = selected_channels
         required_channels = list(selected_channels or _required_channels_for_scheduled(db, settings, user, trigger_event))
 
@@ -340,10 +361,10 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
                     "scheduled_id": scheduled_id,
                     "send_at": q.get("send_at"),
                     "dedupe_key": q.get("dedupe_key"),
-                    "payload": extra_context,
+                    "payload": redact_credential_context(extra_context),
                     "communication_language": communication_language,
-                    "rendered_subject": subject,
-                    "rendered_body": body,
+                    "rendered_subject": redact_credential_body(subject, extra_context),
+                    "rendered_body": redact_credential_body(body.replace(activation_url, '[personal activation link]') if activation_url else body, extra_context),
                     "attachments": [a.get("filename") for a in (attachments or [])],
                 },
             )
@@ -382,6 +403,11 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
             all_ok = any(a.status == "sent" for a in attempts)
 
         if all_ok:
+            if payload.get("jellyfin_credentials") and any(att.status == "sent" for att in attempts):
+                clean_payload = dict(payload)
+                clean_payload.pop("jellyfin_credentials", None)
+                db.execute("UPDATE comm_scheduled SET payload_json=? WHERE id=?",
+                           (json.dumps(clean_payload, ensure_ascii=False), scheduled_id))
             db.execute(
                 """
                 UPDATE comm_scheduled

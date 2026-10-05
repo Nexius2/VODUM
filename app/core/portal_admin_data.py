@@ -59,6 +59,8 @@ def apply_portal_admin_action(db, vodum_user_id: int, action: str) -> int:
         raise ValueError("portal_account_missing")
     account_id = int(account["id"])
     with db.transaction() as cursor:
+        if action in {'revoke_invitation', 'suspend', 'force_logout', 'reset_auth'}:
+            cursor.execute('UPDATE user_activations SET token_hash=NULL,email_token=NULL,plex_token=NULL,generation=generation+1 WHERE vodum_user_id=?', (int(vodum_user_id),))
         if action == "revoke_invitation":
             cursor.execute(
                 "UPDATE portal_account_tokens SET revoked_at=CURRENT_TIMESTAMP WHERE portal_account_id=? "

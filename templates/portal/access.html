@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="{{ active_lang or 'en' }}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><title>{{ t('activation_title') }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/vodum.css', v=g.app_version|default('dev')) }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css', v=g.app_version|default('dev')) }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/portal-activation.css', v=g.app_version|default('dev')) }}">
+<script src="{{ url_for('static', filename='js/pages/portal-activation.js', v=g.app_version|default('dev')) }}" defer></script></head>
+<body class="portal-shell activation-page bg-slate-950 text-slate-100 min-h-screen flex items-center justify-center p-4">
+<main class="activation-card w-full max-w-xl rounded-xl border border-slate-800 bg-slate-900 p-6" data-activation-auto="{{ 'true' if auto else 'false' }}">
+<header class="activation-brand">{% if portal_logo_url %}<img src="{{ portal_logo_url }}" alt="">{% endif %}<span>{{ portal_brand_name or app_brand_name or 'VODUM' }}</span></header>
+<h1 class="text-2xl font-semibold">{{ t('activation_ready_title' if ready else 'activation_title') }}</h1>
+{% for category,msg in get_flashed_messages(with_categories=true) %}<p role="alert" class="my-4 rounded bg-slate-800 p-3">{{ t(msg) }}</p>{% endfor %}
+{% if activation.mode == 'plex' %}
+<p class="my-4 text-slate-300">{{ t('activation_ready_help' if ready else ('activation_preparing_help' if has_token else 'activation_plex_help')) }}</p>
+{% if not ready and not has_token %}
+{% if auto_login %}<p class="activation-redirect" role="status">{{ t('activation_redirecting_plex') }}</p>{% endif %}
+<form method="post" action="{{ url_for('portal_access_plex') }}" data-plex-auto-login="{{ 'true' if auto_login else 'false' }}">
+<input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+<button class="rounded bg-primary px-4 py-3 text-white">{{ t('activation_continue_plex') }}</button></form>
+<p class="text-sm text-slate-400 my-3">{{ t('activation_account_help') }}</p>{% endif %}
+{% elif activation.mode == 'jellyfin' %}
+<p class="my-4">{{ t('activation_jellyfin_help') }}</p>
+{% for account in jellyfin_accounts %}<form method="post" action="{{ url_for('portal_access_jellyfin') }}" class="my-4">
+<input type="hidden" name="_csrf_token" value="{{ csrf_token }}"><input type="hidden" name="server_id" value="{{ account.server_id }}">
+<p>{{ account.username }}</p><label>{{ t('auth.password') }}<input class="w-full rounded bg-slate-800 p-2" type="password" name="password" required autocomplete="current-password"></label>
+<button class="mt-2 rounded bg-primary px-4 py-3">{{ t('activation_login') }}</button></form>{% endfor %}
+
+{% else %}
+<p class="my-4">{{ t('activation_local_help') }}</p>
+<form method="post" action="{{ url_for('portal_access_local') }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token }}"><button class="rounded bg-primary px-4 py-3">{{ t('portal_activate_action') }}</button></form>
+{% endif %}
+<ul class="space-y-4 my-6" aria-live="polite">
+{% for target in targets %}<li class="rounded border border-slate-700 p-4"><strong>{{ target.name }}</strong>
+<p data-server-state>{{ t('activation_state_' ~ target.state) }}</p>
+{% if target.error_key %}<p role="alert">{{ t(target.error_key) }}</p>{% endif %}
+{% if target.state == 'pending' and target.type|lower == 'plex' %}
+<a class="underline" href="https://app.plex.tv/desktop/#!/settings/manage-library-access" target="_blank" rel="noopener noreferrer">{{ t('activation_accept_plex') }}</a>
+{% endif %}
+{% if target.state != 'ready' and (has_token or activation.mode == 'jellyfin') %}
+<form method="post" action="{{ url_for('portal_access_server', server_id=target.server_id) }}" data-server-activation data-working-label="{{ t('activation_state_working') }}">
+<input type="hidden" name="_csrf_token" value="{{ csrf_token }}"><button class="underline mt-2">{{ t('activation_retry') }}</button></form>{% endif %}
+{% if target.type|lower == 'jellyfin' and target.public_url and target.public_url.startswith(('https://','http://')) %}
+<a class="underline" href="{{ target.public_url }}" target="_blank" rel="noopener noreferrer">{{ t('activation_open_jellyfin') }}</a>{% endif %}
+</li>{% endfor %}</ul>
+{% if activation.mode == 'plex' and (ready or targets|selectattr('state','equalto','ready')|selectattr('type','equalto','plex')|list) %}
+<a class="inline-block rounded bg-primary px-5 py-3" href="https://app.plex.tv/desktop/" rel="noreferrer">{{ t('activation_open_plex') }}</a>{% endif %}
+{% if activation.mode == 'plex' and ready %}<p class="my-4"><a class="underline" href="https://www.plex.tv/media-server-downloads/#plex-app" target="_blank" rel="noopener noreferrer">{{ t('activation_apps') }}</a></p>{% endif %}
+{% if ready %}<p class="mt-4 text-sm"><a class="underline" href="{{ url_for('portal_home') }}">{{ t('activation_portal') }}</a></p>{% endif %}
+</main></body></html>

@@ -1,5 +1,70 @@
 # Changelog
 
+## 2026-10-05 - Sauvegarde de l'option d'invitation du portail
+
+- Ajout du champ `portal_show_invitations` dans la requete de sauvegarde des
+  reglages du portail : la case etait transmise mais ignoree par l'UPDATE SQL.
+- Regression verifiee par un POST admin sur une base SQLite : activation,
+  desactivation et lecture du reglage par le portail utilisateur.
+
+## 2026-10-05 - Affiches des citations sur le dashboard et au login
+
+- Verification et prechargement de l'affiche via le proxy/cache commun avant
+  de retenir une citation de film ou de serie. Si l'image est indisponible,
+  recherche d'une autre source ; une reponse HTML ne vaut pas une affiche.
+- Reconstruction des caches anciens non verifies, avec tentative de conserver
+  la citation du jour. Un echec de recherche n'est plus definitif pour la journee.
+  Conservation de la derniere citation avec affiche verifiee en cas d'echec
+  temporaire, et utilisation commune au dashboard et au login avant le refresh.
+- Prechargement du fond de connexion et repli sur l'affiche quand le backdrop
+  est indisponible. Ecriture atomique du cache des citations pour eviter une
+  lecture de fichier partiellement ecrit.
+- Correction du clignotement HTMX : les nouvelles tentatives se font hors ecran,
+  au maximum une fois par minute. L'image apparait uniquement apres chargement
+  reussi ; un changement de source d'image remplace egalement la carte.
+- Diagnostic du proxy : journalisation du fournisseur, serveur, type d'erreur
+  et statut HTTP, sans URL ni identifiants. Sur l'installation reelle, l'ancien
+  cache ciblait JellySerieEmpire hors ligne. Reconstruction declenchee et affiche
+  de The Batman confirmee dans le dashboard. Recherche Plex filtree par GUID pour
+  eviter le timeout observe sur le parcours complet de la bibliotheque.
+- Validation : 24 tests dashboard et un scenario JavaScript reussis, incluant
+  The Office comme serie Plex, les routes d'image dashboard/login pour Plex
+  et Jellyfin, les echecs de telechargement et la reprise d'affichage.
+  Echanges fournisseurs simules ; affichage sur l'installation reelle a verifier.
+
+## 2026-10-05 - Invitations d'amis depuis le portail et identifiants Jellyfin
+
+- Correction du blocage au demarrage : la nouvelle route d'invitation d'ami
+  utilisait le meme nom Flask que l'invitation administrateur. Renommage en
+  `portal_friend_invite`, mise a jour du formulaire et ajout de regressions
+  couvrant l'enregistrement de toutes les routes et la fabrique d'application.
+- Ajout de la case « Inviter un ami » dans les sections visibles du portail,
+  desactivee par defaut. Une fois activee, une nouvelle carte apparait dans
+  Abonnement avec email obligatoire, prenom, nom et telephone facultatifs.
+- Reutilisation du parcours de creation et d'activation existant. Les serveurs,
+  bibliotheques, options de partage Plex, forfait, limites personnalisees et
+  echeance sont repris cote serveur depuis le compte invitant ; celui-ci est
+  automatiquement enregistre comme parrain du nouveau compte.
+- Refus des adresses email deja associees a un compte et des parrains inactifs,
+  controle des sections activees, protection CSRF et limite de cinq demandes
+  d'invitation par utilisateur sur quinze minutes.
+- Jellyfin : generation automatique du mot de passe lorsqu'aucun n'est fourni
+  a la creation. Les invitations d'amis utilisent le meme mot de passe genere
+  sur leurs serveurs Jellyfin. L'activation demande de se connecter avec les
+  identifiants envoyes par email, sans choisir un nouveau mot de passe.
+- Ajout des variables explicites `{jellyfin_password}` et `{jellyfin_username}`
+  dans l'editeur de communications et les modeles de bienvenue par defaut.
+  Les anciens modeles par defaut non personnalises sont mis a jour ; les
+  contenus personnalises sont conserves et peuvent utiliser ces variables.
+- Transmission des identifiants dans les emails de creation, y compris avec
+  activation differee et comptes mixtes. Les mots de passe sont chiffres dans
+  la file d'envoi, conserves pour les reprises puis retires apres envoi reussi ;
+  ils sont masques dans l'historique des notifications.
+- Validation : 186 tests automatises reussis couvrant portail, activation,
+  communications, provisionnement et bootstrap, dont les invitations et la
+  livraison des identifiants Jellyfin. Appels fournisseurs et envois simules ;
+  validation sur une installation et un serveur SMTP reels restant a faire.
+
 ## 2026-09-24 - Alignement Jellyfin sur la version publiée GitHub
 
 - Référence fournie par l'utilisateur : `origin/main`, commit

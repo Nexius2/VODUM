@@ -13,6 +13,7 @@ from core.stream_policy_utils import (
     pick_kill_target as _pick_kill_target,
     is_global_policy as _is_global_policy,
     normalize_user_key as _normalize_user_key,
+    user_counting_key as _user_counting_key,
     is_local_ip as _is_local_ip,
     is_ip_literal as _is_ip_literal,  # noqa: F401 - compatibility facade
     best_account_username as _best_account_username,  # noqa: F401 - compatibility facade
@@ -224,13 +225,13 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
         if _is_global_policy(policy) or not per_server_counting:
             # ✅ COMPTE SUR TOUS LES SERVEURS
             for s in scoped:
-                vodum_user_id, ext = _normalize_user_key(s)
+                vodum_user_id, ext = _user_counting_key(s)
                 by_key.setdefault((vodum_user_id, ext, None), []).append(s)
         else:
             # ✅ COMPTE PAR SERVEUR
             for s in scoped:
                 sid = int(s["server_id"])
-                vodum_user_id, ext = _normalize_user_key(s)
+                vodum_user_id, ext = _user_counting_key(s)
                 by_key.setdefault((vodum_user_id, ext, sid), []).append(s)
 
         for user_key, user_sessions in by_key.items():
@@ -306,7 +307,7 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
         by_user: Dict[Tuple[Optional[int], str], List[dict]] = {}
 
         for s in scoped:
-            ukey = _normalize_user_key(s)
+            ukey = _user_counting_key(s)
             by_user.setdefault(ukey, []).append(s)
 
         for user_key, user_sessions in by_user.items():
@@ -397,7 +398,7 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
                 "kind": "user_ips",
                 "server_id": server_id,
                 "provider": provider,
-                "target_user": user_key,
+                "target_user": _normalize_user_key(target),
                 "sessions": deduped_sessions,
                 "kill_targets": kill_targets,
                 "excess_ips": sorted(excess_ips),

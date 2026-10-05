@@ -30,5 +30,6 @@
     "reactivated": {"subject": "Tu acceso al portal {brand_name} fue reactivado", "body": "Hola {username},\n\nTu acceso al portal fue reactivado.\n\n{portal_login_url}"},
     "new_login": {"subject": "Nuevo acceso a tu portal {brand_name}", "body": "Hola {username},\n\nSe registro un nuevo acceso a tu cuenta. Restablece tu contrasena si no fuiste tu.\n\n{portal_login_url}"},
     "direct_message": {"subject": "Nuevo mensaje en tu portal {brand_name}", "body": "Hola {username},\n\nHas recibido un nuevo mensaje de un administrador. Inicia sesion en tu portal para leerlo.\n\n{portal_login_url}"}
-  }
+  },
+  "activation": {"button": "Activar mi acceso"}
 }

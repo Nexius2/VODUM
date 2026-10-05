@@ -30,5 +30,6 @@
     "reactivated": {"subject": "Ihr {brand_name}-Portalzugang wurde reaktiviert", "body": "Hallo {username},\n\nIhr Portalzugang wurde reaktiviert.\n\n{portal_login_url}"},
     "new_login": {"subject": "Neue Anmeldung in Ihrem {brand_name}-Portal", "body": "Hallo {username},\n\nEine neue Anmeldung wurde registriert. Setzen Sie Ihr Passwort zurueck, falls Sie dies nicht waren.\n\n{portal_login_url}"},
     "direct_message": {"subject": "Neue Nachricht in Ihrem {brand_name}-Portal", "body": "Hallo {username},\n\nSie haben eine neue Nachricht von einem Administrator erhalten. Melden Sie sich in Ihrem Portal an, um sie zu lesen.\n\n{portal_login_url}"}
-  }
+  },
+  "activation": {"button": "Zugang aktivieren"}
 }

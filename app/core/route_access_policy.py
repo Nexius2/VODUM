@@ -38,7 +38,10 @@ def classify_route_path(path: str) -> str:
             "/portal/auth/jellyfin",
             "/portal/auth/plex", "/portal/auth/plex/callback",
             "/portal/auth/plex/confirm",
+            "/portal/access", "/portal/access/plex", "/portal/access/plex/callback", "/portal/access/local", "/portal/access/jellyfin",
         }:
+            return "portal_auth"
+        if normalized.startswith('/portal/access/server/') and normalized.rsplit('/', 1)[-1].isdigit():
             return "portal_auth"
         return "portal"
     return "admin"

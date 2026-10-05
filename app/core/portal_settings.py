@@ -34,6 +34,7 @@ def normalize_portal_settings(form, *, activation_ready=False, debug_mode=False)
         "portal_local_test_enabled": 1 if form.get("portal_local_test_enabled") == "1" else 0,
         "portal_public_url": public_url or None,
         "portal_allowed_hostname": allowed_hostname or None,
+        "portal_show_invitations": 1 if form.get("portal_show_invitations") == "1" else 0,
         "portal_show_subscription": 1 if form.get("portal_show_subscription") == "1" else 0,
         "portal_show_media_access": 1 if form.get("portal_show_media_access") == "1" else 0,
         "portal_show_monitoring": 1 if form.get("portal_show_monitoring") == "1" else 0,

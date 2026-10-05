@@ -3,13 +3,14 @@ import argparse
 import json
 import os
 from pathlib import Path
-import sqlite3
+from contextlib import closing
 import time
 from urllib.parse import quote
 
 from core.http_security import server_http_session
 from core.jellyfin_auth import jellyfin_headers
 from secret_store import decrypt_secret
+from db_manager import open_sqlite_connection
 
 
 def probe(session, base, path, headers):
@@ -48,8 +49,7 @@ def main():
     parser.add_argument("--compare-auth", action="store_true", help="Compare previous and current authentication on identical requests")
     args = parser.parse_args()
     path = Path(os.environ.get("DATABASE_PATH", "/appdata/database.db")).resolve()
-    with sqlite3.connect(path.as_uri() + "?mode=ro", uri=True) as conn:
-        conn.row_factory = sqlite3.Row
+    with closing(open_sqlite_connection(str(path), read_only=True)) as conn:
         row = conn.execute("SELECT * FROM servers WHERE id=? AND type='jellyfin'", (args.server_id,)).fetchone()
         if row is None:
             raise ValueError("Jellyfin server ID not found")

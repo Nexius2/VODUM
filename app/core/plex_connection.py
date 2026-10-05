@@ -67,7 +67,7 @@ def find_working_plex_base_url(
 		try:
 			wait_for_plex_slot(base_url)
 
-			resp = plex_server_http_session(server_row).get(
+			resp = plex_server_http_session(server_row, retry_reads=True).get(
 				f"{base_url}{endpoint}",
 				headers={
 					"X-Plex-Token": token,

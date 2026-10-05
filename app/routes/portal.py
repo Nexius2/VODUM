@@ -37,7 +37,7 @@ def _profile_communication_state(db, settings: dict) -> tuple[bool, bool]:
 def _portal_ui(db) -> dict:
     row = db.query_one(
         "SELECT brand_name,portal_logo_url,"
-        "portal_show_subscription,portal_show_media_access,portal_show_monitoring,portal_show_support FROM settings WHERE id=1"
+        "portal_show_invitations,portal_show_subscription,portal_show_media_access,portal_show_monitoring,portal_show_support FROM settings WHERE id=1"
     ) or {}
     values = dict(row)
     unread_messages = 0
@@ -49,6 +49,7 @@ def _portal_ui(db) -> dict:
         "portal_terms_url": None, "portal_privacy_url": None,
         "portal_features": {key: int(values.get(column, 1) if values.get(column) is not None else 1) == 1 for key, column in _FEATURE_COLUMNS.items()},
         "portal_unread_messages": unread_messages,
+        "portal_invitations_enabled": int(values.get("portal_show_invitations") or 0) == 1,
     }
 
 
@@ -203,6 +204,38 @@ def register(app):
         if not subscription:
             return _portal_error("portal_account_missing")
         return render_template("portal/subscription.html", subscription=subscription, **ui, active_portal_page="subscription")
+
+    @app.post("/portal/subscription/invitations")
+    @portal_login_required
+    @permission_required("portal.subscription.read_own")
+    @portal_user_required
+    def portal_friend_invite():
+        from core.portal_user_invitations import build_invitation_payload, invitation_lock
+        from core.portal_rate_limit import portal_request_allowed
+        from blueprints.users import create_user_from_payload
+        db = get_db()
+        ui = _require_feature(db, "subscription")
+        if not ui["portal_invitations_enabled"]:
+            abort(404)
+        user_id = int(g.auth_principal["vodum_user_id"])
+        if not portal_request_allowed(db, "user_invitation", str(user_id), limit=5):
+            flash("portal_user_invitation_rate_limited", "error")
+            return redirect(url_for("portal_subscription"))
+        try:
+            # Serialize duplicate detection and creation, including concurrent requests.
+            with invitation_lock:
+                payload, source = build_invitation_payload(db, user_id, request.form)
+                response = create_user_from_payload(db, payload, invitation_source=source)
+            result = response[0].get_json() if isinstance(response, tuple) else response.get_json()
+            if not result.get("ok"):
+                flash("portal_user_invitation_failed", "error")
+            elif result.get("provider_errors") or result.get("mailing_errors"):
+                flash("portal_user_invitation_partial", "warning")
+            else:
+                flash("portal_user_invitation_sent", "success")
+        except ValueError as exc:
+            flash(str(exc), "error")
+        return redirect(url_for("portal_subscription"))
 
     @app.get("/portal/media-access")
     @portal_login_required

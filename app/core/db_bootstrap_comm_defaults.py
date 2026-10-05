@@ -159,6 +159,8 @@ def seed_default_comm_templates(conn, cursor) -> None:
                 "Hello {username},\n\n"
                 "Your account has been created successfully.\n\n"
                 "Login email: {email}\n\n"
+                "Jellyfin username: {jellyfin_username}\n"
+                "Jellyfin password (not used for Plex): {jellyfin_password}\n\n"
                 "How to get started:\n"
                 "- Open Plex or Jellyfin\n"
                 "- Sign in with your account\n"
@@ -235,3 +237,6 @@ def seed_default_comm_templates(conn, cursor) -> None:
 
         print(f"✔ Bundled default communication templates inserted: {inserted_defaults}")
 
+
+    from core.communications.default_templates import upgrade_pristine_user_creation_templates
+    upgrade_pristine_user_creation_templates(conn, cursor)

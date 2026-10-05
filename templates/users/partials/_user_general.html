@@ -1,4 +1,8 @@
 {# templates/users/partials/_user_general.html #}
+<form method="post" action="{{ url_for('portal_user_invite', user_id=user.id) }}" class="mb-4">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+  <button class="rounded bg-slate-800 px-4 py-2 text-sm">{{ t('activation_resend') }}</button>
+</form>
 
 {% set _t_identity = t("identity") %}
 {% if _t_identity == "identity" %}{% set _t_identity = "Identity" %}{% endif %}

@@ -30,5 +30,6 @@
     "reactivated": {"subject": "Votre acces au portail {brand_name} a ete reactive", "body": "Bonjour {username},\n\nVotre acces au portail a ete reactive.\n\n{portal_login_url}"},
     "new_login": {"subject": "Nouvelle connexion a votre portail {brand_name}", "body": "Bonjour {username},\n\nUne nouvelle connexion a votre compte a ete enregistree. Reinitialisez votre mot de passe si ce n'etait pas vous.\n\n{portal_login_url}"},
     "direct_message": {"subject": "Nouveau message dans votre portail {brand_name}", "body": "Bonjour {username},\n\nVous avez recu un nouveau message d'un administrateur. Connectez-vous a votre portail pour le lire.\n\n{portal_login_url}"}
-  }
+  },
+  "activation": {"button": "Activer mon accès"}
 }

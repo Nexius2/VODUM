@@ -4,7 +4,7 @@
 {% set fragment_state = 'live' if sessions and sessions|length > 0 else ('idle' if idle_card else 'empty') %}
 {% set fragment_key = now_playing_key if fragment_state == 'live' else (idle_card.quote_key if idle_card and idle_card.quote_key else fragment_state) %}
 
-<div data-now-playing-fragment data-state="{{ fragment_state }}" data-key="{{ fragment_key }}">
+<div data-now-playing-fragment data-state="{{ fragment_state }}" data-key="{{ fragment_key }}{% if fragment_state == 'idle' %}:{{ idle_card.poster_url or '' }}{% endif %}">
 <div class="flex items-center justify-between mb-3">
     <div class="flex items-center gap-3 min-w-0">
 		<h2 class="text-sm font-semibold truncate">
@@ -140,13 +140,15 @@
         <div class="flex items-center gap-3">
 
             {% if idle_card.poster_url %}
+              <div data-quote-artwork-slot class="w-20 h-28 shrink-0 rounded-lg bg-slate-900/80">
                 <img
                     src="{{ idle_card.poster_url }}"
                     alt="{{ idle_card.title or '' }}"
-                    class="js-artwork-image w-20 h-28 rounded-lg object-cover border border-slate-700/70 shrink-0"
+                    class="js-artwork-image js-quote-artwork opacity-0 w-20 h-28 rounded-lg object-cover border border-slate-700/70 shrink-0"
                     loading="lazy"
                     decoding="async"
                 />
+              </div>
             {% else %}
                 <div class="w-20 h-28 rounded-lg border border-slate-700/70 bg-slate-900/80 shrink-0 flex items-center justify-center text-3xl text-slate-500">
                     &ldquo;
