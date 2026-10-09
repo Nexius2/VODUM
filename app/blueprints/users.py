@@ -104,6 +104,7 @@ def api_servers():
         """
         SELECT id, name, type, url, local_url, public_url, server_identifier, status, token
         FROM servers
+        WHERE LOWER(type) IN ('plex', 'jellyfin')
         ORDER BY name ASC
         """
     )
@@ -326,6 +327,8 @@ def create_user_from_payload(db, payload, *, invitation_source=None):
         srv = db.query_one("SELECT id, name, server_identifier, type, url, local_url, public_url, token, settings_json, server_version, unavailable_since, cooldown_until, last_failure, last_checked, status FROM servers WHERE id = ?", (sid,))
         if not srv:
             return jsonify({"ok": False, "error": f"Server not found (id={sid})"}), 400
+        if (srv['type'] or '').lower() not in ('plex', 'jellyfin'):
+            return jsonify({"ok": False, "error": "User access requires a Plex or Jellyfin server"}), 400
         # Keep the working copy decrypted: linked Plex server discovery compares
         # the selected token with the decrypted tokens returned by secret_store.
         srv = decrypt_server_record(srv)

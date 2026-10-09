@@ -5,7 +5,7 @@
 {% block header_subtitle %}{{ t("monitoring.subtitle") }}{% endblock %}
 
 {% block head %}
-  {% if request.args.get('tab', 'overview') in ['activity', 'servers', 'policies'] %}
+  {% if request.args.get('tab', 'overview') in ['activity', 'servers', 'policies', 'user_portal'] %}
     <script src="{{ url_for('static', filename='vendor/chart.js/chart.umd.min.js', v=g.app_version|default('dev')) }}"></script>
   {% endif %}
 {% endblock %}
@@ -49,14 +49,15 @@
   {% set tab_template = "monitoring/overview_body.html" %}
 {% endif %}
 
-{% if current_tab in ['activity', 'servers', 'history', 'users', 'libraries', 'policies', 'usage_risk'] %}
+{% if current_tab in ['activity', 'servers', 'history', 'users', 'libraries', 'policies', 'usage_risk', 'user_portal'] %}
   <div id="monitoring-content">
     {% include tab_template %}
   </div>
 {% else %}
   <div id="monitoring-content"
        hx-get="{{ url_for('monitoring_page', **args) }}"
-       hx-trigger="every {{ refresh_ms }}ms"
+       hx-trigger="every {{ refresh_ms }}ms queue:none, vodum:resume queue:none"
+       hx-sync="this:drop"
        hx-swap="innerHTML">
     {% include tab_template %}
   </div>

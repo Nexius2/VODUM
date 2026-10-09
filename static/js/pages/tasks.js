@@ -23,15 +23,22 @@
     "'": "&#39;"
   }[char])));
 
+  let inFlight = false;
+  let lastMarkup = null;
+
   async function refreshTasksTable() {
+    if (document.hidden || inFlight) return;
+    inFlight = true;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 10000);
     try {
-      const response = await fetch("/api/tasks/list", { cache: "no-store" });
+      const response = await fetch("/api/tasks/list", { cache: "no-store", signal: controller.signal });
       if (!response.ok) return;
 
       const data = await response.json();
       const tasks = Array.isArray(data.tasks) ? data.tasks : [];
 
-      tbody.innerHTML = tasks.map((task) => `
+      const markup = tasks.map((task) => `
         <tr class="border-b border-slate-800">
           ${debugMode ? `<td class="p-2">${Number(task.id || 0)}</td>` : ""}
           <td class="p-2">${escapeHtml(task.name_label || "")}</td>
@@ -43,8 +50,15 @@
           <td class="p-2 text-center">${renderAction(task)}</td>
         </tr>
       `).join("");
+      if (markup !== lastMarkup) {
+        tbody.innerHTML = markup;
+        lastMarkup = markup;
+      }
     } catch (error) {
       console.error("[vodum] refreshTasksTable failed", error);
+    } finally {
+      window.clearTimeout(timeout);
+      inFlight = false;
     }
   }
 
@@ -94,4 +108,7 @@
   }
 
   window.setInterval(refreshTasksTable, pollInterval);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) refreshTasksTable();
+  });
 })();

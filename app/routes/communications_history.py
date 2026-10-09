@@ -51,14 +51,14 @@ def register_history_routes(app):
 
         trigger_filter = (request.args.get("trigger") or "").strip().lower()
         trigger_options = [
-            ("", "All communications"),
-            ("usage_risk_upgrade_suggestion", "Upgrade suggestions"),
-            ("stream_blocked", "Stream blocked"),
-            ("expiration", "Expiration"),
-            ("expiration_change", "Expiration changes"),
-            ("user_creation", "User creation"),
-            ("pending_invite_reminder", "Pending invites"),
-            ("referral_reward", "Referral rewards"),
+            ("", "comm_history_all"),
+            ("usage_risk_upgrade_suggestion", "comm_trigger_usage_risk_upgrade_suggestion"),
+            ("stream_blocked", "comm_trigger_stream_blocked"),
+            ("expiration", "comm_trigger_expiration"),
+            ("expiration_change", "comm_trigger_expiration_change"),
+            ("user_creation", "comm_trigger_user_creation"),
+            ("pending_invite_reminder", "comm_trigger_pending_invite_reminder"),
+            ("referral_reward", "comm_trigger_referral_reward"),
         ]
         allowed_triggers = {value for value, _label in trigger_options if value}
         if trigger_filter not in allowed_triggers:

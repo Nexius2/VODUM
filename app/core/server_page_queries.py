@@ -23,7 +23,8 @@ SERVERS_LIST_COLUMNS = """
                 s.local_url,
                 s.public_url,
                 s.status,
-                s.server_version
+                s.server_version,
+                s.settings_json
 """
 
 LIBRARIES_LIST_COLUMNS = f"""
@@ -102,6 +103,7 @@ def load_libraries_page(db, *, per_page: int, offset: int, order_clause: str):
         SELECT
 {LIBRARIES_LIST_COLUMNS},
             s.name AS server_name,
+            LOWER(TRIM(s.type)) AS server_type,
             COUNT(DISTINCT mu.vodum_user_id) AS users_count
         FROM libraries l
         JOIN servers s ON s.id = l.server_id

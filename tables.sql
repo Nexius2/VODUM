@@ -170,6 +170,8 @@ CREATE INDEX IF NOT EXISTS idx_portal_sessions_account_active
 ON portal_sessions(portal_account_id, revoked_at, expires_at);
 CREATE INDEX IF NOT EXISTS idx_portal_sessions_expiry
 ON portal_sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_portal_sessions_created ON portal_sessions(created_at);
+CREATE INDEX IF NOT EXISTS idx_portal_sessions_account_created ON portal_sessions(portal_account_id,created_at);
 
 CREATE TABLE IF NOT EXISTS portal_account_tokens (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -222,6 +224,7 @@ CREATE INDEX IF NOT EXISTS idx_portal_audit_account_created
 ON portal_audit_events(portal_account_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_portal_audit_type_created
 ON portal_audit_events(event_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_portal_audit_created ON portal_audit_events(created_at DESC);
 
 -----------------------------------------------------------------------
 --  TABLE USERS (media servers only)
@@ -448,6 +451,7 @@ CREATE TABLE IF NOT EXISTS settings (
     portal_show_invitations INTEGER NOT NULL DEFAULT 0,
     portal_show_subscription INTEGER NOT NULL DEFAULT 1,
     portal_show_media_access INTEGER NOT NULL DEFAULT 1,
+    portal_show_media_requests INTEGER NOT NULL DEFAULT 1,
     portal_show_monitoring INTEGER NOT NULL DEFAULT 1,
     portal_show_support INTEGER NOT NULL DEFAULT 1,
     portal_show_payment INTEGER NOT NULL DEFAULT 0,
@@ -979,6 +983,7 @@ ON media_session_history(media_key, started_at);
 CREATE INDEX IF NOT EXISTS idx_msh_stopped_media_type
 ON media_session_history(stopped_at, media_type);
 
+CREATE INDEX IF NOT EXISTS idx_history_stopped_datetime ON media_session_history(datetime(stopped_at));
 CREATE INDEX IF NOT EXISTS idx_hist_user_stopped ON media_session_history(media_user_id, stopped_at);
 CREATE INDEX IF NOT EXISTS idx_hist_server_stopped ON media_session_history(server_id, stopped_at);
 
@@ -1095,6 +1100,8 @@ CREATE INDEX IF NOT EXISTS idx_stream_enforcements_time
 ON stream_enforcements(created_at);
 CREATE INDEX IF NOT EXISTS idx_stream_enforcements_server
 ON stream_enforcements(server_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_stream_enforcements_datetime ON stream_enforcements(datetime(created_at));
+CREATE INDEX IF NOT EXISTS idx_stream_enforcements_kill_datetime ON stream_enforcements(datetime(created_at)) WHERE action = 'kill';
 CREATE INDEX IF NOT EXISTS idx_stream_enforcements_vodum_user_created
 ON stream_enforcements(vodum_user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_stream_enforcements_external_user_created
@@ -1531,3 +1538,46 @@ CREATE TABLE IF NOT EXISTS user_activation_servers (
             lease_until INTEGER NOT NULL DEFAULT 0, lease_id TEXT,
             PRIMARY KEY(activation_id, server_id)
         );
+
+CREATE TABLE IF NOT EXISTS arr_monitoring_samples (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+ checked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ online INTEGER NOT NULL,
+ latency_ms INTEGER,
+ queue_count INTEGER,
+ health_count INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_arr_monitoring_server_time ON arr_monitoring_samples(server_id, checked_at);
+
+CREATE TABLE IF NOT EXISTS library_request_settings (
+ library_id INTEGER PRIMARY KEY REFERENCES libraries(id) ON DELETE CASCADE,
+ requests_enabled INTEGER NOT NULL DEFAULT 1 CHECK(requests_enabled IN (0,1)),
+ request_priority INTEGER NOT NULL DEFAULT 100,
+ default_for_requests INTEGER NOT NULL DEFAULT 0 CHECK(default_for_requests IN (0,1)),
+ created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS library_arr_routes (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ library_id INTEGER NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+ arr_server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+ priority INTEGER NOT NULL CHECK(priority>0),
+ enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+ created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ UNIQUE(library_id,arr_server_id), UNIQUE(library_id,priority)
+);
+CREATE INDEX IF NOT EXISTS idx_library_arr_routes_server ON library_arr_routes(arr_server_id);
+
+CREATE TABLE IF NOT EXISTS library_arr_conditions (
+ library_id INTEGER NOT NULL, arr_server_id INTEGER NOT NULL,
+ conditions_json TEXT NOT NULL DEFAULT '{}', PRIMARY KEY(library_id,arr_server_id),
+ FOREIGN KEY(library_id,arr_server_id) REFERENCES library_arr_routes(library_id,arr_server_id) ON DELETE CASCADE
+);
+
+-- Serialize portal requests across workers while remote checks/additions run.
+CREATE TABLE IF NOT EXISTS portal_media_request_claims (
+ kind TEXT NOT NULL, external_id INTEGER NOT NULL, owner TEXT NOT NULL,
+ created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(kind, external_id)
+);

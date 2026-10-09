@@ -10,8 +10,6 @@
 
 {% include "servers/servers_nav.html" with context %}
 
-{% set top_servers = servers[:4] %}
-{% set other_servers = servers[4:] %}
 {% set first_setup = servers|length == 0 %}
 
 {% if first_setup %}
@@ -37,35 +35,26 @@
               class="grid grid-cols-1 gap-3 text-sm">
 
           <label class="flex flex-col">
-            {{ t("server_type") }}*
-            <select name="type"
-                    class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm">
-              <option value="plex">{{ t("plex") }}</option>
-              <option value="jellyfin">{{ t("jellyfin") }}</option>
-            </select>
-          </label>
-
-          <label class="flex flex-col">
             URL*
             <input
-                type="text"
+                type="url"
                 name="url"
                 required
                 placeholder="http://192.168.1.100:32400"
-                autocomplete="off"
+                autocomplete="url" data-server-url
                 spellcheck="false"
                 class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm"
             >
 
             <span class="mt-1 text-xs text-slate-500">
-              {{ t("servers_example_url") }}: http://192.168.1.100:32400
+              {{ t("servers_connection_examples") }}<br>{{ t("server_auto_detection") }}
             </span>
           </label>
 
           <label class="flex flex-col">
-            Token*
-            <input type="text" name="token" required
-                   class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono text-xs">
+            {{ t("server_credential") }}*
+            <div class="relative"><input type="password" name="token" required autocomplete="new-password" data-server-secret
+                   class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono text-xs w-full pr-10"><button type="button" data-server-secret-toggle aria-label="{{ t('server_secret_visibility') }}" aria-pressed="false" class="absolute right-3 top-1/2 -translate-y-1/2">👁</button></div>
           </label>
 
           <button class="mt-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-sm">
@@ -99,7 +88,7 @@
 
 {% else %}
 
-<div class="grid grid-cols-1 xl:grid-cols-[420px_minmax(0,1fr)] gap-6">
+<div class="grid grid-cols-1 xl:grid-cols-[420px_minmax(0,1fr)] gap-6 items-start">
 
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 min-h-[320px] h-full">
     <h2 class="text-sm font-semibold mb-3">{{ t("add_server") }}</h2>
@@ -108,35 +97,26 @@
           class="grid grid-cols-1 gap-3 text-sm">
 
       <label class="flex flex-col">
-        {{ t("server_type") }}*
-        <select name="type"
-                class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm">
-          <option value="plex">{{ t("plex") }}</option>
-          <option value="jellyfin">{{ t("jellyfin") }}</option>
-        </select>
-      </label>
-
-      <label class="flex flex-col">
         URL*
         <input
-            type="text"
+            type="url"
             name="url"
             required
             placeholder="http://192.168.1.100:32400"
-            autocomplete="off"
+            autocomplete="url" data-server-url
             spellcheck="false"
             class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm"
         >
 
         <span class="mt-1 text-xs text-slate-500">
-          {{ t("servers_example_url") }}: http://192.168.1.100:32400
+          {{ t("servers_connection_examples") }}<br>{{ t("server_auto_detection") }}
         </span>
       </label>
 
       <label class="flex flex-col">
-        Token*
-        <input type="text" name="token" required
-               class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono text-xs">
+        {{ t("server_credential") }}*
+        <div class="relative"><input type="password" name="token" required autocomplete="new-password" data-server-secret
+               class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono text-xs w-full pr-10"><button type="button" data-server-secret-toggle aria-label="{{ t('server_secret_visibility') }}" aria-pressed="false" class="absolute right-3 top-1/2 -translate-y-1/2">👁</button></div>
       </label>
 
       <button class="mt-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-sm">
@@ -144,15 +124,19 @@
       </button>
 
     </form>
-    {% if plex_suggestions %}
-      <div class="my-5 h-px bg-slate-800"></div>
-      {% set plex_suggestions_return_to = "servers" %}
-      {% include "servers/_plex_suggestions.html" %}
-    {% endif %}
   </div>
 
-<div class="grid grid-cols-1 sm:grid-cols-2 gap-4" style="grid-auto-rows:1fr;">
-    {% for s in top_servers %}
+  {% if plex_suggestions %}
+  <div>
+    {% set plex_suggestions_top_row = true %}
+    {% set plex_suggestions_return_to = "servers" %}
+    {% include "servers/_plex_suggestions.html" %}
+  </div>
+  {% endif %}
+</div>
+
+<div class="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" style="grid-auto-rows:1fr;">
+    {% for s in servers %}
     {% set is_deleting = deleting_server_ids is defined and s.id in deleting_server_ids %}
     <a href="{% if not is_deleting %}{{ url_for('server_detail', server_id=s.id) }}{% else %}#{% endif %}"
        class="relative overflow-hidden bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col gap-2 text-sm w-full h-full min-h-[160px] {% if not is_deleting %}hover:bg-slate-800 transition cursor-pointer{% else %}cursor-not-allowed opacity-80{% endif %}"
@@ -174,7 +158,7 @@
           {% elif s.type == 'jellyfin' %}
             <span class="px-2 py-0.5 rounded-full bg-blue-700/40 text-blue-300 text-[10px]">{{ t("jellyfin") }}</span>
           {% else %}
-            <span class="px-2 py-0.5 rounded-full bg-slate-700/40 text-slate-300 text-[10px]">{{ s.type }}</span>
+            <span class="px-2 py-0.5 rounded-full bg-slate-700/40 text-slate-300 text-[10px]">{{ t(s.type) }}</span>
           {% endif %}
         </div>
 
@@ -194,7 +178,7 @@
       </div>
 
       <div class="relative z-[1] text-[11px] text-slate-400 leading-tight">
-        {{ s.libraries_count }} {{ t("libraries") }} · {{ s.users_count }} {{ t("users") }}
+        {% if s.type in ["sonarr", "radarr"] %}{{ t("arr_connection_help") }}{% else %}{{ s.libraries_count }} {{ t("libraries") }} · {{ s.users_count }} {{ t("users") }}{% endif %}
       </div>
 
       {% if s.server_version %}
@@ -202,62 +186,15 @@
         Version: {{ s.server_version }}
       </div>
       {% endif %}
+      {% if s.type in ['sonarr', 'radarr'] and not s.requests_configured %}
+      <p role="status" class="rounded-lg border border-rose-500/50 bg-rose-950/50 p-2 text-xs text-rose-200">{{ t('arr_requests_configuration_notice') }}</p>
+      {% endif %}
     </a>
     {% endfor %}
-  </div>
-
 </div>
 
-{% endif %}
-
-{% if other_servers %}
-<div class="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" style="grid-auto-rows:1fr;">
-
-  {% for s in other_servers %}
-  {% set is_deleting = deleting_server_ids is defined and s.id in deleting_server_ids %}
-  <a href="{% if not is_deleting %}{{ url_for('server_detail', server_id=s.id) }}{% else %}#{% endif %}"
-     class="relative overflow-hidden bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col gap-2 text-sm w-full h-full min-h-[160px] {% if not is_deleting %}hover:bg-slate-800 transition cursor-pointer{% else %}cursor-not-allowed opacity-80{% endif %}"
-     {% if is_deleting %}onclick="return false;" aria-disabled="true"{% endif %}>
-
-    <div class="relative z-[1] flex items-center justify-between">
-      <div class="flex items-center gap-2 font-semibold">
-        {{ s.name }}
-
-        {% if s.type == 'plex' %}
-          <span class="px-2 py-0.5 rounded-full bg-amber-700/40 text-amber-300 text-[10px]">{{ t("plex") }}</span>
-        {% elif s.type == 'jellyfin' %}
-          <span class="px-2 py-0.5 rounded-full bg-blue-700/40 text-blue-300 text-[10px]">{{ t("jellyfin") }}</span>
-        {% else %}
-          <span class="px-2 py-0.5 rounded-full bg-slate-700/40 text-slate-300 text-[10px]">{{ s.type }}</span>
-        {% endif %}
-      </div>
-
-      {% if s.status == 'up' %}
-        <span class="px-2 py-0.5 rounded-full bg-emerald-900/40 text-emerald-300 text-[10px]">{{ t("online") }}</span>
-      {% elif s.status == 'down' %}
-        <span class="px-2 py-0.5 rounded-full bg-rose-900/40 text-rose-300 text-[10px]">{{ t("offline") }}</span>
-      {% else %}
-        <span class="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 text-[10px]">{{ t("unknown") }}</span>
-      {% endif %}
-    </div>
-
-    <div class="relative z-[1] text-[11px] text-slate-400 leading-tight">
-      {{ s.url or s.public_url or s.local_url or t("url_not_defined") }}
-    </div>
-
-    <div class="relative z-[1] text-[11px] text-slate-400 leading-tight">
-      {{ s.libraries_count }} {{ t("libraries") }} · {{ s.users_count }} {{ t("users") }}
-    </div>
-
-    {% if s.server_version %}
-    <div class="relative z-[1] text-[11px] text-slate-500 leading-tight">
-      Version: {{ s.server_version }}
-    </div>
-    {% endif %}
-  </a>
-  {% endfor %}
-
-</div>
 {% endif %}
 
 {% endblock %}
+
+{% block scripts %}<script src="{{ url_for('static', filename='js/pages/servers-create.js', v=g.app_version|default('dev')) }}"></script>{% endblock %}

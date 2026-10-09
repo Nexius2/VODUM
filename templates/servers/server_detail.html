@@ -5,10 +5,27 @@
 {% block header_title %}{{ server.name }}{% endblock %}
 {% block header_subtitle %}{{ t("server_details_subtitle") }}{% endblock %}
 
+{% block header_actions %}
+<div class="flex items-center gap-2">
+<button type="submit" form="server_config"
+        class="px-4 py-2 bg-primary hover:bg-primary-dark rounded text-white text-sm">
+  {{ t("save") }}
+</button>
+<button type="submit" form="delete_form"
+        class="px-4 py-2 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-sm">
+  {{ t("delete") }}
+</button>
+</div>
+{% endblock %}
+
 {% block content %}
+{% if server.type in ['sonarr', 'radarr'] and not arr_requests_configured %}
+<p role="status" class="mb-4 rounded-lg border border-rose-500/50 bg-rose-950/50 p-3 text-sm text-rose-200">{{ t('arr_requests_configuration_notice') }}</p>
+{% endif %}
 
 <!-- FORMULAIRE D'ÉDITION DU SERVEUR -->
-<form method="post" action="{{ url_for('server_detail_save', server_id=server.id) }}" class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 max-w-3xl">
+<form id="server_config" method="post" action="{{ url_for('server_detail_save', server_id=server.id) }}" class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 max-w-3xl">
+<input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
 <input type="hidden" name="server_type" value="{{ server.type }}">
   <h2 class="text-sm font-semibold mb-2 flex items-center gap-2">
     {{ t("server_information") }}
@@ -18,7 +35,7 @@
     {% elif server.type == 'jellyfin' %}
       <span class="px-2 py-0.5 rounded-full bg-blue-700/30 text-blue-300 text-[10px]">{{ t("jellyfin") }}</span>
     {% else %}
-      <span class="px-2 py-0.5 rounded-full bg-slate-700/40 text-slate-300 text-[10px]">{{ server.type }}</span>
+      <span class="px-2 py-0.5 rounded-full bg-slate-700/40 text-slate-300 text-[10px]">{{ t(server.type) }}</span>
     {% endif %}
   </h2>
 
@@ -36,7 +53,8 @@
 			 class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 opacity-60"
 			 value="{% if server.type == 'plex' %}{{ t('plex') }}
 					{% elif server.type == 'jellyfin' %}{{ t('jellyfin') }}
-					{% elif server.type == 'other' %}{{ t('other') }}
+					{% elif server.type in ['sonarr', 'radarr'] %}{{ t(server.type) }}
+                    {% elif server.type == 'other' %}{{ t('other') }}
 					{% endif %}"
 			 readonly>
 	</label>
@@ -58,7 +76,7 @@
     </label>
 
 	<label class="flex flex-col">
-	  {{ t("server_token") }}
+	  {{ t("api_key") if server.type in ["sonarr", "radarr"] else t("server_token") }}
 
 	  <div class="relative mt-1">
 		<input
@@ -100,6 +118,26 @@
     </label>
 
     {% set server_settings = server.settings_json|fromjson if server.settings_json else {} %}
+    {% if server.type in ['sonarr','radarr'] %}
+    {% set request_defaults = server_settings.get('media_requests', {}) %}
+    {% if arr_request_choices.profiles and arr_request_choices.roots %}
+    <input type="hidden" name="arr_request_defaults" value="1">
+    <label class="flex flex-col">{{ t('portal_requests_quality_profile') }}
+      <select {% if arr_request_choices.profiles|length > 1 %}required{% endif %} name="arr_quality_profile_id" class="mt-1 rounded-lg border border-slate-800 bg-slate-950 px-3 py-2">
+        <option value="">{{ t('portal_requests_single_default') }}</option>
+        {% for profile in arr_request_choices.profiles %}<option value="{{ profile.id }}" {% if request_defaults.get('quality_profile_id')==profile.id %}selected{% endif %}>{{ profile.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="flex flex-col">{{ t('portal_requests_destination') }}
+      <select {% if arr_request_choices.roots|length > 1 %}required{% endif %} name="arr_root_folder_id" class="mt-1 rounded-lg border border-slate-800 bg-slate-950 px-3 py-2">
+        <option value="">{{ t('portal_requests_single_default') }}</option>
+        {% for root in arr_request_choices.roots %}<option value="{{ root.id }}" {% if request_defaults.get('root_folder_id')==root.id %}selected{% endif %}>{{ root.path }}</option>{% endfor %}
+      </select>
+    </label>
+    <p class="md:col-span-2 text-xs text-slate-400">{{ t('portal_requests_defaults_help') }}</p>
+    {% else %}<p class="md:col-span-2 text-xs text-amber-300">{{ t('portal_requests_not_configured') }}</p>{% endif %}
+    {% endif %}
+
     <label class="flex items-start gap-2 md:col-span-2">
       <input type="checkbox" name="verify_tls" value="1"
              {% if server_settings.get('verify_tls', true) %}checked{% endif %}
@@ -112,22 +150,6 @@
 
   </div>
 
-  <!-- Barre d'actions -->
-  <div class="mt-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
-
-    <!-- Bouton Enregistrer -->
-    <button class="px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-sm">
-      {{ t("save") }}
-    </button>
-
-    <!-- Bouton Supprimer (lié au formulaire delete_form) -->
-    <button form="delete_form"
-            class="px-4 py-2 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-sm">
-      {{ t("delete") }}
-    </button>
-
-  </div>
-
 </form>
 
 <!-- FORMULAIRE SUPPRESSION EN DEHORS (HTML VALIDE) -->
@@ -136,6 +158,10 @@
       action="{{ url_for('server_delete', server_id=server.id) }}">
 </form>
 
+{% if server.type in ['sonarr', 'radarr'] %}
+{% include "servers/_request_routing.html" %}
+<div class="mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-5 text-sm text-slate-400">{{ t('arr_connection_help') }}</div>
+{% else %}
 <!-- SECTION BIBLIOTHÈQUES -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 mt-8">
   <h2 class="text-sm font-semibold mb-4">{{ t("libraries") }}</h2>
@@ -197,6 +223,8 @@
     <p class="text-xs text-slate-500">{{ t("no_users_for_server") }}</p>
   {% endif %}
 </div>
+
+{% endif %}
 
 <!-- DELETE SERVER CONFIRM MODAL -->
 <div id="deleteServerConfirmModal" class="hidden fixed inset-0 z-50" aria-hidden="true">

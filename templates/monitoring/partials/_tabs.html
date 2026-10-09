@@ -1,48 +1,10 @@
-<nav class="mb-4 border-b border-slate-800 text-base flex flex-wrap items-center gap-6">
+<nav class="monitoring-tabs mb-4 border-b border-slate-800 text-base flex flex-wrap items-center gap-6" aria-label="{{ t('monitoring.title') }}">
   {% set current = tab or "overview" %}
-
-  <a href="{{ url_for('monitoring_page', tab='overview') }}"
-     class="pb-2 border-b-2 {% if current=='overview' %}border-primary text-primary{% else %}border-transparent text-slate-400 hover:text-slate-200{% endif %}">
-    Overview
-  </a>
-
-  <a href="{{ url_for('monitoring_page', tab='now_playing') }}"
-     class="pb-2 border-b-2 {% if current=='now_playing' %}border-primary text-primary{% else %}border-transparent text-slate-400 hover:text-slate-200{% endif %}">
-    Now Playing
-  </a>
-
-  <a href="{{ url_for('monitoring_page', tab='policies') }}"
-     class="pb-2 border-b-2 {% if current=='policies' %}border-primary text-primary{% else %}border-transparent text-slate-400 hover:text-slate-200{% endif %}">
-    Policies
-  </a>
-
-  <a href="{{ url_for('monitoring_page', tab='usage_risk') }}"
-     class="pb-2 border-b-2 {% if current=='usage_risk' %}border-primary text-primary{% else %}border-transparent text-slate-400 hover:text-slate-200{% endif %}">
-    Usage Risk
-  </a>
-
-  <a href="{{ url_for('monitoring_page', tab='activity') }}"
-     class="pb-2 border-b-2 {% if current=='activity' %}border-primary text-primary{% else %}border-transparent text-slate-400 hover:text-slate-200{% endif %}">
-    Activity
-  </a>
-
-  <a href="{{ url_for('monitoring_page', tab='history') }}"
-     class="pb-2 border-b-2 {% if current=='history' %}border-primary text-primary{% else %}border-transparent text-slate-400 hover:text-slate-200{% endif %}">
-    History
-  </a>
-
-  <a href="{{ url_for('monitoring_page', tab='libraries') }}"
-     class="pb-2 border-b-2 {% if current=='libraries' %}border-primary text-primary{% else %}border-transparent text-slate-400 hover:text-slate-200{% endif %}">
-    Libraries
-  </a>
-
-  <a href="{{ url_for('monitoring_page', tab='users') }}"
-     class="pb-2 border-b-2 {% if current=='users' %}border-primary text-primary{% else %}border-transparent text-slate-400 hover:text-slate-200{% endif %}">
-    Users
-  </a>
-
-  <a href="{{ url_for('monitoring_page', tab='servers') }}"
-     class="pb-2 border-b-2 {% if current=='servers' %}border-primary text-primary{% else %}border-transparent text-slate-400 hover:text-slate-200{% endif %}">
-    Servers
-  </a>
+  {% for key,label in [('overview','Overview'),('now_playing','Now Playing'),('policies','Policies'),('usage_risk','Usage Risk'),('activity','Activity'),('history','History'),('libraries','Libraries'),('users','Users'),('servers','Servers'),('user_portal',t('portal_usage_title'))] %}
+  {% if key != 'user_portal' or portal_enabled %}
+  <a href="{{ url_for('monitoring_page', tab=key) }}"
+     {% if current == key %}aria-current="page"{% endif %}
+     class="monitoring-tab pb-2 border-b-2 {% if current==key %}border-primary text-primary{% else %}border-transparent text-slate-400 hover:text-slate-200{% endif %}">{{ label }}</a>
+  {% endif %}
+  {% endfor %}
 </nav>

@@ -80,7 +80,7 @@
               <form method="post" action="{{ url_for('refresh_server_library', library_id=lib.id) }}">
                 <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
                 <button type="submit" class="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-left text-sky-300 hover:bg-slate-800 transition">
-                  <span aria-hidden="true">&#8635;</span><span>{{ t("refresh_library") }}</span>
+                  <span aria-hidden="true">&#8635;</span><span>{{ t("refresh_server_libraries") if lib.server_type == "jellyfin" else t("refresh_library") }}</span>
                 </button>
               </form>
             </div>

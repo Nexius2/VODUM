@@ -1,4 +1,5 @@
 from __future__ import annotations
+from db_manager import isolated_read_operation
 
 
 USER_SORT_COLUMNS = {
@@ -11,6 +12,7 @@ USER_SORT_COLUMNS = {
 }
 
 
+@isolated_read_operation
 def load_monitoring_users_total(db, query):
     if query:
         like = f"%{query}%"
@@ -66,9 +68,10 @@ def load_monitoring_users_total(db, query):
                   THEN ('v:' || mu.vodum_user_id)
                   ELSE ('m:' || mu.id)
                 END AS group_key
-              FROM media_session_history h
-              JOIN media_users mu ON mu.id = h.media_user_id
-              WHERE h.media_user_id IS NOT NULL
+              FROM media_users mu
+              WHERE EXISTS (
+                SELECT 1 FROM media_session_history h WHERE h.media_user_id = mu.id
+              )
             )
             SELECT COUNT(DISTINCT group_key) AS cnt
             FROM base
@@ -77,10 +80,19 @@ def load_monitoring_users_total(db, query):
     return int(dict(row).get("cnt") or 0) if row else 0
 
 
+@isolated_read_operation
 def load_monitoring_users_rows(db, options):
     query = options["q"]
     where_sql = ""
     params = []
+    # Only filtered searches use the concatenated identity text. Keep the
+    # original concatenation for searches, including SQL wildcard semantics.
+    media_search_sql = """
+            , GROUP_CONCAT(
+              COALESCE(b.mu_username, '') || ' ' ||
+              COALESCE(b.mu_email, ''), ' '
+            ) AS media_search
+    """ if query else ""
     if query:
         like = f"%{query}%"
         where_sql = """
@@ -161,12 +173,8 @@ def load_monitoring_users_rows(db, options):
           SELECT b.group_key,
             MAX(b.vodum_user_id) AS vodum_user_id,
             MIN(b.media_user_id) AS user_id,
-            COALESCE(vu.username, MIN(b.mu_username)) AS username,
-            GROUP_CONCAT(
-              COALESCE(b.mu_username, '') || ' ' ||
-              COALESCE(b.mu_email, ''),
-              ' '
-            ) AS media_search
+            COALESCE(vu.username, MIN(b.mu_username)) AS username
+            {media_search_sql}
           FROM base b
           LEFT JOIN vodum_users vu ON vu.id = b.vodum_user_id
           GROUP BY b.group_key

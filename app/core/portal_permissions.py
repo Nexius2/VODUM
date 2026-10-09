@@ -15,6 +15,7 @@ ROLE_PERMISSIONS = {
             "portal.profile.update_own",
             "portal.subscription.read_own",
             "portal.media_access.read_own",
+            "portal.media_requests.create_own",
             "portal.media_access.update_own",
             "portal.monitoring.read_own",
             "portal.support.read",

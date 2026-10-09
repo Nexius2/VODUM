@@ -5,12 +5,13 @@ from markupsafe import Markup, escape
 
 from web.helpers import get_db
 from core.i18n import get_translator
+from core.request_settings import read_presentation_settings
 
 
 def inject_brand_name():
     try:
         db = get_db()
-        row = db.query_one("SELECT brand_name FROM settings WHERE id = 1")
+        row = read_presentation_settings(db)
         brand_name = None
         if row:
             brand_name = row["brand_name"]
@@ -250,7 +251,7 @@ def tz_filter(dt):
         dt = dt.replace(tzinfo=timezone.utc)
 
     db = get_db()
-    row = db.query_one("SELECT timezone FROM settings WHERE id = 1")
+    row = read_presentation_settings(db)
 
     tzname = "UTC"
     if row:

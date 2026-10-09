@@ -1,4 +1,5 @@
 from __future__ import annotations
+from db_manager import isolated_read_operation
 
 from core.monitoring.artwork import (
     build_history_backdrop_url,
@@ -70,6 +71,7 @@ def build_monitoring_library_options(args, cookies, per_page=30):
     }
 
 
+@isolated_read_operation
 def load_monitoring_library_table(db, options):
     count = db.query_one(
         """
@@ -194,7 +196,8 @@ def build_library_top_filter(options):
     return " AND ".join(where), params
 
 
-def load_monitoring_library_top_cards(db, options):
+@isolated_read_operation
+def _load_monitoring_library_top_rows(db, options):
     where_hist_sql, params_hist = build_library_top_filter(
         options
     )
@@ -437,7 +440,12 @@ def load_monitoring_library_top_cards(db, options):
         tuple(params_hist),
     )
 
-    top_rows = [dict(r) for r in (top_rows or [])]
+    return [dict(r) for r in (top_rows or [])]
+
+
+def load_monitoring_library_top_cards(db, options):
+    # Artwork normalization persists repaired refs; keep it outside the reader.
+    top_rows = _load_monitoring_library_top_rows(db, options)
 
     cards_by_library = {}
     for r in top_rows:

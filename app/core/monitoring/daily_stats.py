@@ -33,6 +33,12 @@ def _day_value(value) -> str:
 def materialize_day(db, day) -> dict:
     """Replace one daily aggregate atomically from session history."""
     day = _day_value(day)
+    # Capture before reading history. A concurrent mutation then leaves these
+    # revisions behind the source, so this row cannot be mistaken for fresh.
+    revisions = db.query('''SELECT
+        COALESCE((SELECT revision FROM monitoring_daily_revisions WHERE day = ?), 0) AS source_revision,
+        (SELECT revision FROM monitoring_identity_revision WHERE id = 1) AS identity_revision''', (day,))
+    revision = dict(revisions[0])
     rows = [dict(row) for row in (db.query(
         """
         WITH ranked AS (
@@ -96,16 +102,18 @@ def materialize_day(db, day) -> dict:
         """
         INSERT INTO monitoring_daily_stats(
           day, sessions, watch_ms, active_users, viewer_keys_json,
-          top_users_json, top_media_json, source_max_id, computed_at
-        ) VALUES(?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+          top_users_json, top_media_json, source_max_id, source_revision, identity_revision, computed_at
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
         ON CONFLICT(day) DO UPDATE SET
           sessions=excluded.sessions, watch_ms=excluded.watch_ms,
           active_users=excluded.active_users, viewer_keys_json=excluded.viewer_keys_json,
           top_users_json=excluded.top_users_json, top_media_json=excluded.top_media_json,
-          source_max_id=excluded.source_max_id, computed_at=CURRENT_TIMESTAMP
+          source_max_id=excluded.source_max_id, source_revision=excluded.source_revision,
+          identity_revision=excluded.identity_revision, computed_at=CURRENT_TIMESTAMP
         """,
         (day, len(rows), watch_ms, len(viewers), _json(viewers), _json(top_users),
-         _json(top_media), max((int(row.get("id") or 0) for row in rows), default=0)),
+         _json(top_media), max((int(row.get("id") or 0) for row in rows), default=0),
+         revision['source_revision'], revision['identity_revision']),
     )
     return {"day": day, "sessions": len(rows), "watch_ms": watch_ms, "active_users": len(viewers)}
 
@@ -113,17 +121,32 @@ def materialize_day(db, day) -> dict:
 def refresh_recent_days(db, days: int = 31, *, today=None) -> dict:
     today = date.fromisoformat(_day_value(today or datetime.now(timezone.utc)))
     days = max(1, min(int(days), 366))
-    results = [materialize_day(db, today - timedelta(days=offset)) for offset in range(days)]
-    return {"days": len(results), "sessions": sum(item["sessions"] for item in results)}
+    start = (today - timedelta(days=days - 1)).isoformat()
+    valid = {row['day'] for row in db.query('''SELECT s.day
+        FROM monitoring_daily_stats s
+        LEFT JOIN monitoring_daily_revisions r ON r.day = s.day
+        WHERE s.day BETWEEN ? AND ?
+          AND s.source_revision = COALESCE(r.revision, 0)
+          AND s.identity_revision = (SELECT revision FROM monitoring_identity_revision WHERE id = 1)
+        ''', (start, today.isoformat()))}
+    results = [materialize_day(db, today - timedelta(days=offset))
+               for offset in range(days) if (today - timedelta(days=offset)).isoformat() not in valid]
+    totals = db.query('''SELECT COALESCE(SUM(sessions), 0) AS sessions
+        FROM monitoring_daily_stats WHERE day BETWEEN ? AND ?''', (start, today.isoformat()))
+    return {'days': len(results), 'sessions': int(totals[0]['sessions']), 'skipped_days': len(valid)}
 
 
 def load_materialized_window(db, days: int) -> dict | None:
     """Return compact window statistics, or None when coverage is incomplete."""
     days = max(1, min(int(days), 366))
     rows = [dict(row) for row in (db.query(
-        """SELECT day,sessions,watch_ms,viewer_keys_json,top_users_json,top_media_json
-           FROM monitoring_daily_stats
-           WHERE day >= date('now', ?) ORDER BY day DESC""",
+        """SELECT s.day,s.sessions,s.watch_ms,s.viewer_keys_json,s.top_users_json,s.top_media_json
+           FROM monitoring_daily_stats s
+           LEFT JOIN monitoring_daily_revisions r ON r.day = s.day
+           WHERE s.day >= date('now', ?) AND s.day <= date('now')
+             AND s.source_revision = COALESCE(r.revision, 0)
+             AND s.identity_revision = (SELECT revision FROM monitoring_identity_revision WHERE id = 1)
+           ORDER BY s.day DESC""",
         (f"-{days - 1} days",),
     ) or [])]
     if len(rows) < days:

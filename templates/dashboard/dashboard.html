@@ -76,63 +76,7 @@
       </div>
     </section>
 
-    <!-- Single server -->
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-        <div class="text-xs uppercase text-slate-400 mb-3">
-            {{ t("server") if t("server") != "server" else "Server" }}
-        </div>
-
-        {% if single_server %}
-            <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0">
-                    <div class="text-base font-semibold text-white flex items-center gap-2 min-w-0">
-                        <span class="truncate">{{ single_server.name }}</span>
-
-                        <span class="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize
-                            {% if single_server.type == 'plex' %}
-                                bg-amber-900/40 text-amber-300
-                            {% elif single_server.type == 'jellyfin' %}
-                                bg-blue-900/40 text-blue-300
-                            {% elif single_server.type == 'kodi' %}
-                                bg-indigo-900/40 text-indigo-300
-                            {% else %}
-                                bg-slate-800 text-slate-300
-                            {% endif %}
-                        ">
-                            {{ t(single_server.type) }}
-                        </span>
-                    </div>
-
-                    <div class="text-xs text-slate-400 mt-2 truncate">
-                        {{ single_server.url or '—' }}
-                    </div>
-                </div>
-
-                <div class="shrink-0 text-right">
-                    {% set st = (single_server.status or 'unknown') %}
-                    {% if st == 'up' %}
-                        <div class="inline-flex text-xs px-2 py-1 rounded-full bg-emerald-900/40 text-emerald-300">
-                            {{ t("online") }}
-                        </div>
-                    {% elif st == 'down' %}
-                        <div class="inline-flex text-xs px-2 py-1 rounded-full bg-rose-900/40 text-rose-300">
-                            {{ t("offline") }}
-                        </div>
-                    {% else %}
-                        <div class="inline-flex text-xs px-2 py-1 rounded-full bg-slate-800 text-slate-200">
-                            Unknown
-                        </div>
-                    {% endif %}
-
-                    <div class="text-[10px] text-slate-500 mt-2">
-                        {{ t("last_check") }} : {{ single_server.last_checked|browser_datetime if single_server.last_checked else '-'  }}
-                    </div>
-                </div>
-            </div>
-        {% else %}
-            <p class="text-xs text-slate-500">{{ t("no_servers_configured") }}</p>
-        {% endif %}
-    </div>
+    {% include "dashboard/partials/_servers.html" %}
 
     <div class="h-full" hx-get="{{ url_for('dashboard_subscription_summary_partial') }}"
          hx-trigger="load"
@@ -314,10 +258,7 @@
     </section>
 
 	<!-- Servers list -->
-	<section hx-get="{{ url_for('dashboard_servers_partial') }}" hx-trigger="load" hx-request='{"timeout":8000}' hx-swap="outerHTML" data-dashboard-widget-fallback="{{ t('no_data') }}" class="min-h-64 animate-pulse rounded-2xl border border-slate-800 bg-slate-900 p-4">
-		<div class="mb-4 h-4 w-28 rounded bg-slate-800"></div>
-		<div class="space-y-3"><div class="h-16 rounded-xl bg-slate-800/70"></div><div class="h-16 rounded-xl bg-slate-800/70"></div><div class="h-16 rounded-xl bg-slate-800/70"></div></div>
-	</section>
+	{% include "dashboard/partials/_servers.html" %}
 	{#
 	<section class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
 		{% set online_count = servers | selectattr('status', 'equalto', 'up') | list | length %}

@@ -3,7 +3,7 @@ import json
 from mailing_utils import build_user_context, render_mail
 
 
-def render_communication_history_message(row: dict, brand_name: str) -> dict:
+def render_communication_history_message(row: dict, brand_name: str, portal_public_url: str | None = None) -> dict:
     try:
         metadata = json.loads(row.get("meta_json") or "{}")
     except Exception:
@@ -21,6 +21,7 @@ def render_communication_history_message(row: dict, brand_name: str) -> dict:
         "subscription_name": row.get("subscription_name") or "",
         "subscription_duration_days": row.get("subscription_duration_days") or "",
         "subscription_value": row.get("subscription_value") or "", "brand_name": brand_name,
+        "portal_public_url": portal_public_url,
     }
     context_input.update(metadata)
     context_input.update(payload)

@@ -4,6 +4,15 @@ import time
 from datetime import datetime
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
+from functools import lru_cache
+
+
+@lru_cache(maxsize=4096)
+def _record_datetime(stamp):
+    try:
+        return datetime.strptime(stamp.decode("ascii"), "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
 
 
 def validate_log_retention(days, size_mb):
@@ -22,6 +31,7 @@ class RetentionFileHandler(RotatingFileHandler):
         self.limit_bytes = 50_000_000
         self.next_policy_check = 0
         self.next_age_check = 0
+        self._age_checks = {}
 
     def paths(self):
         base = Path(self.baseFilename)
@@ -49,15 +59,25 @@ class RetentionFileHandler(RotatingFileHandler):
                 for path in self.paths():
                     if not path.exists():
                         continue
+                    stat = path.stat()
+                    signature = (stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size,
+                                 self.retention_days)
+                    checked = self._age_checks.get(path)
+                    if checked and checked[0] == signature and cutoff_local < checked[1]:
+                        continue
                     lines = path.read_bytes().splitlines(keepends=True)
-                    keep = path.stat().st_mtime >= cutoff
+                    keep = stat.st_mtime >= cutoff
+                    # A conservative earliest retained timestamp also covers
+                    # unstructured legacy lines and malformed timestamp fallbacks.
+                    earliest = datetime.fromtimestamp(stat.st_mtime)
                     retained = []
                     for line in lines:
                         if re.match(rb"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", line):
-                            try:
-                                keep = datetime.strptime(line[:19].decode("ascii"), "%Y-%m-%d %H:%M:%S") >= cutoff_local
-                            except ValueError:
-                                pass
+                            stamp = _record_datetime(line[:19])
+                            if stamp is not None:
+                                keep = stamp >= cutoff_local
+                                if keep:
+                                    earliest = min(earliest, stamp)
                         if keep:
                             retained.append(line)
                     if retained != lines:
@@ -65,8 +85,17 @@ class RetentionFileHandler(RotatingFileHandler):
                             path.write_bytes(b"".join(retained))
                         else:
                             path.unlink()
+                    if path.exists():
+                        stat = path.stat()
+                        self._age_checks[path] = (
+                            (stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size,
+                             self.retention_days), earliest)
+                    else:
+                        self._age_checks.pop(path, None)
                 self.next_age_check = now + 3600
             paths = [p for p in self.paths() if p.exists()]
+            self._age_checks = {p: checked for p, checked in self._age_checks.items()
+                                if p in paths}
             total = sum(p.stat().st_size for p in paths)
             for path in paths:
                 if total <= self.limit_bytes:

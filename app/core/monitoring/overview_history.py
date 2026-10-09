@@ -1,4 +1,5 @@
 from __future__ import annotations
+from db_manager import isolated_read_operation
 
 
 HISTORY_SORT_COLUMNS = {
@@ -13,6 +14,7 @@ HISTORY_SORT_COLUMNS = {
 }
 
 
+@isolated_read_operation
 def load_monitoring_history(db, args, cookies, build_url, per_page=30):
     page = args.get("page", type=int, default=1)
     offset = (page - 1) * per_page

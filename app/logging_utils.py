@@ -3,6 +3,8 @@ import os
 import re
 import tempfile
 import time
+import threading
+import sys
 from core.log_retention import RetentionFileHandler
 from pathlib import Path
 
@@ -263,6 +265,11 @@ def read_logs_snapshot():
     except OSError as exc:
         errors.append({"path": "app.log", "error": type(exc).__name__})
     paths = handler.paths()
+    return _read_log_paths(paths, errors)
+
+
+def _read_log_paths(paths, errors):
+    lines = []
     for path in paths:
         try:
             with open(path, "r", encoding="utf-8", errors="replace") as f:
@@ -272,6 +279,69 @@ def read_logs_snapshot():
         except OSError as exc:
             errors.append({"path": os.path.basename(path), "error": type(exc).__name__})
     return {"lines": lines, "errors": errors}
+
+
+_LOG_RECORDS_LOCK = threading.Lock()
+_LOG_RECORDS_CACHE = None
+_LOG_RECORDS_CACHE_MAX_BYTES = 8 * 1024 * 1024
+
+
+def _log_files_signature(paths):
+    signature = []
+    for path in paths:
+        try:
+            stat = path.stat()
+        except FileNotFoundError:
+            continue
+        signature.append((str(path), stat.st_ino, stat.st_size,
+                          stat.st_mtime_ns, stat.st_ctime_ns))
+    return tuple(signature)
+
+
+def _log_records_fit_cache(records):
+    size = sys.getsizeof(records)
+    for row in records:
+        size += sys.getsizeof(row)
+        size += sum(sys.getsizeof(key) + sys.getsizeof(value)
+                    for key, value in row.items())
+        if size > _LOG_RECORDS_CACHE_MAX_BYTES:
+            return False
+    return size <= _LOG_RECORDS_CACHE_MAX_BYTES
+
+
+def read_log_records_snapshot():
+    """Reuse parsing only for unchanged files; exports still read raw lines.
+
+    Keep one bounded cache, invalidate on append/rotation/retention, and never
+    cache partial reads or files that changed while being read.
+    """
+    global _LOG_RECORDS_CACHE
+    with _LOG_RECORDS_LOCK:
+        errors = []
+        try:
+            handler.maintain(force=True)
+        except OSError as exc:
+            errors.append({"path": "app.log", "error": type(exc).__name__})
+        paths = handler.paths()
+        try:
+            signature = _log_files_signature(paths)
+        except OSError:
+            signature = None
+        if not errors and signature is not None and _LOG_RECORDS_CACHE is not None:
+            if _LOG_RECORDS_CACHE[0] == signature:
+                return {"records": [dict(row) for row in _LOG_RECORDS_CACHE[1]], "errors": []}
+        _LOG_RECORDS_CACHE = None
+        snapshot = _read_log_paths(paths, errors)
+        records = parse_log_records(snapshot["lines"])
+        try:
+            stable = signature is not None and signature == _log_files_signature(handler.paths())
+        except OSError:
+            stable = False
+        if (stable and not snapshot["errors"]
+                and sum(item[2] for item in signature) <= _LOG_RECORDS_CACHE_MAX_BYTES
+                and _log_records_fit_cache(records)):
+            _LOG_RECORDS_CACHE = (signature, tuple(dict(row) for row in records))
+        return {"records": records, "errors": snapshot["errors"]}
 
 
 LOG_RECORD_RE = re.compile(

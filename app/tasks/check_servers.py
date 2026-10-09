@@ -10,6 +10,7 @@ check_servers.py - VERSION TXT LOGGING
 ✓ Compatibilité run(task_id, db=None)
 """
 
+from core.arr_connections import arr_get_status
 from core.jellyfin_auth import jellyfin_headers
 import urllib3
 import xml.etree.ElementTree as ET
@@ -281,6 +282,15 @@ def run(task_id: int, db):
                             (found_mid, sid)
                         )
 
+            elif s["type"] in ("sonarr", "radarr"):
+                for candidate_url in base_urls:
+                    status, found_name, _, meta = arr_get_status(s, candidate_url, s["token"])
+                    if status == "up":
+                        base_url = candidate_url
+                        new_name = found_name or old_name
+                        server_version = meta
+                        break
+
             # -----------------------------
             # SERVEUR GÉNÉRIQUE
             # -----------------------------
@@ -290,6 +300,10 @@ def run(task_id: int, db):
             # -----------------------------
             # Mise à jour DB
             # -----------------------------
+            if s["type"] in ("sonarr", "radarr"):
+                from core.arr_monitoring import collect_arr_sample
+                collect_arr_sample(db, s, base_url, status == "up")
+
             if status == "up":
                 db.execute(
                     """

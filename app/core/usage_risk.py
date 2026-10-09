@@ -142,8 +142,8 @@ def _risk_color(level):
     return "green"
 
 
-def _suggest_subscription(db, current_template_id, current_value, needed_streams, needed_ips):
-    templates = db.query(
+def _load_subscription_templates(db):
+    return db.query(
         """
         SELECT id, name, subscription_value, policies_json
         FROM subscription_templates
@@ -151,6 +151,11 @@ def _suggest_subscription(db, current_template_id, current_value, needed_streams
         ORDER BY subscription_value ASC, name ASC
         """
     ) or []
+
+
+def _suggest_subscription(db, current_template_id, current_value, needed_streams, needed_ips, *, templates=None):
+    if templates is None:
+        templates = _load_subscription_templates(db)
 
     candidates = []
 
@@ -662,7 +667,7 @@ def build_usage_risk_report(db, filters=None, persist_history=True):
     # Count blocked playback incidents, not raw enforcement rows. A provider
     # can report the same still-visible session over several enforcement runs;
     # those repeated rows must not look like separate risky behaviours.
-    kill_windows = db.query(
+    kill_windows = (db.query(
         """
         SELECT
           CASE
@@ -682,10 +687,11 @@ def build_usage_risk_report(db, filters=None, persist_history=True):
             THEN CAST(e.server_id AS TEXT) || ':' || COALESCE(NULLIF(TRIM(e.session_key), ''), 'row:' || e.id)
           END) AS kills_90d
         FROM stream_enforcements e
-        WHERE datetime(e.created_at) >= datetime('now', '-90 days')
+        WHERE e.action = 'kill'
+          AND datetime(e.created_at) >= datetime('now', '-90 days')
         GROUP BY actor_key
         """
-    ) or []
+    ) or []) if by_user else []
 
     for row in kill_windows:
         row = dict(row)
@@ -699,6 +705,9 @@ def build_usage_risk_report(db, filters=None, persist_history=True):
         by_user[actor_key]["kills_90d"] = _safe_int(row.get("kills_90d"), 0)
 
     output = []
+    # Lazy and report-local: avoid repeated SQL without caching plan changes
+    # across reports or loading plans when no recommendation is needed.
+    subscription_templates = None
 
     for item in by_user.values():
         distinct_ips = len(item["ips"])
@@ -718,12 +727,15 @@ def build_usage_risk_report(db, filters=None, persist_history=True):
 
         suggestion = None
         if kills_30d >= min_kills:
+            if subscription_templates is None:
+                subscription_templates = _load_subscription_templates(db)
             suggestion = _suggest_subscription(
                 db,
                 item.get("subscription_template_id"),
                 item.get("subscription_value"),
                 needed_streams,
                 needed_ips,
+                templates=subscription_templates,
             )
 
         main_reason = reasons[0] if reasons else "No suspicious usage detected"

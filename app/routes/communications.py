@@ -1,3 +1,4 @@
+from mailing_utils import build_portal_login_url
 # Unified Communications UI (Email + Discord)
 
 from flask import render_template, request, redirect, url_for, flash, jsonify
@@ -415,7 +416,7 @@ def register(app):
             if not subject or not body:
                 return jsonify({"ok": False, "error": t("comm_missing_fields")}), 400
             test_settings = db.query_one(
-                f"SELECT {COMM_CONFIG_SETTINGS_COLUMNS}, admin_email, contact_email FROM settings WHERE id = 1"
+                f"SELECT {COMM_CONFIG_SETTINGS_COLUMNS}, admin_email, contact_email, portal_public_url FROM settings WHERE id = 1"
             )
             test_settings = dict(test_settings) if test_settings else {}
             to_email = (
@@ -425,6 +426,9 @@ def register(app):
             )
             if not to_email:
                 return jsonify({"ok": False, "error": t("comm_missing_admin_email_short")}), 400
+            login_url = build_portal_login_url(test_settings.get("portal_public_url"))
+            subject = subject.replace("{portal_login_url}", login_url)
+            body = body.replace("{portal_login_url}", login_url)
             ok, error = send_email(subject, body, to_email, test_settings)
             if not ok:
                 return jsonify({"ok": False, "error": error or t("comm_email_send_failed_short")}), 502
@@ -789,7 +793,7 @@ def register(app):
 
         if action == "test_email":
             test_settings = db.query_one(
-                f"SELECT {COMM_CONFIG_SETTINGS_COLUMNS}, admin_email, contact_email FROM settings WHERE id = 1"
+                f"SELECT {COMM_CONFIG_SETTINGS_COLUMNS}, admin_email, contact_email, portal_public_url FROM settings WHERE id = 1"
             )
             test_settings = dict(test_settings) if test_settings else {}
             to_email = (

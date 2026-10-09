@@ -3,6 +3,8 @@ from __future__ import annotations
 
 def ensure_portal_foundation_schema(conn, cursor, *, table_exists, ensure_column):
     """Create the disabled-by-default user portal authentication foundation."""
+    from core.portal_media_requests import CLAIM_SCHEMA
+    cursor.execute(CLAIM_SCHEMA)
     from core.db_bootstrap_activation import ensure_activation_schema
     ensure_activation_schema(cursor)
     for column, definition in {
@@ -18,6 +20,7 @@ def ensure_portal_foundation_schema(conn, cursor, *, table_exists, ensure_column
         "portal_show_invitations": "INTEGER NOT NULL DEFAULT 0",
         "portal_show_subscription": "INTEGER NOT NULL DEFAULT 1",
         "portal_show_media_access": "INTEGER NOT NULL DEFAULT 1",
+        "portal_show_media_requests": "INTEGER NOT NULL DEFAULT 1",
         "portal_show_monitoring": "INTEGER NOT NULL DEFAULT 1",
         "portal_show_support": "INTEGER NOT NULL DEFAULT 1",
         "portal_support_content": "TEXT DEFAULT NULL",
@@ -292,6 +295,9 @@ def ensure_portal_foundation_schema(conn, cursor, *, table_exists, ensure_column
         "CREATE INDEX IF NOT EXISTS idx_portal_audit_account_created "
         "ON portal_audit_events(portal_account_id, created_at DESC)"
     )
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_portal_sessions_created ON portal_sessions(created_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_portal_sessions_account_created ON portal_sessions(portal_account_id,created_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_portal_audit_created ON portal_audit_events(created_at DESC)")
     cursor.execute(
         "CREATE INDEX IF NOT EXISTS idx_portal_audit_type_created "
         "ON portal_audit_events(event_type, created_at DESC)"

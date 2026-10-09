@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from tasks_engine import task_logs
 from logging_utils import get_logger
 from core.portal_privacy import cleanup_portal_retention
+from core.retention_batches import delete_retained_rows
 
 log = get_logger("cleanup_data_retention")
 
@@ -65,8 +66,8 @@ def run(task_id: int, db):
 
     def _del(sql: str, params: tuple, label: str):
         nonlocal total_deleted
-        cur = db.execute(sql, params)
-        deleted = getattr(cur, "rowcount", 0) or 0
+        table, predicate = sql.removeprefix("DELETE FROM ").split(" WHERE ", 1)
+        deleted = delete_retained_rows(db, table, predicate, params)
         total_deleted += deleted
         task_logs(task_id, "info", f"{label}: deleted={deleted}")
         log.info(f"{label}: deleted={deleted}")

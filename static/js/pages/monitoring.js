@@ -1,4 +1,21 @@
 (function () {
+  // Install once even when HTMX processes this script again after navigation.
+  if (!window.__vodum_monitoring_polling_guards) {
+    window.__vodum_monitoring_polling_guards = true;
+    document.addEventListener("htmx:beforeRequest", (event) => {
+      const element = event.detail?.elt;
+      if (document.hidden && element?.id === "monitoring-content" && element.hasAttribute("hx-get")) {
+        event.preventDefault();
+      }
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) return;
+      const content = document.getElementById("monitoring-content");
+      if (content?.hasAttribute("hx-get") && window.htmx) {
+        window.htmx.trigger(content, "vodum:resume");
+      }
+    });
+  }
   // ---------------- Users search (existant) ----------------
   function initMonitoringUsersSearch() {
     const form = document.getElementById("monitoring_users_filter_form");
@@ -117,8 +134,32 @@
     if (window.__vodum_np_htmx_guards_installed) return;
     window.__vodum_np_htmx_guards_installed = true;
 
-    document.body.addEventListener("htmx:beforeSwap", function () {
+    document.body.addEventListener("htmx:beforeSwap", function (event) {
       syncCacheFromDom();
+      const detail = event.detail;
+      if (!detail || !detail.target || detail.target.id !== "monitoring-content") return;
+      const currentGrid = detail.target.querySelector("[data-now-playing-grid]");
+      if (!currentGrid || !detail.serverResponse) return;
+
+      // Reorder the incoming markup before rendering, keeping fresh card data.
+      const incoming = document.createElement("template");
+      incoming.innerHTML = detail.serverResponse;
+      const nextGrid = incoming.content.querySelector("[data-now-playing-grid]");
+      if (!nextGrid) return;
+      const nextCards = new Map(Array.from(nextGrid.children, card => [
+        card.dataset.nowPlayingSession, card
+      ]));
+      const ordered = [];
+      for (const card of currentGrid.children) {
+        const id = card.dataset.nowPlayingSession;
+        if (nextCards.has(id)) {
+          ordered.push(nextCards.get(id));
+          nextCards.delete(id);
+        }
+      }
+      // New sessions follow the surviving cards; ended sessions are removed.
+      nextGrid.replaceChildren(...ordered, ...nextCards.values());
+      detail.serverResponse = incoming.innerHTML;
     });
 
     document.body.addEventListener("htmx:afterSwap", function () {

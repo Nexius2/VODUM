@@ -80,6 +80,17 @@
               </div>
             </div>
 
+            {% if j.external_user_id and j.media_role not in ['admin', 'owner'] and not policy.IsAdministrator %}
+              <form method="post" action="{{ url_for('user_jellyfin_state', user_id=user.id, media_user_id=j.media_user_id) }}" class="mb-4">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="action" value="{{ 'enable' if policy.IsDisabled else 'disable' }}">
+                <p class="text-xs text-slate-400 mb-2">{{ t('jellyfin_state_help') }}</p>
+                <button type="submit" class="px-3 py-2 text-xs rounded-lg border border-slate-700 hover:bg-slate-800">
+                  {{ t('jellyfin_state_enable') if policy.IsDisabled else t('jellyfin_state_disable') }} · {{ j.media_username }} · {{ j.name }}
+                </button>
+              </form>
+            {% endif %}
+
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-y-2 text-sm">
               <div class="text-slate-400">{{ t("jellyfin_id") if t("jellyfin_id") else "Jellyfin ID" }}</div>
               <div class="font-mono text-slate-200">{{ j.external_user_id or t("not_available") }}</div>

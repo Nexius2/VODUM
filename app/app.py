@@ -1,5 +1,4 @@
 import os
-import gzip
 import json
 import hmac
 import secrets
@@ -312,6 +311,16 @@ def create_app():
     register_flask_exception_logging(app, get_logger("requests"))
     install_thread_exception_logging(get_logger("threads"))
 
+    # Include authentication and other before-request hooks in the measurement.
+    # Slow requests are useful diagnostics even when debug mode is disabled.
+    route_timing_enabled = _env_bool("VODUM_ROUTE_TIMING") is not False
+    route_timing_threshold_ms = _env_int("VODUM_ROUTE_TIMING_THRESHOLD_MS", 300, minimum=0)
+
+    @app.before_request
+    def start_route_timing():
+        if route_timing_enabled:
+            g.route_started_at = time.perf_counter()
+
     @app.get("/health")
     def health():
         """Container and reverse-proxy readiness probe."""
@@ -366,18 +375,8 @@ def create_app():
     def inject_version():
         g.app_version = APP_VERSION
 
-        # Update badge (sans BDD) -> lit le status dans le data dir configure
-        g.update_available = False
-        try:
-            status_path = update_status_path()
-            if status_path.exists():
-                with status_path.open("r", encoding="utf-8", errors="ignore") as f:
-                    data = json.load(f) or {}
-                g.update_available = bool(data.get("update_available"))
-                g.update_pending_days = int(data.get("update_pending_days") or 0)
-        except Exception:
-            g.update_available = False
-            g.update_pending_days = 0
+        from core.update_badge import read_update_badge
+        g.update_available, g.update_pending_days = read_update_badge(update_status_path())
 
     app.config.from_object(Config)
     app.session_interface = VodumSessionInterface()
@@ -389,14 +388,6 @@ def create_app():
 
     # Backup dir
     app.config.setdefault("BACKUP_DIR", os.environ.get("VODUM_BACKUP_DIR", "/appdata/backups"))
-
-    route_timing_enabled = _env_bool("VODUM_ROUTE_TIMING") is True
-    route_timing_threshold_ms = _env_int("VODUM_ROUTE_TIMING_THRESHOLD_MS", 300, minimum=0)
-
-    @app.before_request
-    def start_route_timing():
-        if route_timing_enabled:
-            g.route_started_at = time.perf_counter()
 
     @app.before_request
     def limit_portal_request_size():
@@ -410,6 +401,7 @@ def create_app():
             return response
 
         duration_ms = int((time.perf_counter() - started_at) * 1000)
+        response.headers.add("Server-Timing", f"app;dur={duration_ms}")
         if duration_ms >= route_timing_threshold_ms and not request.path.startswith("/static"):
             performance_logger.info(
                 "route_timing | duration_ms=%s | status=%s | method=%s | path=%s | endpoint=%s | content_length=%s | htmx=%s",
@@ -425,17 +417,8 @@ def create_app():
 
     gzip_enabled = _env_bool("VODUM_HTTP_GZIP") is not False
     gzip_min_size = _env_int("VODUM_HTTP_GZIP_MIN_BYTES", 1024, minimum=0)
-    gzip_mimetypes = {
-        "application/javascript",
-        "application/json",
-        "application/xml",
-        "image/svg+xml",
-        "text/css",
-        "text/html",
-        "text/javascript",
-        "text/plain",
-        "text/xml",
-    }
+    gzip_level = min(9, _env_int("VODUM_HTTP_GZIP_LEVEL", 6, minimum=1))
+    from core.http_compression import compress_text_response
 
     @app.after_request
     def add_security_headers(response):
@@ -443,39 +426,8 @@ def create_app():
 
     @app.after_request
     def gzip_text_response(response):
-        if not gzip_enabled:
-            return response
-        if request.method == "HEAD" or "gzip" not in request.headers.get("Accept-Encoding", "").lower():
-            return response
-        if response.status_code < 200 or response.status_code in (204, 304):
-            return response
-        if response.direct_passthrough or response.is_streamed:
-            return response
-        if response.headers.get("Content-Encoding") or response.headers.get("Content-Range"):
-            return response
-        if request.path.startswith("/static"):
-            return response
-        if response.mimetype not in gzip_mimetypes:
-            return response
-
-        content_length = response.calculate_content_length()
-        if content_length is not None and content_length < gzip_min_size:
-            return response
-
-        payload = response.get_data()
-        if len(payload) < gzip_min_size:
-            return response
-
-        compressed = gzip.compress(payload)
-        if len(compressed) >= len(payload):
-            return response
-
-        response.set_data(compressed)
-        response.headers["Content-Encoding"] = "gzip"
-        response.headers["Content-Length"] = str(len(compressed))
-        response.headers.add("Vary", "Accept-Encoding")
-        response.headers.pop("ETag", None)
-        return response
+        return compress_text_response(response, enabled=gzip_enabled,
+                                      min_size=gzip_min_size, level=gzip_level)
 
     # i18n (requires DB access)
     init_i18n(app, get_db)

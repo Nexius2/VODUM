@@ -66,8 +66,8 @@
   <div class="px-4 py-3 border-b border-slate-800">
     <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
       <div>
-        <h2 class="text-sm font-semibold text-slate-100">Communication deliveries</h2>
-        <p class="text-xs text-slate-500 mt-1">Sent and failed deliveries, plus pending or errored queued notifications when action is needed.</p>
+        <h2 class="text-sm font-semibold text-slate-100">{{ t('comm_history_deliveries') }}</h2>
+        <p class="text-xs text-slate-500 mt-1">{{ t('comm_history_deliveries_help') }}</p>
       </div>
       <div class="flex flex-wrap gap-2">
         <form method="get" class="flex items-center">
@@ -82,7 +82,7 @@
           <a
             href="{{ url_for('communications_history_page', trigger=value, sort=sort, order=order, page=1, per_page=per_page) }}"
             class="px-3 py-1.5 rounded-lg text-xs border {{ 'border-primary bg-primary/15 text-primary' if trigger_filter == value else 'border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-800' }}"
-          >{{ label }}</a>
+          >{{ t(label) }}</a>
         {% endfor %}
       </div>
     </div>
@@ -104,7 +104,7 @@
             {{ sort_link(t('status'), 'status') }}
           </th>
           <th class="px-4 py-3">
-            Details
+            {{ t('details') }}
           </th>
           <th class="px-4 py-3 w-[190px]">
             {{ sort_link(t('sent_at'), 'sent_at') }}
@@ -115,7 +115,7 @@
       {% for h in history %}
         {% set modal_payload = {
           "kind": h.kind or "",
-          "kind_label": ('Queued template' if h.is_scheduled else (t('template') if h.kind == 'template' else t('campaign'))),
+          "kind_label": (t('comm_history_queued_template') if h.is_scheduled else (t('template') if h.kind == 'template' else t('campaign'))),
           "name": (t(h.template_key) if h.kind == 'template' and h.template_key else h.campaign_name) or "",
           "user": h.user_username or "",
           "channel_used": t(h.channel_used) if h.channel_used else "-",
@@ -136,7 +136,7 @@
           <td class="px-4 py-3 align-top">
             <div class="flex items-center gap-2 min-w-0">
               {% if h.is_scheduled %}
-                <span class="px-2 py-1 rounded bg-amber-900/40 text-amber-300 shrink-0">Queued</span>
+                <span class="px-2 py-1 rounded bg-amber-900/40 text-amber-300 shrink-0">{{ t('queued') }}</span>
                 <span class="text-slate-400 truncate">{{ t(h.template_key) if h.template_key else '-' }}</span>
               {% elif h.kind == 'template' %}
                 <span class="px-2 py-1 rounded bg-slate-800 text-slate-200 shrink-0">{{ t('template') }}</span>
@@ -164,9 +164,9 @@
             {% if h.status == 'sent' %}
               <span class="px-2 py-1 rounded-full bg-emerald-900/40 text-emerald-300">{{ t('sent') }}</span>
             {% elif h.status == 'pending' %}
-              <span class="px-2 py-1 rounded-full bg-amber-900/40 text-amber-300">pending</span>
+              <span class="px-2 py-1 rounded-full bg-amber-900/40 text-amber-300">{{ t('pending') }}</span>
             {% elif h.status == 'error' %}
-              <span class="px-2 py-1 rounded-full bg-rose-900/40 text-rose-300">error</span>
+              <span class="px-2 py-1 rounded-full bg-rose-900/40 text-rose-300">{{ t('error') }}</span>
             {% else %}
               <span class="px-2 py-1 rounded-full bg-rose-900/40 text-rose-300">{{ t('failed') }}</span>
             {% endif %}
@@ -175,7 +175,7 @@
           <td class="px-4 py-3 align-top text-slate-400">
             {% if h.is_scheduled %}
               <div class="truncate" title="{{ t(h.error) if h.error else t('comm_waiting_delivery') }}">{{ t(h.error) if h.error else t('comm_waiting_delivery') }}</div>
-              <div class="text-[11px] text-slate-500 mt-1">Attempts {{ h.attempt_count or 0 }} / {{ h.max_attempts or 10 }}{% if h.next_attempt_at %} - next {{ h.next_attempt_at|browser_datetime }}{% endif %}</div>
+              <div class="text-[11px] text-slate-500 mt-1">{{ t('comm_history_attempts') }} {{ h.attempt_count or 0 }} / {{ h.max_attempts or 10 }}{% if h.next_attempt_at %} - {{ t('comm_history_next_attempt') }} {{ h.next_attempt_at|browser_datetime }}{% endif %}</div>
             {% else %}
               <div class="truncate" title="{{ h.error or '-' }}">{{ h.error or '-' }}</div>
             {% endif %}

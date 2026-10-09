@@ -7,8 +7,9 @@ cleanup_artwork_cache.py
 """
 
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 import os
+import time
 
 from core.monitoring.artwork_cache import ARTWORK_CACHE_DIR
 from tasks_engine import task_logs
@@ -54,8 +55,9 @@ def run(task_id: int, db):
         return {"scanned": 0, "deleted": 0, "retention_days": _safe_retention_days(ARTWORK_CACHE_RETENTION_DAYS)}
 
     retention_days = _safe_retention_days(ARTWORK_CACHE_RETENTION_DAYS)
-    cutoff = datetime.utcnow() - timedelta(days=retention_days)
-    cutoff_ts = cutoff.timestamp()
+    now = time.time()
+    cutoff_ts = now - retention_days * 86400
+    cutoff = datetime.fromtimestamp(cutoff_ts, timezone.utc)
 
     scanned = 0
     deleted = 0
@@ -66,18 +68,25 @@ def run(task_id: int, db):
         log.debug(f"Artwork cache directory = {base}")
 
     for path in base.iterdir():
+        # This snapshot is portal metadata, not an image sidecar.
+        if path.name == "portal-backdrop.json":
+            continue
         if not _is_cache_file(path):
             continue
 
         scanned += 1
+        if scanned % 100 == 0:
+            time.sleep(0.005)
 
         try:
             stat = path.stat()
             too_old = stat.st_mtime < cutoff_ts
             orphan = path.suffix.lower() in {".img", ".json"} and not _counterpart_exists(path)
             tmp_file = path.suffix.lower() == ".tmp"
+            # Writers publish .img and .json separately; give them time to finish.
+            settled = now - stat.st_mtime >= 60
 
-            if too_old or orphan or tmp_file:
+            if settled and (too_old or orphan or tmp_file):
                 path.unlink()
                 deleted += 1
 

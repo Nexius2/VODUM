@@ -41,6 +41,22 @@
   async function renderServersCharts() {
     await waitForChart();
 
+    const arr = config.arr || {};
+    ['sonarr', 'radarr'].forEach(provider => {
+      const instances = (arr.servers || []).filter(s => s.type === provider);
+      const rows = arr.days || [];
+      const days = [...new Set(rows.map(r => r.day))].sort();
+      [['availability', config.arrAvailabilityLabel], ['queue', config.arrQueueLabel]].forEach(([metric, label]) => {
+        const canvas = document.getElementById(`arr-${metric}-${provider}`);
+        if (!canvas) return;
+        const field = metric === 'queue' ? 'queue_count' : metric;
+        new Chart(canvas, {type:'line', data:{labels:days, datasets:instances.map((server,index) => ({
+          label:server.name + ' · ' + label,
+          data:days.map(day => {const row=rows.find(r=>r.day===day && String(r.server_id)===String(server.id)); return row ? row[field] : null;}),
+          borderColor:['#38bdf8','#a78bfa','#fb7185','#34d399'][index%4], tension:0.2, spanGaps:false
+        }))}, options:{responsive:true, scales:{y:{beginAtZero:true, ...(metric==='availability' ? {max:100} : {})}}}});
+      });
+    });
     const details = Array.isArray(config.details) ? config.details : [];
     const sessionsDay = Array.isArray(config.sessionsDay) ? config.sessionsDay : [];
     const mediaTypes = Array.isArray(config.mediaTypes) ? config.mediaTypes : [];

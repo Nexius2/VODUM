@@ -97,7 +97,52 @@
     });
   }
 
+  function initRoutingCards() {
+    document.querySelectorAll('[data-routing-card]').forEach((card) => {
+      if (card.dataset.vodumBound === "1") return;
+      card.dataset.vodumBound = "1";
+      const activation = card.querySelector('[data-routing-active]');
+      const details = card.querySelector('[data-routing-details]');
+      if (!details || !activation) return;
+      const order = card.querySelector('[data-arr-order]');
+      function updateOrder() {
+        if (!order) return;
+        const rows = Array.from(order.querySelectorAll('[data-arr-row]')).filter((row) => !row.classList.contains('hidden'));
+        rows.forEach((row, index) => {
+          row.querySelector('[data-arr-rank]').textContent = index + 1;
+          row.querySelector('[data-arr-up]').disabled = index === 0;
+          row.querySelector('[data-arr-down]').disabled = index === rows.length - 1;
+        });
+      }
+      if (order) order.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-arr-up], [data-arr-down]');
+        if (!button || button.disabled) return;
+        const row = button.closest('[data-arr-row]');
+        const rows = Array.from(order.querySelectorAll('[data-arr-row]')).filter((item) => !item.classList.contains('hidden'));
+        const index = rows.indexOf(row);
+        if (button.hasAttribute('data-arr-up') && index > 0) order.insertBefore(row, rows[index - 1]);
+        if (button.hasAttribute('data-arr-down') && index < rows.length - 1) order.insertBefore(rows[index + 1], row);
+        updateOrder();
+        button.focus();
+      });
+      function sync() {
+        if (order) {
+          const current = order.querySelector('[data-current-arr="1"]');
+          if (current) {
+            current.classList.toggle('hidden', !activation.checked);
+            current.querySelector('input').disabled = !activation.checked;
+          }
+        }
+        updateOrder();
+        details.classList.toggle('hidden', !activation.checked);
+      }
+      activation.addEventListener('change', sync);
+      sync();
+    });
+  }
+
   function initServerDetail() {
+    initRoutingCards();
     initTokenToggle();
     initDeleteModal();
   }

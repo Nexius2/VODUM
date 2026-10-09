@@ -3,7 +3,7 @@ from datetime import datetime
 
 from flask import Response, render_template, request
 
-from logging_utils import AnonymizeFilter, parse_log_records, read_all_logs, read_logs_snapshot
+from logging_utils import AnonymizeFilter, read_all_logs, read_log_records_snapshot
 
 
 ALLOWED_LOG_LEVELS = {"ALL", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
@@ -37,8 +37,8 @@ def register(app):
             page = 1
         per_page = 200
 
-        snapshot = read_logs_snapshot()
-        all_records = parse_log_records(snapshot["lines"])
+        snapshot = read_log_records_snapshot()
+        all_records = snapshot["records"]
         level_counts = summarize_log_levels(all_records)
         records = []
         for record in all_records:
