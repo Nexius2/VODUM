@@ -1,6 +1,6 @@
 from core.portal_media_requests import has_saved_request_defaults
 from mailing_utils import build_portal_login_url
-from flask import current_app, flash, redirect, render_template, request, url_for, jsonify
+from flask import abort, current_app, flash, redirect, render_template, request, url_for, jsonify
 
 from core.i18n import get_translator
 from core.auth_principal import admin_required
@@ -289,8 +289,8 @@ def register(app):
             admin_preview=True, preview_user_id=int(user_id), portal_features=features,
             portal_invitations_enabled=bool(settings.get("portal_show_invitations")),
         )
-        if page == "home":
-            return render_template("portal/home.html", **home, **common, active_portal_page="home")
+        if page == "media" and not features["media"]:
+            abort(404)
         if page == "requests" and features["requests"]:
             from core.portal_media_requests import request_libraries, search_media, MediaRequestError
             term = (request.args.get('q') or '').strip()
@@ -300,7 +300,7 @@ def register(app):
                 except MediaRequestError as exc: flash(str(exc),'error')
             return render_template('portal/requests.html',libraries=request_libraries(db,user_id),
                 results=results,query=term,**common,active_portal_page='requests')
-        if page == "profile":
+        if page in {"home", "profile", "media"}:
             from routes.portal import _profile_communication_state
             notifications_can_override, discord_enabled = _profile_communication_state(db, settings)
             account = db.query_one("SELECT id FROM portal_accounts WHERE vodum_user_id=?", (int(user_id),))
@@ -310,11 +310,10 @@ def register(app):
                 jellyfin_servers=servers, recently_reauthenticated=False, languages=get_available_languages(),
                 notifications_can_override=notifications_can_override,
                 discord_enabled=discord_enabled,
+                **home, accounts=load_portal_media_access(db, user_id) if features["media"] else [],
                 **common, active_portal_page="profile")
         if page == "subscription" and features["subscription"]:
             return render_template("portal/subscription.html", subscription=load_portal_subscription(db, user_id), **common, active_portal_page="subscription")
-        if page == "media" and features["media"]:
-            return render_template("portal/media_access.html", accounts=load_portal_media_access(db, user_id), **common, active_portal_page="media")
         if page == "monitoring" and features["monitoring"]:
             return render_template("portal/monitoring.html", monitoring=load_portal_monitoring(db, user_id), **common, active_portal_page="monitoring")
         if page == "support" and features["support"]:

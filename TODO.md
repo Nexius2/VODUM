@@ -3,7 +3,7 @@
 Ce fichier contient uniquement le travail restant. Les changements termines sont
 documentes dans `changelog.md`.
 
-Derniere mise a jour: 2026-10-08
+Derniere mise a jour: 2026-10-09
 
 ## P0 - Performances et reactivite VODUM (priorite avant les evolutions P1/P2/P3)
 
@@ -367,6 +367,53 @@ Les audits deja termines sont dans `docs/security-*-audit.md`,
 - [ ] Produire le rapport final classe `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFO`,
   avec chemin reel, protections existantes, exploitabilite, impact, correction,
   risque de regression, tests et statut.
+
+## Modernisation Docker et dependances (audit du 2026-10-09)
+
+Traiter progressivement, avec analyse et validation de chaque lot avant le suivant.
+Les versions ci-dessous sont des candidates relevees lors de l'audit ; reverifier
+les versions disponibles au moment de chaque intervention.
+
+- [ ] Valider les mises a jour de `requirements.txt` dans une image de test :
+  installation, `pip check`, demarrage Waitress, routes, scheduler, connexions
+  Plex/Jellyfin, WebSocket Plex et chiffrement/dechiffrement des secrets.
+- [ ] Evaluer Python `3.14.8-slim-trixie` ; comparer avec une mise a jour
+  conservatrice vers `3.12.15-slim-trixie`. Choisir explicitement la variante
+  Debian et definir la politique de versions/digests et de reconstruction.
+  Tester SQLite Python et CLI, initialisation, migrations V1/V2, bootstrap,
+  sauvegarde/restauration et taches sur des donnees temporaires representatives.
+- [ ] Verrouiller les dependances Python indirectes pour des constructions
+  reproductibles ; examiner les imports directs de Werkzeug, MarkupSafe et
+  urllib3 et leur declaration explicite. Verifier les vulnerabilites connues.
+- [ ] Confirmer l'absence d'usage de `pytz` avant une eventuelle suppression ;
+  conserver `python-dateutil` dans la resolution de croniter. Verifier `zoneinfo`
+  et la disponibilite des donnees de fuseaux horaires dans l'image choisie.
+- [ ] Ajouter une etape de construction Node/pnpm avec verrou fige pour preparer
+  les assets, puis copier seulement les resultats dans l'image Python finale.
+  Automatiser la synchronisation des fichiers `static/vendor` avec les versions
+  declarees ; identifier et documenter l'origine/version de QRCode.
+- [ ] Evaluer Tailwind CSS et CLI `4.3.3`, reconstruire le CSS et verifier le rendu.
+  Chart.js `4.5.1` et Flatpickr `4.6.13` etaient deja a jour lors de l'audit.
+- [ ] Etudier separement HTMX `1.9.12` -> `2.0.11` : changements de comportement,
+  formulaires, CSRF, navigation, modales et rafraichissements/polling ; valider
+  les parcours dans le navigateur avant adoption.
+- [ ] Harmoniser les volumes et variables des scripts `create-container.sh` et
+  `get-container.sh` avec Compose : `/appdata/logs`, `/appdata/backups`,
+  `VODUM_LOG_DIR` et `VODUM_BACKUP_DIR`. Conserver les donnees et la cle
+  `vodum.encryption_key` lors du remplacement du conteneur.
+- [ ] Aligner le healthcheck et les ports publies sur `VODUM_PORT` ; evaluer un
+  healthcheck dans l'image pour les lancements hors Compose et le delai de
+  demarrage pendant les migrations longues.
+- [ ] Examiner le workflow actif `.github/workflows/docker-image.yml` : actions
+  checkout v7, setup-buildx v4, login v4, metadata v6 et build-push v7 candidates,
+  compatibilite des runners, renouvellement de l'image de base, tags de version
+  et validation avant publication. Clarifier le role de `docker-publish.yml`
+  a la racine, qui n'est pas execute comme workflow GitHub Actions.
+- [ ] Evaluer un utilisateur non-root et les permissions des volumes, en
+  conservant SQLite CLI et Bash tant que l'entrypoint les utilise.
+- [ ] Exclure explicitement `appdata/` et `backups/` du contexte via `.dockerignore`.
+- [ ] Fiabiliser les metadonnees `INFO` : versions Python/SQLite de l'image
+  construite, au lieu de celles de la machine hote dans `create-container.sh`.
 
 ## Notes de prudence
 

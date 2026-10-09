@@ -4,7 +4,7 @@
   "portal_welcome": "Bienvenue",
   "portal_home_help": "Votre compte et vos acces media personnels en un coup d'oeil.",
   "portal_personal_activity": "Activite personnelle",
-  "portal_profile_help": "Modifiez uniquement les informations personnelles autorisees.",
+  "portal_profile_help": "Votre compte, vos accès aux médias et vos informations personnelles au même endroit.",
   "portal_primary_email_readonly": "Contactez le support pour changer votre email de connexion.",
   "portal_profile_email_invalid": "L'adresse email secondaire est invalide.",
   "portal_profile_saved": "Votre profil a ete mis a jour.",
@@ -2390,5 +2390,6 @@
   "portal_request_count_pending": "Recherche en cours",
   "portal_request_count_failed": "Échecs",
   "portal_request_media": "Média",
-  "portal_request_monitoring_help": "Demandes sur la période sélectionnée ; les 100 plus récentes sont affichées. Un ajout signifie que la demande a été envoyée à Sonarr/Radarr. Les anciennes demandes sans résultat détaillé restent comptées dans le total."
+  "portal_request_monitoring_help": "Demandes sur la période sélectionnée ; les 100 plus récentes sont affichées. Un ajout signifie que la demande a été envoyée à Sonarr/Radarr. Les anciennes demandes sans résultat détaillé restent comptées dans le total.",
+  "portal_personal_details": "Informations personnelles et connexion"
 }

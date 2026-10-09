@@ -2322,7 +2322,7 @@
   "portal_plex_profile_readonly": "Diese Informationen werden von Plex verwaltet.",
   "portal_privacy": "Datenschutz",
   "portal_profile": "Profil",
-  "portal_profile_help": "Verwalten Sie Ihre persönlichen Informationen und Einstellungen.",
+  "portal_profile_help": "Dein Konto, Medienzugriff und persönliche Informationen an einem Ort.",
   "portal_discord_settings": "Discord-Konto",
   "portal_discord_settings_help": "Geben Sie Ihre Discord-Benutzer-ID und Ihren Discord-Namen ein. Die Benutzer-ID wird für Direktnachrichten benötigt.",
   "portal_recent_activity": "Letzte Aktivität",
@@ -2623,5 +2623,6 @@
   "portal_request_count_pending": "Suche läuft",
   "portal_request_count_failed": "Fehler",
   "portal_request_media": "Medium",
-  "portal_request_monitoring_help": "Anfragen im ausgewählten Zeitraum; die letzten 100 werden angezeigt. Hinzufügungen wurden an Sonarr/Radarr gesendet. Ältere Anfragen ohne Ergebnisdetails zählen weiterhin zur Gesamtzahl."
+  "portal_request_monitoring_help": "Anfragen im ausgewählten Zeitraum; die letzten 100 werden angezeigt. Hinzufügungen wurden an Sonarr/Radarr gesendet. Ältere Anfragen ohne Ergebnisdetails zählen weiterhin zur Gesamtzahl.",
+  "portal_personal_details": "Persönliche Informationen und Anmeldung"
 }

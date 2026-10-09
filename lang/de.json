@@ -2186,5 +2186,6 @@
   "portal_request_count_pending": "Suche läuft",
   "portal_request_count_failed": "Fehler",
   "portal_request_media": "Medium",
-  "portal_request_monitoring_help": "Anfragen im ausgewählten Zeitraum; die letzten 100 werden angezeigt. Hinzufügungen wurden an Sonarr/Radarr gesendet. Ältere Anfragen ohne Ergebnisdetails zählen weiterhin zur Gesamtzahl."
+  "portal_request_monitoring_help": "Anfragen im ausgewählten Zeitraum; die letzten 100 werden angezeigt. Hinzufügungen wurden an Sonarr/Radarr gesendet. Ältere Anfragen ohne Ergebnisdetails zählen weiterhin zur Gesamtzahl.",
+  "portal_personal_details": "Persönliche Informationen und Anmeldung"
 }

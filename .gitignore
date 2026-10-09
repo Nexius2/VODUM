@@ -34,7 +34,6 @@ tools/
 .coverage
 htmlcov/
 node_modules/
-security-audit-vodum.md
 
 
 # -----------------------------

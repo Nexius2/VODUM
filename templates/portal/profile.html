@@ -1,7 +1,11 @@
 {% extends "portal/base.html" %}
 {% block title %}{{ t("portal_profile") }} - {{ app_brand_name }}{% endblock %}
 {% block content %}
-<div class="mb-7"><h1 class="text-2xl font-semibold">{{ t("portal_profile") }}</h1><p class="mt-1 text-sm text-slate-400">{{ t("portal_profile_help") }}</p></div>
+<div class="mb-7 flex flex-wrap items-start justify-between gap-3">
+  <div><h1 class="text-2xl font-semibold">{{ t("portal_profile") }}</h1><p class="mt-1 text-sm text-slate-400">{{ t("portal_profile_help") }}</p></div>
+  <span class="portal-account-status inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs" data-account-status="{{ (user.status or 'unknown')|lower|trim }}"><span>{{ t('status') }}</span><span class="font-semibold">{{ t(user.status) }}</span></span>
+</div>
+<div id="personal-details">
 <div class="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
 <div class="min-w-0 lg:col-span-2">
 <form method="post" action="{{ url_for('portal_profile_save') }}" class="space-y-5 rounded-xl border border-slate-800 bg-slate-900 p-6">
@@ -29,5 +33,16 @@
     {% else %}<p class="mt-3 text-sm text-slate-400">{{ t('no_referred_users') }}</p>{% endif %}
   </div>
 </aside>
+</div>
+</div>
+<div class="mt-8">
+{% include 'portal/_profile_overview.html' %}
+{% if portal_features.media %}
+<section id="media-access" class="mt-8" aria-labelledby="profile-media-title">
+  <h2 id="profile-media-title" class="text-lg font-semibold">{{ t('portal_media_access') }}</h2>
+  <p class="mt-1 text-sm text-slate-400">{{ t('portal_media_access_help') }}</p>
+  {% include 'portal/_profile_media.html' %}
+</section>
+{% endif %}
 </div>
 {% endblock %}
