@@ -41,6 +41,24 @@ def _delete_vodum_user_everywhere(db, user_id: int) -> bool:
             cur.close()
 
 def register(app):
+    @app.route("/users/<int:user_id>/jellyfin/<int:media_user_id>/state", methods=["POST"])
+    def user_jellyfin_state(user_id, media_user_id):
+        from core.jellyfin_account_state import set_jellyfin_account_disabled, JellyfinAccountStateError
+        action = request.form.get("action")
+        if action not in ("disable", "enable"):
+            flash("jellyfin_state_failed", "error")
+        else:
+            try:
+                set_jellyfin_account_disabled(get_db(), user_id, media_user_id, action == "disable")
+                task_logger.info("[JELLYFIN ACCOUNT STATE] user_id=%s media_user_id=%s action=%s result=confirmed",
+                                 user_id, media_user_id, action)
+                flash("jellyfin_state_saved", "success")
+            except JellyfinAccountStateError as exc:
+                task_logger.warning("[JELLYFIN ACCOUNT STATE] user_id=%s media_user_id=%s action=%s result=failed",
+                                    user_id, media_user_id, action)
+                flash(str(exc), "error")
+        return redirect(url_for("user_detail", user_id=user_id, tab="general"))
+
     @app.route("/users/<int:user_id>/media-accounts/<int:media_user_id>/delete-removed", methods=["POST"])
     def delete_removed_provider_account(user_id, media_user_id):
         db = get_db()

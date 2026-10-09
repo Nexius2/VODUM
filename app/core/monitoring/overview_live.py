@@ -127,12 +127,13 @@ def load_monitoring_live_context(
                 SELECT {LIVE_SESSION_COLUMNS},
                   s.name AS server_name,
                   s.type AS provider,
-                  mu.username AS username
+                  COALESCE(NULLIF(TRIM(vu.username), ''), mu.username) AS username
                 FROM media_sessions ms
                 JOIN servers s ON s.id = ms.server_id
                 LEFT JOIN media_users mu ON mu.id = ms.media_user_id
+                LEFT JOIN vodum_users vu ON vu.id = mu.vodum_user_id
                 WHERE datetime(ms.last_seen_at) >= datetime('now', ?)
-                ORDER BY datetime(ms.last_seen_at) DESC
+                ORDER BY ms.id ASC
                 """,
                 (live_window_sql,),
             )

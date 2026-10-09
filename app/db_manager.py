@@ -5,6 +5,7 @@ from typing import Any, Iterable, Optional
 import os
 from contextlib import contextmanager
 from pathlib import Path
+from functools import wraps
 
 from secret_store import decrypt_server_record
 
@@ -51,6 +52,49 @@ def open_sqlite_connection(
         cur.close()
 
     return conn
+
+
+class _ReadOnlyDatabase:
+    """Query interface for an operation-scoped, read-only SQLite snapshot."""
+
+    def __init__(self, connection):
+        self.connection = connection
+
+    def query(self, sql, params=()):
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute(sql, params)
+            rows = cursor.fetchall()
+        finally:
+            cursor.close()
+        if "servers" in sql.lower():
+            return [decrypt_server_record(row)
+                    if "token" in row.keys() or "settings_json" in row.keys()
+                    else row for row in rows]
+        return rows
+
+    def query_one(self, sql, params=()):
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute(sql, params)
+            row = cursor.fetchone()
+        finally:
+            cursor.close()
+        if row is not None and "servers" in sql.lower():
+            if "token" in row.keys() or "settings_json" in row.keys():
+                return decrypt_server_record(row)
+        return row
+
+
+def isolated_read_operation(function):
+    """Opt in only audited read-only builders; leave legacy transactions intact."""
+    @wraps(function)
+    def wrapped(db, *args, **kwargs):
+        if not isinstance(db, DBManager):
+            return function(db, *args, **kwargs)
+        with db.readonly_snapshot() as reader:
+            return function(reader, *args, **kwargs)
+    return wrapped
 
 
 class DBManager:
@@ -109,6 +153,22 @@ class DBManager:
             self.db_path,
         )
 
+
+    @contextmanager
+    def readonly_snapshot(self):
+        """Read committed data without holding the shared writer's Python lock.
+
+        A dedicated connection and snapshot belong to this operation only and
+        are closed on success or failure. This API must not be used inside a
+        write transaction or for reads requiring uncommitted writer changes.
+        """
+        connection = open_sqlite_connection(self.db_path, read_only=True)
+        try:
+            connection.execute("PRAGMA query_only = ON")
+            connection.execute("BEGIN")
+            yield _ReadOnlyDatabase(connection)
+        finally:
+            connection.close()
 
     def execute(
         self,
@@ -188,9 +248,18 @@ class DBManager:
         self,
         sql: str,
         params: Iterable[Any] = ()
-    ) -> Optional[sqlite3.Row]:
-        rows = self.query(sql, params)
-        return rows[0] if rows else None
+    ) -> Optional[sqlite3.Row | dict]:
+        with self._lock:
+            cur = self.conn.cursor()
+            try:
+                cur.execute(sql, params)
+                row = cur.fetchone()
+                if row is not None and "servers" in sql.lower():
+                    if "token" in row.keys() or "settings_json" in row.keys():
+                        return decrypt_server_record(row)
+                return row
+            finally:
+                cur.close()
 
     def close(self) -> None:
         """

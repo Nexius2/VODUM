@@ -1,0 +1,19 @@
+{% for provider in ['sonarr', 'radarr'] %}
+{% set connections = arr_servers | selectattr('type', 'equalto', provider) | list %}
+{% if connections %}
+<div class="mt-4 rounded-2xl border border-slate-800 bg-slate-900 p-4" data-arr-provider="{{ provider }}">
+  <h3 class="mb-3 text-sm font-semibold">{{ t(provider) }} <span class="text-xs text-slate-400">· {{ connections|length }}</span></h3>
+  <div class="grid grid-cols-1 gap-3">
+  {% for connection in connections %}
+    <a href="{{ url_for('server_detail', server_id=connection.id) }}" class="block rounded-xl border border-slate-800 bg-slate-950/40 p-3 hover:border-primary">
+      <div class="flex justify-between gap-3"><span class="font-medium text-sm">{{ connection.name }}</span>
+        <span class="text-xs {{ 'text-emerald-300' if connection.status == 'up' else 'text-rose-300' if connection.status == 'down' else 'text-slate-400' }}">{{ t('online') if connection.status == 'up' else t('offline') if connection.status == 'down' else t('unknown') }}</span>
+      </div>
+      <div class="truncate mt-1 text-xs text-slate-400">{{ connection.url or '-' }}</div>
+      <div class="mt-1 text-xs text-slate-500">{{ t('version') }}: {{ connection.server_version or '-' }} · {{ t('last_check') }}: {{ connection.last_checked|browser_datetime if connection.last_checked else '-' }}</div>
+    </a>
+  {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endfor %}

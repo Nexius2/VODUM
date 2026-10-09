@@ -2,6 +2,7 @@
 from core.monitoring.artwork import enrich_live_session_artwork
 from core.dashboard_usage_risk import build_usage_risk_trend
 from core.dashboard_now_playing import build_now_playing_fragment_key, load_dashboard_now_playing
+from core.dashboard_servers import dashboard_server_initial_preview
 from core.dashboard_widgets import (
     get_dashboard_next_tasks,
     get_dashboard_servers,
@@ -86,7 +87,7 @@ def register(app):
                 s.type,
                 COALESCE(s.url, s.local_url, s.public_url) AS url,
                 s.status,
-                s.last_checked
+                s.last_checked, s.server_version
             FROM servers s
             ORDER BY s.type, s.name
             """
@@ -132,6 +133,8 @@ def register(app):
             usage_risk_dashboard=usage_risk_dashboard,
             users_stats=users_stats,
             servers=servers,
+            dashboard_servers=dashboard_server_initial_preview(servers),
+            dashboard_servers_deferred=True,
             latest_logs=latest_logs,
             active_page="dashboard",
         ))

@@ -1,0 +1,48 @@
+{% if request_routing %}
+<section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-6">
+<h2 class="text-sm font-semibold mb-2">{{ t('request_routing_title') }}</h2>
+<p class="text-xs text-slate-400 mb-4">{{ t('request_routing_help') }}</p>
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+{% for library in request_routing %}
+{% set arr = library.current_arr %}
+<div data-routing-card class="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+<input type="hidden" form="server_config" name="routing_library_id" value="{{ library.id }}">
+<h3 class="font-semibold text-sm">{{ library.media_server_name }} / {{ library.name }} <span class="text-xs text-slate-400">· {{ t(library.arr_type) }}</span></h3>
+<input type="hidden" form="server_config" name="routing_{{ library.id }}_single_activation" value="1">
+<div class="flex flex-wrap gap-4 mt-3 text-xs">
+<label><input type="checkbox" form="server_config" data-routing-active name="routing_{{ library.id }}_associated" value="1" {% if arr.associated and arr.enabled %}checked{% endif %}> {{ t('request_routing_associate') }}</label>
+</div>
+<div data-routing-details class="{% if not (arr.associated and arr.enabled) %}hidden{% endif %}">
+<div class="flex flex-wrap items-center gap-4 mt-4 text-xs">
+<label><input type="checkbox" form="server_config" name="routing_{{ library.id }}_default_for_requests" value="1" {% if library.default_for_requests %}checked{% endif %}> {{ t('request_routing_default') }}</label>
+<label>{{ t('request_routing_library_priority') }} <input type="number" min="1" max="100000" form="server_config" name="routing_{{ library.id }}_request_priority" value="{{ library.request_priority }}" class="w-20 bg-slate-900 border border-slate-700 rounded px-2 py-1"></label>
+</div>
+<input type="hidden" form="server_config" name="routing_{{ library.id }}_arr_order_present" value="1">
+<div class="mt-4 overflow-x-auto rounded-lg border border-slate-800">
+<table class="w-full text-xs">
+<thead class="bg-slate-900 text-slate-400"><tr><th class="p-3 text-left">{{ t('request_routing_priority') }}</th><th class="p-3 text-left">{{ t('server') }}</th><th class="p-3 text-right">{{ t('request_routing_order') }}</th></tr></thead>
+<tbody data-arr-order>
+{% set position = namespace(rank=0) %}
+{% for candidate in library.candidates %}{% if candidate.associated or candidate.id==arr.id %}
+{% set position.rank = position.rank + 1 %}
+<tr data-arr-row data-current-arr="{{ '1' if candidate.id==arr.id else '0' }}" class="border-t border-slate-800 {% if candidate.id==arr.id and not (arr.associated and arr.enabled) %}hidden{% endif %}">
+<td class="p-3" data-arr-rank>{{ position.rank }}</td>
+<td class="p-3">{{ candidate.name }}{% if candidate.associated and not candidate.enabled %} <span class="text-slate-400">({{ t('disabled') }})</span>{% endif %}<input type="hidden" form="server_config" name="routing_{{ library.id }}_arr_order" value="{{ candidate.id }}" {% if candidate.id==arr.id and not (arr.associated and arr.enabled) %}disabled{% endif %}></td>
+<td class="p-3 text-right whitespace-nowrap"><button type="button" data-arr-up class="px-2 py-1 rounded bg-slate-800 hover:bg-primary disabled:opacity-40" aria-label="{{ t('request_routing_move_up') }}">↑</button> <button type="button" data-arr-down class="px-2 py-1 rounded bg-slate-800 hover:bg-primary disabled:opacity-40" aria-label="{{ t('request_routing_move_down') }}">↓</button></td>
+</tr>
+{% endif %}{% endfor %}
+</tbody></table>
+</div>
+<div class="mt-4 space-y-3 text-xs">
+<p class="text-slate-400">{{ t('request_routing_conditions_help') }}</p>
+<label class="block">{{ t('request_routing_genres') }}<input type="text" form="server_config" name="routing_{{ library.id }}_genres" maxlength="2000" value="{{ library.conditions.get('genres', [])|join(', ') }}" class="block mt-1 w-full bg-slate-900 border border-slate-700 rounded px-3 py-2"></label>
+<label class="block">{{ t('request_routing_collections') }}<input type="text" form="server_config" name="routing_{{ library.id }}_collections" maxlength="2000" value="{{ library.conditions.get('collections', [])|join(', ') }}" class="block mt-1 w-full bg-slate-900 border border-slate-700 rounded px-3 py-2"></label>
+</div>
+<p class="mt-3 text-xs text-slate-400">{{ t('request_routing_fallback') }} {{ library.fallback.name if library.fallback else t('none') }}</p>
+</div>
+
+</div>
+{% endfor %}
+</div>
+</section>
+{% endif %}

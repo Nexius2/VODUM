@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.retention_batches import delete_retained_rows
+
 
 def export_portal_user_data(db, vodum_user_id: int) -> dict | None:
     user = db.query_one(
@@ -62,6 +64,6 @@ def cleanup_portal_retention(db, cutoff_iso: str) -> dict:
         ("login_attempts", "DELETE FROM portal_login_attempts WHERE last_failed_at IS NOT NULL AND last_failed_at<?", (cutoff_iso,)),
     )
     for label, sql, params in statements:
-        cursor = db.execute(sql, params)
-        deleted[label] = max(int(getattr(cursor, "rowcount", 0) or 0), 0)
+        table, predicate = sql.removeprefix("DELETE FROM ").split(" WHERE ", 1)
+        deleted[label] = delete_retained_rows(db, table, predicate, params)
     return deleted

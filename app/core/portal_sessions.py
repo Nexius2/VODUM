@@ -46,6 +46,8 @@ def create_portal_session(db, portal_account_id: int, *, now=None, ttl=None) -> 
     )
     if not row:
         raise RuntimeError("portal_session_not_persisted")
+    from core.portal_audit import record_portal_event
+    record_portal_event(db, "session_started", "success", portal_account_id=portal_account_id)
     return {"session_id": int(row["id"]), "token": token, "expires_at": row["expires_at"]}
 
 

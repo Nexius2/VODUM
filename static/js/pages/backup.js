@@ -147,9 +147,10 @@
     }).join("");
   }
 
-  async function refreshBackupListOnce() {
+  async function refreshBackupListOnce(signal) {
     const response = await fetch("/api/backup/list", {
       cache: "no-store",
+      signal,
       headers: { "Accept": "application/json" }
     });
 
@@ -159,18 +160,19 @@
     renderBackupRows(data.backups || []);
   }
 
-  async function isAutoBackupStillActive() {
+  async function isAutoBackupStillActive(signal) {
     try {
       const response = await fetch("/api/tasks/list", {
         cache: "no-store",
+        signal,
         headers: { "Accept": "application/json" }
       });
-      if (!response.ok) return false;
+      if (!response.ok) return null;
       const data = await response.json();
       const task = (data.tasks || []).find((item) => item.name === "auto_backup");
-      return task && ["queued", "running"].includes(task.status);
+      return Boolean(task && ["queued", "running"].includes(task.status));
     } catch (error) {
-      return false;
+      return null;
     }
   }
 
@@ -195,6 +197,7 @@
     const statusUrl = config.tautulliStatusUrl || "";
     const msgSelectFile = labels.tautulliSelectFileFirst || "Select a file first.";
     let statusTimer = null;
+    let statusInFlight = false;
 
     function showError(message) {
       errBox.textContent = message;
@@ -296,9 +299,12 @@
     }
 
     async function pollJobStatusOnce() {
-      if (!statusUrl) return;
+      if (!statusUrl || document.hidden || statusInFlight) return;
+      statusInFlight = true;
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 10000);
       try {
-        const response = await fetch(statusUrl, { cache: "no-store" });
+        const response = await fetch(statusUrl, { cache: "no-store", signal: controller.signal });
         if (!response.ok) return;
         const data = await response.json();
         renderJobStatus(data);
@@ -307,6 +313,9 @@
         }
       } catch (error) {
         // Status polling is best-effort.
+      } finally {
+        window.clearTimeout(timeout);
+        statusInFlight = false;
       }
     }
 
@@ -337,6 +346,9 @@
 
     updateButtonState();
     pollJobStatusOnce();
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) pollJobStatusOnce();
+    });
   }
   document.addEventListener("DOMContentLoaded", function () {
     initTautulliImport();
@@ -418,14 +430,36 @@
 
     let attempts = 0;
     const maxAttempts = 45;
-    const timer = window.setInterval(async function () {
+    let inFlight = false;
+    let stopped = false;
+    async function pollBackups() {
+      if (document.hidden || inFlight || stopped) return;
+      inFlight = true;
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 10000);
       attempts += 1;
-      await refreshBackupListOnce();
-      const active = await isAutoBackupStillActive();
-      if (!active || attempts >= maxAttempts) {
-        window.clearInterval(timer);
-        await refreshBackupListOnce();
+      try {
+        await refreshBackupListOnce(controller.signal);
+        const active = await isAutoBackupStillActive(controller.signal);
+        if (active === false || attempts >= maxAttempts) {
+          stopped = true;
+          window.clearInterval(timer);
+          await refreshBackupListOnce(controller.signal);
+        }
+      } catch (error) {
+        // A transient failure must not create overlapping polls or imply completion.
+      } finally {
+        window.clearTimeout(timeout);
+        inFlight = false;
+        if (attempts >= maxAttempts) {
+          stopped = true;
+          window.clearInterval(timer);
+        }
       }
-    }, 2000);
+    }
+    const timer = window.setInterval(pollBackups, 2000);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) pollBackups();
+    });
   });
 })();

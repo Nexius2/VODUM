@@ -7,5 +7,5 @@ from tasks_engine import task_logs
 def run(task_id: int, db):
     task_logs(task_id, "info", "Monitoring daily aggregate refresh started")
     result = refresh_recent_days(db, 31)
-    task_logs(task_id, "success", f"Monitoring daily aggregates refreshed: {result['days']} days, {result['sessions']} sessions")
+    task_logs(task_id, "success", f"Monitoring daily aggregates refreshed: {result['days']} days, {result['skipped_days']} unchanged days, {result['sessions']} sessions in window")
     return result

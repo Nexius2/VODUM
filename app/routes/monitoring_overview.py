@@ -1,3 +1,5 @@
+from core.arr_monitoring import load_arr_monitoring
+from core.arr_connections import load_arr_servers
 # Auto-split from app.py (keep URLs/endpoints intact)
 from flask import (
     render_template, request, url_for, make_response,
@@ -37,6 +39,7 @@ from core.monitoring.overview_policies import (
 )
 from logging_utils import get_logger
 from web.helpers import get_db
+from core.auth_principal import admin_required
 from .monitoring_enforcements import register as register_enforcement_routes
 
 monitoring_logger = get_logger("monitoring_overview")
@@ -45,9 +48,24 @@ def register(app):
     register_enforcement_routes(app)
 
     @app.route("/monitoring")
+    @admin_required
     def monitoring_page():
         db = get_db()
         tab = request.args.get("tab", "overview")
+        portal_setting = db.query_one("SELECT portal_enabled FROM settings WHERE id=1") or {}
+        portal_enabled = int(dict(portal_setting).get("portal_enabled") or 0) == 1
+        if tab == "user_portal":
+            from flask import abort
+            from core.monitoring.portal_usage import load_portal_usage
+            if not portal_enabled:
+                abort(404)
+            try:
+                days = int(request.args.get("days", 30))
+                page = int(request.args.get("page", 1))
+            except ValueError:
+                abort(400)
+            return render_template("monitoring/monitoring.html", active_page="monitoring",
+                                   tab=tab, portal_enabled=True, portal_usage=load_portal_usage(db, days, page))
         if tab not in {
             "overview", "now_playing", "policies", "usage_risk", "activity",
             "history", "libraries", "users", "servers",
@@ -326,6 +344,7 @@ def register(app):
                 edit_policy=locals().get('edit_policy'),
                 server_range=server_range,
                 servers_combined=servers_combined,
+                arr_monitoring=load_arr_monitoring(db, load_arr_servers(db), server_range) if tab == "servers" else {},
                 servers_details=servers_details,
                 servers_sessions_day=servers_sessions_day,
                 servers_media_types=servers_media_types,
@@ -367,6 +386,7 @@ def register(app):
             "monitoring/monitoring.html",
             active_page="monitoring",
             tab=tab,
+            portal_enabled=portal_enabled,
             servers=servers,
             configured_server_count=configured_server_count,
             server_stats=server_stats,
@@ -389,6 +409,7 @@ def register(app):
             edit_policy=locals().get('edit_policy'),
             server_range=server_range,
             servers_combined=servers_combined,
+            arr_monitoring=load_arr_monitoring(db, load_arr_servers(db), server_range) if tab == "servers" else {},
             servers_details=servers_details,
             servers_sessions_day=servers_sessions_day,
             servers_media_types=servers_media_types,

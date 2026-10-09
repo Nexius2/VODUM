@@ -21,7 +21,7 @@
   </div>
 
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-    <div class="text-xs text-slate-400">{{ t("active_users") }}</div>
+    <div class="text-xs text-slate-400">{{ t("monitoring_servers_viewers") }}</div>
     <div class="text-3xl font-semibold mt-2">{{ servers_combined.active_users or 0 }}</div>
   </div>
 
@@ -74,7 +74,7 @@
           <th class="text-left py-2 pr-4">{{ t("users") }}</th>
           <th class="text-left py-2 pr-4">{{ t("libraries") }}</th>
           <th class="text-left py-2 pr-4">{{ t("monitoring_servers_sessions") }}</th>
-          <th class="text-left py-2 pr-4">{{ t("active") }}</th>
+          <th class="text-left py-2 pr-4">{{ t("monitoring_servers_viewers") }}</th>
           <th class="text-left py-2 pr-4">{{ t("monitoring_servers_watch_time") }}</th>
           <th class="text-left py-2 pr-4">{{ t("monitoring.cards.transcodes") }}</th>
           <th class="text-left py-2 pr-4">IPs</th>
@@ -172,11 +172,36 @@
 
 
 
+{% if arr_monitoring and arr_monitoring.servers %}
+<div class="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+{% for provider in ['sonarr', 'radarr'] %}
+{% set instances = arr_monitoring.servers | selectattr('type', 'equalto', provider) | list %}
+{% if instances %}
+<section class="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+<h3 class="font-semibold mb-3">{{ t(provider) }} · {{ t('arr_analysis') }}</h3>
+{% for instance in instances %}
+<a href="{{ url_for('server_detail', server_id=instance.id) }}" class="block mb-3 rounded-xl border border-slate-800 p-3">
+<div class="font-medium">{{ instance.name }} · {{ t('online') if instance.status == 'up' else t('offline') if instance.status == 'down' else t('unknown') }}</div>
+<div class="text-xs text-slate-400 mt-2">{{ t('arr_availability') }}: {{ instance.availability if instance.availability is defined else '-' }}% · {{ t('arr_latency') }}: {{ instance.latency_ms if instance.latency_ms is defined and instance.latency_ms is not none else '-' }} ms</div>
+<div class="text-xs text-slate-400 mt-1">{{ t('arr_queue') }}: {{ instance.queue_count if instance.queue_count is defined and instance.queue_count is not none else '-' }} · {{ t('arr_health') }}: {{ instance.health_count if instance.health_count is defined and instance.health_count is not none else '-' }}</div>
+</a>
+{% endfor %}
+<canvas id="arr-availability-{{ provider }}" height="140"></canvas>
+<canvas id="arr-queue-{{ provider }}" height="140" class="mt-4"></canvas>
+</section>
+{% endif %}
+{% endfor %}
+</div>
+{% endif %}
+
 <script type="application/json" id="monitoring-servers-config">
   {
     "serversUrl": {{ url_for('monitoring_page', tab='servers')|tojson }},
     "serverLabel": {{ t("server")|tojson }},
     "sessionsLabel": {{ t("monitoring_servers_sessions")|tojson }},
+    "arr": {{ (arr_monitoring or {})|tojson }},
+    "arrAvailabilityLabel": {{ t("arr_availability")|tojson }},
+    "arrQueueLabel": {{ t("arr_queue")|tojson }},
     "details": {{ (servers_details or [])|tojson }},
     "sessionsDay": {{ (servers_sessions_day or [])|tojson }},
     "mediaTypes": {{ (servers_media_types or [])|tojson }}

@@ -4,8 +4,8 @@
   <div class="space-y-3">
     {% for c in top_movies_30d[:4] %}
       <div class="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/70">
-        <div class="flex items-center justify-between gap-4 px-4 py-3">
-          <div class="flex items-center gap-3 min-w-0">
+        <div class="monitoring-top-row px-4 py-3">
+          <div class="monitoring-top-identity">
             <div class="w-12 h-16 rounded-lg overflow-hidden bg-slate-800 shrink-0">
               {% if c.poster_url %}
                 <img
@@ -19,7 +19,7 @@
             </div>
 
             <div class="text-sm min-w-0">
-              <div class="font-semibold truncate text-white">{{ c.title or "-" }}</div>
+              <div class="monitoring-top-title font-semibold truncate text-white">{{ c.title or "-" }}</div>
             </div>
           </div>
 

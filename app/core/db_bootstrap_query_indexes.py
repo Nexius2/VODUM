@@ -15,6 +15,9 @@ def ensure_application_query_indexes(conn, cursor) -> None:
         "CREATE INDEX IF NOT EXISTS idx_welcome_email_templates_server ON welcome_email_templates(server_id)",
         "CREATE INDEX IF NOT EXISTS idx_stream_enforcement_state_server ON stream_enforcement_state(server_id)",
         "CREATE INDEX IF NOT EXISTS idx_stream_enforcements_server ON stream_enforcements(server_id, created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_stream_enforcements_datetime ON stream_enforcements(datetime(created_at))",
+        "CREATE INDEX IF NOT EXISTS idx_stream_enforcements_kill_datetime ON stream_enforcements(datetime(created_at)) WHERE action = 'kill'",
+        "CREATE INDEX IF NOT EXISTS idx_history_stopped_datetime ON media_session_history(datetime(stopped_at))",
         "CREATE INDEX IF NOT EXISTS idx_history_server_library_stopped ON media_session_history(server_id, library_section_id, stopped_at)",
         "CREATE INDEX IF NOT EXISTS idx_history_library_top_played ON media_session_history(server_id, library_section_id, media_key, started_at, stopped_at)",
     )

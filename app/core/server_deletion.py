@@ -139,6 +139,8 @@ def delete_server_relations(conn, server_id: int, *, batch_size: int = 1000) -> 
             (server_id,),
             batch_size=batch_size,
         )
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='arr_monitoring_samples'").fetchone():
+        conn.execute("DELETE FROM arr_monitoring_samples WHERE server_id=?", (server_id,))
     conn.execute("DELETE FROM servers WHERE id = ?", (server_id,))
     conn.commit()
     return deleted

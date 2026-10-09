@@ -223,8 +223,8 @@ def _load_request_language_settings() -> Optional[dict]:
     try:
         from web.helpers import get_db
 
-        row = get_db().query_one("SELECT default_language FROM settings WHERE id = 1")
-        return dict(row) if row else None
+        from core.request_settings import read_presentation_settings
+        return read_presentation_settings(get_db())
     except Exception as e:
         get_logger("i18n").warning(
             f"[i18n] Impossible de charger la langue UI depuis les settings: {e}",
@@ -283,8 +283,8 @@ def init_i18n(app, get_db: Callable[[], object]) -> None:
         """
         db = get_db()
 
-        row = db.query_one(f"SELECT {GLOBAL_TEMPLATE_SETTINGS_COLUMNS} FROM settings WHERE id = 1")
-        settings = dict(row) if row else {}
+        from core.request_settings import read_presentation_settings
+        settings = read_presentation_settings(db)
 
         lang = _resolve_active_language(settings)
 

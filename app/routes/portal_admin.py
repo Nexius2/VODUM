@@ -1,3 +1,5 @@
+from core.portal_media_requests import has_saved_request_defaults
+from mailing_utils import build_portal_login_url
 from flask import current_app, flash, redirect, render_template, request, url_for, jsonify
 
 from core.i18n import get_translator
@@ -25,7 +27,7 @@ PORTAL_SETTINGS_COLUMNS = """
     portal_local_test_enabled,
     portal_public_url,
     portal_allowed_hostname,
-    portal_show_invitations,portal_show_subscription,portal_show_media_access,portal_show_monitoring,portal_show_support,portal_show_payment,
+    portal_show_invitations,portal_show_subscription,portal_show_media_access,portal_show_media_requests,portal_show_monitoring,portal_show_support,portal_show_payment,
     portal_support_content,portal_show_support_email,portal_quick_messages_enabled,
     portal_payment_url,portal_payment_label,
     portal_local_auth_enabled,
@@ -34,7 +36,7 @@ PORTAL_SETTINGS_COLUMNS = """
 """
 PORTAL_READINESS_COLUMNS = """
     portal_enabled,portal_public_url,portal_allowed_hostname,brand_name,contact_email,debug_mode,
-    portal_show_invitations,portal_show_subscription,portal_show_media_access,portal_show_monitoring,portal_show_support,portal_show_payment,
+    portal_show_invitations,portal_show_subscription,portal_show_media_access,portal_show_media_requests,portal_show_monitoring,portal_show_support,portal_show_payment,
     portal_support_content,portal_show_support_email,portal_quick_messages_enabled,
     portal_payment_url,portal_payment_label,
     portal_local_auth_enabled,portal_plex_auth_enabled,portal_jellyfin_auth_enabled,
@@ -214,10 +216,11 @@ def register(app):
         return render_template(
             "settings/portal.html",
             settings=dict(settings),
+            portal_arr_ready=any(has_saved_request_defaults(dict(s)) for s in db.query("SELECT settings_json FROM servers WHERE LOWER(type) IN ('sonarr','radarr')")),
             active_page="portal_settings",
             portal_runtime_ready=readiness["ready"],
             portal_readiness=readiness,
-            portal_login_url=f"{public_url}/portal/login" if public_url else "",
+            portal_login_url=build_portal_login_url(public_url),
             payment_links=load_payment_links_admin(db),
         )
 
@@ -267,7 +270,7 @@ def register(app):
             flash("portal_admin_user_invalid", "error")
             return redirect(url_for("portal_settings_page"))
         settings = dict(db.query_one(
-            "SELECT brand_name,portal_logo_url,portal_show_invitations,portal_show_subscription,portal_show_media_access,"
+            "SELECT brand_name,portal_logo_url,portal_show_invitations,portal_show_subscription,portal_show_media_access,portal_show_media_requests,"
             "portal_show_monitoring,portal_show_support,user_notifications_can_override,"
             "discord_enabled,discord_bot_id,discord_bot_token,mailing_enabled,mail_from,smtp_host,"
             "smtp_port,smtp_user,smtp_pass,smtp_auth_method,smtp_oauth_access_token "
@@ -276,6 +279,7 @@ def register(app):
         features = {
             "subscription": bool(settings.get("portal_show_subscription")),
             "media": bool(settings.get("portal_show_media_access")),
+            "requests": bool(settings.get("portal_show_media_requests")),
             "monitoring": bool(settings.get("portal_show_monitoring")),
             "support": bool(settings.get("portal_show_support")),
         }
@@ -287,6 +291,15 @@ def register(app):
         )
         if page == "home":
             return render_template("portal/home.html", **home, **common, active_portal_page="home")
+        if page == "requests" and features["requests"]:
+            from core.portal_media_requests import request_libraries, search_media, MediaRequestError
+            term = (request.args.get('q') or '').strip()
+            results = []
+            if term:
+                try: results = search_media(db,user_id,'all',term)
+                except MediaRequestError as exc: flash(str(exc),'error')
+            return render_template('portal/requests.html',libraries=request_libraries(db,user_id),
+                results=results,query=term,**common,active_portal_page='requests')
         if page == "profile":
             from routes.portal import _profile_communication_state
             notifications_can_override, discord_enabled = _profile_communication_state(db, settings)
@@ -317,15 +330,17 @@ def register(app):
         current = get_db().query_one(
             f"SELECT {PORTAL_READINESS_COLUMNS} FROM settings WHERE id = 1"
         )
+        from core.portal_media_requests import has_saved_request_defaults
+        arr_ready = any(has_saved_request_defaults(dict(s)) for s in get_db().query("SELECT settings_json FROM servers WHERE LOWER(type) IN ('sonarr','radarr')"))
         debug_mode = bool(current and int(current["debug_mode"] or 0) == 1)
         preview = normalize_portal_settings(
-            request.form, activation_ready=True, debug_mode=debug_mode
+            request.form, activation_ready=True, debug_mode=debug_mode, arr_ready=arr_ready
         )
         candidate = dict(current or {})
         candidate.update(preview.values)
         readiness = evaluate_portal_readiness(candidate, trusted_proxy_networks=current_app.config.get("TRUSTED_PROXY_NETS", ""))
         result = normalize_portal_settings(
-            request.form, activation_ready=readiness["ready"], debug_mode=debug_mode
+            request.form, activation_ready=readiness["ready"], debug_mode=debug_mode, arr_ready=arr_ready
         )
         if result.errors:
             translator = get_translator()
@@ -343,6 +358,7 @@ def register(app):
                 portal_show_invitations = :portal_show_invitations,
                 portal_show_subscription = :portal_show_subscription,
                 portal_show_media_access = :portal_show_media_access,
+                portal_show_media_requests = :portal_show_media_requests,
                 portal_show_monitoring = :portal_show_monitoring,
                 portal_show_support = :portal_show_support,
                 portal_support_content = :portal_support_content,

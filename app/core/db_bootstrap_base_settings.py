@@ -46,6 +46,7 @@ def ensure_base_settings(conn, cursor, *, ensure_row) -> None:
         "portal_show_invitations": 0,
         "portal_show_subscription": 1,
         "portal_show_media_access": 1,
+        "portal_show_media_requests": 1,
         "portal_show_monitoring": 1,
         "portal_show_support": 1,
         "portal_show_payment": 0,

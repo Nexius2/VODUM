@@ -1,5 +1,5 @@
 import time
-from flask import abort, flash, g, redirect, render_template, request, session, url_for
+from flask import abort, flash, g, jsonify, redirect, render_template, request, session, url_for
 
 from core.auth_principal import permission_required, portal_login_required, portal_user_required
 from core.portal_page_data import (
@@ -19,7 +19,7 @@ from core.i18n import get_available_languages
 from discord_utils import enrich_discord_settings, is_discord_ready
 from notifications_utils import is_email_ready
 
-_FEATURE_COLUMNS = {"subscription": "portal_show_subscription", "media": "portal_show_media_access", "monitoring": "portal_show_monitoring", "support": "portal_show_support"}
+_FEATURE_COLUMNS = {"subscription": "portal_show_subscription", "media": "portal_show_media_access", "requests": "portal_show_media_requests", "monitoring": "portal_show_monitoring", "support": "portal_show_support"}
 
 
 def _profile_communication_state(db, settings: dict) -> tuple[bool, bool]:
@@ -37,7 +37,7 @@ def _profile_communication_state(db, settings: dict) -> tuple[bool, bool]:
 def _portal_ui(db) -> dict:
     row = db.query_one(
         "SELECT brand_name,portal_logo_url,"
-        "portal_show_invitations,portal_show_subscription,portal_show_media_access,portal_show_monitoring,portal_show_support FROM settings WHERE id=1"
+        "portal_show_invitations,portal_show_subscription,portal_show_media_access,portal_show_media_requests,portal_show_monitoring,portal_show_support FROM settings WHERE id=1"
     ) or {}
     values = dict(row)
     unread_messages = 0
@@ -61,6 +61,46 @@ def _require_feature(db, name: str) -> dict:
 
 
 def register(app):
+    from core.portal_audit import record_portal_event
+    actions = {
+        "portal_profile_save": "profile_updated", "portal_password_change": "password_changed",
+        "portal_friend_invite": "friend_invitation", "portal_method_link_jellyfin": "identity_linked",
+        "portal_method_unlink": "identity_unlinked", "portal_methods_reauthenticate": "reauthentication",
+        "portal_media_request_submit": "media_requested",
+        "portal_media_profile_save": "media_profile_updated", "portal_support_message_send": "support_message_sent",
+    }
+    pages = {"portal_media_requests", "portal_home", "portal_profile", "portal_subscription", "portal_media_access", "portal_monitoring", "portal_support"}
+
+    @app.before_request
+    def portal_audit_request_start():
+        if request.endpoint in actions:
+            g.portal_audit_flash_count = len(session.get("_flashes", []))
+
+    @app.after_request
+    def portal_audit_request_end(response):
+        endpoint = request.endpoint
+        if endpoint not in actions and endpoint not in pages:
+            return response
+        principal = getattr(g, "auth_principal", None) or {}
+        account_id = principal.get("account_id") if principal.get("account_type") == "portal" else None
+        # Authorized user pages only; polling/assets are deliberately excluded.
+        if endpoint in pages and (not account_id or response.status_code != 200):
+            return response
+        outcome = "success"
+        if response.status_code >= 400:
+            outcome = "blocked" if response.status_code in (401, 403, 404, 429) else "failure"
+        elif endpoint in actions:
+            flashes = session.get("_flashes", [])[getattr(g, "portal_audit_flash_count", 0):]
+            if any(category == "error" for category, _ in flashes) or not account_id:
+                outcome = "failure"
+        try:
+            record_portal_event(get_db(), actions.get(endpoint, "page_view"), outcome,
+                                portal_account_id=account_id, details={"page": endpoint, **getattr(g,"portal_request_details",{})})
+        except Exception:
+            from logging_utils import get_logger
+            get_logger("portal_audit").error("Unable to persist portal event endpoint=%s", endpoint)
+        return response
+
     def _portal_error(message_key: str, status=404):
         return render_template("portal/error.html", message_key=message_key, **_portal_ui(get_db()), active_portal_page=""), status
 
@@ -236,6 +276,79 @@ def register(app):
         except ValueError as exc:
             flash(str(exc), "error")
         return redirect(url_for("portal_subscription"))
+
+    @app.get("/portal/requests")
+    @portal_login_required
+    @permission_required("portal.media_requests.create_own")
+    @portal_user_required
+    def portal_media_requests():
+        from core.portal_media_requests import request_libraries, search_media, MediaRequestError
+        from core.portal_rate_limit import portal_request_allowed
+        from web.security import get_client_ip
+        from itsdangerous import URLSafeTimedSerializer
+        db = get_db(); ui = _require_feature(db, "requests")
+        user_id = int(g.auth_principal["vodum_user_id"])
+        libraries = request_libraries(db,user_id)
+        from core.portal_request_backdrop import request_backdrop_posters
+        backdrop_posters = request_backdrop_posters(db, libraries)
+        term = (request.args.get('q') or '').strip()
+        results = []
+        if term:
+            if not portal_request_allowed(db,'media_search:'+str(user_id),get_client_ip(),limit=60):
+                abort(429)
+            try:
+                results = search_media(db,user_id,'all',term)
+                signer = URLSafeTimedSerializer(app.secret_key,salt='portal-media-request')
+                for row in results:
+                    row['selection'] = signer.dumps({'user_id':user_id,'kind':row['kind'],'external_id':row['external_id'],'title':row['title'][:200]})
+            except MediaRequestError as exc: flash(str(exc),'error')
+        return render_template('portal/requests.html',libraries=libraries,results=results,
+            query=term,backdrop_posters=backdrop_posters,**ui,active_portal_page='requests')
+
+    @app.get('/portal/requests/backdrop/<int:history_id>')
+    @portal_login_required
+    @permission_required('portal.media_requests.create_own')
+    @portal_user_required
+    def portal_request_backdrop_poster(history_id):
+        from flask import send_file
+        from core.portal_media_requests import request_libraries
+        from core.portal_request_backdrop import cached_request_poster
+        db = get_db()
+        _require_feature(db, 'requests')
+        user_id = int(g.auth_principal['vodum_user_id'])
+        cached = cached_request_poster(db, history_id, request_libraries(db, user_id))
+        if not cached:
+            abort(404)
+        response = send_file(cached['path'], mimetype=cached['content_type'], conditional=False)
+        response.headers['Cache-Control'] = 'private, no-store'
+        return response
+
+    @app.post("/portal/requests")
+    @portal_login_required
+    @permission_required("portal.media_requests.create_own")
+    @portal_user_required
+    def portal_media_request_submit():
+        from core.portal_media_requests import submit_request, MediaRequestError
+        from core.portal_rate_limit import portal_request_allowed
+        from web.security import get_client_ip
+        from itsdangerous import URLSafeTimedSerializer, BadSignature
+        db = get_db(); _require_feature(db,'requests')
+        user_id = int(g.auth_principal['vodum_user_id'])
+        if not portal_request_allowed(db,'media_submit:'+str(user_id),get_client_ip(),limit=30): abort(429)
+        try:
+            selection = URLSafeTimedSerializer(app.secret_key,salt='portal-media-request').loads(request.form.get('selection',''),max_age=3600)
+            if selection['user_id'] != user_id: raise ValueError()
+            g.portal_request_details = {'media_kind':selection['kind'], 'external_id':selection['external_id'], 'media_title':selection.get('title','')[:200]}
+            result = submit_request(db,user_id,None,selection['kind'],selection['external_id'])
+            g.portal_request_details['request_result'] = result
+            if request.headers.get('Accept') == 'application/json': return jsonify(result=result)
+            flash(result,'success')
+        except (BadSignature,KeyError,TypeError,ValueError) as exc:
+            result = str(exc) if isinstance(exc,MediaRequestError) else 'portal_requests_invalid'
+            g.portal_request_details = {**getattr(g,'portal_request_details',{}), 'request_result':result}
+            if request.headers.get('Accept') == 'application/json': return jsonify(result=result),422
+            flash(result,'error')
+        return redirect(url_for('portal_media_requests',q=(request.form.get('search_query') or '')[:100]))
 
     @app.get("/portal/media-access")
     @portal_login_required

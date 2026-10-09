@@ -83,6 +83,7 @@
       return;
     }
 
+    if (event.target.closest("a, button, input, select, textarea")) return;
     const link = event.target.closest("[data-dashboard-link]");
     if (link) {
       navigateTo(link.dataset.dashboardLink);
@@ -92,6 +93,7 @@
   document.addEventListener("keydown", function (event) {
     if (event.key !== "Enter" && event.key !== " ") return;
 
+    if (event.target.closest("a, button, input, select, textarea")) return;
     const link = event.target.closest("[data-dashboard-link]");
     if (!link) return;
 

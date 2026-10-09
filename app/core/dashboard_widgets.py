@@ -2,6 +2,7 @@
 
 from collections import Counter
 import logging
+from db_manager import isolated_read_operation
 
 from core.aggregate_cache import cached_aggregate
 from core.dashboard_servers import dashboard_server_preview
@@ -128,6 +129,7 @@ def _build_usage_risk_dashboard(usage_risk_report, history_rows=None):
     )
     return result
 
+@isolated_read_operation
 def get_dashboard_usage_risk(db):
     summary = {"high": 0, "medium": 0, "low": 0, "suggested": 0}
     dashboard = {"top_reasons": [], **build_usage_risk_trend([], 0)}
@@ -154,12 +156,13 @@ def get_dashboard_usage_risk(db):
         dashboard["error"] = True
     return summary, dashboard
 
+@isolated_read_operation
 def get_dashboard_servers(db):
     servers = [dict(row) for row in (db.query(
         """
         SELECT s.id, s.name, s.type,
                COALESCE(s.url, s.local_url, s.public_url) AS url,
-               s.status, s.last_checked
+               s.status, s.last_checked, s.server_version
         FROM servers s
         ORDER BY s.type, s.name
         """
@@ -175,10 +178,10 @@ def get_dashboard_servers(db):
                 """
                 WITH events AS (
                     SELECT server_id, datetime(started_at) AS ts, 1 AS delta
-                    FROM media_session_history WHERE stopped_at >= datetime('now', '-7 days')
+                    FROM media_session_history WHERE datetime(stopped_at) >= datetime('now', '-7 days')
                     UNION ALL
                     SELECT server_id, datetime(stopped_at) AS ts, -1 AS delta
-                    FROM media_session_history WHERE stopped_at >= datetime('now', '-7 days')
+                    FROM media_session_history WHERE datetime(stopped_at) >= datetime('now', '-7 days')
                 ), running AS (
                     SELECT server_id, SUM(delta) OVER (
                         PARTITION BY server_id ORDER BY ts

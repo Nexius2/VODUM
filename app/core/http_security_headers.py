@@ -5,7 +5,7 @@ from flask import request
 
 PORTAL_CSP = (
     "default-src 'self'; "
-    "img-src 'self' data: https://challenges.cloudflare.com; "
+    "img-src 'self' data: https://challenges.cloudflare.com https://image.tmdb.org https://artworks.thetvdb.com; "
     "style-src 'self' 'unsafe-inline'; "
     "script-src 'self' https://challenges.cloudflare.com; "
     "frame-src 'self' https://challenges.cloudflare.com; "

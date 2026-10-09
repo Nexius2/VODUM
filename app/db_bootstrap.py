@@ -205,6 +205,12 @@ def run_migrations():
 
     ensure_subscription_gift_schema(conn, cursor, table_exists=table_exists)
 
+    from core.library_request_routing import SCHEMA as library_request_schema
+    conn.executescript(library_request_schema)
+
+    from core.arr_monitoring import SCHEMA as arr_monitoring_schema
+    conn.executescript(arr_monitoring_schema)
+
     ensure_monitoring_live_schema(conn, cursor, table_exists=table_exists)
 
     ensure_monitoring_history_schema(

@@ -505,3 +505,54 @@ svg {
 @media (min-width: 105rem) {
   .portal-readiness-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+.monitoring-top-row {
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 1rem;
+}
+
+.monitoring-top-identity { display: contents; }
+
+.monitoring-top-title {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+@media (max-width: 767px) {
+  .monitoring-top-row { gap: .75rem; padding-left: .75rem; padding-right: .75rem; }
+  .monitoring-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .5rem;
+    padding: .75rem;
+    border: 1px solid #1e293b;
+    border-radius: .875rem;
+    background: #0f172a;
+  }
+  .monitoring-tabs .monitoring-tab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: .625rem .5rem;
+    border: 1px solid #334155;
+    border-radius: .5rem;
+    background: #020617;
+    text-align: center;
+    font-size: .875rem;
+    line-height: 1.25;
+  }
+  .monitoring-tabs .monitoring-tab[aria-current="page"] {
+    border-color: #818cf8;
+    background: #312e81;
+    color: #e0e7ff;
+    font-weight: 600;
+  }
+  .monitoring-tabs .monitoring-tab:focus-visible { outline: 2px solid #818cf8; outline-offset: 2px; }
+}

@@ -85,8 +85,8 @@ def load_history_detail(db, history_id: int, history_columns: str) -> dict | Non
     """, (history_id,))
     if not row:
         return None
-    settings = db.query_one("SELECT brand_name FROM settings WHERE id = 1") or {}
-    return render_communication_history_message(dict(row), dict(settings).get("brand_name") or "VODUM")
+    settings = db.query_one("SELECT brand_name, portal_public_url FROM settings WHERE id = 1") or {}
+    return render_communication_history_message(dict(row), dict(settings).get("brand_name") or "VODUM", dict(settings).get("portal_public_url"))
 
 
 def load_configuration_page_data(db, settings_columns: str) -> dict:

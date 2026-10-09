@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from db_manager import isolated_read_operation
+
 from core.monitoring.resource_stats import (
     apply_server_resource_stats,
     load_server_resource_stats,
@@ -9,6 +11,7 @@ from core.monitoring.resource_stats import (
 EMPTY_SERVER_STATS = {"online": 0, "offline": 0, "total": 0}
 
 
+@isolated_read_operation
 def load_monitoring_server_context(db, tab):
     servers = [
         dict(row)
@@ -56,6 +59,7 @@ def load_monitoring_server_context(db, tab):
     }
 
 
+@isolated_read_operation
 def load_monitoring_servers_tab(
     db,
     args,
@@ -137,14 +141,32 @@ def load_monitoring_servers_tab(
           FROM media_sessions
           WHERE datetime(last_seen_at) >= datetime('now', ?)
         ),
+        identified AS (
+          SELECT source.*,
+            COALESCE(
+              'vodum:' || CAST(mu.vodum_user_id AS TEXT),
+              'media:' || CAST(mu.id AS TEXT),
+              'external:' || CAST(source.server_id AS TEXT) || ':' || NULLIF(TRIM(source.external_user_id), ''),
+              'media:' || CAST(source.media_user_id AS TEXT)
+            ) AS viewer_id
+          FROM source
+          LEFT JOIN media_users mu ON mu.id = COALESCE(
+            source.media_user_id,
+            (SELECT matched.id FROM media_users matched
+             WHERE matched.server_id = source.server_id
+               AND matched.external_user_id = NULLIF(TRIM(source.external_user_id), '')
+             LIMIT 1)
+          )
+        ),
         plays AS (
           SELECT
             (CAST(server_id AS TEXT) || '|' ||
-             COALESCE(CAST(media_user_id AS TEXT), external_user_id, 'unknown_user') || '|' ||
+             COALESCE(viewer_id, 'unknown_user') || '|' ||
              COALESCE(NULLIF(TRIM(media_key), ''), 'no_media') || '|' ||
              strftime('%Y-%m-%d %H:%M', started_at)
             ) AS play_key,
 
+            MAX(viewer_id) AS viewer_id,
             MAX(server_id) AS server_id,
             MAX(media_user_id) AS media_user_id,
             MAX(external_user_id) AS external_user_id,
@@ -163,7 +185,7 @@ def load_monitoring_servers_tab(
             MAX(client_product) AS client_product,
             MAX(device) AS device,
             MAX(library_section_id) AS library_section_id
-          FROM source
+          FROM identified
           GROUP BY play_key
         )
     """
@@ -175,7 +197,7 @@ def load_monitoring_servers_tab(
         WITH {source_cte}
         SELECT
           COUNT(*) AS sessions,
-          COUNT(DISTINCT COALESCE(CAST(media_user_id AS TEXT), external_user_id)) AS active_users,
+          COUNT(DISTINCT viewer_id) AS active_users,
           COALESCE(SUM(watch_ms), 0) AS watch_ms,
           COALESCE(SUM(CASE WHEN was_transcode = 1 THEN 1 ELSE 0 END), 0) AS transcodes,
           AVG(NULLIF(peak_bitrate, 0)) AS avg_peak_bitrate,
@@ -210,7 +232,7 @@ def load_monitoring_servers_tab(
           (SELECT COUNT(*) FROM live x WHERE x.server_id = s.id AND COALESCE(x.is_transcode, 0) = 0) AS live_direct_plays,
 
           (SELECT COUNT(*) FROM plays h WHERE h.server_id = s.id) AS sessions,
-          (SELECT COUNT(DISTINCT COALESCE(CAST(h.media_user_id AS TEXT), h.external_user_id)) FROM plays h WHERE h.server_id = s.id) AS active_users,
+          (SELECT COUNT(DISTINCT h.viewer_id) FROM plays h WHERE h.server_id = s.id) AS active_users,
           (SELECT COALESCE(SUM(h.watch_ms), 0) FROM plays h WHERE h.server_id = s.id) AS watch_ms,
           (SELECT COALESCE(SUM(CASE WHEN h.was_transcode = 1 THEN 1 ELSE 0 END), 0) FROM plays h WHERE h.server_id = s.id) AS transcodes,
           (SELECT AVG(NULLIF(h.peak_bitrate, 0)) FROM plays h WHERE h.server_id = s.id) AS avg_peak_bitrate,

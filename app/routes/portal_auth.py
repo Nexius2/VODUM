@@ -202,6 +202,7 @@ def register(app):
                 principal = session.get(SESSION_PRINCIPAL_KEY) or {}
                 if principal.get("role") != "user": raise ValueError("unavailable")
                 link_identity(db, int(principal["account_id"]), "plex", identity.subject)
+                record_portal_event(db, "identity_linked", "success", portal_account_id=int(principal["account_id"]), details={"provider": "plex"})
                 session["portal_reauthenticated_at"] = int(time.time())
                 flash("portal_method_linked", "success")
                 return redirect(url_for("portal_profile"))
@@ -216,6 +217,8 @@ def register(app):
                 raise ValueError("unavailable")
             return redirect(url_for("portal_home"))
         except (PlexFlowRejected, PlexAuthError, ValueError) as exc:
+            record_portal_event(db, "login_failed", "failure", client_ip=get_client_ip(),
+                                user_agent=request.user_agent.string, details={"method": "plex"})
             current_app.logger.warning("Portal Plex callback failed (%s): %s", type(exc).__name__, exc)
             return render_template("portal/auth_message.html", message_key="portal_plex_login_failed", login_quote_visual=_build_portal_login_visual()), 400
 
@@ -234,6 +237,8 @@ def register(app):
             if not linked or not _open_plex_portal_session(get_db(), linked): raise ValueError("unavailable")
             return redirect(url_for("portal_home"))
         except (ValueError, KeyError):
+            record_portal_event(get_db(), "login_failed", "failure", client_ip=get_client_ip(),
+                                user_agent=request.user_agent.string, details={"method": "plex"})
             return render_template("portal/auth_message.html", message_key="portal_plex_login_failed"), 400
 
     @app.get("/portal/activate")

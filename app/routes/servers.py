@@ -1,5 +1,6 @@
 # Auto-split from app.py (keep URLs/endpoints intact)
 import uuid
+import json
 import threading
 from flask import (
     render_template, request, redirect, url_for, flash, current_app, session, jsonify,
@@ -8,6 +9,7 @@ from flask import (
 from logging_utils import get_logger
 from web.helpers import get_db
 from web.pagination import normalize_page, pagination_links
+from core.library_request_routing import load_arr_request_routing
 from core.server_page_queries import (
     count_libraries,
     count_server_users,
@@ -98,6 +100,17 @@ def _background_delete_server(app, db_path, server_id, server_name):
     )
 
 def register(app):
+    @app.route("/servers/<int:server_id>/libraries/<int:library_id>/request-routing", methods=["POST"])
+    def save_library_request_routing(server_id, library_id):
+        from core.library_request_routing import save_arr_request_routing, RoutingConfigurationError
+        try:
+            save_arr_request_routing(get_db(), server_id, library_id, request.form)
+            logger.info("[REQUEST ROUTING] server_id=%s library_id=%s result=saved",server_id,library_id)
+            flash("request_routing_saved", "success")
+        except RoutingConfigurationError as exc:
+            flash(str(exc), "error")
+        return redirect(url_for("server_detail", server_id=server_id))
+
     @app.route("/servers/<int:server_id>/token", methods=["POST"])
     @admin_required
     def server_token_reveal(server_id):
@@ -164,6 +177,9 @@ def register(app):
         db = get_db()
 
         servers = load_servers_list(db)
+        from core.portal_media_requests import has_saved_request_defaults
+        servers = [{**dict(server), 'requests_configured': has_saved_request_defaults(dict(server))}
+                   for server in servers]
         deleting_server_ids = snapshot_deleting_server_ids(
             SERVER_DELETE_LOCK,
             SERVER_DELETE_IN_PROGRESS,
@@ -251,16 +267,6 @@ def register(app):
         db = get_db()
 
         form_data = read_new_server_form(request.form)
-        server_type = form_data["server_type"]
-
-        if not is_supported_server_type(server_type):
-            logger.error(
-                f"[SERVER CREATE] Invalid server_type received: {server_type}"
-            )
-            flash("Invalid server type", "error")
-            return redirect(url_for("servers"))
-        name = f"{server_type.upper()} - pending"
-
         url = form_data["url"]
 
         # --------------------------------------------------
@@ -284,8 +290,18 @@ def register(app):
         public_url = form_data["public_url"]
         token = form_data["token"]
 
+        from core.server_detection import detect_server, ServerDetectionError
+        try:
+            detected = detect_server(url, token)
+        except ServerDetectionError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("servers_list"))
+        server_type = detected["type"]
+        name = detected["name"]
+        initial_version = detected["version"]
+
         # Options spécifiques (stockées dans settings_json)
-        server_identifier = str(uuid.uuid4())
+        server_identifier = detected["identifier"] or str(uuid.uuid4())
 
         # settings_json (clé/valeurs extensibles)
         settings = form_data["settings"]
@@ -307,6 +323,8 @@ def register(app):
                 settings_json=settings_json,
             )
             # --------------------------------------------------
+            db.execute("""UPDATE servers SET status='up', last_checked=CURRENT_TIMESTAMP,
+                server_version=? WHERE server_identifier=?""", (initial_version, server_identifier))
             # 2) Activation des tâches système
             # --------------------------------------------------
             ensure_new_server_tasks()
@@ -445,8 +463,18 @@ def register(app):
             db, server_id, per_page=per_page, offset=users_offset,
         )
 
+        from core.portal_media_requests import has_saved_request_defaults
+        arr_request_choices = None
+        if server["type"] in ("sonarr", "radarr"):
+            from core.portal_media_requests import arr_defaults, MediaRequestError
+            try: arr_request_choices = arr_defaults({**dict(server), **dict(load_server_secrets(db,server_id) or {})})
+            except MediaRequestError: arr_request_choices = {'profiles':[], 'roots':[]}
+
         return render_template(
             "servers/server_detail.html",
+            arr_request_choices=arr_request_choices,
+            arr_requests_configured=has_saved_request_defaults(dict(server)),
+            request_routing=load_arr_request_routing(db, server_id) if server["type"] in ("sonarr", "radarr") else [],
             server=server,
             libraries=libraries,
             libraries_pagination=libraries_pagination,
@@ -491,15 +519,35 @@ def register(app):
             verify_tls=form_data["verify_tls"],
         )
 
+        if server_type in ('sonarr','radarr') and request.form.get('arr_request_defaults') == '1':
+            from core.portal_media_requests import arr_defaults, MediaRequestError
+            try:
+                choices_server = dict(db.query_one('SELECT * FROM servers WHERE id=?',(server_id,)))
+                choices_server.update(url=url, local_url=local_url, public_url=public_url,
+                    token=token or choices_server.get('token'),settings_json=json.dumps(settings))
+                choices = arr_defaults(choices_server)
+                defaults = {}
+                for field, collection, key in [('arr_quality_profile_id','profiles','quality_profile_id'),('arr_root_folder_id','roots','root_folder_id')]:
+                    value = request.form.get(field,'')
+                    if not value and len(choices[collection]) == 1:
+                        value = choices[collection][0]['id']
+                    if not value and len(choices[collection]) > 1: raise ValueError()
+                    if value:
+                        value = int(value)
+                        if not any(r['id'] == value for r in choices[collection]): raise ValueError()
+                        defaults[key] = value
+                settings['media_requests'] = defaults
+            except (ValueError,MediaRequestError):
+                flash('portal_requests_not_configured','error')
+                return redirect(url_for('server_detail',server_id=server_id))
+
         settings_json, token = prepare_updated_server_secrets(
             settings,
             token,
             row["token"] if row else None,
         )
 
-        update_server(
-            db,
-            server_id,
+        server_values = dict(
             name=name,
             server_type=server_type,
             url=url,
@@ -509,6 +557,16 @@ def register(app):
             settings_json=settings_json,
             status=status,
         )
+
+        if server_type in ('sonarr','radarr'):
+            from core.library_request_routing import save_arr_page, RoutingConfigurationError
+            try:
+                save_arr_page(db, server_id, request.form, server_values)
+            except RoutingConfigurationError as exc:
+                flash(str(exc), 'error')
+                return redirect(url_for('server_detail', server_id=server_id))
+        else:
+            update_server(db, server_id, **server_values)
 
         # --------------------------------------------------
         # Wakeup auto-enable system

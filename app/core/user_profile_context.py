@@ -22,6 +22,24 @@ EMPTY_REFERRAL_STATS = {
 }
 
 
+def has_user_playback(db, user_id: int) -> bool:
+    """Include current playback, before the collector archives its history."""
+    return bool(db.query_one(
+        """
+        SELECT 1 FROM media_users mu
+        WHERE mu.vodum_user_id = ?
+          AND (
+            EXISTS (SELECT 1 FROM media_sessions ms WHERE ms.media_user_id = mu.id)
+            OR EXISTS (
+                SELECT 1 FROM media_session_history msh WHERE msh.media_user_id = mu.id
+            )
+          )
+        LIMIT 1
+        """,
+        (user_id,),
+    ))
+
+
 def normalize_profile_date(raw: str):
     raw = (raw or "").strip()
     if not raw:

@@ -17,6 +17,7 @@ from core.user_subscription_snapshots import (
     clear_template_snapshot,
 )
 from core.user_profile_context import (
+    has_user_playback,
     enrich_media_servers,
     load_expiration_lock,
     load_merged_usernames,
@@ -291,18 +292,9 @@ def register(app):
             mview = "profile"
 
         # --------------------------------------------------
-        # Never used: no playback/session history linked to this VODUM user
+        # Include ongoing sessions as well as completed playback history.
         # --------------------------------------------------
-        never_used = not db.query_one(
-            """
-            SELECT 1
-            FROM media_session_history msh
-            JOIN media_users mu ON mu.id = msh.media_user_id
-            WHERE mu.vodum_user_id = ?
-            LIMIT 1
-            """,
-            (user_id,),
-        ) if tab == "general" else False
+        never_used = not has_user_playback(db, user_id) if tab == "general" else False
 
         # --------------------------------------------------
         # Subscription template (optional)

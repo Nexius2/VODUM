@@ -17,7 +17,7 @@ def _valid_email(value: str) -> bool:
     return bool(local and "." in domain and not domain.startswith("."))
 
 
-def normalize_portal_settings(form, *, activation_ready=False, debug_mode=False) -> PortalSettingsResult:
+def normalize_portal_settings(form, *, activation_ready=False, debug_mode=False, arr_ready=False) -> PortalSettingsResult:
     public_url = str(form.get("portal_public_url") or "").strip().rstrip("/")
     parsed_public = urlsplit(public_url) if public_url else None
     allowed_hostname = parsed_public.hostname if parsed_public else None
@@ -37,6 +37,7 @@ def normalize_portal_settings(form, *, activation_ready=False, debug_mode=False)
         "portal_show_invitations": 1 if form.get("portal_show_invitations") == "1" else 0,
         "portal_show_subscription": 1 if form.get("portal_show_subscription") == "1" else 0,
         "portal_show_media_access": 1 if form.get("portal_show_media_access") == "1" else 0,
+        "portal_show_media_requests": 1 if form.get("portal_show_media_requests") == "1" and arr_ready else 0,
         "portal_show_monitoring": 1 if form.get("portal_show_monitoring") == "1" else 0,
         "portal_show_support": 1 if form.get("portal_show_support") == "1" else 0,
         "portal_support_content": support_content or None,
@@ -56,6 +57,8 @@ def normalize_portal_settings(form, *, activation_ready=False, debug_mode=False)
         "portal_password_require_symbol": 1 if form.get("portal_password_require_symbol") == "1" else 0,
     }
     errors = []
+    if form.get("portal_show_media_requests") == "1" and not arr_ready:
+        errors.append("portal_requests_arr_required")
     if public_url:
         parsed = urlsplit(public_url)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.username:

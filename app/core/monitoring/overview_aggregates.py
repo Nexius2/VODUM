@@ -1,10 +1,12 @@
 """Cached read-only aggregates for the Monitoring overview."""
 
+from db_manager import isolated_read_operation
 from core.aggregate_cache import cached_aggregate, cached_query_rows
 from core.monitoring.artwork import build_history_backdrop_url, build_history_poster_url
 from core.monitoring.daily_stats import load_materialized_window
 
-def build_monitoring_overview_aggregates(db, sessions_stats):
+@isolated_read_operation
+def _load_monitoring_overview_aggregates(db, sessions_stats):
     stats_7d = {"sessions": 0, "active_users": 0, "total_watch_ms": 0, "avg_watch_ms": 0}
     top_users_30d = []
     top_content_30d = []
@@ -434,15 +436,8 @@ def build_monitoring_overview_aggregates(db, sessions_stats):
     )
     
     top_content_30d = [dict(r) for r in (top_content_30d or [])]
-    for item in top_content_30d:
-        item["poster_url"] = build_history_poster_url(item, db)
-        item["backdrop_url"] = build_history_backdrop_url(item, db) or item["poster_url"]
-    
     top_movies_30d = [dict(r) for r in (top_movies_30d or [])]
-    for item in top_movies_30d:
-        item["poster_url"] = build_history_poster_url(item, db)
-        item["backdrop_url"] = build_history_backdrop_url(item, db) or item["poster_url"]
-    
+
     concurrent_7d = cached_aggregate(
         "monitoring:overview:concurrent-7d",
         120,
@@ -468,3 +463,15 @@ def build_monitoring_overview_aggregates(db, sessions_stats):
         "top_movies_30d": top_movies_30d,
         "concurrent_7d": concurrent_7d,
     }
+
+
+def build_monitoring_overview_aggregates(db, sessions_stats):
+    # End the read snapshot before artwork repair writes through the normal DB.
+    result = _load_monitoring_overview_aggregates(db, sessions_stats)
+    for key in ("top_content_30d", "top_movies_30d"):
+        for item in result[key]:
+            item["poster_url"] = build_history_poster_url(item, db)
+            item["backdrop_url"] = build_history_backdrop_url(item, db) or item["poster_url"]
+    from core.portal_request_backdrop import remember_backdrop_candidates
+    remember_backdrop_candidates(result)
+    return result

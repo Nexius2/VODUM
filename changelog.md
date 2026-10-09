@@ -1,490 +1,543 @@
 # Changelog
 
-## 2026-10-05 - Sauvegarde de l'option d'invitation du portail
-
-- Ajout du champ `portal_show_invitations` dans la requete de sauvegarde des
-  reglages du portail : la case etait transmise mais ignoree par l'UPDATE SQL.
-- Regression verifiee par un POST admin sur une base SQLite : activation,
-  desactivation et lecture du reglage par le portail utilisateur.
-
-## 2026-10-05 - Affiches des citations sur le dashboard et au login
-
-- Verification et prechargement de l'affiche via le proxy/cache commun avant
-  de retenir une citation de film ou de serie. Si l'image est indisponible,
-  recherche d'une autre source ; une reponse HTML ne vaut pas une affiche.
-- Reconstruction des caches anciens non verifies, avec tentative de conserver
-  la citation du jour. Un echec de recherche n'est plus definitif pour la journee.
-  Conservation de la derniere citation avec affiche verifiee en cas d'echec
-  temporaire, et utilisation commune au dashboard et au login avant le refresh.
-- Prechargement du fond de connexion et repli sur l'affiche quand le backdrop
-  est indisponible. Ecriture atomique du cache des citations pour eviter une
-  lecture de fichier partiellement ecrit.
-- Correction du clignotement HTMX : les nouvelles tentatives se font hors ecran,
-  au maximum une fois par minute. L'image apparait uniquement apres chargement
-  reussi ; un changement de source d'image remplace egalement la carte.
-- Diagnostic du proxy : journalisation du fournisseur, serveur, type d'erreur
-  et statut HTTP, sans URL ni identifiants. Sur l'installation reelle, l'ancien
-  cache ciblait JellySerieEmpire hors ligne. Reconstruction declenchee et affiche
-  de The Batman confirmee dans le dashboard. Recherche Plex filtree par GUID pour
-  eviter le timeout observe sur le parcours complet de la bibliotheque.
-- Validation : 24 tests dashboard et un scenario JavaScript reussis, incluant
-  The Office comme serie Plex, les routes d'image dashboard/login pour Plex
-  et Jellyfin, les echecs de telechargement et la reprise d'affichage.
-  Echanges fournisseurs simules ; affichage sur l'installation reelle a verifier.
-
-## 2026-10-05 - Invitations d'amis depuis le portail et identifiants Jellyfin
-
-- Correction du blocage au demarrage : la nouvelle route d'invitation d'ami
-  utilisait le meme nom Flask que l'invitation administrateur. Renommage en
-  `portal_friend_invite`, mise a jour du formulaire et ajout de regressions
-  couvrant l'enregistrement de toutes les routes et la fabrique d'application.
-- Ajout de la case « Inviter un ami » dans les sections visibles du portail,
-  desactivee par defaut. Une fois activee, une nouvelle carte apparait dans
-  Abonnement avec email obligatoire, prenom, nom et telephone facultatifs.
-- Reutilisation du parcours de creation et d'activation existant. Les serveurs,
-  bibliotheques, options de partage Plex, forfait, limites personnalisees et
-  echeance sont repris cote serveur depuis le compte invitant ; celui-ci est
-  automatiquement enregistre comme parrain du nouveau compte.
-- Refus des adresses email deja associees a un compte et des parrains inactifs,
-  controle des sections activees, protection CSRF et limite de cinq demandes
-  d'invitation par utilisateur sur quinze minutes.
-- Jellyfin : generation automatique du mot de passe lorsqu'aucun n'est fourni
-  a la creation. Les invitations d'amis utilisent le meme mot de passe genere
-  sur leurs serveurs Jellyfin. L'activation demande de se connecter avec les
-  identifiants envoyes par email, sans choisir un nouveau mot de passe.
-- Ajout des variables explicites `{jellyfin_password}` et `{jellyfin_username}`
-  dans l'editeur de communications et les modeles de bienvenue par defaut.
-  Les anciens modeles par defaut non personnalises sont mis a jour ; les
-  contenus personnalises sont conserves et peuvent utiliser ces variables.
-- Transmission des identifiants dans les emails de creation, y compris avec
-  activation differee et comptes mixtes. Les mots de passe sont chiffres dans
-  la file d'envoi, conserves pour les reprises puis retires apres envoi reussi ;
-  ils sont masques dans l'historique des notifications.
-- Validation : 186 tests automatises reussis couvrant portail, activation,
-  communications, provisionnement et bootstrap, dont les invitations et la
-  livraison des identifiants Jellyfin. Appels fournisseurs et envois simules ;
-  validation sur une installation et un serveur SMTP reels restant a faire.
-
-## 2026-09-24 - Alignement Jellyfin sur la version publiée GitHub
-
-- Référence fournie par l'utilisateur : `origin/main`, commit
-  `e5fbc501f061ad0872897af078798b91d7f70b46`, version 26.09.16 b0539.
-- Restauration exacte de `core/jellyfin_auth.py`, `core/jellyfin_http.py` et
-  `tasks/sync_jellyfin.py` depuis cette référence. Ce changement remplace les
-  tentatives précédentes de retour arrière fondées sur le HEAD local d'août.
-- Vérification : les neuf autres fichiers de transport, fournisseurs,
-  monitoring, contrôle serveur et stockage des secrets comparés sont déjà
-  identiques à cette référence. Les modifications d'expiration sont conservées.
-- 44 tests locaux réussis. Cette comparaison explique les écarts introduits
-  par les derniers correctifs, mais ne démontre pas la cause des timeouts
-  initiaux ni l'identité de la configuration et de l'image réellement exécutée.
-
-## 2026-09-24 - Retour au parcours de synchronisation Jellyfin antérieur
-
-- Annulation des changements récents du comptage Jellyfin : restauration de
-  la séquence `/Items/Counts`, puis `/Items`, et des requêtes par utilisateur
-  lorsque le comptage sans utilisateur ne fournit pas de résultat exploitable.
-- Restauration de la lecture dédiée `/Users/{id}` pour les politiques, avec
-  le délai historique de 30 secondes. Conservation de l'arrêt sur réponse
-  invalide ou incomplète pour ne pas effacer des droits ou identités par erreur.
-- Authentification : envoi de la même clé déchiffrée dans `Authorization` et
-  `X-Emby-Token`. Le retour à `X-Emby-Token` seul avait produit des HTTP 401
-  sur les installations signalées ; ce retour est annulé.
-- Retour ciblé construit à partir des fonctions suivies dans Git (6d73efd),
-  sans prétendre restaurer une image exacte du 22 septembre : aucun commit de
-  cette date n'est disponible. Sauvegarde locale préalable dans `.tmp`.
-- Validation : 45 tests locaux réussis, incluant deux serveurs HTTP de test
-  exigeant respectivement chaque format d'authentification, le repli de
-  comptage et la préservation des données lors d'un timeout. Déploiement et
-  fonctionnement sur l'installation réelle non vérifiés depuis ce poste.
-
-## 2026-09-23 - Retour aux requêtes Jellyfin antérieures
-
-- Rétablissement de `X-Emby-Token` pour les appels API Jellyfin, à la place
-  de l'en-tête Authorization introduit récemment. Conservation du déchiffrement
-  des clés enregistrées et de la validation des caractères d'en-tête.
-- Rétablissement de 20 secondes par comptage de bibliothèque au lieu de 5,
-  suppression du budget global de 15 secondes qui pouvait laisser les dernières
-  bibliothèques sans mise à jour. Le premier échec réseau interrompt toujours
-  les comptages suivants et préserve les valeurs précédentes.
-- Maintien des 30 secondes pour les utilisateurs, de la réutilisation des
-  politiques incluses dans leur liste et des protections en cas de réponse
-  incomplète. Les échecs restent signalés.
-- Validation locale : 41 tests réussis, dont un parcours HTTP avec clé chiffrée
-  et le comptage simulé de plusieurs bibliothèques lentes. Retour de compatibilité
-  appliqué ; résolution sur l'installation réelle non vérifiée à distance.
-
-## 2026-09-23 - Diagnostic des lenteurs Jellyfin
-
-- Comparaison optionnelle `--compare-auth` entre l'ancien en-tête
-  `X-Emby-Token` et le nouvel en-tête `Authorization`, sur les mêmes appels
-  utilisateurs/comptage et avec des connexions séparées. Trois tests ciblés
-  réussis ; résultat sur le serveur réel encore nécessaire pour conclure.
-
-- Ajout de `python -m diagnose_jellyfin 7`, à exécuter dans le conteneur VODUM :
-  mesure séparée des utilisateurs, sessions, bibliothèques et d'un comptage,
-  sur les adresses configurées, avec les accès enregistrés.
-- Base ouverte en lecture seule ; aucune modification des comptes. Le rapport
-  affiche les durées, codes HTTP et types d'erreurs, sans adresse, clé API ni
-  contenu des utilisateurs. Deux tests ciblés réussis.
-- Diagnostic ajouté pour poursuivre l'investigation des timeouts signalés ;
-  leur cause sur l'installation réelle n'est pas encore confirmée.
-
-## 2026-09-23 - Correction du délai de synchronisation Jellyfin
-
-- Rétablissement du délai de 30 secondes pour la récupération de la liste des
-  utilisateurs et des politiques individuelles. La réduction à 15 secondes
-  pouvait interrompre la synchronisation de serveurs plus lents ou chargés.
-- Conservation des optimisations de comptage des bibliothèques et de lecture
-  des politiques déjà incluses dans la liste des utilisateurs.
-- Un échec de récupération reste signalé et ne déclenche pas de nettoyage des
-  utilisateurs absents ni de leurs accès sur la base d'une liste incomplète.
-- Validation : 17 tests ciblés réussis, dont une réponse simulée à 20 secondes
-  et la conservation des données lors d'un dépassement du délai. Aucun appel
-  au serveur réel ; le bon déroulement sur celui-ci reste à vérifier.
-
-## 2026-09-23 - Règles d'expiration communes et comptes mixtes
-
-- L'abonnement reste valable pendant toute sa date d'expiration : le statut
-  devient expiré le lendemain, comme les actions de retrait et de suppression.
-- Protections communes pour les abonnements à vie, overrides, propriétaires
-  Plex et administrateurs Jellyfin ; préservation des statuts manuels et
-  exclusion des notifications automatiques d'expiration pour ces fiches.
-- Une invitation Plex en attente exclut uniquement ce compte des blocages et
-  retraits d'accès. Elle ne décale plus l'expiration d'une fiche possédant aussi
-  un compte actif Jellyfin ou Plex. Les règles de lecture ciblent les comptes
-  éligibles et les retraits de bibliothèques restent limités à leur serveur.
-- Nettoyage des anciens blocages système lors d'une exemption ou d'un
-  renouvellement, et suppression des doublons sans modifier les règles manuelles.
-- La suppression complète conserve ses protections plus strictes : toutes les
-  cibles doivent être éligibles et confirmées avant de supprimer la fiche VODUM.
-- Validation : 61 tests ciblés réussis, dont 8 nouveaux scénarios de régression.
-  Appels natifs simulés ; aucun compte réel modifié pendant ces contrôles.
-- Détails : [règles d'expiration](docs/regles-expiration-2026-09-23.md).
-
-## 2026-09-23 - Suppression des utilisateurs après expiration
-
-- Nouvelle option « Supprimer l'utilisateur après expiration » dans Expiration
-  behavior, avec délai configurable de 1 à 3 650 jours. Elle ne bloque pas les
-  lectures pendant le délai et reste désactivée tant qu'elle n'est pas choisie.
-- Suppression native du compte Jellyfin ou retrait des partages des serveurs
-  Plex concernés, puis suppression de la fiche VODUM après confirmation de
-  toutes les cibles. Aucun compte Plex personnel n'est supprimé.
-- Ajout du petit « ? » demandé : sans le mode d'import limité aux utilisateurs
-  partagés, une identité Plex peut être réimportée après sa suppression locale.
-  Aide utilisable au clavier et au clic, traduite dans les cinq langues.
-- Protections des propriétaires, administrateurs, Plex Home, invitations en
-  attente, abonnements à vie et exemptions d'expiration. Relecture de la date
-  et du mode avant suppression, respect de l'arrêt du planificateur.
-- En cas d'échec partiel, conservation de la fiche locale, journalisation et
-  reprise idempotente. Les anciens jobs d'accès en file sont annulés pour ne
-  pas rétablir un partage retiré ; les jobs en cours reportent la suppression.
-- Validation : 35 tests ciblés réussis, dont les deux formulaires et le parcours
-  de suppression sur base temporaire avec le vrai bootstrap. Les appels natifs
-  sont simulés ; aucun compte réel n'a été supprimé.
-- Détails et limites dans `docs/suppression-expiration-2026-09-23.md`.
-
-## 2026-09-23 - Import Plex limité aux partages par défaut
-
-- Le mode `shared_only` devient le défaut pour les nouvelles installations et
-  les paramètres absents ou invalides. Les choix existants valides, notamment
-  `global`, sont conservés lors des mises à jour et des sauvegardes de formulaire
-  qui ne transmettent pas ce champ.
-- Mise à jour des libellés dans les cinq langues : le mode partagé est identifié
-  comme défaut et l'aide précise que changer de mode ne supprime pas les fiches
-  et historiques déjà présents dans VODUM.
-- Correction du parsing Plex : l'identifiant d'un partage n'est plus utilisé
-  comme identifiant utilisateur lorsque `userID`/`userId` manque ou vaut zéro.
-- Vérification sur base temporaire du vrai traitement de synchronisation :
-  utilisateur partagé sur deux serveurs, absence de réimport après retrait du
-  partage et suppression locale, absence de repli vers l'import global et
-  conservation des données locales en cas de réponse vide.
-- Validation : 13 tests ciblés réussis, dont bootstrap initial et répété.
-  Les réponses Plex sont simulées ; aucun compte réel n'a été modifié.
-
-## 2026-09-22 - Cycle de vie : cartographie et réglages d'expiration
-
-- Cartographie des modes d'expiration, suppressions locales, exceptions et
-  renouvellements dans `docs/cycle-vie-utilisateurs-2026-09-22.md`. La TODO
-  précise les écarts à traiter avant les nouvelles actions natives Jellyfin.
-- Retrait du champ « supprimer après X jours », qui n'était relié à aucun
-  traitement. Une explication remplace le champ ; la valeur historique reste
-  conservée en base, sans activer de suppression automatique.
-- Le passage à « aucune action » ou au retrait direct des accès nettoie les
-  anciennes règles système de blocage depuis les deux pages de réglages,
-  sans supprimer les règles manuelles.
-- Les réglages d'abonnement et l'activation automatique respectent désormais
-  l'arrêt du planificateur. Une date d'expiration supprimée ne laisse plus de
-  règle de blocage résiduelle au prochain passage du gestionnaire.
-- Ajout de régressions sur les changements de mode, la préservation des règles
-  manuelles, l'arrêt du planificateur et la suppression de la date d'expiration.
-- Correction complémentaire repérée pendant les tests : le nettoyage des logs
-  accepte les dates anciennes hors de la plage des timestamps Windows.
-- Validation : 28 tests ciblés réussis, contrôle des deux formulaires sur une
-  base temporaire avec le vrai bootstrap et compilation Python réussie.
-
-## 2026-09-22 - Clôture des validations fonctionnelles
-
-- Validations fonctionnelles et sur l'installation réelle considérées comme
-  terminées sur confirmation de l'utilisateur : mots de passe et coupure de
-  lecture Jellyfin, restauration sur une instance neuve et checklist manuelle
-  de publication derrière le reverse proxy HTTPS.
-- Retrait de ces validations de la TODO. Cette clôture ne constitue pas une
-  nouvelle exécution des tests par l'agent ; les audits restant à réaliser et
-  les problèmes identifiés dans les tests automatisés restent à traiter.
-
-## 2026-09-21 - Conservation configurable des logs
-
-- Ajout des réglages de logs dans Settings > Système : conservation de 7, 14,
-  30 ou 90 jours, avec 30 jours par défaut.
-- Plafond de stockage de 50 Mo par défaut, configurable de 5 à 1 000 Mo dans
-  les options avancées. Les fichiers les plus anciens sont supprimés plus tôt
-  si ce plafond est atteint.
-- Nettoyage automatique selon l'âge et la taille, y compris des archives
-  existantes, avec prise en compte des réglages sans redémarrage.
-- Migration automatique des paramètres et traductions en français, anglais,
-  allemand, espagnol et italien.
-- Validation : 17 tests des logs, test de migration et vérification du formulaire
-  avec sauvegarde des réglages et rejet des valeurs invalides.
-
-## 2026-09-07 - P0 Jellyfin : coupure et mot de passe
-
-- Une erreur du message d'avertissement ne bloque plus la coupure groupee.
-- Verification de la session et du titre avant Stop ; aucun arret d'un nouveau
-  titre a partir d'une ancienne ligne du collecteur. Les reponses de sessions
-  invalides et les redirections de commandes ne valent plus succes.
-- Confirmation de l'arret jusqu'a cinq secondes, avec diagnostic des capacites
-  du client si la lecture continue. Aucun changement des droits du compte.
-- Correction de la regression du 06/09 : `ResetPassword=false` laisse Jellyfin
-  appliquer `NewPw` ; `true` choisit une autre branche et ignore ce mot de passe.
-- 33 tests cibles passent ; validation sur clients Jellyfin reels encore a faire.
-
-## 2026-09-06 - Correction du mot de passe Jellyfin
-
-- Remplacement de `NewPassword` par `NewPw`. Le parametre `ResetPassword`
-  introduit dans ce lot a ete corrige le 07/09 (voir ci-dessus).
-- Retrait de l'option « changement de mot de passe obligatoire », non supportée
-  par le modèle de politique Jellyfin.
-
-## 2026-08-31 - Liens externes de renouvellement du portail
-
-- La piste d'integration directe aux API de paiement a ete abandonnee: VODUM ne
-  stocke aucun credential marchand et ne cree ni transaction ni webhook.
-- L'administrateur peut activer et organiser une liste compacte de liens HTTPS
-  externes avec libelle, texte de bouton et instructions.
-- La page Abonnement affiche les liens applicables avec un avertissement clair:
-  le paiement est externe et le renouvellement reste valide manuellement.
-- La devise affichee reste l'unique `subscription_currency` des reglages
-  d'abonnement; aucun second reglage divergent n'est cree.
-
-## 2026-08-31 - Audit securite backup et restauration
-
-- Les archives refusent maintenant chemins malveillants POSIX/Windows, doublons,
-  symlinks, fichiers speciaux et membres ZIP chiffres avant toute extraction.
-- Le rollback post-restauration couvre desormais les pieces jointes avec la base
-  et la cle de chiffrement.
-- Une base restauree sans cle embarquee doit prouver que tous ses secrets sont
-  compatibles avec la cle active avant le remplacement.
-- Les telechargements sensibles sont `private, no-store` et l'API de liste ne
-  divulgue plus les chemins locaux.
-
-## 2026-08-31 - Audit des secrets et cles persistantes
-
-- Une cle de chiffrement manquante n'est plus regeneree lorsqu'une base ou son
-  WAL contient deja des credentials chiffres; le demarrage exige la restauration
-  de la cle correspondante.
-- La creation initiale de `vodum.encryption_key` est atomique et restrictive.
-- La migration chiffre aussi les anciens secrets TOTP administrateur et
-  Turnstile encore stockes en clair.
-- Le filtre de logs neutralise maintenant explicitement mots de passe, secrets
-  et cles API en plus des tokens et autorisations.
-
-## 2026-08-31 - Audit LAN et reverse proxy
-
-- La confiance des en-tetes forwarded, le filtre IP, HTTPS, les cookies Secure,
-  HSTS et Host ont ete testes ensemble en acces direct et via proxy.
-- Le controle de hostname du portail gere maintenant correctement les adresses
-  IPv6 avec port.
-- Les reseaux prives restent autorises par defaut; un proxy non approuve ne peut
-  influencer ni l'adresse cliente, ni le schema HTTPS, ni Host.
-
-## 2026-08-31 - Audit SSRF et origine des sorties HTTP
-
-- La session HTTP des serveurs refuse maintenant toute requete initiale et toute
-  redirection vers une origine non configuree.
-- Les adresses LAN, loopback et IPv6 restent utilisables lorsqu'elles appartiennent
-  explicitement aux URL du serveur configure.
-- La recherche d'illustrations du tableau de bord et le ping des serveurs generiques
-  utilisent desormais la session HTTP bornee commune.
-- Un rapport d'inventaire et quatre tests de regression documentent la garantie.
-
-## 2026-08-30 - En-tetes HTTP et CSP progressive
-
-- Verification automatisee de HSTS sur HTTPS, `nosniff`, protection frame,
-  Referrer-Policy et Permissions-Policy sur les reponses HTTP.
-- Correction de la CSP stricte du portail : les deux comportements JavaScript
-  inline encore presents ont ete externalises dans un asset `self`, ce qui evite
-  leur blocage par le navigateur sans ajouter `unsafe-inline` aux scripts.
-- Ajout de `object-src 'none'` et confirmation de la CSP d'enforcement et du
-  `Cache-Control: no-store` sur les pages et API du portail.
-- L'administration reste sans CSP d'enforcement jusqu'a externalisation de ses
-  handlers inline; les autres en-tetes defensifs restent appliques globalement.
-
-## 2026-08-30 - Audit XSS des rendus administrateur et portail
-
-- Revue des contournements d'echappement Jinja, du HTML genere en Python et des
-  sinks DOM dans le JavaScript applicatif, hors bibliotheques vendor minifiees.
-- Confirmation que les valeurs utilisateur/provider, medias, serveurs, logs,
-  communications, erreurs et imports sont echappees avant insertion HTML ou
-  affectees avec `textContent`.
-- Suppression du dernier `|safe` Jinja, inutile car il ne servait qu'a afficher
-  des fleches de tri constantes.
-- Ajout de regressions avec charges hostiles sur le seul filtre Python retournant
-  `Markup`, qui echappe ses attributs et son texte visible.
-
-## 2026-08-30 - Audit global CSRF et methodes HTTP
-
-- Extraction du garde CSRF global dans un module de securite dedie, toujours
-  enregistre directement par la fabrique Flask avant les modules de routes.
-- Suppression d'exemptions techniques inutiles : toutes les requetes POST, PUT,
-  PATCH et DELETE exigent maintenant sans exception un jeton de session valide.
-- Ajout de regressions pour les formulaires et requetes JSON, les jetons absents,
-  vides ou incorrects et chacune des quatre methodes mutantes.
-- Extension de l'audit statique des GET a toute l'application; aucune mutation
-  persistante non revue n'est detectee. Le proxy artwork authentifie et son cache
-  local restent l'unique exception documentee.
-
-## 2026-08-30 - Audit de non-enumeration du compte administrateur
-
-- Confirmation que les emails administrateur connus et inconnus recoivent la
-  meme erreur generique, la meme redirection et les memes controles anti-abus.
-- Confirmation que les deux chemins executent exactement une verification de
-  mot de passe couteuse; un hash factice est utilise pour un compte inconnu.
-- Les motifs detailles restent reserves aux journaux et alertes d'exploitation
-  et ne sont pas renvoyes dans la reponse d'authentification.
-
-## 2026-08-30 - Audit anti-bruteforce des connexions
-
-- Confirmation du verrouillage combine par IP et par email pour les connexions
-  locales administrateur et portail, avec fenetre et duree de blocage bornees.
-- Extension de cette protection a la connexion Jellyfin du portail : les echecs
-  sont comptes par IP et par couple serveur/utilisateur avant tout nouvel appel
-  au provider; les valeurs de compte restent uniquement stockees sous forme
-  d'empreinte.
-- Correction de la deconnexion portail en cas de panne DB : l'echec de revocation
-  serveur est journalise mais n'empeche plus l'effacement du cookie navigateur.
-
-## 2026-08-30 - Audit des cookies de session LAN et proxy HTTPS
-
-- Verification des attributs reels `Secure`, `HttpOnly`, `SameSite` et
-  `Expires` du cookie de session en HTTP LAN direct et derriere un reverse proxy
-  HTTPS de confiance.
-- Confirmation qu'un proxy non approuve ne peut pas imposer la semantique HTTPS
-  avec un en-tete `X-Forwarded-Proto` forge.
-- Le comportement existant est conserve : cookie utilisable en HTTP LAN avec
-  `HttpOnly` et `SameSite=Lax`, et cookie `Secure` avec la politique SameSite
-  configuree lorsque HTTPS est etabli directement ou par un proxy approuve.
-
-## 2026-08-30 - Audit de la duree des sessions
-
-- Confirmation d'une expiration glissante apres 12 heures d'inactivite par
-  defaut, configurable avec `VODUM_SESSION_LIFETIME_HOURS`, pour les sessions
-  administrateur et portail.
-- Confirmation que seules les sessions authentifiees deviennent permanentes
-  dans le navigateur; les etats temporaires de connexion restent lies a la
-  session du navigateur.
-- Ajout de regressions sur le caractere permanent et la rotation de l'etat
-  pre-authentification, en complement des tests d'expiration serveur.
-
-## 2026-08-29 - Invalidation serveur des sessions a la deconnexion
-
-- Ajout de sessions administrateur opaques et revocables cote serveur; la
-  deconnexion revoque uniquement la session courante avant d'effacer le cookie.
-- Le garde global refuse les sessions revoquees, expirees, alterees et les anciens
-  cookies sans reference serveur, qui doivent se reconnecter une fois apres migration.
-- Confirmation de la revocation serveur deja appliquee aux sessions portail.
-
-## 2026-08-29 - Verification anti-fixation des sessions admin
-
-- Confirmation que les connexions locale et Plex utilisent la meme ouverture de
-  session, qui supprime l'etat pre-authentification et ne preserve que la langue.
-- Ajout de regressions prouvant la suppression des marqueurs controles, du CSRF
-  pre-authentification et des preuves Plex temporaires apres authentification.
-
-## 2026-08-29 - Audit de la confiance TOTP locale
-
-- Restriction explicite de la confiance locale aux reseaux RFC1918, loopback,
-  link-local et IPv6 ULA, sans dependre de la classification plus large et
-  evolutive de `ipaddress.is_private`.
-- Verification automatisee de la duree et des attributs HttpOnly, Secure et
-  SameSite du cookie, ainsi que de son invalidation par email ou secret TOTP.
-
-## 2026-08-29 - Audit de la verification et de l'enrolement TOTP
-
-- Correction de l'enrolement TOTP Settings et wizard: le secret confirme est
-  maintenant genere et lie a la session par le serveur, expire apres dix minutes
-  et est consomme une seule fois; une valeur choisie dans le formulaire est ignoree.
-- Retrait des champs caches qui renvoyaient le secret comme source d'autorite et
-  ajout de tests d'expiration, isolation des usages et consommation unique.
-
-## 2026-08-29 - Audit de la connexion administrateur Plex
-
-- Audit du flux PIN Plex administrateur, de l'etat de session, du callback,
-  de la correspondance d'identite, du TOTP VODUM optionnel et de l'ouverture
-  de session; aucune vulnerabilite exploitable supplementaire n'a ete confirmee.
-- Ajout de regressions sur l'usage unique, l'expiration, la separation des usages
-  des flux Plex et la consommation de la preuve TOTP intermediaire expiree.
-
-## 2026-08-29 - Audit de la connexion administrateur locale
-
-- Audit du parcours complet email/mot de passe administrateur: CSRF, normalisation,
-  anti-bruteforce IP/email, TOTP, redirection, rotation de session et journalisation.
-- Suppression d'un canal d'enumeration temporelle: les emails inconnus effectuent
-  maintenant une verification de hash factice aussi couteuse que les comptes connus.
-- Ajout de tests de regression pour les chemins email connu et inconnu.
-
-## 2026-08-28 - Runtime du conteneur et dependances
-
-- Mise a jour des dependances Python directes, notamment Flask 3.1.3,
-  Waitress 3.0.2, Requests 2.34.2 et Cryptography 50.0.1; `pip-audit` ne
-  detecte aucune vulnerabilite connue dans le nouvel ensemble.
-- Ajout d'une vraie route `/health` et remplacement du healthcheck trompeur sur
-  `/` par une sonde Python directe, sans shell ni redirection de connexion.
-- Retrait de `curl` de l'image, installation APT sans recommandations et
-  configuration Python/pip adaptee a un conteneur de production.
-- Correction du workflow de publication Docker mal forme et suppression de
-  l'affichage inutile du nom de compte du registre.
-- Documentation des controles restant a effectuer dans CI : scan de l'image
-  Linux finale et validation des droits de volumes avant un passage non-root.
-
-## 2026-08-28 - Durcissement de la classification des routes
-
-- Audit des 178 routes Flask enregistrees et confirmation du repli ferme vers
-  le perimetre administrateur pour toute route non explicitement classee.
-- Correction des frontieres de prefixes publics et setup : des chemins voisins
-  comme `/health-debug`, `/static-admin` ou `/setup-secret` ne peuvent plus
-  heriter accidentellement d'un acces moins restrictif.
-- Correction de la classification de `POST /portal/auth/jellyfin`, qui est de
-  nouveau accessible avant connexion tout en conservant le controle du hostname,
-  le rate limiting et les validations provider existantes.
-- Ajout de tests couvrant les chemins ressemblants, l'acces anonyme, le refus
-  d'un utilisateur portail sur l'administration et l'acces d'un administrateur.
-# 2026-09-01
-
-- Correction des actions des sauvegardes dont les séparateurs PowerShell
-  littéraux étaient affichés dans les libellés Download, Restore et Delete.
-- Placement de Payment & renewal derrière le mode debug : option expérimentale
-  masquée en fonctionnement normal, avertissement « ne pas utiliser », panneau
-  affiché seulement après activation dans les sections visibles et blocage
-  serveur des liens lorsque le mode debug est désactivé.
-- Finalisation des liens externes du User Portal : contrat i18n vérifié sur les
-  cinq langues et régressions ajoutées pour l'absence de lien, les liens
-  désactivés, les forfaits masqués déjà attribués, les abonnements à vie et les
-  utilisateurs expirés.
-# Corrections P0 — 2026-09-04
-
-- Autorise les iframes locales dans la CSP d’administration et force le chargement
-  du monitoring intégré au profil utilisateur.
-- Le refresh des bibliothèques Plex/Jellyfin est désormais opérationnel depuis
-  `Servers & Libraries` (route POST protégée par CSRF, avec ciblage de la section
-  Plex et scan serveur Jellyfin).
+Changements depuis la derniere publication, effectuee avant le monitoring du portail utilisateur.
+
+## Nettoyage du cache des affiches
+
+- Snapshot des posters du portail conserve lors du nettoyage du cache.
+- Fichiers temporaires et orphelins recents proteges pendant 60 secondes
+  pour laisser les ecritures d'affiches se terminer.
+- Courte pause toutes les 100 entrees pour repartir le travail de maintenance.
+
+## Sauvegarde SQLite en ligne
+
+- Base sauvegardee via un snapshot SQLite coherent sur une connexion dediee,
+  puis compressee sans utiliser le verrou de connexion partage de l'application.
+- Checkpoint WAL force retire ; donnees commitees dans le WAL incluses.
+  Format de l'archive, pieces jointes et cle de chiffrement conserves.
+- Snapshot temporaire nettoye en cas de succes ou d'erreur.
+- Budget du snapshot SQLite de 300 secondes, configurable via
+  `VODUM_BACKUP_SNAPSHOT_TIMEOUT_SECONDS`. Depassement signale comme echec
+  sans publier d'archive incomplete ; compression hors de ce budget.
+
+## Purge des historiques par lots
+
+- Retention des six tables historiques traitee par lots de 500 lignes avec
+  liberation du verrou entre les lots, au lieu d'une suppression massive.
+- Meme traitement pour les sessions, jetons, audits, limites de requetes et
+  tentatives de connexion du portail. Comptes conserves et reprise possible
+  au passage suivant si une purge est interrompue.
+- Dates reverifiees avant suppression ; nouvelles lignes laissees au prochain
+  passage pour que les imports ne prolongent pas indefiniment la purge.
+
+## Badge de mise a jour
+
+- Statut JSON du badge reutilise entre requetes tant que le fichier ne change
+  pas, au lieu de le rouvrir et de le decoder a chaque navigation ou polling.
+- Modification, remplacement et suppression detectes ; les erreurs de lecture
+  sont retentees a la requete suivante.
+
+## Lectures de configuration pendant le rendu
+
+- Langue, nom de marque et fuseau horaire reutilisent la configuration deja
+  lue dans la meme requete GET, notamment lors du formatage de nombreuses dates.
+- Configuration relue a la requete suivante et pour les requetes qui modifient
+  les donnees. Controles d'acces et revocation des sessions inchanges.
+
+## Affichage immediat des serveurs sur le dashboard
+
+- Liste, statuts et dernier controle affiches avec la page, sans attendre le
+  calcul des pics de lectures sur sept jours. Pics deja en cache reutilises.
+- Calcul des pics charge ensuite ; une expiration de la requete conserve
+  la liste visible au lieu de remplacer la carte par « No data ».
+
+## Lien de connexion au portail dans les communications
+
+- Variable `{portal_login_url}` conservee lors du premier rendu des envois
+  planifies et construite depuis l'URL publique du portail.
+- Lien disponible dans les mails de test et la reconstruction des anciens
+  historiques ; messages deja enregistres conserves tels qu'envoyes.
+- Construction du lien partagee avec la configuration du portail pour eviter
+  de doubler le chemin `/portal`.
+
+## Compression des reponses web
+
+- Compression des reponses texte au niveau gzip 6 par defaut pour reduire
+  le cout CPU, avec une legere hausse de taille selon le contenu.
+  Niveau configurable de 1 a 9 via `VODUM_HTTP_GZIP_LEVEL`.
+- Contenu decompresse identique ; exclusions des petites reponses, fichiers
+  statiques, flux et reponses deja compressees conservees.
+
+## Lisibilite du monitoring sur mobile
+
+- Titres longs des tops films et series sur plusieurs lignes, avec compteurs
+  maintenus a droite dans une colonne distincte. Titres limites a deux lignes
+  sur mobile comme sur ordinateur.
+- Navigation mobile presentee en boutons sur deux colonnes, avec bordures,
+  zone tactile de 44 pixels et section active contrastee. Navigation desktop
+  et visibilite conditionnelle du portail conservees.
+
+## Rafraichissement du monitoring en arriere-plan
+
+- Suivi des sauvegardes et imports Tautulli : polling suspendu dans les onglets
+  masques, reprise au retour, sans chevauchement et attente bornee cote navigateur.
+  Les jobs continuent sur le serveur. Une erreur temporaire de lecture du statut
+  ne marque pas la sauvegarde terminee ; resultat final et arret du suivi conserves.
+
+- Page Tasks : polling suspendu dans les onglets masques, reprise au retour,
+  requete unique en vol et delai maximal de 10 secondes cote navigateur.
+  Le tableau n'est plus reconstruit lorsque son contenu est identique ; les
+  changements de statut et les boutons d'action restent actualises.
+
+- Les vues Vue d'ensemble et Lectures en cours suspendent leurs requetes
+  periodiques lorsque l'onglet est masque et se rafraichissent au retour.
+- Les requetes lentes ne se chevauchent pas et ne s'empilent pas. Cadences
+  visibles, filtres, ordre des cartes et mises a jour de lecture conserves.
+- Tests JavaScript sur 100 tentatives masquees, retour visible, onglets sans
+  polling et reexecution du script ; regressions du monitoring conservees.
+
+## Compteurs de blocages Usage risk
+
+- Comptage des incidents sur 7/30/90 jours limite aux actions kill, sans
+  parcours des avertissements. Index partiel de dates ajoute au schema initial
+  et au bootstrap ; deduplication par serveur/session et scores conserves.
+- Rapport sans evenement filtre : aucun comptage global des blocages.
+- Comparaison des rapports complets sur actions mixtes, acteurs sans blocage,
+  sessions repetees et identites externes. EXPLAIN QUERY PLAN confirme l'index.
+- Benchmark local de 200 000 evenements dont 2 000 blocages, sept executions :
+  mediane 124,414 ms contre 3,355 ms pour cette requete, compteurs identiques.
+  Mesure synthetique en memoire, sans prediction de latence en production.
+- Index construit au prochain bootstrap ; espace et cout d'entretien
+  supplementaires pour les blocages. Aucun historique modifie ou supprime.
+
+## Fond discret des demandes medias du portail
+
+- Selection des affiches conservee sur disque pour survivre aux redemarrages
+  et etre partagee entre processus web. Seuls les quatre films et quatre series
+  affiches dans le monitoring sont utilises, avec leurs images resolues exactes.
+  Les affiches identiques sont dedupliquees ; aucun remplacement par d'autres
+  titres de l'historique ou du classement. Les acces restent verifies.
+
+- Mosaique translucide des quatre premiers films et series du classement deja
+  en cache, avec affiches presentes sur disque. Aucun recalcul de classement ni
+  appel fournisseur supplementaire ; absence de decor si aucune image locale
+  accessible n'est disponible.
+- Images decoratives masquees aux lecteurs d'ecran, chargement differe et
+  adaptation mobile. L'endpoint du portail reverifie session, fonctionnalite
+  et acces a la bibliotheque ; reponse privee sans stockage navigateur.
+- Aucun acces aux endpoints artwork admin depuis le portail ; les historiques
+  sans bibliotheque identifiable ne sont pas utilises pour le decor.
+
+## Premier chargement du dashboard et analyse Usage risk
+
+- Contexte des serveurs et statistiques de Monitoring > Servers lus dans des
+  snapshots independants de la connexion d'ecriture partagee. Aucun changement
+  de requetes, filtres, plages, statistiques, dechiffrement ou rendu ; chaque
+  operation voit un snapshot coherent ferme en fin de traitement.
+- Comparaison des valeurs pour all/7d/1m/6m/12m et plage invalide, absence
+  d'ecriture et lecture pendant occupation du verrou partagent les regressions
+  SQLite. Benchmark WAL synthetique avec transaction de 250 ms : mediane de
+  lecture 261,796 ms avant et 9,182 ms apres, statistiques identiques sur cinq
+  executions. Details dans la documentation technique des lectures serveur.
+
+- Rafraichissement des statistiques quotidiennes limite aux jours manquants ou
+  modifies. Les imports tardifs, corrections, deplacements entre jours et
+  suppressions sont suivis par triggers SQLite ; les changements d'identite
+  invalident conservativement la fenetre. Les agregats perimes ne sont plus
+  utilises lors d'une lecture non cachee ; repli sur les requetes existantes.
+- Migration additive au bootstrap : revisions par jour et identites, colonnes
+  de revisions dans les agregats et neuf triggers. Les anciens agregats sont
+  reconstruits au premier passage, sans modifier l'historique source.
+- Benchmark local : 31 000 sessions, 31 jours, un jour modifie ; rafraichissement
+  complet 281,001 ms, incremental 8,723 ms, resultats identiques. Surcout mesure
+  de suivi : environ 8 ms pour 5 000 insertions. Details et limites dans
+  la documentation technique des statistiques quotidiennes.
+
+- Blocs Servers et Usage risk sur des snapshots SQLite en lecture seule,
+  independants du verrou de la connexion partagee. Filtre des pics sur sept
+  jours aligne sur l'index datetime existant, verifie par EXPLAIN QUERY PLAN.
+- Abonnements charges une seule fois par analyse Usage risk, a la premiere
+  recommandation necessaire ; aucun cache entre rapports. Les recommandations,
+  filtres, scores et enregistrements gardent leur parcours existant.
+- Mesures des routes lentes actives par defaut (desactivables avec
+  VODUM_ROUTE_TIMING=false), incluant les hooks avant requete, et duree Flask
+  exposee par Server-Timing. La file Waitress n'est pas incluse.
+- Benchmark synthetique hors production : 500 utilisateurs, 100 abonnements,
+  sept executions ; mediane 209,242 ms avant et 131,202 ms apres, 500 lectures
+  des abonnements contre une seule, rapports identiques. Ce resultat ne mesure
+  pas la latence de l'instance ni un scenario multi-utilisateur sous charge.
+- 50 tests dashboard/Usage risk passent, y compris comparaison des rapports,
+  configuration modifiee entre deux analyses et liste d'abonnements vide.
+
+## Requetes Utilisateurs du monitoring
+
+- Le compteur sans recherche verifie l'existence d'un historique par compte
+  avec l'index existant, au lieu de regrouper toutes les lectures.
+- La liste sans recherche evite la concatenation inutilisee des identites par
+  lecture. Les recherches filtrees gardent leur comportement, y compris les
+  caracteres SQL LIKE, les comptes regroupes, tris et pagination.
+- Comparaison aux requetes precedentes sur 250 cas de compteurs/listes.
+  Aucun changement de schema, de donnees ou de templates.
+
+## Reduction des parcours de retention des logs
+
+- Consultation : cache unique et borne des evenements analyses pour les fichiers
+  inchanges, avec controle des metadonnees a chaque demande. Toute modification,
+  rotation ou purge invalide le cache ; les lectures partielles/en erreur ne
+  sont pas mises en cache. Les gros historiques restent consultables sans
+  troncature. Recherche, compteurs, pagination, tracebacks et export brut
+  anonymise conservent leur comportement, sans modification visuelle.
+
+- Les fichiers inchanges deja controles ne sont plus relus par l'entretien
+  tant qu'aucune ligne retenue ne peut expirer. Les modifications de contenu,
+  rotations et changements de politique invalident ce controle.
+- Decodage des dates repetees reutilise via un cache borne. Les regles de
+  retention, tracebacks, consultation, recherche, compteurs et exports restent
+  inchanges ; aucune modification des templates ou du schema.
+- Regressions sur expiration apres mise en cache, fichiers modifies/remplaces,
+  dates invalides, politique de retention et budget disque.
+
+## Isolation des lectures lourdes du monitoring
+
+- Extension a l'historique, aux agregats de la vue d'ensemble (cache froid ou
+  chaud) et aux classements par bibliotheque. Les reparations des references
+  d'affiches restent executees avec la connexion d'ecriture apres fermeture
+  du snapshot ; filtres, pagination, classements, URL et caches sont conserves.
+
+- Les statistiques Utilisateurs et le tableau Bibliotheques utilisent une
+  connexion SQLite en lecture seule par operation, fermee en fin de traitement.
+  Ces lectures ne monopolisent plus le verrou de la connexion partagee avec
+  les pages et les taches de fond ; les requetes et le rendu restent identiques.
+- Aucun changement de schema, migration ou suppression de donnees. Les ecritures,
+  transactions, imports et controles d'acces conservent leur parcours existant.
+- Regressions : lectures/ecritures concurrentes, snapshots coherents, refus des
+  ecritures sur le lecteur, fermeture apres erreur, commit/rollback et resultats
+  identiques avec filtres, pagination et lectures dedupliquees.
+
+## Serveurs de creation utilisateur
+
+- Choix des serveurs limite a Plex et Jellyfin lors de la creation utilisateur.
+  Rejet des ARR cote serveur avant creation du compte ou attribution d'acces.
+
+## Visibilite et suivi des demandes du portail
+
+- Demandes de medias en deuxieme position apres l'accueil. Activation independante
+  de l'acces aux medias dans les sections visibles, avec controle admin d'au moins
+  un ARR ayant profil et destination enregistres.
+- Monitoring : compteurs demandes, ajouts envoyes, deja disponibles, recherche
+  en cours et echecs ; tableau dedie avec date, utilisateur, titre, type et resultat.
+  Les ajouts correspondent a l'envoi a l'ARR, pas a un telechargement termine.
+- Resultats detailles des nouvelles demandes enregistres dans l'audit existant,
+  sans doublon d'evenements. Traductions dans les cinq langues.
+
+## Explication des demandes pour les utilisateurs
+
+- Texte du portail reformule dans les cinq langues : rechercher un titre,
+  le selectionner pour demander son ajout et expliquer sa recherche puis son
+  ajout automatique aux serveurs lorsqu'il devient disponible, sans jargon.
+
+## Recherche unifiee du portail
+
+- Recherche des films et series sans selecteur de type, avec indication du type
+  sur chaque resultat. Les identifiants signes et destinations restent propres
+  a chaque media. Les resultats disponibles sont conserves si un type echoue.
+
+## Actions de la fiche serveur
+
+- Bouton Delete deplace a cote de Save dans l'en-tete, avec le style et la
+  confirmation de suppression existants.
+
+## Exclusion des ARR non configures
+
+- Notice rouge dans la liste et la fiche de chaque ARR sans profil qualite et
+  destination de demandes enregistres. Ces instances sont exclues des recherches,
+  verifications de doublons et ajouts du portail, quelle que soit leur priorite.
+- Sauvegarde explicite des identifiants des choix uniques proposes par l'ARR.
+
+## Departage des bibliotheques pour les demandes
+
+- A preference et priorite identiques, selection de la bibliotheque dont le
+  premier ARR correspondant dispose de valeurs de demande enregistrees, avant
+  le departage par ID. Evite qu'une bibliotheque specialisee sans configuration
+  bloque une destination generale configuree. L'ordre ARR et les criteres restent
+  respectes ; aucune verification de profil sur les ARR secondaires.
+
+## Associations ARR avant destinations de secours
+
+- Le routage automatique traite les associations configurees avant les
+  bibliotheques sans association, meme si une destination de secours possede une
+  preference ou une priorite superieure. Les acces utilisateur et criteres medias
+  restent verifies.
+- Journal des bibliotheques candidates, origine explicite ou secours et nom de
+  l'ARR retenu pour expliquer les erreurs de configuration. Aucun secret ajoute.
+
+## Diagnostic de l'instance ARR retenue
+
+- Journal de resolution avec bibliotheque, instance et priorite effectivement
+  retenues. Si les valeurs par defaut echouent, comparaison des identifiants
+  sauvegardes et disponibles, sans cle API ni chemin.
+- Tests de regression Sonarr et Radarr : le second ARR sans valeurs par defaut
+  reste interroge pour les doublons, mais seule l'instance prioritaire est
+  verifiee pour le profil/destination puis recoit l'ajout.
+
+## Ordre des ARR par bibliotheque
+
+- Remplacement du champ priorite ARR par un tableau des instances liees avec
+  boutons monter/descendre. Rang recalcule automatiquement, sauvegarde globale.
+- Reordonnancement transactionnel sans collision, en conservant les criteres et
+  activations des autres ARR. Une liste perimee ou invalide est rejetee.
+
+## Sauvegarde globale dans le titre des fiches serveur
+
+- Bouton Save unique en haut a droite du titre, avec le meme style que Settings.
+- Retrait du bouton dans Media Request Routing et dans la carte de connexion :
+  l'action enregistre toujours toute la fiche, y compris les profils et destinations ARR.
+
+## Perimetre de verification des demandes medias
+
+- Selection de la destination avant les controles obligatoires. Un serveur media
+  ou un ARR sans rapport avec cette bibliotheque ne bloque plus l'ajout.
+- A preference/priorite egales, les liens admin explicites passent avant les
+  bibliotheques non configurees utilisant le fallback automatique.
+- La bibliotheque retenue et tous ses ARR actifs restent verifies avant l'envoi.
+- Correction de l'ajout Sonarr lorsque les metadonnees de saisons sont nulles.
+- Messages distincts pour verification media, verification ARR, ajout refuse et
+  reponse d'ajout incertaine. Diagnostic admin sans URL, cle ou payload dans les logs.
+
+## Retour colore sur les demandes medias
+
+- Resultat affiche dans un petit popup au-dessus des recherches : vert pour
+  disponible/ajoute, violet pour recherche deja en cours, rouge en cas d'erreur.
+- Envoi sans rechargement : recherche et resultats restent visibles. Fermeture
+  manuelle ou avec Echap ; les confirmations disparaissent apres dix secondes.
+- Formulaire classique conserve sans JavaScript, avec retour a la recherche.
+
+## Demandes simplifiees et affiches medias
+
+- Suppression des choix de bibliotheque et de resolution dans le portail.
+  Destination automatique selon les acces, preferences, priorites et criteres medias.
+- Qualite confiee au profil existant de Sonarr/Radarr choisi dans la fiche admin ;
+  suppression des cases de resolution fixes du routage. Les anciennes contraintes
+  de resolution ne bloquent plus les demandes automatiques.
+- Affiches a cote des resultats, avec remplacement visuel si aucune affiche
+  n'est disponible. URLs publiques TMDB/TVDB uniquement, jamais les URLs ARR.
+- Conservation du theme, de la sauvegarde unique et des controles de doublons.
+
+## Demandes medias dans le portail utilisateur
+
+- Recherche films/series via Sonarr/Radarr et selection du media, de la bibliotheque
+  accessible et de la resolution. Resultats dedupliques par TMDB/TVDB ID.
+- Verification de Plex/Jellyfin puis de tous les ARR lies : deja disponible,
+  recherche deja en cours, ou ajout avec recherche dans l'ARR prioritaire qui
+  satisfait les criteres medias. Une verification en echec bloque l'ajout.
+- Profil qualite et destination par defaut dans la fiche ARR, sauvegardes avec
+  son bouton unique. Valeurs existantes de l'instance, sans mapping de chemins.
+- Revalidation des acces, selection signee, CSRF, limites par utilisateur/IP,
+  reservation SQLite contre les soumissions simultanees et audit du portail.
+  Connexions et cles API restent cote serveur. Traductions dans les cinq langues.
+- Validation : tests du portail, du routage admin, du schema et des serveurs ;
+  verification des doublons, acces, pannes et soumissions signees/CSRF.
+- TODO ajuste : historique, quotas fonctionnels et failover avec reconciliation
+  restent a traiter. Aucun ajout reel effectue pendant les tests.
+
+## Activation unique par association ARR
+
+- Une seule case « Link this ARR » lie et active l'ARR pour la bibliotheque,
+  et affiche ses options. Decochee, elle retire cette association et replie la carte.
+- Suppression des deux cases d'activation supplementaires. Retirer un ARR
+  ne desactive pas les demandes ou les associations des autres instances.
+
+## Cartes de routage ARR compactes
+
+- Les bibliotheques dont les demandes sont desactivees sont repliees ; leur nom et les cases
+  d'activation restent visibles. Les priorites et criteres apparaissent des que
+  la case Enable requests est cochee, meme sans association explicite a l'ARR.
+- Repli immediat sans effacer les valeurs saisies, avec conservation du theme
+  et du bouton de sauvegarde unique.
+
+## Sauvegarde unique de la configuration ARR
+
+- Un seul bouton Save pour la fiche ARR : connexion et configuration de toutes
+  les bibliotheques sont enregistrees ensemble. Suppression des boutons par carte,
+  avec conservation de leur disposition et du theme.
+- Sauvegarde transactionnelle : une regle invalide annule toutes les modifications
+  de la page, y compris celles du serveur. Formulaire admin avec jeton CSRF.
+
+## Routage configure depuis les fiches ARR et criteres medias
+
+- Section de configuration deplacee vers les fiches Sonarr/Radarr ; les fiches
+  Plex/Jellyfin gardent leurs sections habituelles. Chaque ARR propose uniquement
+  les bibliotheques VODUM compatibles, avec le nom de leur serveur media.
+- Edition de l'association courante sans effacer les autres ARR de la bibliotheque.
+  Conservation des priorites, activation et preferences existantes.
+- Criteres par association : genres, resolution demandee (720p/1080p/2160p),
+  collections. Dimensions combinees avec AND, valeurs d'une dimension avec OR,
+  comparaison sans casse ; criteres vides universels, metadonnees manquantes
+  exclues si necessaires. Aucune correspondance de chemin ajoutee.
+- Table `library_arr_conditions` liee aux associations existantes, suppression
+  en cascade. Configuration persistee et fonction de correspondance testee ;
+  raccordement au resolver et envoi portail encore au TODO.
+- Validation : 9 tests du routage admin, dont criteres, preservation des autres
+  instances, compatibilite, conflits et rendu. Aucun serveur reel modifie.
+
+## Configuration admin du routage des demandes medias
+
+- Section de routage dans les fiches Plex/Jellyfin, fondee sur toutes les
+  bibliotheques deja synchronisees, independamment de leur pagination.
+  Films : Radarr uniquement ; series : Sonarr uniquement ; autres types exclus.
+- Plusieurs associations ARR par bibliotheque avec priorite numerique et activation,
+  activation des demandes, bibliotheque preferee et priorite de bibliotheque.
+  Sans association, affichage du premier ARR compatible par ID croissant.
+- Tables `library_arr_routes` et `library_request_settings` au bootstrap et dans
+  le schema initial, cles etrangeres avec suppression en cascade, sauvegarde
+  transactionnelle et verification du serveur, de la bibliotheque, des types et
+  des priorites uniques. Route admin POST avec formulaire CSRF ; aucun secret expose.
+- Theme existant conserve, traductions dans les cinq langues. Aucun chemin ou
+  root folder ajoute. La resolution utilisateur et l'envoi/failover des demandes
+  restent a implementer ; ce lot configure leurs destinations.
+- Validation : 59 tests reussis du routage admin et des serveurs, dont stockage,
+  relecture, types incompatibles, IDs invalides, priorites, rendu et cascades.
+  Aucun changement sur une base ou des serveurs reels.
+
+## Detection automatique du type de serveur
+
+- Suppression du choix du type dans les formulaires d'ajout : URL et token/cle
+  API suffisent. Detection Plex, Jellyfin, Sonarr et Radarr par leurs reponses
+  API authentifiees, sans deduction a partir du port.
+- Verification du format et de l'identite de l'application, conservation des
+  sous-chemins, timeout et refus des redirections ; serveur inconnu ou connexion
+  invalide refuse avant insertion. Stockage chiffre et synchronisations conserves.
+- Presentation et oeil du token conserves ; aide traduite dans les cinq langues.
+
+## Disposition de la page Servers
+
+- Ajout de serveur conserve en haut a gauche ; serveurs Plex disponibles deplaces
+  a droite. Toutes les cartes de serveurs sont placees dans une grille uniforme
+  en dessous, avec le contenu, le theme et les interactions existants.
+
+## Theme et navigation de la carte Servers
+
+- Restauration du survol violet, de l'ombre, de la transition et du focus clavier
+  existants sur la carte Servers du dashboard.
+- Destination unique Servers & libraries pour toute la carte, y compris les
+  lignes des serveurs ; les fiches restent accessibles depuis la page Servers.
+
+## Formulaire serveurs, dashboard et monitoring ARR
+
+- URL de creation au format URL, exemple adapte au type de serveur et champs
+  de secret en `new-password` pour limiter l'autoremplissage de connexion.
+  Oeil de visibilite du token restaure dans les deux variantes du formulaire.
+- Verification de connexion avant insertion : un serveur inaccessible est refuse.
+  Un serveur confirme est enregistre immediatement online, avec sa version.
+- Dashboard : presentation commune pour tous les types, carte Servers cliquable
+  et liens individuels vers les fiches, y compris avec un seul serveur.
+- Monitoring ARR distinct des lectures : collecte periodique de disponibilite,
+  temps de reponse API, taille de file et alertes de sante ; courbes par instance
+  de disponibilite et de file sur la periode choisie. Affichage conditionnel par
+  type ; valeurs inconnues conservees, historique retenu 366 jours et nettoye
+  lors de la suppression de la connexion.
+- Validation : 131 tests reussis des serveurs, connexions et monitoring ARR,
+  monitoring media, dashboard et schema monitoring ; verification du rendu
+  des liens et courbes conditionnelles. Aucun serveur reel modifie.
+- Nouvelle table et index `arr_monitoring_samples`, ajoutes au bootstrap existant
+  et au schema initial. L'historique commence au deploiement de cette version.
+
+## Connexions Sonarr et Radarr
+
+- Ajout des types Sonarr/Radarr dans Servers & libraries : plusieurs instances,
+  URL de base et cle API dans le stockage chiffre existant ; edition et suppression
+  locales reutilisees. La cle vide conserve le secret existant lors de l'edition.
+- Controle authentifie via `/api/v3/system/status` avec `X-Api-Key`, timeout,
+  refus des redirections, verification du type d'application et version.
+  Le controle periodique reutilise `check_servers`, sans synchronisation de
+  comptes ou de bibliotheques Plex/Jellyfin pour ces types.
+- Dashboard > Servers et Monitoring > Servers : cartes Sonarr/Radarr dediees,
+  conditionnees a la presence d'instances, avec statut, URL, version et date du
+  dernier controle ; aucune cle transmise aux cartes et aucun compteur de lecture.
+- Validation : 137 tests reussis (connexions API et cartes conditionnelles,
+  serveurs, monitoring, dashboard, stockage chiffre, auto-enable et routes).
+  Six templates verifies syntaxiquement. Aucun serveur reel modifie.
+- Traductions dans les cinq langues. Le futur parcours de demandes du portail
+  est documente au TODO ; les connexions sont disponibles pour sa mise en place.
+
+## Nettoyage de la feuille de route
+
+- Regroupement des validations apres deploiement (communications, monitoring,
+  Jellyfin, dashboard, portail et expiration), sans les considerer comme terminees.
+- Fusion des exigences de desactivation automatique Jellyfin et de renouvellement ;
+  clarification de la suppression manuelle native encore a ajouter et de l'edition
+  des politiques au-dela du champ `IsDisabled` deja gere manuellement.
+- Conservation des etudes et audits ouverts, avec references aux fonctions
+  existantes pour eviter les doublons. Aucun changement fonctionnel.
+
+## Desactivation manuelle des comptes Jellyfin
+
+- Fiche utilisateur Jellyfin : desactivation/reactivation explicite d'un compte
+  sur un serveur precis, avec nom du compte et du serveur, aide et traductions
+  dans les cinq langues. La fiche VODUM et les bibliotheques sont conservees.
+- Lecture native avant ecriture, conservation des autres champs de politique,
+  relecture de confirmation et mise a jour du snapshot local apres confirmation.
+  Protection des administrateurs locaux et natifs, ciblage par compte lie a la
+  fiche, route POST admin et jeton CSRF. Repetition sans ecriture si deja applique.
+- Journalisation des identifiants et du resultat, sans reponse provider ni secret.
+- Validation : 14 tests de l'action, du rendu multilingue, des scopes de routes
+  et de la protection CSRF. Aucun compte reel modifie.
+- La politique automatique de fin d'abonnement et la provenance des blocages
+  restent au TODO ; cette action est strictement manuelle.
+
+## Reprise du TODO et portee du scan Jellyfin
+
+- Controle des briques existantes pour le premier lot : acces, suppression native
+  apres expiration, suppression locale, reprises et lecture du statut Jellyfin.
+  TODO precise pour reutiliser ces fonctions et distinguer les actions manuelles
+  encore absentes ; retrait des lignes terminees deja tracees ici.
+- Menu des bibliotheques : Jellyfin indique avant execution que le scan concerne
+  toutes les bibliotheques du serveur, dans les cinq langues. Le message de
+  succes existant et le scan Plex cible sont conserves.
+- Validation : 12 tests du refresh et des requetes de la page serveurs reussis.
+  Aucune operation native executee sur les comptes ou serveurs reels.
+
+## Traductions et comptage des spectateurs
+
+- Ajout du libelle historique `expiration_date_change` dans les cinq langues.
+- Monitoring > Servers : deduplication des spectateurs par utilisateur VODUM
+  entre serveurs, resolution des sessions sans identifiant interne et separation
+  des identifiants externes par serveur pour eviter les collisions.
+- Libelle explicite « Spectateurs sur la periode » : personnes ayant regarde du
+  contenu sur la periode choisie, distinctes des utilisateurs actuellement actifs
+  affiches sur le dashboard. Les anciens spectateurs restent dans l'historique.
+- Validation : 7 tests reussis (monitoring des serveurs et historique des
+  communications), dont un cas SQLite avec plusieurs serveurs et sessions live.
+
+## Traductions de l'historique des communications
+
+- Traduction des filtres, du titre et de l'aide, des notifications en attente,
+  des tentatives et de leur prochaine date dans les cinq langues disponibles.
+- Libelles lisibles pour les modeles standards et historiques : lecture bloquee,
+  changement de date d'expiration, suggestion d'abonnement, abonnement expire,
+  rappels, parrainage et creation d'utilisateur. Meme traduction dans la fenetre
+  de detail ; conservation des noms personnalises non reconnus.
+- Validation : 22 tests des communications, avec rendu de l'historique et de
+  sa file d'attente dans les cinq langues et conservation d'un nom personnalise.
+
+## Monitoring et journalisation du portail utilisateur
+
+- Nouvel onglet Monitoring > User portal, reserve aux administrateurs et
+  disponible uniquement lorsque le portail est active. Periodes de 7, 30 et
+  90 jours, connexions quotidiennes, utilisateurs actifs/en ligne, invitations
+  d'amis et modifications de compte, graphiques et historique pagine.
+- Tableau des utilisateurs avec nombre de connexions, derniere activite,
+  invitations et modifications. Correction du lien vers les fiches utilisateurs
+  (`user_detail`) qui provoquait une erreur de rendu avec des comptes presents.
+- Evenements du portail visibles dans les logs admin sous `vodum.portal_audit` :
+  connexions et deconnexions, consultations, modifications de profil/mot de passe,
+  methodes de connexion, invitations et messages au support. Resultats succes,
+  echec ou blocage ; aucun contenu de formulaire ni mot de passe journalise.
+- Comptage des connexions a partir des sessions pour couvrir les fournisseurs
+  sans doubler les evenements d'authentification. Ajout d'index pour les requetes
+  par periode, et correction des types d'audit Jellyfin/Plex manquants.
+- Validation : 129 tests portail, dont rendu complet avec utilisateurs,
+  controle admin/portail desactive, agregats, pagination et erreurs de formulaire.
+  Graphiques controles dans le navigateur avec donnees locales de test.
+  L'historique depend des donnees conservees ; les nouvelles actions sont
+  enregistrees a partir du deploiement.

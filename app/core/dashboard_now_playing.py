@@ -114,10 +114,11 @@ def _sessions(db, window_sql: str, limit: int = 6) -> list[dict]:
           ms.missing_count,
           s.name AS server_name,
           s.type AS provider,
-          mu.username AS username
+          COALESCE(NULLIF(TRIM(vu.username), ''), mu.username) AS username
         FROM media_sessions ms
         JOIN servers s ON s.id = ms.server_id
         LEFT JOIN media_users mu ON mu.id = ms.media_user_id
+        LEFT JOIN vodum_users vu ON vu.id = mu.vodum_user_id
         WHERE LOWER(TRIM(s.type)) IN ('plex', 'jellyfin')
           AND datetime(ms.last_seen_at) >= datetime('now', ?)
           AND COALESCE(ms.missing_count, 0) = 0

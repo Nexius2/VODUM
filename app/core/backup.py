@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
+import tempfile
+import time
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime
@@ -47,9 +50,33 @@ def _add_dir_to_zip(zipf: zipfile.ZipFile, source_dir: Path, archive_root: str) 
         zipf.write(path, f"{archive_root}/{rel.as_posix()}")
 
 
+def _snapshot_timeout_seconds() -> int:
+    try:
+        return max(1, int(os.environ.get('VODUM_BACKUP_SNAPSHOT_TIMEOUT_SECONDS', '300')))
+    except ValueError:
+        return 300
+
+
+def _snapshot_database(db_path: Path, snapshot: Path, timeout_seconds: int):
+    deadline = time.monotonic() + timeout_seconds
+
+    def progress(status, remaining, total):
+        if time.monotonic() >= deadline:
+            raise TimeoutError('SQLite backup snapshot exceeded its time budget')
+
+    source = sqlite3.connect(db_path.resolve().as_uri() + '?mode=ro', uri=True, timeout=5)
+    try:
+        destination = sqlite3.connect(snapshot)
+        try:
+            source.backup(destination, pages=256, sleep=0.01, progress=progress)
+        finally:
+            destination.close()
+    finally:
+        source.close()
+
+
 def create_backup_file(get_db: Callable[[], object], cfg: BackupConfig) -> str | None:
     logger = get_logger("backup")
-    db = get_db()
 
     try:
         backup_dir = ensure_backup_dir(cfg)
@@ -63,8 +90,6 @@ def create_backup_file(get_db: Callable[[], object], cfg: BackupConfig) -> str |
     tmp_backup_path = backup_dir / f".{backup_filename}.uploading"
 
     try:
-        db.execute("PRAGMA wal_checkpoint(TRUNCATE);")
-
         db_path = Path(cfg.database_path)
         if not db_path.exists():
             logger.error(f"[BACKUP] Fichier DB introuvable: {db_path}")
@@ -89,11 +114,16 @@ def create_backup_file(get_db: Callable[[], object], cfg: BackupConfig) -> str |
         if tmp_backup_path.exists():
             tmp_backup_path.unlink()
 
-        with zipfile.ZipFile(tmp_backup_path, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
-            zipf.write(db_path, "database.db")
-            zipf.writestr("vodum.encryption_key", encryption_key)
-            zipf.writestr("manifest.json", json.dumps(manifest, indent=2))
-            _add_dir_to_zip(zipf, attachments_dir, "attachments")
+        # Online backup includes committed WAL data without checkpointing or
+        # holding DBManager's shared connection lock while compressing the ZIP.
+        with tempfile.TemporaryDirectory(prefix=".vodum-snapshot-", dir=backup_dir) as directory:
+            snapshot = Path(directory) / "database.db"
+            _snapshot_database(db_path, snapshot, _snapshot_timeout_seconds())
+            with zipfile.ZipFile(tmp_backup_path, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
+                zipf.write(snapshot, "database.db")
+                zipf.writestr("vodum.encryption_key", encryption_key)
+                zipf.writestr("manifest.json", json.dumps(manifest, indent=2))
+                _add_dir_to_zip(zipf, attachments_dir, "attachments")
 
         if tmp_backup_path.stat().st_size <= 0:
             raise RuntimeError("Backup zip was created empty")

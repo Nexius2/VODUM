@@ -1,4 +1,5 @@
 import sqlite3
+from core.db_bootstrap_daily_refresh import ensure_daily_refresh_schema
 
 
 def ensure_monitoring_history_schema(conn, cursor, *, table_exists, ensure_column) -> None:
@@ -81,5 +82,6 @@ def ensure_monitoring_history_schema(conn, cursor, *, table_exists, ensure_colum
         )
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_monitoring_daily_stats_computed ON monitoring_daily_stats(computed_at)")
+    ensure_daily_refresh_schema(cursor)
     conn.commit()
     print("Monitoring daily aggregate table verified.")
