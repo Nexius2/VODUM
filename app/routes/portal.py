@@ -109,10 +109,7 @@ def register(app):
     @permission_required("portal.home.read_own")
     @portal_user_required
     def portal_home():
-        data = load_portal_home(get_db(), int(g.auth_principal["vodum_user_id"]))
-        if not data:
-            return _portal_error("portal_account_missing")
-        return render_template("portal/home.html", **data, **_portal_ui(get_db()), active_portal_page="home")
+        return portal_profile()
 
     @app.get("/portal/profile")
     @portal_login_required
@@ -124,6 +121,11 @@ def register(app):
         profile = load_portal_profile(db, user_id)
         if not profile:
             return _portal_error("portal_account_missing")
+        ui = _portal_ui(db)
+        overview = load_portal_home(db, user_id)
+        if not overview:
+            return _portal_error("portal_account_missing")
+        accounts = load_portal_media_access(db, user_id) if ui["portal_features"]["media"] else []
         account_id = int(g.auth_principal["account_id"])
         setting = dict(db.query_one(
             "SELECT user_notifications_can_override,portal_local_auth_enabled,portal_plex_auth_enabled,portal_jellyfin_auth_enabled,"
@@ -153,7 +155,7 @@ def register(app):
             show_auth_management=bool(has_local or can_link_plex or can_link_jellyfin),
             recently_reauthenticated=recently_reauthenticated(session), languages=get_available_languages(),
             notifications_can_override=notifications_can_override, discord_enabled=discord_enabled,
-            **_portal_ui(db), active_portal_page="profile",
+            **overview, accounts=accounts, **ui, active_portal_page="profile",
         )
 
     @app.post("/portal/profile/methods/reauthenticate")
@@ -355,9 +357,8 @@ def register(app):
     @permission_required("portal.media_access.read_own")
     @portal_user_required
     def portal_media_access():
-        db = get_db(); ui = _require_feature(db, "media")
-        accounts = load_portal_media_access(db, int(g.auth_principal["vodum_user_id"]))
-        return render_template("portal/media_access.html", accounts=accounts, **ui, active_portal_page="media")
+        _require_feature(get_db(), "media")
+        return redirect(url_for("portal_profile", _anchor="media-access"))
 
     @app.post("/portal/media-access/<int:media_user_id>/profile")
     @portal_login_required
@@ -370,7 +371,7 @@ def register(app):
             flash("portal_provider_profile_saved", "success")
         except ValueError as exc:
             flash(str(exc), "error")
-        return redirect(url_for("portal_media_access"))
+        return redirect(url_for("portal_profile", _anchor="media-access"))
 
     @app.get("/portal/monitoring")
     @portal_login_required

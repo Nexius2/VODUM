@@ -2186,5 +2186,6 @@
   "portal_request_count_pending": "Ricerca in corso",
   "portal_request_count_failed": "Errori",
   "portal_request_media": "Contenuto",
-  "portal_request_monitoring_help": "Richieste nel periodo selezionato; sono mostrate le ultime 100. Un’aggiunta indica l’invio a Sonarr/Radarr. Le vecchie richieste senza un risultato dettagliato restano incluse nel totale."
+  "portal_request_monitoring_help": "Richieste nel periodo selezionato; sono mostrate le ultime 100. Un’aggiunta indica l’invio a Sonarr/Radarr. Le vecchie richieste senza un risultato dettagliato restano incluse nel totale.",
+  "portal_personal_details": "Informazioni personali e accesso"
 }

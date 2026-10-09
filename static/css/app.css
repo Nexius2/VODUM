@@ -556,3 +556,30 @@ svg {
   }
   .monitoring-tabs .monitoring-tab:focus-visible { outline: 2px solid #818cf8; outline-offset: 2px; }
 }
+
+/* Compact account status badge in the user portal. */
+.portal-account-status {
+  color: #cbd5e1;
+  background-color: #0f172a;
+  border-color: #475569;
+}
+.portal-account-status[data-account-status="active"] {
+  color: #86efac;
+  background-color: #052e16;
+  border-color: #166534;
+}
+.portal-account-status:is([data-account-status="pre_expired"], [data-account-status="invited"], [data-account-status="pending"]) {
+  color: #fde047;
+  background-color: #422006;
+  border-color: #854d0e;
+}
+.portal-account-status[data-account-status="reminder"] {
+  color: #fdba74;
+  background-color: #431407;
+  border-color: #9a3412;
+}
+.portal-account-status:is([data-account-status="expired"], [data-account-status="suspended"], [data-account-status="disabled"], [data-account-status="inactive"], [data-account-status="removed"], [data-account-status="unfriended"], [data-account-status="deleted"]) {
+  color: #fca5a5;
+  background-color: #450a0a;
+  border-color: #991b1b;
+}

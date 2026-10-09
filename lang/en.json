@@ -4,7 +4,7 @@
   "portal_welcome": "Welcome",
   "portal_home_help": "Your account and personal media access at a glance.",
   "portal_personal_activity": "Personal activity",
-  "portal_profile_help": "Update only the personal information you are allowed to change.",
+  "portal_profile_help": "Your account, media access and personal information in one place.",
   "portal_primary_email_readonly": "Contact support to change your login email.",
   "portal_profile_email_invalid": "The secondary email address is invalid.",
   "portal_profile_saved": "Your profile was updated.",
@@ -2390,5 +2390,6 @@
   "portal_request_count_pending": "Search in progress",
   "portal_request_count_failed": "Failures",
   "portal_request_media": "Media",
-  "portal_request_monitoring_help": "Requests in the selected period; the latest 100 are shown. An addition means the request was sent to Sonarr/Radarr. Older requests without a detailed result remain included in the total."
+  "portal_request_monitoring_help": "Requests in the selected period; the latest 100 are shown. An addition means the request was sent to Sonarr/Radarr. Older requests without a detailed result remain included in the total.",
+  "portal_personal_details": "Personal information and sign-in"
 }
