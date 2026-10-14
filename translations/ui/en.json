@@ -2624,5 +2624,10 @@
   "portal_request_count_failed": "Failures",
   "portal_request_media": "Media",
   "portal_request_monitoring_help": "Requests in the selected period; the latest 100 are shown. An addition means the request was sent to Sonarr/Radarr. Older requests without a detailed result remain included in the total.",
-  "portal_personal_details": "Personal information and sign-in"
+  "portal_personal_details": "Personal information and sign-in",
+  "portal_requests_searching": "Searching\u2026",
+  "portal_requests_searching_help": "Looking for your title. Please wait\u2026",
+  "portal_requests_checking_help": "Checking this title in the catalogs and on media servers. Please wait\u2026",
+  "portal_requests_checking_catalogs": "Consulting movie and series catalogs\u2026",
+  "portal_requests_checking_servers": "Checking media libraries\u2026"
 }

@@ -2391,5 +2391,10 @@
   "portal_request_count_failed": "Échecs",
   "portal_request_media": "Média",
   "portal_request_monitoring_help": "Demandes sur la période sélectionnée ; les 100 plus récentes sont affichées. Un ajout signifie que la demande a été envoyée à Sonarr/Radarr. Les anciennes demandes sans résultat détaillé restent comptées dans le total.",
-  "portal_personal_details": "Informations personnelles et connexion"
+  "portal_personal_details": "Informations personnelles et connexion",
+  "portal_requests_searching": "Recherche en cours\u2026",
+  "portal_requests_searching_help": "Recherche de votre titre. Merci de patienter\u2026",
+  "portal_requests_checking_help": "Nous recherchons ce titre dans les catalogues et sur les serveurs de m\u00e9dias. Merci de patienter\u2026",
+  "portal_requests_checking_catalogs": "Consultation des catalogues de films et s\u00e9ries\u2026",
+  "portal_requests_checking_servers": "V\u00e9rification des biblioth\u00e8ques de m\u00e9dias\u2026"
 }
