@@ -2624,5 +2624,10 @@
   "portal_request_count_failed": "Errores",
   "portal_request_media": "Contenido",
   "portal_request_monitoring_help": "Solicitudes del período seleccionado; se muestran las últimas 100. Una adición indica el envío a Sonarr/Radarr. Las solicitudes antiguas sin resultado detallado siguen incluidas en el total.",
-  "portal_personal_details": "Información personal e inicio de sesión"
+  "portal_personal_details": "Información personal e inicio de sesión",
+  "portal_requests_searching": "Buscando\u2026",
+  "portal_requests_searching_help": "Buscando tu t\u00edtulo. Espera un momento\u2026",
+  "portal_requests_checking_help": "Comprobando este t\u00edtulo en los cat\u00e1logos y servidores multimedia. Espera un momento\u2026",
+  "portal_requests_checking_catalogs": "Consultando cat\u00e1logos de pel\u00edculas y series\u2026",
+  "portal_requests_checking_servers": "Comprobando bibliotecas multimedia\u2026"
 }

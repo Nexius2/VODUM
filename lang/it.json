@@ -2187,5 +2187,10 @@
   "portal_request_count_failed": "Errori",
   "portal_request_media": "Contenuto",
   "portal_request_monitoring_help": "Richieste nel periodo selezionato; sono mostrate le ultime 100. Un’aggiunta indica l’invio a Sonarr/Radarr. Le vecchie richieste senza un risultato dettagliato restano incluse nel totale.",
-  "portal_personal_details": "Informazioni personali e accesso"
+  "portal_personal_details": "Informazioni personali e accesso",
+  "portal_requests_searching": "Ricerca in corso\u2026",
+  "portal_requests_searching_help": "Ricerca del titolo. Attendi\u2026",
+  "portal_requests_checking_help": "Verifica del titolo nei cataloghi e sui server multimediali. Attendi\u2026",
+  "portal_requests_checking_catalogs": "Consultazione dei cataloghi di film e serie\u2026",
+  "portal_requests_checking_servers": "Verifica delle librerie multimediali\u2026"
 }

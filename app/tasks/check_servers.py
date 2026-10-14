@@ -236,7 +236,7 @@ def run(task_id: int, db):
 
             new_name = old_name
             machine_id = s["server_identifier"]
-            server_version = None
+            server_version = s.get("server_version")
             status = "unknown"
             meta = None
 

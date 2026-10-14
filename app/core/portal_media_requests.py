@@ -144,11 +144,11 @@ def search_media(db, user_id, kind, term):
     jobs, identities = [], []
     for media_kind in kinds:
         provider = 'radarr' if media_kind == 'movie' else 'sonarr'
-        servers = {}
-        for library in libraries:
-            if compatible_arr_type(library['type']) == provider:
-                for server in linked_arrs(db,library): servers.setdefault(server['id'],server)
-        for server in servers.values():
+        if not any(compatible_arr_type(library['type']) == provider for library in libraries):
+            continue
+        servers = [dict(row) for row in db.query(
+            'SELECT * FROM servers WHERE LOWER(type)=? ORDER BY id', (provider,))]
+        for server in servers:
             identities.append(media_kind)
             jobs.append(lambda server=server, media_kind=media_kind:
                 api(server, '/api/v3/' + media_kind + '/lookup', params={'term':term.strip()}))
@@ -209,7 +209,7 @@ def plex_present(server, library, media):
 
 
 def media_present(server, library, media, kind):
-    if server['type'] == 'plex': return plex_present(server,library,media)
+    if str(server['type']).lower() == 'plex': return plex_present(server,library,media)
     offset = 0
     deadline = time.monotonic() + 90
     while True:
@@ -335,12 +335,30 @@ def submit_request(db,user_id,library_id,kind,external_id,resolution=''):
             not item[0]['preferred'], item[0]['request_priority'],
             not has_saved_request_defaults(item[2][0]), item[0]['id']))
         library,selected_arrs,matching = eligible[0]
-        # Materialize DB rows before dispatching HTTP-only workers.
+        # Check every registered compatible ARR before scanning media libraries.
+        # Routing only controls where we add, never where we detect duplicates.
+        registered_arrs = [dict(row) for row in db.query(
+            'SELECT * FROM servers WHERE LOWER(type)=? ORDER BY id', (provider,))]
+        arr_failed = False
+        arr_present = False
+        key = 'tmdbId' if kind == 'movie' else 'tvdbId'
+        for existing in parallel_reads([
+                lambda server=server: api(server,'/api/v3/'+kind)
+                for server in registered_arrs]):
+            if not isinstance(existing,list):
+                arr_failed = True
+            elif any(r.get(key) == external_id for r in existing):
+                arr_present = True
+
+        # Materialize DB rows before dispatching HTTP-only workers. Check all
+        # registered media libraries, including those without request routing.
         media_checks = {}
-        for candidate in [library] + [r for r in all_libraries if r['id'] != library['id']]:
+        registered_libraries = [dict(row) for row in db.query("""
+            SELECT l.* FROM libraries l JOIN servers s ON s.id=l.server_id
+            WHERE LOWER(s.type) IN ('plex','jellyfin') ORDER BY l.id""")]
+        for candidate in [library] + [r for r in registered_libraries if r['id'] != library['id']]:
             if compatible_arr_type(candidate['type']) != provider: continue
             server = dict(db.query_one('SELECT * FROM servers WHERE id=?',(candidate['server_id'],)))
-            if candidate['id'] != library['id'] and server.get('status') in ('down','offline'): continue
             media_checks.setdefault(server['id'], []).append((server,candidate))
 
         def check_libraries(checks):
@@ -354,21 +372,13 @@ def submit_request(db,user_id,library_id,kind,external_id,resolution=''):
             return False, failed
 
         jobs = [lambda checks=checks: check_libraries(checks) for checks in media_checks.values()]
-        media_count = len(jobs)
-        jobs.extend(lambda server=server: api(server,'/api/v3/'+kind) for server in selected_arrs)
         outcomes = parallel_reads(jobs)
         media_failed = False
-        for outcome in outcomes[:media_count]:
+        for outcome in outcomes:
             present, failed = outcome
             if present: return 'portal_requests_present'
             media_failed = media_failed or failed
-        arr_failed = False
-        key = 'tmdbId' if kind == 'movie' else 'tvdbId'
-        for existing in outcomes[media_count:]:
-            if not isinstance(existing,list):
-                arr_failed = True
-            elif any(r.get(key) == external_id for r in existing):
-                return 'portal_requests_pending'
+        if arr_present: return 'portal_requests_pending'
         if media_failed: raise MediaRequestError('portal_requests_media_unavailable')
         if arr_failed: raise MediaRequestError('portal_requests_arr_unavailable')
         get_logger('portal_media_requests').info(

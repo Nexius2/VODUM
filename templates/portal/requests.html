@@ -16,13 +16,14 @@
 <h1 class="text-2xl font-semibold">{{ t('portal_requests_title') }}</h1>
 <p class="mt-2 text-sm text-slate-400">{{ t('portal_requests_help') }}</p>
 {% if libraries %}
-<form method="get" class="mt-6 flex flex-wrap gap-3 rounded-2xl border border-slate-800 bg-slate-900 p-5">
+<form method="get" data-media-search data-working="{{ t('portal_requests_searching') }}" class="mt-6 flex flex-wrap gap-3 rounded-2xl border border-slate-800 bg-slate-900 p-5">
 {% if admin_preview %}<input type="hidden" name="page" value="requests">{% endif %}
 <label class="flex-1">{{ t('portal_requests_search') }}<input name="q" value="{{ query }}" minlength="2" maxlength="100" required class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2"></label>
 <button class="self-end rounded-lg bg-primary px-4 py-2 text-white hover:bg-primary-dark">{{ t('portal_requests_search') }}</button>
+<div hidden data-search-progress class="portal-request-progress" role="status"><span class="portal-request-spinner" aria-hidden="true"></span><span>{{ t('portal_requests_searching_help') }}</span></div>
 </form>
 {% if query and not results %}<p class="mt-6 text-slate-400">{{ t('portal_requests_no_results') }}</p>{% endif %}
-<div class="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+<div data-search-results class="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
 {% for item in results %}<article class="rounded-2xl border border-slate-800 bg-slate-900 p-5">
 <div class="flex items-start gap-4">
 {% if item.poster %}<img src="{{ item.poster }}" alt="{{ item.title }}" loading="lazy" referrerpolicy="no-referrer" width="100" height="150" class="w-24 shrink-0 rounded-lg object-cover" style="aspect-ratio:2/3">
@@ -35,8 +36,16 @@
 <input type="hidden" name="search_query" value="{{ query }}">
 <input type="hidden" name="_csrf_token" value="{{ csrf_token }}"><input type="hidden" name="selection" value="{{ item.selection }}">
 <button {% if admin_preview %}type="button" disabled{% endif %} class="rounded-lg bg-primary px-4 py-2 text-white hover:bg-primary-dark disabled:opacity-50">{{ t('portal_requests_select') }}</button>
+<div hidden data-request-progress class="portal-request-progress" role="status">
+<span class="portal-request-spinner" aria-hidden="true"></span>
+<span><span>{{ t('portal_requests_checking_help') }}</span><span class="portal-request-scan" aria-hidden="true"><span>{{ t('portal_requests_checking_catalogs') }}</span><span>{{ t('portal_requests_checking_servers') }}</span></span></span>
+</div>
 </form></div></div></article>{% endfor %}</div>
 {% else %}<p class="mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-5 text-slate-400">{{ t('portal_requests_no_libraries') }}</p>{% endif %}
 </div></div>
+<dialog id="request-progress-dialog" class="portal-request-dialog" aria-labelledby="request-progress-title" aria-describedby="request-progress-body">
+<h2 id="request-progress-title" class="text-lg font-semibold" tabindex="-1"></h2>
+<div id="request-progress-body"></div>
+</dialog>
 {% endblock %}
 {% block scripts %}<script src="{{ url_for('static', filename='js/pages/portal-requests.js', v=g.app_version|default('dev')) }}"></script>{% endblock %}

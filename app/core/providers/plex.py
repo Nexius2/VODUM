@@ -156,12 +156,34 @@ class PlexProvider(BaseProvider):
         xml_text = self._get("/status/sessions")
         root = ET.fromstring(xml_text)
 
+        original_node = next((node for node in root if str(
+            node.attrib.get("sessionKey") or node.attrib.get("sessionId") or node.attrib.get("key")
+        ) == str(session_key)), None)
+
+        def playback_identity(node):
+            user = node.find("User")
+            player = node.find("Player")
+            if user is None or player is None:
+                return None
+            user_id = user.get("id")
+            machine_id = player.get("machineIdentifier")
+            address = player.get("address")
+            # Device names such as "iPhone" are shared by unrelated players.
+            # Follow reconnects only with an explicit account and client ID.
+            if not user_id or not machine_id or not address:
+                return None
+            return user_id, machine_id, address
+
+        target_identity = playback_identity(original_node) if original_node is not None else None
+
         def find_session_id(container: ET.Element) -> Optional[str]:
             # Retrouver la session correspondante au session_key.
             for node in container:
                 # sessionKey est souvent sur le node (Video/Track/Episode)
                 sk = node.attrib.get("sessionKey") or node.attrib.get("sessionId") or node.attrib.get("key")
-                if not sk or str(sk) != str(session_key):
+                if not sk or (str(sk) != str(session_key) and (
+                    target_identity is None or playback_identity(node) != target_identity
+                )):
                     continue
 
                 # La vraie sessionId est généralement dans <Session id="...">.
@@ -174,6 +196,7 @@ class PlexProvider(BaseProvider):
                 # Certaines versions exposent sessionId directement.
                 if node.attrib.get("sessionId"):
                     return str(node.attrib["sessionId"])
+                raise RuntimeError("Active Plex session has no termination session ID")
             return None
 
         target_session_id = find_session_id(root)
@@ -192,18 +215,18 @@ class PlexProvider(BaseProvider):
 
         # GET puis POST (compat)
         try:
-            requested = self._request("GET", "/status/sessions/terminate", params=params)
+            requested = self._request("GET", "/status/sessions/terminate", params=dict(params))
 
         except Exception:
             try:
-                requested = self._request("POST", "/status/sessions/terminate", params=params)
+                requested = self._request("POST", "/status/sessions/terminate", params=dict(params))
 
             except Exception as e2:
                 error_text = str(e2)
 
                 if "404" in error_text:
                     refreshed = ET.fromstring(self._get("/status/sessions"))
-                    if find_session_id(refreshed) is None:
+                    if find_session_id(refreshed) is None and target_identity is None:
                         log.info(
                             f"Session already terminated on Plex "
                             f"session_key={session_key} session_id={target_session_id}"
@@ -220,13 +243,21 @@ class PlexProvider(BaseProvider):
         # on every poll because some clients recreate it during a timeline
         # transition while retaining the same sessionKey.
         verify_delays = (0.0, 1.0, 2.0, 4.0, 8.0)
+        absent_once = False
         for attempt, delay in enumerate(verify_delays):
             if delay:
                 time.sleep(delay)
             refreshed = ET.fromstring(self._get("/status/sessions"))
             current_session_id = find_session_id(refreshed)
             if current_session_id is None:
-                return True
+                # A reconnect can briefly disappear from the server snapshot.
+                # Require two observations before declaring this client stopped.
+                if target_identity is None or absent_once:
+                    return True
+                absent_once = True
+                continue
+
+            absent_once = False
 
             if current_session_id != target_session_id:
                 log.info(
@@ -244,7 +275,10 @@ class PlexProvider(BaseProvider):
             # session disappearance above as the only success criterion.
             if attempt < len(verify_delays) - 1:
                 try:
-                    self._request("GET", "/status/sessions/terminate", params=params)
+                    try:
+                        self._request("GET", "/status/sessions/terminate", params=dict(params))
+                    except Exception:
+                        self._request("POST", "/status/sessions/terminate", params=dict(params))
                 except Exception:
                     log.debug(
                         "Retrying Plex terminate failed session_key=%s session_id=%s",
