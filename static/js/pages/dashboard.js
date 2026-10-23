@@ -1,6 +1,7 @@
 (function vodumDashboardPage() {
   function navigateTo(url) {
     if (!url) return;
+    window.vodumShowMobileNavigationLoader?.();
     window.location.href = url;
   }
 

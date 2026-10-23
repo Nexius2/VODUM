@@ -4,6 +4,8 @@ def enforce_global_cron_setting(conn, cursor) -> None:
         row = cursor.fetchone()
         cron_enabled = int(row[0]) if row and row[0] is not None else 1
     except Exception:
+        from core.error_reporting import log_handled_failure
+        log_handled_failure("bootstrap.read_cron_switch")
         cron_enabled = 1
 
     if cron_enabled != 0:

@@ -53,6 +53,7 @@
         username.textContent = data.username || "";
         password.textContent = data.password || "";
       } catch (requestError) {
+        console.error("[vodum] migration credentials load failed");
         error.classList.remove("hidden");
       }
     });

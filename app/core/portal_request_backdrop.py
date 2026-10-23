@@ -25,6 +25,8 @@ def remember_backdrop_candidates(result):
             json.dump(payload, handle)
         os.replace(temporary, directory / 'portal-backdrop.json')
     except OSError:
+        from core.error_reporting import log_handled_failure
+        log_handled_failure("portal.persist_backdrop_cache")
         pass
     finally:
         if temporary and os.path.exists(temporary):

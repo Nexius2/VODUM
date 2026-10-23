@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 import json
 from datetime import datetime, timezone
 
@@ -119,6 +120,7 @@ def run_migration_access_operation(
     try:
         result = handler(db, campaign_id)
     except Exception as exc:
+        log_handled_failure("migrations.change_access")
         return {"ok": False, "reason": str(exc), "exception": exc}
 
     if result.get("queued") and capabilities:

@@ -17,6 +17,8 @@ def inject_brand_name():
             brand_name = row["brand_name"]
         brand_name = (brand_name or "").strip()
     except Exception:
+        from core.error_reporting import log_handled_failure
+        log_handled_failure("settings.load_brand_name")
         brand_name = ""
 
     return {"app_brand_name": brand_name if brand_name else "VODUM"}

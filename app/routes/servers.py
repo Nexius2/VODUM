@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 # Auto-split from app.py (keep URLs/endpoints intact)
 import uuid
 import json
@@ -399,6 +400,7 @@ def register(app):
             flash("server_delete_started", "success")
 
         except Exception as e:
+            log_handled_failure("servers.start_deletion")
             release_server_deletion(
                 SERVER_DELETE_LOCK,
                 SERVER_DELETE_IN_PROGRESS,

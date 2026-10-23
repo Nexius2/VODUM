@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 from core.jellyfin_auth import jellyfin_headers
 
@@ -269,6 +270,7 @@ class JellyfinProvider(BaseProvider):
             # /Items/{id} retourne un objet avec Name + Type généralement fiables
             return self._get_json(f"/Items/{item_id}") or {}
         except Exception:
+            log_handled_failure("jellyfin.read_item")
             return {}
 
     def _get_item_ancestors(self, item_id: str) -> List[Dict[str, Any]]:
@@ -276,6 +278,7 @@ class JellyfinProvider(BaseProvider):
             data = self._get_json(f"/Items/{item_id}/Ancestors") or []
             return data if isinstance(data, list) else []
         except Exception:
+            log_handled_failure("jellyfin.read_ancestors")
             return []
 
 

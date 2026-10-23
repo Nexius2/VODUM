@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 # Auto-split from app.py (keep URLs/endpoints intact)
 import math
 import os
@@ -415,6 +416,7 @@ def register(app):
                 """
             )
         except Exception:
+            log_handled_failure("auth.load_plex_identity")
             plex_identity = None
 
         if not (s.get("admin_password_hash") or "").strip():
@@ -644,6 +646,7 @@ def register(app):
             if not exists:
                 return redirect(url_for("setup_wizard", resume="wizard"))
         except Exception:
+            log_handled_failure("auth.check_setup_state")
             return
 
         row = db.query_one("SELECT COUNT(*) AS cnt FROM servers")
@@ -676,6 +679,7 @@ def register(app):
                     503,
                 )
         except Exception:
+            log_handled_failure("auth.check_maintenance_state")
             return
 
 

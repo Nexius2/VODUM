@@ -1,5 +1,6 @@
 import re
 from difflib import SequenceMatcher
+from db_manager import isolated_read_operation
 
 
 USER_MERGE_COLUMNS = """
@@ -70,10 +71,11 @@ def score_candidate(user: dict, candidate: dict) -> int:
     return score
 
 
-def get_merge_suggestions(db, user_id: int, limit: int | None = None):
+@isolated_read_operation
+def _load_merge_candidates(db, user_id: int):
     user = db.query_one(f"SELECT {USER_MERGE_COLUMNS} FROM vodum_users WHERE id=?", (user_id,))
     if not user:
-        return []
+        return None, []
     user = dict(user)
     candidates = db.query(
         """SELECT id, username, firstname, lastname, email, second_email,
@@ -81,6 +83,14 @@ def get_merge_suggestions(db, user_id: int, limit: int | None = None):
            FROM vodum_users WHERE id != ?""",
         (user_id,),
     )
+    return user, [dict(candidate) for candidate in candidates]
+
+
+def get_merge_suggestions(db, user_id: int, limit: int | None = None):
+    user, candidates = _load_merge_candidates(db, user_id)
+    if user is None:
+        return []
+    # Scoring is CPU work: release the SQLite snapshot before ranking.
     scored = []
     for candidate in candidates:
         candidate = dict(candidate)

@@ -8,6 +8,7 @@
     try {
       return JSON.parse(el.textContent || "{}");
     } catch (_) {
+      console.error("[vodum] monitoring policies configuration failed");
       return {};
     }
   }
@@ -34,7 +35,7 @@
 
   function destroyIfNeeded(el) {
     if (el && el._chartInstance) {
-      try { el._chartInstance.destroy(); } catch (_) {}
+      try { el._chartInstance.destroy(); } catch (_) { console.error("[vodum] monitoring chart cleanup failed");}
       el._chartInstance = null;
     }
   }
@@ -408,13 +409,14 @@
         const payload = await response.json();
         if (payload?.row) openModal(payload.row);
       } catch (_) {
+        console.error("[vodum] enforcement detail load failed");
         setText("pem_details_json", label("requestFailed", "Request failed"));
       }
     }
 
     function openModalFromRow(row) {
       let summary = {};
-      try { summary = JSON.parse(row.getAttribute("data-enforcement") || "{}"); } catch (_) {}
+      try { summary = JSON.parse(row.getAttribute("data-enforcement") || "{}"); } catch (_) { console.error("[vodum] enforcement row metadata failed");}
       return openModalFromData(summary, row.dataset.enforcementUrl || "");
     }
 
@@ -535,6 +537,7 @@
           });
         })
         .catch(() => {
+          console.error("[vodum] enforcement user history failed");
           groupModalRows.innerHTML = `
             <tr>
               <td class="p-4 text-rose-300" colspan="6">${escapeHtml(label("unableUserHistory", "Unable to load user history."))}</td>
@@ -566,7 +569,7 @@
       row.addEventListener("click", () => {
         try {
           openGroupModal(JSON.parse(row.getAttribute("data-enforcement-group")));
-        } catch (_) {}
+        } catch (_) { console.error("[vodum] enforcement group open failed");}
       });
 
       row.addEventListener("keydown", (e) => {
@@ -574,7 +577,7 @@
           e.preventDefault();
           try {
             openGroupModal(JSON.parse(row.getAttribute("data-enforcement-group")));
-          } catch (_) {}
+          } catch (_) { console.error("[vodum] enforcement keyboard group open failed");}
         }
       });
     });

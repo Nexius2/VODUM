@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 
 def ensure_referral_schema(
@@ -247,6 +248,7 @@ def ensure_referral_schema(
             print("✅ user_referrals CHECK constraint migrated")
 
     except Exception as e:
+        log_handled_failure("bootstrap.migrate_referral_constraint")
         print(f"❌ Failed migrating user_referrals constraint: {e}")
 
     ensure_column(cursor, "user_referral_settings", "auto_expire_pending", "INTEGER NOT NULL DEFAULT 1")

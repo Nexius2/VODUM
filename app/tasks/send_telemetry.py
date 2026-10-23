@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 import hashlib
 import json
 import platform
@@ -251,6 +252,7 @@ def run(task_id: int, db: DBManager):
                 )
 
         except Exception:
+            log_handled_failure("telemetry.read_update_status")
             pass
 
         if not version:

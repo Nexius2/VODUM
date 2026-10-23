@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 import json
 
 
@@ -9,6 +10,7 @@ def parse_json_list(raw: str) -> list:
         value = json.loads(raw or "[]")
         return value if isinstance(value, list) else []
     except Exception:
+        log_handled_failure("policies.decode_template_policies")
         return []
 
 

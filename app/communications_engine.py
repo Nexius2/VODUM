@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 import json
 import os
@@ -28,6 +29,7 @@ def _ensure_dir(p: Path) -> None:
     try:
         p.mkdir(parents=True, exist_ok=True)
     except Exception:
+        log_handled_failure("communications.create_storage")
         pass
 
 
@@ -90,6 +92,7 @@ def get_localized_template_content(
             row = dict(row)
             return row.get("subject") or subject or "", row.get("body") or body or "", lang
     except Exception:
+        log_handled_failure("communications.load_template_translation")
         pass
 
     return subject or "", body or "", lang
@@ -761,6 +764,7 @@ def send_to_user(
                 if k not in render_input or render_input.get(k) in (None, "")
             })
         except Exception:
+            log_handled_failure("communications.load_subscription_context")
             pass
 
     render_input["brand_name"] = (
@@ -774,6 +778,7 @@ def send_to_user(
             portal_row = db.query_one("SELECT portal_public_url FROM settings WHERE id=1")
             portal_public_url = dict(portal_row).get("portal_public_url") if portal_row else None
         except Exception:
+            log_handled_failure("communications.load_portal_url")
             portal_public_url = None
     render_input["portal_login_url"] = build_portal_login_url(portal_public_url)
 
@@ -897,6 +902,7 @@ def send_to_user(
                     )
                 )
             except Exception as e:
+                log_handled_failure("communications.deliver_discord")
                 attempts.append(SendAttempt(channel="discord", status="failed", error=str(e)[:1000]))
 
         # In FIRST mode, stop as soon as one channel succeeded.

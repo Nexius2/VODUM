@@ -1,5 +1,7 @@
 """ARR availability, API latency, download queue and health history."""
+from core.error_reporting import log_handled_failure
 import time
+from db_manager import isolated_read_operation
 from core.http_security import server_http_session
 
 SCHEMA = 'CREATE TABLE IF NOT EXISTS arr_monitoring_samples (\n id INTEGER PRIMARY KEY AUTOINCREMENT,\n server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,\n checked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n online INTEGER NOT NULL,\n latency_ms INTEGER,\n queue_count INTEGER,\n health_count INTEGER\n);\nCREATE INDEX IF NOT EXISTS idx_arr_monitoring_server_time ON arr_monitoring_samples(server_id, checked_at);\n'
@@ -26,6 +28,7 @@ def collect_arr_sample(db, server, base_url, online):
                 if isinstance(data, list):
                     health = len(data)
         except Exception:
+            log_handled_failure("arr.collect_metrics", server_id=server.get("id"))
             pass  # Missing metrics remain null, never a fabricated zero.
         finally:
             http.close()
@@ -38,6 +41,11 @@ def collect_arr_sample(db, server, base_url, online):
 def load_arr_monitoring(db, servers, requested_range):
     if not servers:
         return {"servers": [], "days": []}
+    return _load_arr_monitoring(db, servers, requested_range)
+
+
+@isolated_read_operation
+def _load_arr_monitoring(db, servers, requested_range):
     delta = {"7d":"-7 days", "1m":"-1 month", "6m":"-6 months", "12m":"-12 months", "all":"-366 days"}.get(requested_range, "-7 days")
     summaries = [dict(row) for row in (db.query("""SELECT a.server_id,
         COUNT(*) AS checks, ROUND(100.0 * AVG(a.online), 1) AS availability,

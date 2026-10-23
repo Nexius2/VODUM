@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 import json
 
 from core.media_jobs import insert_plex_media_job
@@ -173,6 +174,7 @@ def apply_user_plex_options(
         try:
             details = json.loads(media_user["details_json"] or "{}")
         except Exception:
+            log_handled_failure("plex.decode_user_options")
             details = {}
         if not isinstance(details, dict):
             details = {}
@@ -260,6 +262,7 @@ def replicate_plex_flags_same_owner(
         try:
             details = json.loads(media_user["details_json"] or "{}")
         except Exception:
+            log_handled_failure("plex.decode_replication_options")
             details = {}
         if not isinstance(details, dict):
             details = {}

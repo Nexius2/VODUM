@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 import smtplib
 from email.message import EmailMessage
@@ -77,6 +78,7 @@ def send_email(subject: str, body: str, to_email: str, smtp_settings: Dict, atta
             msg.add_attachment(data, maintype=maintype, subtype=subtype, filename=filename)
         except Exception:
             # best effort: never fail the whole send just because one attachment is broken
+            log_handled_failure("email.attach_file")
             continue
 
 
@@ -88,4 +90,5 @@ def send_email(subject: str, body: str, to_email: str, smtp_settings: Dict, atta
             server.send_message(msg)
         return True, None
     except Exception as e:
+        log_handled_failure("email.smtp_send")
         return False, str(e)

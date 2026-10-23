@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 import json
 from pathlib import Path
 
@@ -11,6 +12,7 @@ def _language(db) -> str:
         language = str((dict(row) if row else {}).get("default_language") or "en").strip().lower()
         return language or "en"
     except Exception:
+        log_handled_failure("stream_enforcer.load_language")
         return "en"
 
 
@@ -30,6 +32,7 @@ def _load(language: str) -> dict:
                 data = json.loads(path.read_text(encoding="utf-8")) or {}
                 break
         except Exception:
+            log_handled_failure("stream_enforcer.load_translations")
             data = {}
     _CACHE[language] = data
     return data

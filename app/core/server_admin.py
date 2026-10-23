@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 import json
 
 from secret_store import (
@@ -65,6 +66,7 @@ def commit_server_creation(db) -> bool:
     try:
         db.commit()
     except Exception:
+        log_handled_failure("servers.commit_creation")
         return False
     return True
 
@@ -110,6 +112,7 @@ def decode_server_settings(row):
     try:
         settings = json.loads(row["settings_json"])
     except Exception:
+        log_handled_failure("servers.decode_settings")
         return {}
     return settings
 

@@ -1,4 +1,5 @@
 """Expiration deletion: preflight all accounts, delete remotely, then locally."""
+from core.error_reporting import log_handled_failure
 from datetime import date
 import json
 
@@ -91,6 +92,7 @@ def delete_expired_user(db, user_id, *, today=None, adapter=NativeUserDeletion):
             except Exception as exc:
                 # Keep local identities on partial failure. Next run rechecks native state.
                 # Commit canceled queued jobs even when a server operation failed.
+                log_handled_failure("users.delete_expired_native_account")
                 result.update(status="failed", reason=str(exc) if isinstance(exc, NativeDeletionError) else type(exc).__name__)
                 return result
             delete_local_user(cur, user_id)

@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 import json
 
 from mailing_utils import build_user_context, render_mail
@@ -7,6 +8,7 @@ def render_communication_history_message(row: dict, brand_name: str, portal_publ
     try:
         metadata = json.loads(row.get("meta_json") or "{}")
     except Exception:
+        log_handled_failure("communications.decode_history_metadata")
         metadata = {}
     if metadata.get("rendered_subject") or metadata.get("rendered_body"):
         row["rendered_subject"] = metadata.get("rendered_subject") or ""

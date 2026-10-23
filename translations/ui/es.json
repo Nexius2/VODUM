@@ -2597,7 +2597,7 @@
   "portal_requests_unavailable": "No se pudieron comprobar todos los servidores. No se envió ninguna solicitud nueva; inténtalo más tarde.",
   "portal_requests_busy": "Este medio se está comprobando. Inténtalo en un momento.",
   "portal_requests_present": "Este medio ya está disponible en tus bibliotecas.",
-  "portal_requests_pending": "Búsqueda en curso: este medio ya está en Sonarr/Radarr.",
+  "portal_requests_pending": "Nuestros sistemas de búsqueda ya están gestionando este título y pronto estará disponible en streaming.",
   "portal_requests_added": "Solicitud añadida: la búsqueda ha comenzado.",
   "portal_requests_no_match": "Ningún ARR vinculado coincide con este medio y resolución.",
   "portal_requests_not_configured": "El administrador debe configurar los valores predeterminados de solicitudes ARR.",

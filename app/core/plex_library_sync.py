@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 from core.plex_library_access import plex_section_total_items
 from logging_utils import get_logger
@@ -177,6 +178,7 @@ def sync_plex_libraries(db, server, libraries):
                     timeout=10,
                 )
             except Exception:
+                log_handled_failure("plex.read_library_count")
                 count = None
             if count is not None:
                 db.execute(

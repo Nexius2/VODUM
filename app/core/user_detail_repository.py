@@ -1,3 +1,6 @@
+from db_manager import isolated_read_operation
+
+
 USER_DETAIL_COLUMNS = """
     id, username, firstname, lastname, email, second_email, phone,
     expiration_date, renewal_method, renewal_date, created_at, notes,
@@ -26,6 +29,16 @@ def load_user_access_rows(
     *,
     include_servers: bool,
     include_libraries: bool,
+) -> tuple[list, list]:
+    if not include_servers and not include_libraries:
+        return [], []
+    return _load_user_access_rows(db, user_id, include_servers=include_servers,
+                                  include_libraries=include_libraries)
+
+
+@isolated_read_operation
+def _load_user_access_rows(
+    db, user_id: int, *, include_servers: bool, include_libraries: bool,
 ) -> tuple[list, list]:
     servers = db.query(
         f"""

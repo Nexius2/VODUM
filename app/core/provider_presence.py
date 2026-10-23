@@ -1,6 +1,7 @@
 """Live provider-presence checks used before local user deletion."""
 
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 import json
 
@@ -15,6 +16,7 @@ def _json_dict(raw) -> dict:
     try:
         value = json.loads(raw) if isinstance(raw, str) else raw
     except Exception:
+        log_handled_failure("providers.decode_presence_identity")
         value = {}
     return value if isinstance(value, dict) else {}
 
@@ -56,6 +58,7 @@ def check_plex_account_presence(server: dict, account_row: dict) -> dict:
         try:
             users = account.users() or []
         except Exception:
+            log_handled_failure("plex.list_accounts")
             users = []
         for user in users:
             if matches_plex_identity(user, email=email, username=username, external_user_id=external_user_id):
@@ -71,6 +74,7 @@ def check_plex_account_presence(server: dict, account_row: dict) -> dict:
             pending = pending_fn() or [] if callable(pending_fn) else []
             pending_lookup_ok = callable(pending_fn)
         except Exception:
+            log_handled_failure("plex.list_pending_invites")
             pending = []
         for invite in pending:
             if matches_plex_identity(invite, email=email, username=username):
@@ -88,6 +92,7 @@ def check_plex_account_presence(server: dict, account_row: dict) -> dict:
         result.update(state="missing", detail="Plex account/invite not found on platform")
         return result
     except Exception as exc:
+        log_handled_failure("plex.verify_account_presence")
         result.update(can_return_on_sync=True, detail=f"Unable to verify Plex account: {exc}")
         return result
 
@@ -121,6 +126,7 @@ def check_jellyfin_account_presence(server: dict, account_row: dict) -> dict:
         result.update(state="missing", detail="Jellyfin user not found on platform")
         return result
     except Exception as exc:
+        log_handled_failure("jellyfin.verify_account_presence")
         result.update(can_return_on_sync=True, detail=f"Unable to verify Jellyfin user: {exc}")
         return result
 

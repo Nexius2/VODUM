@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 import json
 
@@ -30,6 +31,7 @@ def job_payload_as_dict(job):
     try:
         data = json.loads(raw) if isinstance(raw, str) else raw
     except Exception:
+        log_handled_failure("plex.decode_access_job")
         return {}
     return data if isinstance(data, dict) else {}
 

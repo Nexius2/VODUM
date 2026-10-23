@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 #!/usr/bin/env python3
 import os
 import json
@@ -16,6 +17,7 @@ def _load_lang_dict(lang_code: str, lang_dir: str) -> Dict[str, str]:
             data = json.load(f)
         return data if isinstance(data, dict) else {}
     except Exception:
+        log_handled_failure("email.load_translations")
         return {}
 
 

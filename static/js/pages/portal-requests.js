@@ -83,6 +83,7 @@
         stopProgress(form);
         show(data.result || 'portal_requests_unavailable');
       } catch (_) {
+        console.error("[vodum] portal media request failed");
         stopProgress(form);
         show('portal_requests_unavailable');
       } finally {

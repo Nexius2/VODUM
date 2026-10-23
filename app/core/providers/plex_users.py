@@ -107,6 +107,8 @@ def plex_invite_and_share(
                         is_pending = True
                         break
         except Exception:
+            from core.error_reporting import log_handled_failure
+            log_handled_failure("plex.check_pending_invitation")
             pass
 
     # 1) inviteFriend only if needed

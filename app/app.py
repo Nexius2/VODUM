@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 import os
 import json
 import hmac
@@ -74,6 +75,7 @@ def _read_trust_proxy_from_db(db_path: str) -> bool:
 
         return int(row["web_trust_proxy"] or 0) == 1
     except Exception:
+        log_handled_failure("config.read_proxy_trust")
         return False
     finally:
         if conn is not None:
@@ -122,6 +124,7 @@ def startup_admin_recover_if_requested(app: Flask):
         with open(RESET_FILE, "r", encoding="utf-8") as f:
             marker = (f.read() or "").strip()
     except Exception:
+        log_handled_failure("startup.read_admin_reset_marker")
         marker = ""
 
     if marker != RESET_MAGIC:
@@ -308,7 +311,7 @@ def create_app():
     lang_dir = _resolve_asset_dir(base_dir, os.path.join("translations", "ui"))
 
     app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
-    register_flask_exception_logging(app, get_logger("requests"))
+    register_flask_exception_logging(app, get_logger("requests"), register_action_hook=False)
     install_thread_exception_logging(get_logger("threads"))
 
     # Include authentication and other before-request hooks in the measurement.
@@ -376,7 +379,7 @@ def create_app():
         g.app_version = APP_VERSION
 
         from core.update_badge import read_update_badge
-        g.update_available, g.update_pending_days = read_update_badge(update_status_path())
+        g.update_available, g.update_pending_days = read_update_badge(update_status_path(), APP_VERSION)
 
     app.config.from_object(Config)
     app.session_interface = VodumSessionInterface()
@@ -453,6 +456,10 @@ def create_app():
     # Routes
     from routes import register_routes
     register_routes(app)
+
+    # Flask runs response hooks in reverse registration order. Inspect JSON
+    # outcomes before compression changes the response body.
+    app.after_request(app.extensions["vodum_action_logger"])
 
     # Expose helpers pour d’éventuels scripts internes
     app.get_db = get_db

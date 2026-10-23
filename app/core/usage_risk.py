@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 import ipaddress
 import json
 
@@ -177,6 +178,7 @@ def _suggest_subscription(db, current_template_id, current_value, needed_streams
         try:
             policies = json.loads(tpl.get("policies_json") or "[]")
         except Exception:
+            log_handled_failure("usage_risk.decode_template_policies")
             policies = []
 
         for policy in policies:
@@ -627,6 +629,7 @@ def build_usage_risk_report(db, filters=None, persist_history=True):
                     if _is_public_ip(ip):
                         item["ips"].add(ip)
         except Exception:
+            log_handled_failure("usage_risk.load_session_addresses")
             pass
 
         try:

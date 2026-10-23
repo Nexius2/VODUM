@@ -44,6 +44,107 @@ extension ; une amelioration de performance ne justifie aucune perte fonctionnel
   Servers du monitoring isoles egalement. Comparaison des six valeurs de plage,
   absence d'ecriture et test de lecture pendant verrou d'ecriture occupe.
   Benchmark concurrent synthetique dans `tools/benchmark_monitoring_server_reads.py`.
+  Cinquieme lot livre : lectures en cours du dashboard isolees dans un snapshot,
+  y compris compteurs et repli borne lorsque la file de taches est occupee.
+  Resultats compares et lecture pendant transaction d'ecriture testes ; benchmark
+  synthetique dans `tools/benchmark_dashboard_live_reads.py`. Mesure sur base
+  representative toujours restante.
+  Sixieme lot livre : sessions, compteurs et serveurs du monitoring en direct
+  charges dans un snapshot commun. Enrichissement/reparation artwork conserve
+  apres fermeture du lecteur sur le parcours d'ecriture. Repli sur les compteurs
+  recents et onglets sans lecture preserves ; benchmark avec
+  `tools/benchmark_dashboard_live_reads.py --monitoring`.
+  Septieme lot livre : evenements recents Overview/Activity et utilisateurs du
+  filtre Bibliotheques sur connexions de lecture independantes. Tri, limites,
+  details de series, deduplication et libelles conserves ; aucun snapshot pour
+  les onglets sans evenements. Comparaison sous transaction concurrente testee.
+  Benchmark : `tools/benchmark_dashboard_live_reads.py --activity` et
+  `--library-users`. Validation representative toujours restante.
+  Huitieme lot livre : rapport d'usage du portail (compteurs, chronologie,
+  utilisateurs, evenements et demandes medias) dans un snapshot commun.
+  Periodes, pagination et comptes compares au parcours precedent pendant
+  transaction concurrente, cas vide et integrite verifies. Benchmark :
+  `tools/benchmark_dashboard_live_reads.py --portal-usage`. Mesure sur base
+  representative et autres parcours encore a traiter.
+  Neuvieme lot livre : neuf lectures de l'onglet Politiques (catalogue,
+  compteurs, repartitions, utilisateurs, actions recentes/regroupees, suivi,
+  chronologie et pagination) isolees par operation. Requetes et regles conservees ;
+  comparaison avec/sans donnees et pendant transaction concurrente testee.
+  Benchmark synthetique : `tools/benchmark_dashboard_live_reads.py --policies`.
+  Mesure representative toujours restante.
+  Dixieme lot livre : consultation Sonarr/Radarr dans un snapshot commun pour
+  disponibilite, latence, derniers compteurs et series quotidiennes. Collecte
+  et purge inchangees ; sans serveur ARR, aucune connexion supplementaire.
+  Six plages, valeurs absentes et transaction concurrente testees ; benchmark
+  `tools/benchmark_dashboard_live_reads.py --arr`. Mesure representative restante.
+  Onzieme lot livre : liste Serveurs, compteur et page Bibliotheques sur
+  snapshots de lecture independants. Tris, pagination, types normalises et
+  compteurs distincts preserves ; comparaison pendant transaction concurrente,
+  cas vides et absence d'ecriture testes. Benchmark :
+  `tools/benchmark_dashboard_live_reads.py --server-pages`.
+  Validation representative encore a traiter.
+  Douzieme lot livre : cinq lectures de la fiche serveur (detail, bibliotheques,
+  utilisateurs et compteurs) sur snapshots independants. Perimetre par serveur,
+  comptes multiples rattaches a un utilisateur, pagination et serveur absent
+  testes pendant transaction concurrente. Benchmark :
+  `tools/benchmark_dashboard_live_reads.py --server-detail`.
+  Validation representative restante. Controle general de fabrique SQLite en
+  echec hors lot : connexions directes dans `app/diagnose_stream_policies.py`
+  et `app/core/backup.py`, a qualifier avant de modifier ces parcours.
+  Treizieme lot livre : chargements des pages Campagnes et Modeles de
+  communication isoles chacun dans un snapshot de lecture. Traductions,
+  pieces jointes, tri, pagination et editeurs conserves ; enregistrements et
+  envois inchanges. Comparaison pendant transaction concurrente et cas vides
+  testes. Benchmark : `tools/benchmark_dashboard_live_reads.py --communication-pages`.
+  Validation representative toujours restante.
+  Quatorzieme lot livre : detail de l'historique et configuration Communications
+  sur snapshots de lecture independants. Message archive ou reconstruit,
+  substitutions historiques, masquage des secrets et compteurs de file preserves ;
+  comparaison pendant transaction concurrente et cas absents/vides testes.
+  Benchmark : `tools/benchmark_dashboard_live_reads.py --communication-details`.
+  Validation representative toujours restante.
+  Quinzieme lot livre : tableau d'acces de la fiche utilisateur sur snapshot
+  commun aux serveurs et bibliotheques. Selection du compte le plus renseigne,
+  droits des comptes lies et options de chargement preserves ; aucun snapshot
+  lorsque les deux listes sont inutiles. Lectures utilisees par l'enregistrement
+  conservees sur leur parcours actuel. Comparaison concurrente et benchmark :
+  `tools/benchmark_dashboard_live_reads.py --user-access`.
+  Validation representative toujours restante.
+  Seizieme lot livre : historique des notifications de la fiche utilisateur
+  (compteurs et pages email/Discord) dans un snapshot commun. Pagination
+  independante, libelles et ordre conserves ; aucun snapshot si desactive.
+  Comparaison pendant transaction concurrente et utilisateurs absents testes.
+  Benchmark : `tools/benchmark_dashboard_live_reads.py --user-notifications`.
+  Validation representative toujours restante.
+  Dix-septieme lot livre : affichage du parrainage et noms des comptes fusionnes
+  sur snapshots independants. Compteurs, liste des filleuls, parrain de repli,
+  tri et deduplication des noms conserves ; actions de parrainage inchangees.
+  Comparaison pendant transaction concurrente et utilisateurs absents testes.
+  Benchmark : `tools/benchmark_dashboard_live_reads.py --user-referrals`.
+  Validation representative toujours restante.
+  Dix-huitieme lot livre : politiques actives affichees sur la fiche utilisateur
+  dans un snapshot commun aux identites et regles. Portee, fournisseur, ordre
+  et libelles conserves ; application des restrictions inchangee. Comparaison
+  pendant transaction concurrente, utilisateur absent et absence d'ecriture testes.
+  Benchmark : `tools/benchmark_dashboard_live_reads.py --user-policies`.
+  Validation representative toujours restante.
+  Dix-neuvieme lot livre : utilisateur et candidats de fusion charges dans un
+  snapshot commun, ferme avant calcul des scores. Classement et limites
+  conserves ; action de fusion inchangee. Comparaison pendant transaction
+  concurrente et utilisateur absent testes. Benchmark de la phase de lecture :
+  `tools/benchmark_dashboard_live_reads.py --merge-candidates`.
+  Validation representative toujours restante.
+  Vingtieme lot livre : prochaines taches et resume des abonnements du dashboard
+  sur snapshots independants. Tri, compteurs, repartition et graphique conserves ;
+  tables optionnelles absentes et transaction concurrente testees, sans ecriture.
+  Benchmark : `tools/benchmark_dashboard_live_reads.py --dashboard-summaries`.
+  Validation representative toujours restante.
+  Vingt-et-unieme lot livre : suivi personnel du portail dans un snapshot
+  commun aux periodes, historique et repartitions. Isolation par utilisateur,
+  deduplication, durees et masquage IP conserves ; autorisations de route
+  inchangees. Comparaison pendant transaction concurrente et utilisateur absent
+  testes. Benchmark : `tools/benchmark_dashboard_live_reads.py --personal-monitoring`.
+  Validation representative toujours restante.
 - [ ] 2. Liberer les threads web : executer les operations longues dans des jobs
   bornes, avec reponse rapide, suivi de progression et reprise idempotente.
   Prioriser demandes medias et recuperations lentes ; verifier qu'une operation
@@ -172,6 +273,12 @@ regressions fonctionnelles et de securite. Aucun changement d'hebergement ni
 migration de moteur de base n'est requis par cette liste.
 
 ## Validation apres deploiement
+
+- [ ] Indicateur de mise a jour : verifier la connexion GitHub depuis le conteneur,
+  la detection via check_update et le badge apres rechargement de page. Definir
+  si le signal doit suivre main/INFO ou une image effectivement publiee ;
+  voir `docs/audit-update-badge-2026-10-20.md`. Traduction des infobulles et
+  indication de fraicheur du dernier controle a etudier.
 
 - [ ] Communications : verifier les traductions de l'historique, des anciens
   envois (`expiration_date_change`) et des notifications en attente.

@@ -10,6 +10,7 @@ notifications across restarts and to keep older dashboards stable.
 """
 
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 import json
 from datetime import date, datetime
@@ -56,6 +57,7 @@ def _parse_payload(payload_raw) -> dict:
         data = json.loads(payload_raw)
         return data if isinstance(data, dict) else {}
     except Exception:
+        log_handled_failure("communications.decode_expiration_payload")
         return {}
 
 

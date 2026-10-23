@@ -203,6 +203,7 @@
         try {
           data = JSON.parse(rawText);
         } catch (_) {
+          console.error("[vodum] user action response decoding failed");
           showResult("error", rawText || config.invalid_json_response || "Invalid JSON response");
           return;
         }
@@ -498,6 +499,7 @@
         (config.fields || []).forEach(([label, key]) => appendPreviewRow(label, data.result?.[key], data.sources?.[key]));
         appendChangeList(data.changes);
       } catch (error) {
+        console.error("[vodum] user profile preview failed");
         if (previewError) {
           previewError.textContent = `${config.preview_error || "Preview error"}: ${error.message || error}`;
           previewError.classList.remove("hidden");

@@ -1,6 +1,7 @@
 """Bound application logs by both age and disk usage."""
 import re
 import time
+import sys
 from datetime import datetime
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
@@ -115,8 +116,30 @@ class RetentionFileHandler(RotatingFileHandler):
         except Exception:
             self.handleError(record)
         # A cleanup failure must not prevent recording the original event.
-        super().emit(record)
+        try:
+            super().emit(record)
+        except Exception:
+            self.handleError(record)
         try:
             self.maintain()
         except Exception:
             self.handleError(record)
+
+    def handleError(self, record):
+        # Logging must not break the operation or disappear when Python's
+        # logging.raiseExceptions is disabled in production. Docker captures
+        # stderr even when the log volume is full or unwritable.
+        now = time.monotonic()
+        previous = getattr(self, "_last_stderr_failure", None)
+        if previous is not None and now - previous < 60:
+            return
+        self._last_stderr_failure = now
+        exc_type = sys.exc_info()[0]
+        try:
+            sys.stderr.write(
+                "VODUM LOGGING FAILURE | error_type="
+                + (exc_type.__name__ if exc_type else "unknown")
+                + " | unable to write or maintain application logs; check log volume and permissions\n"
+            )
+        except (OSError, ValueError):
+            pass  # No writable logging destination remains.

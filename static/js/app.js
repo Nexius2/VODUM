@@ -169,7 +169,7 @@ async function apiPost(url, body = {}) {
   }
   if (!contentType.includes("application/json")) {
     const text = await response.text().catch(() => "");
-    return { ok: true, raw: text };
+    throw new Error(`POST ${url} -> Expected JSON, got ${contentType}\n${text}`);
   }
   return response.json();
 }
@@ -530,6 +530,7 @@ document.body.addEventListener("htmx:afterSwap", function (event) {
         box.classList.add("hidden");
       }
     } catch {
+      console.error("[vodum] task activity refresh failed");
       lastHadActivity = false;
       box.classList.add("hidden");
     } finally {
@@ -598,6 +599,13 @@ window.vodumFlash = function(category, message, autoHideMs = 4000) {
 
   let showTimer = null;
   let safetyTimer = null;
+  const mobileLayout = () => window.matchMedia("(max-width: 767px)").matches;
+  const foregroundRequests = new Set();
+
+  // Cards and other JS navigations do not necessarily dispatch an anchor click.
+  window.vodumShowMobileNavigationLoader = () => {
+    if (mobileLayout()) show(0);
+  };
 
   function reveal() {
     loader.hidden = false;
@@ -634,6 +642,25 @@ window.vodumFlash = function(category, message, autoHideMs = 4000) {
     document.documentElement.removeAttribute("aria-busy");
   }
 
+  // Only user-triggered HTMX requests should show feedback; polling stays quiet.
+  document.addEventListener("htmx:beforeSend", (event) => {
+    const detail = event.detail || {};
+    const trigger = detail.requestConfig?.triggeringEvent;
+    if (!mobileLayout() || !trigger || !["click", "submit", "change", "input", "keydown"].includes(trigger.type)) return;
+    if (detail.elt?.closest("[data-no-navigation-loader]")) return;
+    foregroundRequests.add(detail.xhr);
+    show(0);
+  });
+  document.addEventListener("htmx:afterRequest", (event) => {
+    if (!foregroundRequests.delete(event.detail?.xhr)) return;
+    if (!foregroundRequests.size) hide();
+  });
+
+  // Also covers scripted redirects, native form.submit() and reloads on mobile.
+  window.addEventListener("beforeunload", () => {
+    if (mobileLayout()) show(0);
+  });
+
   function isHtmxManaged(element) {
     if (!element) return false;
     if (element.matches("[hx-get], [hx-post], [hx-put], [hx-patch], [hx-delete], [data-hx-get], [data-hx-post], [data-hx-put], [data-hx-patch], [data-hx-delete]")) {
@@ -664,7 +691,10 @@ window.vodumFlash = function(category, message, autoHideMs = 4000) {
     show();
   }, true);
 
-  window.addEventListener("pageshow", hide);
+  window.addEventListener("pageshow", () => {
+    foregroundRequests.clear();
+    hide();
+  });
   window.addEventListener("pagehide", () => clearTimeout(showTimer));
 })();
 

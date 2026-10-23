@@ -11,6 +11,7 @@ from core.usage_risk import build_usage_risk_report
 from web.helpers import table_exists
 
 
+@isolated_read_operation
 def get_dashboard_next_tasks(db):
     if not table_exists(db, "tasks"):
         return {
@@ -51,6 +52,7 @@ def get_dashboard_next_tasks(db):
         "error": int((row["error"] if row else 0) or 0),
     }
 
+@isolated_read_operation
 def get_dashboard_subscription_summary(db):
     kills_7d = 0
     if table_exists(db, "stream_enforcements"):

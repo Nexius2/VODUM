@@ -9,6 +9,7 @@ check_servers.py - VERSION TXT LOGGING
 ✓ task_logs() seulement pour START / SUCCESS / ERROR
 ✓ Compatibilité run(task_id, db=None)
 """
+from core.error_reporting import log_handled_failure
 
 from core.arr_connections import arr_get_status
 from core.jellyfin_auth import jellyfin_headers
@@ -172,6 +173,7 @@ def check_generic_server(server_row, url):
         r = server_http_session(server_row, retry_reads=True).get(url, timeout=5)
         return "up" if r.status_code < 400 else "down"
     except Exception:
+        log_handled_failure("servers.check_http_availability", server_id=server_row.get("id"))
         return "down"
 
 

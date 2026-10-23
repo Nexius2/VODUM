@@ -2364,7 +2364,7 @@
   "portal_requests_unavailable": "Impossible de vérifier tous les serveurs. Aucune nouvelle demande envoyée ; réessayez plus tard.",
   "portal_requests_busy": "Ce média est en cours de vérification. Réessayez dans un instant.",
   "portal_requests_present": "Ce média est déjà disponible dans vos bibliothèques.",
-  "portal_requests_pending": "Recherche déjà en cours : ce média est déjà présent dans Sonarr/Radarr.",
+  "portal_requests_pending": "Ce média est déjà pris en charge par nos outils de recherche et sera prochainement disponible en streaming.",
   "portal_requests_added": "Demande ajoutée : la recherche a été lancée.",
   "portal_requests_no_match": "Aucun ARR lié ne correspond aux critères de ce média et de cette résolution.",
   "portal_requests_not_configured": "Les paramètres de demande ARR doivent être configurés par l’administrateur.",

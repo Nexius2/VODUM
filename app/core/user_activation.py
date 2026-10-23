@@ -1,4 +1,5 @@
 """Personal activation with immutable identity binding and resumable server intent."""
+from core.error_reporting import log_handled_failure
 import hashlib
 import json
 import secrets
@@ -229,10 +230,12 @@ def process_server(db, activation, sid, identifier):
             state = 'ready' if found else 'error'
         error = None if state != 'error' else error
     except ValueError as exc:
+        log_handled_failure("activation.validate_server_access", server_id=sid)
         if str(exc) in {'activation_reauthenticate', 'activation_configuration_error', 'activation_identity_conflict'}:
             error = str(exc)
     except Exception:
-        # Provider exceptions can contain credentials/URLs; never put them in the UI or logs.
+        # Keep provider exception messages out of the UI and logs.
+        log_handled_failure("activation.apply_server_access", server_id=sid)
         error = 'activation_server_error'
     finally:
         db.execute('UPDATE user_activation_servers SET state=?,error_key=?,lease_until=0,lease_id=NULL WHERE activation_id=? AND server_id=? AND lease_id=?',

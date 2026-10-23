@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 from datetime import UTC, datetime
 import json
@@ -257,6 +258,7 @@ def register(app):
                         "linked" if get_admin_auth_identity(db, "plex") else "skipped"
                     )
                 except Exception:
+                    log_handled_failure("setup.load_plex_identity")
                     state["plex_auth"] = "skipped"
 
             elif step == 4:
@@ -527,6 +529,7 @@ def register(app):
                     except (PlexDiscoveryError, ValueError):
                         pass
         except Exception:
+            log_handled_failure("setup.load_plex_discovery")
             page_data["plex_auth_identity"] = None
             page_data["plex_suggestions"] = []
         communications_available = _communications_available(settings, state)

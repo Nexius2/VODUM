@@ -1,10 +1,13 @@
+from core.error_reporting import log_handled_failure
 import os
 import json
 from datetime import datetime, timezone
 import requests
 from logging_utils import get_logger
 from core.app_paths import update_status_path
-import re
+import tempfile
+import time
+from utils.version import load_app_version, is_valid_app_version, app_version_tuple
 
 
 logger = get_logger("task_check_update")
@@ -12,7 +15,6 @@ logger = get_logger("task_check_update")
 GITHUB_REPO = "Nexius2/VODUM"   
 GITHUB_BRANCH = "main"       
 
-LOCAL_INFO_PATH = "/app/INFO"
 
 
 def _read_version_from_info_text(text: str) -> str:
@@ -23,38 +25,10 @@ def _read_version_from_info_text(text: str) -> str:
 
 
 def _read_local_version() -> str:
-    if not os.path.exists(LOCAL_INFO_PATH):
-        return "dev"
-    try:
-        with open(LOCAL_INFO_PATH, "r", encoding="utf-8", errors="ignore") as f:
-            return _read_version_from_info_text(f.read()) or "dev"
-    except Exception:
-        return "dev"
-
-def _normalize_version_str(v: str) -> str:
-    return (v or "").strip()
-
+    return load_app_version(fallback="dev")
 
 def _parse_version_tuple(v: str):
-    s = _normalize_version_str(v)
-    if not s or s.lower() == "dev":
-        return None
-
-    # enlève un éventuel "v" en début
-    if s.lower().startswith("v"):
-        s = s[1:].strip()
-
-    # ex: "26.02.10 b1841"
-    m = re.match(r"^(\d+)\.(\d+)\.(\d+)(?:\s*[ -]?\s*b(\d+))?$", s, re.IGNORECASE)
-    if not m:
-        return None
-
-    yy = int(m.group(1))
-    mm = int(m.group(2))
-    dd = int(m.group(3))
-    build = int(m.group(4)) if m.group(4) else 0
-
-    return (yy, mm, dd, build)
+    return app_version_tuple(v)
 
 
 def _is_update_available(local_v: str, remote_v: str) -> bool:
@@ -64,8 +38,8 @@ def _is_update_available(local_v: str, remote_v: str) -> bool:
     if local_t is not None and remote_t is not None:
         return remote_t > local_t
 
-    # fallback (comportement historique)
-    return bool(remote_v and _normalize_version_str(remote_v) != _normalize_version_str(local_v))
+    # Unknown versions cannot establish that the remote build is newer.
+    return False
 
 
 def _raw_info_url() -> str:
@@ -75,13 +49,32 @@ def _raw_info_url() -> str:
 
 
 def _write_status(payload: dict):
+    temporary = None
     try:
         status_file = update_status_path()
         status_file.parent.mkdir(parents=True, exist_ok=True)
-        with status_file.open("w", encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=status_file.parent,
+                                         prefix=".update-status-", suffix=".tmp", delete=False) as f:
+            temporary = f.name
             json.dump(payload, f, ensure_ascii=False, indent=2)
+        for attempt in range(5):
+            try:
+                os.replace(temporary, status_file)
+                break
+            except PermissionError:
+                # Windows can deny replacement while another process reads.
+                if os.name != 'nt' or attempt == 4:
+                    raise
+                time.sleep(0.01 * (2 ** attempt))
     except Exception as e:
         logger.error(f"Failed writing {update_status_path()}: {e}")
+        raise RuntimeError('Unable to publish update status') from e
+    finally:
+        if temporary:
+            try:
+                os.unlink(temporary)
+            except OSError:
+                pass
 
 
 # ✅ IMPORTANT : le moteur appelle run(task_id, db) => il faut accepter 2 args
@@ -100,7 +93,7 @@ def run(task_id: int = None, db=None):
         }
         _write_status(payload)
         logger.warning("check_update: GITHUB_REPO not configured")
-        return
+        raise RuntimeError('Update source is not configured')
 
     url = _raw_info_url()
 
@@ -115,16 +108,23 @@ def run(task_id: int = None, db=None):
         "source": url,
     }
 
+    previous = {}
     status_file = update_status_path()
     if status_file.exists():
         try:
             with status_file.open("r", encoding="utf-8") as f:
                 previous = json.load(f) or {}
+            if not isinstance(previous, dict):
+                previous = {}
 
-            payload["update_available_since"] = previous.get("update_available_since")
-            payload["update_pending_days"] = int(previous.get("update_pending_days") or 0)
+            if (previous.get('source') == url
+                    and _is_update_available(local_version, previous.get('latest_version'))
+                    and previous.get('update_available') is True):
+                payload["update_available_since"] = previous.get("update_available_since")
+                payload["update_pending_days"] = max(0, int(previous.get("update_pending_days") or 0))
 
         except Exception:
+            log_handled_failure("updates.read_previous_status")
             pass
 
     try:
@@ -132,6 +132,10 @@ def run(task_id: int = None, db=None):
         r.raise_for_status()
 
         latest = _read_version_from_info_text(r.text)
+        if not is_valid_app_version(latest):
+            raise ValueError("Remote INFO contains no valid VERSION")
+        if not is_valid_app_version(local_version):
+            raise ValueError("Local version is unknown")
         payload["latest_version"] = latest or None
         payload["update_available"] = _is_update_available(local_version, latest)
 
@@ -153,6 +157,7 @@ def run(task_id: int = None, db=None):
                 )
 
             except Exception:
+                log_handled_failure("updates.read_first_seen_date")
                 payload["update_available_since"] = now.isoformat()
                 payload["update_pending_days"] = 0
 
@@ -169,11 +174,24 @@ def run(task_id: int = None, db=None):
             logger.info(f"No update: local={local_version} remote={latest}")
 
     except requests.exceptions.RequestException as e:
-        payload["error"] = str(e)
+        payload["error"] = str(e) or type(e).__name__
         logger.warning(f"Update check unavailable: {e}")
 
     except Exception as e:
-        payload["error"] = str(e)
+        payload["error"] = str(e) or type(e).__name__
         logger.error(f"Update check failed: {e}")
 
+    if payload['error']:
+        # A temporary outage does not cancel an already confirmed update.
+        # Recompare against this installation so upgrades clear obsolete badges.
+        latest = previous.get('latest_version')
+        if previous.get('source') == url and is_valid_app_version(latest):
+            payload['latest_version'] = latest
+            payload['update_available'] = _is_update_available(local_version, latest)
+        if not payload['update_available']:
+            payload['update_available_since'] = None
+            payload['update_pending_days'] = 0
+
     _write_status(payload)
+    if payload['error']:
+        raise RuntimeError('Update check unavailable; see update status')

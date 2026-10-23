@@ -1,6 +1,7 @@
 """Provider-neutral disk cache for monitoring artwork."""
 
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 import hashlib
 import json
@@ -39,6 +40,7 @@ def _remove_cache_pair(img_path: Path, meta_path: Path) -> None:
         try:
             path.unlink(missing_ok=True)
         except OSError:
+            log_handled_failure("artwork.remove_cache_file")
             pass
 
 
@@ -67,6 +69,7 @@ def read_artwork_cache(cache_key: str, *, allow_stale: bool = False) -> dict | N
         with img_path.open("rb") as handle:
             detected_content_type = detect_image_content_type(handle.read(32))
     except OSError:
+        log_handled_failure("artwork.read_cache_file")
         return None
     if not detected_content_type:
         _remove_cache_pair(img_path, meta_path)

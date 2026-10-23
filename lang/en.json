@@ -2364,7 +2364,7 @@
   "portal_requests_unavailable": "Unable to check all servers. No new request was sent; try again later.",
   "portal_requests_busy": "This media is being checked. Try again shortly.",
   "portal_requests_present": "This media is already available in your libraries.",
-  "portal_requests_pending": "Search already in progress: this media is already in Sonarr/Radarr.",
+  "portal_requests_pending": "This title is already being handled by our search tools and will be available to stream soon.",
   "portal_requests_added": "Request added: the search has started.",
   "portal_requests_no_match": "No linked ARR matches this media and resolution.",
   "portal_requests_not_configured": "An administrator must configure the ARR request defaults.",

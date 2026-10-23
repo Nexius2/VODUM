@@ -54,9 +54,9 @@ def extract_machine_identifier(session: dict) -> str:
             value = raw.get(key)
             if value:
                 return str(value).strip().lower()
-    except Exception as exc:
-        if is_debug_mode_enabled():
-            logger.debug("[smart_household] failed to extract machine identifier: %s", exc)
+    except Exception:
+        from core.error_reporting import log_handled_failure
+        log_handled_failure("stream_enforcer.extract_machine_identifier")
     return ""
 
 

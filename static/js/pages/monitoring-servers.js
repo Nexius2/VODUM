@@ -4,6 +4,7 @@
   try {
     config = JSON.parse(configNode ? configNode.textContent || "{}" : "{}");
   } catch (error) {
+    console.error("[vodum] monitoring server configuration failed");
     config = {};
   }
 

@@ -108,7 +108,7 @@
     const node = document.getElementById("users-page-config");
     if (!node) return {};
     try { return JSON.parse(node.textContent || "{}"); }
-    catch (_) { return {}; }
+    catch (_) { console.error("[vodum] user creation configuration failed"); return {}; }
   }
 
   const config = cfg();
@@ -409,6 +409,7 @@
           });
         }
       } catch (_) {
+        console.error("[vodum] user library lookup failed");
         if (libsBox) libsBox.innerHTML = `<div class="text-red-400">${escapeHtml(t("failedLibraries", "Unable to load libraries"))}</div>`;
       }
     });
@@ -500,6 +501,7 @@
       let data;
       try { data = JSON.parse(raw); }
       catch (_) {
+        console.error("[vodum] user creation response decoding failed");
         data = {
           ok: false,
           error: raw && !raw.toLowerCase().includes("<!doctype html") ? raw : t("serverCreateError", "Server error during user creation. Check backend logs."),
@@ -517,6 +519,7 @@
       feedback(message, "success");
       setTimeout(() => window.location.reload(), 800);
     } catch (error) {
+      console.error("[vodum] user creation failed");
       feedback(error.message || String(error), "error");
     } finally {
       if (button) button.disabled = false;
@@ -548,6 +551,7 @@
         if (!state.servers.length) await initServers();
         window.VodumCreateUser.open();
       } catch (error) {
+        console.error("[vodum] user server lookup failed");
         const message = t("failedServers", "Unable to load servers: {error}").replace("{error}", error.message || error);
         if (window.vodumFlash) window.vodumFlash("error", message);
       }

@@ -13,12 +13,14 @@
   try {
     incompatible = JSON.parse(configNode.textContent || "{}");
   } catch (error) {
+    console.error("[vodum] migration compatibility configuration failed");
     incompatible = {};
   }
 
   try {
     messages = JSON.parse(messagesNode ? messagesNode.textContent || "{}" : "{}");
   } catch (error) {
+    console.error("[vodum] migration translation configuration failed");
     messages = {};
   }
 

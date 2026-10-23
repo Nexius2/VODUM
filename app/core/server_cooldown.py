@@ -77,6 +77,11 @@ def should_skip_unreachable_server(server_row) -> bool:
 
 
 def mark_server_unreachable(db, server_id: int, reason: str, cooldown_seconds: int = DEFAULT_COOLDOWN_SECONDS) -> None:
+    from logging_utils import get_logger
+    get_logger("servers").warning(
+        "Server marked unreachable | server_id=%s | cooldown_seconds=%s",
+        int(server_id), int(cooldown_seconds),
+    )
     now = datetime.now(timezone.utc)
     cooldown_until = _dt_sqlite(now + timedelta(seconds=cooldown_seconds))
 

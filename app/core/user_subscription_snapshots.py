@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 import json
 from collections.abc import Callable
@@ -9,6 +10,7 @@ def _parse_json_list(raw: str):
         value = json.loads(raw or "[]")
         return value if isinstance(value, list) else []
     except Exception:
+        log_handled_failure("subscriptions.decode_policy_snapshot")
         return []
 
 
@@ -25,6 +27,7 @@ def delete_locked_subscription_policies(db, vodum_user_id: int):
         try:
             rule = json.loads(row["rule_value_json"] or "{}")
         except Exception:
+            log_handled_failure("policies.decode_subscription_rule")
             rule = {}
         if rule.get("locked") and rule.get("subscription_name"):
             db.execute(

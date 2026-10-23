@@ -4,6 +4,7 @@
   try {
     config = JSON.parse(configNode ? configNode.textContent || "{}" : "{}");
   } catch (error) {
+    console.error("[vodum] monitoring activity configuration failed");
     config = {};
   }
 
@@ -181,7 +182,7 @@
     // Chart.js owns the backing-store size and applies devicePixelRatio.
     // Writing canvas.width manually here made mobile charts render at roughly
     // half the available CSS width on high-density screens.
-    try { chart.resize(w, h); chart.update("none"); } catch (_) {}
+    try { chart.resize(w, h); chart.update("none"); } catch (_) { console.error("[vodum] monitoring chart resize failed");}
   }
 
   function manualResizeAll(list) {

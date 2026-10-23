@@ -172,6 +172,7 @@
       const task = (data.tasks || []).find((item) => item.name === "auto_backup");
       return Boolean(task && ["queued", "running"].includes(task.status));
     } catch (error) {
+      console.error("[vodum] backup task status failed");
       return null;
     }
   }
@@ -312,6 +313,7 @@
           statusTimer = window.setInterval(pollJobStatusOnce, 2000);
         }
       } catch (error) {
+        console.error("[vodum] backup job status failed");
         // Status polling is best-effort.
       } finally {
         window.clearTimeout(timeout);
@@ -447,6 +449,7 @@
           await refreshBackupListOnce(controller.signal);
         }
       } catch (error) {
+        console.error("[vodum] backup list refresh failed");
         // A transient failure must not create overlapping polls or imply completion.
       } finally {
         window.clearTimeout(timeout);

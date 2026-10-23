@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import date, datetime
 from urllib.parse import urlsplit
+from db_manager import isolated_read_operation
 
 from core.subscription_value_format import format_subscription_value
 
@@ -307,6 +308,7 @@ def load_portal_media_access(db, vodum_user_id: int) -> list[dict]:
     return list(accounts.values())
 
 
+@isolated_read_operation
 def load_portal_monitoring(db, vodum_user_id: int) -> dict:
     periods = {}
     for key, modifier in (("last_24h", "-24 hours"), ("last_7d", "-7 days"), ("last_30d", "-30 days")):

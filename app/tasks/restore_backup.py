@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 import os
 import shutil
 import sqlite3
@@ -242,6 +243,7 @@ def _safe_restore_from_path(backup_path: Path, db) -> None:
             try:
                 pre_restore_path.unlink()
             except Exception:
+                log_handled_failure("backup.remove_previous_restore_copy")
                 pass
 
         if db_path.exists():
@@ -261,6 +263,7 @@ def _safe_restore_from_path(backup_path: Path, db) -> None:
         try:
             db.close()
         except Exception:
+            log_handled_failure("backup.close_current_database")
             pass
 
         _reset_tasks_engine_db_instance()
@@ -271,6 +274,7 @@ def _safe_restore_from_path(backup_path: Path, db) -> None:
                 try:
                     p.unlink()
                 except Exception:
+                    log_handled_failure("backup.remove_database_sidecar")
                     pass
 
         tmp_path = db_path.with_suffix(db_path.suffix + ".restore_tmp")
@@ -278,6 +282,7 @@ def _safe_restore_from_path(backup_path: Path, db) -> None:
             try:
                 tmp_path.unlink()
             except Exception:
+                log_handled_failure("backup.remove_temporary_database")
                 pass
 
         shutil.copy2(str(restore_db_path), str(tmp_path))
@@ -291,6 +296,7 @@ def _safe_restore_from_path(backup_path: Path, db) -> None:
                 try:
                     p.unlink()
                 except Exception:
+                    log_handled_failure("backup.remove_restored_sidecar")
                     pass
 
         try:
@@ -313,6 +319,7 @@ def _safe_restore_from_path(backup_path: Path, db) -> None:
             try:
                 restored_db.close()
             except Exception:
+                log_handled_failure("backup.close_restored_database")
                 pass
 
             _reset_tasks_engine_db_instance()
@@ -329,6 +336,7 @@ def _safe_restore_from_path(backup_path: Path, db) -> None:
                         try:
                             db_path.unlink()
                         except Exception:
+                            log_handled_failure("backup.remove_failed_database")
                             pass
                     shutil.copy2(str(pre_restore_path), str(db_path))
 
@@ -358,12 +366,14 @@ def _safe_restore_from_path(backup_path: Path, db) -> None:
                 try:
                     tmp_path.unlink()
                 except Exception:
+                    log_handled_failure("backup.cleanup_temporary_database")
                     pass
 
             if pre_restore_key_path.exists():
                 try:
                     pre_restore_key_path.unlink()
                 except Exception:
+                    log_handled_failure("backup.cleanup_temporary_key")
                     pass
 
     finally:
