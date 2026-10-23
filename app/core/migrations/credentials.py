@@ -1,6 +1,7 @@
 """Reconcile Jellyfin credential delivery with the Communications queue."""
 
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 import json
 
@@ -66,6 +67,7 @@ def reconcile_credentials_delivery(db) -> int:
             WHERE result_json LIKE '%credentials_delivery_job_key%'"""
         ) or []
     except Exception:
+        log_handled_failure("migrations.load_credential_deliveries")
         return 0
 
     for raw in rows:
@@ -86,6 +88,7 @@ def reconcile_credentials_delivery(db) -> int:
                 (job_key,),
             )
         except Exception:
+            log_handled_failure("migrations.check_credential_delivery")
             continue
         if not scheduled:
             continue

@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 # Auto-split from app.py (keep URLs/endpoints intact)
 
 from flask import render_template, request, redirect, url_for, flash, jsonify
@@ -307,6 +308,7 @@ def register(app):
                     (int(user["subscription_template_id"]),),
                 )
         except Exception:
+            log_handled_failure("users.load_subscription_template")
             subscription_template = None
 
         user["subscription_template_name"] = subscription_template["name"] if subscription_template else None

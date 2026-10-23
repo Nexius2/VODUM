@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 # Auto-split from app.py (keep URLs/endpoints intact)
 from datetime import datetime
 from pathlib import Path
@@ -109,6 +110,7 @@ def register(app):
             return True, f"OK (found_tables={len(tables)})"
 
         except Exception as e:
+            log_handled_failure("backup.validate_database")
             return False, f"{type(e).__name__}: {e}"
 
 
@@ -301,6 +303,7 @@ def register(app):
                 )
                 flash(t("backup_settings_saved"), "success")
             except Exception as e:
+                log_handled_failure("backup.save_settings")
                 flash(t("backup_settings_error").format(error=str(e)), "error")
 
         # ───────────────────────────────

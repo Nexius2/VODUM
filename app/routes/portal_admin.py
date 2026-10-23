@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 from core.portal_media_requests import has_saved_request_defaults
 from mailing_utils import build_portal_login_url
 from flask import abort, current_app, flash, redirect, render_template, request, url_for, jsonify
@@ -62,6 +63,7 @@ def register(app):
                 "SELECT COUNT(*) AS cnt FROM portal_messages WHERE sender_type='user' AND read_by_admin=0"
             ) if enabled else None
         except Exception:
+            log_handled_failure("portal.load_unread_count")
             return {"portal_enabled": False, "unread_total": 0}
         return {
             "portal_enabled": enabled,
@@ -169,6 +171,7 @@ def register(app):
             except ValueError as exc:
                 flash(str(exc), 'error')
             except Exception:
+                log_handled_failure("portal.queue_activation_email")
                 flash('portal_invite_send_failed', 'error')
             return redirect(url_for('user_detail', user_id=user_id))
         user = db.query_one("SELECT id,email,username FROM vodum_users WHERE id=?", (user_id,))

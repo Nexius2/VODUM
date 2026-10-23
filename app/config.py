@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 import os
 import secrets
 from datetime import timedelta
@@ -27,6 +28,7 @@ def _get_secret_key() -> str:
             if value:
                 return value
     except Exception:
+        log_handled_failure("config.read_session_key")
         pass
 
     secret_key = secrets.token_hex(32)
@@ -37,8 +39,10 @@ def _get_secret_key() -> str:
         try:
             os.chmod(key_file, 0o600)
         except Exception:
+            log_handled_failure("config.restrict_session_key_permissions")
             pass
     except Exception:
+        log_handled_failure("config.persist_session_key")
         return secret_key
 
     return secret_key
@@ -57,6 +61,7 @@ def _read_settings_from_db(db_path: str) -> dict:
         ).fetchone()
         return dict(row) if row else {}
     except Exception:
+        log_handled_failure("config.read_cookie_settings")
         return {}
     finally:
         if conn is not None:

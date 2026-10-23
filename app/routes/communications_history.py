@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 import json
 
 from flask import jsonify, render_template, request
@@ -236,6 +237,7 @@ def register_history_routes(app):
             try:
                 payload = json.loads(r.get("payload_json") or "{}")
             except Exception:
+                log_handled_failure("communications.decode_history_payload")
                 payload = {}
             if not isinstance(payload, dict):
                 payload = {}

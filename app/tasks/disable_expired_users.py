@@ -19,6 +19,7 @@ NB: Les comptes utilisateurs restent chez Plex/Jellyfin, seuls les accès sont r
 """
 
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 from datetime import date
 import json
@@ -47,6 +48,7 @@ def _purge_expired_subscription_policies(db) -> int:
         try:
             rule = json.loads(r["rule_value_json"] or "{}")
         except Exception:
+            log_handled_failure("subscriptions.decode_expired_policy")
             rule = {}
 
         if isinstance(rule, dict) and rule.get("system_tag") == SYSTEM_TAG:

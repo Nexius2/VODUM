@@ -1,6 +1,7 @@
 """Operational controls for migration campaigns."""
 
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 import json
 
@@ -117,6 +118,7 @@ def set_user_excluded(db, campaign_id: int, migration_user_id: int, excluded: bo
     try:
         options = json.loads(row["options_json"] or "{}")
     except Exception:
+        log_handled_failure("migrations.decode_exclusion_options")
         options = {}
     if excluded:
         options["eligibility_before_exclusion"] = str(row["eligibility"] or "ready")

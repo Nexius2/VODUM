@@ -1,3 +1,6 @@
+from db_manager import isolated_read_operation
+
+
 LIBRARY_TYPE_SQL = """
                 CASE LOWER(TRIM(COALESCE(l.type, '')))
                     WHEN 'tvshows' THEN 'shows'
@@ -54,6 +57,7 @@ SERVER_DETAIL_LIBRARY_COLUMNS = f"""
 """
 
 
+@isolated_read_operation
 def load_servers_list(db):
     return db.query(
         f"""
@@ -97,6 +101,7 @@ def normalize_libraries_sort(sort: str, order: str) -> tuple[str, str, str]:
     return normalized_sort, normalized_order, clause
 
 
+@isolated_read_operation
 def load_libraries_page(db, *, per_page: int, offset: int, order_clause: str):
     return db.query(
         f"""
@@ -117,11 +122,13 @@ def load_libraries_page(db, *, per_page: int, offset: int, order_clause: str):
     )
 
 
+@isolated_read_operation
 def count_libraries(db) -> int:
     total_row = db.query_one("SELECT COUNT(*) AS total FROM libraries")
     return int(total_row["total"] if total_row and total_row["total"] is not None else 0)
 
 
+@isolated_read_operation
 def load_server_detail(db, server_id: int):
     return db.query_one(
         f"SELECT {SERVER_DETAIL_COLUMNS} FROM servers WHERE id = ?",
@@ -129,6 +136,7 @@ def load_server_detail(db, server_id: int):
     )
 
 
+@isolated_read_operation
 def count_server_libraries(db, server_id: int) -> int:
     total_row = db.query_one(
         "SELECT COUNT(*) AS total FROM libraries WHERE server_id = ?",
@@ -137,6 +145,7 @@ def count_server_libraries(db, server_id: int) -> int:
     return int(total_row["total"] if total_row and total_row["total"] is not None else 0)
 
 
+@isolated_read_operation
 def load_server_libraries(db, server_id: int, *, per_page: int, offset: int):
     return db.query(
         f"""
@@ -155,6 +164,7 @@ def load_server_libraries(db, server_id: int, *, per_page: int, offset: int):
     )
 
 
+@isolated_read_operation
 def count_server_users(db, server_id: int) -> int:
     total_row = db.query_one(
         """
@@ -169,6 +179,7 @@ def count_server_users(db, server_id: int) -> int:
     return int(total_row["total"] if total_row and total_row["total"] is not None else 0)
 
 
+@isolated_read_operation
 def load_server_users(db, server_id: int, *, per_page: int, offset: int):
     return db.query(
         """

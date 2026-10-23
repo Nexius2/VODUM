@@ -532,6 +532,7 @@
     try {
       TEMPLATE_POLICIES = JSON.parse(tpl.policies_json || "[]") || [];
     } catch (e) {
+      console.error("[vodum] subscription template policy decoding failed");
       TEMPLATE_POLICIES = [];
     }
 

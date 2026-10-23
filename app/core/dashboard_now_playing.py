@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from db_manager import isolated_read_operation
 
 def build_now_playing_fragment_key(
     sessions,
@@ -132,6 +133,7 @@ def _sessions(db, window_sql: str, limit: int = 6) -> list[dict]:
     return [dict(row) for row in rows]
 
 
+@isolated_read_operation
 def load_dashboard_now_playing(db, *, live_window_seconds: int = 300) -> dict:
     live_window_sql = f"-{int(live_window_seconds)} seconds"
 

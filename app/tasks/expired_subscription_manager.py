@@ -17,6 +17,7 @@ NOTE:
 """
 
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 import json
 from datetime import date
@@ -239,6 +240,7 @@ def _cleanup_orphan_system_policies(db) -> int:
         try:
             rule = json.loads(r["rule_value_json"] or "{}")
         except Exception:
+            log_handled_failure("subscriptions.decode_orphan_policy")
             rule = {}
         if not isinstance(rule, dict) or rule.get("system_tag") != SYSTEM_TAG:
             continue

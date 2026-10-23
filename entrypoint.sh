@@ -143,16 +143,22 @@ fi
 # 3️⃣.2️⃣ Fix FK legacy (REFERENCES *_old / *__rebuild / *__rebuild_old)
 # - Déclenche si:
 #   a) le dry-run liste des tables à rebuild
-#   b) OU foreign_key_check mentionne un parent avec suffix legacy
+#   b) OU le schema reference un parent avec suffix legacy
 # ---------------------------------------------------------------------------
 
-DRY_OUT="$(python3 /app/migrations/20260201_fix_fk_legacy_suffixes.py "$DB_PATH" --dry-run || true)"
+log INFO "Checking legacy foreign-key repair plan (schema only)"
+DRY_OUT="$(python3 -u /app/migrations/20260201_fix_fk_legacy_suffixes.py "$DB_PATH" --dry-run || true)"
+if [ -n "$DRY_OUT" ]; then
+  printf '%s\n' "$DRY_OUT"
+fi
 
 # Signal 1 : le script voit des refs legacy
 echo "$DRY_OUT" | grep -q "\[DRY\]" && NEED_FIX=1 || NEED_FIX=0
 
-# Signal 2 : sqlite voit des FK cassées vers des tables legacy
-FKC_OUT="$(sqlite3 "$DB_PATH" "PRAGMA foreign_key_check;" 2>/dev/null || true)"
+# Signal 2 : examiner les noms des parents, pas toutes les lignes historiques.
+# Le controle d'integrite complet reste execute apres une reparation effective.
+log INFO "Checking legacy foreign-key parent names (schema only)"
+FKC_OUT="$(sqlite3 "$DB_PATH" < /app/migrations/detect_legacy_foreign_keys.sql)"
 echo "$FKC_OUT" | grep -Eiq "(_old|__rebuild_old|__rebuild)" && NEED_FIX=1 || true
 
 if [ "${NEED_FIX:-0}" = "1" ]; then
@@ -188,7 +194,7 @@ fi
 
 
 log INFO "Starting DB bootstrap"
-python3 /app/db_bootstrap.py 2>&1 | tee -a "$LOG_DIR/entrypoint.log"
+python3 -u /app/db_bootstrap.py 2>&1 | tee -a "$LOG_DIR/entrypoint.log"
 log INFO "DB bootstrap completed"
 
 # ---------------------------------------------------------------------------

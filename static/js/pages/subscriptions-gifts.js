@@ -5,6 +5,7 @@
     try {
       return JSON.parse(node.textContent || "{}");
     } catch (error) {
+      console.error("[vodum] subscription gift configuration failed");
       return {};
     }
   }
@@ -85,6 +86,7 @@
     try {
       users = JSON.parse(jsonEl.textContent || "[]");
     } catch (error) {
+      console.error("[vodum] subscription gift users failed");
       users = [];
     }
 
@@ -212,6 +214,7 @@
         }).join("");
       })
       .catch(function () {
+        console.error("[vodum] subscription gift user lookup failed");
         if (usersBox) usersBox.innerHTML = `<div class="text-red-300 text-sm">${escapeHtml(i18n.requestFailed || "Request failed")}</div>`;
       });
   }
@@ -298,6 +301,7 @@
         }
       })
       .catch(function () {
+        console.error("[vodum] subscription gift submit failed");
         showAlert("error", escapeHtml(i18n.requestFailed || "Request failed"));
       });
   }

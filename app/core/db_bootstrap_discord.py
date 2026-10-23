@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 def ensure_discord_schema(conn, cursor, *, table_exists, ensure_column) -> None:
     ensure_column(cursor, "settings", "discord_enabled", "INTEGER DEFAULT 0")
     ensure_column(cursor, "settings", "discord_bot_token", "TEXT DEFAULT NULL")
@@ -34,6 +35,7 @@ def ensure_discord_schema(conn, cursor, *, table_exists, ensure_column) -> None:
             conn.commit()
             print("Migrated legacy discord_bot_token into discord_bots (Primary bot)")
     except Exception as exc:
+        log_handled_failure("bootstrap.migrate_discord_bot")
         print(f"Discord bots migration skipped: {exc}")
 
     ensure_column(cursor, "settings", "notifications_order", "TEXT DEFAULT 'email'")

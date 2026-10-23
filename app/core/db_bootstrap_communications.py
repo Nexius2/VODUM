@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 def ensure_communications_schema(conn, cursor, *, table_exists, ensure_column) -> None:
     # 2.1.2 Communications (Unified) tables + migration (NEW)
     # -------------------------------------------------
@@ -624,6 +625,7 @@ def ensure_communications_schema(conn, cursor, *, table_exists, ensure_column) -
                     preavis_days = int(r[0]) if r[0] is not None else None
                     relance_days = int(r[1]) if r[1] is not None else None
             except Exception:
+                log_handled_failure("bootstrap.read_legacy_notification_delays")
                 pass
 
             keys = ("preavis", "relance", "fin")
@@ -640,6 +642,7 @@ def ensure_communications_schema(conn, cursor, *, table_exists, ensure_column) -
                             e_body = row[1]
                             e_days = row[2]
                     except Exception:
+                        log_handled_failure("bootstrap.read_legacy_email_template")
                         pass
 
                 d_title = None
@@ -652,6 +655,7 @@ def ensure_communications_schema(conn, cursor, *, table_exists, ensure_column) -
                             d_title = row[0]
                             d_body = row[1]
                     except Exception:
+                        log_handled_failure("bootstrap.read_legacy_discord_template")
                         pass
 
                 # Priority: email content, fallback to discord content
@@ -733,6 +737,7 @@ def ensure_communications_schema(conn, cursor, *, table_exists, ensure_column) -
                 for r in cursor.fetchall() or []:
                     tpl_map[r[1]] = r[0]
             except Exception:
+                log_handled_failure("bootstrap.map_communication_templates")
                 tpl_map = {}
 
             if table_exists(cursor, "sent_emails"):
@@ -753,6 +758,7 @@ def ensure_communications_schema(conn, cursor, *, table_exists, ensure_column) -
                             )
                             inserted = True
                         except Exception:
+                            log_handled_failure("bootstrap.migrate_email_history")
                             inserted = False
 
                     if not inserted:
@@ -780,6 +786,7 @@ def ensure_communications_schema(conn, cursor, *, table_exists, ensure_column) -
                             )
                             inserted = True
                         except Exception:
+                            log_handled_failure("bootstrap.migrate_discord_history")
                             inserted = False
 
                     if not inserted:
@@ -801,6 +808,8 @@ def ensure_communications_schema(conn, cursor, *, table_exists, ensure_column) -
                 """)
                 conn.commit()
             except Exception:
+                log_handled_failure("bootstrap.normalize_communication_dates")
                 pass
     except Exception as e:
+        log_handled_failure("bootstrap.migrate_communications")
         print(f"⚠️ Communications migration skipped: {e}")

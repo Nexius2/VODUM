@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Authentication failures affect all servers. A transient server/network
       // failure must still allow the other selected servers to be processed.
       if (response.status === 401 || response.status === 403 || response.status === 429) break;
-    } catch (_) { /* Continue with the next server; persisted states survive a retry. */ }
+    } catch (_) { console.error("[vodum] portal server activation failed"); /* Continue with the next server; persisted states survive a retry. */ }
     finally { button.disabled = false; form.removeAttribute('aria-busy'); }
   }
   window.location.reload();

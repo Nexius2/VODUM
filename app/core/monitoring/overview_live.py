@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from core.monitoring.resource_stats import apply_server_resource_stats
 from core.monitoring.snapshots import get_live_session_stats
+from db_manager import isolated_read_operation
 
 
 LIVE_SESSION_COLUMNS = """
@@ -61,7 +62,8 @@ def _apply_progress(session):
     session["remaining_text"] = _format_duration(max(0, duration - progress))
 
 
-def load_monitoring_live_context(
+@isolated_read_operation
+def _load_monitoring_live_rows(
     db,
     tab,
     server_resource_stats,
@@ -143,9 +145,22 @@ def load_monitoring_live_context(
     apply_server_resource_stats(sessions, server_resource_stats)
     for session in sessions:
         _apply_progress(session)
-        session.update(_enrich_live_session_artwork(session, db))
     return {
         "sessions_stats": sessions_stats,
         "live_servers": live_servers,
         "sessions": sessions,
     }
+
+
+def load_monitoring_live_context(
+    db, tab, server_resource_stats, *, live_window_seconds=300,
+):
+    # Non-live tabs must not open a snapshot. Artwork enrichment may repair
+    # persisted references, so keep it on the writer after the reader closes.
+    loader = (_load_monitoring_live_rows if tab in {"overview", "now_playing"}
+              else _load_monitoring_live_rows.__wrapped__)
+    context = loader(db, tab, server_resource_stats,
+                     live_window_seconds=live_window_seconds)
+    for session in context["sessions"]:
+        session.update(_enrich_live_session_artwork(session, db))
+    return context

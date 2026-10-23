@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 import json
 import os
 import time
@@ -31,6 +32,7 @@ def _sqlite_checkpoint_if_possible(db):
     try:
         db.execute("PRAGMA wal_checkpoint(TRUNCATE);")
     except Exception as e:
+        log_handled_failure("backup.checkpoint_database")
         if is_debug_mode_enabled():
             log.debug(f"SQLite WAL checkpoint skipped/failed: {e}")
 

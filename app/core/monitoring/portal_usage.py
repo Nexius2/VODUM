@@ -1,8 +1,10 @@
 """Read-only portal usage aggregates, independent of media monitoring."""
 from datetime import datetime, timedelta, timezone
 import json
+from db_manager import isolated_read_operation
 
 
+@isolated_read_operation
 def load_portal_usage(db, days=30, page=1):
     days = days if days in (7, 30, 90) else 30
     page = max(1, int(page))

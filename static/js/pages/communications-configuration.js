@@ -77,6 +77,7 @@ document.addEventListener("DOMContentLoaded", function () {
         setStatus("");
       }, 1200);
     } catch (error) {
+      console.error("[vodum] communication settings save failed");
       setStatus("Save failed");
       window.setTimeout(function () {
         setStatus("");

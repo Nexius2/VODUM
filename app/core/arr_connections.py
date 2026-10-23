@@ -1,4 +1,5 @@
 """Read-only connection checks for Sonarr/Radarr; credentials stay server-side."""
+from core.error_reporting import log_handled_failure
 from core.http_security import server_http_session
 
 ARR_TYPES = ("sonarr", "radarr")
@@ -24,6 +25,7 @@ def arr_get_status(server, base_url, token):
             name = info.get("instanceName") or expected.capitalize()
         return ("up", name, None, str(info["version"]))
     except Exception:
+        log_handled_failure("arr.test_connection")
         return ("down", None, None, "API connection failed")
     finally:
         http.close()

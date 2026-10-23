@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 from core.media_jobs import insert_plex_media_job
 from core.user_sync_jobs import get_preferred_plex_media_user_id
 from tasks_engine import enable_and_run_task_by_name
@@ -68,6 +69,7 @@ def wake_plex_sync_worker() -> bool:
     try:
         enable_and_run_task_by_name("apply_plex_access_updates")
     except Exception:
+        log_handled_failure("servers.wake_plex_access_worker")
         return False
     return True
 

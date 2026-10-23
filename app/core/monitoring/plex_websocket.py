@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 import json
 import threading
 import time
@@ -90,9 +91,9 @@ class PlexWebsocketClient:
 
         if not self.ws:
             if ws_errors:
-                logger.debug(
-                    f"Plex websocket unavailable for {self.server['name']} on all URLs: "
-                    + " | ".join(ws_errors)
+                logger.warning(
+                    "Plex websocket unavailable on all URLs | server_id=%s | attempts=%s",
+                    self.server.get("id"), len(ws_errors),
                 )
             return
 
@@ -183,6 +184,7 @@ class PlexWebsocketClient:
             from tasks_engine import enqueue_task
             enqueue_task(int(row["id"]))
         except Exception:
+            log_handled_failure("plex.enqueue_stream_enforcer")
             logger.debug("Unable to enqueue stream_enforcer after Plex websocket refresh", exc_info=True)
 
     def _event_details(self, data: dict) -> tuple[str, set[str]]:

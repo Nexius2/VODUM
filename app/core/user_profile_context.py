@@ -1,8 +1,10 @@
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 import json
 import re
 from datetime import datetime
+from db_manager import isolated_read_operation
 
 
 REFERRAL_DISPLAY_COLUMNS = """
@@ -88,6 +90,7 @@ def enrich_media_servers(rows):
         try:
             details = json.loads(server.get("details_json") or "{}")
         except Exception:
+            log_handled_failure("users.decode_server_details")
             details = {}
         if not isinstance(details, dict):
             details = {}
@@ -148,6 +151,7 @@ def load_expiration_lock(db, user_id: int) -> dict:
                 if isinstance(policy, dict) and policy.get("IsAdministrator"):
                     is_admin = True
             except Exception:
+                log_handled_failure("users.read_expiration_lock")
                 pass
             if is_admin:
                 reasons.append(f"Jellyfin admin ({server_name})")
@@ -164,6 +168,7 @@ def load_expiration_lock(db, user_id: int) -> dict:
     }
 
 
+@isolated_read_operation
 def load_merged_usernames(db, user_id: int, main_username: str):
     main_username_normalized = (main_username or "").strip().lower()
     rows = db.query(
@@ -186,6 +191,7 @@ def load_merged_usernames(db, user_id: int, main_username: str):
     return sorted(usernames.values(), key=str.lower)
 
 
+@isolated_read_operation
 def load_referral_context(db, user_id: int, referrer_user_id=None):
     referral_row = db.query_one(
         f"""

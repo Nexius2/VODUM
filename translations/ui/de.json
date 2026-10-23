@@ -2597,7 +2597,7 @@
   "portal_requests_unavailable": "Nicht alle Server konnten geprüft werden. Keine neue Anfrage gesendet; bitte später versuchen.",
   "portal_requests_busy": "Dieses Medium wird geprüft. Bitte gleich erneut versuchen.",
   "portal_requests_present": "Dieses Medium ist bereits in Ihren Bibliotheken verfügbar.",
-  "portal_requests_pending": "Suche läuft bereits: Dieses Medium ist schon in Sonarr/Radarr vorhanden.",
+  "portal_requests_pending": "Dieser Titel wird bereits von unseren Suchwerkzeugen bearbeitet und wird demnächst zum Streamen verfügbar sein.",
   "portal_requests_added": "Anfrage hinzugefügt: Die Suche wurde gestartet.",
   "portal_requests_no_match": "Kein verknüpfter ARR entspricht diesem Medium und dieser Auflösung.",
   "portal_requests_not_configured": "Ein Administrator muss die ARR-Vorgaben für Anfragen konfigurieren.",

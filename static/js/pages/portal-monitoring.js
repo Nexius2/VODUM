@@ -25,7 +25,7 @@
     const dataNode = document.getElementById("portal-monitoring-chart-data");
     if (!dataNode || !window.Chart) return;
     let data = {};
-    try { data = JSON.parse(dataNode.textContent || "{}"); } catch (_) { return; }
+    try { data = JSON.parse(dataNode.textContent || "{}"); } catch (_) { console.error("[vodum] portal monitoring configuration failed"); return; }
     const palette = ["#3b82f6", "#10b981", "#ef4444", "#a78bfa", "#f59e0b", "#06b6d4"];
     const doughnutOptions = {responsive: true, maintainAspectRatio: false, animation: false, cutout: "70%", plugins: {legend: {display: false}}};
     const lineOptions = {responsive: true, maintainAspectRatio: false, animation: false, normalized: true, plugins: {legend: {labels: {color: "#94a3b8"}}}, scales: {x: {ticks: {color: "#64748b"}, grid: {color: "rgba(148,163,184,.08)"}}, y: {beginAtZero: true, ticks: {color: "#64748b"}, grid: {color: "rgba(148,163,184,.08)"}}}};

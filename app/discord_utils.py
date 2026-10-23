@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 import time
 import requests
 from secret_store import decrypt_secret
@@ -55,6 +56,7 @@ def resolve_discord_bot(db, settings: dict) -> dict:
                 b['token'] = (decrypt_secret(b.get('token')) or '').strip()
                 return b
         except Exception:
+            log_handled_failure("discord.load_bot_credentials")
             pass
 
     # Legacy fallback
@@ -136,6 +138,7 @@ def validate_discord_bot_token(bot_token: str, timeout: int = 10) -> tuple[bool,
         return False, f"Discord API error {r.status_code}: {r.text}"
 
     except Exception as e:
+        log_handled_failure("discord.validate_token")
         return False, f"Discord validation failed: {e}"
 
 
@@ -172,6 +175,7 @@ def fetch_discord_bot_identity(bot_token: str, timeout: int = 10) -> tuple[bool,
         return False, {"error": f"Discord API error {r.status_code}: {r.text}"}
 
     except Exception as e:
+        log_handled_failure("discord.validate_bot")
         return False, {"error": f"Discord validation failed: {e}"}
 
 

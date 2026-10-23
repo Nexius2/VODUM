@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 import json
 import os
 import socket
@@ -223,6 +224,7 @@ def _execute_job(db, job):
         try:
             payload = json.loads(payload_json)
         except Exception:
+            log_handled_failure("media_jobs.decode_payload")
             payload = None
 
     return collect_sessions_for_server(
@@ -290,6 +292,7 @@ def run(task_id, db):
                 })
 
         except Exception as e:
+            log_handled_failure("media_jobs.execute", job_id=job["id"], server_id=job["server_id"])
             errors += 1
             _mark_retry_or_error(db, job, str(e))
             # on continue, pour ne pas bloquer la boucle
@@ -298,6 +301,7 @@ def run(task_id, db):
         from core.monitoring.collector import write_monitoring_snapshot
         snapshot = write_monitoring_snapshot(db)
     except Exception as e:
+        log_handled_failure("media_jobs.write_monitoring_snapshot")
         snapshot = {"error": str(e)}
 
     stream_enforcer_enqueued = False
@@ -305,6 +309,7 @@ def run(task_id, db):
         try:
             stream_enforcer_enqueued = _enqueue_stream_enforcer(db)
         except Exception:
+            log_handled_failure("media_jobs.enqueue_stream_enforcer")
             stream_enforcer_enqueued = False
 
     queued_left_row = db.query_one("""

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 import json
 from datetime import datetime
@@ -359,6 +360,7 @@ def collect_sessions_for_server(
             resource_stats = _collect_server_resource_stats(srv, provider_name)
             _store_server_resource_stats(db, server_id, provider_name, resource_stats)
         except Exception as resource_exc:
+            log_handled_failure("monitoring.collect_resource_stats", server_id=server_id)
             if is_debug_mode_enabled():
                 logger.debug(
                     "server resource stats collection failed (server_id=%s): %s",
@@ -900,6 +902,7 @@ def collect_sessions_for_server(
                 },
             )
         except Exception:
+            log_handled_failure("monitoring.store_resource_failure", server_id=server_id)
             pass
 
         if _has_recent_live_sessions(db, server_id, window_seconds=180):
@@ -949,6 +952,7 @@ def collect_sessions(db) -> Dict[str, Any]:
             report["sessions_seen"] += int(r.get("sessions_seen", 0))
             report["events"] += int(r.get("events", 0))
         except Exception as e:
+            log_handled_failure("monitoring.collect_server", server_id=server_id)
             report["errors"].append({"server_id": server_id, "provider": provider_name, "error": str(e)})
 
     # -------------------------------------------------

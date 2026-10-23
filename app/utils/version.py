@@ -9,6 +9,12 @@ VERSION_PATTERN = re.compile(r"^v?\d+\.\d+\.\d+(?:[\s._-]+(?:b|build)\d+)?$", re
 INVALID_VERSIONS = {"", "unknown", "dev", "none", "null", "n/a"}
 
 
+def app_version_tuple(value: object):
+    version = str(value or '').strip()
+    match = re.fullmatch(r'v?(\d+)\.(\d+)\.(\d+)(?:[\s._-]+(?:b|build)(\d+))?', version, re.IGNORECASE)
+    return tuple(int(part or 0) for part in match.groups()) if match else None
+
+
 def is_valid_app_version(value: object) -> bool:
     version = str(value or "").strip()
     return version.lower() not in INVALID_VERSIONS and bool(VERSION_PATTERN.fullmatch(version))

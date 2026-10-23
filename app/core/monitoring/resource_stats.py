@@ -165,8 +165,8 @@ def collect_plex_server_resources(srv: Dict[str, Any], timeout: int = 4) -> Dict
         except Exception as exc:
             last_error = exc
 
-    if is_debug_mode_enabled():
-        logger.debug("Plex resource stats fetch failed for server_id=%s: %s", srv.get("id"), str(last_error) if last_error else "unknown")
+    logger.warning("Plex resource stats fetch failed for server_id=%s error_type=%s",
+                   srv.get("id"), type(last_error).__name__ if last_error else "unknown")
     return {"cpu_pct": None, "ram_pct": None, "is_available": 0, "note": "unreachable"}
 
 

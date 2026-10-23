@@ -122,7 +122,7 @@
 
       let policies = [];
       try { policies = JSON.parse(card.dataset.policies || "[]") || []; }
-      catch (_) { policies = []; }
+      catch (_) { console.error("[vodum] subscription card policy decoding failed"); policies = []; }
 
       if (!policies.length) return;
 

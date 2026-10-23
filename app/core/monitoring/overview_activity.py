@@ -1,9 +1,15 @@
 from __future__ import annotations
+from db_manager import isolated_read_operation
 
 
 def load_recent_monitoring_events(db, tab, limit=30):
     if tab not in {"overview", "activity"}:
         return []
+    return _load_recent_monitoring_events(db, limit)
+
+
+@isolated_read_operation
+def _load_recent_monitoring_events(db, limit=30):
     return db.query(
         """
         SELECT e.id, s.name AS server_name, e.provider, e.event_type,

@@ -1,6 +1,7 @@
 """Explicit source-access removal and rollback for validated migrations."""
 
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 import json
 from datetime import datetime, timedelta, timezone
@@ -17,6 +18,7 @@ def _json_dict(raw) -> dict:
     try:
         value = json.loads(raw or "{}")
     except Exception:
+        log_handled_failure("migrations.decode_access_job_result")
         value = {}
     return value if isinstance(value, dict) else {}
 
@@ -145,6 +147,7 @@ def reconcile_destination_usage(db) -> int:
             """
         )
     except Exception:
+        log_handled_failure("migrations.load_waiting_validation")
         return 0
     for raw in rows:
         user = dict(raw)
@@ -165,6 +168,7 @@ def reconcile_destination_usage(db) -> int:
                 (user["destination_media_user_id"], user["destination_media_user_id"], since),
             )
         except Exception:
+            log_handled_failure("migrations.check_destination_activity")
             continue
         if not activity or not activity["activity_at"]:
             continue
@@ -195,6 +199,7 @@ def reconcile_source_jobs(db) -> int:
             """
         )
     except Exception:
+        log_handled_failure("migrations.load_access_jobs")
         return 0
     operations = {
         "source": ("removal", "restoration"),

@@ -1,6 +1,7 @@
 """Read-only analysis for user migration plans."""
 
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 import re
 from collections import Counter
@@ -201,6 +202,7 @@ def suggest_library_mappings(
             )
         ]
     except Exception:
+        log_handled_failure("migrations.load_learned_mappings")
         learned_rows = []
 
     mappings = []

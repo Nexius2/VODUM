@@ -55,7 +55,8 @@ class SchedulerRuntime:
     def force_check_update(self):
         try:
             row = self.db.query_one(
-                "SELECT id, enabled, status, queued_count FROM tasks WHERE name='check_update'"
+                "SELECT id, enabled, status, queued_count, schedule, schedule_mode, interval_seconds "
+                "FROM tasks WHERE name='check_update'"
             )
             if not row:
                 self.logger.warning("check_update startup refresh skipped: task not found")
@@ -73,7 +74,10 @@ class SchedulerRuntime:
                 self.logger.warning("check_update startup refresh enqueue refused")
                 return False
             try:
-                next_run = self.compute_next_run("0 4 * * *", "cron", None, datetime.now())
+                next_run = self.compute_next_run(
+                    row['schedule'], row['schedule_mode'] or 'cron',
+                    row['interval_seconds'], datetime.now(),
+                )
                 self.db.execute(
                     "UPDATE tasks SET next_run=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
                     (next_run, task_id),

@@ -1,6 +1,7 @@
 """Persistence helpers for migration drafts. No provider action is executed."""
 
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 import json
 
@@ -256,6 +257,7 @@ def update_migration_draft(
     try:
         existing_options = json.loads(campaign["options_json"] or "{}")
     except Exception:
+        log_handled_failure("migrations.decode_draft_options")
         existing_options = {}
     values = _clean_draft_values(
         analysis,

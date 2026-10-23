@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
+from db_manager import isolated_read_operation
 
 
 ALLOWED_ENFORCEMENT_PAGE_SIZES = (20, 50, 100)
@@ -27,6 +28,7 @@ def _decorate_policy(row):
     return policy
 
 
+@isolated_read_operation
 def load_policy_catalog(db, edit_policy_id=None):
     policies = [
         _decorate_policy(row)
@@ -68,6 +70,7 @@ def load_policy_catalog(db, edit_policy_id=None):
     }
 
 
+@isolated_read_operation
 def load_policy_dashboard(db, catalog):
     base = db.query_one(
         """
@@ -134,6 +137,7 @@ def load_policy_dashboard(db, catalog):
     }
 
 
+@isolated_read_operation
 def load_policy_breakdowns(db, period="-30 days"):
     scopes = db.query(
         """
@@ -183,6 +187,7 @@ def load_policy_breakdowns(db, period="-30 days"):
     }
 
 
+@isolated_read_operation
 def load_policy_top_users(db, period="-30 days", limit=10):
     rows = db.query(
         """
@@ -228,6 +233,7 @@ def load_policy_top_users(db, period="-30 days", limit=10):
     return [dict(row) for row in (rows or [])]
 
 
+@isolated_read_operation
 def load_recent_policy_enforcements(db, pagination):
     rows = db.query(
         """
@@ -274,6 +280,7 @@ def load_recent_policy_enforcements(db, pagination):
     return [dict(row) for row in (rows or [])]
 
 
+@isolated_read_operation
 def load_grouped_policy_enforcements(
     db,
     period="-24 hours",
@@ -356,6 +363,7 @@ def load_grouped_policy_enforcements(
     )[: int(result_limit)]
 
 
+@isolated_read_operation
 def load_policy_tracked_state(db, period="-1 hour"):
     row = db.query_one(
         """
@@ -379,6 +387,7 @@ def load_policy_tracked_state(db, period="-1 hour"):
     }
 
 
+@isolated_read_operation
 def load_policy_hits_timeline(db, days=30, today=None):
     days = max(1, int(days))
     rows = db.query(
@@ -418,6 +427,7 @@ def load_policy_hits_timeline(db, days=30, today=None):
     ]
 
 
+@isolated_read_operation
 def load_policy_enforcement_pagination(db, args):
     page = max(args.get("enforcement_page", 1, type=int), 1)
     per_page = args.get("enforcement_per_page", 20, type=int)

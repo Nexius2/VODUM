@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 from typing import Dict, List, Optional
 import json
 
@@ -20,8 +21,10 @@ def load_user_stream_overrides(db) -> Dict[int, int]:
                 if value > 0:
                     overrides[int(row["id"])] = value
             except Exception:
+                log_handled_failure("stream_enforcer.decode_user_override")
                 continue
     except Exception:
+        log_handled_failure("stream_enforcer.load_user_overrides")
         return {}
     return overrides
 

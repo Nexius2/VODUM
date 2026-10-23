@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 # Auto-split from app.py (keep URLs/endpoints intact)
 import json
 
@@ -725,6 +726,7 @@ def register(app):
                 try:
                     rj = json.loads(existing["rule_value_json"] or "{}")
                 except Exception:
+                    log_handled_failure("policies.decode_existing_rule")
                     rj = {}
                 if rj.get("system_tag") or rj.get("locked"):
                     flash("Policy is read-only.", "error")
@@ -832,6 +834,7 @@ def register(app):
         try:
             rule = json.loads(existing["rule_value_json"] or "{}")
         except Exception:
+            log_handled_failure("policies.decode_deleted_rule")
             rule = {}
 
         if rule.get("system_tag") or rule.get("locked"):
@@ -879,6 +882,7 @@ def register(app):
             try:
                 rule = json.loads(row["rule_value_json"] or "{}")
             except Exception:
+                log_handled_failure("policies.decode_bulk_deleted_rule")
                 rule = {}
 
             if rule.get("system_tag") or rule.get("locked"):

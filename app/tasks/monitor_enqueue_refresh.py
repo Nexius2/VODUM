@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 import json
 from datetime import datetime, timezone
 from core.server_cooldown import should_skip_unreachable_server
@@ -49,6 +50,7 @@ def run(task_id, db):
                 settings = json.loads(settings_json)
                 interval = int(settings.get("monitoring_interval_sec", DEFAULT_INTERVAL_SEC))
             except Exception:
+                log_handled_failure("monitoring.decode_server_interval")
                 interval = DEFAULT_INTERVAL_SEC
 
         if interval < MIN_INTERVAL_SEC:

@@ -1,6 +1,7 @@
 """Destination-only execution for migration campaigns."""
 
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 import json
 import secrets
@@ -27,6 +28,7 @@ def _result_json(migration_user: dict) -> dict:
     try:
         result = json.loads(migration_user.get("result_json") or "{}")
     except Exception:
+        log_handled_failure("migrations.decode_result")
         result = {}
     return result if isinstance(result, dict) else {}
 
@@ -36,6 +38,7 @@ def _campaign_options(campaign: dict) -> dict:
     try:
         options = json.loads(raw)
     except Exception:
+        log_handled_failure("migrations.decode_options")
         options = {}
     return options if isinstance(options, dict) else {}
 
@@ -216,6 +219,7 @@ def _mapping_for_user(db, campaign_id: int, source_server_id: int, vodum_user_id
     try:
         options = json.loads(_dict(migration_user_row).get("options_json") or "{}")
     except Exception:
+        log_handled_failure("migrations.decode_user_mapping")
         options = {}
     raw_overrides = options.get("library_mapping_overrides") if isinstance(options, dict) else {}
     overrides: dict[int, list[int]] = {}
@@ -442,6 +446,7 @@ def _ensure_jellyfin_destination(db, campaign: dict, migration_user: dict, vodum
         try:
             account_details = json.loads(account.get("details_json") or "{}")
         except Exception:
+            log_handled_failure("migrations.decode_destination_account")
             account_details = {}
         account_created_by_campaign = (
             int(account_details.get("migration_campaign_id") or 0) == int(campaign["id"])

@@ -6,6 +6,7 @@
   try {
     config = JSON.parse(configNode.textContent || "{}");
   } catch (error) {
+    console.error("[vodum] monitoring user configuration failed");
     config = {};
   }
 
@@ -222,6 +223,7 @@
   try {
     messages = JSON.parse(configNode ? configNode.textContent || "{}" : "{}");
   } catch (error) {
+    console.error("[vodum] monitoring user translations failed");
     messages = {};
   }
 
@@ -357,6 +359,7 @@
         noMap.classList.remove("hidden");
       }
     } catch (err) {
+      console.error("[vodum] monitoring address lookup failed");
       showError(messages.unableIp);
     }
   }

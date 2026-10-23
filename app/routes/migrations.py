@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 import json
 from datetime import datetime
 
@@ -73,6 +74,7 @@ def register(app):
                     raise ValueError(f"Migration pair is not allowed: {selection_blocker}.")
                 analysis = analyze_migration(db, source_id, destination_id)
             except Exception as exc:
+                log_handled_failure("migrations.analyze_pair")
                 if not selection_blocker:
                     analysis_error = str(exc)
 
@@ -378,6 +380,7 @@ def register(app):
             add_log("warning", "migrations", f"Migration campaign paused: campaign_id={campaign_id}")
             flash("migration_campaign_paused", "success")
         except Exception as exc:
+            log_handled_failure("migrations.pause", campaign_id=campaign_id)
             flash(str(exc), "error")
         return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
 
@@ -390,6 +393,7 @@ def register(app):
             add_log("warning", "migrations", f"Migration campaign resumed: campaign_id={campaign_id}")
             flash("migration_campaign_resumed", "success")
         except Exception as exc:
+            log_handled_failure("migrations.resume", campaign_id=campaign_id)
             flash(str(exc), "error")
         return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
 
@@ -403,6 +407,7 @@ def register(app):
             add_log("warning", "migrations", f"Migration failed users retried: campaign_id={campaign_id} count={count}")
             flash("migration_failed_users_retried", "success")
         except Exception as exc:
+            log_handled_failure("migrations.retry_users", campaign_id=campaign_id)
             flash(str(exc), "error")
         return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
 
@@ -414,6 +419,7 @@ def register(app):
             add_log("warning", "migrations", f"Migration user excluded: campaign_id={campaign_id} migration_user_id={migration_user_id}")
             flash("migration_user_excluded", "success")
         except Exception as exc:
+            log_handled_failure("migrations.exclude_user", campaign_id=campaign_id)
             flash(str(exc), "error")
         return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
 
@@ -425,6 +431,7 @@ def register(app):
             add_log("warning", "migrations", f"Migration user included: campaign_id={campaign_id} migration_user_id={migration_user_id}")
             flash("migration_user_included", "success")
         except Exception as exc:
+            log_handled_failure("migrations.include_user", campaign_id=campaign_id)
             flash(str(exc), "error")
         return redirect(url_for("migration_campaign_detail", campaign_id=campaign_id))
 
@@ -449,6 +456,7 @@ def register(app):
         try:
             options = json.loads(row["options_json"] or "{}")
         except Exception:
+            log_handled_failure("migrations.decode_mapping_options")
             options = {}
         overrides = mapping_overrides_from_form(request.form, prefix="user_library_mapping_")
         options["library_mapping_overrides"] = {
@@ -480,6 +488,7 @@ def register(app):
                 set_user_excluded(db, campaign_id, int(row["id"]), True)
                 excluded += 1
             except Exception:
+                log_handled_failure("migrations.bulk_exclude_user", campaign_id=campaign_id)
                 continue
         add_log("warning", "migrations", f"Blocked migration users excluded: campaign_id={campaign_id} count={excluded}")
         flash("migration_blocked_users_excluded", "success")
@@ -584,6 +593,7 @@ def register(app):
         try:
             result = json.loads(row["result_json"] or "{}")
         except Exception:
+            log_handled_failure("migrations.decode_credentials_result")
             result = {}
         encrypted = result.get("encrypted_generated_password")
         if not encrypted:

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 import json
 from types import SimpleNamespace
@@ -42,6 +43,7 @@ def details_json_as_dict(user_row):
     try:
         data = json.loads(raw) if isinstance(raw, str) else raw
     except Exception:
+        log_handled_failure("plex.decode_account_identity")
         return {}
     return data if isinstance(data, dict) else {}
 

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 import json
 from datetime import datetime, timezone
@@ -101,6 +102,7 @@ def sync_plex_owner_for_server(db, server):
         try:
             details = json.loads(media_user["details_json"] or "{}")
         except Exception:
+            log_handled_failure("plex.decode_owner_identity")
             details = {}
         if not isinstance(details, dict):
             details = {}

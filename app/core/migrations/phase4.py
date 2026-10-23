@@ -1,6 +1,7 @@
 """Reusable, provider-neutral migration plan import and export."""
 
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 import json
 from datetime import datetime, timezone
@@ -70,6 +71,7 @@ def export_migration_plan(db, campaign_id: int) -> dict:
     try:
         options = json.loads(campaign.get("options_json") or "{}")
     except Exception:
+        log_handled_failure("migrations.decode_export_options")
         options = {}
     return {
         "format": PLAN_FORMAT,

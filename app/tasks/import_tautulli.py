@@ -23,6 +23,7 @@ Rules:
 """
 
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 import os
 import sqlite3
@@ -67,6 +68,7 @@ def _write_status_file(payload: dict) -> None:
         with open(STATUS_FILE, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
     except Exception:
+        log_handled_failure("tautulli.write_import_status")
         pass
 
 
@@ -166,6 +168,7 @@ def _ensure_unique_index(conn: sqlite3.Connection) -> None:
         conn.execute(create_sql)
         conn.commit()
     except Exception:
+        log_handled_failure("tautulli.create_deduplication_index")
         conn.rollback()
         # Fallback without window functions: keep the lowest id
         conn.execute("BEGIN")

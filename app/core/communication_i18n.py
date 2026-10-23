@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 import json
 import os
@@ -58,6 +59,7 @@ def load_communication_catalog(lang: str) -> dict:
                     data = json.load(f)
                 return data if isinstance(data, dict) else {}
         except Exception:
+            log_handled_failure("communications.load_catalog")
             continue
     return {}
 
@@ -86,6 +88,7 @@ def communication_translate(key: str, lang: str, variables: dict | None = None) 
     try:
         return str(text).format(**(variables or {}))
     except Exception:
+        log_handled_failure("communications.format_translation")
         return str(text)
 
 

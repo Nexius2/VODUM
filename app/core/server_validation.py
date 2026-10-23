@@ -1,6 +1,7 @@
 """Provider-neutral media-server validation used by setup and configuration flows."""
 
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 import xml.etree.ElementTree as ET
 
@@ -33,6 +34,7 @@ def _validate_plex_token_on_plextv(token: str) -> tuple[bool, str | None]:
         return True, username
 
     except Exception as exc:
+        log_handled_failure("plex.validate_token")
         return False, f"Unable to validate the token on plex.tv: {exc}"
 
 
@@ -72,6 +74,7 @@ def _validate_plex(server: dict, base_url: str, token: str) -> tuple:
         )
 
     except Exception as exc:
+        log_handled_failure("plex.validate_server")
         return ("down", None, None, f"Plex connection failed: {exc}")
 
 

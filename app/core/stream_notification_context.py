@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 import json
 
 from core.stream_notification_delivery import media_title_from_session
@@ -8,6 +9,7 @@ def build_notification_policy_context(policy: dict, target: dict, related_sessio
     try:
         rule = json.loads(policy.get("rule_value_json") or "{}")
     except Exception:
+        log_handled_failure("stream_enforcer.decode_notification_rule")
         rule = {}
     if not isinstance(rule, dict):
         rule = {}

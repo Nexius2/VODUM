@@ -61,6 +61,8 @@ def _cron_jobs_enabled() -> bool:
         return int(row["enable_cron_jobs"]) == 1 if row and row["enable_cron_jobs"] is not None else True
     except Exception:
         # If settings row doesn't exist yet (fresh DB), don't block tasks_engine
+        from core.error_reporting import log_handled_failure
+        log_handled_failure("scheduler.read_cron_switch")
         return True
 
 

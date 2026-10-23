@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 import json
 from datetime import datetime
 
@@ -21,12 +22,14 @@ def _cleanup_expired_credentials(db) -> int:
             "SELECT id,result_json FROM migration_users WHERE result_json LIKE '%encrypted_generated_password%'"
         )
     except Exception:
+        log_handled_failure("migrations.load_credentials_for_expiry")
         return 0
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     for row in rows:
         try:
             result = json.loads(row["result_json"] or "{}")
         except Exception:
+            log_handled_failure("migrations.decode_credential_expiry_result")
             continue
         expires_at = str(result.get("credentials_expires_at") or "")
         if not expires_at or expires_at > now:
@@ -160,6 +163,7 @@ def run(task_id: int, db):
             """
         )
     except Exception:
+        log_handled_failure("migrations.count_active_jobs")
         active_jobs = None
     if (
         (not active or int(active["total"] or 0) == 0)

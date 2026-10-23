@@ -7,6 +7,7 @@
     try {
       return JSON.parse(node.textContent || "{}");
     } catch (error) {
+      console.error("[vodum] communication history configuration failed");
       return {};
     }
   }
@@ -25,6 +26,7 @@
     try {
       data = JSON.parse(raw || "{}");
     } catch (error) {
+      console.error("[vodum] communication history metadata failed");
       data = {};
     }
 
@@ -62,6 +64,7 @@
         setText("commHistoryModalBody", detail.body || "-");
         setText("commHistoryModalMeta", detail.meta_json || "{}");
       } catch (_) {
+        console.error("[vodum] communication history detail failed");
         setText("commHistoryModalSubject", config.loadErrorLabel || "Unable to load details.");
         setText("commHistoryModalBody", "-");
       }

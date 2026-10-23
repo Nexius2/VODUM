@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 import json
 from datetime import datetime
 
@@ -26,6 +27,7 @@ def build_migration_report(
         try:
             result = json.loads(user.get("result_json") or "{}")
         except Exception:
+            log_handled_failure("migrations.decode_report_result")
             result = {}
         result.pop("encrypted_generated_password", None)
         user["result"] = result

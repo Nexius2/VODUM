@@ -2597,7 +2597,7 @@
   "portal_requests_unavailable": "Impossibile verificare tutti i server. Nessuna nuova richiesta inviata; riprova più tardi.",
   "portal_requests_busy": "Questo contenuto è in fase di verifica. Riprova tra poco.",
   "portal_requests_present": "Questo contenuto è già disponibile nelle tue librerie.",
-  "portal_requests_pending": "Ricerca già in corso: questo contenuto è già presente in Sonarr/Radarr.",
+  "portal_requests_pending": "Questo titolo è già gestito dai nostri strumenti di ricerca e sarà presto disponibile in streaming.",
   "portal_requests_added": "Richiesta aggiunta: la ricerca è iniziata.",
   "portal_requests_no_match": "Nessun ARR collegato corrisponde a questo contenuto e risoluzione.",
   "portal_requests_not_configured": "Un amministratore deve configurare i valori predefiniti delle richieste ARR.",

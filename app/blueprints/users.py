@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 import json
 import re
 import traceback
@@ -863,6 +864,7 @@ def create_user_from_payload(db, payload, *, invitation_source=None):
                     sent_welcome_keys.add(welcome_gate_key)
 
             except Exception as e:
+                log_handled_failure("users.send_welcome")
                 mailing_errors.append(f"server_id={server_id}: {e}")
 
     if guided_mode:
@@ -871,6 +873,7 @@ def create_user_from_payload(db, payload, *, invitation_source=None):
         except ValueError as exc:
             mailing_errors.append(str(exc))
         except Exception:
+            log_handled_failure("users.send_activation")
             mailing_errors.append('portal_invite_send_failed')
         for error in mailing_errors:
             flash(error, 'error')

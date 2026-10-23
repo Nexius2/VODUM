@@ -1,3 +1,4 @@
+from core.error_reporting import log_handled_failure
 import json
 from datetime import datetime, timedelta
 
@@ -95,6 +96,7 @@ def normalize_campaign_detail(campaign_row) -> dict:
     try:
         options = json.loads(campaign.get("options_json") or "{}")
     except Exception:
+        log_handled_failure("migrations.decode_campaign_options")
         options = {}
     campaign["safety_delay_days"] = max(0, int(options.get("safety_delay_days", 7)))
     campaign["jellyfin_password_strategy"] = str(
@@ -152,18 +154,22 @@ def enrich_campaign_users(
         try:
             user["blockers"] = json.loads(user.get("blockers_json") or "[]")
         except Exception:
+            log_handled_failure("migrations.decode_user_blockers")
             user["blockers"] = []
         try:
             result = json.loads(user.get("result_json") or "{}")
         except Exception:
+            log_handled_failure("migrations.decode_user_result")
             result = {}
         try:
             user_options = json.loads(user.get("options_json") or "{}")
         except Exception:
+            log_handled_failure("migrations.decode_user_options")
             user_options = {}
         try:
             source_snapshot = json.loads(user.get("source_snapshot_json") or "{}")
         except Exception:
+            log_handled_failure("migrations.decode_source_snapshot")
             source_snapshot = {}
         source_library_ids = []
         for ids in (source_snapshot.get("source_access") or {}).values():
@@ -225,6 +231,7 @@ def enrich_campaign_users(
                     + timedelta(days=safety_delay_days)
                 ).strftime("%Y-%m-%d %H:%M:%S")
             except Exception:
+                log_handled_failure("migrations.compute_removal_date")
                 pass
 
     summary["validated"] = sum(1 for user in users if user.get("destination_validated_at"))

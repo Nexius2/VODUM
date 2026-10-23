@@ -1,4 +1,5 @@
 import ipaddress
+from core.error_reporting import log_handled_failure
 import json
 from typing import List, Optional, Tuple
 
@@ -14,6 +15,7 @@ def loads_json(value: Optional[str]) -> dict:
     try:
         return json.loads(value)
     except Exception:
+        log_handled_failure("policies.decode_rule")
         return {}
 
 
@@ -34,9 +36,8 @@ def jellyfin_session_id_from_target(target: dict, fallback_session_key: str) -> 
         session_id = (target.get("_parsed_raw_json") or {}).get("Id")
         if session_id:
             return str(session_id)
-    except Exception as exc:
-        if is_debug_mode_enabled():
-            logger.debug("[stream_enforcer] failed to extract jellyfin session id: %s", exc)
+    except Exception:
+        log_handled_failure("stream_enforcer.extract_jellyfin_session_id")
     return str(fallback_session_key)
 
 

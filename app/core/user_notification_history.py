@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+from db_manager import isolated_read_operation
 
 
 COMM_HISTORY_COLUMNS = """
@@ -78,6 +79,16 @@ def load_user_notification_history(
             "discord_total": 0,
             "per_page": per_page,
         }
+
+    return _load_user_notification_history(
+        db, user_id, email_page_value, discord_page_value, per_page=per_page,
+    )
+
+
+@isolated_read_operation
+def _load_user_notification_history(
+    db, user_id: int, email_page_value=None, discord_page_value=None, *, per_page=10,
+):
 
     totals = {}
     pages = {}

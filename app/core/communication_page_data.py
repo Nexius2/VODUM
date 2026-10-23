@@ -2,8 +2,10 @@ from communications_engine import fetch_campaign_attachments, fetch_template_att
 from core.communication_template_admin import apply_template_translation
 from core.communications.default_templates import is_stream_blocked_template
 from core.communication_history_rendering import render_communication_history_message
+from db_manager import isolated_read_operation
 
 
+@isolated_read_operation
 def load_campaign_page_data(db, load_id, editor_columns: str, list_columns: str) -> dict:
     servers = db.query("SELECT id, name FROM servers ORDER BY name")
     subscriptions = db.query("""
@@ -30,6 +32,7 @@ def load_campaign_page_data(db, load_id, editor_columns: str, list_columns: str)
     }
 
 
+@isolated_read_operation
 def load_template_page_data(
     db, *, load_id, page: int, per_page: int, language: str,
     editor_columns: str, list_columns: str,
@@ -68,6 +71,7 @@ def load_template_page_data(
     }
 
 
+@isolated_read_operation
 def load_history_detail(db, history_id: int, history_columns: str) -> dict | None:
     row = db.query_one(f"""
         SELECT {history_columns}, u.id AS user_id, u.username AS user_username,
@@ -89,6 +93,7 @@ def load_history_detail(db, history_id: int, history_columns: str) -> dict | Non
     return render_communication_history_message(dict(row), dict(settings).get("brand_name") or "VODUM", dict(settings).get("portal_public_url"))
 
 
+@isolated_read_operation
 def load_configuration_page_data(db, settings_columns: str) -> dict:
     row = db.query_one(f"SELECT {settings_columns} FROM settings WHERE id = 1")
     settings = dict(row) if row else {}

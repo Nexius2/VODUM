@@ -28,6 +28,7 @@
           // Do not overwrite a replacement typed while the request was running.
           if (!input.value) input.value = data.token;
         } catch (_) {
+          console.error("[vodum] server saved credential load failed");
           if (error) error.textContent = "Unable to load the saved API key. Reload the page and try again.";
           return;
         } finally {

@@ -196,7 +196,9 @@ class PlexProvider(BaseProvider):
                 # Certaines versions exposent sessionId directement.
                 if node.attrib.get("sessionId"):
                     return str(node.attrib["sessionId"])
-                raise RuntimeError("Active Plex session has no termination session ID")
+                # Plex may omit Session.id during a playback transition.
+                # Keep this distinct from an absent playback (None).
+                return ""
             return None
 
         target_session_id = find_session_id(root)
@@ -204,7 +206,7 @@ class PlexProvider(BaseProvider):
         # 3) Sans correspondance certaine, ne pas confondre sessionKey et sessionId.
         if not target_session_id:
             log.warning(
-                "Cannot terminate Plex session: session is absent from /status/sessions "
+                "Cannot terminate Plex session: session is absent or has no termination ID "
                 f"session_key={session_key}"
             )
             return False
@@ -249,6 +251,9 @@ class PlexProvider(BaseProvider):
                 time.sleep(delay)
             refreshed = ET.fromstring(self._get("/status/sessions"))
             current_session_id = find_session_id(refreshed)
+            if current_session_id == "":
+                absent_once = False
+                continue
             if current_session_id is None:
                 # A reconnect can briefly disappear from the server snapshot.
                 # Require two observations before declaring this client stopped.

@@ -7,6 +7,7 @@
     try {
       return JSON.parse(node.textContent || "{}");
     } catch (error) {
+      console.error("[vodum] communication template configuration failed");
       return {};
     }
   }
@@ -266,6 +267,7 @@
         status.textContent = payload.message || payload.error || `HTTP ${response.status}`;
         status.className = `self-center text-xs ${response.ok && payload.ok ? "text-emerald-300" : "text-rose-300"}`;
       } catch (error) {
+        console.error("[vodum] communication template test failed");
         status.textContent = error.message || String(error);
         status.className = "self-center text-xs text-rose-300";
       } finally {

@@ -1,6 +1,8 @@
 from __future__ import annotations
+from core.error_reporting import log_handled_failure
 
 import json
+from db_manager import isolated_read_operation
 
 
 ACTIVE_POLICY_COLUMNS = """
@@ -15,6 +17,7 @@ ACTIVE_POLICY_COLUMNS = """
 """
 
 
+@isolated_read_operation
 def load_active_policies_for_user(db, vodum_user_id: int):
     media_rows = db.query(
         """
@@ -82,6 +85,7 @@ def load_active_policies_for_user(db, vodum_user_id: int):
             if not isinstance(rule, dict):
                 rule = {}
         except Exception:
+            log_handled_failure("policies.decode_active_rule")
             rule = {}
 
         scope_type = (policy.get("scope_type") or "").strip()

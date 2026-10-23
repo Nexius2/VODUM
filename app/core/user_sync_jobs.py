@@ -1,4 +1,5 @@
 """Provider-neutral orchestration of user access synchronization jobs."""
+from core.error_reporting import log_handled_failure
 
 from core.media_jobs import insert_jellyfin_media_job, insert_plex_media_job
 from logging_utils import get_logger
@@ -63,6 +64,7 @@ def queue_plex_share_settings_sync(db, user_id: int, server_id: int, reason: str
         try:
             wake_task("apply_plex_access_updates")
         except Exception:
+            log_handled_failure("users.wake_access_worker")
             pass
 
     return inserted

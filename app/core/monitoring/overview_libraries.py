@@ -165,6 +165,7 @@ def load_monitoring_library_table(db, options):
     }
 
 
+@isolated_read_operation
 def load_monitoring_library_users(db):
     rows = db.query(
         """
