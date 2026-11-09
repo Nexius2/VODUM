@@ -99,6 +99,7 @@ def register(app):
             """
             SELECT
               SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) AS running,
+              MAX(CASE WHEN name='run_collections' AND status='running' THEN 1 ELSE 0 END) AS collections_running,
               SUM(CASE WHEN COALESCE(queued_count, 0) > 0 THEN 1 ELSE 0 END) AS queued
             FROM tasks
             WHERE status = 'running'
@@ -111,6 +112,13 @@ def register(app):
 
         running = row["running"] or 0
         queued  = row["queued"]  or 0
+        # A collection lease is the authority if the task row was reset by
+        # recovery while its dedicated worker is still inside an external call.
+        if table_exists(db, 'collection_instances'):
+            live = db.query_one("""SELECT COUNT(*) AS count FROM collection_instances
+                WHERE lease_id IS NOT NULL AND julianday(lease_until)>julianday('now')""")
+            if live and live['count'] and not row['collections_running']:
+                running += 1
         active  = running + queued
 
         return {

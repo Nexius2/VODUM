@@ -11,15 +11,24 @@ from logging_utils import get_logger
 from datetime import datetime, timedelta, timezone
 from utils.version import load_app_version
 from core.app_paths import update_status_path
+from core.language_telemetry import configured_language, observations
 
 TELEMETRY_URL = "https://vodum-telemetry.vodum-project.workers.dev/api/ingest"
 
 log = get_logger("telemetry")
 _SEND_LOCK = threading.Lock()
+COLLECTION_TELEMETRY_MODELS = ('memoria','streaming_country','streaming_worldwide','seasonal',
+    'recent_releases','spotlight','imdb','recently_added','kids','tmdb','family','awards',
+    'top_country','franchises','platforms','continents','hidden_gems')
+COLLECTION_TELEMETRY_FIELDS = frozenset({
+    'collections_configurations','collections_enabled','collections_targets','collections_published',
+    'collections_arr_enabled','collections_runs_30d','collections_failures_30d','collections_warnings_30d',
+    *('collections_model_'+model for model in COLLECTION_TELEMETRY_MODELS),
+})
 
 # Only aggregate numeric values, boolean feature flags and tightly allow-listed
 # enums belong here. Never add names, addresses, URLs, IPs, tokens or free text.
-TELEMETRY_PAYLOAD_KEYS = frozenset({
+TELEMETRY_PAYLOAD_KEYS = COLLECTION_TELEMETRY_FIELDS | frozenset({
     "telemetry_enabled", "instance_id", "schema_version", "version", "platform", "runtime_platform",
     "container", "virtualized", "python_version", "docker", "managed_users",
     "total_users", "expired_users", "pending_users", "plex_servers",
@@ -32,7 +41,7 @@ TELEMETRY_PAYLOAD_KEYS = frozenset({
     "portal_local_auth_enabled", "portal_plex_auth_enabled",
     "portal_jellyfin_auth_enabled", "turnstile_enabled",
     "quick_messages_enabled", "cron_enabled",
-    "maintenance_enabled", "default_language", "expiry_mode",
+    "maintenance_enabled", "default_language", "expiry_mode", "language_observations_json",
     "update_pending_days",
 })
 
@@ -58,6 +67,37 @@ def validate_anonymous_payload(payload):
 def _aggregate(db, sql, params=()):
     row = db.query_one(sql, params)
     return dict(row) if row else {}
+
+
+def collection_telemetry(db):
+    """Count logical configurations once even when movies and series are paired."""
+    metrics=dict.fromkeys(COLLECTION_TELEMETRY_FIELDS,0)
+    groups=db.query("""SELECT model,MAX(enabled) AS enabled,COUNT(*) AS targets,
+        MAX(CASE WHEN json_valid(config_json) THEN
+            CASE WHEN json_extract(config_json,'$.arr_enabled')=1 OR json_extract(config_json,'$.mode')='arr'
+            THEN 1 ELSE 0 END ELSE 0 END) AS arr_enabled
+        FROM collection_instances WHERE retired=0
+        GROUP BY COALESCE(group_id,id),model""")
+    for row in groups:
+        metrics['collections_configurations']+=1
+        metrics['collections_enabled']+=int(bool(row['enabled']))
+        metrics['collections_targets']+=int(row['targets'])
+        metrics['collections_arr_enabled']+=int(bool(row['arr_enabled']))
+        if row['model'] in COLLECTION_TELEMETRY_MODELS:
+            metrics['collections_model_'+row['model']]+=1
+    metrics['collections_published']=int(_aggregate(db,"""SELECT COUNT(*) AS total
+        FROM collection_objects WHERE remote_id IS NOT NULL AND state!='deleted'""").get('total') or 0)
+    usage=_aggregate(db,"""SELECT SUM(runs) AS runs,SUM(failures) AS failures,SUM(warnings) AS warnings
+        FROM (
+            SELECT COUNT(*) AS runs,SUM(state='error') AS failures,SUM(state='warning') AS warnings
+            FROM collection_runs WHERE started_at>=date('now','-30 day')
+              AND kind='sync' AND state IN ('success','warning','error')
+            UNION ALL
+            SELECT runs,failures,warnings FROM collection_run_daily_totals WHERE day>=date('now','-30 day')
+        )""")
+    for key in ('runs','failures','warnings'):
+        metrics['collections_'+key+'_30d']=int(usage.get(key) or 0)
+    return metrics
 
 
 def get_or_create_instance_id(db):
@@ -270,7 +310,9 @@ def run(task_id: int, db: DBManager):
 
         payload = validate_anonymous_payload({
             "instance_id": instance_id,
-            "schema_version": 2,
+            "schema_version": 4,
+            "language_observations_json": observations(db),
+            **collection_telemetry(db),
             "version": version,
             "platform": platform.system().lower(),
             "runtime_platform": platform_info["platform"],
@@ -310,7 +352,7 @@ def run(task_id: int, db: DBManager):
             "quick_messages_enabled": 1 if portal_settings.get("portal_quick_messages_enabled") else 0,
             "cron_enabled": 1 if settings.get("enable_cron_jobs") else 0,
             "maintenance_enabled": 1 if settings.get("maintenance_mode") else 0,
-            "default_language": str(settings.get("default_language") or "unknown").lower() if str(settings.get("default_language") or "").lower() in {"en", "fr", "es", "de", "it"} else "unknown",
+            "default_language": configured_language(settings.get("default_language")),
             "expiry_mode": str(settings.get("expiry_mode") or "none").lower() if str(settings.get("expiry_mode") or "").lower() in {"none", "warn_only", "warn_then_disable", "disable"} else "unknown",
             "update_pending_days": update_pending_days,
         })

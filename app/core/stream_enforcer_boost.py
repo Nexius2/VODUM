@@ -4,7 +4,7 @@ from logging_utils import get_logger
 
 
 logger = get_logger("stream_enforcer")
-NORMAL_INTERVAL_SECONDS = 15
+NORMAL_INTERVAL_SECONDS = 5
 BOOST_INTERVAL_SECONDS = 5
 BOOST_KILL_THRESHOLD = 1
 BOOST_WINDOW_MINUTES = 10

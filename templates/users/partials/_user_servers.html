@@ -30,7 +30,7 @@
       </div>
       <button type="button"
               class="px-3 py-2 rounded-lg border border-amber-700 text-amber-400 hover:bg-amber-900/20 text-sm"
-              onclick="openMergeOverlay()">
+              data-merge-action="open">
         {{ t("merge_user") }}
       </button>
     </div>
@@ -349,7 +349,7 @@
           {{ t("merge.warning") }}
         </p>
       </div>
-      <button type="button" onclick="closeMergeOverlay()" class="text-slate-400 hover:text-white">✕</button>
+      <button type="button" data-merge-action="close" class="text-slate-400 hover:text-white">✕</button>
     </div>
 
     <!-- Body -->
@@ -383,8 +383,8 @@
         {% if merge_suggestions|length > 5 %}
           <button type="button"
                   class="px-3 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 text-sm"
-                  onclick="toggleAllMergeCandidates()"
-                  id="mergeMoreBtn">
+                  data-merge-action="more"
+                  id="mergeMoreBtn" aria-expanded="false" aria-controls="mergeCandidatesTop">
             {{ t("merge_show_all") }} ({{ merge_suggestions|length }})
           </button>
         {% endif %}
@@ -395,7 +395,7 @@
 
         <button type="button"
                 class="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
-                onclick="closeMergeOverlay()">
+                data-merge-action="close">
           {{ t("cancel") }}
         </button>
 
@@ -403,6 +403,7 @@
               id="mergeForm"
               action="{{ url_for('user_merge', user_id=user.id) }}"
               class="flex items-center">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
           <input type="hidden" name="other_id" id="mergeOtherId" value="">
 
           <button type="submit"
@@ -430,64 +431,22 @@
 
       <div class="space-y-3">
 
-        {# --- LISTE TOP 5 --- #}
+        <input type="search" id="mergeSearch" aria-label="{{ t('search') }}"
+               placeholder="{{ t('search') }}" autocomplete="off"
+               class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
+        <p id="mergeNoResults" class="hidden text-sm text-slate-400" role="status">{{ t('no_data') }}</p>
         <div id="mergeCandidatesTop" class="space-y-3">
-          {% for cand in merge_suggestions[:5] %}
-            <div
-              class="merge-candidate cursor-pointer flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3 hover:border-amber-700"
-              data-other-id="{{ cand.id }}"
-              tabindex="0"
-              role="button"
-              aria-selected="false"
-            >
-              <div>
-                <div class="font-medium">
-                  {{ cand.firstname or '' }} {{ cand.lastname or '' }}
-                  <span class="text-slate-400 text-sm">@{{ cand.username }}</span>
-                </div>
-                <div class="text-xs text-slate-400">
-                  {{ cand.email or '—' }}
-                  · score {{ cand.merge_score }}
-                </div>
-              </div>
-
-              <!--<div class="text-xs text-slate-500">
-                {{ t("merge_action") }}
-              </div>-->
-            </div>
+          {% for cand in merge_suggestions %}
+          <button type="button"
+                  class="merge-candidate w-full text-left rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3 hover:border-amber-700 {{ 'hidden' if loop.index > 5 else '' }}"
+                  data-other-id="{{ cand.id }}"
+                  data-search="{{ cand.firstname or '' }} {{ cand.lastname or '' }} {{ cand.username or '' }} {{ cand.email or '' }} {{ cand.second_email or '' }}"
+                  aria-pressed="false">
+            <span class="font-medium block">{{ cand.firstname or '' }} {{ cand.lastname or '' }} @{{ cand.username }}</span>
+            <span class="text-xs text-slate-400">{{ cand.email or '—' }} · score {{ cand.merge_score }}</span>
+          </button>
           {% endfor %}
         </div>
-
-        {# --- LISTE COMPLETE (cachée par défaut) --- #}
-        {% if merge_suggestions|length > 5 %}
-          <div id="mergeAllCandidates" class="hidden space-y-3">
-            {% for cand in merge_suggestions[5:] %}
-              <div
-                class="merge-candidate cursor-pointer flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3 hover:border-amber-700"
-                data-other-id="{{ cand.id }}"
-                tabindex="0"
-                role="button"
-                aria-selected="false"
-              >
-                <div>
-                  <div class="font-medium">
-                    {{ cand.firstname or '' }} {{ cand.lastname or '' }}
-                    <span class="text-slate-400 text-sm">@{{ cand.username }}</span>
-                  </div>
-                  <div class="text-xs text-slate-400">
-                    {{ cand.email or '—' }}
-                    · score {{ cand.merge_score }}
-                  </div>
-                </div>
-
-                <div class="text-xs text-slate-500">
-                  {{ t("merge_action") }}
-                </div>
-              </div>
-            {% endfor %}
-          </div>
-        {% endif %}
-
       </div>
     </div>
 
@@ -515,7 +474,7 @@
 
             <button type="button"
                     class="text-slate-400 hover:text-white"
-                    onclick="closeMergeConfirmModal()"
+                    data-merge-action="cancel-preview"
                     aria-label="Close">
               ✕
             </button>
@@ -602,12 +561,12 @@
           <div class="px-5 py-4 border-t border-slate-800 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
             <button type="button"
                     class="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
-                    onclick="closeMergeConfirmModal()">
+                    data-merge-action="cancel-preview">
               {{ t("cancel") }}
             </button>
 
             <button type="button"
-                    id="mergeFinalConfirmBtn"
+                    id="mergeFinalConfirmBtn" disabled
                     class="px-4 py-2 rounded-lg bg-amber-700 hover:bg-amber-800 text-white text-sm">
               {{ t("merge_confirm_cta") }}
             </button>
@@ -651,7 +610,7 @@
     "preview_media_jobs": t("merge.preview.media_jobs"),
     "show_top": t("merge_show_top"),
     "show_all": t("merge_show_all") ~ " (" ~ (merge_suggestions|length) ~ ")",
-    "preview_error": "Preview error",
+    "preview_error": t("merge_failed"),
     "fields": [
       [t("firstname"), "firstname"],
       [t("lastname"), "lastname"],

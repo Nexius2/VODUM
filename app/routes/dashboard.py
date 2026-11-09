@@ -3,6 +3,7 @@ from core.monitoring.artwork import enrich_live_session_artwork
 from core.dashboard_usage_risk import build_usage_risk_trend
 from core.dashboard_now_playing import build_now_playing_fragment_key, load_dashboard_now_playing
 from core.dashboard_servers import dashboard_server_initial_preview
+from core.error_reporting import request_phase
 from core.dashboard_widgets import (
     get_dashboard_next_tasks,
     get_dashboard_servers,
@@ -142,7 +143,8 @@ def register(app):
     @app.route("/dashboard/_next_tasks")
     def dashboard_next_tasks_partial():
         db = get_db()
-        dashboard_tasks = get_dashboard_next_tasks(db)
+        with request_phase('load_tasks'):
+            dashboard_tasks = get_dashboard_next_tasks(db)
 
         return _no_store_response(render_template(
             "dashboard/partials/_next_tasks.html",
@@ -151,7 +153,8 @@ def register(app):
 
     @app.route("/dashboard/_subscription_summary")
     def dashboard_subscription_summary_partial():
-        summary = get_dashboard_subscription_summary(get_db())
+        with request_phase('load_subscriptions'):
+            summary = get_dashboard_subscription_summary(get_db())
         return _no_store_response(render_template(
             "dashboard/partials/_streams_killed_subscriptions.html",
             **summary,
@@ -159,7 +162,8 @@ def register(app):
 
     @app.route("/dashboard/_usage_risk")
     def dashboard_usage_risk_partial():
-        summary, dashboard = get_dashboard_usage_risk(get_db())
+        with request_phase('load_usage_risk'):
+            summary, dashboard = get_dashboard_usage_risk(get_db())
         return _no_store_response(render_template(
             "dashboard/partials/_usage_risk.html",
             usage_risk_summary=summary,
@@ -168,7 +172,8 @@ def register(app):
 
     @app.route("/dashboard/_servers")
     def dashboard_servers_partial():
-        servers, preview = get_dashboard_servers(get_db())
+        with request_phase('load_servers'):
+            servers, preview = get_dashboard_servers(get_db())
         return _no_store_response(render_template(
             "dashboard/partials/_servers.html",
             servers=servers,
@@ -179,9 +184,11 @@ def register(app):
     def dashboard_now_playing_partial():
         db = get_db()
 
-        now_playing = load_dashboard_now_playing(db)
+        with request_phase('load_playback'):
+            now_playing = load_dashboard_now_playing(db)
         sessions = now_playing["sessions"]
-        sessions = [enrich_live_session_artwork(s, db) for s in sessions]
+        with request_phase('artwork'):
+            sessions = [enrich_live_session_artwork(s, db) for s in sessions]
         total_live = now_playing["total_live"]
         total_transcode = now_playing["total_transcode"]
         now_playing_key = build_now_playing_fragment_key(
@@ -193,7 +200,8 @@ def register(app):
 
         idle_card = None
         if total_live <= 0:
-            idle_card = build_dashboard_quote_card()
+            with request_phase('idle_card'):
+                idle_card = build_dashboard_quote_card()
 
         return _no_store_response(render_template(
             "dashboard/partials/_now_playing.html",

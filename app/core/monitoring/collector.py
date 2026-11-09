@@ -9,7 +9,7 @@ import time
 
 
 from core.monitoring.diff import compute_session_events
-from core.monitoring.mappers import resolve_media_user_id
+from core.monitoring.mappers import resolve_media_user_id, repair_unmapped_sessions
 from core.monitoring.artwork import extract_artwork_refs
 from core.subscription_activation import activate_subscription_on_playback
 from core.monitoring.library_media import repair_unambiguous_library_associations
@@ -822,6 +822,7 @@ def collect_sessions_for_server(
 
             db.execute("DELETE FROM media_sessions WHERE server_id=? AND session_key=?", (server_id, sk))
 
+        repair_unmapped_sessions(db, server_id)
         repaired = repair_unambiguous_library_associations(db, server_id)
         if repaired["live"] or repaired["history"]:
             logger.info(

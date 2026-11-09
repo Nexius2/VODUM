@@ -31,5 +31,5 @@
     "new_login": {"subject": "Neue Anmeldung in Ihrem {brand_name}-Portal", "body": "Hallo {username},\n\nEine neue Anmeldung wurde registriert. Setzen Sie Ihr Passwort zurueck, falls Sie dies nicht waren.\n\n{portal_login_url}"},
     "direct_message": {"subject": "Neue Nachricht in Ihrem {brand_name}-Portal", "body": "Hallo {username},\n\nSie haben eine neue Nachricht von einem Administrator erhalten. Melden Sie sich in Ihrem Portal an, um sie zu lesen.\n\n{portal_login_url}"}
   },
-  "activation": {"button": "Zugang aktivieren"}
+  "activation": {"button": "Zugang aktivieren", "instructions": "Beginnen Sie beim ersten Zugriff mit der Schaltfläche unten. Erstellen Sie bei Plex ein Konto oder melden Sie sich mit der E-Mail-Adresse dieser Einladung an. Kehren Sie danach zur Aktivierungsseite zurück und warten Sie, bis alle Server bereit sind. Akzeptieren Sie ausstehende Einladungen in Plex und prüfen Sie danach den Zugang erneut. Der Portal-Anmeldelink ist für spätere Besuche."}
 }

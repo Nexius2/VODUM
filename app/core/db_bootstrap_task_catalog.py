@@ -1,4 +1,13 @@
 def seed_default_tasks(conn, cursor, *, ensure_row) -> None:
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "run_collections", "description": "task_description.run_collections",
+        "schedule": "15 5 * * *", "enabled": 1, "status": "idle",
+    })
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "refresh_collection_inventory", "description": "task_description.refresh_collection_inventory",
+        "schedule": "0 */12 * * *", "schedule_mode": "interval", "interval_seconds": 43200,
+        "enabled": 1, "status": "idle", "next_run": "1970-01-01 00:00:00", "max_retries": 0,
+    })
     # 3. Injecter les données par défaut
     # -------------------------------------------------
 

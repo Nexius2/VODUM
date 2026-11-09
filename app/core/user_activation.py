@@ -1,5 +1,6 @@
 """Personal activation with immutable identity binding and resumable server intent."""
 from core.error_reporting import log_handled_failure
+from core.activation_trace import trace_activation
 import hashlib
 import json
 import secrets
@@ -67,6 +68,9 @@ def prepare_activation(db, user_id, mode, blocks, servers):
 
 def send_activation(db, user_id, *, jellyfin_credentials=None):
     """Queue the configured user_creation templates, one per existing delay slot."""
+    from core.user_profile_context import has_user_playback
+    if has_user_playback(db,user_id):
+        raise ValueError('activation_already_used')
     from communications_engine import select_comm_templates_for_user, schedule_template_notification, enqueue_named_task
     row = db.query_one('SELECT id,mode FROM user_activations WHERE vodum_user_id=?', (user_id,))
     if not row:
@@ -97,10 +101,14 @@ def send_activation(db, user_id, *, jellyfin_credentials=None):
             dedupe_key=f"activation:{row['id']}:{generation}:template:{template['id']}")
     if any(int(template.get('days_after') or 0) <= 0 for template in templates):
         enqueue_named_task(db, 'send_expiration_emails')
+    trace_activation('email_queued',activation_id=int(row['id']),user_id=int(user_id),generation=int(generation))
 
 
 def activation_delivery_url(db, user_id, payload):
     """Mint at delivery, never store a bearer link in the scheduling queue."""
+    from core.user_profile_context import has_user_playback
+    if has_user_playback(db,user_id):
+        raise ValueError('activation_already_used')
     from mailing_utils import build_portal_login_url
     settings = activation_settings(db)
     if not int(settings.get('portal_enabled') or 0):
@@ -211,6 +219,7 @@ def process_server(db, activation, sid, identifier):
                     (now + 300, lease, activation['id'], sid, now))
         if cur.rowcount != 1:
             return
+    trace_activation('server_started', activation=activation, server_id=sid)
     state, error = 'error', 'activation_server_error'
     try:
         target = dict(db.query_one('SELECT * FROM user_activation_servers WHERE activation_id=? AND server_id=?', (activation['id'], sid)))
@@ -223,7 +232,7 @@ def process_server(db, activation, sid, identifier):
             if len(libraries) != len(ids) or not ids:
                 raise ValueError('activation_configuration_error')
             state = activate_plex_server(server, libraries, json.loads(target['options_json']), activation['plex_subject'],
-                                         decrypt_secret(activation['plex_token']), identifier)
+                                         decrypt_secret(activation['plex_token']), identifier,activation=activation)
             persist_plex_access(db, activation, sid, ids, state)
         else:
             found = db.query_one("SELECT id FROM media_users WHERE vodum_user_id=? AND server_id=? AND type='jellyfin'", (activation['vodum_user_id'], sid))
@@ -240,9 +249,13 @@ def process_server(db, activation, sid, identifier):
     finally:
         db.execute('UPDATE user_activation_servers SET state=?,error_key=?,lease_until=0,lease_id=NULL WHERE activation_id=? AND server_id=? AND lease_id=?',
                    (state, error, activation['id'], sid, lease))
+    trace_activation('server_'+state, activation=activation, server_id=sid,
+                     outcome='failure' if state=='error' else ('pending' if state=='pending' else 'success'),
+                     exc=ValueError(error) if error else None)
     targets = activation_targets(db, activation['id'])
     if activation['mode'] == 'plex' and targets and all(t['state'] == 'ready' for t in targets):
         db.execute('UPDATE user_activations SET completed_at=?,token_hash=NULL,email_token=NULL,plex_token=NULL WHERE id=?', (now, activation['id']))
+        trace_activation('completed', activation=activation)
 
 
 def persist_plex_access(db, activation, sid, ids, state):

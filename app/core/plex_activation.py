@@ -4,9 +4,10 @@ import requests
 from core.http_security import ConfiguredHostSession
 from core.plex_auth_client import PLEX_HTTP_ORIGINS
 from core.plex_share_xml import get_shared_servers_for_machine, plex_title_to_id_map
+from core.activation_trace import trace_activation
 
 
-def activate_plex_server(server, libraries, options, subject, user_token, client_identifier):
+def activate_plex_server(server, libraries, options, subject, user_token, client_identifier, *, activation=None):
     from plexapi.myplex import MyPlexAccount
 
     machine = str(server.get('server_identifier') or '').strip()
@@ -39,13 +40,16 @@ def activate_plex_server(server, libraries, options, subject, user_token, client
                 'librarySectionIds': ids, 'settings': settings,
             })
         response.raise_for_status()
+        trace_activation('share_updated' if matches else 'share_created',activation=activation,server_id=server.get('id'))
         # Re-read after POST, including a prior POST whose response was lost.
         shares = get_shared_servers_for_machine(owner, machine)
         matching_ids = {str(s['id']) for s in shares if str(subject) in
                         (str(s.get('userID') or ''), str(s.get('invitedId') or ''))}
         if not matching_ids:
+            trace_activation('share_confirmation',activation=activation,outcome='pending',server_id=server.get('id'))
             return 'pending'
         headers['X-Plex-Token'] = user_token
+        stage = 'invitation_read'
         try:
             response = http.get(f'{base}/invites/received/pending', headers=headers)
             response.raise_for_status()
@@ -53,11 +57,13 @@ def activate_plex_server(server, libraries, options, subject, user_token, client
                 for share in invitation.get('sharedServers') or []:
                     # Never accept the first invitation or all invitations from an owner.
                     if str(share.get('id')) in matching_ids:
+                        stage = 'invitation_accept'
                         accepted = http.post(f"{base}/{int(share['id'])}/accept", headers=headers)
                         accepted.raise_for_status()
-        except (requests.RequestException, ValueError, TypeError, AttributeError):
+                        trace_activation('invitation_accepted', activation=activation, server_id=server.get('id'))
+        except (requests.RequestException, ValueError, TypeError, AttributeError) as exc:
             # User may need to accept in Plex; readiness must still be verified below.
-            pass
+            trace_activation(stage, activation=activation, outcome='failure', exc=exc, server_id=server.get('id'))
         response = http.get('https://plex.tv/api/v2/resources', headers=headers,
                             params={'includeHttps': 1, 'includeRelay': 1})
         response.raise_for_status()

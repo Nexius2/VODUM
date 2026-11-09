@@ -25,23 +25,22 @@ def merge_vodum_users(db, master_id: int, other_id: int) -> None:
     if master_id == other_id:
         return
 
-    master = db.query_one(f"SELECT {USER_MERGE_COLUMNS} FROM vodum_users WHERE id=?", (master_id,))
-    other = db.query_one(f"SELECT {USER_MERGE_COLUMNS} FROM vodum_users WHERE id=?", (other_id,))
+    with db.transaction() as cursor:
+        _merge_users(cursor, master_id, other_id)
+
+
+def _merge_users(cursor, master_id, other_id):
+    master = cursor.execute(f"SELECT {USER_MERGE_COLUMNS} FROM vodum_users WHERE id=?", (master_id,)).fetchone()
+    other = cursor.execute(f"SELECT {USER_MERGE_COLUMNS} FROM vodum_users WHERE id=?", (other_id,)).fetchone()
     if not master or not other:
         raise ValueError("user not found")
-
-    master = dict(master)
-    other = dict(other)
-
-    # ⚠️ IMPORTANT :
-    # DBManager.execute() commit déjà (autocommit). Donc PAS de BEGIN/COMMIT/ROLLBACK ici.
-    # Sinon tu as exactement "cannot commit/rollback - no transaction is active".
+    master, other = dict(master), dict(other)
 
     # Ancien index trop strict :
     # il empêchait un même utilisateur VODUM d'avoir plusieurs comptes
     # Plex/Jellyfin sur le même serveur après un merge manuel.
-    db.execute("DROP INDEX IF EXISTS uq_media_users_vodum_server")
-    db.execute(
+    cursor.execute("DROP INDEX IF EXISTS uq_media_users_vodum_server")
+    cursor.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_media_users_vodum_server
         ON media_users(vodum_user_id, server_id)
@@ -50,13 +49,13 @@ def merge_vodum_users(db, master_id: int, other_id: int) -> None:
     )
 
     # 1) Déplacer media_users
-    db.execute(
+    cursor.execute(
         "UPDATE media_users SET vodum_user_id=? WHERE vodum_user_id=?",
         (master_id, other_id),
     )
 
     # 2) user_identities (éviter collisions UNIQUE)
-    db.execute(
+    cursor.execute(
         """
         DELETE FROM user_identities
         WHERE vodum_user_id = ?
@@ -71,13 +70,13 @@ def merge_vodum_users(db, master_id: int, other_id: int) -> None:
         """,
         (other_id, master_id),
     )
-    db.execute(
+    cursor.execute(
         "UPDATE user_identities SET vodum_user_id=? WHERE vodum_user_id=?",
         (master_id, other_id),
     )
 
     # 3) sent_emails (éviter collisions UNIQUE)
-    db.execute(
+    cursor.execute(
         """
         DELETE FROM sent_emails
         WHERE user_id = ?
@@ -91,13 +90,13 @@ def merge_vodum_users(db, master_id: int, other_id: int) -> None:
         """,
         (other_id, master_id),
     )
-    db.execute(
+    cursor.execute(
         "UPDATE sent_emails SET user_id=? WHERE user_id=?",
         (master_id, other_id),
     )
 
     # 3bis) media_jobs (sinon supprimés par ON DELETE CASCADE)
-    db.execute(
+    cursor.execute(
         "UPDATE media_jobs SET vodum_user_id=? WHERE vodum_user_id=?",
         (master_id, other_id),
     )
@@ -107,7 +106,7 @@ def merge_vodum_users(db, master_id: int, other_id: int) -> None:
     # - le master et le other avaient déjà chacun une ligne media_users
     #   pour le même serveur / même compte Plex-Jellyfin
     # - après UPDATE vodum_user_id, on se retrouve avec 2 lignes identiques
-    duplicate_groups = db.query(
+    duplicate_groups = cursor.execute(
         """
         SELECT
             server_id,
@@ -125,10 +124,10 @@ def merge_vodum_users(db, master_id: int, other_id: int) -> None:
         HAVING COUNT(*) > 1
         """,
         (master_id,),
-    )
+    ).fetchall()
 
     for grp in duplicate_groups:
-        dup_rows = db.query(
+        dup_rows = cursor.execute(
             """
             SELECT id, details_json, raw_json
             FROM media_users
@@ -155,7 +154,7 @@ def merge_vodum_users(db, master_id: int, other_id: int) -> None:
                 grp["ext_key"],
                 grp["user_key"],
             ),
-        )
+        ).fetchall()
 
         if len(dup_rows) <= 1:
             continue
@@ -169,7 +168,7 @@ def merge_vodum_users(db, master_id: int, other_id: int) -> None:
         placeholders = ",".join("?" * len(duplicate_ids))
 
         # Rebrancher toutes les bibliothèques sur la ligne conservée
-        db.execute(
+        cursor.execute(
             f"""
             INSERT OR IGNORE INTO media_user_libraries(media_user_id, library_id)
             SELECT ?, library_id
@@ -179,10 +178,20 @@ def merge_vodum_users(db, master_id: int, other_id: int) -> None:
             (keep_id, *duplicate_ids),
         )
 
+        # Preserve playback ownership before ON DELETE SET NULL detaches it.
+        for table in ('media_sessions', 'media_session_history', 'media_events'):
+            cursor.execute(
+                f"UPDATE OR IGNORE {table} SET media_user_id=? WHERE media_user_id IN ({placeholders})",
+                (keep_id, *duplicate_ids),
+            )
+
         # Supprimer les doublons media_users
         # media_user_libraries sera nettoyé par ON DELETE CASCADE
-        db.execute(
-            f"DELETE FROM media_users WHERE id IN ({placeholders})",
+        cursor.execute(
+            f"""DELETE FROM media_users WHERE id IN ({placeholders})
+                AND NOT EXISTS (SELECT 1 FROM media_sessions WHERE media_user_id=media_users.id)
+                AND NOT EXISTS (SELECT 1 FROM media_session_history WHERE media_user_id=media_users.id)
+                AND NOT EXISTS (SELECT 1 FROM media_events WHERE media_user_id=media_users.id)""",
             tuple(duplicate_ids),
         )
 
@@ -254,13 +263,13 @@ def merge_vodum_users(db, master_id: int, other_id: int) -> None:
 
     if merged:
         sets = ", ".join([f"{k}=?" for k in merged.keys()])
-        db.execute(
+        cursor.execute(
             f"UPDATE vodum_users SET {sets} WHERE id=?",
             [*merged.values(), master_id],
         )
 
     # 5) Supprimer other
-    db.execute("DELETE FROM vodum_users WHERE id=?", (other_id,))
+    cursor.execute("DELETE FROM vodum_users WHERE id=?", (other_id,))
 
 def build_merge_preview(master: dict, other: dict) -> dict:
     """

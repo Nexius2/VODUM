@@ -32,6 +32,12 @@ def run(task_id, db):
         WHERE LOWER(TRIM(type)) IN ('plex','jellyfin')
     """)
 
+    # A slow display refresh preference must not delay subscription enforcement.
+    enforce_limits = db.query_one("""
+        SELECT id FROM stream_policies WHERE is_enabled=1
+        AND rule_type IN ('max_streams_per_user','max_streams_per_ip','max_ips_per_user')
+        LIMIT 1
+    """)
     now = _utcnow()
     enqueued = 0
     skipped_existing = 0
@@ -55,6 +61,8 @@ def run(task_id, db):
 
         if interval < MIN_INTERVAL_SEC:
             interval = MIN_INTERVAL_SEC
+        if enforce_limits:
+            interval = min(interval, DEFAULT_INTERVAL_SEC)
 
         last_refresh_row = db.query_one("""
             SELECT COALESCE(MAX(processed_at), MAX(created_at)) AS last_refresh

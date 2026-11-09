@@ -1,0 +1,10 @@
+{
+  "seasonal": {
+    "upstream": "https://github.com/Kometa-Team/Kometa/blob/331becfd45e374ea9eccf60ff956ba7ecf590a29/defaults/movie/seasonal.yml",
+    "license": "MIT"
+  },
+  "awards": {
+    "upstream": "https://github.com/Kometa-Team/Kometa/tree/e1327dc4e7f709277e3e2be88df76c3eefe349e2/defaults/award",
+    "license": "MIT"
+  }
+}

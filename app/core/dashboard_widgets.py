@@ -4,6 +4,7 @@ from collections import Counter
 import logging
 from db_manager import isolated_read_operation
 
+from core.error_reporting import request_phase
 from core.aggregate_cache import cached_aggregate
 from core.dashboard_servers import dashboard_server_preview
 from core.dashboard_usage_risk import build_usage_risk_trend
@@ -173,27 +174,28 @@ def get_dashboard_servers(db):
         server["peak_streams_7d"] = 0
 
     if table_exists(db, "media_session_history"):
-        rows = cached_aggregate(
-            "dashboard:server-peaks:7d",
-            120,
-            lambda: [dict(row) for row in (db.query(
-                """
-                WITH events AS (
-                    SELECT server_id, datetime(started_at) AS ts, 1 AS delta
-                    FROM media_session_history WHERE datetime(stopped_at) >= datetime('now', '-7 days')
-                    UNION ALL
-                    SELECT server_id, datetime(stopped_at) AS ts, -1 AS delta
-                    FROM media_session_history WHERE datetime(stopped_at) >= datetime('now', '-7 days')
-                ), running AS (
-                    SELECT server_id, SUM(delta) OVER (
-                        PARTITION BY server_id ORDER BY ts
-                        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-                    ) AS active_count FROM events
-                )
-                SELECT server_id, MAX(active_count) AS peak FROM running GROUP BY server_id
-                """
-            ) or [])],
-        )
+        with request_phase("server_peaks_cache_wait_or_query"):
+            rows = cached_aggregate(
+                "dashboard:server-peaks:7d",
+                120,
+                lambda: [dict(row) for row in (db.query(
+                    """
+                    WITH events AS (
+                        SELECT server_id, datetime(started_at) AS ts, 1 AS delta
+                        FROM media_session_history WHERE datetime(stopped_at) >= datetime('now', '-7 days')
+                        UNION ALL
+                        SELECT server_id, datetime(stopped_at) AS ts, -1 AS delta
+                        FROM media_session_history WHERE datetime(stopped_at) >= datetime('now', '-7 days')
+                    ), running AS (
+                        SELECT server_id, SUM(delta) OVER (
+                            PARTITION BY server_id ORDER BY ts
+                            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                        ) AS active_count FROM events
+                    )
+                    SELECT server_id, MAX(active_count) AS peak FROM running GROUP BY server_id
+                    """
+                ) or [])],
+            )
         peaks = {int(row["server_id"]): int(row["peak"] or 0) for row in rows}
         for server in servers:
             server["peak_streams_7d"] = peaks.get(int(server["id"]), 0)

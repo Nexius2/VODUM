@@ -31,5 +31,5 @@
     "new_login": {"subject": "New login to your {brand_name} portal", "body": "Hello {username},\n\nA new login to your portal account was recorded. Reset your password if this was not you.\n\n{portal_login_url}"},
     "direct_message": {"subject": "New message in your {brand_name} portal", "body": "Hello {username},\n\nYou received a new message from an administrator. Sign in to your portal to read it.\n\n{portal_login_url}"}
   },
-  "activation": {"button": "Activate your access"}
+  "activation": {"button": "Activate your access", "instructions": "For your first visit, start with the button below. On Plex, create an account or sign in using the email address that received this message, then return to the activation page. Wait until all servers are ready. If an invitation is pending, accept it in Plex and return to check your access. The portal sign-in link is for later visits."}
 }

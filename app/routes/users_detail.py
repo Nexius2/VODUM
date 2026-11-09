@@ -285,6 +285,10 @@ def register(app):
 
         # on convertit en dict pour éviter les surprises sqlite3.Row
         tab = (request.args.get("tab") or "general").strip().lower()
+        # The merge dialog and candidates belong to the Access tab. Preserve
+        # legacy ?merge=1 links as well as the explicit navigation button.
+        if request.args.get("merge") == "1":
+            tab = "access"
         if tab not in ("general", "monitoring", "access", "notifications", "media"):
             tab = "general"
 

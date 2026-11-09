@@ -25,6 +25,8 @@ class SchedulerRuntime:
         try:
             self.db.execute(
                 """UPDATE tasks SET
+                   next_run=CASE WHEN name='refresh_collection_inventory' AND status='running'
+                                 THEN datetime('now') ELSE next_run END,
                    status=CASE WHEN enabled=0 THEN status
                                WHEN queued_count>0 THEN 'queued' ELSE 'idle' END,
                    updated_at=CURRENT_TIMESTAMP
@@ -50,7 +52,7 @@ class SchedulerRuntime:
                 )
             except Exception as exc:
                 self.logger.error("Error scheduler (global): %s", exc, exc_info=True)
-            time.sleep(30)
+            time.sleep(5)
 
     def force_check_update(self):
         try:

@@ -25,7 +25,7 @@ class VodumSessionInterface(SecureCookieSessionInterface):
         # a top-level GET callback. A Strict cookie is not sent on that
         # cross-site return, so the PIN/state stored in the session is lost.
         # Emit the flow-start response as Lax without weakening other sessions.
-        if request.endpoint in {"portal_plex_start", "portal_plex_link_start"}:
+        if request.endpoint in {"portal_plex_start", "portal_plex_link_start", "portal_access_plex"}:
             return "Lax"
         if value == "None" and not request.is_secure:
             return "Lax"

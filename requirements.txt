@@ -8,3 +8,6 @@ croniter==6.2.4
 requests==2.34.2
 websocket-client==1.9.2
 cryptography==50.0.2
+
+PyYAML>=6.0.2,<7
+playwright==1.64.1

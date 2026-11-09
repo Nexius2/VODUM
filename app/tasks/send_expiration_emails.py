@@ -135,6 +135,7 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
           q.dedupe_key,
           q.channels_sent,
           t.key AS template_key,
+          t.name AS template_name,
           t.subject,
           t.body,
           t.trigger_event,
@@ -278,6 +279,9 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
                 if trigger_event != 'user_creation' or q.get('template_provider') not in ('all', q.get('provider')):
                     raise ValueError('activation_no_template')
                 activation_url = activation_delivery_url(db, uid, payload)
+                from core.user_activation import activation_settings
+                from mailing_utils import build_portal_login_url
+                extra_context['portal_login_url']=build_portal_login_url(activation_settings(db).get('portal_public_url'))
             except ValueError as exc:
                 db.execute("UPDATE comm_scheduled SET status='error',attempt_count=max_attempts,last_error=?,next_attempt_at=NULL WHERE id=?", (str(exc), scheduled_id))
                 failed += 1
@@ -297,7 +301,7 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
 
         if activation_url:
             from core.activation_email import activation_email_body
-            body = activation_email_body(body, activation_url, communication_language)
+            body = activation_email_body(body, activation_url, communication_language, provider=q.get('provider'))
 
         selected_channels = explicit_delivery_channels(q.get("delivery_channels"))
         if activation_url:
@@ -357,6 +361,7 @@ def _flush_comm_scheduled(db, settings: dict, task_id: int | None):
                 attempt=att,
                 meta={
                     "template_key": q.get("template_key"),
+                    "template_name": q.get("template_name"),
                     "trigger_event": trigger_event,
                     "provider": q.get("provider"),
                     "server_id": q.get("server_id"),

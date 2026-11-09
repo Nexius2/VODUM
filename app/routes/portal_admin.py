@@ -12,6 +12,7 @@ from core.portal_readiness import evaluate_portal_readiness
 from core.portal_admin_data import apply_portal_admin_action
 from core.portal_email import portal_email_payload
 from core.portal_privacy import erase_portal_user_data, export_portal_user_data
+from core.portal_system_status import load_portal_system_status
 from core.portal_page_data import (
     load_portal_home, load_portal_media_access, load_portal_monitoring,
     load_portal_profile, load_portal_subscription, load_portal_support,
@@ -162,6 +163,10 @@ def register(app):
     @admin_required
     def portal_user_invite(user_id):
         db = get_db()
+        from core.user_profile_context import has_user_playback
+        if has_user_playback(db,user_id):
+            flash('activation_already_used','warning')
+            return redirect(url_for('user_detail',user_id=user_id))
         from core.user_activation import send_activation
         guided = db.query_one('SELECT id FROM user_activations WHERE vodum_user_id=?', (user_id,))
         if guided:
@@ -292,8 +297,11 @@ def register(app):
             admin_preview=True, preview_user_id=int(user_id), portal_features=features,
             portal_invitations_enabled=bool(settings.get("portal_show_invitations")),
         )
-        if page == "media" and not features["media"]:
+        if page in {"media","system-status"} and not features["media"]:
             abort(404)
+        if page in {'media','system-status'}:
+            return render_template('portal/system_status.html',accounts=load_portal_media_access(db,user_id),
+                health=load_portal_system_status(db,user_id),**common,active_portal_page='system-status')
         if page == "requests" and features["requests"]:
             from core.portal_media_requests import request_libraries, search_media, MediaRequestError
             term = (request.args.get('q') or '').strip()
@@ -303,7 +311,7 @@ def register(app):
                 except MediaRequestError as exc: flash(str(exc),'error')
             return render_template('portal/requests.html',libraries=request_libraries(db,user_id),
                 results=results,query=term,**common,active_portal_page='requests')
-        if page in {"home", "profile", "media"}:
+        if page in {"home", "profile"}:
             from routes.portal import _profile_communication_state
             notifications_can_override, discord_enabled = _profile_communication_state(db, settings)
             account = db.query_one("SELECT id FROM portal_accounts WHERE vodum_user_id=?", (int(user_id),))
@@ -313,7 +321,7 @@ def register(app):
                 jellyfin_servers=servers, recently_reauthenticated=False, languages=get_available_languages(),
                 notifications_can_override=notifications_can_override,
                 discord_enabled=discord_enabled,
-                **home, accounts=load_portal_media_access(db, user_id) if features["media"] else [],
+                **home, accounts=[],
                 **common, active_portal_page="profile")
         if page == "subscription" and features["subscription"]:
             return render_template("portal/subscription.html", subscription=load_portal_subscription(db, user_id), **common, active_portal_page="subscription")

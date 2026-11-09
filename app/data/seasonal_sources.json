@@ -1,0 +1,140 @@
+{
+  "events": {
+    "new_year": {
+      "imdb": [
+        "ls066838460"
+      ]
+    },
+    "valentine": {
+      "imdb": [
+        "ls032692441",
+        "ls000094398",
+        "ls057783436",
+        "ls064427905"
+      ]
+    },
+    "patrick": {
+      "imdb": [
+        "ls067580975"
+      ]
+    },
+    "easter": {
+      "imdb": [
+        "ls062665509",
+        "ls051733651"
+      ]
+    },
+    "mother": {
+      "keywords": [
+        "motherhood",
+        "pregnancy"
+      ]
+    },
+    "memorial": {
+      "imdb": [
+        "ls526590990"
+      ]
+    },
+    "father": {
+      "keywords": [
+        "fatherhood"
+      ]
+    },
+    "independence": {
+      "imdb": [
+        "ls561449172",
+        "ls541213215",
+        "ls068664510",
+        "ls080925875"
+      ]
+    },
+    "labor": {
+      "imdb": [
+        "ls002014923"
+      ]
+    },
+    "halloween": {
+      "imdb": [
+        "ls546214737",
+        "ls023118929",
+        "ls000099714"
+      ],
+      "tmdb_collection": [
+        185103,
+        11716,
+        750822,
+        313086,
+        91361,
+        8581,
+        1733,
+        8091,
+        2980,
+        751156
+      ],
+      "tmdb_movie": [
+        23437
+      ]
+    },
+    "veteran": {
+      "imdb": [
+        "ls526590990",
+        "ls565595526"
+      ]
+    },
+    "thanksgiving": {
+      "keywords": [
+        "thanksgiving"
+      ]
+    },
+    "christmas": {
+      "mdblist": [
+        "https://mdblist.com/lists/k0meta/christmas-extravaganza"
+      ]
+    },
+    "aapi": {
+      "mdblist": [
+        "https://mdblist.com/lists/k0meta/asian-american-pacific-islander-heritage-month"
+      ]
+    },
+    "disabilities": {
+      "keywords": [
+        "disability"
+      ]
+    },
+    "black_history": {
+      "imdb": [
+        "ls023525790"
+      ],
+      "letterboxd": [
+        "https://letterboxd.com/mardarrius/list/black-is-beautiful/"
+      ]
+    },
+    "lgbtq": {
+      "imdb": [
+        "ls080580859"
+      ]
+    },
+    "latinx": {
+      "mdblist": [
+        "https://mdblist.com/lists/k0meta/latinx-heritage-month"
+      ]
+    },
+    "women": {
+      "keywords": [
+        "women in film",
+        "women's rights",
+        "women's suffrage",
+        "womens rights",
+        "womens suffrage"
+      ]
+    },
+    "summer": {
+      "keywords": [
+        "summer vacation",
+        "summer camp"
+      ],
+      "vodum_extension": true
+    }
+  },
+  "license_notice": "seasonal-sources-LICENSE.txt"
+}

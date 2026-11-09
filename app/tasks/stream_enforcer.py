@@ -244,30 +244,17 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
                 except Exception:
                     pass
 
-            counted_sessions = user_sessions
-            counted_sessions = _deduplicate_user_stream_sessions(policy, user_key, counted_sessions)
-
-            defer_probable_switch = should_defer_stream_violation(
-                policy_id=int(policy.get("id") or 0),
-                user_key=user_key,
-                sessions=counted_sessions,
-                limit=eff_max,
-                current_count=len(counted_sessions),
-            )
-
+            # Every provider session consumes a slot, including mobile/device
+            # overlaps. Similar clients or media never prove a stopped stream.
+            counted_sessions = _deduplicate_household_sessions(user_sessions)
             if len(counted_sessions) <= eff_max:
                 continue
-
-            if defer_probable_switch:
-                logger.info(
-                    "[max_streams_grace] probable device switch | policy=%s | user=%s | streams=%s | max=%s | grace=%ss",
-                    policy.get("id"),
-                    user_key,
-                    len(counted_sessions),
-                    eff_max,
-                    HOUSEHOLD_MEDIA_GRACE_SECONDS,
-                )
-                continue
+            remaining = list(counted_sessions)
+            kill_targets = []
+            while len(remaining) > eff_max:
+                excess = _pick_kill_target(remaining, selector)
+                kill_targets.append(excess)
+                remaining.remove(excess)
 
             # ✅ On choisit la session à tuer globalement (tous serveurs confondus)
             target = _pick_kill_target(counted_sessions, selector)
@@ -287,7 +274,8 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
                 "server_id": server_id,
                 "provider": provider,
                 "target_user": target_user,
-                "sessions": [target],   # mono-session => kill toujours sur le bon serveur
+                "sessions": counted_sessions,
+                "kill_targets": kill_targets,
                 "reason": reason,
                 "selector": selector,
                 "warn_title": warn_title,
@@ -338,8 +326,6 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
 
                 ips.add(ip)
 
-            if _should_grace_coherent_ip_switch(policy, user_key, deduped_sessions, ips, max_ips):
-                continue
             if len(ips) <= max_ips:
                 continue
 
@@ -439,15 +425,15 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
         for key, ip_sessions in by_key.items():
             counted_ip_sessions = _deduplicate_household_sessions(ip_sessions)
 
-            if should_defer_stream_violation(
-                policy_id=int(policy.get("id") or 0), user_key=("ip", key),
-                sessions=counted_ip_sessions, limit=max_streams,
-                current_count=len(counted_ip_sessions),
-            ):
-                continue
-
             if len(counted_ip_sessions) <= max_streams:
                 continue
+
+            remaining = list(counted_ip_sessions)
+            kill_targets = []
+            while len(remaining) > max_streams:
+                excess = _pick_kill_target(remaining, selector)
+                kill_targets.append(excess)
+                remaining.remove(excess)
 
             ip_value = key.split("|", 1)[1] if ("|" in key) else key
             reason = f"max_streams_per_ip({ip_value}): {len(counted_ip_sessions)} > {max_streams}"
@@ -469,6 +455,7 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
                 "provider": provider,
                 "target_user": _normalize_user_key(target),
                 "sessions": counted_ip_sessions,
+                "kill_targets": kill_targets,
                 "reason": reason,
                 "selector": selector,
                 "warn_title": warn_title,
@@ -603,12 +590,25 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
 # Enforcement state + actions
 # -------------------------
 
+def _attempt_kill(server_row, session_key, reason):
+    try:
+        return _kill_session(server_row, session_key, reason=reason)
+    except Exception as exc:
+        # Persist provider exceptions through the normal kill_failed path.
+        logger.error('Stream termination raised | server=%s session=%s error_type=%s',
+                     server_row.get('id'), session_key, type(exc).__name__)
+        return False
+
+
 def _log_enforcement(policy_id: int, server_id: int, provider: str, session_key: str,
                      vodum_user_id: Optional[int], external_user_id: str,
                      action: str, reason: str,
                      account_username: Optional[str] = None,
                      ips_json: Optional[str] = None,
                      details_json: Optional[str] = None):
+    if action in ('kill', 'kill_failed'):
+        from core.stream_kill_diagnostics import merge
+        details_json = merge(details_json, server_id, session_key)
     log_enforcement(
         _db, policy_id, server_id, provider, session_key, vodum_user_id,
         external_user_id, action, reason, account_username, ips_json, details_json,
@@ -687,7 +687,7 @@ def _kill_violation_targets(
     user_vodum_id: Optional[int],
     user_ext: str,
 ) -> None:
-    """Terminate every live session belonging to an excess IP."""
+    """Terminate all excess sessions without a warning delay."""
     policy_id = int(policy["id"])
     reason = violation.get("reason") or "policy violation"
     kill_reason_for_client = violation.get("warn_text") or reason
@@ -695,6 +695,7 @@ def _kill_violation_targets(
     live_sessions = _load_live_sessions()
 
     for target in targets:
+        user_vodum_id, user_ext = _normalize_user_key(target)
         server_id = int(target["server_id"])
         provider_type = target["provider"]
         server_row = _load_server(server_id)
@@ -716,23 +717,7 @@ def _kill_violation_targets(
         )
 
         try:
-            if provider_type == "jellyfin":
-                message_key = _jellyfin_session_id_from_target(target, session_key)
-                try:
-                    _warn_session(
-                        server_row,
-                        message_key,
-                        violation.get("warn_title", "Stream limit"),
-                        violation.get("warn_text", "Limit reached."),
-                        timeout_ms=JELLYFIN_KILL_MESSAGE_TIMEOUT_MS,
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "Jellyfin warning failed before stop: server=%s error=%s",
-                        server_id, type(exc).__name__,
-                    )
-
-            ok = _kill_session(server_row, session_key, reason=kill_reason_for_client)
+            ok = _attempt_kill(server_row, session_key, reason=kill_reason_for_client)
 
             if ok:
                 _queue_stream_blocked_notification(
@@ -878,6 +863,10 @@ def run(task_id: int, db):
         # Policy système "abonnement expiré" :
         # on coupe immédiatement, sans warning, sans délai de recheck.
         if _is_strict_expired_subscription_policy(policy):
+            if len(kill_targets) > 1:
+                _kill_violation_targets(task_id, policy, v, kill_targets, user_vodum_id, user_ext)
+                maybe_boost_after_expired_kill(_db, task_id, policy_id, user_vodum_id)
+                continue
             try:
                 kill_live_sessions = _load_live_sessions(stable_seconds=0)
 
@@ -889,7 +878,7 @@ def run(task_id: int, db):
                     reason=reason,
                 )
 
-                ok = _kill_session(server_row, session_key, reason=kill_reason_for_client)
+                ok = _attempt_kill(server_row, session_key, reason=kill_reason_for_client)
 
                 if ok:
                     _queue_stream_blocked_notification(
@@ -941,6 +930,20 @@ def run(task_id: int, db):
                     exc_info=True
                 )
 
+            continue
+
+        if policy.get("rule_type") in {
+            "max_streams_per_user", "max_streams_per_ip", "max_ips_per_user"
+        }:
+            # Re-evaluate current collected state without sleeping. A stream
+            # which disappeared since evaluation must not be stopped again.
+            current = _recheck_violation(policy, v, delay_seconds=0)
+            if current:
+                _kill_violation_targets(
+                    task_id, policy, current,
+                    current.get("kill_targets") or current["sessions"],
+                    *current["target_user"],
+                )
             continue
 
         # A Plex player may automatically recreate a session after terminate.
@@ -1071,7 +1074,7 @@ def run(task_id: int, db):
 
 
             # Kill stream (Plex affichera kill_reason_for_client ; Jellyfin ignore reason, mais on a déjà envoyé un message)
-            ok = _kill_session(server_row, session_key, reason=kill_reason_for_client)
+            ok = _attempt_kill(server_row, session_key, reason=kill_reason_for_client)
 
             if ok:
                 _queue_stream_blocked_notification(

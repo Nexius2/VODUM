@@ -32,6 +32,7 @@ from core.db_bootstrap_task_catalog import seed_default_tasks
 from core.db_bootstrap_admin_auth import ensure_admin_auth_schema
 from core.db_bootstrap_portal import ensure_portal_foundation_schema
 from core.db_bootstrap_payments import ensure_payment_schema
+from core.db_bootstrap_collections import ensure_collection_schema
 
 
 # Bootstrap messages contain Unicode symbols. Some host consoles (notably
@@ -79,6 +80,7 @@ def run_migrations():
 
     conn = open_sqlite_connection(DB_PATH)
     cursor = conn.cursor()
+    ensure_collection_schema(conn, cursor)
 
     # -------------------------------------------------
     # 0. Nettoyage legacy : suppression table logs (désormais obsolète)

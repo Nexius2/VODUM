@@ -16,6 +16,10 @@ WORKDIR /app
 # Python deps
 COPY requirements.txt .
 RUN python -m pip install -r requirements.txt
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
+RUN python -m playwright install --with-deps chromium \
+    && chmod -R a+rX /opt/playwright \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy application source
 COPY app/ /app/

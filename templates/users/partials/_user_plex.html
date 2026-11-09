@@ -14,15 +14,8 @@
       </div>
 
       {% set first_plex = plex_accounts[0] %}
-      {% if first_plex.media_avatar %}
-        <img src="{{ first_plex.media_avatar }}"
-             alt="Plex avatar"
-             class="w-10 h-10 rounded-full border border-slate-700" loading="lazy" decoding="async">
-      {% elif user.avatar %}
-        <img src="{{ user.avatar }}"
-             alt="Plex avatar"
-             class="w-10 h-10 rounded-full border border-slate-700" loading="lazy" decoding="async">
-      {% endif %}
+      {% set provider_avatar = first_plex.media_avatar or user.avatar %}
+      {% include 'users/partials/_provider_avatar.html' %}
     </div>
 
     <div class="flex flex-wrap gap-2 mb-4">

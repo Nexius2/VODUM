@@ -1,0 +1,110 @@
+{
+  "version": 2,
+  "scope": "Six curated movie franchises; no automatic saga discovery.",
+  "universes": {
+    "dcu": {
+      "title": "DC Universe",
+      "provider": "imdb_lists",
+      "media_types": [
+        "movie"
+      ],
+      "scope": "All DC Comics films, including animation, across cinematic continuities.",
+      "lists": [
+        "ls020636102",
+        "ls058721118"
+      ],
+      "include_video": true,
+      "include_short": true,
+      "include_special": true,
+      "supplement_lists": [
+        "ls045579204"
+      ]
+    },
+    "avp": {
+      "title": "Alien & Predator",
+      "provider": "imdb",
+      "list": "https://www.imdb.com/list/ls543971628/",
+      "media_types": [
+        "movie"
+      ],
+      "include_video": true,
+      "include_short": true,
+      "include_special": true,
+      "supplement_lists": [
+        "ls042156304"
+      ]
+    },
+    "fast": {
+      "title": "Fast & Furious",
+      "provider": "imdb",
+      "list": "https://www.imdb.com/list/ls4102351575/",
+      "media_types": [
+        "movie"
+      ],
+      "include_video": true,
+      "include_short": true,
+      "include_special": true
+    },
+    "mcu": {
+      "title": "Marvel Cinematic Universe",
+      "provider": "imdb",
+      "list": "https://www.imdb.com/list/ls539646485/",
+      "media_types": [
+        "movie"
+      ],
+      "include_video": true,
+      "include_short": true,
+      "include_special": true
+    },
+    "starwars": {
+      "title": "Star Wars",
+      "provider": "tmdb_collection",
+      "collection": 10,
+      "required_movies": [
+        11,
+        1891,
+        1892,
+        1893,
+        1894,
+        1895,
+        140607,
+        181808,
+        181812
+      ],
+      "movies": [
+        12180,
+        330459,
+        348350,
+        1228710
+      ],
+      "media_types": [
+        "movie"
+      ],
+      "scope": "Skywalker saga, theatrical spin-offs and official standalone shorts, videos and television specials. Series and normal television episodes excluded.",
+      "source": "https://www.starwars.com/films",
+      "include_video": true,
+      "include_short": true,
+      "include_special": true,
+      "supplement_lists": [
+        "ls024519932"
+      ],
+      "supplement_imdb_ids": [
+        "tt12885438",
+        "tt15164924",
+        "tt20784210",
+        "tt43679852"
+      ]
+    },
+    "trek": {
+      "title": "Star Trek",
+      "provider": "imdb",
+      "list": "https://www.imdb.com/list/ls547463722/",
+      "media_types": [
+        "movie"
+      ],
+      "include_video": true,
+      "include_short": true,
+      "include_special": true
+    }
+  }
+}

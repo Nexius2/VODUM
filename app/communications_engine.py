@@ -180,7 +180,7 @@ def store_uploads(kind: str, object_id: int, files) -> List[Dict]:
 
 def fetch_template_attachments(db, template_id: int) -> List[Dict]:
     rows = db.query(
-        "SELECT filename, mime_type, path FROM comm_template_attachments WHERE template_id = ? ORDER BY id",
+        "SELECT id, filename, mime_type, path FROM comm_template_attachments WHERE template_id = ? ORDER BY id",
         (template_id,),
     )
     return [dict(r) for r in (rows or [])]

@@ -2,6 +2,8 @@
 
 Real captures of the local VODUM interface, taken on 2026-10-09 with a 1920 × 1080 desktop viewport. The output PNG files are 1920 × 1080; small browser capture margins are padded without stretching the interface.
 
+The Collections catalog was captured separately on 2026-11-02 as a full-page JPEG at the browser's existing viewport. It shows the model catalog without user accounts, server addresses or connection settings; no masking was needed for this capture.
+
 Personal names, account identifiers, email addresses, private server labels, URLs and network addresses are covered with opaque masks. Masks do not change the underlying application data. Some charts are covered where their labels contain private identifiers.
 
 | File | Screen |
@@ -10,6 +12,7 @@ Personal names, account identifiers, email addresses, private server labels, URL
 | [users.png](users.png) | Users, status, expiry and access |
 | [servers.png](servers.png) | Plex, Jellyfin and ARR integrations |
 | [libraries.png](libraries.png) | Libraries across servers |
+| [collections.jpg](collections.jpg) | Collections workspace and model catalog (full-page capture, 2026-11-02) |
 | [monitoring.png](monitoring.png) | Monitoring overview |
 | [policies.png](policies.png) | Streaming policy overview |
 | [activity.png](activity.png) | Playback activity |

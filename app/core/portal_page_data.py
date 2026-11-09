@@ -280,12 +280,12 @@ def load_portal_media_access(db, vodum_user_id: int) -> list[dict]:
         """
         SELECT mu.id,mu.type,mu.username,mu.accepted_at,mu.joined_at,
                mu.details_json,mu.raw_json,
-               s.name AS server_name,s.type AS server_type,s.status AS server_status,
+               s.id AS server_id,s.name AS server_name,s.type AS server_type,s.status AS server_status,
                l.id AS library_id,l.name AS library_name,l.type AS library_type
         FROM media_users mu
         JOIN servers s ON s.id=mu.server_id
         LEFT JOIN media_user_libraries mul ON mul.media_user_id=mu.id
-        LEFT JOIN libraries l ON l.id=mul.library_id
+        LEFT JOIN libraries l ON l.id=mul.library_id AND l.server_id=mu.server_id
         WHERE mu.vodum_user_id=?
         ORDER BY LOWER(COALESCE(s.name,'')),mu.id,LOWER(COALESCE(l.name,''))
         """,
@@ -296,7 +296,7 @@ def load_portal_media_access(db, vodum_user_id: int) -> list[dict]:
         row = dict(source)
         account = accounts.setdefault(row["id"], {
             "id": row["id"], "type": (row.get("type") or row.get("server_type") or "").lower(),
-            "username": row.get("username"), "server_name": row.get("server_name"),
+            "username": row.get("username"), "server_name": row.get("server_name"), "server_id":row.get("server_id"),
             "server_status": row.get("server_status"), "accepted_at": row.get("accepted_at"),
             "joined_at": row.get("joined_at"), "libraries": [], "invitation_status": "active",
         })

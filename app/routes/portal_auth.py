@@ -18,6 +18,7 @@ from core.portal_bruteforce import (
     register_login_failure,
 )
 from core.portal_audit import record_portal_event
+from core.activation_trace import trace_activation
 from core.portal_sessions import create_portal_session, revoke_portal_session
 from core.auth_principal import portal_principal
 from core.portal_account_state import state_allows_portal
@@ -193,10 +194,13 @@ def register(app):
     @app.get("/portal/auth/plex/callback")
     def portal_plex_callback():
         db = get_db()
+        stage = 'login_state'
         try:
             flow = consume_plex_flow(session, returned_state=request.args.get("state") or "")
+            stage = 'login_token'
             client = _plex_client(db); token = client.wait_for_token(flow.pin_id)
             if not token: raise PlexAuthError("authorization incomplete")
+            stage = 'login_identity'
             identity = client.fetch_identity(token)
             if flow.purpose == "link":
                 principal = session.get(SESSION_PRINCIPAL_KEY) or {}
@@ -207,6 +211,7 @@ def register(app):
                 flash("portal_method_linked", "success")
                 return redirect(url_for("portal_profile"))
             if flow.purpose != "login": raise ValueError("unavailable")
+            stage = 'login_account_resolution'
             try:
                 linked = resolve_plex_portal_account(db, identity.subject, provider_email=identity.email)
             except PlexPortalLinkAmbiguous as ambiguous:
@@ -219,7 +224,7 @@ def register(app):
         except (PlexFlowRejected, PlexAuthError, ValueError) as exc:
             record_portal_event(db, "login_failed", "failure", client_ip=get_client_ip(),
                                 user_agent=request.user_agent.string, details={"method": "plex"})
-            current_app.logger.warning("Portal Plex callback failed (%s): %s", type(exc).__name__, exc)
+            trace_activation(stage, activation=session.get('user_activation'), outcome='failure', exc=exc)
             return render_template("portal/auth_message.html", message_key="portal_plex_login_failed", login_quote_visual=_build_portal_login_visual()), 400
 
     @app.post("/portal/auth/plex/confirm")

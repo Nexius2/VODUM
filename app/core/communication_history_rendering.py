@@ -1,7 +1,29 @@
 from core.error_reporting import log_handled_failure
 import json
+import re
+from html.parser import HTMLParser
 
 from mailing_utils import build_user_context, render_mail
+
+
+def readable_history_body(body):
+    body=str(body or '')
+    if not re.search(r'<(?:br|p|div|a|html|table)\b',body,re.I):return body
+    class TextReader(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.parts=[]
+            self.hidden=0
+        def handle_starttag(self,tag,attrs):
+            if tag in ('script','style'):self.hidden+=1
+            if not self.hidden and tag in ('br','p','div','tr'):self.parts.append('\n')
+        def handle_endtag(self,tag):
+            if tag in ('script','style'):self.hidden=max(0,self.hidden-1)
+            if not self.hidden and tag in ('p','div','tr'):self.parts.append('\n')
+        def handle_data(self,data):
+            if not self.hidden:self.parts.append(data)
+    reader=TextReader();reader.feed(body)
+    return re.sub(r'\n{3,}','\n\n',''.join(reader.parts)).strip()
 
 
 def render_communication_history_message(row: dict, brand_name: str, portal_public_url: str | None = None) -> dict:
@@ -11,8 +33,9 @@ def render_communication_history_message(row: dict, brand_name: str, portal_publ
         log_handled_failure("communications.decode_history_metadata")
         metadata = {}
     if metadata.get("rendered_subject") or metadata.get("rendered_body"):
+        row["template_name"] = metadata.get("template_name") or row.get("template_name") or ""
         row["rendered_subject"] = metadata.get("rendered_subject") or ""
-        row["rendered_body"] = metadata.get("rendered_body") or ""
+        row["rendered_body"] = readable_history_body(metadata.get("rendered_body"))
         return row
     payload = metadata.get("payload") or {}
     context_input = {
@@ -35,5 +58,5 @@ def render_communication_history_message(row: dict, brand_name: str, portal_publ
     subject = row.get("template_subject") if row.get("kind") == "template" else row.get("campaign_subject")
     body = row.get("template_body") if row.get("kind") == "template" else row.get("campaign_body")
     row["rendered_subject"] = render_mail(subject or "", context)
-    row["rendered_body"] = render_mail(body or "", context)
+    row["rendered_body"] = readable_history_body(render_mail(body or "", context))
     return row

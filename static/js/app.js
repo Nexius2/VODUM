@@ -493,6 +493,7 @@ document.body.addEventListener("htmx:afterSwap", function (event) {
   let timer = null;
   let lastHadActivity = false;
   let inFlight = false;
+  let activityFailures = 0;
 
   function schedule(delayMs) {
     if (timer) window.clearTimeout(timer);
@@ -512,12 +513,13 @@ document.body.addEventListener("htmx:afterSwap", function (event) {
     const timeout = window.setTimeout(() => controller.abort(), 10000);
     try {
       const r = await fetch("/api/tasks/activity", { cache: "no-store", signal: controller.signal });
-      if (!r.ok) throw new Error("bad status");
+      if (!r.ok) {const error = new Error("bad status");error.status = r.status;throw error;}
       const data = await r.json();
       const running = Number(data.running || 0);
       const queued = Number(data.queued || 0);
       const n = running + queued;
       lastHadActivity = n > 0;
+      activityFailures = 0;
 
       if (lastHadActivity) {
         const parts = [];
@@ -529,22 +531,25 @@ document.body.addEventListener("htmx:afterSwap", function (event) {
       } else {
         box.classList.add("hidden");
       }
-    } catch {
-      console.error("[vodum] task activity refresh failed");
-      lastHadActivity = false;
-      box.classList.add("hidden");
+    } catch (error) {
+      activityFailures += 1;
+      const transient = error.name === 'AbortError' || error instanceof TypeError || error.status >= 500;
+      if (activityFailures === 1) {
+        (transient ? console.warn : console.error)("[vodum] task activity refresh failed",error);
+      }
     } finally {
       window.clearTimeout(timeout);
       inFlight = false;
     }
 
-    schedule(lastHadActivity ? activeDelayMs : idleDelayMs);
+    schedule(activityFailures ? Math.min(60000,idleDelayMs * 2 ** Math.min(activityFailures-1,3)) : lastHadActivity ? activeDelayMs : idleDelayMs);
   }
 
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) refresh();
   });
 
+  document.addEventListener('vodum:task-activity-changed', refresh);
   refresh();
 })();
 

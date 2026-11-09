@@ -381,7 +381,13 @@
     const confirmButton = document.getElementById("mergeConfirmBtn");
     const confirmModal = document.getElementById("mergeConfirmModal");
     const finalConfirmButton = document.getElementById("mergeFinalConfirmBtn");
-    const allCandidates = document.getElementById("mergeAllCandidates");
+    if (confirmModal) overlay.appendChild(confirmModal);
+    const candidates = [...overlay.querySelectorAll(".merge-candidate")];
+    const search = document.getElementById("mergeSearch");
+    const noResults = document.getElementById("mergeNoResults");
+    let showAll = false;
+    let previewVersion = 0;
+    let approvedTarget = null;
     const moreButton = document.getElementById("mergeMoreBtn");
     const previewContent = document.getElementById("mergePreviewContent");
     const previewLoading = document.getElementById("mergePreviewLoading");
@@ -393,13 +399,16 @@
     let selectedCandidate = null;
 
     function closeConfirmModal() {
+      previewVersion += 1;
+      approvedTarget = null;
+      if (finalConfirmButton) finalConfirmButton.disabled = true;
       confirmModal?.classList.add("hidden");
     }
     function clearSelection() {
-      document.querySelectorAll(".merge-candidate").forEach((candidate) => {
+      candidates.forEach((candidate) => {
         candidate.classList.remove("border-amber-700", "bg-amber-900/10");
         candidate.classList.add("border-slate-800");
-        candidate.setAttribute("aria-selected", "false");
+        candidate.setAttribute("aria-pressed", "false");
       });
       selectedCandidate = null;
       if (otherIdInput) otherIdInput.value = "";
@@ -413,21 +422,44 @@
       overlay.classList.remove("hidden");
       document.body.classList.add("overflow-hidden");
       clearSelection();
+      filterCandidates();
+      search?.focus();
     }
     function closeOverlay() {
       overlay.classList.add("hidden");
       document.body.classList.remove("overflow-hidden");
       closeConfirmModal();
     }
-    window.openMergeOverlay = openOverlay;
-    window.closeMergeOverlay = closeOverlay;
-    window.closeMergeConfirmModal = closeConfirmModal;
-    window.toggleAllMergeCandidates = () => {
-      if (!allCandidates || !moreButton) return;
-      const show = allCandidates.classList.contains("hidden");
-      allCandidates.classList.toggle("hidden");
-      moreButton.textContent = show ? config.show_top : config.show_all;
-    };
+    const normalize = (value) => value.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+    function filterCandidates() {
+      const terms = normalize(search?.value || "").trim().split(/\s+/).filter(Boolean);
+      let visibleCount = 0;
+      candidates.forEach((candidate, index) => {
+        const matches = terms.length
+          ? terms.every((term) => normalize(candidate.dataset.search || "").includes(term))
+          : showAll || index < 5;
+        candidate.classList.toggle("hidden", !matches);
+        if (matches) visibleCount += 1;
+      });
+      if (selectedCandidate?.classList.contains("hidden")) clearSelection();
+      noResults?.classList.toggle("hidden", visibleCount > 0);
+      if (moreButton) {
+        moreButton.disabled = terms.length > 0;
+        moreButton.setAttribute("aria-expanded", String(showAll || terms.length > 0));
+        moreButton.textContent = showAll ? config.show_top : config.show_all;
+      }
+    }
+    search?.addEventListener("input", filterCandidates);
+    document.querySelectorAll("[data-merge-action]").forEach((button) => {
+      button.addEventListener("click", () => {
+        switch (button.dataset.mergeAction) {
+          case "open": openOverlay(); break;
+          case "close": closeOverlay(); break;
+          case "cancel-preview": closeConfirmModal(); break;
+          case "more": showAll = !showAll; filterCandidates(); break;
+        }
+      });
+    });
 
     function fillConfirm(candidate) {
       if (!candidate) return;
@@ -442,7 +474,7 @@
       selectedCandidate = candidate;
       candidate.classList.remove("border-slate-800");
       candidate.classList.add("border-amber-700", "bg-amber-900/10");
-      candidate.setAttribute("aria-selected", "true");
+      candidate.setAttribute("aria-pressed", "true");
       const otherId = candidate.dataset.otherId || "";
       if (otherIdInput) otherIdInput.value = otherId;
       if (confirmButton && otherId) {
@@ -486,6 +518,9 @@
     }
     async function loadPreview(otherId) {
       if (!previewContent) return;
+      const version = ++previewVersion;
+      approvedTarget = null;
+      if (finalConfirmButton) finalConfirmButton.disabled = true;
       previewError?.classList.add("hidden");
       previewChanges?.classList.add("hidden");
       previewContent.replaceChildren();
@@ -495,31 +530,34 @@
         url.searchParams.set("other_id", otherId);
         const response = await fetch(url, { headers: { Accept: "application/json" } });
         const data = await response.json();
-        if (!response.ok) throw new Error(data?.error || "preview_failed");
+        if (version !== previewVersion) return;
+        if (!response.ok || String(data.other_id) !== otherId || !data.result || !data.changes) throw new Error("preview_failed");
         (config.fields || []).forEach(([label, key]) => appendPreviewRow(label, data.result?.[key], data.sources?.[key]));
         appendChangeList(data.changes);
+        approvedTarget = otherId;
+        if (finalConfirmButton) finalConfirmButton.disabled = false;
       } catch (error) {
-        console.error("[vodum] user profile preview failed");
+        if (version !== previewVersion) return;
+        console.error("[vodum] user merge preview failed");
         if (previewError) {
-          previewError.textContent = `${config.preview_error || "Preview error"}: ${error.message || error}`;
+          previewError.textContent = config.preview_error || "Preview failed";
           previewError.classList.remove("hidden");
         }
       } finally {
-        previewLoading?.classList.add("hidden");
+        if (version === previewVersion) previewLoading?.classList.add("hidden");
       }
     }
 
     overlay.addEventListener("click", (event) => { if (event.target === overlay) closeOverlay(); });
     confirmModal?.addEventListener("click", (event) => { if (event.target === confirmModal) closeConfirmModal(); });
-    document.addEventListener("click", (event) => {
+    overlay.addEventListener("click", (event) => {
       const candidate = event.target.closest?.(".merge-candidate");
       if (candidate) selectCandidate(candidate);
     });
-    document.addEventListener("keydown", (event) => {
-      if ((event.key === "Enter" || event.key === " ") && document.activeElement?.classList.contains("merge-candidate")) {
-        event.preventDefault();
-        selectCandidate(document.activeElement);
-      }
+    overlay.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      if (confirmModal && !confirmModal.classList.contains("hidden")) closeConfirmModal();
+      else closeOverlay();
     });
     const mainForm = document.getElementById("user_main_form");
     mainForm?.addEventListener("keydown", (event) => {
@@ -554,7 +592,7 @@
       confirmModal?.classList.remove("hidden");
     });
     finalConfirmButton?.addEventListener("click", () => {
-      if (!otherIdInput?.value) return;
+      if (!approvedTarget || otherIdInput?.value !== approvedTarget) return;
       closeConfirmModal();
       mergeForm?.submit();
     });
@@ -584,7 +622,18 @@
     }, { once: true });
   }
 
+  function bindProviderAvatars() {
+    document.querySelectorAll('[data-provider-avatar]').forEach((image) => {
+      if (image.dataset.fallbackBound === '1') return;
+      image.dataset.fallbackBound = '1';
+      const fallback = () => image.remove();
+      image.addEventListener('error', fallback, { once: true });
+      if (image.complete && image.naturalWidth === 0) fallback();
+    });
+  }
+
   function initUserDetail() {
+    bindProviderAvatars();
     bindExpirationOverride();
     bindReferrerPicker();
     bindJellyfinPasswordModal();

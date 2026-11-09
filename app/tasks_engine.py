@@ -70,6 +70,7 @@ def _cron_jobs_enabled() -> bool:
 # LOCKS / QUEUES
 # -------------------------------------------------------------------
 task_worker_lease = WorkerLease()
+collection_worker_lease = WorkerLease()
 
 
 # In-memory signals are isolated from the scheduler orchestration so their
@@ -119,6 +120,17 @@ def _start_task_worker():
         raise
     return True
 
+def _start_collection_worker():
+    if not collection_worker_lease.claim():
+        return False
+    try:
+        threading.Thread(target=_task_worker, kwargs={'collections':True},
+                         name='vodum-collections-worker', daemon=True).start()
+    except Exception:
+        collection_worker_lease.release()
+        raise
+    return True
+
 # -------------------------------------------------------------------
 # TASK LIMITS
 # -------------------------------------------------------------------
@@ -126,6 +138,8 @@ TASK_MAX_DURATION = {
     "sync_plex": 60 * 60,
     "sync_jellyfin": 30 * 60,
     "import_tautulli": 6 * 60 * 60,  # 6h (migration possible, gros volumes)
+    "refresh_collection_inventory": 7 * 24 * 60 * 60,  # Large inventories are serial and completion-scheduled.
+    "run_collections": 6 * 60 * 60,  # Full eligible filmographies; do not cap ARR by visible collection size.
 
     # Monitoring / workers : doivent être rapides
     "monitor_collect_sessions": 60,        # 1 min
@@ -158,7 +172,7 @@ def _mark_task_retry_or_error(task_id: int, task_name: str, error_message: str):
         max_retries = int(row["max_retries"] or 0) if row else 0
 
         next_attempt = retry_count + 1
-        can_retry = next_attempt <= max_retries
+        can_retry = task_name not in ('run_collections','refresh_collection_inventory') and next_attempt <= max_retries
 
         if can_retry:
             modifier = _retry_modifier_for_attempt(next_attempt)
@@ -333,7 +347,7 @@ def prepare_restored_database(restored_db):
 def recover_stuck_tasks(max_minutes=30):
     # A live worker may legitimately own a long-running task. Resetting its DB
     # state here would allow the scheduler to enqueue a duplicate execution.
-    if task_worker_lease.is_claimed():
+    if task_worker_lease.is_claimed() or collection_worker_lease.is_claimed():
         return
 
     try:
@@ -514,7 +528,8 @@ def enqueue_task(task_id: int):
     )
 
     # Démarrage du worker SI nécessaire
-    _start_task_worker()
+    task = db.query_one('SELECT name FROM tasks WHERE id=?',(task_id,))
+    (_start_collection_worker if task and task['name'] in ('run_collections','refresh_collection_inventory') else _start_task_worker)()
 
     return True
 
@@ -526,6 +541,13 @@ def _kick_worker_if_needed():
     Important: au boot, le recovery peut laisser des tasks en 'queued' sans
     jamais repasser par enqueue_task() -> donc sans démarrer le worker.
     """
+    try:
+        if not collection_worker_lease.is_claimed():
+            pending_collection = db.query_one("SELECT id FROM tasks WHERE name IN ('run_collections','refresh_collection_inventory') AND queued_count>0 AND enabled=1")
+            if pending_collection:
+                _start_collection_worker()
+    except Exception:
+        logger.error('[COLLECTIONS WORKER] Unable to check pending queue',exc_info=True)
     # -------------------------------------------------
     # Worker déjà actif → inutile de requêter SQLite
     # -------------------------------------------------
@@ -533,7 +555,7 @@ def _kick_worker_if_needed():
         return
 
     try:
-        row = db.query_one("SELECT COUNT(*) AS cnt FROM tasks WHERE queued_count > 0 AND enabled = 1")
+        row = db.query_one("SELECT COUNT(*) AS cnt FROM tasks WHERE queued_count > 0 AND enabled = 1 AND name NOT IN ('run_collections','refresh_collection_inventory')")
         pending = int(row["cnt"]) if row else 0
     except Exception as e:
         logger.error(f"[WORKER] Unable to check pending queue: {e}", exc_info=True)
@@ -546,7 +568,8 @@ def _kick_worker_if_needed():
         logger.warning(f"[WORKER] Kick worker: {pending} queued task(s) detected in DB")
 
 
-def _task_worker():
+def _task_worker(collections=False):
+    worker_lease = collection_worker_lease if collections else task_worker_lease
     try:
         while True:
             # 1) Récupère une tâche en file d'attente
@@ -557,18 +580,20 @@ def _task_worker():
                     FROM tasks
                     WHERE queued_count > 0
                       AND enabled = 1
+                      AND ((?=1 AND name IN ('run_collections','refresh_collection_inventory')) OR (?=0 AND name NOT IN ('run_collections','refresh_collection_inventory')))
                       ORDER BY
                           CASE name
+                              WHEN 'refresh_collection_inventory' THEN -1
                               WHEN 'monitor_enqueue_refresh' THEN 1
                               WHEN 'media_jobs_worker' THEN 2
-                              WHEN 'stream_enforcer' THEN 3
+                              WHEN 'stream_enforcer' THEN 0
                               WHEN 'monitor_collect_sessions' THEN 99
                               ELSE 10
                         END ASC,
                         updated_at ASC,
                         id ASC
                     LIMIT 1
-                    """
+                    """, (int(collections),int(collections))
                 )
             except Exception as e:
                 logger.error(f"[WORKER] DB error while fetching queued task: {e}", exc_info=True)
@@ -599,7 +624,7 @@ def _task_worker():
 
     finally:
         # GARANTIE : le worker se libère toujours
-        task_worker_lease.release()
+        worker_lease.release()
 
         # Si une tâche a été ajoutée juste avant l'arrêt du worker,
         # on relance immédiatement un worker pour ne rien laisser bloqué.
@@ -626,7 +651,7 @@ def _load_task_run_callable(task_name: str):
 
 def _execute_task_run_callable(run_func, task_id: int, task_name: str, max_duration: int):
     """
-    Execute the task inside the single scheduler worker.
+    Execute the task inside its serial worker lane.
 
     Python cannot safely stop a timed-out thread. The previous helper allowed
     that thread to continue while the worker started following tasks, creating

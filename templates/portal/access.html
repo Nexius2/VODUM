@@ -42,7 +42,7 @@
 {% if target.type|lower == 'jellyfin' and target.public_url and target.public_url.startswith(('https://','http://')) %}
 <a class="underline" href="{{ target.public_url }}" target="_blank" rel="noopener noreferrer">{{ t('activation_open_jellyfin') }}</a>{% endif %}
 </li>{% endfor %}</ul>
-{% if activation.mode == 'plex' and (ready or targets|selectattr('state','equalto','ready')|selectattr('type','equalto','plex')|list) %}
+{% if activation.mode == 'plex' and ready %}
 <a class="inline-block rounded bg-primary px-5 py-3" href="https://app.plex.tv/desktop/" rel="noreferrer">{{ t('activation_open_plex') }}</a>{% endif %}
 {% if activation.mode == 'plex' and ready %}<p class="my-4"><a class="underline" href="https://www.plex.tv/media-server-downloads/#plex-app" target="_blank" rel="noopener noreferrer">{{ t('activation_apps') }}</a></p>{% endif %}
 {% if ready %}<p class="mt-4 text-sm"><a class="underline" href="{{ url_for('portal_home') }}">{{ t('activation_portal') }}</a></p>{% endif %}

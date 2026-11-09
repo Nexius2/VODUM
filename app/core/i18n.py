@@ -12,6 +12,7 @@ from web.security import safe_redirect_target
 
 # Cache global pour éviter de relire les JSON à chaque requête
 _I18N_CACHE: Dict[str, Dict] = {}
+_I18N_CACHE_SOURCES: Dict[str, tuple] = {}
 _AVAILABLE_LANGUAGES_CACHE: Optional[Dict[str, str]] = None
 
 GLOBAL_TEMPLATE_SETTINGS_COLUMNS = """
@@ -76,9 +77,6 @@ def load_language_dict(lang_code: str) -> dict:
     """
     logger = get_logger("i18n")
 
-    if lang_code in _I18N_CACHE:
-        return _I18N_CACHE[lang_code]
-
     translations: dict[str, str] = {}
 
     lang_dir = current_app.config.get("LANG_DIR") or os.path.join(current_app.root_path, "..", "translations", "ui")
@@ -90,9 +88,23 @@ def load_language_dict(lang_code: str) -> dict:
     if not os.path.exists(json_path):
         json_path = legacy_json_path
 
+    def file_signature(path):
+        try:
+            stat = os.stat(path)
+            return path, stat.st_mtime_ns, stat.st_size
+        except OSError:
+            return path, None, None
+
+    # A copied catalogue must become visible without restarting the process.
+    # Include both paths so separate app roots cannot share a stale language.
+    signature = (file_signature(json_path),file_signature(legacy_json_path))
+    if lang_code in _I18N_CACHE and _I18N_CACHE_SOURCES.get(lang_code)==signature:
+        return _I18N_CACHE[lang_code]
+
     if not os.path.exists(json_path):
         logger.warning(f"[i18n] Fichier de langue introuvable: {json_path}")
         _I18N_CACHE[lang_code] = translations
+        _I18N_CACHE_SOURCES[lang_code] = signature
         return translations
 
     try:
@@ -122,6 +134,7 @@ def load_language_dict(lang_code: str) -> dict:
         )
 
     _I18N_CACHE[lang_code] = translations
+    _I18N_CACHE_SOURCES[lang_code] = signature
     return translations
 
 
@@ -287,6 +300,13 @@ def init_i18n(app, get_db: Callable[[], object]) -> None:
         settings = read_presentation_settings(db)
 
         lang = _resolve_active_language(settings)
+        from core.language_telemetry import observe
+        try:
+            observe(db, settings, lang, request)
+        except Exception:
+            # Telemetry must never prevent a page from rendering.
+            from core.error_reporting import log_handled_failure
+            log_handled_failure('telemetry.language_observation')
 
         return {
             "t": get_translator(settings),

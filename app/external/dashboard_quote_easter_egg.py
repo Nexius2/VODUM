@@ -1,4 +1,5 @@
 import json
+from contextvars import ContextVar
 import os
 import random
 import tempfile
@@ -18,6 +19,7 @@ logger = get_logger("dashboard_quote_easter_egg")
 
 CONFIG_FILES = ("movie_quotes.json", "series_quotes.json")
 CACHE_FILE = "dashboard_quote_easter_egg.json"
+_REFRESH_LOOKUPS = ContextVar("dashboard_quote_lookups", default=None)
 
 
 def _get_db():
@@ -74,7 +76,7 @@ def _load_quotes_file(path):
             logger.error(f"Quotes file root is not a list: {path}")
             return []
 
-        logger.info(f"Loaded {len(data)} quote entries from {path}")
+        logger.debug(f"Loaded {len(data)} quote entries from {path}")
         return data
 
     except Exception:
@@ -103,7 +105,7 @@ def _load_cache():
     path = _get_cache_path()
 
     if not os.path.exists(path):
-        logger.info(f"No dashboard quote cache file yet: {path}")
+        logger.debug(f"No dashboard quote cache file yet: {path}")
         return None
 
     try:
@@ -134,7 +136,7 @@ def _save_cache(payload):
             if os.path.exists(temporary_path):
                 os.unlink(temporary_path)
 
-        logger.info(f"Saved dashboard quote cache: {path}")
+        logger.debug(f"Saved dashboard quote cache: {path}")
 
     except Exception:
         logger.exception(f"Failed to save dashboard quote cache: {path}")
@@ -222,7 +224,7 @@ def _get_servers():
     )
 
     servers = [dict(r) for r in rows]
-    logger.info(f"Found {len(servers)} eligible online servers for dashboard quote refresh")
+    logger.debug(f"Found {len(servers)} eligible online servers for dashboard quote refresh")
     return servers
 
 
@@ -293,6 +295,45 @@ def _match_plex_guids(guid_nodes, imdb, tmdb):
     return False
 
 
+def _plex_inventory(server, base, plex_type):
+    """Read external GUIDs once per server/type during a daily refresh.
+
+    Plex's guid filter targets the primary agent GUID (often plex://),
+    which is not the IMDb/TMDB GUID exposed by includeGuids.
+    """
+    memo = _REFRESH_LOOKUPS.get()
+    key = ("plex", server.get("id"), base, plex_type)
+    if memo is not None and key in memo:
+        return memo[key]
+    # Cache failures too, so an unavailable server is tried only once.
+    if memo is not None:
+        memo[key] = []
+    nodes = []
+    offset = 0
+    page_size = 200
+    while True:
+        wait_for_plex_slot(base)
+        response = server_http_session(server).get(
+            f"{base}/library/all",
+            params={"X-Plex-Token": server.get("token"), "includeGuids": "1",
+                    "type": plex_type, "X-Plex-Container-Start": str(offset),
+                    "X-Plex-Container-Size": str(page_size)}, timeout=20,
+        )
+        response.raise_for_status()
+        root = ET.fromstring(response.text)
+        page = [node for node in root if node.tag in ("Video", "Directory")]
+        nodes.extend(page)
+        offset += len(page)
+        total = root.attrib.get("totalSize")
+        if not page or (total is not None and offset >= int(total)):
+            break
+        if total is None and len(page) < page_size:
+            break
+    if memo is not None:
+        memo[key] = nodes
+    return nodes
+
+
 def _resolve_on_plex(server, media_type, imdb, tmdb):
     token = server.get("token")
     bases = _candidate_bases(server)
@@ -302,26 +343,13 @@ def _resolve_on_plex(server, media_type, imdb, tmdb):
 
     plex_type = "1" if media_type == "movie" else "2"
 
-    params = {
-        "X-Plex-Token": token,
-        "includeGuids": "1",
-        "type": plex_type,
-        "guid": f"imdb://{imdb}" if imdb else f"tmdb://{tmdb}",
-    }
-
     for base in bases:
         url = f"{base}/library/all"
 
         try:
-            logger.info(f"[PLEX] Lookup on server={server.get('name')} url={url}")
+            logger.debug(f"[PLEX] Lookup on server={server.get('name')} url={url}")
 
-            wait_for_plex_slot(base)
-            r = server_http_session(server).get(url, params=params, timeout=20)
-            r.raise_for_status()
-
-            root = ET.fromstring(r.text)
-
-            for node in root:
+            for node in _plex_inventory(server, base, plex_type):
                 if node.tag not in ("Video", "Directory"):
                     continue
 
@@ -340,7 +368,7 @@ def _resolve_on_plex(server, media_type, imdb, tmdb):
                 )
 
                 if not poster_path:
-                    logger.info(
+                    logger.debug(
                         f"[PLEX] Match found without poster on server={server.get('name')} title={node.attrib.get('title')}"
                     )
                     continue
@@ -348,7 +376,7 @@ def _resolve_on_plex(server, media_type, imdb, tmdb):
                 title = node.attrib.get("title") or "Unknown"
                 year = node.attrib.get("year")
 
-                logger.info(
+                logger.debug(
                     f"[PLEX] Exact match found server={server.get('name')} title={title} year={year}"
                 )
 
@@ -409,7 +437,7 @@ def _resolve_on_jellyfin(server, media_type, imdb, tmdb):
             }
 
             try:
-                logger.info(
+                logger.debug(
                     f"[JELLYFIN] Lookup on server={server.get('name')} url={url} start_index={start_index}"
                 )
 
@@ -445,7 +473,7 @@ def _resolve_on_jellyfin(server, media_type, imdb, tmdb):
                     title = item.get("Name") or "Unknown"
                     year = item.get("ProductionYear")
 
-                    logger.info(
+                    logger.debug(
                         f"[JELLYFIN] Exact match found server={server.get('name')} title={title} year={year}"
                     )
 
@@ -535,7 +563,13 @@ def _resolve_media(entry):
         logger.warning(f"Quote entry skipped (no imdb/tmdb): {entry.get('key')}")
         return None
 
-    servers = _get_servers()
+    memo = _REFRESH_LOOKUPS.get()
+    if memo is not None and "servers" in memo:
+        servers = list(memo["servers"])
+    else:
+        servers = _get_servers()
+        if memo is not None:
+            memo["servers"] = list(servers)
     random.shuffle(servers)
 
     for server in servers:
@@ -551,11 +585,19 @@ def _resolve_media(entry):
             if resolved and _verify_quote_artwork(server, resolved):
                 return resolved
 
-    logger.info(f"No media match found for quote entry: {entry.get('key')}")
+    logger.debug(f"No media match found for quote entry: {entry.get('key')}")
     return None
 
 
 def refresh_dashboard_quote_cache(force=False):
+    token = _REFRESH_LOOKUPS.set({})
+    try:
+        return _refresh_dashboard_quote_cache(force=force)
+    finally:
+        _REFRESH_LOOKUPS.reset(token)
+
+
+def _refresh_dashboard_quote_cache(force=False):
     today = _today_str()
     cached = _load_cache()
 
@@ -571,7 +613,7 @@ def refresh_dashboard_quote_cache(force=False):
             logger.warning("Dashboard quote artwork is unverified or incomplete -> rebuilding cache")
 
     if not force and cached and cached.get("day") == today and cached.get("none") is not True and not cache_is_legacy:
-        logger.info(f"Dashboard quote cache already ready for today ({today})")
+        logger.debug(f"Dashboard quote cache already ready for today ({today})")
         return cached
 
     quotes = _load_quotes()
@@ -615,23 +657,36 @@ def refresh_dashboard_quote_cache(force=False):
 
     rotation = _load_rotation(cached)
     seen_keys = rotation.get("seen_keys") or []
+    # Older caches may not include rotation history. Count the displayed
+    # selection as seen too, otherwise it can immediately be drawn again.
+    previous_key = _normalize_str((cached or {}).get("quote_key"))
+    if previous_key and previous_key not in seen_keys:
+        seen_keys.append(previous_key)
     seen_set = set(seen_keys)
 
     unseen_candidates = [entry for entry in candidates if _quote_key(entry) not in seen_set]
     unseen_candidates = _shuffle_quote_candidates(unseen_candidates)
 
     retry_candidates = _shuffle_quote_candidates(candidates)
+    # At the end of a cycle, try every alternative before repeating the
+    # currently displayed media. Still allow it when it is the only match.
+    retry_candidates.sort(key=lambda entry: _quote_key(entry) == previous_key)
 
     passes = [
         (unseen_candidates, False),
         (retry_candidates, True),
     ]
 
+    attempted = set()
     for pass_candidates, reset_rotation in passes:
         if not pass_candidates:
             continue
 
         for entry in pass_candidates:
+            candidate_key = _quote_key(entry)
+            if candidate_key in attempted:
+                continue
+            attempted.add(candidate_key)
             quote_text = _pick_quote_text(entry)
             resolved = _resolve_media(entry)
 
@@ -680,7 +735,7 @@ def refresh_dashboard_quote_cache(force=False):
     }
     _with_rotation(payload, seen_keys)
     _save_cache(payload)
-    logger.info("No valid dashboard quote found for today")
+    logger.debug("No valid dashboard quote found for today")
     return payload
 
 
@@ -829,15 +884,15 @@ def build_login_quote_artwork_request(kind="poster"):
 def build_dashboard_quote_card():
     payload = _load_cache()
     if not payload:
-        logger.info("Dashboard quote cache missing -> using local quote fallback")
+        logger.debug("Dashboard quote cache missing -> using local quote fallback")
         return _build_local_quote_fallback()
 
     if payload.get("day") != _today_str():
-        logger.info("Dashboard quote cache is outdated -> keeping last resolved artwork")
+        logger.debug("Dashboard quote cache is outdated -> keeping last resolved artwork")
         # Keep the same last resolved artwork as the login screen until refresh.
 
     if payload.get("none") is True:
-        logger.info("Dashboard quote cache says no matching media for today -> using local quote fallback")
+        logger.debug("Dashboard quote cache says no matching media for today -> using local quote fallback")
         return _build_local_quote_fallback()
 
     poster_url, backdrop_url = _build_quote_artwork_urls(payload)

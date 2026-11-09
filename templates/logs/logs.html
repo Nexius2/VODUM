@@ -9,7 +9,7 @@
     {{ t("application_logs") }}
 {% endblock %}
 {% block header_actions %}
-<a href="{{ url_for('download_logs') }}"
+<a href="{{ url_for('download_logs') }}" download data-no-navigation-loader hx-boost="false"
    class="inline-flex items-center gap-2 px-3 py-2 rounded-lg
           bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm">
 
@@ -104,9 +104,16 @@
                         <td class="px-4 py-2">{{ log.level }}</td>
                         <td class="px-4 py-2">{{ log.source }}</td>
                         <td class="px-4 py-2 text-slate-300 max-w-xl break-words whitespace-normal">
-							<div class="max-h-32 overflow-auto">
-								{{ log.message }}
-							</div>
+                            {% if log.explanation %}
+                            {% set info = log.explanation %}
+                            <strong class="block text-slate-100">{{ t(info.title) }}</strong>
+                            {% for label, value in info.context %}<div class="text-sm"><span class="text-slate-400">{{ t(label) }} :</span> {{ value }}</div>{% endfor %}
+                            {% if info.unidentified %}<p class="text-amber-300">{{ t('log_help.unidentified') }}</p>{% endif %}
+                            {% if info.cause != "log_help.cause_unknown" or not info.code %}<p class="mt-1">{{ t(info.cause) }}</p>{% endif %}
+                            {% if info.code %}<p>{{ t(info.code) }}</p>{% endif %}
+                            <p class="mt-1 text-slate-200">{{ t(info.action) }}</p>
+                            <details class="mt-2"><summary class="cursor-pointer text-slate-400">{{ t('log_help.details') }}</summary><pre class="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">{{ log.message }}</pre></details>
+                            {% else %}<div class="max-h-32 overflow-auto">{{ log.message }}</div>{% endif %}
 						</td>
 
                     </tr>

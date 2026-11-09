@@ -28,6 +28,7 @@ from core.jellyfin_vodum_user_matching import (
     pick_best_vodum_user_for_username,
 )
 from core.jellyfin_sync_repository import (
+    prune_jellyfin_libraries,
     mark_jellyfin_media_user_removed,
     mark_jellyfin_media_user_present,
     replace_jellyfin_library_access,
@@ -430,7 +431,10 @@ def _sync_libraries_for_server(
     data = _get_json(session, api_url, timeout=30, token=token)
     mapping: Dict[str, int] = {}
 
-    if not isinstance(data, list):
+    if not isinstance(data, list) or any(
+        not isinstance(entry, dict) or not entry.get("ItemId") or not entry.get("Name")
+        for entry in data
+    ):
         raise ValueError("Jellyfin returned an invalid library list; existing access preserved")
 
     updated_counts = 0
@@ -439,15 +443,9 @@ def _sync_libraries_for_server(
     counts_unavailable = False
 
     for entry in data:
-        if not isinstance(entry, dict):
-            continue
-
         item_id = entry.get("ItemId")
         name = entry.get("Name") or ""
         lib_type = entry.get("CollectionType") or entry.get("Type") or ""
-
-        if not item_id or not name:
-            continue
 
         item_id = str(item_id)
         name = str(name)
@@ -483,6 +481,11 @@ def _sync_libraries_for_server(
         )
         updated_counts += 1
 
+
+    retained = prune_jellyfin_libraries(db, server_id, set(mapping.values()))
+    if retained:
+        logger.warning("Jellyfin server_id=%s: removed libraries still referenced by local settings: %s",
+                       server_id, ", ".join(retained))
 
     logger.info(
         f"Jellyfin libraries: {len(mapping)} importées/mises à jour "

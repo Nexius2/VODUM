@@ -61,13 +61,8 @@
               </div>
 
               <div class="shrink-0 flex items-center gap-2">
-                {% if j.media_avatar %}
-                  <img src="{{ j.media_avatar }}" alt="{{ t('user_jellyfin_avatar_alt') }}"
-                       class="w-10 h-10 rounded-full border border-slate-700" loading="lazy" decoding="async">
-                {% elif j.avatar %}
-                  <img src="{{ j.avatar }}" alt="{{ t('user_jellyfin_avatar_alt') }}"
-                       class="w-10 h-10 rounded-full border border-slate-700" loading="lazy" decoding="async">
-                {% endif %}
+                {% set provider_avatar = j.media_avatar or j.avatar %}
+                {% include 'users/partials/_provider_avatar.html' %}
 
                 {% if jf_user_url %}
                   <a href="{{ jf_user_url }}"

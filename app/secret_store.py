@@ -142,6 +142,8 @@ def validate_database_encryption_key(database_path: Path, key_bytes: bytes) -> i
             "admin_auth_identities": ("discovery_token_enc",),
             "migration_campaigns": ("options_json",),
             "migration_users": ("options_json", "result_json"),
+            "collection_instances": ("secret_tmdb",),
+            "collection_settings": ("secret_tmdb",),
         }
         existing_tables = {
             row[0] for row in connection.execute(

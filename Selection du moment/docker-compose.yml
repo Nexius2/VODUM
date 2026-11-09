@@ -1,0 +1,18 @@
+services:
+  selection:
+    build: .
+    restart: unless-stopped
+    init: true
+    environment:
+      PLEX_URL: ${PLEX_URL}
+      PLEX_TOKEN: ${PLEX_TOKEN}
+      TMDB_API_KEY: ${TMDB_API_KEY}
+    volumes:
+      - ./config/config.yaml:/app/config/config.yaml:ro
+      - ./appdata:/appdata
+      - ./logs:/logs
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 60s

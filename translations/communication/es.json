@@ -31,5 +31,5 @@
     "new_login": {"subject": "Nuevo acceso a tu portal {brand_name}", "body": "Hola {username},\n\nSe registro un nuevo acceso a tu cuenta. Restablece tu contrasena si no fuiste tu.\n\n{portal_login_url}"},
     "direct_message": {"subject": "Nuevo mensaje en tu portal {brand_name}", "body": "Hola {username},\n\nHas recibido un nuevo mensaje de un administrador. Inicia sesion en tu portal para leerlo.\n\n{portal_login_url}"}
   },
-  "activation": {"button": "Activar mi acceso"}
+  "activation": {"button": "Activar mi acceso", "instructions": "Para tu primer acceso, empieza por el botón de abajo. En Plex, crea una cuenta o inicia sesión con la dirección que recibió este correo y vuelve a la página de activación. Espera a que todos los servidores estén listos. Si queda una invitación pendiente, acéptala en Plex y vuelve a comprobar el acceso. El enlace de inicio de sesión del portal es para visitas posteriores."}
 }

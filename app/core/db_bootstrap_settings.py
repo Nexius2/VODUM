@@ -34,6 +34,10 @@ def upgrade_task_settings_auth_schema(
         ensure_column(cursor, "tasks", col, definition)
 
     print("✔ Task columns verified.")
+    cursor.execute("""CREATE TABLE IF NOT EXISTS telemetry_language_observations (
+        day TEXT NOT NULL, scope TEXT NOT NULL, configured TEXT NOT NULL,
+        browser TEXT NOT NULL, displayed TEXT NOT NULL,
+        PRIMARY KEY(day,scope,configured,browser,displayed))""")
 
     # -------------------------------------------------
     # 2.1 Vérifier colonnes SETTINGS (migrations légères)

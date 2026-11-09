@@ -1,0 +1,3 @@
+{% macro status_badge(system) -%}
+<span class="rounded px-2 py-1 text-xs font-medium {{ 'bg-emerald-950 text-emerald-300' if system.status=='up' else 'bg-rose-950 text-rose-300' if system.status=='down' else 'bg-slate-800 text-slate-300' }}">{% set status_labels={'up':'portal_health_up','down':'portal_health_down','unknown':'portal_health_unknown'} %}{{ t(status_labels[system.status]) }}</span>
+{%- endmacro %}

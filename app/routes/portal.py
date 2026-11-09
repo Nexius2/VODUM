@@ -9,6 +9,7 @@ from core.portal_page_data import (
 )
 from web.helpers import get_db, send_email_via_settings
 from core.portal_messages import add_message, conversation_for_user, message_page, mark_read, unread_messages_for_user
+from core.portal_system_status import load_portal_system_status
 from core.portal_provider_profile import update_portal_provider_profile
 from core.portal_auth_methods import list_auth_methods, local_reauthentication_valid, recently_reauthenticated, unlink_identity, link_identity
 from core.portal_jellyfin_auth import authenticate_jellyfin_user, JellyfinPortalAuthError
@@ -69,7 +70,7 @@ def register(app):
         "portal_media_request_submit": "media_requested",
         "portal_media_profile_save": "media_profile_updated", "portal_support_message_send": "support_message_sent",
     }
-    pages = {"portal_media_requests", "portal_home", "portal_profile", "portal_subscription", "portal_media_access", "portal_monitoring", "portal_support"}
+    pages = {"portal_media_requests", "portal_home", "portal_profile", "portal_subscription", "portal_media_access", "portal_system_status", "portal_monitoring", "portal_support"}
 
     @app.before_request
     def portal_audit_request_start():
@@ -352,13 +353,24 @@ def register(app):
             flash(result,'error')
         return redirect(url_for('portal_media_requests',q=(request.form.get('search_query') or '')[:100]))
 
+    @app.get('/portal/system-status')
+    @portal_login_required
+    @permission_required('portal.media_access.read_own')
+    @portal_user_required
+    def portal_system_status():
+        db=get_db()
+        ui=_require_feature(db,'media')
+        user_id=int(g.auth_principal['vodum_user_id'])
+        return render_template('portal/system_status.html',accounts=load_portal_media_access(db,user_id),
+            health=load_portal_system_status(db,user_id),**ui,active_portal_page='system-status')
+
     @app.get("/portal/media-access")
     @portal_login_required
     @permission_required("portal.media_access.read_own")
     @portal_user_required
     def portal_media_access():
         _require_feature(get_db(), "media")
-        return redirect(url_for("portal_profile", _anchor="media-access"))
+        return redirect(url_for("portal_system_status"))
 
     @app.post("/portal/media-access/<int:media_user_id>/profile")
     @portal_login_required
@@ -371,7 +383,7 @@ def register(app):
             flash("portal_provider_profile_saved", "success")
         except ValueError as exc:
             flash(str(exc), "error")
-        return redirect(url_for("portal_profile", _anchor="media-access"))
+        return redirect(url_for("portal_profile", _anchor="media-usernames"))
 
     @app.get("/portal/monitoring")
     @portal_login_required

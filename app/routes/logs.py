@@ -1,4 +1,5 @@
 import math
+from core.log_presentation import explain_log
 from datetime import datetime
 
 from flask import Response, render_template, request
@@ -54,7 +55,7 @@ def register(app):
         total_pages = max(1, math.ceil(total_logs / per_page))
         page = max(1, min(page, total_pages))
         start = (page - 1) * per_page
-        paginated = records[start:start + per_page]
+        paginated = [{**record,"explanation":explain_log(record)} for record in records[start:start + per_page]]
 
         window_size = 10
         page_window_start = max(1, page - 4)
@@ -81,13 +82,7 @@ def register(app):
         output = []
         anonymizer = AnonymizeFilter(force=True)
         for line in read_all_logs():
-            record = type(
-                "Record",
-                (),
-                {"msg": line, "args": (), "getMessage": lambda self: self.msg},
-            )()
-            anonymizer.filter(record)
-            output.append(record.msg)
+            output.append(anonymizer.anonymize(line))
 
         if not output:
             output.append("No logs available.\n")

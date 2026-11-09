@@ -1,4 +1,57 @@
 (function () {
+  function bindAttachments() {
+    const input = document.getElementById('template-attachments');
+    const list = document.getElementById('template-attachments-pending');
+    if (!input || !list) return;
+    // Keep pending files across successive selections; only submit on Save.
+    let pending = [];
+    function render() {
+      list.replaceChildren();
+      if (!pending.length) return;
+      const heading = document.createElement('p');
+      heading.textContent = list.dataset.pendingLabel;
+      heading.className = 'font-medium text-emerald-300';
+      list.appendChild(heading);
+      pending.forEach(function (file, index) {
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between gap-2 rounded-lg border border-emerald-600/50 p-2';
+        const name = document.createElement('span');
+        name.className = 'min-w-0 break-all text-slate-200';
+        name.textContent = file.name;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'shrink-0 rounded border border-rose-500/60 px-2 py-1 text-rose-300 hover:bg-rose-950';
+        button.textContent = list.dataset.removeLabel;
+        button.setAttribute('aria-label', `${list.dataset.removeLabel} ${file.name}`);
+        button.addEventListener('click', function () {
+          pending.splice(index, 1);
+          syncFiles();
+          render();
+        });
+        row.append(name, button);
+        list.appendChild(row);
+      });
+    }
+    function syncFiles() {
+      const transfer = new DataTransfer();
+      pending.forEach(file => transfer.items.add(file));
+      input.files = transfer.files;
+    }
+    input.addEventListener('change', function () {
+      for (const file of input.files) {
+        if (!pending.some(item => item.name === file.name && item.size === file.size && item.lastModified === file.lastModified)) {
+          pending.push(file);
+        }
+      }
+      syncFiles();
+      render();
+    });
+    input.form?.addEventListener('reset', function () {
+      pending = [];
+      list.replaceChildren();
+    });
+  }
+
   function readConfig() {
     const node = document.getElementById("comm-templates-config");
     if (!node) {
@@ -277,6 +330,7 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
+    bindAttachments();
     const config = readConfig();
     bindTemplateForm(config);
     bindDiscordCounter();

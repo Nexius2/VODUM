@@ -1,0 +1,41 @@
+plex:
+  url: ""
+  token: ""
+  library: "Films"
+  collection: "🍿 La Sélection du Moment"
+tmdb:
+  api_key: ""
+  language: "fr-FR"
+collection:
+  retention_days: 30
+  release_window_days: 30
+scoring:
+  min_score: 65
+  minimum_votes: 100
+  high_rating_threshold: 7.0
+  profiles:
+    blockbuster_popularity: 50
+    high_rated_popularity: 5
+    franchise_popularity: 20
+    trending_popularity: 15
+    trend_strength: 0.5
+  weights:
+    freshness: 25
+    popularity: 35
+    rating: 25
+    trending: 10
+    franchise: 5
+exclusions:
+  manual_removal_cooldown_days: 30
+scheduler:
+  enabled: true
+  daily_time: "12:30"
+  timezone: "Europe/Paris"
+database:
+  path: "/appdata/selection.db"
+logging:
+  level: "INFO"
+  path: "/logs/selection.log"
+  retention_days: 30
+execution:
+  dry_run: true

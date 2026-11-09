@@ -1,4 +1,5 @@
 import json
+import sqlite3
 from datetime import datetime, timezone
 
 
@@ -52,6 +53,24 @@ def upsert_jellyfin_library(db, server_id, section_id, name, library_type) -> in
     return int(row["id"])
 
 
+def prune_jellyfin_libraries(db, server_id, current_ids):
+    """Remove stale libraries while preserving rows referenced by configurations."""
+    retained = []
+    for row in db.query("SELECT id, name FROM libraries WHERE server_id = ?", (server_id,)):
+        if row["id"] in current_ids:
+            continue
+        try:
+            with db.transaction() as cursor:
+                cursor.execute("DELETE FROM media_user_libraries WHERE library_id = ?", (row["id"],))
+                cursor.execute("DELETE FROM libraries WHERE id = ? AND server_id = ?",
+                               (row["id"], server_id))
+        except sqlite3.IntegrityError as exc:
+            if str(exc) != "FOREIGN KEY constraint failed":
+                raise
+            retained.append(row["name"])
+    return retained
+
+
 def set_jellyfin_media_user_state(
     db, media_user_id: int, server_id: int, owned: int,
     all_libraries: int, num_libraries: int, last_seen_at,
@@ -85,3 +104,4 @@ def replace_jellyfin_library_access(
             VALUES (?, ?)""",
             (media_user_id, library_id),
         )
+

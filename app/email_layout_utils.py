@@ -3,6 +3,7 @@ from core.error_reporting import log_handled_failure
 import os
 import json
 import re
+import html as html_module
 from typing import Dict, Callable, Tuple
 
 DEFAULT_BRAND_FALLBACK = "Vodum"
@@ -52,9 +53,17 @@ def html_to_plain(html: str) -> str:
         return ""
     txt = re.sub(r"(?i)<br\s*/?>", "\n", html)
     txt = re.sub(r"(?i)</p\s*>", "\n\n", txt)
+    # Preserve actionable links, including personal activation and reset URLs.
+    # Only HTTP(S) targets are included; decode HTML entities for plain readers.
+    def link(match):
+        target = html_module.unescape(match.group(2))
+        label = re.sub(r'<[^>]+>', '', match.group(3))
+        return label if label.strip()==target else f'{label} ({target})'
+    txt = re.sub(r'''<a\b[^>]*\bhref\s*=\s*(["'])(https?://.*?)\1[^>]*>(.*?)</a\s*>''',
+                 link,txt,flags=re.I|re.S)
     txt = re.sub(r"<[^>]+>", "", txt)
     txt = re.sub(r"\n{3,}", "\n\n", txt)
-    return txt.strip()
+    return html_module.unescape(txt.strip())
 
 
 def normalize_body_to_html(body: str) -> str:

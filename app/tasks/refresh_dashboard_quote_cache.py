@@ -9,6 +9,6 @@ def run(task_id: int, db):
 
     payload = refresh_dashboard_quote_cache(force=False)
 
-    logger.info(f"[TASK {task_id}] Result: {payload}")
+    logger.debug(f"[TASK {task_id}] Result: {payload}")
 
     return payload

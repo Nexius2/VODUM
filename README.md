@@ -23,7 +23,7 @@ Spend less time switching between dashboards. See who has access, when it expire
 
 *Real desktop captures from VODUM. Private information is masked; counts and activity reflect the captured instance. [Browse all screenshots](screenshots/README.md).*
 
-[Features](#features) · [User Portal](#a-portal-for-your-members) · [Docker](#install-with-docker) · [Unraid](#install-on-unraid) · [Configuration](#configuration) · [Contributing](#contributing)
+[Features](#features) · [Collections](#smart-collections-for-your-libraries) · [User Portal](#a-portal-for-your-members) · [Docker](#install-with-docker) · [Unraid](#install-on-unraid) · [Configuration](#configuration) · [Contributing](#contributing)
 
 ## Features
 
@@ -34,6 +34,7 @@ Spend less time switching between dashboards. See who has access, when it expire
 | **Subscriptions** | Define plans, durations and limits; follow renewals and expiration workflows. |
 | **Streaming policies** | Configure simultaneous-stream and IP limits; inspect violations and enforcement events. |
 | **Monitoring** | Follow current playback, historical activity, usage risk, users, libraries and server statistics. |
+| **Collections** | Build and refresh themed selections in Plex and Jellyfin libraries, with schedules, previews and publication controls. |
 | **User Portal** | Offer account details, media access, subscriptions, personal activity and support. |
 | **Media requests** | Search movies and series through Radarr/Sonarr and configure request destinations. |
 | **Communications** | Prepare targeted campaigns, use templates and manage portal conversations. |
@@ -49,6 +50,34 @@ Connect Plex and Jellyfin servers, inspect connection health and manage access t
 ![Connected Plex, Jellyfin and ARR servers](screenshots/servers.png)
 
 [Servers & libraries guide](vodum-docs/docs/servers-libraries.md) · [Libraries screenshot](screenshots/libraries.png)
+
+### Smart collections for your libraries
+
+Give members new ways to discover your movie and TV libraries. Choose a collection model, select compatible Plex or Jellyfin libraries, preview the selection and schedule its updates from the **Collections** workspace.
+
+| Featured model | What it brings to your library |
+| --- | --- |
+| **Memoria** | Temporary tribute collections honoring people from film and television. |
+| **Top Streaming by Country** | Streaming trends for a selected country, matched against your library. |
+| **Top Streaming Worldwide / Continent** | Worldwide charts or continental rankings aggregated from national charts. |
+| **Seasonal** | Movie selections for holidays, seasons and special occasions. |
+| **Latest releases by country** | Recent releases filtered by original language or country of origin/production. |
+| **In the spotlight** | Timely movie selections based on recent availability and relevance. |
+
+Configure selection limits, sorting and daily, weekly, monthly, manual or custom schedules. Review configured collections and synchronization history in the same workspace. Supported models can optionally request missing titles through connected Radarr/Sonarr services.
+
+On Plex, choose whether to promote collections on the library's Recommended page, your Home or shared users' Home, and set their priority. Jellyfin supports collection management but does not offer equivalent Home promotion controls. VODUM manages only the collections it creates; existing external collections and media are preserved.
+
+<details>
+<summary>Explore the Collections interface</summary>
+
+![VODUM Collections workspace with the model catalog, schedules and library selections](screenshots/collections.jpg)
+
+*Real capture of the model catalog, November 2, 2026. Available models and controls depend on the installed version.*
+
+</details>
+
+[Shared library inventory](docs/collections-inventory.md) · [Publication visibility](docs/collections-visibility.md) · [Collection priority](docs/collections-priority.md)
 
 ### Manage the member lifecycle
 

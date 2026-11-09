@@ -36,6 +36,14 @@ class TaskScheduler:
 
         for row in rows:
             self._process_row(row, now)
+        if any(row['name'] == 'run_collections' for row in rows):
+            try:
+                from core.collections_repository import wake_due_collections
+                from core.collections_control import start_controls
+                start_controls(self.db)
+                wake_due_collections(self.db, self.enqueue)
+            except Exception:
+                self.logger.error('Unable to enqueue due collections', exc_info=True)
         return True
 
     def _process_row(self, row, now):

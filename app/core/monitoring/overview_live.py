@@ -144,6 +144,8 @@ def _load_monitoring_live_rows(
     ]
     apply_server_resource_stats(sessions, server_resource_stats)
     for session in sessions:
+        from core.monitoring.mappers import apply_playback_username
+        apply_playback_username(session)
         _apply_progress(session)
     return {
         "sessions_stats": sessions_stats,

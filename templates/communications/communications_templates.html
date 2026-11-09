@@ -213,15 +213,31 @@
 
       <div class="text-xs">
         <label class="block mb-1">{{ t('attachments') }}</label>
-        <input type="file" name="attachments" multiple class="w-full text-xs text-slate-300">
+        <input id="template-attachments" type="file" name="attachments" multiple class="sr-only peer">
+        <label for="template-attachments" class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-indigo-400 bg-indigo-600 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-500 peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-300">
+          <span aria-hidden="true">＋</span> {{ t('comm_attachments_add') }}
+        </label>
+        <div id="template-attachments-pending" class="mt-2 space-y-2" aria-live="polite"
+             data-pending-label="{{ t('comm_attachments_pending') }}"
+             data-remove-label="{{ t('comm_attachments_remove') }}"></div>
         <p class="mt-1 text-[11px] text-slate-500">{{ t('comm_attachments_help') }}</p>
 
         {% if loaded_template and loaded_template.attachments %}
           <div class="mt-2 space-y-1">
+            <p class="font-medium text-slate-300">{{ t('comm_attachments_saved') }}</p>
             {% for a in loaded_template.attachments %}
-              <div class="text-[11px] text-slate-400">📎 {{ a.filename }}</div>
+              <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-700 bg-slate-950 p-2">
+                <span class="min-w-0 break-all text-slate-200">📎 {{ a.filename }}</span>
+                <label class="inline-flex cursor-pointer items-center gap-2 rounded border border-rose-500/60 px-2 py-1 text-rose-300 has-[:checked]:bg-rose-950">
+                  <input type="checkbox" name="remove_attachment_ids" value="{{ a.id }}" class="accent-rose-500">
+                  {{ t('comm_attachments_remove') }}
+                </label>
+              </div>
             {% endfor %}
+            <p class="text-[11px] text-slate-400">{{ t('comm_attachments_remove_help') }}</p>
           </div>
+        {% else %}
+          <p class="mt-2 text-slate-400">{{ t('comm_attachments_none') }}</p>
         {% endif %}
       </div>
 

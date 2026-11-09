@@ -1581,3 +1581,92 @@ CREATE TABLE IF NOT EXISTS portal_media_request_claims (
  kind TEXT NOT NULL, external_id INTEGER NOT NULL, owner TEXT NOT NULL,
  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(kind, external_id)
 );
+
+
+-- Smart collections: instances, engine runs and VODUM ownership
+
+
+
+
+CREATE TABLE IF NOT EXISTS collection_settings (id INTEGER PRIMARY KEY CHECK(id=1), secret_tmdb TEXT, suppress_empty INTEGER NOT NULL DEFAULT 1);
+INSERT OR IGNORE INTO collection_settings(id) VALUES(1);
+CREATE TABLE IF NOT EXISTS collection_instances (
+ id TEXT PRIMARY KEY, group_id TEXT, retired INTEGER NOT NULL DEFAULT 0, model TEXT NOT NULL, library_id INTEGER NOT NULL REFERENCES libraries(id),
+ name TEXT NOT NULL, config_json TEXT NOT NULL DEFAULT '{}', secret_tmdb TEXT,
+ enabled INTEGER NOT NULL DEFAULT 0, schedule TEXT, timezone TEXT NOT NULL DEFAULT 'UTC',
+ next_run TEXT, requested TEXT, state TEXT NOT NULL DEFAULT 'idle',
+ lease_id TEXT, lease_until TEXT, last_run TEXT, last_error TEXT,
+ created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_collection_due ON collection_instances(enabled,next_run);
+CREATE TABLE IF NOT EXISTS collection_runs (
+ id INTEGER PRIMARY KEY AUTOINCREMENT, instance_id TEXT NOT NULL REFERENCES collection_instances(id) ON DELETE CASCADE,
+ kind TEXT NOT NULL, state TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT,
+ result_json TEXT NOT NULL DEFAULT '{}', error_type TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_collection_runs_instance ON collection_runs(instance_id,id DESC);
+CREATE TABLE IF NOT EXISTS collection_people (
+ instance_id TEXT NOT NULL REFERENCES collection_instances(id) ON DELETE CASCADE,
+ person_key TEXT NOT NULL, tmdb_id INTEGER NOT NULL, name TEXT NOT NULL, death_date TEXT NOT NULL,
+ detected_at TEXT NOT NULL, expires_at TEXT NOT NULL, data_json TEXT NOT NULL DEFAULT '{}',
+ PRIMARY KEY(instance_id,person_key), UNIQUE(instance_id,tmdb_id)
+);
+CREATE TABLE IF NOT EXISTS collection_objects (
+ id TEXT PRIMARY KEY, instance_id TEXT NOT NULL REFERENCES collection_instances(id) ON DELETE CASCADE,
+ person_key TEXT NOT NULL, remote_id TEXT, title TEXT NOT NULL,
+ state TEXT NOT NULL DEFAULT 'reserved', UNIQUE(instance_id,person_key)
+);
+CREATE TABLE IF NOT EXISTS collection_person_tombstones (
+ instance_id TEXT NOT NULL REFERENCES collection_instances(id) ON DELETE CASCADE,
+ tmdb_id INTEGER NOT NULL, person_key TEXT NOT NULL, suppress_until TEXT NOT NULL,
+ PRIMARY KEY(instance_id,tmdb_id)
+);
+CREATE TABLE IF NOT EXISTS collection_person_choices (
+ group_id TEXT NOT NULL, tmdb_id INTEGER NOT NULL, excluded INTEGER NOT NULL DEFAULT 0,
+ manual INTEGER NOT NULL DEFAULT 0, data_json TEXT NOT NULL DEFAULT '{}',
+ added_at TEXT, expires_at TEXT, PRIMARY KEY(group_id,tmdb_id)
+);
+CREATE TABLE IF NOT EXISTS collection_arr_requests (
+ arr_server_id INTEGER NOT NULL REFERENCES servers(id), media_type TEXT NOT NULL, external_id INTEGER NOT NULL,
+ instance_id TEXT NOT NULL REFERENCES collection_instances(id), state TEXT NOT NULL, updated_at TEXT NOT NULL,
+ PRIMARY KEY(arr_server_id,media_type,external_id)
+);
+
+
+CREATE TABLE IF NOT EXISTS collection_spotlight_meta (
+ instance_id TEXT NOT NULL REFERENCES collection_instances(id) ON DELETE CASCADE,
+ key TEXT NOT NULL, value TEXT, PRIMARY KEY(instance_id,key));
+CREATE TABLE IF NOT EXISTS collection_spotlight_entries (
+ id INTEGER PRIMARY KEY, instance_id TEXT NOT NULL REFERENCES collection_instances(id) ON DELETE CASCADE,
+ plex_id TEXT NOT NULL, tmdb_id INTEGER, title TEXT NOT NULL, entered TEXT NOT NULL,
+ expires TEXT NOT NULL, origin TEXT NOT NULL, checked TEXT NOT NULL,
+ active INTEGER NOT NULL DEFAULT 1, reason TEXT, removed TEXT, cooldown TEXT, event TEXT);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_spotlight_active
+ ON collection_spotlight_entries(instance_id,plex_id) WHERE active=1;
+CREATE TABLE IF NOT EXISTS collection_spotlight_operations (
+ id INTEGER PRIMARY KEY, instance_id TEXT NOT NULL REFERENCES collection_instances(id) ON DELETE CASCADE,
+ action TEXT NOT NULL, plex_id TEXT NOT NULL, tmdb_id INTEGER, title TEXT NOT NULL,
+ entered TEXT NOT NULL, expires TEXT NOT NULL, event TEXT, status TEXT NOT NULL DEFAULT 'pending');
+CREATE TABLE IF NOT EXISTS collection_spotlight_runs (
+ id INTEGER PRIMARY KEY, instance_id TEXT NOT NULL REFERENCES collection_instances(id) ON DELETE CASCADE,
+ started TEXT, finished TEXT, cleanup TEXT, population TEXT, summary TEXT);
+
+-- Shared collection library inventory
+
+CREATE TABLE IF NOT EXISTS collection_inventory (
+ library_id INTEGER PRIMARY KEY REFERENCES libraries(id) ON DELETE CASCADE,
+ generation TEXT, scope TEXT, started_at TEXT, finished_at TEXT, completed_at TEXT,
+ duration_seconds REAL, media_count INTEGER NOT NULL DEFAULT 0,
+ state TEXT NOT NULL DEFAULT 'missing', last_error TEXT);
+CREATE TABLE IF NOT EXISTS collection_inventory_media (
+ library_id INTEGER NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+ media_id TEXT NOT NULL, data_json TEXT NOT NULL,
+ PRIMARY KEY(library_id,media_id));
+CREATE TABLE IF NOT EXISTS collection_inventory_audio (
+ library_id INTEGER NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+ generation TEXT NOT NULL, media_id TEXT NOT NULL, language TEXT NOT NULL,
+ available INTEGER NOT NULL, PRIMARY KEY(library_id,generation,media_id,language));
+CREATE TABLE IF NOT EXISTS collection_inventory_runs (
+ id INTEGER PRIMARY KEY, started_at TEXT NOT NULL, finished_at TEXT,
+ duration_seconds REAL, libraries INTEGER NOT NULL DEFAULT 0,
+ media_count INTEGER NOT NULL DEFAULT 0, failures INTEGER NOT NULL DEFAULT 0);

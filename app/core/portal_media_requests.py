@@ -1,6 +1,7 @@
 """User-scoped media search and checked, deterministic ARR submissions."""
 import json
 import time
+import requests as http_requests
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import ContextVar, copy_context
 from uuid import uuid4
@@ -45,15 +46,48 @@ def api(server, path, *, params=None, payload=None):
     headers = {'Accept':'application/json'}
     headers['X-Plex-Token' if kind == 'plex' else ('X-Emby-Token' if kind == 'jellyfin' else 'X-Api-Key')] = server.get('token') or ''
     try:
-        url = (server.get('url') or server.get('local_url') or server.get('public_url') or '').rstrip('/') + path
-        response = http.request('POST' if payload is not None else 'GET', url,
-                                params=params, json=payload, headers=headers,
-                                timeout=timeout, allow_redirects=False)
+        bases = list(dict.fromkeys(str(server.get(key) or '').strip().rstrip('/')
+                                  for key in ('url','local_url','public_url')
+                                  if str(server.get(key) or '').strip()))
+        if not bases:
+            raise MediaRequestError('portal_requests_unavailable')
+        # Only reads may fail over. A lost POST response may hide a successful
+        # remote addition, so never replay it on another address.
+        if payload is not None:
+            bases = bases[:1]
+        read_deadline = deadline if deadline is not None else time.monotonic() + 24
+        for index, base in enumerate(bases):
+            remaining = read_deadline - time.monotonic()
+            if remaining <= 0:
+                raise MediaRequestError('portal_requests_unavailable')
+            try:
+                response = http.request('POST' if payload is not None else 'GET', base + path,
+                                        params=params, json=payload, headers=headers,
+                                        timeout=min(timeout,remaining), allow_redirects=False)
+            except http_requests.exceptions.SSLError:
+                raise
+            except (http_requests.exceptions.ConnectionError,http_requests.exceptions.Timeout):
+                if index == len(bases)-1:
+                    raise
+                continue
+            if response.status_code in (502,503,504) and index < len(bases)-1:
+                response.close()
+                continue
+            break
         if response.status_code not in (200,201):
+            fields = []
+            try:
+                validation = response.json()
+                allowed = {'QualityProfileId','RootFolderPath','Path','Title','TvdbId','TmdbId','MinimumAvailability','Seasons','SeriesType','LanguageProfileId','Monitored','AddOptions'}
+                fields = sorted({row.get('propertyName') for row in validation if isinstance(row,dict) and row.get('propertyName') in allowed}) if isinstance(validation,list) else []
+            except (ValueError,TypeError):
+                pass
             get_logger('portal_media_requests').warning(
-                'Media request API failure server_id=%s type=%s method=%s endpoint=%s http=%s',
-                server.get('id'),kind,'POST' if payload is not None else 'GET',path,response.status_code)
-            raise MediaRequestError('portal_requests_add_failed' if payload is not None else 'portal_requests_unavailable')
+                'Media request API failure server_id=%s type=%s method=%s endpoint=%s http=%s validation_fields=%s',
+                server.get('id'),kind,'POST' if payload is not None else 'GET',path,response.status_code,fields)
+            error = MediaRequestError('portal_requests_add_failed' if payload is not None else 'portal_requests_unavailable')
+            error.http_status, error.validation_fields, error.endpoint = response.status_code,fields,path
+            raise error
         data = response.json()
         if not isinstance(data,(dict,list)): raise MediaRequestError('portal_requests_unavailable')
         return data
@@ -63,7 +97,9 @@ def api(server, path, *, params=None, payload=None):
         get_logger('portal_media_requests').warning(
             'Media request API connection failure server_id=%s type=%s method=%s endpoint=%s error_type=%s',
             server.get('id'),kind,'POST' if payload is not None else 'GET',path,type(exc).__name__)
-        raise MediaRequestError('portal_requests_add_uncertain' if payload is not None else 'portal_requests_unavailable') from None
+        error = MediaRequestError('portal_requests_add_uncertain' if payload is not None else 'portal_requests_unavailable')
+        error.endpoint, error.connection_error = path,type(exc).__name__
+        raise error from None
     finally:
         http.close()
 
@@ -233,6 +269,9 @@ def arr_defaults(server):
     profiles, roots = parallel_reads([
         lambda: api(server,'/api/v3/qualityprofile'),
         lambda: api(server,'/api/v3/rootfolder')])
+    for value in (profiles,roots):
+        if isinstance(value,MediaRequestError):
+            raise value
     if not isinstance(profiles,list) or not isinstance(roots,list):
         raise MediaRequestError('portal_requests_unavailable')
     if any(not isinstance(r,dict) or type(r.get('id')) is not int for r in profiles + roots):
@@ -240,8 +279,8 @@ def arr_defaults(server):
     return {'profiles':profiles, 'roots':roots}
 
 
-def add_media(server, media, kind):
-    choices = arr_defaults(server)
+def add_media(server, media, kind, *, choices=None):
+    choices = choices if choices is not None else arr_defaults(server)
     settings = json.loads(server.get('settings_json') or '{}').get('media_requests',{})
     profiles, roots = choices['profiles'], choices['roots']
     profile = next((r for r in profiles if r['id'] == settings.get('quality_profile_id')),None)

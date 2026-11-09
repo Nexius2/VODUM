@@ -1,4 +1,4 @@
-TASK_DEFAULTS_VERSION = 4
+TASK_DEFAULTS_VERSION = 5
 
 TASK_SCHEDULE_DEFAULTS = {
     "sync_plex": "7 */6 * * *",
@@ -88,5 +88,14 @@ def migrate_task_schedule_defaults(conn, cursor) -> None:
                 next_run = NULL, updated_at = CURRENT_TIMESTAMP
             WHERE name = 'stream_enforcer'
               AND (interval_seconds IS NULL OR interval_seconds IN (15, 60, 120))
+        """)
+        conn.commit()
+
+    if current_version < 5:
+        # Upgrade existing installations, including a persisted future next_run.
+        cursor.execute("""
+            UPDATE tasks SET schedule_mode = 'interval', interval_seconds = 5,
+                next_run = NULL, updated_at = CURRENT_TIMESTAMP
+            WHERE name = 'stream_enforcer'
         """)
         conn.commit()

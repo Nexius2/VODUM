@@ -286,6 +286,12 @@
         const device = escapeHtml(sess.device ?? "—");
         const clientName = escapeHtml(sess.client_name ?? "—");
         const clientProduct = escapeHtml(sess.client_product ?? "—");
+        let rawSession = sess.raw_json;
+        if (typeof rawSession === "string") {
+          try { rawSession = JSON.parse(rawSession); } catch { rawSession = {}; }
+        }
+        const machineId = escapeHtml(rawSession?.Player?.machineIdentifier ?? rawSession?.DeviceId ?? "—");
+
         const bitrate = escapeHtml(sess.bitrate ?? "—");
         const transcode = escapeHtml(formatBoolTranscode(sess.is_transcode));
 
@@ -300,6 +306,7 @@
               <div><div class="text-[11px] uppercase tracking-wide text-slate-500">IP</div><div class="mt-1 text-sm text-slate-100">${ip}</div></div>
               <div><div class="text-[11px] uppercase tracking-wide text-slate-500">${escapeHtml(label("device", "Device"))}</div><div class="mt-1 text-sm text-slate-100">${device}</div></div>
               <div><div class="text-[11px] uppercase tracking-wide text-slate-500">${escapeHtml(label("client", "Client"))}</div><div class="mt-1 text-sm text-slate-100">${clientName} / ${clientProduct}</div></div>
+              <div class="md:col-span-2"><div class="text-[11px] uppercase tracking-wide text-slate-500">${escapeHtml(label("device", "Device"))} ID</div><div class="mt-1 text-sm text-slate-100 break-all">${machineId}</div></div>
               <div><div class="text-[11px] uppercase tracking-wide text-slate-500">${escapeHtml(label("startedAt", "Started at"))}</div><div class="mt-1 text-sm text-slate-100">${startedAt}</div></div>
               <div><div class="text-[11px] uppercase tracking-wide text-slate-500">${escapeHtml(label("lastSeenAt", "Last seen at"))}</div><div class="mt-1 text-sm text-slate-100">${lastSeenAt}</div></div>
               <div><div class="text-[11px] uppercase tracking-wide text-slate-500">${escapeHtml(label("bitrate", "Bitrate"))}</div><div class="mt-1 text-sm text-slate-100">${bitrate}</div></div>

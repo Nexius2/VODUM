@@ -26,7 +26,7 @@ def migrate_task_scheduler_mode(conn, cursor, *, ensure_column):
         SET
             schedule_mode = 'interval',
             interval_seconds = CASE
-                WHEN name = 'stream_enforcer' THEN 15
+                WHEN name = 'stream_enforcer' THEN 5
                 ELSE 15
             END
         WHERE name IN (

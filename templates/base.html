@@ -125,6 +125,12 @@
           {{ t("servers_libraries") }}
         </a>
 
+        <a href="{{ url_for('collections_page') }}"
+           class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='collections' }}">
+          <svg class="mr-2 h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="7" y="7" width="14" height="14" rx="2"/><path d="M17 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2M12 11l5 3-5 3z"/></svg>
+          {{ t("collections.title") }}
+        </a>
+
         <a href="{{ url_for('subscriptions') }}"
            class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='subscriptions' }}">
           <svg class="mr-2 h-4 w-4 shrink-0" aria-hidden="true"><use href="#vodum-icon-gift"></use></svg>
@@ -309,7 +315,7 @@
     </div>
   </div>
 
-  <script src="{{ url_for('static', filename='js/app.js', v=g.app_version|default('dev')) }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js', v=g.app_version|default('dev'), revision='collections-activity-1') }}"></script>
   <script src="{{ url_for('static', filename='js/modal_manager.js', v=g.app_version|default('dev')) }}"></script>
   {% block scripts %}{% endblock %}
 

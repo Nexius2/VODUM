@@ -12,6 +12,7 @@ set -euo pipefail
 #  - Démarrer l'application Flask
 ###############################################################################
 
+export VODUM_STARTUP_STARTED_AT="$(date +%s)"
 echo "Starting VODUM..."
 
 # ---------------------------------------------------------------------------
@@ -206,12 +207,5 @@ UPLOAD_MB="${VODUM_MAX_UPLOAD_MB:-4096}"
 case "$UPLOAD_MB" in
   ''|*[!0-9]*) log ERROR "VODUM_MAX_UPLOAD_MB must be a positive integer"; exit 1 ;;
 esac
-MAX_REQUEST_BODY_SIZE=$((UPLOAD_MB * 1024 * 1024))
-
-log INFO "Waitress listening on 0.0.0.0:${VODUM_PORT:-5000}"
-exec waitress-serve \
-  --host=0.0.0.0 \
-  --port="${VODUM_PORT:-5000}" \
-  --threads="${VODUM_WAITRESS_THREADS:-6}" \
-  --max-request-body-size="$MAX_REQUEST_BODY_SIZE" \
-  run:app
+log INFO "Loading application; waiting for HTTP readiness confirmation"
+exec python3 -u /app/serve.py

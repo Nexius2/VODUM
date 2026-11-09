@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 from core.plex_rate_limit import wait_for_plex_slot
 from core.http_security import server_http_session
 from core.providers.base import BaseProvider
+from core import stream_kill_diagnostics as diagnostics
 from logging_utils import get_logger
 
 log = get_logger("plex")
@@ -123,12 +124,18 @@ class PlexProvider(BaseProvider):
                     headers=self._headers(),
                     timeout=self.timeout,
                 )
+                if path == '/status/sessions/terminate':
+                    diagnostics.event('http_response', method=method,
+                                      http_status=r.status_code, address_index=bases.index(base))
                 r.raise_for_status()
                 return True
             except requests.exceptions.RequestException as e:
                 last_exc = e
                 code = getattr(getattr(e, "response", None), "status_code", None)
                 errors.append(f"{method} {url} -> {code or type(e).__name__}")
+                if path == '/status/sessions/terminate':
+                    diagnostics.event('http_error', method=method, address_index=bases.index(base),
+                                      **diagnostics.exception_fields(e))
                 continue
 
         raise RuntimeError(f"Plex request failed. Attempts: {', '.join(errors)}") from last_exc
@@ -144,6 +151,14 @@ class PlexProvider(BaseProvider):
 
 
     def terminate_session(self, session_key: str, reason: str = "") -> bool:
+        diagnostics.event('resolve_target', session_key=str(session_key))
+        try:
+            return self._terminate_session(session_key, reason)
+        except Exception as exc:
+            diagnostics.event('termination_error', **diagnostics.exception_fields(exc))
+            raise
+
+    def _terminate_session(self, session_key: str, reason: str = "") -> bool:
         """
         Plex: /status/sessions/terminate attend sessionId (= l'id de la balise <Session id="...">),
         qui n'est pas toujours égal au sessionKey.
@@ -153,6 +168,7 @@ class PlexProvider(BaseProvider):
           - on appelle terminate avec la bonne valeur
         """
         # 1) charger /status/sessions (XML brut)
+        diagnostics.event('snapshot_read', phase='initial')
         xml_text = self._get("/status/sessions")
         root = ET.fromstring(xml_text)
 
@@ -202,9 +218,12 @@ class PlexProvider(BaseProvider):
             return None
 
         target_session_id = find_session_id(root)
+        diagnostics.event('target_resolved', session_id=target_session_id,
+                          identity_available=target_identity is not None, snapshot_sessions=len(root))
 
         # 3) Sans correspondance certaine, ne pas confondre sessionKey et sessionId.
         if not target_session_id:
+            diagnostics.event('result', outcome='target_absent' if target_session_id is None else 'missing_session_id')
             log.warning(
                 "Cannot terminate Plex session: session is absent or has no termination ID "
                 f"session_key={session_key}"
@@ -229,6 +248,7 @@ class PlexProvider(BaseProvider):
                 if "404" in error_text:
                     refreshed = ET.fromstring(self._get("/status/sessions"))
                     if find_session_id(refreshed) is None and target_identity is None:
+                        diagnostics.event('result', outcome='absent_after_not_found')
                         log.info(
                             f"Session already terminated on Plex "
                             f"session_key={session_key} session_id={target_session_id}"
@@ -238,6 +258,7 @@ class PlexProvider(BaseProvider):
                 raise
 
         if not requested:
+            diagnostics.event('result', outcome='command_not_accepted')
             return False
 
         # Plex can acknowledge termination before a TV client has actually
@@ -249,8 +270,20 @@ class PlexProvider(BaseProvider):
         for attempt, delay in enumerate(verify_delays):
             if delay:
                 time.sleep(delay)
+            diagnostics.event('snapshot_read', phase='verification', poll=attempt + 1)
             refreshed = ET.fromstring(self._get("/status/sessions"))
             current_session_id = find_session_id(refreshed)
+            matching = next((node for node in refreshed if str(
+                node.get('sessionKey') or node.get('sessionId') or node.get('key')
+            ) == str(session_key) or (
+                target_identity is not None and playback_identity(node) == target_identity
+            )), None)
+            player = matching.find('Player') if matching is not None else None
+            diagnostics.event('verification', poll=attempt + 1, delay_seconds=delay,
+                              session_id=current_session_id,
+                              session_key=matching.get('sessionKey') if matching is not None else None,
+                              state=player.get('state') if player is not None else None,
+                              progress_ms=matching.get('viewOffset') if matching is not None else None)
             if current_session_id == "":
                 absent_once = False
                 continue
@@ -258,6 +291,7 @@ class PlexProvider(BaseProvider):
                 # A reconnect can briefly disappear from the server snapshot.
                 # Require two observations before declaring this client stopped.
                 if target_identity is None or absent_once:
+                    diagnostics.event('result', outcome='stop_confirmed')
                     return True
                 absent_once = True
                 continue
@@ -265,6 +299,8 @@ class PlexProvider(BaseProvider):
             absent_once = False
 
             if current_session_id != target_session_id:
+                diagnostics.event('session_recreated', old_session_id=target_session_id,
+                                  new_session_id=current_session_id)
                 log.info(
                     "Plex session was recreated during termination "
                     "session_key=%s old_session_id=%s new_session_id=%s",
@@ -280,10 +316,15 @@ class PlexProvider(BaseProvider):
             # session disappearance above as the only success criterion.
             if attempt < len(verify_delays) - 1:
                 try:
+                    # Some Plex/proxy combinations acknowledge GET without
+                    # stopping playback. Try the compatible POST form once the
+                    # first GET retry has also left the session alive.
+                    method = "POST" if attempt % 2 else "GET"
+                    fallback_method = "GET" if method == "POST" else "POST"
                     try:
-                        self._request("GET", "/status/sessions/terminate", params=dict(params))
+                        self._request(method, "/status/sessions/terminate", params=dict(params))
                     except Exception:
-                        self._request("POST", "/status/sessions/terminate", params=dict(params))
+                        self._request(fallback_method, "/status/sessions/terminate", params=dict(params))
                 except Exception:
                     log.debug(
                         "Retrying Plex terminate failed session_key=%s session_id=%s",
@@ -292,6 +333,7 @@ class PlexProvider(BaseProvider):
                         exc_info=True,
                     )
 
+        diagnostics.event('result', outcome='still_present_after_retries')
         log.warning(
             "Plex accepted terminate request but session is still active "
             f"session_key={session_key} session_id={target_session_id}"

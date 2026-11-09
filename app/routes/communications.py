@@ -25,7 +25,7 @@ from core.communication_template_admin import (
 )
 from core.communication_template_rules import normalize_template_rules
 from core.communication_channels import normalize_delivery_channels
-from core.communication_attachments import store_communication_attachments
+from core.communication_attachments import store_communication_attachments, remove_template_attachments
 from core.communication_configuration_form import parse_communication_configuration
 from core.communication_page_data import (
     load_campaign_page_data, load_template_page_data,
@@ -650,6 +650,7 @@ def register(app):
             _upsert_template_translation(db, int(tid), selected_language, subject, body)
 
             store_communication_attachments(db, "template", int(tid), request.files.getlist("attachments"))
+            remove_template_attachments(db, int(tid), request.form.getlist('remove_attachment_ids'))
 
             add_log(
                 "info",

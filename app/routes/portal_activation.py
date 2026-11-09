@@ -9,6 +9,7 @@ from core.portal_rate_limit import portal_request_allowed
 from core.portal_sessions import create_portal_session
 from core.auth_principal import open_portal_session, portal_principal
 from core.portal_audit import record_portal_event
+from core.activation_trace import trace_activation
 from web.helpers import get_db
 from web.security import get_client_ip
 
@@ -50,6 +51,7 @@ def register(app):
                     return failure('portal_login_locked', 429)
                 activation = service.load_activation(db, token=request.args['token'])
                 session[CONTEXT] = {'id': activation['id'], 'generation': activation['generation']}
+                trace_activation('link_opened', activation=activation)
                 session['activation_auto'] = bool(activation['plex_token']) or activation['mode'] == 'jellyfin'
                 session['activation_auto_login'] = activation['mode'] == 'plex' and not activation['plex_token'] and not activation['completed_at']
                 # Strip personal token before rendering links or loading external resources.
@@ -64,11 +66,13 @@ def register(app):
                                    auto_login=bool(session.pop('activation_auto_login', False)),
                                    auto=bool(session.pop('activation_auto', False)))
         except ValueError as exc:
+            trace_activation('link_rejected',activation=session.get(CONTEXT),outcome='failure',exc=exc)
             return failure(str(exc))
 
     @app.post('/portal/access/plex')
     def portal_access_plex():
         session.pop('activation_auto_login', None)
+        activation = None
         try:
             db, activation, settings = load()
             if activation['mode'] != 'plex':
@@ -79,27 +83,37 @@ def register(app):
             pin = plex.create_pin()
             flow = begin_plex_flow(session, pin_id=pin.id, purpose='activation')
             session['activation_plex_context'] = dict(session[CONTEXT])
+            trace_activation('plex_started', activation=activation)
             from mailing_utils import build_portal_login_url
             callback = build_portal_login_url(settings['portal_public_url']).removesuffix('/login') + '/access/plex/callback?state=' + flow.state
             return redirect(plex.build_authorization_url(pin, callback, signup=not bool(activation['plex_subject'])))
-        except (ValueError, PlexAuthError):
+        except (ValueError, PlexAuthError) as exc:
+            trace_activation('plex_start', activation=activation, outcome='failure', exc=exc)
             flash('activation_reauthenticate', 'error')
             return redirect(url_for('portal_access'))
 
     @app.get('/portal/access/plex/callback')
     def portal_access_plex_callback():
+        activation = None
+        context = session.get('activation_plex_context') or session.get(CONTEXT) or {}
+        stage = 'callback_state'
         try:
             flow = consume_plex_flow(session, returned_state=request.args.get('state') or '', expected_purpose='activation')
             bound_context = session.pop('activation_plex_context', None)
             if not bound_context or bound_context != session.get(CONTEXT):
                 raise ValueError('activation_invalid')
+            stage = 'callback_context'
             db, activation, settings = load()
             plex = client(db)
+            stage = 'callback_token'
             token = plex.wait_for_token(flow.pin_id)
             if not token:
                 raise ValueError('activation_reauthenticate')
+            stage = 'callback_identity'
             identity = plex.fetch_identity(token)
+            stage = 'callback_bind'
             linked = service.bind_plex_identity(db, activation, identity, token)
+            stage = 'callback_session'
             created = create_portal_session(db, linked['portal_account_id'], ttl=current_app.permanent_session_lifetime)
             context = dict(session[CONTEXT])
             open_portal_session(session, portal_principal(portal_account_id=linked['portal_account_id'],
@@ -108,10 +122,13 @@ def register(app):
             record_portal_event(db, 'activation_plex_verified', 'success', portal_account_id=linked['portal_account_id'])
             # Access changes run via CSRF-protected POST, independently for each server.
             session['activation_auto'] = True
+            trace_activation('plex_verified', activation=activation)
             return redirect(url_for('portal_access'))
-        except (PlexFlowRejected, PlexAuthError):
+        except (PlexFlowRejected, PlexAuthError) as exc:
+            trace_activation(stage, activation=activation or context, outcome='failure', exc=exc)
             flash('activation_reauthenticate', 'error')
         except ValueError as exc:
+            trace_activation(stage, activation=activation or context, outcome='failure', exc=exc)
             flash(str(exc), 'error')
         return redirect(url_for('portal_access'))
 
@@ -126,7 +143,11 @@ def register(app):
             identifier = client(db).client_identifier if activation['mode'] == 'plex' else ''
             service.process_server(db, activation, server_id, identifier)
             if request.headers.get('Accept') == 'application/json':
-                return jsonify(ok=True)
+                target = next((t for t in service.activation_targets(db,activation['id']) if t['server_id']==server_id),None)
+                if target is None:
+                    return jsonify(ok=False, error='activation_invalid'),400
+                failed = target['state']=='error'
+                return jsonify(ok=not failed, state=target['state'],error=target['error_key']),422 if failed else 200
             return redirect(url_for('portal_access'))
         except ValueError as exc:
             return failure(str(exc))

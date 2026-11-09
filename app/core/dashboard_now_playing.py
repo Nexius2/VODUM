@@ -130,7 +130,11 @@ def _sessions(db, window_sql: str, limit: int = 6) -> list[dict]:
         """,
         (window_sql, int(limit)),
     ) or []
-    return [dict(row) for row in rows]
+    from core.monitoring.mappers import apply_playback_username
+    sessions = [dict(row) for row in rows]
+    for session in sessions:
+        apply_playback_username(session)
+    return sessions
 
 
 @isolated_read_operation

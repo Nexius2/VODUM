@@ -1,0 +1,154 @@
+{
+  "revision": "e1327dc4e7f709277e3e2be88df76c3eefe349e2",
+  "source": "https://raw.githubusercontent.com/Kometa-Team/Kometa/e1327dc4e7f709277e3e2be88df76c3eefe349e2/defaults/both/universe.yml",
+  "images_revision": "dfff31ab08446353844bb97de601c3a64edc8220",
+  "universes": {
+    "avp": {
+      "title": "Alien / Predator",
+      "provider": "imdb",
+      "list": "https://www.imdb.com/list/ls543971628/",
+      "media_types": [
+        "movie"
+      ]
+    },
+    "arrow": {
+      "title": "Arrowverse",
+      "provider": "imdb",
+      "list": "https://www.imdb.com/list/ls566667558/",
+      "media_types": [
+        "movie",
+        "tv"
+      ]
+    },
+    "askew": {
+      "title": "View Askewniverse",
+      "provider": "mdblist",
+      "list": "https://mdblist.com/lists/k0meta/external/15362",
+      "media_types": [
+        "movie",
+        "tv"
+      ]
+    },
+    "conjuring": {
+      "title": "Conjuring Universe",
+      "provider": "imdb",
+      "list": "https://www.imdb.com/list/ls068768438/",
+      "media_types": [
+        "movie"
+      ]
+    },
+    "dca": {
+      "title": "DC Animated Universe",
+      "provider": "mdblist",
+      "list": "https://mdblist.com/lists/johnfawkes/dca",
+      "media_types": [
+        "movie",
+        "tv"
+      ]
+    },
+    "dceu": {
+      "title": "DC Extended Universe",
+      "provider": "mdblist",
+      "list": "https://mdblist.com/lists/fa11en82/dc-extended-universe",
+      "media_types": [
+        "movie",
+        "tv"
+      ]
+    },
+    "dcu": {
+      "title": "DC Universe",
+      "provider": "tmdb",
+      "list": 8642250,
+      "media_types": [
+        "movie",
+        "tv"
+      ]
+    },
+    "fast": {
+      "title": "Fast & Furious",
+      "provider": "imdb",
+      "list": "https://www.imdb.com/list/ls4102351575/",
+      "media_types": [
+        "movie"
+      ]
+    },
+    "marvel": {
+      "title": "In Association With Marvel",
+      "provider": "mdblist",
+      "list": "https://mdblist.com/lists/k0meta/external/15110",
+      "media_types": [
+        "movie",
+        "tv"
+      ]
+    },
+    "mcu": {
+      "title": "Marvel Cinematic Universe",
+      "provider": "imdb",
+      "list": "https://www.imdb.com/list/ls539646485/",
+      "media_types": [
+        "movie",
+        "tv"
+      ]
+    },
+    "middle": {
+      "title": "Middle Earth",
+      "provider": "mdblist",
+      "list": "https://mdblist.com/lists/k0meta/external/46550",
+      "media_types": [
+        "movie",
+        "tv"
+      ]
+    },
+    "rocky": {
+      "title": "Rocky / Creed",
+      "provider": "mdblist",
+      "list": "https://mdblist.com/lists/k0meta/external/9248",
+      "media_types": [
+        "movie"
+      ]
+    },
+    "trek": {
+      "title": "Star Trek",
+      "provider": "imdb",
+      "list": "https://www.imdb.com/list/ls547463722/",
+      "media_types": [
+        "movie",
+        "tv"
+      ]
+    },
+    "star": {
+      "title": "Star Wars Universe",
+      "provider": "imdb",
+      "list": "https://www.imdb.com/list/ls501373412/",
+      "media_types": [
+        "movie",
+        "tv"
+      ]
+    },
+    "mummy": {
+      "title": "Mummy Universe",
+      "provider": "mdblist",
+      "list": "https://mdblist.com/lists/k0meta/external/9249",
+      "media_types": [
+        "movie"
+      ]
+    },
+    "wizard": {
+      "title": "Wizarding World",
+      "provider": "mdblist",
+      "list": "https://mdblist.com/lists/k0meta/external/23683",
+      "media_types": [
+        "movie"
+      ]
+    },
+    "xmen": {
+      "title": "X-Men Universe",
+      "provider": "imdb",
+      "list": "https://www.imdb.com/list/ls567618635/",
+      "media_types": [
+        "movie",
+        "tv"
+      ]
+    }
+  }
+}

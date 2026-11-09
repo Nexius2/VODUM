@@ -45,8 +45,33 @@
     }
   });
 
+  const serverRetries = new WeakMap();
+
+  function scheduleServerRetry(widget, notice) {
+    if (serverRetries.has(widget)) return;
+    const timer = window.setTimeout(() => {
+      serverRetries.delete(widget);
+      if (!widget.isConnected || notice.hidden) return;
+      if (document.hidden) {
+        scheduleServerRetry(widget, notice);
+        return;
+      }
+      widget.querySelector("[data-dashboard-server-retry]")?.click();
+    }, 5000);
+    serverRetries.set(widget, timer);
+  }
+
   function showWidgetFallback(event) {
     const target = (event.detail && event.detail.target) || event.target;
+    const serverWidget = target?.closest?.('[data-dashboard-refresh="servers"]');
+    if (serverWidget) {
+      const notice = serverWidget.querySelector('[data-dashboard-refresh-error]');
+      if (notice) {
+        notice.hidden = false;
+        scheduleServerRetry(serverWidget, notice);
+      }
+      return;
+    }
     if (!target?.dataset?.dashboardWidgetFallback) return;
 
     // Keep the last successful snapshot during a transient refresh failure.

@@ -1,7 +1,11 @@
-<section {% if dashboard_servers_deferred %}hx-get="{{ url_for('dashboard_servers_partial') }}" hx-trigger="load delay:500ms" hx-request='{"timeout":8000}' hx-swap="outerHTML"{% endif %} role="link" tabindex="0" data-dashboard-link="{{ url_for('servers_list') }}" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/40">
+<section {% if dashboard_servers_deferred %}hx-get="{{ url_for('dashboard_servers_partial') }}" hx-trigger="load delay:500ms" hx-sync="this:drop" hx-request='{"timeout":8000}' hx-swap="outerHTML"{% endif %} data-dashboard-refresh="servers" role="link" tabindex="0" data-dashboard-link="{{ url_for('servers_list') }}" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/40">
   {% set online_count = servers | selectattr('status', 'equalto', 'up') | list | length %}
   {% set offline_count = servers | selectattr('status', 'equalto', 'down') | list | length %}
   <div class="mb-3 flex items-center justify-between"><h2 class="text-sm font-semibold">{{ t("servers") }}</h2><span class="whitespace-nowrap text-[11px] text-slate-400"><span class="font-medium text-emerald-300">{{ online_count }}</span> {{ t("online") }} · <span class="font-medium text-rose-300">{{ offline_count }}</span> {{ t("offline") }}</span></div>
+  <div data-dashboard-refresh-error role="status" hidden class="mb-3 rounded-lg border border-amber-500/40 bg-amber-950/30 p-3 text-xs text-amber-200">
+    <span>{{ t('dashboard_servers_refresh_failed') }}</span>
+    <button type="button" data-dashboard-server-retry hx-sync="closest section:drop" class="ml-2 underline" hx-get="{{ url_for('dashboard_servers_partial') }}" hx-target="closest section" hx-swap="outerHTML" hx-request='{"timeout":8000}'>{{ t('dashboard_retry_refresh') }}</button>
+  </div>
   <div class="space-y-2">
     {% for s in dashboard_servers %}
       <div class="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2">
