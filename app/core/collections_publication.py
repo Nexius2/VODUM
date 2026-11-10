@@ -11,7 +11,10 @@ PENDING={'collections.membership_pending','collections.order_pending'}
 def signature(instance):
     config=json.loads(instance['config_json'])
     for key in ('visibility','priority','mode','arr_enabled','arr_server'):config.pop(key,None)
-    return hashlib.sha256(json.dumps([instance['model'],instance['library_id'],config],sort_keys=True).encode()).hexdigest()
+    inputs=[instance['model'],instance['library_id'],config]
+    if instance['model']=='streaming_country':
+        inputs.append('regional-tmdb-charts-v3')
+    return hashlib.sha256(json.dumps(inputs,sort_keys=True).encode()).hexdigest()
 
 
 def record_plan(db,record,title,matches,config):

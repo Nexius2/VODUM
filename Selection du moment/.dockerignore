@@ -1,8 +1,0 @@
-.git
-.env
-.venv
-appdata
-logs
-tests
-__pycache__
-config/config.yaml

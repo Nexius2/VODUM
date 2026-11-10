@@ -208,6 +208,8 @@ def run(task_id, db):
                     context={'collection_name':instance['name'],'instance_id':instance['id'],'server_name':server['name'] if server else ''},library_id=instance['library_id'])
             # Exception text from external services may contain credentials.
             code = str(exc) if isinstance(exc,ValueError) and str(exc).startswith('collections.') else 'collections.execution_failed'
+            if isinstance(exc,RuntimeError) and str(exc)=='collections.publication_failed':
+                code = 'collections.publication_failed'
             if isinstance(exc,CollectionOwnershipError) and str(exc) in {
                     'collections.ownership_failed','collections.title_collision'}:
                 code = str(exc)

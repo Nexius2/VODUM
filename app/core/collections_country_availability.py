@@ -1,4 +1,4 @@
-"""Country-parameterized equivalent of top_hit_Movies' availability engine.
+"""Regional film catalogues and weekly TV trends via the official TMDb API.
 
 Take ten subscription titles per provider, merge typed TMDb identities, enrich
 popularity, then sort the union. Provider count and chart rank never override
@@ -8,7 +8,8 @@ import math
 import re
 
 from core.collections_repository import CollectionRunCancelled
-from core.collections_streaming_source import StreamingSource, COUNTRIES
+from core.collections_platforms_catalog import PLATFORMS
+from core.collections_streaming_source import StreamingSource, COUNTRIES, normalized
 
 
 def popularity_order(row):
@@ -35,7 +36,15 @@ class CountryAvailabilitySource(StreamingSource):
             if type(identifier) is not int or identifier<=0 or not row.get('provider_name'):
                 raise ValueError('collections.streaming_source_invalid')
             unique[identifier]={'id':identifier,'name':row['provider_name']}
-        return list(unique.values())
+        providers = []
+        for key in ('netflix','prime','apple','disney','max','paramount'):
+            spec = PLATFORMS[key]
+            aliases = {normalized(name) for name in spec['aliases']}
+            ids = sorted(row['id'] for row in unique.values()
+                         if row['id'] in spec['ids'] or normalized(row['name']) in aliases)
+            if ids:
+                providers.append({'id':key,'name':spec['name'],'offer_ids':'|'.join(map(str,ids))})
+        return providers
 
     def provider_titles(self, country, media_type, provider_id):
         def load():
@@ -58,6 +67,8 @@ class CountryAvailabilitySource(StreamingSource):
         self.diagnostics=[]
         if country not in COUNTRIES or media_type not in ('movie','tv'):
             raise ValueError('collections.invalid_country')
+        if media_type=='tv':
+            return self.tv_trends(country)
         try:
             providers=self.provider_catalog(country,media_type)
         except CollectionRunCancelled:raise
@@ -79,7 +90,7 @@ class CountryAvailabilitySource(StreamingSource):
                         'ranking':'tmdb_popularity_desc','failures':[]}
             self.diagnostics.append(diagnostic)
             try:
-                titles=self.provider_titles(country,media_type,provider['id'])
+                titles=self.provider_titles(country,media_type,provider['offer_ids'])
                 for rank,title in enumerate(titles,1):
                     identifier=title.get('id')
                     if type(identifier) is not int or identifier<=0:
@@ -124,6 +135,56 @@ class CountryAvailabilitySource(StreamingSource):
                 raise ValueError('collections.streaming_incomplete') from exc
         if not rows:raise ValueError('collections.streaming_empty')
         return sorted(rows,key=popularity_order)
+
+    def tv_trends(self, country):
+        source = 'tmdb_weekly_tv_'+country.lower()
+        kind = 'country_tmdb_trending'
+        diagnostic = {'id':source,'name':'TMDb','country':country,'source_kind':kind,
+                      'state':'error','count':0}
+        self.diagnostics.append(diagnostic)
+        ranked = {}
+        try:
+            for page in range(1,6):
+                chart = self.cached(['weekly-tv-trends-v1',self.language,page],6,
+                                    lambda:self.tmdb('/trending/tv/week',page=page))
+                titles = chart.get('results')
+                if not isinstance(titles,list) or (page==1 and not titles):
+                    raise ValueError('collections.streaming_source_invalid')
+                for offset, title in enumerate(titles,1):
+                    self.heartbeat()
+                    identifier = title.get('id')
+                    if type(identifier) is not int or identifier<=0 or not title.get('name'):
+                        raise ValueError('collections.streaming_identity_failed')
+                    if identifier in ranked or title.get('adult'):
+                        continue
+                    if getattr(self,'content_language',None) and title.get('original_language')!=self.content_language:
+                        continue
+                    offers = self.cached(['weekly-tv-offers-v1',identifier],6,
+                                         lambda:self.tmdb(f'/tv/{identifier}/watch/providers'))
+                    markets = offers.get('results')
+                    if not isinstance(markets,dict):
+                        raise ValueError('collections.streaming_source_invalid')
+                    regional = markets.get(country,{})
+                    if not isinstance(regional,dict):
+                        raise ValueError('collections.streaming_source_invalid')
+                    if not any(regional.get(mode) for mode in ('flatrate','free','ads')):
+                        continue
+                    rank = (page-1)*20+offset
+                    ranked[identifier] = {'id':identifier,'title':title['name'],
+                        'year':str(title.get('first_air_date') or '')[:4],
+                        'original_language':title.get('original_language'),
+                        'buzz_score':-rank,'sources':[source],
+                        'ranks_by_source':{source:rank},'source_kinds':{source:kind}}
+                if not titles or page>=chart.get('total_pages',1):
+                    break
+        except CollectionRunCancelled: raise
+        except Exception as exc:
+            self.partial = True
+            diagnostic['failure'] = self.failure(exc,source,country,'tv','weekly_trends')
+            raise ValueError('collections.streaming_incomplete') from exc
+        diagnostic.update(state='success',count=len(ranked))
+        if not ranked: raise ValueError('collections.streaming_empty')
+        return list(ranked.values())
 
     def original_language(self, media_type, row):
         return row.get('original_language') or super().original_language(media_type,row)

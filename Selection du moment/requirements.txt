@@ -1,5 +1,0 @@
-PlexAPI>=4.17,<5
-requests>=2.32,<3
-PyYAML>=6,<7
-filelock>=3.16,<4
-tzdata>=2025.1

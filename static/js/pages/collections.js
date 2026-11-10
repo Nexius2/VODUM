@@ -53,7 +53,7 @@
   function streamingDetails(result) {
     const providers = result.diagnostics?.providers || [];
     if (!providers.length) return '';
-    const directKinds = ['platform_chart','worldwide_platform_chart','continent_platform_chart','worldwide_tmdb_streaming','continent_tmdb_streaming','country_tmdb_availability'];
+    const directKinds = ['platform_chart','worldwide_platform_chart','continent_platform_chart','worldwide_tmdb_streaming','continent_tmdb_streaming','country_tmdb_availability','country_tmdb_trending'];
     const fallbackKinds = ['justwatch_popularity','worldwide_tmdb_trending'];
     const hasCoverage = providers.some((row) => [...directKinds,...fallbackKinds].includes(row.source_kind));
     const coverage = result.diagnostics?.coverage || {

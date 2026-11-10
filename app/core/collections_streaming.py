@@ -46,7 +46,7 @@ def run_streaming_country(db, instance, *, kind='sync', heartbeat=lambda:None,
             result['diagnostics']['providers'] = source.diagnostics
             if instance['model'] in ('streaming_country','streaming_worldwide') and source.diagnostics:
                 coverage = {
-                    'direct':sum(p.get('source_kind') in ('platform_chart','worldwide_platform_chart','continent_platform_chart','worldwide_tmdb_streaming','continent_tmdb_streaming','country_tmdb_availability') and p.get('count',0)>0 for p in source.diagnostics),
+                    'direct':sum(p.get('source_kind') in ('platform_chart','worldwide_platform_chart','continent_platform_chart','worldwide_tmdb_streaming','continent_tmdb_streaming','country_tmdb_availability','country_tmdb_trending') and p.get('count',0)>0 for p in source.diagnostics),
                     'fallback':sum(p.get('source_kind') in ('justwatch_popularity','worldwide_tmdb_trending') and p.get('count',0)>0 for p in source.diagnostics),
                     'failed':sum(p.get('state')=='error' for p in source.diagnostics),
                 }
@@ -127,7 +127,7 @@ def run_streaming_country(db, instance, *, kind='sync', heartbeat=lambda:None,
                 result['warnings'].append('collections.streaming_partial')
         fill_local_limit = config['mode']!='arr' and bool(config['limit'])
         acquisition_ids = {row['id'] for row in candidates[:config['limit']]} if fill_local_limit else None
-        if config['limit'] and not fill_local_limit:
+        if config['limit'] and (not fill_local_limit or instance['model']=='streaming_country'):
             candidates = candidates[:config['limit']]
         # Resolve all local identities before publishing or submitting to Arr.
         # A failed lookup must never turn an unknown local title into a download.
@@ -238,7 +238,7 @@ def run_streaming_country(db, instance, *, kind='sync', heartbeat=lambda:None,
             # media IDs, not just discovery candidates, against the hard cap.
             matches=list({str(row['id']):row for row in matches}.values())
             if not matches and acquisition_ids is not None and credit['id'] not in acquisition_ids:
-                # Lower ranks fill display slots using existing local titles;
+                # For models with local backfill, lower ranks fill display slots;
                 # they must not expand the configured top-N acquisition scope.
                 continue
             if config['limit'] and matches:

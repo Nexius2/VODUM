@@ -191,7 +191,6 @@ def run_platforms(db,instance,*,kind='sync',heartbeat=lambda:None,adapter_factor
         if deferred:
             result['warnings'].append('collections.platforms_availability_pending')
             if not preview:
-                from core.collections_repository import stamp
                 db.execute('''INSERT INTO collection_discovery_cache(cache_key,data_json,updated_at) VALUES(?,?,?)
                     ON CONFLICT(cache_key) DO UPDATE SET data_json=excluded.data_json,updated_at=excluded.updated_at''',
                     (progress_key,json.dumps({'next_media_id':first_deferred}),stamp()))

@@ -53,6 +53,14 @@ def explain_log(record):
     named=re.search(r'Collection (.+?) finished instance=([^ ]+) library=([^ ]+) server=(.+?) run=(\d+)',message)
     if named and not context:
         context=[('log_help.collection_name',named[1]),('log_help.server_name',named[4]),('log_help.library_id',named[3]),('log_help.run_id',named[5])]
+    if not context and 'collection(s) failed: ' in message:
+        # The scheduler embeds the collection summaries inside its error string.
+        summary=message.split('collection(s) failed: ',1)[1]
+        for entry in summary.split('; '):
+            match=re.match(r'(.+?) \(instance=([^ ,]+), library=(\d+), run=(\d+), stage=[a-z_]+, cause=[\w.]+\)',entry)
+            if match:
+                context.extend(zip(('log_help.collection_name','log_help.instance_id',
+                                    'log_help.library_id','log_help.run_id'),match.groups()))
     if not context:
         for key in ('library_id','server_id','run_id'):
             value=re.search(r'\b'+key+r'=(\d+)',message)

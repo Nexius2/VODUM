@@ -89,6 +89,7 @@ def _set_db(db):
 from core.stream_sync_dedupe import (
     STREAM_SYNC_GRACE_CACHE as _STREAM_SYNC_GRACE_CACHE,  # noqa: F401 - compatibility facade
     deduplicate_user_stream_sessions as _deduplicate_user_stream_sessions,
+    plex_restart_overlap_count,
 )
 from core.stream_ip_transition_grace import (
     IP_GRACE_CACHE as _IP_GRACE_CACHE,  # noqa: F401 - compatibility facade
@@ -244,10 +245,10 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
                 except Exception:
                     pass
 
-            # Every provider session consumes a slot, including mobile/device
-            # overlaps. Similar clients or media never prove a stopped stream.
             counted_sessions = _deduplicate_household_sessions(user_sessions)
-            if len(counted_sessions) <= eff_max:
+            if len(counted_sessions) <= eff_max or (
+                eff_max > 0 and len(counted_sessions) - plex_restart_overlap_count(counted_sessions) <= eff_max
+            ):
                 continue
             remaining = list(counted_sessions)
             kill_targets = []
@@ -425,7 +426,9 @@ def _evaluate_policy(policy: dict, sessions: List[dict]) -> List[dict]:
         for key, ip_sessions in by_key.items():
             counted_ip_sessions = _deduplicate_household_sessions(ip_sessions)
 
-            if len(counted_ip_sessions) <= max_streams:
+            if len(counted_ip_sessions) <= max_streams or (
+                max_streams > 0 and len(counted_ip_sessions) - plex_restart_overlap_count(counted_ip_sessions) <= max_streams
+            ):
                 continue
 
             remaining = list(counted_ip_sessions)

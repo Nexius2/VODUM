@@ -1,13 +1,37 @@
 import time
+from datetime import datetime, timezone
 
 from logging_utils import get_logger, is_debug_mode_enabled
 from core.stream_enforcer_config import HOUSEHOLD_MEMORY_SECONDS, STREAM_SYNC_GRACE_SECONDS, STREAM_SYNC_TRANSITION_SECONDS
 from core.stream_media_transition import is_coherent_media_transition, media_family_key
-from core.stream_session_identity import parse_datetime, session_endpoint_identity, session_sort_key
+from core.stream_session_identity import extract_machine_identifier, parse_datetime, session_endpoint_identity, session_sort_key
 
 
 logger = get_logger("stream_enforcer")
 STREAM_SYNC_GRACE_CACHE: dict[str, dict] = {}
+PLEX_RESTART_GRACE_SECONDS = 30
+
+
+def plex_restart_overlap_count(sessions: list[dict]) -> int:
+    """Count recent Plex sessions that may be replacing the same playback."""
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    groups = {}
+    for session in sessions:
+        if session.get("provider") != "plex":
+            continue
+        machine = extract_machine_identifier(session)
+        ip = (session.get("ip") or "").strip()
+        media = session.get("media_key")
+        start = parse_datetime(session.get("started_at"))
+        if not (machine and ip and ip != "unknown" and media and start and start <= now):
+            continue
+        key = (session["server_id"], session.get("external_user_id"),
+               session.get("vodum_user_id"), machine, ip, media)
+        groups.setdefault(key, []).append(start)
+    return sum(
+        sum((now - start).total_seconds() < PLEX_RESTART_GRACE_SECONDS for start in starts[1:])
+        for starts in (sorted(group) for group in groups.values())
+    )
 
 
 def _cleanup_cache():

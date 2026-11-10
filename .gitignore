@@ -27,6 +27,11 @@ docker-data/
 
 # Test, validation and dev-only folders
 tests/
+test/
+test_*.py
+*_test.py
+*.test.*
+*.spec.*
 tools/
 .pytest_cache/
 .mypy_cache/
@@ -88,3 +93,45 @@ Thumbs.db
 config.json
 settings.json
 *.bat
+
+# Local audits, diagnostics and private exports
+[Aa]udits/
+[Aa]udit/
+*audit*.md
+*audit*.json
+*audit*.html
+*audit*.txt
+diagnose_*.py
+reports/
+exports/
+dumps/
+backups/
+secrets/
+private/
+credentials/
+captures/
+*.db-*
+*.sqlite-*
+*.sqlite3-*
+*.dump
+*.bak
+*.zip
+*.tar
+*.tar.gz
+*.7z
+*.pem
+*.key
+*.p12
+*.pfx
+*.csv
+*.har
+config.local.*
+settings.local.*
+config.yaml
+config.yml
+settings.yaml
+settings.yml
+secrets.*
+credentials.*
+*.sql.gz
+*.sql.bak

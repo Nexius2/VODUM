@@ -3,7 +3,59 @@
 Les changements non publiés sont regroupés en tête de ce fichier. Les dates
 indiquent la mise à jour du journal, pas une confirmation de déploiement.
 
-## Non publié — mise à jour du 2026-11-08
+## Non publié — mise à jour du 2026-11-10
+
+### Exclusions Git et Docker
+
+- Les [règles Git](.gitignore) excluent les tests, rapports d’audit et formats
+  courants de données locales. Les tests précédemment suivis sont retirés de
+  l’index et restent disponibles localement. L’historique Git est conservé.
+- Le [contexte Docker](.dockerignore) est limité aux fichiers nécessaires au
+  Dockerfile et exclut aussi les artefacts locaux dans les sous-dossiers
+  applicatifs. Reconstruire l’image pour appliquer ces exclusions. Aucune migration.
+
+### Déploiement de la télémétrie
+
+- La procédure du Worker inclut la migration D1 du 2 novembre pour le schéma 4.
+  Appliquer uniquement les migrations manquantes, puis déployer le Worker avant
+  de mettre à jour les clients VODUM. Aucun changement au schéma SQLite local.
+  Voir l'[ordre de déploiement](docs/telemetry-languages.md).
+
+### Limites de lectures Plex
+
+- Le [contrôle des flux](app/tasks/stream_enforcer.py) diffère la coupure
+  pendant les 30 premières secondes d'une nouvelle session Plex si le
+  [chevauchement](app/core/stream_sync_dedupe.py) avec une lecture du même
+  contenu suffit à expliquer le dépassement de la limite par utilisateur ou
+  par IP. Le serveur, le compte, l'identifiant de l'appareil et l'IP doivent
+  correspondre. Un dépassement persistant est de nouveau sanctionnable après
+  ce délai. Une limite à zéro reste immédiate.
+- Déployer ensemble le contrôle et son module de détection. Aucune migration.
+
+### Top streaming par pays
+
+- Le [moteur régional](app/core/collections_country_availability.py) fusionne
+  les dix premiers films de chacune des six plateformes de référence
+  disponibles dans le pays choisi, puis trie les films par popularité TMDb.
+  Pour les séries, il parcourt cinq pages de tendances mondiales TMDb de la
+  semaine et ne garde que les titres accessibles en streaming dans ce pays.
+  La disponibilité est locale, le classement des tendances reste mondial.
+- Le [moteur de publication](app/core/collections_streaming.py) applique la
+  limite avant de chercher les titres en bibliothèque. La clé TMDb partagée
+  sert aux deux classements. Une collecte incomplète préserve la publication.
+- Déployer le moteur, la [reprise de publication](app/core/collections_publication.py)
+  et les libellés ensemble, puis relancer les collections. Aucune migration.
+
+### Collections par plateforme et journaux
+
+- Le [moteur par plateforme](app/core/collections_platforms.py) enregistre la
+  reprise lorsque le budget de recherche de disponibilité est atteint.
+  Le [planificateur](app/tasks/run_collections.py) conserve le code connu
+  d'échec de publication et les [journaux](app/core/log_presentation.py)
+  affichent la collection, la bibliothèque et l'exécution figurant dans
+  les résumés d'échec. Déployer les trois fichiers ensemble. Aucune migration.
+
+## Changements précédant la publication du 2026-11-09
 
 ### Langues et acquisition des collections
 
