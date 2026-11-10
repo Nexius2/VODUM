@@ -133,5 +133,6 @@ settings.yaml
 settings.yml
 secrets.*
 credentials.*
+!/app/core/migrations/credentials.py
 *.sql.gz
 *.sql.bak

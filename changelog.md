@@ -7,6 +7,10 @@ indiquent la mise à jour du journal, pas une confirmation de déploiement.
 
 ### Exclusions Git et Docker
 
+- Le [contexte Docker](.dockerignore) inclut explicitement le module Python
+  des migrations masqué par le filtre des fichiers d’identifiants. Le
+  [Dockerfile](Dockerfile) vérifie aussi la présence des fichiers de démarrage.
+  Reconstruire l’image et recréer le conteneur. Aucune migration.
 - Les [règles Git](.gitignore) excluent les tests, rapports d’audit et formats
   courants de données locales. Les tests précédemment suivis sont retirés de
   l’index et restent disponibles localement. L’historique Git est conservé.

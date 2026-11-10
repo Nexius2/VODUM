@@ -28,6 +28,11 @@ COPY static/ /app/static/
 COPY translations/ /app/translations/
 COPY migrations/ /app/migrations/
 
+# Verify the application module and startup files are present in the context.
+RUN test -f /app/core/migrations/credentials.py \
+    && test -f /app/serve.py \
+    && test -f /app/migrations/detect_legacy_foreign_keys.sql
+
 # Fail the image build if the dedicated Plex sign-in UI is missing from the
 # Docker context. This prevents an apparently successful rebuild from shipping
 # stale settings templates.
