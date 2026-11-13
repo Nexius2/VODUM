@@ -13,6 +13,8 @@ venv/
 !.env.example
 
 # Runtime data / local databases
+/appdata/
+vodum.encryption_key
 *.db
 *.sqlite
 *.sqlite3
@@ -20,7 +22,7 @@ venv/
 *.db-shm
 *.sqlite-wal
 *.sqlite-shm
-logs/
+/logs/
 *.log
 instance/
 docker-data/
@@ -83,6 +85,7 @@ build/
 .idea/
 .DS_Store
 Thumbs.db
+[Dd]esktop.ini
 
 # Temp / local files
 .cache/
@@ -95,6 +98,8 @@ settings.json
 *.bat
 
 # Local audits, diagnostics and private exports
+/docs/collections-live-diagnostic-*.md
+/docs/collections-live-followup-*.md
 [Aa]udits/
 [Aa]udit/
 *audit*.md

@@ -73,6 +73,12 @@
             · Client: <span class="text-slate-200">{{ s.client_name or "-" }}</span>
           </div>
 
+          {% if s.ip_location or s.ip_is_local %}
+            <div class="mt-1 text-sm text-slate-400 break-words">
+              {{ t("monitoring_user_location") }}: <span class="text-slate-200">{{ s.ip_location or t("monitoring_user_private_ip") }}</span>
+            </div>
+          {% endif %}
+
           {% if s.progress_text %}
             <div class="mt-3 now-playing-progress"
                  data-session-id="{{ s.id }}"

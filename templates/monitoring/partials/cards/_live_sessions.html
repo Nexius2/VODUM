@@ -103,11 +103,17 @@
           {% endif %}
         {% endfor %}
       </div>
-    {% elif not sessions_stats.is_snapshot_fallback %}
+    {% elif not idle_card and not sessions_stats.is_snapshot_fallback %}
       <div class="mt-4 text-sm text-slate-500">
         {{ t("monitoring.cards.live_sessions_no_sessions") }} {{ live_window_seconds }}s.
       </div>
     {% endif %}
 
+  {% endif %}
+
+  {% if idle_card %}
+    <div class="mt-4">
+      {% include "dashboard/partials/_idle_quote.html" %}
+    </div>
   {% endif %}
 </div>

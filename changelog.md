@@ -3,7 +3,60 @@
 Les changements non publiés sont regroupés en tête de ce fichier. Les dates
 indiquent la mise à jour du journal, pas une confirmation de déploiement.
 
-## Non publié — mise à jour du 2026-11-10
+## Non publié — mise à jour du 2026-11-13
+
+### Fichiers locaux du dépôt
+
+- Le [.gitignore](.gitignore) exclut le dossier de données Docker local,
+  la clé de chiffrement VODUM, les fichiers Desktop.ini et les comptes
+  rendus de diagnostic des collections sur une instance réelle. La règle
+  des journaux vise le dossier racine et laisse le gabarit des logs visible.
+- Le [.dockerignore](.dockerignore) exclut aussi les données locales et la
+  clé de chiffrement du contexte de build. Aucune migration requise.
+
+### Localisation des lectures
+
+- [Now Playing](templates/monitoring/partials/sections/_now_playing.html) affiche
+  la localisation approximative de la lecture sous le client. Le [suivi personnel
+  du portail](templates/portal/monitoring.html) ajoute une colonne Localisation
+  à l'onglet Adresses IP et conserve le masquage des adresses.
+- Les IP publiques sont recherchées par lots et mises en cache via
+  [le service IP existant](app/core/monitoring/ip_location.py). Les adresses
+  locales sont identifiées sans requête externe. En cas d'indisponibilité du
+  service, les lectures et l'historique restent accessibles.
+- Déployer les gabarits et le code applicatif ensemble. Aucune migration requise.
+
+### Citation dans Monitoring
+
+- La carte [Live sessions](templates/monitoring/partials/cards/_live_sessions.html)
+  affiche la citation du Dashboard quand aucune session n'est détectée. Elle se
+  met à jour à l'ouverture de Monitoring et lors des actualisations automatiques,
+  pour un ou plusieurs serveurs. Le mode de secours des statistiques conserve
+  son indicateur habituel.
+- Déployer la [route Monitoring](app/routes/monitoring_overview.py) et le
+  [gabarit partagé de la citation](templates/dashboard/partials/_idle_quote.html)
+  dans la même mise à jour de l'application. Aucune migration requise.
+
+### Remontée de la télémétrie
+
+- Le [client de télémétrie](app/tasks/send_telemetry.py) renvoie les agrégats
+  au format du schéma 3 quand le Worker rejette le schéma 4 à la validation.
+  Les langues observées sont omises de ce relevé et le suivant retente le
+  schéma 4. Les erreurs d'envoi persistantes apparaissent dans la page Tâches.
+- Aucune migration SQLite supplémentaire. Pour recevoir les langues observées,
+  appliquer la migration D1 du 2 novembre si elle manque, puis déployer le
+  Worker avant le client. Le repli client fonctionne avec le Worker de schéma 3.
+  Voir l'[ordre de déploiement](docs/telemetry-languages.md).
+
+### Reprise de publication des collections Plex
+
+- Si Plex rejette une page de 1 000 membres, la [publication Plex](app/core/collections_media.py)
+  reprend la lecture depuis le début avec la pagination standard de PlexAPI.
+  L'ajout, le retrait et le tri des membres attendent une lecture complète.
+  Si Plex rejette aussi la lecture standard, l'échec est conservé.
+- Aucune migration. Déployer le code, redémarrer le worker Collections, puis
+  relancer la configuration concernée. Rejet simulé localement, publication
+  sur SerieEmpire à vérifier après déploiement.
 
 ### Exclusions Git et Docker
 

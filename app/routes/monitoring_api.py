@@ -1,6 +1,5 @@
 # Auto-split from app.py (keep URLs/endpoints intact)
 import json
-import ipaddress
 
 import requests
 from flask import request, Response, current_app, jsonify, abort, send_file
@@ -9,6 +8,7 @@ from core.monitoring.artwork_cache import (
     ARTWORK_CACHE_TTL_SECONDS,
 )
 from core.monitoring.artwork_proxy import ArtworkProxyError, fetch_monitoring_artwork
+from core.monitoring.ip_location import format_ip_location, is_public_ip, parse_stream_ip
 from web.helpers import get_db
 from logging_utils import get_logger
 
@@ -310,19 +310,11 @@ def register(app):
         if not raw_ip:
             return jsonify({"ok": False, "error": "missing_ip"}), 400
 
-        try:
-            ip_obj = ipaddress.ip_address(raw_ip)
-        except ValueError:
+        ip_obj = parse_stream_ip(raw_ip)
+        if ip_obj is None:
             return jsonify({"ok": False, "error": "invalid_ip"}), 400
 
-        if (
-            ip_obj.is_private
-            or ip_obj.is_loopback
-            or ip_obj.is_link_local
-            or ip_obj.is_multicast
-            or ip_obj.is_reserved
-            or ip_obj.is_unspecified
-        ):
+        if not is_public_ip(ip_obj):
             return jsonify({
                 "ok": True,
                 "ip": raw_ip,
@@ -365,7 +357,7 @@ def register(app):
             "query",
         ])
 
-        lookup_url = f"http://ip-api.com/json/{raw_ip}"
+        lookup_url = f"http://ip-api.com/json/{ip_obj}"
         try:
             resp = requests.get(
                 lookup_url,
@@ -402,9 +394,7 @@ def register(app):
             "ok": True,
             "ip": data.get("query") or raw_ip,
             "is_private": False,
-            "display_name": ", ".join(
-                [x for x in [data.get("city"), data.get("regionName"), data.get("country")] if x]
-            ) or raw_ip,
+            "display_name": format_ip_location(data) or raw_ip,
             "country": data.get("country"),
             "region": data.get("regionName"),
             "city": data.get("city"),

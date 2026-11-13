@@ -5,6 +5,7 @@ from datetime import date, datetime
 from urllib.parse import urlsplit
 from db_manager import isolated_read_operation
 
+from core.monitoring.ip_location import load_ip_locations, parse_stream_ip
 from core.subscription_value_format import format_subscription_value
 
 
@@ -308,8 +309,29 @@ def load_portal_media_access(db, vodum_user_id: int) -> list[dict]:
     return list(accounts.values())
 
 
-@isolated_read_operation
+def _masked_ip(value):
+    address = parse_stream_ip(value)
+    if address is None:
+        return "•••"
+    if address.version == 6:
+        prefix = address.packed[:6].hex()
+        return ":".join(prefix[index:index + 4] for index in (0, 4, 8)) + ":…"
+    return ".".join(str(address).split(".")[:2] + ["×", "×"])
+
+
 def load_portal_monitoring(db, vodum_user_id: int) -> dict:
+    monitoring = _load_portal_monitoring_rows(db, vodum_user_id)
+    rows = monitoring["ip_rows"]
+    locations = load_ip_locations(row.get("ip") for row in rows)
+    for row in rows:
+        address = row.get("ip")
+        row["ip_is_local"], row["ip_location"] = locations[address]
+        row["ip"] = _masked_ip(address)
+    return monitoring
+
+
+@isolated_read_operation
+def _load_portal_monitoring_rows(db, vodum_user_id: int) -> dict:
     periods = {}
     for key, modifier in (("last_24h", "-24 hours"), ("last_7d", "-7 days"), ("last_30d", "-30 days")):
         row = db.query_one(
@@ -451,16 +473,6 @@ def load_portal_monitoring(db, vodum_user_id: int) -> dict:
     top_players = normalized(top_players)
     ip_rows = normalized(ip_rows)
 
-    def masked_ip(value):
-        value = str(value or "")
-        if ":" in value:
-            parts = value.split(":")
-            return ":".join(parts[:3]) + ":…"
-        parts = value.split(".")
-        return ".".join(parts[:2] + ["×", "×"]) if len(parts) == 4 else "•••"
-
-    for row in ip_rows:
-        row["ip"] = masked_ip(row.get("ip"))
     max_daily = max((int(row.get("plays") or 0) for row in daily), default=0)
     max_server = max((int(row.get("plays") or 0) for row in servers), default=0)
     media_total = sum(int(row.get("plays") or 0) for row in media_types)

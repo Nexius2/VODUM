@@ -469,7 +469,13 @@ class PlexCollections:
             if created_now:
                 items=[]
             elif isinstance(obj,PlexCollection):
-                items=obj.fetchItems(obj.key+'/children',container_size=1000)
+                children_key=obj.key+'/children'
+                try:
+                    items=obj.fetchItems(children_key,container_size=1000)
+                except BadRequest:
+                    # Restart the read with PlexAPI's standard pagination.
+                    # Membership changes require a complete snapshot.
+                    items=obj.fetchItems(children_key)
             else:
                 items=obj.items()
             current = {str(row['id']):row['item'] for row in seed} if created_now else {str(item.ratingKey):item for item in items}

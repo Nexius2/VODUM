@@ -37,6 +37,7 @@ from core.monitoring.overview_policies import (
     load_policy_top_users,
     load_recent_policy_enforcements,
 )
+from external.dashboard_quote_easter_egg import build_dashboard_quote_card
 from logging_utils import get_logger
 from web.helpers import get_db
 from core.auth_principal import admin_required
@@ -100,7 +101,14 @@ def register(app):
         # --------------------------
         # Donnees overview uniquement
         # --------------------------
+        idle_card = None
         if tab == "overview":
+            if (
+                not sessions_stats["live_sessions"]
+                and not live_servers
+                and not sessions_stats.get("is_snapshot_fallback")
+            ):
+                idle_card = build_dashboard_quote_card()
             overview_aggregates = build_monitoring_overview_aggregates(db, sessions_stats)
             stats_7d = overview_aggregates["stats_7d"]
             top_users_30d = overview_aggregates["top_users_30d"]
@@ -326,6 +334,7 @@ def register(app):
                 configured_server_count=configured_server_count,
                 server_stats=server_stats,
                 sessions_stats=sessions_stats,
+                idle_card=idle_card,
                 live_servers=live_servers,
                 sessions=sessions,
                 events=events,
@@ -391,6 +400,7 @@ def register(app):
             configured_server_count=configured_server_count,
             server_stats=server_stats,
             sessions_stats=sessions_stats,
+            idle_card=idle_card,
             live_servers=live_servers,
             sessions=sessions,
             events=events,
