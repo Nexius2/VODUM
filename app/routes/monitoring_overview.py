@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from core.arr_monitoring import load_arr_monitoring
 from core.arr_connections import load_arr_servers
 # Auto-split from app.py (keep URLs/endpoints intact)
@@ -10,8 +12,10 @@ from core.monitoring.overview_servers import (
     load_monitoring_servers_tab,
 )
 from core.monitoring.overview_live import load_monitoring_live_context
+from core.monitoring.overview_locations import load_monitoring_locations
 from core.monitoring.overview_activity import load_recent_monitoring_events
 from core.monitoring.overview_history import load_monitoring_history
+from core.monitoring.library_growth import PERIODS
 from core.monitoring.overview_libraries import (
     build_monitoring_library_options,
     build_monitoring_library_pagination,
@@ -43,6 +47,10 @@ from core.auth_principal import admin_required
 from .monitoring_enforcements import register as register_enforcement_routes
 
 monitoring_logger = get_logger("monitoring_overview")
+MONITORING_TABS = {
+    "overview", "now_playing", "location", "policies", "usage_risk", "activity",
+    "history", "libraries", "users", "servers", "user_portal",
+}
 
 def register(app):
     register_enforcement_routes(app)
@@ -52,8 +60,55 @@ def register(app):
     def monitoring_page():
         db = get_db()
         tab = request.args.get("tab", "overview")
+        show_library_top = tab == "libraries" and request.args.get("library_top") == "1"
+        if tab in MONITORING_TABS:
+            request.environ["vodum.route_view"] = "libraries_top" if show_library_top else tab
+        if show_library_top and request.headers.get("HX-Request"):
+            options = build_monitoring_library_options(request.args, request.cookies)
+            response = make_response(render_template(
+                "monitoring/partials/_library_top_cards.html",
+                library_top_cards=load_monitoring_library_top_cards(db, options),
+            ))
+            response.cache_control.no_store = True
+            response.vary.add("HX-Request")
+            return response
         portal_setting = db.query_one("SELECT portal_enabled FROM settings WHERE id=1") or {}
         portal_enabled = int(dict(portal_setting).get("portal_enabled") or 0) == 1
+        live_window_seconds = 300
+        if tab == "location":
+            preference = "monitoring_location_live"
+            selected = request.args.get("live")
+            live_only = (selected if selected in {"0", "1"} else request.cookies.get(preference)) == "1"
+            now = int(datetime.now(timezone.utc).timestamp())
+            period = request.args.get("period", 0, type=int)
+            period = period if period in {1, 7, 30} else 0
+            start = now - period * 86400
+            instant = max(start, min(now, request.args.get("at", start, type=int))) if period else None
+            server_id = request.args.get("server", type=int)
+            country = request.args.get("country", "").upper()
+            country = country if len(country) == 2 and country.isascii() and country.isalpha() else ""
+            playing_only = not period and request.args.get("playing") == "1"
+            location = load_monitoring_locations(
+                db, live_only=live_only, live_window_seconds=live_window_seconds,
+                server_id=server_id, instant=instant, country=country, playing_only=playing_only,
+            )
+            partial = request.headers.get("HX-Request") == "true"
+            template = "monitoring/tabs/location.html" if partial else "monitoring/monitoring.html"
+            servers = [] if partial else db.query(
+                "SELECT id, name FROM servers WHERE type IN ('plex', 'jellyfin') ORDER BY name"
+            )
+            response = make_response(render_template(
+                template, active_page="monitoring", tab=tab, portal_enabled=portal_enabled,
+                live_only=live_only, location=location, location_servers=servers,
+                location_server_id=server_id, location_country=country, playing_only=playing_only,
+                location_period=period, location_start=start, location_end=now, location_instant=instant,
+                location_heat=request.args.get("heat") == "1",
+            ))
+            response.cache_control.no_store = True
+            if not partial and selected in {"0", "1"}:
+                response.set_cookie(preference, selected, max_age=365 * 24 * 60 * 60,
+                                    httponly=True, secure=request.is_secure, samesite="Lax")
+            return response
         if tab == "user_portal":
             from flask import abort
             from core.monitoring.portal_usage import load_portal_usage
@@ -66,18 +121,17 @@ def register(app):
                 abort(400)
             return render_template("monitoring/monitoring.html", active_page="monitoring",
                                    tab=tab, portal_enabled=True, portal_usage=load_portal_usage(db, days, page))
-        if tab not in {
-            "overview", "now_playing", "policies", "usage_risk", "activity",
-            "history", "libraries", "users", "servers",
-        }:
+        if tab not in MONITORING_TABS:
             from flask import abort
             abort(400)
 
-        # Une session est consideree "live" si vue dans les 120 dernieres secondes
-        live_window_seconds = 300
         live_window_sql = f"-{live_window_seconds} seconds"
 
-        server_context = load_monitoring_server_context(db, tab)
+        server_context = (
+            load_monitoring_server_context(db, tab)
+            if tab in {"overview", "now_playing", "servers", "usage_risk"}
+            else dict(servers=[], configured_server_count=0, server_resource_stats={}, server_stats={})
+        )
         servers = server_context["servers"]
         configured_server_count = server_context["configured_server_count"]
         server_resource_stats = server_context["server_resource_stats"]
@@ -100,7 +154,8 @@ def register(app):
         # --------------------------
         # Donnees overview uniquement
         # --------------------------
-        if tab == "overview":
+        overview_deferred = tab == "overview" and not request.headers.get("HX-Request")
+        if tab == "overview" and not overview_deferred:
             overview_aggregates = build_monitoring_overview_aggregates(db, sessions_stats)
             stats_7d = overview_aggregates["stats_7d"]
             top_users_30d = overview_aggregates["top_users_30d"]
@@ -119,7 +174,8 @@ def register(app):
         rows = []
         filters = {}
         pagination = None
-        library_top_cards = []
+        library_top_cards = None
+        growth_period = "7"
         library_users = []
         library_range = "30d"
         library_user = "all"
@@ -240,6 +296,9 @@ def register(app):
 
 
         elif tab == "libraries":
+            requested_period = request.args.get("growth", "7")
+            if requested_period in {str(days) for days in PERIODS}:
+                growth_period = requested_period
             library_options = build_monitoring_library_options(
                 request.args,
                 request.cookies,
@@ -250,7 +309,7 @@ def register(app):
             sort_key = library_options["sort_key"]
             sort_dir = library_options["sort_dir"]
 
-            library_table = load_monitoring_library_table(db, library_options)
+            library_table = load_monitoring_library_table(db, library_options, growth_period)
             rows = library_table["rows"]
             total_rows = library_table["total_rows"]
             hidden_libraries_count = library_table["hidden_libraries_count"]
@@ -268,10 +327,8 @@ def register(app):
 
             library_users = load_monitoring_library_users(db)
 
-            library_top_cards = load_monitoring_library_top_cards(
-                db,
-                library_options,
-            )
+            if show_library_top:
+                library_top_cards = load_monitoring_library_top_cards(db, library_options)
 
         server_range = request.args.get("range", "7d")
         servers_combined = None
@@ -330,6 +387,7 @@ def register(app):
                 sessions=sessions,
                 events=events,
                 live_window_seconds=live_window_seconds,
+                overview_deferred=overview_deferred,
                 stats_7d=stats_7d,
                 top_users_30d=top_users_30d,
                 top_content_30d=top_content_30d,
@@ -353,6 +411,7 @@ def register(app):
                 servers_top_titles=servers_top_titles,
                 servers_unique_ips=servers_unique_ips,
                 library_top_cards=library_top_cards,
+                growth_period=growth_period,
                 library_users=library_users,
                 library_range=library_range,
                 library_user=library_user,
@@ -379,6 +438,9 @@ def register(app):
                 resp.set_cookie(f"monitoring_{tab}_sort", str(sort_key), max_age=60*60*24*365)
                 resp.set_cookie(f"monitoring_{tab}_dir",  str(sort_dir),  max_age=60*60*24*365)
 
+            if tab == "overview":
+                resp.vary.add("HX-Request")
+                resp.cache_control.no_store = True
             return resp
 
         # Page complete (chargement normal)
@@ -395,6 +457,7 @@ def register(app):
             sessions=sessions,
             events=events,
             live_window_seconds=live_window_seconds,
+            overview_deferred=overview_deferred,
             stats_7d=stats_7d,
             top_users_30d=top_users_30d,
             top_content_30d=top_content_30d,
@@ -418,6 +481,7 @@ def register(app):
             servers_top_titles=servers_top_titles,
             servers_unique_ips=servers_unique_ips,
             library_top_cards=library_top_cards,
+            growth_period=growth_period,
             library_users=library_users,
             library_range=library_range,
             library_user=library_user,
@@ -441,6 +505,10 @@ def register(app):
             stream_policy_types=stream_policy_types,
         ))
         
+        if show_library_top or tab == "overview":
+            resp.vary.add("HX-Request")
+        if tab == "overview":
+            resp.cache_control.no_store = True
         if sort_key and sort_dir:
             resp.set_cookie(f"monitoring_{tab}_sort", str(sort_key), max_age=60*60*24*365)
             resp.set_cookie(f"monitoring_{tab}_dir",  str(sort_dir),  max_age=60*60*24*365)

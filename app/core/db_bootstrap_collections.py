@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS collection_external_ids (
  media_type TEXT NOT NULL, media_id INTEGER NOT NULL, data_json TEXT NOT NULL, updated_at TEXT NOT NULL,
  PRIMARY KEY(media_type,media_id)
 );
-CREATE TABLE IF NOT EXISTS collection_settings (id INTEGER PRIMARY KEY CHECK(id=1), secret_tmdb TEXT, suppress_empty INTEGER NOT NULL DEFAULT 1);
+CREATE TABLE IF NOT EXISTS collection_settings (id INTEGER PRIMARY KEY CHECK(id=1), secret_tmdb TEXT, secret_myanimelist TEXT, suppress_empty INTEGER NOT NULL DEFAULT 1);
 INSERT OR IGNORE INTO collection_settings(id) VALUES(1);
 CREATE TABLE IF NOT EXISTS collection_instances (
  id TEXT PRIMARY KEY, group_id TEXT, retired INTEGER NOT NULL DEFAULT 0, model TEXT NOT NULL, library_id INTEGER NOT NULL REFERENCES libraries(id),
@@ -65,6 +65,10 @@ CREATE TABLE IF NOT EXISTS collection_last_counts (
  instance_id TEXT PRIMARY KEY REFERENCES collection_instances(id) ON DELETE CASCADE,
  count_json TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS collection_last_sync (
+ instance_id TEXT PRIMARY KEY REFERENCES collection_instances(id) ON DELETE CASCADE,
+ run_id INTEGER NOT NULL, state TEXT NOT NULL, reasons_json TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS collection_run_daily_totals (
  day TEXT PRIMARY KEY, runs INTEGER NOT NULL, failures INTEGER NOT NULL, warnings INTEGER NOT NULL
 );
@@ -115,6 +119,8 @@ def ensure_collection_schema(conn, cursor):
         if statement.strip():
             cursor.execute(statement)
     settings_columns = {row[1] for row in cursor.execute('PRAGMA table_info(collection_settings)')}
+    if 'secret_myanimelist' not in settings_columns:
+        cursor.execute('ALTER TABLE collection_settings ADD COLUMN secret_myanimelist TEXT')
     if 'suppress_empty' not in settings_columns:
         cursor.execute('ALTER TABLE collection_settings ADD COLUMN suppress_empty INTEGER NOT NULL DEFAULT 1')
     columns = {row[1] for row in cursor.execute('PRAGMA table_info(collection_instances)')}

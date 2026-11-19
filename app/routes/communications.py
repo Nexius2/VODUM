@@ -14,6 +14,7 @@ from core.communications.default_templates import (
 from core.communications.rules import (
     find_enabled_template_duplicate,
     normalize_campaign_targets,
+    normalize_campaign_user_scope,
 )
 from web.helpers import get_db, add_log
 from email_sender import send_email
@@ -68,6 +69,7 @@ COMM_CAMPAIGN_EDITOR_COLUMNS = """
     body,
     server_id,
     trigger_provider,
+    user_scope,
     subscription_scope,
     subscription_template_id,
     delivery_channels,
@@ -84,6 +86,7 @@ COMM_CAMPAIGN_LIST_COLUMNS = """
                 c.subject,
                 c.server_id,
                 c.trigger_provider,
+                c.user_scope,
                 c.subscription_scope,
                 c.subscription_template_id,
                 c.delivery_channels,
@@ -176,6 +179,7 @@ def register(app):
             is_test = 1 if request.form.get("is_test") == "1" else 0
             delivery_channels = normalize_delivery_channels(request.form.get("delivery_channels"))
             trigger_provider, subscription_scope, subscription_template_id = normalize_campaign_targets(db, request.form)
+            user_scope = normalize_campaign_user_scope(request.form.get("user_scope"))
 
             if not name or not subject or not body:
                 flash(t("comm_missing_fields"), "error")
@@ -194,6 +198,7 @@ def register(app):
                     body,
                     server_id,
                     trigger_provider,
+                    user_scope,
                     subscription_scope,
                     subscription_template_id,
                     delivery_channels,
@@ -202,7 +207,7 @@ def register(app):
                     created_at,
                     updated_at
                 )
-                VALUES(?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """,
                 (
                     name,
@@ -210,6 +215,7 @@ def register(app):
                     body,
                     server_id,
                     trigger_provider,
+                    user_scope,
                     subscription_scope,
                     subscription_template_id,
                     delivery_channels,
@@ -234,6 +240,9 @@ def register(app):
             is_test = 1 if request.form.get("is_test") == "1" else 0
             delivery_channels = normalize_delivery_channels(request.form.get("delivery_channels"))
             trigger_provider, subscription_scope, subscription_template_id = normalize_campaign_targets(db, request.form)
+            previous_scope = db.query_one("SELECT user_scope FROM comm_campaigns WHERE id=?", (cid,)) if cid else None
+            user_scope = normalize_campaign_user_scope(request.form.get("user_scope"),
+                default=(previous_scope["user_scope"] if previous_scope else "all"))
 
             if not cid:
                 flash(t("comm_not_found"), "error")
@@ -256,6 +265,7 @@ def register(app):
                     body = ?,
                     server_id = ?,
                     trigger_provider = ?,
+                    user_scope = ?,
                     subscription_scope = ?,
                     subscription_template_id = ?,
                     delivery_channels = ?,
@@ -269,6 +279,7 @@ def register(app):
                     body,
                     server_id,
                     trigger_provider,
+                    user_scope,
                     subscription_scope,
                     subscription_template_id,
                     delivery_channels,

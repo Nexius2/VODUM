@@ -186,7 +186,7 @@
 
 <!-- TABLE USERS -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-<table class="w-full text-sm">
+<table class="admin-users-table w-full text-sm">
 	<thead class="bg-slate-950/60 text-slate-400">
 		<tr>
 			<th class="px-4 py-3 text-left sortable {% if sort == 'username' %}sorted sorted-{{ order }}{% endif %}">
@@ -259,13 +259,13 @@
         <tr class="border-t border-slate-800 hover:bg-slate-800/50 cursor-pointer"
             onclick="window.location='{{ url_for('user_detail', user_id=u.id) }}'">
 
-            <td class="px-4 py-3">{{ u.username }}</td>
-            <td class="px-4 py-3 text-slate-300"
+            <td data-label="{{ t('name') }}" class="px-4 py-3"><a href="{{ url_for('user_detail', user_id=u.id) }}" class="admin-user-name">{{ u.username }}</a></td>
+            <td data-label="{{ t('email') }}" class="px-4 py-3 text-slate-300"
 				data-sort-value="{{ u.email or '' }}">
 			  {{ u.email or t("not_available") }}
 			</td>
 
-			<td class="px-4 py-3 text-slate-300"
+			<td data-label="{{ t('subscription') }}" class="px-4 py-3 text-slate-300"
 				data-sort-value="{{ u.subscription_role_label or u.subscription_name or '' }}">
 			  {% if u.subscription_role_label %}
 				<span class="text-amber-300">{{ u.subscription_role_label }}</span>
@@ -274,7 +274,7 @@
 			  {% endif %}
 			</td>
 
-            <td class="px-4 py-3">
+            <td data-label="{{ t('status') }}" class="px-4 py-3">
                 {% set colors = {
                     'active': 'bg-emerald-900/40 text-emerald-300',
                     'pre_expired': 'bg-amber-900/40 text-amber-300',
@@ -292,7 +292,7 @@
 
             </td>
 
-			<td class="px-4 py-3 text-slate-300"
+			<td data-label="{{ t('expiration') }}" class="px-4 py-3 text-slate-300"
 				data-sort-value="{{ u.subscription_role_label or u.expiration_date or '' }}">
 			  {% if u.subscription_role_label %}
 				<span class="text-amber-300">{{ u.subscription_role_label }}</span>
@@ -300,8 +300,8 @@
 				{{ u.expiration_date or t("not_available") }}
 			  {% endif %}
 			</td>
-            <td class="px-4 py-3 text-slate-300">{{ u.servers_count }}</td>
-            <td class="px-4 py-3 text-slate-300">{{ u.libraries_count }}</td>
+            <td data-label="{{ t('servers') }}" class="px-4 py-3 text-slate-300">{{ u.servers_count }}</td>
+            <td data-label="{{ t('libraries') }}" class="px-4 py-3 text-slate-300">{{ u.libraries_count }}</td>
 
         </tr>
 

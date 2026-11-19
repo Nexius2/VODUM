@@ -63,12 +63,10 @@ def load_servers_list(db):
         f"""
         SELECT
 {SERVERS_LIST_COLUMNS},
-            COUNT(DISTINCT l.id) AS libraries_count,
-            COUNT(DISTINCT mu.vodum_user_id) AS users_count
+            (SELECT COUNT(*) FROM libraries l WHERE l.server_id = s.id) AS libraries_count,
+            (SELECT COUNT(DISTINCT mu.vodum_user_id) FROM media_users mu
+             WHERE mu.server_id = s.id) AS users_count
         FROM servers s
-        LEFT JOIN libraries l ON l.server_id = s.id
-        LEFT JOIN media_users mu ON mu.server_id = s.id
-        GROUP BY s.id
         ORDER BY s.name
         """
     )

@@ -8,6 +8,10 @@
   {% if request.args.get('tab', 'overview') in ['activity', 'servers', 'policies', 'user_portal'] %}
     <script src="{{ url_for('static', filename='vendor/chart.js/chart.umd.min.js', v=g.app_version|default('dev')) }}"></script>
   {% endif %}
+  {% if tab == 'location' %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/monitoring-location.css', v=g.app_version|default('dev')) }}">
+    <script defer src="{{ url_for('static', filename='js/pages/monitoring-location.js', v=g.app_version|default('dev')) }}"></script>
+  {% endif %}
 {% endblock %}
 
 {% block content %}
@@ -49,17 +53,100 @@
   {% set tab_template = "monitoring/overview_body.html" %}
 {% endif %}
 
-{% if current_tab in ['activity', 'servers', 'history', 'users', 'libraries', 'policies', 'usage_risk', 'user_portal'] %}
+{% if current_tab == 'location' %}
+  <section class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+    <div id="location-stats"></div>
+    <div class="mb-4 flex flex-wrap items-center gap-4">
+      <h2 class="font-semibold">{{ t('monitoring_user_location') }}</h2>
+      <form action="{{ url_for('monitoring_page') }}" method="get" class="location-mode-form">
+        <input type="hidden" name="tab" value="location">
+        {% for key in ['heat', 'server', 'country', 'playing', 'period', 'at'] if args.get(key) %}
+        <input type="hidden" name="{{ key }}" value="{{ args[key] }}">
+        {% endfor %}
+        <button type="submit" name="live" value="{{ '0' if live_only else '1' }}"
+                {% if location_period %}disabled{% endif %}
+                role="switch" aria-checked="{{ 'true' if live_only else 'false' }}"
+                aria-label="{{ t('monitoring_location_live') }}"
+                class="location-mode-switch">
+          <span aria-hidden="true">{{ t('monitoring_location_last') }}</span>
+          <span class="location-mode-track" aria-hidden="true"></span>
+          <span aria-hidden="true">{{ t('monitoring_location_live') }}</span>
+        </button>
+      </form>
+      <a class="location-control" data-location-heat aria-current="{{ 'true' if location_heat else 'false' }}"
+         href="{{ url_for('monitoring_page', **dict(args, heat='0' if location_heat else '1')) }}">{{ t('monitoring_location_heat') }}</a>
+      <details class="location-filters">
+        <summary class="location-control">{{ t('monitoring_location_filters') }}</summary>
+        <form action="{{ url_for('monitoring_page') }}" method="get">
+          <input type="hidden" name="tab" value="location">
+          <input type="hidden" name="heat" value="{{ '1' if location_heat else '0' }}">
+          {% if location_instant is not none %}<input type="hidden" name="at" value="{{ location_instant }}">{% endif %}
+          <label>{{ t('monitoring_location_server') }}
+            <select name="server">
+              <option value="">{{ t('monitoring_location_all') }}</option>
+              {% for server in location_servers %}
+              <option value="{{ server.id }}" {% if server.id == location_server_id %}selected{% endif %}>{{ server.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>{{ t('monitoring_location_country') }}
+            <select name="country" data-location-countries>
+              <option value="">{{ t('monitoring_location_all') }}</option>
+              {% for code in location.countries %}
+              <option value="{{ code }}" {% if code == location_country %}selected{% endif %}>{{ code }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>{{ t('monitoring_location_period') }}
+            <select name="period">
+              {% for value in [0, 1, 7, 30] %}
+              <option value="{{ value }}" {% if value == location_period %}selected{% endif %}>{{ t('monitoring_location_period_' ~ value) }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label><input type="checkbox" name="playing" value="1" {% if playing_only %}checked{% endif %}> {{ t('monitoring_location_active') }}</label>
+          <button class="location-control" type="submit">{{ t('monitoring_location_apply') }}</button>
+        </form>
+      </details>
+    </div>
+    <div id="monitoring-content" data-location-map
+         data-basemap="{{ url_for('static', filename='vendor/natural-earth/countries-110m.json') }}"
+         data-heat="{{ 1 if location_heat else 0 }}"
+         {% if not location_period %}
+         hx-get="{{ url_for('monitoring_page', **dict(args, live='1' if live_only else '0')) }}"
+         hx-trigger="every 30s queue:none, vodum:resume queue:none"
+         hx-sync="this:drop"
+         hx-swap="innerHTML"
+         {% endif %}>
+      {% include tab_template %}
+    </div>
+    {% if location_period %}
+    <div class="location-timeline" data-location-timeline>
+      <button type="button" class="location-control" data-timeline-play
+              data-play="{{ t('monitoring_location_play') }}" data-pause="{{ t('monitoring_location_pause') }}">{{ t('monitoring_location_play') }}</button>
+      <input type="range" min="{{ location_start }}" max="{{ location_end }}" step="any" value="{{ location_instant }}"
+             aria-label="{{ t('monitoring_location_period') }}">
+      <output></output>
+      <a class="location-control" href="{{ url_for('monitoring_page', **dict(args, period=0, at=None)) }}">{{ t('monitoring_location_period_0') }}</a>
+      <span data-timeline-error hidden>{{ t('monitoring_location_timeline_error') }}</span>
+    </div>
+    {% endif %}
+  </section>
+{% elif current_tab in ['activity', 'servers', 'history', 'users', 'libraries', 'policies', 'usage_risk', 'user_portal'] %}
   <div id="monitoring-content">
     {% include tab_template %}
   </div>
 {% else %}
   <div id="monitoring-content"
        hx-get="{{ url_for('monitoring_page', **args) }}"
-       hx-trigger="every {{ refresh_ms }}ms queue:none, vodum:resume queue:none"
+       hx-trigger="{{ 'load queue:none, ' if overview_deferred else '' }}every {{ refresh_ms }}ms queue:none, vodum:resume queue:none"
        hx-sync="this:drop"
        hx-swap="innerHTML">
-    {% include tab_template %}
+    {% if overview_deferred %}
+      {% include "monitoring/partials/_overview_loading.html" %}
+    {% else %}
+      {% include tab_template %}
+    {% endif %}
   </div>
 {% endif %}
 

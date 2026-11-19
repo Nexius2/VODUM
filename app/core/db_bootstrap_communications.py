@@ -352,6 +352,8 @@ def ensure_communications_schema(conn, cursor, *, table_exists, ensure_column) -
         conn.commit()
 
     ensure_column(cursor, "comm_campaigns", "trigger_provider", "TEXT DEFAULT 'all'")
+    # Existing campaigns keep their original audience; new forms default to active.
+    ensure_column(cursor, "comm_campaigns", "user_scope", "TEXT NOT NULL DEFAULT 'all' CHECK(user_scope IN ('all','active'))")
     ensure_column(cursor, "comm_campaigns", "subscription_scope", "TEXT DEFAULT 'none'")
     ensure_column(cursor, "comm_campaigns", "subscription_template_id", "INTEGER DEFAULT NULL")
     ensure_column(cursor, "comm_campaigns", "delivery_channels", "TEXT NOT NULL DEFAULT 'inherit'")

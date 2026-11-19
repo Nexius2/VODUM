@@ -531,6 +531,10 @@ def _ensure_jellyfin_destination(db, campaign: dict, migration_user: dict, vodum
 
 
 def process_migration_user(db, campaign: dict, migration_user: dict) -> str:
+    from core.migrations.analysis import migration_pair_blocker
+    blocker = migration_pair_blocker(db, campaign['source_server_id'], campaign['destination_server_id'])
+    if blocker:
+        raise ValueError(f"Migration pair is not allowed: {blocker}.")
     vodum_user = _dict(
         db.query_one(
             "SELECT id, username, email, status FROM vodum_users WHERE id = ?",

@@ -36,12 +36,16 @@ RUN test -f /app/core/migrations/credentials.py \
 # Fail the image build if the dedicated Plex sign-in UI is missing from the
 # Docker context. This prevents an apparently successful rebuild from shipping
 # stale settings templates.
-RUN grep -Fq 'data-testid="plex-auth-settings-card"' /app/templates/settings/partials/_settings_system.html \
-    && grep -Fq 'form="plex-auth-link-form"' /app/templates/settings/partials/_settings_system.html \
+RUN grep -Fq 'data-testid="plex-auth-settings-card"' /app/templates/settings/partials/_settings_security.html \
+    && grep -Fq 'form="plex-auth-link-form"' /app/templates/settings/partials/_settings_security.html \
+    && grep -Fq 'include "settings/partials/_settings_security.html"' /app/templates/settings/settings.html \
     && grep -Fq "url_for('plex_auth_link_start')" /app/templates/settings/settings.html \
     && grep -Fq 'name="admin_auth_method"' /app/templates/setup/wizard.html \
     && grep -Fq 'wizard_admin_use_plex_help' /app/templates/setup/wizard.html \
-    && grep -Fq 'include "servers/_plex_suggestions.html"' /app/templates/servers/servers.html \
+    && grep -Fq 'include "servers/_plex_suggestions_loader.html"' /app/templates/servers/servers.html \
+    && grep -Fq "url_for('server_plex_suggestions_partial')" /app/templates/servers/_plex_suggestions_loader.html \
+    && grep -Fq '"servers/_plex_suggestions_result.html"' /app/routes/servers.py \
+    && grep -Fq 'include "servers/_plex_suggestions.html"' /app/templates/servers/_plex_suggestions_result.html \
     && grep -Fq 'include "servers/_plex_suggestions.html"' /app/templates/setup/wizard.html \
     && grep -Fq "preferred_url_" /app/templates/servers/plex_discovery.html
 

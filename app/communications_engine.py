@@ -209,6 +209,8 @@ def get_campaign_target_users(db, campaign: Dict) -> List[Dict]:
     trigger_provider = (campaign.get("trigger_provider") or "all").strip().lower()
     subscription_scope = (campaign.get("subscription_scope") or "none").strip().lower()
     subscription_template_id = _safe_nullable_int(campaign.get("subscription_template_id"))
+    from core.communications.rules import normalize_campaign_user_scope
+    user_scope = normalize_campaign_user_scope(campaign.get("user_scope"), default="all")
 
     conditions = [
         """
@@ -232,14 +234,17 @@ def get_campaign_target_users(db, campaign: Dict) -> List[Dict]:
     conditions.append(")")
 
     if subscription_scope == "all":
-        conditions.append("u.subscription_template_id IS NOT NULL")
+        conditions.append("AND u.subscription_template_id IS NOT NULL")
 
     elif subscription_scope == "specific":
         if subscription_template_id is None:
             return []
 
-        conditions.append("u.subscription_template_id = ?")
+        conditions.append("AND u.subscription_template_id = ?")
         params.append(subscription_template_id)
+
+    if user_scope == "active":
+        conditions.append("AND u.status IN ('active','pre_expired','reminder')")
 
     where_sql = "\n".join(conditions)
 
@@ -313,7 +318,7 @@ def queue_campaign_delivery(db, campaign_id: int, *, rebuild_queue: bool = True)
         "reason": str|None,
     }
     """
-    campaign = db.query_one("SELECT id, name, subject, body, server_id, status, is_test, created_at, updated_at, sent_at FROM comm_campaigns WHERE id = ?", (campaign_id,))
+    campaign = db.query_one("SELECT id, name, subject, body, server_id, trigger_provider, subscription_scope, subscription_template_id, user_scope, status, is_test, created_at, updated_at, sent_at FROM comm_campaigns WHERE id = ?", (campaign_id,))
     campaign = dict(campaign) if campaign else None
     if not campaign:
         return {
@@ -741,6 +746,7 @@ def send_to_user(
     attachments: List[Dict] | None,
     forced_channels: List[str] | None = None,
     bypass_skip_never_used_accounts: bool = False,
+    automated: bool = True,
 ) -> List[SendAttempt]:
 
     """Send according to unified rules (FIRST / ALL).
@@ -858,7 +864,7 @@ def send_to_user(
             ok_any = False
             errors: List[str] = []
             for r in recipients:
-                ok, err = send_email(subject, body, r, s2, attachments=attachments or [])
+                ok, err = send_email(subject, body, r, s2, attachments=attachments or [], automated=automated)
                 if ok:
                     ok_any = True
                 elif err:

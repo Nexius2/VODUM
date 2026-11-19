@@ -45,6 +45,8 @@
 **/captures/
 **/screenshots/
 **/instance/
+**/appdata/
+**/vodum.encryption_key
 **/docker-data/
 **/*.log
 **/*.db

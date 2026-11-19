@@ -5,6 +5,7 @@ import socket
 import uuid
 from datetime import datetime, timezone, timedelta
 from core.monitoring.collector import collect_sessions_for_server
+from core.media_jobs import log_media_job_queue_wait
 
 WORKER_ID = f"{socket.gethostname()}:{os.getpid()}"
 
@@ -82,28 +83,23 @@ def _recover_expired_running_refresh_jobs(db):
     """)
 
 def _cleanup_finished_refresh_jobs(db):
-    """
-    Nettoie les anciens jobs monitoring terminés.
-
-    Sans ça, media_jobs grossit en continu.
-    On garde un historique récent pour debug, mais on évite que la table devienne
-    un cimetière de jobs success/error.
-    """
-    db.execute("""
-        DELETE FROM media_jobs
-        WHERE action='refresh'
-          AND status='success'
-          AND processed_at IS NOT NULL
-          AND processed_at < datetime('now', '-2 days')
-    """)
-
-    db.execute("""
-        DELETE FROM media_jobs
-        WHERE action='refresh'
-          AND status IN ('error', 'canceled')
-          AND processed_at IS NOT NULL
-          AND processed_at < datetime('now', '-7 days')
-    """)
+    """Keep the retention windows and resume any backlog on the next run."""
+    for status, retention in (("success", "-2 days"), ("error", "-7 days"), ("canceled", "-7 days")):
+        db.execute(
+            """
+            DELETE FROM media_jobs
+            WHERE id IN (
+                SELECT id FROM media_jobs
+                WHERE action = 'refresh'
+                  AND status = ?
+                  AND processed_at IS NOT NULL
+                  AND processed_at < datetime('now', ?)
+                ORDER BY processed_at, id
+                LIMIT 500
+            )
+            """,
+            (status, retention),
+        )
 
 def _claim_one(db):
     """
@@ -153,6 +149,7 @@ def _claim_one(db):
     if claimed["status"] != "running" or claimed["locked_by"] != lock_owner:
         return None
 
+    log_media_job_queue_wait(claimed, kind="monitoring_refresh")
     return claimed
 
 
@@ -258,7 +255,7 @@ def run(task_id, db):
     _recover_expired_running_refresh_jobs(db)
     _cleanup_finished_refresh_jobs(db)
 
-    while processed < MAX_BATCH:
+    while processed + errors < MAX_BATCH:
         if (_utcnow() - start).total_seconds() >= TIME_BUDGET_SECONDS:
             break
 
@@ -268,6 +265,17 @@ def run(task_id, db):
 
         try:
             result = _execute_job(db, job) or {}
+
+            if result.get("warning"):
+                warnings.append({
+                    "server_id": int(job["server_id"]),
+                    "provider": (job["provider"] or "").lower().strip(),
+                    "warning": str(result["warning"])[:500],
+                })
+            if result.get("collection_failed"):
+                _mark_retry_or_error(db, job, str(result.get("warning") or "Monitoring collection failed"))
+                errors += 1
+                continue
 
             _mark_success(db, job)
             processed += 1
@@ -283,13 +291,6 @@ def run(task_id, db):
                 "status": result.get("status"),
                 "stale_sessions_kept": int(result.get("stale_sessions_kept") or 0),
             })
-
-            if result.get("warning"):
-                warnings.append({
-                    "server_id": int(job["server_id"]),
-                    "provider": (job["provider"] or "").lower().strip(),
-                    "warning": str(result.get("warning"))[:500],
-                })
 
         except Exception as e:
             log_handled_failure("media_jobs.execute", job_id=job["id"], server_id=job["server_id"])

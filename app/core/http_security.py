@@ -6,6 +6,8 @@ import requests
 import json
 import time
 
+from core.provider_cache_timing import provider_cache_timing
+
 
 def url_origin(value: object) -> tuple[str, str, int] | None:
     try:
@@ -67,6 +69,19 @@ class ConfiguredHostSession(requests.Session):
             )
         if self.default_timeout is not None:
             kwargs.setdefault("timeout", self.default_timeout)
+        timing = provider_cache_timing.get()
+        if timing is None:
+            return self._request_with_retries(method, url, **kwargs)
+        started_at = time.perf_counter_ns()
+        try:
+            return self._request_with_retries(method, url, **kwargs)
+        finally:
+            duration_ns = time.perf_counter_ns() - started_at
+            with timing.lock:
+                timing.provider_ns += duration_ns
+                timing.provider_calls += 1
+
+    def _request_with_retries(self, method, url, **kwargs):
         # Opt in only for read-only workflows: some Plex GET endpoints mutate state.
         attempts = 3 if self.retry_reads and method.upper() in {"GET", "HEAD"} else 1
         for attempt in range(attempts):

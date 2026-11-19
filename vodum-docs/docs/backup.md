@@ -20,8 +20,14 @@ must reapply any erasure request after a rollback when legally required.
 
 Select an existing backup or upload `.zip`, `.db` or `.sqlite`. VODUM validates
 SQLite integrity, required tables, ZIP paths, member count and extracted size.
-Restore enters maintenance mode, replaces data safely and exits the process so
-the container can restart.
+Restore enters maintenance mode, waits for work already running in the task
+lanes to finish and suspends new starts. It replaces data safely and exits the
+process so the container can restart. New work remains suspended until restart.
+
+Pending portal media requests from the restored database are closed to avoid
+replaying an ARR addition that may already have happened. Check the actual
+provider state before submitting a request again. Historical subscription,
+portal and collection data reflect the restored point in time.
 
 When an encryption key is supplied through the environment, it must match the
 key contained in a full backup. Never restore an untrusted archive.

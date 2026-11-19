@@ -16,6 +16,7 @@ from core.auth_principal import (
 )
 from core.portal_account_state import effective_portal_account_state, state_message
 from core.route_access_policy import classify_route_path
+from db_manager import isolated_read_operation
 from logging_utils import get_logger
 from web.helpers import get_db
 from web.security import get_client_ip
@@ -52,7 +53,12 @@ def _configured_admin_hostname() -> str:
 
 
 def _get_auth_settings() -> dict:
-    row = get_db().query_one(
+    return _load_auth_settings(get_db())
+
+
+@isolated_read_operation
+def _load_auth_settings(db) -> dict:
+    row = db.query_one(
         """
         SELECT s.admin_email, s.admin_password_hash, s.auth_enabled,
                s.portal_public_url,
@@ -61,7 +67,11 @@ def _get_auth_settings() -> dict:
                    WHERE i.admin_account_id=1
                      AND i.provider='plex'
                      AND i.is_active=1
-               ) AS plex_auth_configured
+               ) AS plex_auth_configured,
+               EXISTS(
+                   SELECT 1 FROM admin_auth_identities i
+                   WHERE i.admin_account_id=1 AND i.provider='jellyfin' AND i.is_active=1
+               ) AS jellyfin_auth_configured
         FROM settings s WHERE s.id = 1
         """
     )
@@ -75,6 +85,7 @@ def _is_auth_configured(settings: dict) -> bool:
     return bool(
         (settings.get("admin_password_hash") or "").strip()
         or int(settings.get("plex_auth_configured") or 0) == 1
+        or int(settings.get("jellyfin_auth_configured") or 0) == 1
     )
 
 
@@ -107,8 +118,12 @@ def register_global_access_guard(app) -> None:
             security_logger.warning("Blocked request | ip=%s | path=%s", client_ip, request.path)
             abort(403)
 
-        settings = _get_auth_settings()
         access_scope = classify_route_path(request.path)
+        # Public assets and health checks do not depend on account settings.
+        # Keep the IP filter above; protected routes still read fresh auth state.
+        if access_scope == "public":
+            return None
+        settings = _get_auth_settings()
         expected_portal_host = str(
             urlsplit(str(settings.get("portal_public_url") or "")).hostname or ""
         ).lower().rstrip(".")

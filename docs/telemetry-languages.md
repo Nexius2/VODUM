@@ -37,6 +37,7 @@ Ordre de déploiement :
 2. Déployer le worker mis à jour, qui accepte aussi les anciens clients.
 3. Déployer VODUM. La table locale est créée automatiquement au démarrage.
 
-Le nouveau champ n'est pas accepté par les anciens workers : mettre le
-récepteur à jour avant les clients. Aucun déploiement n'est effectué par cette
-modification du dépôt.
+Lorsqu'un Worker rejette le relevé de schéma 4 avec l'erreur de validation
+du protocole, VODUM renvoie les compteurs au format du schéma 3, sans les
+langues observées. Le prochain relevé tente de nouveau le schéma 4. La migration
+et le déploiement du Worker restent nécessaires pour recevoir ces observations.

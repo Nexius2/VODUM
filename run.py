@@ -38,6 +38,8 @@ app = create_app()
 if (not app.debug) or (os.environ.get("WERKZEUG_RUN_MAIN") == "true"):
     with app.app_context():
         start_scheduler()
+    from core.portal_media_request_jobs import start_media_request_worker
+    start_media_request_worker(app.scheduler_db_provider)
 
 
 if __name__ == "__main__":

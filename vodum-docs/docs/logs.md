@@ -1,19 +1,18 @@
 # Logs
 
-Logs provide timestamp, level, source and message with level/search filters and
-pagination. Task errors are also visible from the Tasks page.
+The Logs page provides paginated operational events, level filters, search and
+an anonymized text export. Event messages and multiline exceptions are displayed
+directly, without a generic explanation or a details panel to open. Line breaks
+are preserved and long lines wrap; continuation lines remain part of their event.
 
-Downloaded logs pass through the anonymization filter. In normal mode VODUM
-masks email local parts and common token/authorization patterns. Debug mode may
-expose more context; enable it briefly and treat resulting logs as sensitive.
+Level counters cover the retained history, not just the visible page. Unfiltered
+paging uses an index and reads only the requested event page. Text search may
+need broader analysis. Rotation/purge invalidates affected cached analysis;
+unchanged archives can be reused within the bounded cache.
 
-Useful sources include `boot`, provider synchronization, `tasks_engine`,
-Communications workers, monitoring collectors, backups and migrations.
+Recent dashboard logs are a short operational sample. For a pending action,
+check its task/job or delivery history as well as the log timestamp and source.
+For latency, see [Performance](performance.md) and its route-timing report.
 
-For container-start failures, also inspect:
-
-```bash
-docker compose logs vodum
-```
-
-The persistent entrypoint log is stored under `VODUM_LOG_DIR`.
+Anonymization reduces exposure but does not make every support capture harmless.
+Review exports and keep logs, backups and authentication-related details private.

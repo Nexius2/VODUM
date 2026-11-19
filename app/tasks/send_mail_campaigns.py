@@ -75,7 +75,7 @@ def send_email(settings, to_email, subject, body):
     # - brand_name depuis settings
     # - footer traduit via i18n
     # -------------------------------------------------
-    body_plain, body_html = build_email_parts(body, settings)
+    body_plain, body_html = build_email_parts(body, settings, automated=False)
 
     msg = EmailMessage()
     msg["From"] = mail_from

@@ -10,7 +10,7 @@ from flask import Flask, g, request, session, abort
 from config import Config
 from logging_utils import get_logger
 task_logger = get_logger("app")
-from db_manager import DBManager, open_sqlite_connection
+from db_manager import DBManager, SQLiteTiming, open_sqlite_connection, sqlite_timing
 from core.session_security import VodumSessionInterface
 from core.csrf_security import csrf_request_guard
 from core.http_security_headers import apply_security_headers
@@ -24,6 +24,7 @@ from core.error_reporting import (
     register_flask_exception_logging,
 )
 from core.proxy_security import ConditionalProxyFix
+from core.provider_cache_timing import ProviderCacheTiming, provider_cache_timing
 from core.global_access_guard import register_global_access_guard
 from utils.version import load_app_version
 
@@ -318,11 +319,26 @@ def create_app():
     # Slow requests are useful diagnostics even when debug mode is disabled.
     route_timing_enabled = _env_bool("VODUM_ROUTE_TIMING") is not False
     route_timing_threshold_ms = _env_int("VODUM_ROUTE_TIMING_THRESHOLD_MS", 300, minimum=0)
+    sqlite_timing_enabled = _env_bool("VODUM_SQLITE_TIMING") is True
+    provider_cache_timing_enabled = _env_bool("VODUM_PROVIDER_CACHE_TIMING") is True
 
     @app.before_request
     def start_route_timing():
         if route_timing_enabled:
-            g.route_started_at = time.perf_counter()
+            request.environ["vodum.route_started_at"] = time.perf_counter()
+            if sqlite_timing_enabled:
+                request.environ["vodum.sqlite_timing_token"] = sqlite_timing.set(SQLiteTiming())
+            if provider_cache_timing_enabled:
+                request.environ["vodum.provider_cache_timing_token"] = provider_cache_timing.set(ProviderCacheTiming())
+
+    @app.teardown_request
+    def stop_route_timing(_error):
+        token = request.environ.pop("vodum.sqlite_timing_token", None)
+        if token is not None:
+            sqlite_timing.reset(token)
+        token = request.environ.pop("vodum.provider_cache_timing_token", None)
+        if token is not None:
+            provider_cache_timing.reset(token)
 
     @app.get("/health")
     def health():
@@ -399,22 +415,51 @@ def create_app():
 
     @app.after_request
     def log_slow_route(response):
-        started_at = getattr(g, "route_started_at", None)
+        started_at = request.environ.get("vodum.route_started_at")
         if started_at is None:
             return response
 
         duration_ms = int((time.perf_counter() - started_at) * 1000)
         response.headers.add("Server-Timing", f"app;dur={duration_ms}")
-        if duration_ms >= route_timing_threshold_ms and not request.path.startswith("/static"):
+        queue_wait_us = request.environ.get("vodum.waitress_queue_wait_us")
+        if queue_wait_us is not None:
+            response.headers.add("Server-Timing", f"waitress;dur={queue_wait_us / 1000:.3f}")
+        slow_route = duration_ms >= route_timing_threshold_ms
+        slow_queue = queue_wait_us is not None and queue_wait_us >= route_timing_threshold_ms * 1000
+        if (slow_route or slow_queue) and request.endpoint != "static":
+            method = request.method
+            if method not in {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}:
+                method = "OTHER"
+            timing = sqlite_timing.get() if sqlite_timing_enabled else None
+            sqlite_fields = ""
+            if timing is not None:
+                sqlite_fields = (
+                    f" | db_lock_wait_us={timing.lock_wait_ns // 1000}"
+                    f" | db_sql_us={timing.sql_ns // 1000}"
+                    f" | db_sql_calls={timing.sql_calls}"
+                )
+            queue_field = "" if queue_wait_us is None else f" | waitress_queue_wait_us={queue_wait_us}"
+            external_timing = provider_cache_timing.get() if provider_cache_timing_enabled else None
+            external_fields = ""
+            if external_timing is not None:
+                external_fields = (
+                    f" | provider_us={external_timing.provider_ns // 1000}"
+                    f" | provider_calls={external_timing.provider_calls}"
+                    f" | aggregate_cache_us={external_timing.cache_ns // 1000}"
+                    f" | aggregate_cache_hits={external_timing.cache_hits}"
+                    f" | aggregate_cache_misses={external_timing.cache_misses}"
+                )
             performance_logger.info(
-                "route_timing | duration_ms=%s | status=%s | method=%s | path=%s | endpoint=%s | content_length=%s | htmx=%s",
+                "route_timing | duration_ms=%s | status=%s | method=%s | endpoint=%s | htmx=%s%s%s%s%s",
                 duration_ms,
                 response.status_code,
-                request.method,
-                request.path,
+                method,
                 request.endpoint or "-",
-                response.calculate_content_length() or 0,
                 "1" if request.headers.get("HX-Request") else "0",
+                sqlite_fields,
+                queue_field,
+                external_fields,
+                f" | view={request.environ['vodum.route_view']}" if "vodum.route_view" in request.environ else "",
             )
         return response
 

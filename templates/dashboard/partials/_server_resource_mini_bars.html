@@ -1,0 +1,12 @@
+<div class="flex shrink-0 items-center" style="width: 28px; height: 28px; gap: 2px;">
+  {% for label, key, color in [('CPU', 'server_cpu_pct', '#818cf8'), ('RAM', 'server_ram_pct', '#34d399')] %}
+    <div class="flex items-center" style="width: 13px; gap: 2px;">
+    {% if s.status == 'up' and s[key] is defined and s[key] is not none %}
+        <div role="meter" aria-label="{{ label }}" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ s[key] }}" class="overflow-hidden" style="position: relative; width: 11px; height: 26px; border-radius: 3px; background-color: #1e293b;">
+          <span class="block rounded-full" style="position: absolute; bottom: 0; width: 100%; height: {{ s[key] }}%; background-color: {{ color }};"></span>
+          <span aria-hidden="true" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; writing-mode: vertical-rl; transform: rotate(180deg); font-size: 7px; line-height: 7px; font-weight: 600; letter-spacing: 1px; color: #f8fafc; text-shadow: 0 1px 2px #020617;">{{ label }}</span>
+        </div>
+    {% endif %}
+    </div>
+  {% endfor %}
+</div>

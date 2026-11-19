@@ -7,6 +7,7 @@ from core.plex_rate_limit import install_plex_rate_limit
 from core.plex_connection import find_working_plex_base_url
 from core.server_cooldown import should_skip_unreachable_server
 from core.http_security import plex_server_http_session
+from core.media_jobs import log_media_job_queue_wait
 from core.plex_access_identity import (
     PendingPlexInvite,
     PlexUserLookupUnavailable,
@@ -771,6 +772,7 @@ def run(task_id: int, db):
             logger.warning(f"Job {job_id} disappeared after claim, skipped.")
             continue
 
+        log_media_job_queue_wait(job, kind="plex_access")
         try:
             if job["action"] == "grant":
                 apply_grant_job(db, job)

@@ -1,6 +1,8 @@
 def ensure_base_settings(conn, cursor, *, ensure_row) -> None:
+    from datetime import datetime, timezone
     ensure_row(cursor, "settings", "id = :id", {
         "id": 1,
+        "instance_started_at": datetime.now(timezone.utc).isoformat(),
         "mail_from": "noreply@example.com",
         "smtp_host": "",
         "smtp_port": 587,

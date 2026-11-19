@@ -39,7 +39,7 @@
 
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% for category, message in messages %}
-        <div class="mb-4 rounded-lg border p-3 text-sm {% if category == 'error' %}border-rose-700 bg-rose-950/30 text-rose-200{% else %}border-emerald-700 bg-emerald-950/30 text-emerald-200{% endif %}">{{ t(message) }}</div>
+        <div role="{{ 'alert' if category == 'error' else 'status' }}" class="mb-4 rounded-lg border p-3 text-sm {% if category == 'error' %}border-rose-700 bg-rose-950/30 text-rose-200{% else %}border-emerald-700 bg-emerald-950/30 text-emerald-200{% endif %}">{{ t(message) }}</div>
       {% endfor %}
     {% endwith %}
 
@@ -65,16 +65,24 @@
         <p class="text-sm text-slate-400 mb-6">{{ t("wizard.admin_intro") }}</p>
         <form method="post" class="space-y-4" data-admin-auth-choice>
           <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
-          <div class="grid gap-3 md:grid-cols-2">
+          <div class="grid gap-3 md:grid-cols-3">
             <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-amber-700 bg-amber-950/20 p-4">
               <input type="radio" name="admin_auth_method" value="plex" checked class="mt-0.5 h-4 w-4">
               <span><span class="block font-medium text-amber-200">{{ t("wizard_admin_use_plex") }}</span><span class="mt-1 block text-xs text-slate-400">{{ t("wizard_admin_use_plex_help") }}</span></span>
+            </label>
+            <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-700 p-4">
+              <input type="radio" name="admin_auth_method" value="jellyfin" class="mt-0.5 h-4 w-4">
+              <span><span class="block font-medium">{{ t("wizard_admin_use_jellyfin") }}</span><span class="mt-1 block text-xs text-slate-400">{{ t("wizard_admin_use_jellyfin_help") }}</span></span>
             </label>
             <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-700 p-4">
               <input type="radio" name="admin_auth_method" value="local" class="mt-0.5 h-4 w-4">
               <span><span class="block font-medium">{{ t("wizard_admin_use_local") }}</span><span class="mt-1 block text-xs text-slate-400">{{ t("wizard_admin_use_local_help") }}</span></span>
             </label>
           </div>
+          <p class="text-sm text-slate-400">{{ t("wizard_admin_more_servers_help") }}</p>
+          <label class="hidden block text-sm" data-jellyfin-admin-fields>{{ t("jellyfin_admin_server_url") }}
+            <input type="url" name="jellyfin_admin_url" placeholder="http://192.168.1.100:8096" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
+          </label>
           <div class="hidden space-y-4 rounded-xl border border-slate-700 p-4" data-local-admin-fields>
           <label class="block text-sm">{{ t("auth.admin_email") }}
             <input name="email" type="email" required value="{{ settings.admin_email or '' }}" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
@@ -113,10 +121,15 @@
           (() => {
             const form = document.querySelector('[data-admin-auth-choice]');
             const localFields = form?.querySelector('[data-local-admin-fields]');
+            const jellyfinFields = form?.querySelector('[data-jellyfin-admin-fields]');
             const sync = () => {
-              const local = form?.querySelector('[name="admin_auth_method"]:checked')?.value === 'local';
+              const choice = form?.querySelector('[name="admin_auth_method"]:checked')?.value;
+              const local = choice === 'local';
+              jellyfinFields?.classList.toggle('hidden', choice !== 'jellyfin');
+              jellyfinFields?.querySelectorAll('input').forEach(input => { input.required = choice === 'jellyfin'; input.disabled = choice !== 'jellyfin'; });
               localFields?.classList.toggle('hidden', !local);
               localFields?.querySelectorAll('input').forEach((input) => {
+                input.disabled = !local;
                 if (input.name === 'email' || input.name === 'password' || input.name === 'confirm_password') input.required = local;
               });
             };
@@ -162,7 +175,9 @@
           {% set plex_suggestions_return_to = "wizard" %}
           {% include "servers/_plex_suggestions.html" %}
         {% endif %}
-        <form method="post" autocomplete="off" class="grid md:grid-cols-2 gap-4 mb-6">
+        <details class="mb-6 rounded-xl border border-slate-700 p-4">
+          <summary class="cursor-pointer text-sm font-medium text-indigo-300">{{ t("wizard.add_more_servers") }}</summary>
+        <form method="post" autocomplete="off" class="mt-4 grid md:grid-cols-2 gap-4">
           <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
           <input type="text" name="wizard_fake_username" autocomplete="username" tabindex="-1" aria-hidden="true" class="hidden">
           <input type="password" name="wizard_fake_password" autocomplete="current-password" tabindex="-1" aria-hidden="true" class="hidden">
@@ -186,6 +201,7 @@
           </label>
           <button name="action" value="add_server" class="md:col-span-2 px-4 py-2 rounded-lg bg-indigo-700 hover:bg-indigo-600 text-sm">{{ t("wizard.test_add_server") }}</button>
         </form>
+        </details>
         <div class="space-y-2 mb-6">
           {% for server in servers %}
             <div class="flex justify-between rounded-lg bg-slate-950 border border-slate-800 px-4 py-3 text-sm">
@@ -198,7 +214,7 @@
             </div>
           {% endfor %}
         </div>
-        <form method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token }}">{% include "setup/_nav.html" %}</form>
+        <form id="wizard-servers-continue" method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token }}">{% include "setup/_nav.html" %}</form>
 
       {% elif step == 5 %}
         <h2 class="text-xl font-semibold mb-2">{{ copy.communications }}</h2>

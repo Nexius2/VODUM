@@ -1,10 +1,15 @@
 from __future__ import annotations
+
+import json
+
 from db_manager import isolated_read_operation
+from core.aggregate_cache import cached_aggregate
 
 from core.monitoring.artwork import (
     build_history_backdrop_url,
     build_history_poster_url,
 )
+from core.monitoring.library_growth import GROWTH_LIBRARIES
 
 
 LIBRARY_RANGES = {"7d", "30d", "90d", "1y", "all"}
@@ -72,27 +77,51 @@ def build_monitoring_library_options(args, cookies, per_page=30):
 
 
 @isolated_read_operation
-def load_monitoring_library_table(db, options):
-    count = db.query_one(
-        """
-        WITH plays AS (
-          SELECT h.server_id,
-            CAST(h.library_section_id AS TEXT) AS library_section_id
-          FROM media_session_history h
-          WHERE COALESCE(NULLIF(TRIM(h.library_section_id), ''), '') <> ''
-          GROUP BY h.server_id, CAST(h.library_section_id AS TEXT)
+def load_monitoring_library_table(db, options, growth_period="7"):
+    qualifies = f"""({GROWTH_LIBRARIES}) OR (
+        TRIM(l.section_id) <> '' AND EXISTS (
+          SELECT 1 FROM media_session_history h
+          WHERE h.server_id = l.server_id AND h.library_section_id = l.section_id
         )
+    )"""
+    count = db.query_one(
+        f"""
         SELECT COUNT(*) AS cnt
         FROM libraries l
-        JOIN plays p
-          ON p.server_id = l.server_id
-         AND p.library_section_id = CAST(l.section_id AS TEXT)
+        JOIN servers s ON s.id = l.server_id
+        WHERE {qualifies}
         """
     )
     total_rows = int(dict(count).get("cnt") or 0) if count else 0
+    # The most recent stopped_at is unchanged by playback deduplication.
+    # Pick that page via the existing index, then compute its totals only.
+    page_by_last = options.get("sort_key") == "last"
+    page_cte = history_join = library_join = ""
+    final_limit = "LIMIT ? OFFSET ?"
+    if page_by_last:
+        direction = "ASC" if options["sort_dir"] == "asc" else "DESC"
+        page_cte = f"""
+          page_libraries AS MATERIALIZED (
+            SELECT l.id, l.server_id, l.section_id,
+              (SELECT MAX(h.stopped_at) FROM media_session_history h
+               WHERE h.server_id = l.server_id
+                 AND h.library_section_id = l.section_id
+                 AND TRIM(l.section_id) <> '') AS page_last_stream_at
+            FROM libraries l JOIN servers s ON s.id = l.server_id
+            WHERE {qualifies}
+            ORDER BY page_last_stream_at {direction} NULLS LAST, l.id
+            LIMIT ? OFFSET ?
+          ),
+        """
+        history_join = """
+          page_libraries page CROSS JOIN media_session_history h
+            ON h.server_id = page.server_id AND h.library_section_id = page.section_id
+        """
+        library_join = "JOIN page_libraries page ON page.id = l.id"
+        final_limit = ""
     rows = db.query(
         f"""
-        WITH plays AS (
+        WITH {page_cte} plays AS (
           SELECT h.server_id,
             CAST(h.library_section_id AS TEXT) AS library_section_id,
             MAX(h.stopped_at) AS stopped_at,
@@ -109,7 +138,7 @@ def load_monitoring_library_table(db, options):
                 ELSE COALESCE(h.watch_ms, 0)
               END
             )) AS watch_ms
-          FROM media_session_history h
+          FROM {history_join or "media_session_history h"}
           WHERE COALESCE(NULLIF(TRIM(h.library_section_id), ''), '') <> ''
           GROUP BY h.server_id, CAST(h.library_section_id AS TEXT),
             (
@@ -139,25 +168,32 @@ def load_monitoring_library_table(db, options):
             WHERE mul.library_id = l.id
               AND LOWER(COALESCE(mu_acc.role, '')) != 'owner'
           ) AS users_with_access,
-          l.item_count, ls.last_stream_at, ls.total_plays, ls.played_ms
+          l.item_count, ls.last_stream_at, ls.total_plays, ls.played_ms,
+          ({GROWTH_LIBRARIES}) AS growth_supported,
+          g.measured_at AS growth_measured_at, g.totals_json AS growth_totals,
+          g.last_attempt_at AS growth_last_attempt_at, g.last_error AS growth_last_error
         FROM libraries l
         JOIN servers s ON s.id = l.server_id
-        JOIN lib_stats ls
+        {library_join}
+        LEFT JOIN lib_stats ls
           ON ls.server_id = l.server_id
          AND ls.library_section_id = CAST(l.section_id AS TEXT)
-        ORDER BY {options["order_sql"]}
-        LIMIT ? OFFSET ?
+        LEFT JOIN monitoring_library_growth g ON g.library_id = l.id
+        WHERE ls.server_id IS NOT NULL OR ({GROWTH_LIBRARIES})
+        ORDER BY {options["order_sql"]} NULLS LAST, l.id
+        {final_limit}
         """,
         (options["per_page"], options["offset"]),
     )
     libraries = [dict(row) for row in (rows or [])]
     for library in libraries:
+        growth_totals = library.pop("growth_totals")
+        library["growth"] = json.loads(growth_totals).get(growth_period) if growth_totals else None
         played_ms = library.get("played_ms") or 0
         library["played_duration"] = (
             f"{played_ms // 3600000}h "
             f"{((played_ms % 3600000) // 60000)}m"
         )
-        library["has_last_stream"] = True
     return {
         "rows": libraries,
         "total_rows": total_rows,
@@ -446,7 +482,12 @@ def _load_monitoring_library_top_rows(db, options):
 
 def load_monitoring_library_top_cards(db, options):
     # Artwork normalization persists repaired refs; keep it outside the reader.
-    top_rows = _load_monitoring_library_top_rows(db, options)
+    db_path = getattr(db, "db_path", None)
+    if db_path:
+        key = ("monitoring:library-top", db_path, options["library_range"], options["library_user_id"])
+        top_rows = cached_aggregate(key, 60, lambda: _load_monitoring_library_top_rows(db, options))
+    else:
+        top_rows = _load_monitoring_library_top_rows(db, options)
 
     cards_by_library = {}
     for r in top_rows:

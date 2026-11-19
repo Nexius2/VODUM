@@ -14,6 +14,7 @@ from logging_utils import get_logger
 from tasks_engine import prepare_restored_database, task_logs
 from core.archive_safety import validate_zip_limits
 from core.app_paths import imports_dir as get_imports_dir
+from core.tasks.database_restore_gate import database_restore_gate
 from secret_store import (
     encryption_key_bytes,
     encryption_key_file_path,
@@ -384,6 +385,7 @@ def _safe_restore_from_path(backup_path: Path, db) -> None:
         time.sleep(1.5)
         os._exit(0)
 
+    database_restore_gate.pause_until_restart()
     threading.Thread(target=_delayed_exit, daemon=True).start()
     log.warning("Backup restored. Maintenance mode ON. Process will exit for restart.")
 

@@ -1,5 +1,17 @@
 def seed_default_tasks(conn, cursor, *, ensure_row) -> None:
     ensure_row(cursor, "tasks", "name = :name", {
+        "name": "refresh_usage_risk_recommendations",
+        "description": "task_description.refresh_usage_risk_recommendations",
+        "schedule": "4,34 * * * *", "enabled": 1, "status": "idle",
+        "next_run": "1970-01-01 00:00:00", "max_retries": 0,
+    })
+    ensure_row(cursor, "tasks", "name = :name", {
+        "name": "refresh_library_growth",
+        "description": "task_description.refresh_library_growth",
+        "schedule": "45 4 * * *", "enabled": 1, "status": "idle",
+        "next_run": "1970-01-01 00:00:00", "max_retries": 0,
+    })
+    ensure_row(cursor, "tasks", "name = :name", {
         "name": "run_collections", "description": "task_description.run_collections",
         "schedule": "15 5 * * *", "enabled": 1, "status": "idle",
     })

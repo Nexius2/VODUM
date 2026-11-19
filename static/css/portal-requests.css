@@ -15,7 +15,21 @@
 .portal-requests-backdrop img { width: 100%; height: 100%; max-height: 26rem; object-fit: cover; border-radius: 1rem; filter: saturate(.65); }
 .portal-requests-backdrop img:nth-child(even) { transform: translateY(2rem); }
 .portal-requests-content { position: relative; }
-@media (max-width: 640px) { .portal-requests-backdrop { grid-template-columns: repeat(2, 1fr); gap: .5rem; opacity: .1; } .portal-requests-backdrop img:nth-child(n+5) { display: none; } }
+@media (max-width: 640px) {
+  .portal-requests-backdrop {
+    --poster-fade: linear-gradient(to bottom, transparent, #0005 15%, #000 40%, #000 70%, transparent);
+    inset-block-end: auto;
+    height: 31rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: 14rem;
+    gap: .625rem;
+    opacity: .34;
+    -webkit-mask-image: var(--poster-fade);
+    mask-image: var(--poster-fade);
+  }
+  .portal-requests-backdrop img { filter: saturate(.92); }
+  .portal-requests-backdrop img:nth-child(n+5) { display: none; }
+}
 
 .portal-request-progress { display: flex; align-items: center; gap: .65rem; width: 100%; color: #94a3b8; font-size: .85rem; }
 .portal-request-progress[hidden], [data-search-results][hidden] { display: none; }

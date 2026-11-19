@@ -140,7 +140,7 @@
     document.getElementById("tpl_name").value = "";
     document.getElementById("tpl_notes").value = "";
     document.getElementById("tpl_duration_days").value = "30";
-    document.getElementById("tpl_subscription_value").value = "0";
+    document.getElementById("tpl_subscription_value").value = "";
     document.getElementById("tpl_is_default").checked = false;
     document.getElementById("tpl_is_enabled").checked = true;
     document.getElementById("tpl_is_lifetime").checked = false;
@@ -520,7 +520,7 @@
     document.getElementById("tpl_name").value = tpl.name || "";
     document.getElementById("tpl_notes").value = tpl.notes || "";
     document.getElementById("tpl_duration_days").value = tpl.duration_days || 30;
-    document.getElementById("tpl_subscription_value").value = tpl.subscription_value || 0;
+    document.getElementById("tpl_subscription_value").value = tpl.subscription_value ?? "";
     document.getElementById("tpl_is_default").checked = String(tpl.is_default || "0") === "1";
     document.getElementById("tpl_is_enabled").checked = String(tpl.is_enabled ?? 1) === "1";
     document.getElementById("tpl_is_lifetime").checked = String(tpl.is_lifetime || "0") === "1";

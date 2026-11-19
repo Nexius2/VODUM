@@ -26,7 +26,7 @@ def _normalize_server_key(server_or_url) -> str:
     return raw.lower()
 
 
-def wait_for_plex_slot(server_or_url, heartbeat=None, priority=False) -> None:
+def wait_for_plex_slot(server_or_url, heartbeat=None, priority=False, *, deadline=None) -> float | None:
     key = _normalize_server_key(server_or_url)
     if not key:
         return
@@ -46,11 +46,16 @@ def wait_for_plex_slot(server_or_url, heartbeat=None, priority=False) -> None:
                 heartbeat()
             with _SLOT_CHANGED:
                 now = time.monotonic()
+                if deadline is not None and now >= deadline:
+                    raise TimeoutError("Plex request slot deadline expired")
                 remaining = _MIN_INTERVAL-(now-_LAST_REQUEST_AT.get(key,0.0))
                 if queue[0] is ticket and remaining<=0:
                     _LAST_REQUEST_AT[key] = now
                     return time.monotonic()-started
-                _SLOT_CHANGED.wait(timeout=min(max(remaining,0.01),0.5) if queue[0] is ticket else 0.5)
+                wait_seconds = min(max(remaining, 0.01), 0.5) if queue[0] is ticket else 0.5
+                if deadline is not None:
+                    wait_seconds = min(wait_seconds, deadline - now)
+                _SLOT_CHANGED.wait(timeout=wait_seconds)
     finally:
         with _SLOT_CHANGED:
             queue.remove(ticket)

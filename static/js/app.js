@@ -19,34 +19,50 @@ function initMobileMenu() {
 
   if (!menu || !openBtn || !closeBtn || !backdrop || !mobileNav || !desktopNav) return;
 
-  if (!mobileNav.dataset.ready) {
-    mobileNav.innerHTML = desktopNav.innerHTML;
-    mobileNav.dataset.ready = "1";
+  if (menu.dataset.bound) return;
+  menu.dataset.bound = "1";
+  mobileNav.innerHTML = desktopNav.innerHTML;
+  const dockButton = document.getElementById("adminDockMenu");
+  const triggers = [openBtn, dockButton].filter(Boolean);
+  const dialog = menu.querySelector('[role="dialog"]');
+  const mobile = window.matchMedia("(max-width: 767px)");
+  let previousFocus;
+  let previousOverflow;
 
-    mobileNav.querySelectorAll("a").forEach((link) => {
-      link.addEventListener("click", () => {
-        menu.classList.add("hidden");
-        document.body.classList.remove("overflow-hidden");
-      });
-    });
+  function closeMenu() {
+    if (menu.classList.contains("hidden")) return;
+    menu.classList.add("hidden");
+    document.body.style.overflow = previousOverflow;
+    triggers.forEach(button => button.setAttribute("aria-expanded", "false"));
+    previousFocus?.focus();
   }
 
   function openMenu() {
+    if (!menu.classList.contains("hidden")) return closeMenu();
+    previousFocus = document.activeElement;
+    previousOverflow = document.body.style.overflow;
     menu.classList.remove("hidden");
-    document.body.classList.add("overflow-hidden");
+    document.body.style.overflow = "hidden";
+    triggers.forEach(button => button.setAttribute("aria-expanded", "true"));
+    closeBtn.focus();
   }
 
-  function closeMenu() {
-    menu.classList.add("hidden");
-    document.body.classList.remove("overflow-hidden");
-  }
-
-  openBtn.addEventListener("click", openMenu);
+  triggers.forEach(button => button.addEventListener("click", openMenu));
   closeBtn.addEventListener("click", closeMenu);
   backdrop.addEventListener("click", closeMenu);
-
+  mobileNav.querySelectorAll("a").forEach(link => link.addEventListener("click", closeMenu));
+  mobile.addEventListener("change", () => { if (!mobile.matches) closeMenu(); });
   document.addEventListener("keydown", (event) => {
+    if (menu.classList.contains("hidden")) return;
     if (event.key === "Escape") closeMenu();
+    if (event.key !== "Tab") return;
+    const items = [...dialog.querySelectorAll('a[href], button:not([disabled])')].filter(el => el.getClientRects().length);
+    const first = items[0], last = items.at(-1);
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault(); last?.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault(); first?.focus();
+    }
   });
 }
 
@@ -842,7 +858,7 @@ window.vodumFlash = function(category, message, autoHideMs = 4000) {
 // ------------ MOBILE TABLES ---------------------------------------------
 (function vodumMobileTables() {
   function shouldSkip(table) {
-    return table.closest(".vodum-mobile-table-scroll, .overflow-x-auto, .table-responsive");
+    return table.matches(".admin-users-table, .admin-card-table") || table.closest(".vodum-mobile-table-scroll, .overflow-x-auto, .table-responsive, .cl-table-wrap");
   }
 
   function enhanceMobileTables(root = document) {
@@ -859,6 +875,7 @@ window.vodumFlash = function(category, message, autoHideMs = 4000) {
       const wrapper = document.createElement("div");
       wrapper.className = "vodum-mobile-table-scroll";
       wrapper.dataset.vodumMobileTable = "1";
+      wrapper.tabIndex = 0;
       table.parentNode.insertBefore(wrapper, table);
       wrapper.appendChild(table);
     });

@@ -419,7 +419,14 @@ def register(app):
             log_handled_failure("auth.load_plex_identity")
             plex_identity = None
 
-        if not (s.get("admin_password_hash") or "").strip():
+        try:
+            jellyfin_identity = db.query_one(
+                "SELECT id FROM admin_auth_identities WHERE admin_account_id=1 AND provider='jellyfin' AND is_active=1"
+            )
+        except Exception:
+            log_handled_failure("auth.load_jellyfin_identity")
+            jellyfin_identity = None
+        if not (s.get("admin_password_hash") or "").strip() and not plex_identity and not jellyfin_identity:
             return redirect(url_for("setup_admin"))
 
         reset_host_example = os.environ.get(
@@ -449,6 +456,8 @@ def register(app):
             next_url=safe_redirect_target(request.args.get("next"), ""),
             login_quote_visual=_build_login_quote_visual_safe(),
             plex_login_available=plex_identity is not None,
+            jellyfin_login_available=jellyfin_identity is not None,
+            local_login_available=bool((s.get("admin_password_hash") or "").strip()),
             turnstile=turnstile_config(s),
         )
 
@@ -629,6 +638,7 @@ def register(app):
             "/logout",
             "/setup-admin",
             "/auth/plex/",
+            "/auth/jellyfin/",
         )
 
         if request.path.startswith(allowed_prefixes):
@@ -663,6 +673,7 @@ def register(app):
             "/logout",
             "/setup-admin",
             "/auth/plex/login",
+            "/auth/jellyfin/login",
         )
 
         if request.path.startswith(allowed_prefixes) or request.path in ("/favicon.ico",):

@@ -39,9 +39,14 @@ n'est pas modifié silencieusement lorsque la suppression est activée.
 
 ## Échecs, concurrence et reprises
 
-- Une erreur HTTP, un timeout, une redirection, une réponse mal formée ou une
-  confirmation manquante conserve la fiche locale et apparaît dans les logs de
-  tâche. Aucune réponse fournisseur ni secret n'est copié dans ces messages.
+- Une connexion impossible, un timeout ou HTTP 502/503/504 reporte la suppression :
+  message INFO avec serveur, fournisseur et utilisateur, conservation locale,
+  nouvelle vérification à la prochaine exécution planifiée. Le même serveur n'est
+  pas sollicité de nouveau pour chaque utilisateur du lot. La tâche ne passe pas
+  en erreur pour cette seule indisponibilité.
+- Les autres erreurs HTTP, certificats TLS invalides, redirections, réponses mal
+  formées et confirmations manquantes conservent la fiche et restent des erreurs.
+  Aucune réponse fournisseur ni secret n'est copié dans ces messages.
 - Une suppression distante déjà effectuée n'est pas annulée si un autre serveur
   échoue. La reprise vérifie l'état natif ; une absence confirmée est idempotente.
 - Les jobs d'accès en cours reportent la suppression. Les jobs encore en file
@@ -54,6 +59,20 @@ n'est pas modifié silencieusement lorsque la suppression est activée.
   opération ; la transaction n'englobe pas tout le lot d'utilisateurs.
 - Un renouvellement enregistré avant la transaction annule l'éligibilité.
   Il ne recrée jamais un compte déjà supprimé sur un serveur lors d'un échec partiel.
+
+## Diagnostic des suppressions non confirmées
+
+L'erreur finale de `delete_expired_users` reprend désormais le détail des dix
+premiers échecs : identifiant VODUM, serveur, compte média, fournisseur, étape
+`inspect` ou `delete_and_confirm` et motif contrôlé. Les autres échecs restent
+dans les lignes `Expiration deletion retained` des logs. Une exception inattendue
+est représentée par son type, sans recopier sa réponse ou ses paramètres secrets.
+
+Le message « Native deletion unconfirmed » seul ne démontre pas la cause : il
+signifie que la fiche locale a été conservée pour permettre une reprise. Après
+mise à jour, relever le nouveau message contextualisé pour déterminer l'action
+nécessaire ; ne pas contourner la confirmation native ni supprimer la fiche locale
+pour faire disparaître l'erreur.
 
 ## Vérification
 

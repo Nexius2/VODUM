@@ -1,6 +1,5 @@
 # Auto-split from app.py (keep URLs/endpoints intact)
 import json
-import ipaddress
 
 import requests
 from flask import request, Response, current_app, jsonify, abort, send_file
@@ -8,7 +7,9 @@ from flask import request, Response, current_app, jsonify, abort, send_file
 from core.monitoring.artwork_cache import (
     ARTWORK_CACHE_TTL_SECONDS,
 )
-from core.monitoring.artwork_proxy import ArtworkProxyError, fetch_monitoring_artwork
+from core.auth_principal import admin_required
+from core.monitoring.artwork_proxy import ArtworkProxyError, fetch_monitoring_artwork, fetch_monitoring_avatar
+from core.monitoring.ip_location import format_ip_location, is_public_ip, parse_stream_ip
 from web.helpers import get_db
 from logging_utils import get_logger
 
@@ -43,6 +44,30 @@ def _is_safe_relative_media_path(path: str) -> bool:
 
 
 def register(app):
+    @app.route("/api/monitoring/avatar/<int:account_id>")
+    @admin_required
+    def api_monitoring_avatar(account_id):
+        row = get_db().query_one(
+            """
+            SELECT s.id, LOWER(TRIM(s.type)) AS type, s.url, s.local_url, s.public_url,
+                   s.token, s.settings_json, mu.avatar, mu.external_user_id
+            FROM media_users mu JOIN servers s ON s.id = mu.server_id
+            WHERE mu.id = ?
+            """,
+            (account_id,),
+        )
+        if not row or not row["avatar"]:
+            abort(404)
+        result = fetch_monitoring_avatar(dict(row), row["avatar"], row["external_user_id"])
+        if not result:
+            abort(404)
+        if result["kind"] == "file":
+            response = send_file(result["path"], mimetype=result["content_type"], conditional=True)
+        else:
+            response = Response(result["content"], mimetype=result["content_type"])
+        response.headers["Cache-Control"] = "private, no-store"
+        return response
+
     # -----------------------------------------------------------------
     # Route explicitement autorisée à proxyfier un média distant
     # pour le monitoring (poster / art uniquement).
@@ -310,19 +335,11 @@ def register(app):
         if not raw_ip:
             return jsonify({"ok": False, "error": "missing_ip"}), 400
 
-        try:
-            ip_obj = ipaddress.ip_address(raw_ip)
-        except ValueError:
+        ip_obj = parse_stream_ip(raw_ip)
+        if ip_obj is None:
             return jsonify({"ok": False, "error": "invalid_ip"}), 400
 
-        if (
-            ip_obj.is_private
-            or ip_obj.is_loopback
-            or ip_obj.is_link_local
-            or ip_obj.is_multicast
-            or ip_obj.is_reserved
-            or ip_obj.is_unspecified
-        ):
+        if not is_public_ip(ip_obj):
             return jsonify({
                 "ok": True,
                 "ip": raw_ip,
@@ -365,7 +382,7 @@ def register(app):
             "query",
         ])
 
-        lookup_url = f"http://ip-api.com/json/{raw_ip}"
+        lookup_url = f"http://ip-api.com/json/{ip_obj}"
         try:
             resp = requests.get(
                 lookup_url,
@@ -402,9 +419,7 @@ def register(app):
             "ok": True,
             "ip": data.get("query") or raw_ip,
             "is_private": False,
-            "display_name": ", ".join(
-                [x for x in [data.get("city"), data.get("regionName"), data.get("country")] if x]
-            ) or raw_ip,
+            "display_name": format_ip_location(data) or raw_ip,
             "country": data.get("country"),
             "region": data.get("regionName"),
             "city": data.get("city"),

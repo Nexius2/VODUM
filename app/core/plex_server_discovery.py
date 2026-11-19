@@ -245,14 +245,17 @@ def automatic_plex_suggestions(
         "result_count": len(candidates),
         "expires_at": now + DISCOVERY_TTL_SECONDS,
     }
-    return _safe_suggestions(candidates, existing), next_context
+    # Forms need the persisted candidate IDs on the first render as well as
+    # subsequent cache hits; resource payloads do not contain those IDs.
+    stored_candidates = load_discovery(db, discovery_id=discovery_id, session_secret=nonce)
+    return _safe_suggestions(stored_candidates, existing), next_context
 
 
 def _safe_suggestions(candidates: list[dict], existing: set[str]) -> list[dict]:
     suggestions = []
     for item in candidates:
         machine_id = str(item.get("machine_identifier") or "").strip()
-        if not machine_id or machine_id in existing:
+        if not machine_id or machine_id in existing or not item.get("presence"):
             continue
         safe = dict(item)
         safe.pop("access_token", None)

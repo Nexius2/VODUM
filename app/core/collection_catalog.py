@@ -8,6 +8,8 @@ COLLECTION_MODELS = (
     {"id": "seasonal", "glyph": "◈", "theme": "seasonal", "media_types": ["movie"], "default_limit": 30, "default_sort": "daily_random", "daily": False},
     {"id": "recent_releases", "glyph": "◷", "theme": "releases", "media_types": ["movie", "shows"], "default_limit": 0, "default_sort": "release", "daily": False},
     {"id": "spotlight", "glyph": "ϟ", "theme": "spotlight", "media_types": ["movie"], "default_limit": 0, "default_sort": "availability", "daily": False},
+    {"id":"anilist", "glyph":"✧", "theme":"spotlight", "media_types":["movie","shows"], "default_limit":0, "default_sort":"rank", "daily":False, "secondary":True},
+    {"id":"myanimelist", "glyph":"✧", "theme":"spotlight", "media_types":["movie","shows"], "default_limit":0, "default_sort":"rank", "daily":False, "secondary":True},
     {"id":"imdb", "glyph":"★", "theme":"spotlight", "media_types":["movie","shows"], "default_limit":0, "default_sort":"rank", "daily":False, "secondary":True},
     {"id":"recently_added", "glyph":"+", "theme":"releases", "media_types":["movie","shows"], "default_limit":30, "default_sort":"added", "daily":False, "secondary":True},
     {"id":"kids", "glyph":"☀", "theme":"releases", "media_types":["movie","shows"], "default_limit":30, "default_sort":"rank", "daily":False, "secondary":True},
@@ -21,10 +23,10 @@ COLLECTION_MODELS = (
 )
 
 FUTURE_MODELS = (
-    "imdb", "tmdb", "recently_added", "kids", "family", "awards", "top_country", "franchises",
+    "imdb", "tmdb", "myanimelist", "anilist", "recently_added", "kids", "family", "awards", "top_country", "franchises",
     "platforms", "continents", "hidden_gems",
 )
 
 
 def collection_catalog():
-    return [{**model, "engine_key": model["id"], "engine_available":model['id'] in ('memoria','spotlight','streaming_country','streaming_worldwide','recent_releases','seasonal','imdb','recently_added','kids','tmdb','family','awards','top_country','franchises','continents','platforms','hidden_gems')} for model in COLLECTION_MODELS]
+    return [{**model, "engine_key": model["id"], "engine_available":model['id'] in ('memoria','spotlight','streaming_country','streaming_worldwide','recent_releases','seasonal','imdb','myanimelist','anilist','recently_added','kids','tmdb','family','awards','top_country','franchises','continents','platforms','hidden_gems')} for model in COLLECTION_MODELS]

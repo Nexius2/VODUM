@@ -197,6 +197,9 @@ def register(app):
 
             elif step == 2:
                 auth_method = (request.form.get("admin_auth_method") or "plex").strip().lower()
+                if auth_method == "jellyfin":
+                    from routes.jellyfin_admin_auth import start_wizard_jellyfin_link
+                    return start_wizard_jellyfin_link(db, request.form.get("jellyfin_admin_url"))
                 if auth_method == "plex":
                     state["administrator"] = "plex_pending"
                     _save(db, step=3, state=state, active=1)
@@ -297,6 +300,18 @@ def register(app):
                         "success",
                     )
                     return continue_setup_wizard()
+                if action == "continue" and request.form.getlist("candidate_id"):
+                    from routes.plex_auth import add_wizard_plex_selection
+                    try:
+                        selection_ok = add_wizard_plex_selection(db, request.form)
+                    except Exception:
+                        log_handled_failure("setup.add_plex_selection")
+                        flash("wizard.plex_selection_failed", "error")
+                        selection_ok = False
+                    if not selection_ok:
+                        return continue_setup_wizard()
+                    # Discovery updates the persisted set of validated servers.
+                    state = _state(_settings(db))
                 validated_count = count_validated_setup_servers(db, state)
                 if validated_count < 1:
                     flash(COPY.get(session.get("lang"), COPY["en"])["required"], "error")
@@ -525,6 +540,8 @@ def register(app):
                             return_to="wizard",
                         )
                         page_data["plex_suggestions"] = suggestions
+                        page_data["plex_suggestions_selected"] = discovery_context.get("wizard_selected", [])
+                        page_data["plex_suggestions_urls"] = discovery_context.get("wizard_urls", {})
                         session["vodum_plex_discovery"] = discovery_context
                     except (PlexDiscoveryError, ValueError):
                         pass

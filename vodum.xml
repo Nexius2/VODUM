@@ -10,7 +10,7 @@
   <Support>https://forums.unraid.net/topic/196501-support-nexius2-vodum/</Support>
   <Project>https://github.com/Nexius2/VODUM</Project>
   <ReadMe/>
-  <Overview>VODUM is a self-hosted subscription management tool for Plex and Jellyfin, designed to centrally manage users, subscriptions, and media library access.</Overview>
+    <Overview>VODUM is a centralized management platform for Plex and Jellyfin administrators. Manage multiple servers, users, subscriptions, real-time monitoring, automated communications, media collections, and access policies from a single interface. Includes a self-service user portal, media requests, invitations, automation tools, and much more.</Overview>
   <Category>MediaApp: Tools</Category>
   <WebUI>http://[IP]:[PORT:8097]/</WebUI>
   <TemplateURL/>

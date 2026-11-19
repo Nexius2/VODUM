@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+from db_manager import isolated_read_operation
 from datetime import datetime, timedelta, timezone
 
 
@@ -37,14 +38,18 @@ def create_admin_session(db, *, now=None, ttl=None) -> dict:
     return {"session_id": int(row["id"]), "token": token}
 
 
+@isolated_read_operation
+def _load_admin_session(db, session_id):
+    return db.query_one(
+        "SELECT token_hash,last_seen_at,expires_at,revoked_at FROM admin_sessions "
+        "WHERE id=? AND admin_account_id=1", (int(session_id),),
+    )
+
+
 def validate_admin_session(db, session_id: int, token: str, *, now=None, ttl=None) -> bool:
     if not token:
         return False
-    row = db.query_one(
-        "SELECT token_hash,last_seen_at,expires_at,revoked_at FROM admin_sessions "
-        "WHERE id=? AND admin_account_id=1",
-        (int(session_id),),
-    )
+    row = _load_admin_session(db, session_id)
     if not row or row["revoked_at"]:
         return False
     if not secrets.compare_digest(str(row["token_hash"] or ""), _token_hash(token)):

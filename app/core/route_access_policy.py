@@ -8,12 +8,14 @@ ADMIN_AUTH_EXACT = frozenset(
         "/login", "/login/submit", "/logout", "/setup-admin",
         "/setup-admin/save", "/auth/plex/login",
         "/auth/plex/login/callback", "/auth/plex/login/totp",
+        "/auth/jellyfin/login", "/auth/jellyfin/login/confirm",
     }
 )
 SETUP_FLOW_EXACT = frozenset(
     {
         "/auth/plex/wizard-link", "/auth/plex/link/callback",
         "/auth/plex/link/confirm",
+        "/auth/jellyfin/wizard",
     }
 )
 

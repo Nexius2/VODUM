@@ -1,10 +1,9 @@
-import math
-from core.log_presentation import explain_log
 from datetime import datetime
+from collections import Counter
 
 from flask import Response, render_template, request
 
-from logging_utils import AnonymizeFilter, read_all_logs, read_log_records_snapshot
+from logging_utils import AnonymizeFilter, read_all_logs, read_log_page
 
 
 ALLOWED_LOG_LEVELS = {"ALL", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
@@ -15,12 +14,10 @@ def normalize_log_level(value) -> str:
     return level if level in ALLOWED_LOG_LEVELS else "ALL"
 
 
-def summarize_log_levels(records) -> dict[str, int]:
-    counts = {level: 0 for level in ALLOWED_LOG_LEVELS if level != "ALL"}
-    for record in records:
-        level = str(record.get("level") or "").upper()
-        if level in counts:
-            counts[level] += 1
+def summarize_log_levels(records=(), *, level_counts=None) -> dict[str, int]:
+    if level_counts is None:
+        level_counts = Counter(str(record.get("level") or "").upper() for record in records)
+    counts = {level: level_counts.get(level, 0) for level in ALLOWED_LOG_LEVELS if level != "ALL"}
     counts["ALL"] = sum(counts.values())
     return counts
 
@@ -38,24 +35,11 @@ def register(app):
             page = 1
         per_page = 200
 
-        snapshot = read_log_records_snapshot()
-        all_records = snapshot["records"]
-        level_counts = summarize_log_levels(all_records)
-        records = []
-        for record in all_records:
-            if level != "ALL" and record["level"] != level:
-                continue
-            searchable = " ".join(str(value) for value in record.values())
-            if search and search.lower() not in searchable.lower():
-                continue
-            records.append(record)
-
-        total_logs = len(records)
-        records.reverse()
-        total_pages = max(1, math.ceil(total_logs / per_page))
-        page = max(1, min(page, total_pages))
-        start = (page - 1) * per_page
-        paginated = [{**record,"explanation":explain_log(record)} for record in records[start:start + per_page]]
+        snapshot = read_log_page(level, search, page, per_page)
+        level_counts = summarize_log_levels(level_counts=snapshot["counts"])
+        page = snapshot["page"]
+        total_pages = snapshot["total_pages"]
+        paginated = snapshot["records"]
 
         window_size = 10
         page_window_start = max(1, page - 4)

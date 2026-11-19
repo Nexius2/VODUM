@@ -138,14 +138,15 @@ def wrap_email_html(inner_html: str, title: str, footer_text: str) -> str:
 """
 
 
-def build_email_parts(body: str, settings: Dict, lang_dir: str = "/app/translations/ui") -> Tuple[str, str]:
+def build_email_parts(
+    body: str, settings: Dict, lang_dir: str = "/app/translations/ui", *,
+    automated: bool = True,
+) -> Tuple[str, str]:
     """
     Retourne: (plain_text, full_html)
     """
-    t = get_script_translator(settings, lang_dir=lang_dir)
-
     brand = get_brand_name(settings)
-    footer = t("email_automatic_notice")
+    footer = get_script_translator(settings, lang_dir=lang_dir)("email_automatic_notice") if automated else ""
 
     inner_html = normalize_body_to_html(body)
     full_html = wrap_email_html(inner_html, title=brand, footer_text=footer)

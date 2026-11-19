@@ -100,7 +100,7 @@ def run_streaming_country(db, instance, *, kind='sync', heartbeat=lambda:None,
         except CollectionRunCancelled: raise
         except Exception as exc:
             log_handled_failure('collections.streaming.discovery',level='error')
-            code = str(exc) if str(exc) in ('collections.streaming_incomplete','collections.streaming_empty','collections.streaming_source_invalid','collections.seasonal_sources_unavailable','collections.imdb_source_unavailable','collections.imdb_source_invalid','collections.imdb_invalid_chart','collections.awards_source_unavailable','collections.awards_source_invalid') else 'collections.streaming_unavailable'
+            code = str(exc) if str(exc) in ('collections.streaming_incomplete','collections.streaming_empty','collections.streaming_source_invalid','collections.seasonal_sources_unavailable','collections.imdb_source_unavailable','collections.imdb_source_invalid','collections.imdb_invalid_chart','collections.myanimelist_key_required','collections.myanimelist_source_invalid','collections.myanimelist_source_unavailable','collections.myanimelist_invalid_chart','collections.anilist_invalid_chart','collections.anilist_source_invalid','collections.anilist_source_unavailable','collections.secret_store_unavailable','collections.awards_source_unavailable','collections.awards_source_invalid') else 'collections.streaming_unavailable'
             result['errors'].append(code)
             progress('complete')
             return result
@@ -144,6 +144,8 @@ def run_streaming_country(db, instance, *, kind='sync', heartbeat=lambda:None,
                     by_title.setdefault(key,[]).append(row)
                     if row.get('year'):
                         by_title_year.setdefault((key,str(row['year'])),[]).append(row)
+        inventory_matcher = getattr(type(source),'match_inventory',None)
+        verified_matches = inventory_matcher(source,candidates,inventory) if callable(inventory_matcher) else None
         by_local_id = {str(row['id']):row for row in inventory}
         for row in inventory:
             if row.get('tmdb'): by_tmdb.setdefault(str(row['tmdb']),[]).append(row)
@@ -157,8 +159,9 @@ def run_streaming_country(db, instance, *, kind='sync', heartbeat=lambda:None,
             if fill_local_limit and len(selected)>=config['limit'] and candidate_index>=config['limit']:
                 break
             heartbeat()
-            matches = [by_local_id[str(identifier)] for identifier in credit.get('library_item_ids',[]) if str(identifier) in by_local_id]
-            if not matches: matches = list(by_tmdb.get(str(credit['id']),[]))
+            local_ids = credit.get('library_item_ids',[]) if verified_matches is None else verified_matches.get(credit['id'],[])
+            matches = [by_local_id[str(identifier)] for identifier in local_ids if str(identifier) in by_local_id]
+            if not matches and verified_matches is None: matches = list(by_tmdb.get(str(credit['id']),[]))
             # A verified alternate ID is sufficient even when the library's
             # TMDb lookup failed earlier. Never match contradictory TMDb IDs.
             if not matches:
@@ -223,8 +226,9 @@ def run_streaming_country(db, instance, *, kind='sync', heartbeat=lambda:None,
                 # The supplied Plex synchronizer publishes one local edition
                 # for each ranked TMDb identity.
                 matches=matches[:1]
+            tmdb_id = credit.get('tmdb_id',credit['id'])
             if fill_local_limit and not matches and len(missing_candidates) < config['limit']:
-                missing_candidates.append({'title':credit['title'],'year':credit.get('year'),'tmdb_id':credit['id']})
+                missing_candidates.append({'title':credit['title'],'year':credit.get('year'),'tmdb_id':tmdb_id})
             if matches and config['mode'] != 'arr' and config.get('required_audio_language'):
                 try:
                     matches=[row for row in matches if get_adapter().has_audio(row,config['required_audio_language'])]
@@ -248,7 +252,7 @@ def run_streaming_country(db, instance, *, kind='sync', heartbeat=lambda:None,
                 if str(row['id']) not in seen:
                     selected.append(row); seen.add(str(row['id']))
             if not matches: missing.append(credit)
-            media_rows.append({'tmdb_id':credit['id'],'title':credit['title'],'media_type':media_type,
+            media_rows.append({'tmdb_id':tmdb_id,'title':credit['title'],'media_type':media_type,
                 'present':bool(matches),'library_item_ids':[row['id'] for row in matches],
                 'sources':credit['sources'],'ranks_by_source':credit['ranks_by_source'],
                 'source_kinds':credit['source_kinds'],'buzz_score':credit['buzz_score'],

@@ -1,15 +1,17 @@
 # VODUM - Feuille de route
 
-Ce fichier contient uniquement le travail restant. Les changements termines sont
-documentes dans `changelog.md`.
+Ce fichier suit uniquement les travaux restants. Les elements termines ont ete
+retires apres publication ; les objectifs globaux restent ouverts tant que leurs
+sous-parties ou mesures restent a faire. Le detail historique est archive dans
+`changelog-archive-2026-11-19.md`.
 
-Derniere mise a jour: 2026-10-09
+Derniere mise a jour: 2026-11-19
 
 ## P0 - Performances et reactivite VODUM (priorite avant les evolutions P1/P2/P3)
 
 Perimetre : application VODUM, independamment de la machine et de l'hebergement.
 Ordre ci-dessous par impact attendu sur la reactivite globale, a confirmer par
-mesure ; les gains ne sont pas encore chiffres. Conserver les optimisations deja
+mesure ; les gains sur installation representative restent a chiffrer. Conserver les optimisations deja
 presentes (WAL, index, caches, agregats, lectures HTTP paralleles des demandes).
 
 Prerequis obligatoires pour chaque optimisation : aucun changement visuel,
@@ -25,160 +27,57 @@ extension ; une amelioration de performance ne justifie aucune perte fonctionnel
   base representative, plusieurs utilisateurs et des fournisseurs lents,
   sans journaliser de secrets. Ces mesures peuvent ajuster l'ordre ci-dessous.
 
+  Restent la mesure sur une base représentative et la couverture du SQL
+  hors DBManager, des appels et caches hors de ce périmètre et des autres
+  files et reprises de jobs.
+
 - [ ] 1. Reduire la contention SQLite : remplacer progressivement la connexion
   partagee et son verrou global par des connexions de lecture independantes
   et une gestion explicite des ecritures. Auditer les usages directs de `db.conn`,
   les transactions et le dechiffrement sous verrou ; conserver l'atomicite,
   les contraintes et WAL. Ne pas simplement retirer le verrou actuel.
-  Premier lot livre : lectures lourdes Utilisateurs et tableau Bibliotheques du
-  monitoring isolees sur des snapshots SQLite en lecture seule. Les ecritures,
-  migrations, imports et controles d'acces gardent leur connexion actuelle.
-  Deuxieme lot livre : historique, agregats de la vue d'ensemble et classements
-  par bibliotheque isoles egalement. La reparation des references artwork reste
-  sur le parcours d'ecriture existant, apres fermeture du snapshot de lecture.
+
   Reste a mesurer sur une base representative et etendre aux autres parcours
   apres audit de leurs eventuelles ecritures.
-  Troisieme lot livre : blocs Servers et Usage risk du dashboard isoles sur
-  des snapshots de lecture ; requete des pics alignee sur l'index de dates.
-  Quatrieme lot livre : contexte et neuf lectures de statistiques de l'onglet
-  Servers du monitoring isoles egalement. Comparaison des six valeurs de plage,
-  absence d'ecriture et test de lecture pendant verrou d'ecriture occupe.
-  Benchmark concurrent synthetique dans `tools/benchmark_monitoring_server_reads.py`.
-  Cinquieme lot livre : lectures en cours du dashboard isolees dans un snapshot,
-  y compris compteurs et repli borne lorsque la file de taches est occupee.
-  Resultats compares et lecture pendant transaction d'ecriture testes ; benchmark
-  synthetique dans `tools/benchmark_dashboard_live_reads.py`. Mesure sur base
-  representative toujours restante.
-  Sixieme lot livre : sessions, compteurs et serveurs du monitoring en direct
-  charges dans un snapshot commun. Enrichissement/reparation artwork conserve
-  apres fermeture du lecteur sur le parcours d'ecriture. Repli sur les compteurs
-  recents et onglets sans lecture preserves ; benchmark avec
-  `tools/benchmark_dashboard_live_reads.py --monitoring`.
-  Septieme lot livre : evenements recents Overview/Activity et utilisateurs du
-  filtre Bibliotheques sur connexions de lecture independantes. Tri, limites,
-  details de series, deduplication et libelles conserves ; aucun snapshot pour
-  les onglets sans evenements. Comparaison sous transaction concurrente testee.
-  Benchmark : `tools/benchmark_dashboard_live_reads.py --activity` et
-  `--library-users`. Validation representative toujours restante.
-  Huitieme lot livre : rapport d'usage du portail (compteurs, chronologie,
-  utilisateurs, evenements et demandes medias) dans un snapshot commun.
-  Periodes, pagination et comptes compares au parcours precedent pendant
-  transaction concurrente, cas vide et integrite verifies. Benchmark :
-  `tools/benchmark_dashboard_live_reads.py --portal-usage`. Mesure sur base
-  representative et autres parcours encore a traiter.
-  Neuvieme lot livre : neuf lectures de l'onglet Politiques (catalogue,
-  compteurs, repartitions, utilisateurs, actions recentes/regroupees, suivi,
-  chronologie et pagination) isolees par operation. Requetes et regles conservees ;
-  comparaison avec/sans donnees et pendant transaction concurrente testee.
-  Benchmark synthetique : `tools/benchmark_dashboard_live_reads.py --policies`.
-  Mesure representative toujours restante.
-  Dixieme lot livre : consultation Sonarr/Radarr dans un snapshot commun pour
-  disponibilite, latence, derniers compteurs et series quotidiennes. Collecte
-  et purge inchangees ; sans serveur ARR, aucune connexion supplementaire.
-  Six plages, valeurs absentes et transaction concurrente testees ; benchmark
-  `tools/benchmark_dashboard_live_reads.py --arr`. Mesure representative restante.
-  Onzieme lot livre : liste Serveurs, compteur et page Bibliotheques sur
-  snapshots de lecture independants. Tris, pagination, types normalises et
-  compteurs distincts preserves ; comparaison pendant transaction concurrente,
-  cas vides et absence d'ecriture testes. Benchmark :
-  `tools/benchmark_dashboard_live_reads.py --server-pages`.
-  Validation representative encore a traiter.
-  Douzieme lot livre : cinq lectures de la fiche serveur (detail, bibliotheques,
-  utilisateurs et compteurs) sur snapshots independants. Perimetre par serveur,
-  comptes multiples rattaches a un utilisateur, pagination et serveur absent
-  testes pendant transaction concurrente. Benchmark :
-  `tools/benchmark_dashboard_live_reads.py --server-detail`.
+
   Validation representative restante. Controle general de fabrique SQLite en
   echec hors lot : connexions directes dans `app/diagnose_stream_policies.py`
   et `app/core/backup.py`, a qualifier avant de modifier ces parcours.
-  Treizieme lot livre : chargements des pages Campagnes et Modeles de
-  communication isoles chacun dans un snapshot de lecture. Traductions,
-  pieces jointes, tri, pagination et editeurs conserves ; enregistrements et
-  envois inchanges. Comparaison pendant transaction concurrente et cas vides
-  testes. Benchmark : `tools/benchmark_dashboard_live_reads.py --communication-pages`.
-  Validation representative toujours restante.
-  Quatorzieme lot livre : detail de l'historique et configuration Communications
-  sur snapshots de lecture independants. Message archive ou reconstruit,
-  substitutions historiques, masquage des secrets et compteurs de file preserves ;
-  comparaison pendant transaction concurrente et cas absents/vides testes.
-  Benchmark : `tools/benchmark_dashboard_live_reads.py --communication-details`.
-  Validation representative toujours restante.
-  Quinzieme lot livre : tableau d'acces de la fiche utilisateur sur snapshot
-  commun aux serveurs et bibliotheques. Selection du compte le plus renseigne,
-  droits des comptes lies et options de chargement preserves ; aucun snapshot
-  lorsque les deux listes sont inutiles. Lectures utilisees par l'enregistrement
-  conservees sur leur parcours actuel. Comparaison concurrente et benchmark :
-  `tools/benchmark_dashboard_live_reads.py --user-access`.
-  Validation representative toujours restante.
-  Seizieme lot livre : historique des notifications de la fiche utilisateur
-  (compteurs et pages email/Discord) dans un snapshot commun. Pagination
-  independante, libelles et ordre conserves ; aucun snapshot si desactive.
-  Comparaison pendant transaction concurrente et utilisateurs absents testes.
-  Benchmark : `tools/benchmark_dashboard_live_reads.py --user-notifications`.
-  Validation representative toujours restante.
-  Dix-septieme lot livre : affichage du parrainage et noms des comptes fusionnes
-  sur snapshots independants. Compteurs, liste des filleuls, parrain de repli,
-  tri et deduplication des noms conserves ; actions de parrainage inchangees.
-  Comparaison pendant transaction concurrente et utilisateurs absents testes.
-  Benchmark : `tools/benchmark_dashboard_live_reads.py --user-referrals`.
-  Validation representative toujours restante.
-  Dix-huitieme lot livre : politiques actives affichees sur la fiche utilisateur
-  dans un snapshot commun aux identites et regles. Portee, fournisseur, ordre
-  et libelles conserves ; application des restrictions inchangee. Comparaison
-  pendant transaction concurrente, utilisateur absent et absence d'ecriture testes.
-  Benchmark : `tools/benchmark_dashboard_live_reads.py --user-policies`.
-  Validation representative toujours restante.
-  Dix-neuvieme lot livre : utilisateur et candidats de fusion charges dans un
-  snapshot commun, ferme avant calcul des scores. Classement et limites
-  conserves ; action de fusion inchangee. Comparaison pendant transaction
-  concurrente et utilisateur absent testes. Benchmark de la phase de lecture :
-  `tools/benchmark_dashboard_live_reads.py --merge-candidates`.
-  Validation representative toujours restante.
-  Vingtieme lot livre : prochaines taches et resume des abonnements du dashboard
-  sur snapshots independants. Tri, compteurs, repartition et graphique conserves ;
-  tables optionnelles absentes et transaction concurrente testees, sans ecriture.
-  Benchmark : `tools/benchmark_dashboard_live_reads.py --dashboard-summaries`.
-  Validation representative toujours restante.
-  Vingt-et-unieme lot livre : suivi personnel du portail dans un snapshot
-  commun aux periodes, historique et repartitions. Isolation par utilisateur,
-  deduplication, durees et masquage IP conserves ; autorisations de route
-  inchangees. Comparaison pendant transaction concurrente et utilisateur absent
-  testes. Benchmark : `tools/benchmark_dashboard_live_reads.py --personal-monitoring`.
+
   Validation representative toujours restante.
 - [ ] 2. Liberer les threads web : executer les operations longues dans des jobs
   bornes, avec reponse rapide, suivi de progression et reprise idempotente.
   Prioriser demandes medias et recuperations lentes ; verifier qu'une operation
   fournisseur bloquee ne retarde pas la navigation des autres utilisateurs.
   Evaluer le dimensionnement Waitress apres reduction des blocages.
+
+  Restent la recherche initiale et les autres opérations longues, ainsi
+  que la mesure Waitress sous charge représentative.
 - [ ] 3. Eviter les recalculs de tout l'historique dans le monitoring : materialiser
   les statistiques par utilisateur/bibliotheque et la derniere activite ; garder
   les filtres, tris et la pagination coherents. Retirer les identites repetees
   par lecture dans `GROUP_CONCAT`, charger les identites depuis leurs tables.
   Verifier les plans SQL et la deduplication ; ajouter uniquement les index utiles.
-  Premier lot livre : compteur Utilisateurs sans filtre par verification indexee
-  de l'existence d'un historique ; suppression de la concatenation des identites
-  inutilisee lorsque la liste n'est pas filtree. Recherche filtree conservee
-  a l'identique, avec comparaisons aux anciennes requetes pour tris/pagination.
-  Reste a materialiser les statistiques et optimiser les recherches filtrees.
+
+  Restent à matérialiser les totaux de lecture, optimiser les recherches filtrées
+  et les tris Lectures/Durée, et mesurer les gains sur l'installation réelle.
 - [ ] 4. Rendre la consultation des logs proportionnelle a la page affichee :
   separer entretien/rotation et consultation, eviter le nettoyage force et la
   relecture de toutes les archives a chaque ouverture. Mettre les compteurs en
   cache, borner les lectures et etudier une file de journalisation dediee ;
   conserver recherche, traces multilignes, anonymisation et retention.
-  Premier lot livre : l'entretien ne relit plus les fichiers deja controles
-  et inchanges tant qu'aucune ligne ne peut expirer. Invalidation sur changement
-  de fichier/politique ; reutilisation bornee du decodage des dates repetees.
-  Deuxieme lot livre : cache borne des evenements analyses, invalide sur
-  changement/rotation/purge ; consultation repetee sans relecture ni analyse
-  des fichiers inchanges. Recherche, compteurs, pagination et export conserves.
+
   Reste a borner les lectures lors d'un changement ou pour les gros historiques,
-  et a optimiser les compteurs et la recherche au-dela du cache.
+  et a optimiser la recherche au-dela du cache.
 - [ ] 5. Reduire les parcours des demandes medias : qualifier les recherches
   ciblees par identifiant fournisseur Plex/Jellyfin/ARR et un index local
   actualise. Eviter les scans complets et appels de details repetes ; conserver
   les controles d'acces, la verification avant ajout, les reservations contre
   les doublons et l'absence de failover apres POST incertain. La parallelisation
   deja presente ne suffit pas a supprimer ces parcours.
+
+  Restent l’index couvrant les autres bibliothèques et l’optimisation
+  du contrôle d’absence.
 - [ ] 6. Prioriser les appels Plex et les images interactives : revoir la limite
   partagee d'une requete/seconde, avec concurrence bornee et adaptation aux
   erreurs fournisseur. Servir immediatement un artwork ancien disponible,
@@ -186,93 +85,56 @@ extension ; une amelioration de performance ne justifie aucune perte fonctionnel
   imposer un budget total aux essais de chemins/adresses. Reutiliser les
   connexions HTTP dans un meme travail sans partager une session mutable
   entre threads ; conserver les restrictions d'origine et la verification TLS.
+
+  Restent la mesure sous charge et la qualification des autres appels Plex.
 - [ ] 7. Regrouper les ecritures des collectes et synchronisations en petits lots :
   reduire les commits par session/evenement/droit et les reecritures de
   metadonnees inchangees. Garder les transactions courtes, sans appel reseau,
   et verifier coherence, reprise et comportement lors d'une erreur partielle.
+
 - [ ] 8. Separer les taches urgentes des travaux lourds : files/workers bornes
   pour monitoring et actions interactives, distincts des imports, campagnes,
   synchronisations et prechargements. Decouper les travaux longs, prevoir des
   budgets reels/cooperatifs et preserver les leases et protections contre les
   executions concurrentes incompatibles ; ne pas creer de threads abandonnes.
+
+  Restent la mesure sous charge et le découpage des autres tâches longues.
 - [ ] 9. Reduire les rafraichissements inutiles : cadence adaptative selon l'activite,
   suspension des onglets masques dans toutes les vues, absence de chevauchement
   et retour des seuls changements utiles. Conserver la protection du dashboard
   deja presente ; evaluer snapshots partages, reponses conditionnelles ou SSE
   selon le cout mesure et la compatibilite du serveur web/reverse proxy.
-  Premier lot livre : polling des vues Monitoring overview/now_playing suspendu
-  en onglet masque, reprise immediate au retour, sans empilement de requetes
-  lentes. Les cadences visibles et soumissions de filtres sont conservees.
-  Deuxieme lot livre : polling de Tasks suspendu en onglet masque, reprise au
-  retour, une seule requete en vol avec attente bornee a 10 secondes. Tableau
-  conserve quand son contenu genere est identique ; statuts et actions actualises
-  lors d'un changement. Tests sur reponse lente, erreur et reprise.
-  Troisieme lot livre : suivi des sauvegardes et imports Tautulli suspendu en
-  onglet masque, reprise au retour et requetes sans chevauchement, bornees a
-  10 secondes cote navigateur. Une erreur de lecture du statut de sauvegarde
-  ne vaut plus confirmation de fin ; rafraichissement final conserve.
+
   Reste a etendre aux autres vues et evaluer cadence adaptative et snapshots.
 - [ ] 10. Rendre les calculs de fond incrementaux : recalculer uniquement les jours
   modifies des agregats quotidiens ; charger une seule fois les abonnements
   pendant l'analyse des usages. Dissocier la consultation des rapports de
   l'enregistrement des recommandations et etendre les caches avec invalidation.
-  Premier lot livre : abonnements charges une seule fois par rapport Usage risk,
-  uniquement si une recommandation est necessaire. Configuration relue au
-  rapport suivant ; resultats compares et benchmark synthetique disponible dans
-  `tools/benchmark_usage_risk.py`.
-  Deuxieme lot livre : statistiques quotidiennes recalculees uniquement pour
-  les jours absents ou modifies. Suivi SQLite des insertions/corrections/purges
-  d'historique et des changements d'identite ; recalcul conservateur de toute
-  la fenetre apres changement d'identite. Benchmark local et cout d'ecriture
-  documentes dans `docs/performance-daily-refresh-2026-10-08.md`.
-  Reste a separer consultation/enregistrement des recommandations, etendre
-  l'invalidation des caches et valider sous charge representative.
-  Troisieme lot livre : compteurs de blocages Usage risk limites aux actions
-  kill avec index partiel de dates ; aucune lecture globale de ces compteurs
-  quand aucun evenement ne correspond aux filtres. Rapports compares a la
-  requete precedente ; benchmark dans `tools/benchmark_usage_risk_kill_windows.py`.
+
+  Restent l’invalidation des caches et la validation sous charge
+  représentative.
+
 - [ ] 11. Reduire les petits couts repetes : mutualiser les lectures de settings
   dans une requete, mettre en cache le statut de mise a jour avec invalidation,
   et comparer un niveau gzip moins couteux. Preserver la revocation immediate
   des sessions et les controles de droits ; ne pas cacher les autorisations
   sans politique d'invalidation explicite.
-  Premier lot livre : compression HTML/JSON au niveau gzip 6 par defaut,
-  configurable de 1 a 9 via VODUM_HTTP_GZIP_LEVEL. Contenu et exclusions
-  preserves ; benchmark synthetique reproductible (y compris quatre workers)
-  dans `tools/benchmark_http_compression.py`. Mesure en production restante.
-  Deuxieme lot livre : langue, nom de marque, fuseau horaire et contexte
-  global des templates partagent une lecture des settings par requete GET/HEAD.
-  Aucun cache entre requetes ; lectures fraiches pour les requetes mutantes.
-  Controles d'autorisation et revocation inchanges. Gain sous charge a mesurer.
-  Troisieme lot livre : statut du badge de mise a jour reutilise tant que le
-  fichier ne change pas. Invalidation par metadonnees, remplacement/suppression
-  detectes ; erreurs relues a la requete suivante. Mesure sous charge restante.
+
 - [ ] 12. Borner la maintenance : purges par lots, sauvegardes/checkpoints et
   entretien des caches sans longues pauses du traitement interactif. Verifier
   la restauration, la coherence des sauvegardes et les effets sur les lecteurs.
-  Premier lot livre : six tables historiques de cleanup_data_retention purgees
-  par lots de 500 lignes avec commit et pause entre lots. Borne initiale des
-  identifiants, dates reverifiees avant suppression ; retention inchangee.
-  Deuxieme lot livre : cinq tables de retention du portail traitees avec le
-  meme mecanisme ; comptes et regles d'expiration conserves. Reprise apres
-  interruption testee. Checkpoints/sauvegardes et mesure sous charge restants.
-  Troisieme lot livre : sauvegarde SQLite en ligne par connexion dediee,
-  snapshot temporaire puis compression ; checkpoint TRUNCATE force retire.
-  Restauration du contenu WAL validee, donnees non commitees exclues et
-  nettoyage apres erreur teste. Mesure concurrente representative restante.
-  Quatrieme lot livre : budget cooperatif du snapshot SQLite (300 s par defaut,
-  VODUM_BACKUP_SNAPSHOT_TIMEOUT_SECONDS). Abandon propre sans archive publiee
-  en cas de depassement ; coherence testee pendant des commits concurrents.
-  Compression et parcours des pieces jointes hors de ce budget.
-  Cinquieme lot livre : nettoyage artwork avec pause toutes les 100 entrees,
-  grace de 60 s pour fichiers temporaires/orphelins et exclusion du snapshot
-  portal-backdrop.json. Retention et suppression des anciens binomes testees.
 
 Chaque lot doit demontrer un gain de latence sous charge et conserver les
 regressions fonctionnelles et de securite. Aucun changement d'hebergement ni
 migration de moteur de base n'est requis par cette liste.
 
 ## Validation apres deploiement
+
+Les validations ci-dessous restent ouvertes : ni la presence du code ni les tests
+locaux ne permettent de les cocher sans observation sur l'installation cible.
+
+- [ ] Derniers correctifs P1 : verifier l'audience des campagnes et le report
+  d'expiration lorsque Jellyfin est hors ligne, puis la reprise lorsqu'il revient.
 
 - [ ] Indicateur de mise a jour : verifier la connexion GitHub depuis le conteneur,
   la detection via check_update et le badge apres rechargement de page. Definir
@@ -308,9 +170,17 @@ migration de moteur de base n'est requis par cette liste.
   et renouvellement sur plusieurs serveurs et dans une installation mixte.
   Distinguer compte sans acces, compte encore reference et compte supprime.
 
+- [ ] Dashboard : confirmer que la carte Serveurs apparait au premier rendu,
+  avant le calcul des pics 7 jours. Liste et statuts rendus directement depuis
+  les donnees deja chargees ; pics en cache reutilises, liste conservee en cas
+  de timeout du complement. Duree du calcul historique encore a mesurer.
+
 ## Principes de suivi
 
-- Retirer une ligne lorsqu'elle est terminee et la tracer dans `changelog.md`.
+- Retirer les lignes et sous-lots termines apres publication. Ne conserver ici
+  que le travail restant ; tracer effets et limites dans `changelog.md`.
+- Conserver ouverts les objectifs partiels et les validations apres deploiement ;
+  une verification locale ne vaut pas une validation en production.
 - Valider les changements de schema et les traitements automatiques sur une copie
   representative de la vraie base avant publication.
 - Ajouter des tests de regression aux fonctions sensibles ou exposees sur Internet.
@@ -320,8 +190,6 @@ migration de moteur de base n'est requis par cette liste.
   faisabilite et leur utilite sont confirmees. Elles ne changent pas les
   comportements existants par defaut.
 - Reference technique : [audit Plex/Jellyfin du 6 septembre 2026](docs/audit-couverture-plex-jellyfin-2026-09-06.md).
-
-Etat des briques deja presentes : [controle du premier lot](docs/todo-existant-2026-10-06.md).
 
 ## P1 - Cycle de vie des utilisateurs et fins d'abonnement
 
@@ -422,13 +290,9 @@ droits du serveur et l'acces aux sauvegardes ; le ZIP reste un fichier sensible.
 
 ## Portail utilisateur
 
-- [x] Demandes medias du portail : recherche films/series via ARR, resolution automatique parmi
-  les bibliotheques accessibles, verification Plex/Jellyfin et tous les ARR lies,
-  ajout dans l'ARR prioritaire correspondant aux criteres. Deduplication par ID,
-  CSRF, limites de requetes et reservation contre les soumissions simultanees.
-  Profil qualite et destination par defaut choisis dans la fiche ARR.
-- [ ] Completer les demandes medias avec historique persistant, suivi et quotas
-  fonctionnels ; failover avec reconciliation apres une reponse ARR incertaine.
+- [ ] Completer les demandes medias avec un historique durable consultable et
+  des quotas fonctionnels ; failover avec reconciliation apres une reponse ARR
+  incertaine. Le traitement existant ne rejoue pas automatiquement un POST incertain.
 
 - [ ] Ajouter un historique contractuel des abonnements avec un modele de donnees
   dedie ; l'historique des cadeaux disponible dans Subscriptions ne le remplace pas.
@@ -518,7 +382,6 @@ les versions disponibles au moment de chaque intervention.
   a la racine, qui n'est pas execute comme workflow GitHub Actions.
 - [ ] Evaluer un utilisateur non-root et les permissions des volumes, en
   conservant SQLite CLI et Bash tant que l'entrypoint les utilise.
-- [ ] Exclure explicitement `appdata/` et `backups/` du contexte via `.dockerignore`.
 - [ ] Fiabiliser les metadonnees `INFO` : versions Python/SQLite de l'image
   construite, au lieu de celles de la machine hote dans `create-container.sh`.
 
@@ -532,7 +395,3 @@ les versions disponibles au moment de chaque intervention.
 - Valider les optimisations SQL avec la vraie base et `EXPLAIN QUERY PLAN`; trop
   d'index peut ralentir les ecritures et le bootstrap.
 - Garder les modifications de texte ciblees afin de ne pas recreer de mojibake.
-- [ ] Dashboard : confirmer que la carte Serveurs apparait au premier rendu,
-  avant le calcul des pics 7 jours. Liste et statuts rendus directement depuis
-  les donnees deja chargees ; pics en cache reutilises, liste conservee en cas
-  de timeout du complement. Duree du calcul historique encore a mesurer.

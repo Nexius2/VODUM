@@ -1,3 +1,5 @@
+from core.collections_page_data import load_collections_page_data
+from core.auth_principal import admin_required
 from core.collections_repository import hidden_gems_name
 from core.collections_platforms_catalog import PLATFORMS
 from core.collections_diagnostics import normalize_collection_result, collection_count_snapshots
@@ -11,6 +13,7 @@ import os
 from flask import render_template, request, jsonify, Response, abort
 
 from core.collections_repository import recently_added_name, kids_collection_name
+from core.collections_anime_catalog import anime_charts
 from core.collections_imdb_catalog import imdb_charts, CHART_LABELS
 from core.collections_streaming_options import EXTRA_COUNTRIES, CONTENT_LANGUAGES
 from core.collection_catalog import FUTURE_MODELS, collection_catalog
@@ -59,22 +62,7 @@ def register(app):
     @app.get("/collections")
     def collections_page():
         db = get_db()
-        libraries = [dict(row) for row in db.query(f"""
-            SELECT l.id, l.name, l.server_id, s.name AS server_name, s.status AS server_status,
-                   LOWER(TRIM(s.type)) AS provider, {LIBRARY_TYPE_SQL} AS media_type
-            FROM libraries l JOIN servers s ON s.id=l.server_id
-            WHERE LOWER(TRIM(s.type)) IN ('plex', 'jellyfin')
-            ORDER BY s.name COLLATE NOCASE, l.name COLLATE NOCASE, l.id
-        """) or []]
-        libraries = [row for row in libraries if row["media_type"] in ("movie", "shows")]
-        arr_servers = [dict(row) for row in db.query("""
-            SELECT id, name, LOWER(TRIM(type)) AS type FROM servers
-            WHERE LOWER(TRIM(type)) IN ('radarr', 'sonarr') ORDER BY name COLLATE NOCASE
-        """) or []]
-        for library in libraries:
-            expected = 'radarr' if library['media_type']=='movie' else 'sonarr'
-            library['arr_routes'] = [dict(row) for row in db.query("""SELECT s.id,s.name FROM library_arr_routes r JOIN servers s ON s.id=r.arr_server_id
-                WHERE r.library_id=? AND r.enabled=1 AND LOWER(TRIM(s.type))=? ORDER BY r.priority,r.arr_server_id""",(library['id'],expected))]
+        page_data = load_collections_page_data(db)
         return render_template(
             "collections/collections.html", active_page="collections",
             hidden_gems_names={language:hidden_gems_name(language) for language in CHART_LABELS},
@@ -85,16 +73,17 @@ def register(app):
             awards_options=awards_options(), award_years=list(range(utcnow().year,1899,-1)),
             awards_names={language:{award:awards_collection_name(award,'latest',language).split(' · ')[0] for award in AWARDS} for language in CHART_LABELS},
             tmdb_charts={language:tmdb_charts(language) for language in CHART_LABELS},
+            anime_charts={language:anime_charts(language) for language in CHART_LABELS},
             imdb_charts={language:imdb_charts(language) for language in CHART_LABELS},
             streaming_countries=EXTRA_COUNTRIES, content_languages=CONTENT_LANGUAGES,
             platform_options={key:spec['name'] for key,spec in PLATFORMS.items()},
             catalog=collection_catalog(), future_models=FUTURE_MODELS, collection_debug=is_debug_mode_enabled(),
-            libraries=libraries, arr_servers=arr_servers,
+            libraries=page_data["libraries"], arr_servers=page_data["arr_servers"],
             worldwide_names=WORLDWIDE_TITLES, region_names={language:{region:worldwide_collection_name(region,language) for region in STREAMING_REGIONS} for language in WORLDWIDE_TITLES}, seasonal_events=EVENT_IDS,
             seasonal_names={language:{country:seasonal_collection_name(country,language) for country in countries} for language,countries in STREAMING_COUNTRY_NAMES.items()},
             recent_names={language:{country:recent_collection_name(country,language) for country in countries} for language,countries in STREAMING_COUNTRY_NAMES.items()},
             streaming_names={language:{country:streaming_collection_name(country,language) for country in countries} for language,countries in STREAMING_COUNTRY_NAMES.items()},
-            instances=list_instances(db), collection_settings=collection_settings(db),
+            instances=page_data["instances"], collection_settings=page_data["collection_settings"],
         )
 
     def failure(exc):
@@ -299,6 +288,24 @@ def register(app):
         finally:
             if source is not None:
                 source.close()
+
+    @app.post('/api/collections/settings/secret/<provider>')
+    @admin_required
+    def collections_reveal_secret(provider):
+        secret_columns = {'tmdb': 'secret_tmdb', 'myanimelist': 'secret_myanimelist'}
+        column = secret_columns.get(provider)
+        if column is None:
+            abort(404)
+        try:
+            row = get_db().query_one('SELECT secret_tmdb,secret_myanimelist FROM collection_settings WHERE id=1')
+            stored = row[column] if row else None
+            value = decrypt_secret(stored) if stored else os.environ.get('TMDB_API_KEY') if provider == 'tmdb' else None
+            response = jsonify(ok=True, value=value or '')
+        except SecretDecryptionError as exc:
+            response, status = failure(exc)
+            response.status_code = status
+        response.headers['Cache-Control'] = 'no-store'
+        return response
 
     @app.post('/api/collections/settings')
     def collections_settings_api():

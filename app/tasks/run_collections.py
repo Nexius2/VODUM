@@ -1,3 +1,4 @@
+from core.collection_sync_status import actionable_collection_warnings
 from core.collections_history import compact_legacy_collection_history, store_finished_run
 from core.collections_hidden_gems import run_hidden_gems
 from core.collections_platforms import run_platforms
@@ -20,6 +21,8 @@ from datetime import timedelta
 from core.collections_repository import due_sql, next_occurrence, next_collection_run, stamp, utcnow, global_timezone, CollectionRunCancelled, recover_stale_collection_runs
 from core.collections_memoria import run_memoria
 from core.collections_spotlight import run_spotlight
+from core.collections_anilist import run_anilist
+from core.collections_myanimelist import run_myanimelist
 from core.collections_imdb import run_imdb
 from core.collections_recent_releases import run_recent_releases
 from core.collections_seasonal import run_seasonal
@@ -41,7 +44,7 @@ class CollectionRunTimedOut(CollectionRunCancelled):
     pass
 
 
-ENGINES = {'hidden_gems':run_hidden_gems,'platforms':run_platforms,'continents':run_continents,'franchises':run_franchises,'top_country':run_top_country,'awards':run_awards,'family':run_family,'tmdb':run_tmdb,'kids':run_kids,'recently_added':run_recently_added,'imdb':run_imdb,'memoria':run_memoria,'spotlight':run_spotlight,'streaming_country':run_streaming_country,'streaming_worldwide':run_streaming_worldwide,'recent_releases':run_recent_releases,'seasonal':run_seasonal}
+ENGINES = {'anilist':run_anilist,'myanimelist':run_myanimelist,'hidden_gems':run_hidden_gems,'platforms':run_platforms,'continents':run_continents,'franchises':run_franchises,'top_country':run_top_country,'awards':run_awards,'family':run_family,'tmdb':run_tmdb,'kids':run_kids,'recently_added':run_recently_added,'imdb':run_imdb,'memoria':run_memoria,'spotlight':run_spotlight,'streaming_country':run_streaming_country,'streaming_worldwide':run_streaming_worldwide,'recent_releases':run_recent_releases,'seasonal':run_seasonal}
 
 
 # Only known public error keys may be shown in collection rows.
@@ -54,6 +57,8 @@ VISIBLE_ERRORS={
     'collections.inventory_storage_failed','collections.ownership_failed','collections.title_collision',
     'collections.jellyfin_response_invalid','collections.jellyfin_item_unavailable','collections.plex_order_rejected','collections.publication_failed','collections.plex_title_rejected','collections.family_audio_unknown','collections.streaming_incomplete',
     'collections.streaming_empty','collections.streaming_source_invalid','collections.streaming_unavailable',
+    'collections.anilist_source_invalid','collections.anilist_source_unavailable',
+    'collections.myanimelist_key_required','collections.myanimelist_source_invalid','collections.myanimelist_source_unavailable',
     'collections.imdb_source_unavailable','collections.imdb_source_invalid','collections.tmdb_key_required',
 }
 
@@ -180,7 +185,7 @@ def run(task_id, db):
                 db.execute('UPDATE collection_instances SET priority_pending=0 WHERE id=?',(instance['id'],))
             if result.get('errors'):
                 state = 'error'
-            elif result.get('warnings'):
+            elif actionable_collection_warnings(result.get('warnings') or []):
                 state = 'warning'
         except CollectionRunTimedOut as exc:
             error_type, state = 'CollectionRunTimedOut', 'error'

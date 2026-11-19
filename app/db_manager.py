@@ -1,13 +1,73 @@
 import sqlite3
 import threading
 import logging
+import time
 from typing import Any, Iterable, Optional
 import os
 from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass
 from pathlib import Path
 from functools import wraps
 
 from secret_store import decrypt_server_record
+
+
+@dataclass
+class SQLiteTiming:
+    lock_wait_ns: int = 0
+    sql_ns: int = 0
+    sql_calls: int = 0
+
+
+sqlite_timing = ContextVar("sqlite_timing", default=None)
+
+
+@contextmanager
+def _measure_sql(*, count_call=True):
+    timing = sqlite_timing.get()
+    if timing is None:
+        yield
+        return
+    started_at = time.perf_counter_ns()
+    try:
+        yield
+    finally:
+        timing.sql_ns += time.perf_counter_ns() - started_at
+        if count_call:
+            timing.sql_calls += 1
+
+
+class _TimedTransactionCursor(sqlite3.Cursor):
+    """Measure SQLite calls without including application work between them."""
+
+    def execute(self, *args, **kwargs):
+        with _measure_sql():
+            return super().execute(*args, **kwargs)
+
+    def executemany(self, *args, **kwargs):
+        with _measure_sql():
+            return super().executemany(*args, **kwargs)
+
+    def executescript(self, *args, **kwargs):
+        with _measure_sql():
+            return super().executescript(*args, **kwargs)
+
+    def fetchone(self):
+        with _measure_sql(count_call=False):
+            return super().fetchone()
+
+    def fetchmany(self, *args, **kwargs):
+        with _measure_sql(count_call=False):
+            return super().fetchmany(*args, **kwargs)
+
+    def fetchall(self):
+        with _measure_sql(count_call=False):
+            return super().fetchall()
+
+    def __next__(self):
+        with _measure_sql(count_call=False):
+            return super().__next__()
 
 
 def open_sqlite_connection(
@@ -63,8 +123,9 @@ class _ReadOnlyDatabase:
     def query(self, sql, params=()):
         cursor = self.connection.cursor()
         try:
-            cursor.execute(sql, params)
-            rows = cursor.fetchall()
+            with _measure_sql():
+                cursor.execute(sql, params)
+                rows = cursor.fetchall()
         finally:
             cursor.close()
         if "servers" in sql.lower():
@@ -76,8 +137,9 @@ class _ReadOnlyDatabase:
     def query_one(self, sql, params=()):
         cursor = self.connection.cursor()
         try:
-            cursor.execute(sql, params)
-            row = cursor.fetchone()
+            with _measure_sql():
+                cursor.execute(sql, params)
+                row = cursor.fetchone()
         finally:
             cursor.close()
         if row is not None and "servers" in sql.lower():
@@ -170,6 +232,15 @@ class DBManager:
         finally:
             connection.close()
 
+    @contextmanager
+    def _locked(self):
+        timing = sqlite_timing.get()
+        started_at = time.perf_counter_ns() if timing is not None else 0
+        with self._lock:
+            if timing is not None:
+                timing.lock_wait_ns += time.perf_counter_ns() - started_at
+            yield
+
     def execute(
         self,
         sql: str,
@@ -177,12 +248,13 @@ class DBManager:
         *,
         commit: bool = True
     ) -> sqlite3.Cursor:
-        with self._lock:
+        with self._locked():
             cur = self.conn.cursor()
             try:
-                cur.execute(sql, params)
-                if commit:
-                    self.conn.commit()
+                with _measure_sql():
+                    cur.execute(sql, params)
+                    if commit:
+                        self.conn.commit()
                 return cur
             except Exception:
                 self.conn.rollback()
@@ -192,14 +264,21 @@ class DBManager:
     @contextmanager
     def transaction(self):
         """Yield one cursor while holding the connection lock for an atomic unit."""
-        with self._lock:
-            cursor = self.conn.cursor()
+        with self._locked():
+            timing_enabled = sqlite_timing.get() is not None
+            cursor = self.conn.cursor(factory=_TimedTransactionCursor) if timing_enabled else self.conn.cursor()
             try:
-                cursor.execute("BEGIN IMMEDIATE")
+                if timing_enabled:
+                    with _measure_sql(count_call=False):
+                        sqlite3.Cursor.execute(cursor, "BEGIN IMMEDIATE")
+                else:
+                    cursor.execute("BEGIN IMMEDIATE")
                 yield cursor
-                self.conn.commit()
+                with _measure_sql(count_call=False):
+                    self.conn.commit()
             except Exception:
-                self.conn.rollback()
+                with _measure_sql(count_call=False):
+                    self.conn.rollback()
                 raise
             finally:
                 cursor.close()
@@ -211,12 +290,13 @@ class DBManager:
         *,
         commit: bool = True
     ) -> None:
-        with self._lock:
+        with self._locked():
             cur = self.conn.cursor()
             try:
-                cur.executemany(sql, seq_of_params)
-                if commit:
-                    self.conn.commit()
+                with _measure_sql():
+                    cur.executemany(sql, seq_of_params)
+                    if commit:
+                        self.conn.commit()
             except Exception:
                 self.conn.rollback()
                 raise
@@ -228,11 +308,12 @@ class DBManager:
         sql: str,
         params: Iterable[Any] = ()
     ) -> list[sqlite3.Row | dict]:
-        with self._lock:
+        with self._locked():
             cur = self.conn.cursor()
             try:
-                cur.execute(sql, params)
-                rows = cur.fetchall()
+                with _measure_sql():
+                    cur.execute(sql, params)
+                    rows = cur.fetchall()
                 if "servers" in sql.lower():
                     return [
                         decrypt_server_record(row)
@@ -249,11 +330,12 @@ class DBManager:
         sql: str,
         params: Iterable[Any] = ()
     ) -> Optional[sqlite3.Row | dict]:
-        with self._lock:
+        with self._locked():
             cur = self.conn.cursor()
             try:
-                cur.execute(sql, params)
-                row = cur.fetchone()
+                with _measure_sql():
+                    cur.execute(sql, params)
+                    row = cur.fetchone()
                 if row is not None and "servers" in sql.lower():
                     if "token" in row.keys() or "settings_json" in row.keys():
                         return decrypt_server_record(row)
