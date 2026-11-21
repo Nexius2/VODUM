@@ -247,7 +247,21 @@ def seerr_request_state(data):
     if status != _REQUEST_APPROVED:
         return None
     media = data.get('media')
-    media_status = media.get('status4k' if data.get('is4k') else 'status') if isinstance(media, dict) else None
+    if not isinstance(media, dict):
+        return 'approved'
+    key = 'status4k' if data.get('is4k') else 'status'
+    # A season request is judged by its own seasons: the show-wide status stays
+    # "partial" because of seasons that were never part of this request.
+    requested = [row.get('seasonNumber') for row in data.get('seasons') or [] if isinstance(row, dict)]
+    known = {row.get('seasonNumber'): row.get(key) for row in media.get('seasons') or [] if isinstance(row, dict)}
+    if requested and known:
+        statuses = [known.get(number) for number in requested]
+        if all(value in _STATUS_AVAILABLE for value in statuses):
+            return 'available'
+        if any(value in _STATUS_AVAILABLE + _STATUS_PARTIAL for value in statuses):
+            return 'partial'
+        return 'approved'
+    media_status = media.get(key)
     if media_status in _STATUS_AVAILABLE:
         return 'available'
     if media_status in _STATUS_PARTIAL:

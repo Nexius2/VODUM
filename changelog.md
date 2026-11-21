@@ -49,7 +49,12 @@ L’historique antérieur est conservé dans le [journal archivé](changelog-arc
   introduit précédemment. Seerr répond 202 « No seasons available to request »
   sans rien créer lorsque les saisons choisies sont déjà prises en charge ou
   n'ont pas encore d'épisodes : le portail l'affiche comme « plus rien à
-  demander » et le sélecteur verrouille les saisons sans épisodes. Limites : les
+  demander » et le sélecteur verrouille les saisons sans épisodes. Une demande
+  de saisons est suivie d'après l'état de ses propres saisons (`media.seasons`),
+  car l'état global de la série reste « partiel » à cause des autres saisons.
+  Une demande réelle (série, une saison, au nom du membre) a été créée via le
+  flux VODUM contre l'instance Seerr réelle, approuvée automatiquement, puis
+  supprimée. Limites : les
   permissions Seerr sont lues à chaque recherche sans cache ; un refus 4K par
   Seerr à la soumission est rapporté comme demande refusée par le service.
 - Documentation : [demandes de médias](vodum-docs/docs/media-requests.md).

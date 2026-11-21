@@ -58,7 +58,9 @@ when Seerr tracks one, for the 4K copy. Members then choose per request:
 After submission the recent-request list follows the Seerr request itself:
 *waiting for approval*, *approved* (being processed), *partially available*,
 *available*, *declined by an administrator*, *failed* (Seerr could not process
-it) or *removed* when the request no longer exists in Seerr. The state is read from Seerr when the page loads or
+it) or *removed* when the request no longer exists in Seerr. A season request
+is judged by the seasons it asked for, not by the show-wide status, which
+stays partial as long as other seasons are missing. The state is read from Seerr when the page loads or
 polls, at most once a minute per request and within a short deadline, so a
 slow Seerr only delays the update. The list keeps the last known state while
 Seerr is unreachable and stops following a request once it is available,
