@@ -6,14 +6,54 @@
   const jobList = jobsPanel?.querySelector('[data-job-list]');
   if (jobsPanel) messages.portal_requests_queued = jobsPanel.dataset.queued;
   let hasActiveJobs = jobsPanel?.dataset.active === '1';
+  let hasTrackedJobs = jobsPanel?.dataset.tracking === '1';
   let pollPending = false;
   let refreshRequested = false;
   let jobTimer;
   let lastJobs;
+  const FINAL_SEERR_STATES = ['declined', 'available', 'removed'];
 
   function scheduleJobsPoll() {
     clearTimeout(jobTimer);
-    if (hasActiveJobs && !document.hidden) jobTimer = setTimeout(refreshJobs, 2500);
+    if (document.hidden) return;
+    // Jobs still running poll quickly; a submitted Seerr request only needs an occasional look.
+    if (hasActiveJobs) jobTimer = setTimeout(refreshJobs, 2500);
+    else if (hasTrackedJobs) jobTimer = setTimeout(refreshJobs, 60000);
+  }
+
+  function badge(state, text) {
+    const span = document.createElement('span');
+    span.className = 'portal-request-badge mt-1';
+    span.dataset.state = state;
+    span.textContent = text;
+    return span;
+  }
+
+  function renderJob(job) {
+    const row = document.createElement('li');
+    row.className = 'rounded-lg bg-slate-950 px-3 py-2';
+    const title = document.createElement('strong');
+    title.textContent = job.title;
+    row.append(title);
+    const details = [];
+    if (job.is_4k) details.push(messages.portal_requests_badge_4k);
+    if (Array.isArray(job.seasons) && job.seasons.length) details.push(`${messages.portal_requests_seasons_summary} ${job.seasons.join(', ')}`);
+    if (details.length) {
+      const detail = document.createElement('span');
+      detail.className = 'ml-2 text-xs text-slate-400';
+      detail.textContent = details.join(' · ');
+      row.append(detail);
+    }
+    const status = document.createElement('span');
+    status.className = 'block text-slate-300';
+    status.textContent = job.status === 'done'
+      ? messages[job.result] || messages.portal_requests_unavailable
+      : job.status === 'queued' ? jobsPanel.dataset.queued : jobsPanel.dataset.checking;
+    row.append(status);
+    if (job.seerr_state && messages[`portal_requests_seerr_state_${job.seerr_state}`]) {
+      row.append(badge(job.seerr_state, messages[`portal_requests_seerr_state_${job.seerr_state}`]));
+    }
+    return row;
   }
 
   async function refreshJobs() {
@@ -37,23 +77,12 @@
       if (!response.ok) return;
       const {jobs} = await response.json();
       hasActiveJobs = jobs.some((job) => job.status !== 'done');
+      hasTrackedJobs = jobs.some((job) => job.seerr_state && !FINAL_SEERR_STATES.includes(job.seerr_state));
       const snapshot = JSON.stringify(jobs);
       if (lastJobs === snapshot) return;
       lastJobs = snapshot;
       jobsPanel.hidden = jobs.length === 0;
-      jobList.replaceChildren(...jobs.map((job) => {
-        const row = document.createElement('li');
-        row.className = 'rounded-lg bg-slate-950 px-3 py-2';
-        const title = document.createElement('strong');
-        title.textContent = job.title;
-        const status = document.createElement('span');
-        status.className = 'block text-slate-300';
-        status.textContent = job.status === 'done'
-          ? messages[job.result] || messages.portal_requests_unavailable
-          : job.status === 'queued' ? jobsPanel.dataset.queued : jobsPanel.dataset.checking;
-        row.append(title, status);
-        return row;
-      }));
+      jobList.replaceChildren(...jobs.map(renderJob));
     } catch (_) {
       // Keep the last known job state and try again on the next visible poll.
     } finally {
@@ -70,7 +99,7 @@
 
   document.addEventListener('visibilitychange', () => {
     clearTimeout(jobTimer);
-    if (!document.hidden && hasActiveJobs) refreshJobs();
+    if (!document.hidden && (hasActiveJobs || hasTrackedJobs)) refreshJobs();
   });
   window.addEventListener('pageshow', (event) => {
     if (event.persisted && jobsPanel) refreshJobs();
@@ -99,6 +128,91 @@
     progressOwner = null;
   }
   progressDialog.addEventListener('cancel', (event) => event.preventDefault());
+
+  // Season picker for Seerr series: every season not yet available is preselected.
+  const seasonsDialog = document.getElementById('request-seasons-dialog');
+  const seasonsForm = document.getElementById('request-seasons-form');
+  const seasonsList = seasonsDialog?.querySelector('[data-seasons-list]');
+  const seasonsAll = seasonsDialog?.querySelector('[data-seasons-all]');
+  const seasonsError = seasonsDialog?.querySelector('[data-seasons-error]');
+  function seasonBoxes() {
+    return [...seasonsList.querySelectorAll('input[type="checkbox"]:not(:disabled)')];
+  }
+  function syncSeasonsAll() {
+    const boxes = seasonBoxes();
+    seasonsAll.checked = boxes.length > 0 && boxes.every((box) => box.checked);
+    seasonsAll.disabled = boxes.length === 0;
+  }
+  seasonsAll?.addEventListener('change', () => {
+    seasonBoxes().forEach((box) => { box.checked = seasonsAll.checked; });
+  });
+  seasonsList?.addEventListener('change', syncSeasonsAll);
+  seasonsDialog?.querySelector('[data-seasons-cancel]').addEventListener('click', () => seasonsDialog.close('cancel'));
+  function renderSeasons(seasons) {
+    seasonsList.replaceChildren(...seasons.map((season) => {
+      const label = document.createElement('label');
+      const box = document.createElement('input');
+      box.type = 'checkbox'; box.value = String(season.number);
+      box.className = 'rounded border-slate-600 bg-slate-950';
+      box.checked = season.requestable; box.disabled = !season.requestable;
+      if (!season.requestable) label.dataset.disabled = '';
+      const text = document.createElement('span');
+      text.textContent = season.name || String(season.number);
+      if (season.episodes) text.textContent += ` · ${season.episodes} ${messages.portal_requests_episodes}`;
+      label.append(box, text);
+      if (season.status && messages[`portal_requests_badge_${season.status}`]) {
+        label.append(badge(season.status, messages[`portal_requests_badge_${season.status}`]));
+      }
+      return label;
+    }));
+    syncSeasonsAll();
+  }
+  async function loadSeasons(form) {
+    const url = new URL(form.dataset.seasonsUrl, window.location.href);
+    const choice = form.querySelector('input[type="checkbox"][name="is_4k"]');
+    if (choice) url.searchParams.set('is_4k', choice.checked ? '1' : '0');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+    try {
+      const response = await fetch(url, {credentials: 'same-origin', signal: controller.signal, headers: {Accept: 'application/json'}});
+      if (response.redirected || !response.ok) return null;
+      const data = await response.json();
+      return Array.isArray(data.seasons) ? data.seasons : null;
+    } catch (_) {
+      return null;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  // Resolves to the chosen season numbers, [] for "all" (list unavailable), or null when cancelled.
+  function chooseSeasons(seasons) {
+    if (!seasonsDialog || typeof seasonsDialog.showModal !== 'function') return Promise.resolve([]);
+    renderSeasons(seasons);
+    seasonsError.hidden = true;
+    return new Promise((resolve) => {
+      function finish(event) {
+        seasonsForm.removeEventListener('submit', onSubmit);
+        seasonsDialog.removeEventListener('close', onClose);
+        resolve(event);
+      }
+      function onSubmit(event) {
+        event.preventDefault();
+        const chosen = seasonBoxes().filter((box) => box.checked).map((box) => Number(box.value));
+        if (!chosen.length) {
+          seasonsError.textContent = messages.portal_requests_seasons_none_selected;
+          seasonsError.hidden = false;
+          return;
+        }
+        seasonsDialog.close('confirm');
+        finish(chosen);
+      }
+      function onClose() { finish(null); }
+      seasonsForm.addEventListener('submit', onSubmit);
+      seasonsDialog.addEventListener('close', onClose);
+      seasonsDialog.showModal();
+      seasonsDialog.querySelector('h2').focus();
+    });
+  }
   let timer;
   function close() {
     clearTimeout(timer);
@@ -143,7 +257,7 @@
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       if (form.getAttribute('aria-busy') === 'true') return;
-      const button = form.querySelector('button');
+      const button = form.querySelector('button[type="submit"], button:not([type])');
       const label = button.textContent;
       const progress = form.querySelector('[data-request-progress]');
       if (!startProgress(form, progress)) return;
@@ -151,7 +265,20 @@
       button.disabled = true; button.textContent = form.dataset.working;
       form.setAttribute('aria-busy', 'true');
       try {
-        const response = await fetch(form.action, {method: 'POST', body: new FormData(form), credentials: 'same-origin', headers: {Accept: 'application/json'}});
+        const body = new FormData(form);
+        if (form.dataset.seasonsUrl) {
+          const seasons = await loadSeasons(form);
+          if (seasons === null) {
+            show('portal_requests_seasons_unavailable');
+          } else {
+            stopProgress(form);
+            const chosen = await chooseSeasons(seasons);
+            if (chosen === null) return;
+            if (chosen.length) body.set('seasons', chosen.join(','));
+            if (!startProgress(form, progress)) return;
+          }
+        }
+        const response = await fetch(form.action, {method: 'POST', body, credentials: 'same-origin', headers: {Accept: 'application/json'}});
         if (response.redirected) throw new Error('Session unavailable');
         const data = await response.json();
         stopProgress(form);
