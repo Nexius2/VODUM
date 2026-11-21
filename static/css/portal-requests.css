@@ -51,6 +51,7 @@
 .portal-request-badge[data-state="partial"] { border-color: #f59e0b; background: #78350f; color: #fef3c7; }
 .portal-request-badge[data-state="pending"], .portal-request-badge[data-state="pending_approval"], .portal-request-badge[data-state="approved"] { border-color: #6366f1; background: #312e81; color: #e0e7ff; }
 .portal-request-badge[data-state="declined"], .portal-request-badge[data-state="failed"], .portal-request-badge[data-state="removed"] { border-color: #fb7185; background: #881337; color: #ffe4e6; }
+.portal-request-badge[data-state="unaired"] { border-color: #475569; background: #0f172a; color: #94a3b8; }
 .portal-request-seasons { max-height: 50vh; overflow-y: auto; }
 .portal-request-seasons label { display: flex; align-items: center; gap: .6rem; padding: .35rem .5rem; border-radius: .5rem; }
 .portal-request-seasons label:hover { background: #1e293b; }

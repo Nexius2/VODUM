@@ -233,7 +233,7 @@ def process_media_request_job(db):
           tracking.get("seerr_request_id"), *lease))
     if updated.rowcount:
         success = result in {"portal_requests_added", "portal_requests_pending", "portal_requests_present",
-                             "portal_requests_seerr_awaiting_approval"}
+                             "portal_requests_seerr_awaiting_approval", "portal_requests_seerr_nothing_to_request"}
         details = {"media_kind": job["kind"], "external_id": job["external_id"],
                    "media_title": job["title"], "request_result": result,
                    "request_source": job["source"] or "arr"}

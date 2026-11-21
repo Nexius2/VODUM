@@ -3051,6 +3051,8 @@
   "portal_requests_seerr_state_removed": "La richiesta non esiste più nel servizio di richieste",
   "portal_requests_seerr_state_failed": "Elaborazione non riuscita nel servizio di richieste",
   "portal_requests_season": "Stagione",
+  "portal_requests_seerr_nothing_to_request": "Niente più da richiedere: le stagioni scelte sono già gestite o non hanno ancora episodi.",
+  "portal_requests_badge_unaired": "Non ancora trasmessa",
   "portal_request_count_total": "Richieste effettuate",
   "portal_request_count_added": "Aggiunte inviate",
   "portal_request_count_present": "Già disponibili",

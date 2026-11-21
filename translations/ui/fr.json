@@ -3025,6 +3025,8 @@
   "portal_requests_seerr_state_removed": "La demande n'existe plus dans le service de demandes",
   "portal_requests_seerr_state_failed": "Le traitement a échoué dans le service de demandes",
   "portal_requests_season": "Saison",
+  "portal_requests_seerr_nothing_to_request": "Plus rien à demander : les saisons choisies sont déjà prises en charge ou n'ont pas encore d'épisodes.",
+  "portal_requests_badge_unaired": "Pas encore diffusée",
   "portal_request_count_total": "Demandes effectuées",
   "portal_request_count_added": "Ajouts envoyés",
   "portal_request_count_present": "Déjà disponibles",

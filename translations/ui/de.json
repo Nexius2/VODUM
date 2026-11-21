@@ -3051,6 +3051,8 @@
   "portal_requests_seerr_state_removed": "Die Anfrage existiert im Anfragedienst nicht mehr",
   "portal_requests_seerr_state_failed": "Verarbeitung im Anfragedienst fehlgeschlagen",
   "portal_requests_season": "Staffel",
+  "portal_requests_seerr_nothing_to_request": "Nichts mehr anzufragen: Die gewählten Staffeln sind bereits in Bearbeitung oder haben noch keine Folgen.",
+  "portal_requests_badge_unaired": "Noch nicht ausgestrahlt",
   "portal_request_count_total": "Anfragen",
   "portal_request_count_added": "Übermittelte Hinzufügungen",
   "portal_request_count_present": "Bereits verfügbar",

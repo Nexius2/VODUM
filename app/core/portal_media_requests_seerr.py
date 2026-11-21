@@ -141,9 +141,12 @@ def seerr_seasons(details, is_4k=False):
             continue
         badge = seerr_status_badge(states.get(number))
         episodes = season.get('episodeCount')
-        rows.append({'number': number, 'name': str(season.get('name') or '')[:80],
-                     'episodes': episodes if type(episodes) is int else None,
-                     'status': badge, 'requestable': badge not in ('available', 'pending')})
+        episodes = episodes if type(episodes) is int else None
+        # Seerr refuses a season without episodes ("No seasons available to request").
+        if badge is None and episodes == 0:
+            badge = 'unaired'
+        rows.append({'number': number, 'name': str(season.get('name') or '')[:80], 'episodes': episodes,
+                     'status': badge, 'requestable': badge not in ('available', 'pending', 'unaired')})
     rows.sort(key=lambda row: row['number'])
     return rows[:MAX_SEASONS]
 
@@ -253,7 +256,13 @@ def seerr_request_state(data):
 
 
 def seerr_error_result(http_status):
-    """Portal result for a rejected POST; Seerr reports duplicates and quotas itself."""
+    """Portal result for a POST that created nothing; Seerr reports duplicates and quotas itself.
+
+    202 is Seerr's "No seasons available to request": every chosen season is
+    already handled or has no episodes yet, so nothing was created.
+    """
+    if http_status == 202:
+        return 'portal_requests_seerr_nothing_to_request'
     if http_status == 409:
         return 'portal_requests_pending'
     if http_status == 403:
