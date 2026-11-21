@@ -9,9 +9,9 @@ from urllib.parse import quote, urlsplit
 from core.http_security import server_http_session
 from logging_utils import get_logger
 from core.library_request_routing import compatible_arr_type, route_matches_media
-from core.portal_media_requests_seerr import (seerr_details, seerr_error_result, seerr_find_user,
-    seerr_is_4k, seerr_media_state, seerr_metadata, seerr_request_payload, seerr_request_result,
-    seerr_search, seerr_user_lookup_keys)
+from core.portal_media_requests_seerr import (seerr_can_request_4k, seerr_details, seerr_error_result,
+    seerr_find_user, seerr_is_4k, seerr_media_state, seerr_metadata, seerr_request_payload,
+    seerr_request_result, seerr_request_state, seerr_search, seerr_seasons, seerr_user_lookup_keys)
 from core.portal_provider_identity_state import row_media_identity_is_usable
 from core.plex_guids import plex_external_guid
 from db_manager import isolated_read_operation
@@ -227,17 +227,31 @@ def search_media(db, user_id, kind, term):
                 seerr_servers.setdefault(server['id'], server)
                 seerr_kinds.add(media_kind)
     # One Seerr search covers movies and series; ask each linked instance once.
+    # The member's Seerr user is read alongside, so the card can offer 4K only
+    # when Seerr would accept it.
+    identity_keys = _member_identity_keys(db, user_id) if seerr_servers else None
     for server in seerr_servers.values():
-        identities.append(('seerr', None))
+        identities.append(('seerr', server['id']))
         jobs.append(lambda server=server: seerr_search(api, server, term.strip(), seerr_kinds))
+        if any(identity_keys.values()):
+            identities.append(('seerr_user', server['id']))
+            jobs.append(lambda server=server: seerr_find_user(api, server, identity_keys))
     if not jobs: raise MediaRequestError('portal_requests_no_libraries')
     results = {media_kind:{} for media_kind in kinds}
     success = False
-    for (source, media_kind), rows in zip(identities, parallel_reads(jobs)):
+    outcomes = list(zip(identities, parallel_reads(jobs)))
+    seerr_users = {server_id: user for (source, server_id), user in outcomes
+                   if source == 'seerr_user' and isinstance(user, dict)}
+    for (source, media_kind), rows in outcomes:
+        if source == 'seerr_user': continue
         if not isinstance(rows,list): continue
         success = True
         if source == 'seerr':
+            server = seerr_servers[media_kind]
+            user = seerr_users.get(server['id'])
             for row in rows:
+                row['default_4k'] = seerr_is_4k(server)
+                row['can_4k'] = bool(user) and seerr_can_request_4k(user['permissions'], row['kind'])
                 results[row['kind']].setdefault(('seerr', row['external_id']), row)
             continue
         id_key = 'tmdbId' if media_kind == 'movie' else 'tvdbId'
@@ -502,13 +516,15 @@ def _authorized_before_post(db, user_id, library, before_post):
     return authorize_post
 
 
-def submit_request(db,user_id,library_id,kind,external_id,resolution='', *, before_post=None, source='arr'):
+def submit_request(db,user_id,library_id,kind,external_id,resolution='', *, before_post=None, source='arr',
+                   is_4k=None, seasons=None, on_submitted=None):
     if kind not in ('movie','series') or type(external_id) is not int or external_id <= 0 or resolution not in ('','720p','1080p','2160p'):
         raise MediaRequestError('portal_requests_invalid')
     if source not in ('arr','seerr'):
         raise MediaRequestError('portal_requests_invalid')
     if source == 'seerr':
-        return submit_seerr_request(db,user_id,library_id,kind,external_id,resolution,before_post=before_post)
+        return submit_seerr_request(db,user_id,library_id,kind,external_id,resolution,before_post=before_post,
+                                    is_4k=is_4k, seasons=seasons, on_submitted=on_submitted)
     provider = 'radarr' if kind == 'movie' else 'sonarr'
     automatic = library_id is None
     destinations, explicit_library_ids = _request_destinations(db, user_id, library_id, kind, 'arr')
@@ -610,9 +626,43 @@ def _member_identity_keys(db, user_id):
     return seerr_user_lookup_keys([dict(row) for row in rows])
 
 
-def submit_seerr_request(db,user_id,library_id,kind,external_id,resolution='', *, before_post=None):
-    """Request through Seerr on behalf of the member; Seerr decides duplicates and approval."""
+def _seerr_details_from(servers, kind, external_id):
+    """Details of one title from the first Seerr instance that knows it, with that server's id."""
+    for server in servers:
+        try:
+            candidate = seerr_details(api, server, kind, external_id)
+        except MediaRequestError:
+            continue
+        if isinstance(candidate, dict) and candidate.get('id') == external_id:
+            return candidate, server['id']
+    raise MediaRequestError('portal_requests_unavailable')
+
+
+def seerr_season_options(db, user_id, external_id, is_4k=None):
+    """Seasons the member may pick for a series, read from a Seerr routed to one of their libraries."""
+    if type(external_id) is not int or external_id <= 0:
+        raise MediaRequestError('portal_requests_invalid')
+    destinations, _ = _request_destinations(db, user_id, None, 'series', 'seerr')
+    servers = list({s['id']:s for _,linked in destinations for s in linked}.values())
+    deadline_token = _request_deadline.set(time.monotonic() + 15)
+    try:
+        details, server_id = _seerr_details_from(servers, 'series', external_id)
+    finally:
+        _request_deadline.reset(deadline_token)
+    server = next(s for s in servers if s['id'] == server_id)
+    return seerr_seasons(details, seerr_is_4k(server) if is_4k is None else bool(is_4k))
+
+
+def submit_seerr_request(db,user_id,library_id,kind,external_id,resolution='', *, before_post=None,
+                         is_4k=None, seasons=None, on_submitted=None):
+    """Request through Seerr on behalf of the member; Seerr decides duplicates and approval.
+
+    ``is_4k`` is the member's choice (None when they made none); it only counts
+    when their Seerr user may request 4K, otherwise the server flag applies.
+    ``seasons`` lists the chosen seasons of a series; None asks for all of them.
+    """
     automatic = library_id is None
+    seasons = list(seasons) if kind == 'series' and seasons else None
     destinations, explicit_library_ids = _request_destinations(db, user_id, library_id, kind, 'seerr')
     get_logger('portal_media_requests').info(
         'Seerr request candidates user_id=%s kind=%s destinations=%s', user_id, kind,
@@ -622,16 +672,7 @@ def submit_seerr_request(db,user_id,library_id,kind,external_id,resolution='', *
     deadline_token = _request_deadline.set(time.monotonic() + 120)
     try:
         servers = list({s['id']:s for _,linked in destinations for s in linked}.values())
-        details, details_server_id = None, None
-        for server in servers:
-            try:
-                candidate = seerr_details(api, server, kind, external_id)
-            except MediaRequestError:
-                continue
-            if isinstance(candidate, dict) and candidate.get('id') == external_id:
-                details, details_server_id = candidate, server['id']
-                break
-        if details is None: raise MediaRequestError('portal_requests_unavailable')
+        details, details_server_id = _seerr_details_from(servers, kind, external_id)
         metadata = {**seerr_metadata(details), 'resolution': resolution}
         eligible = _eligible_destinations(destinations, metadata, automatic)
         eligible.sort(key=lambda item: (
@@ -639,25 +680,36 @@ def submit_seerr_request(db,user_id,library_id,kind,external_id,resolution='', *
             not item[0]['preferred'], item[0]['request_priority'], item[0]['id']))
         library, _, matching = eligible[0]
         server = matching[0]
-        is_4k = seerr_is_4k(server)
         if server['id'] != details_server_id:
             details = seerr_details(api, server, kind, external_id)
             if not isinstance(details, dict) or details.get('id') != external_id:
                 raise MediaRequestError('portal_requests_unavailable')
-        state = seerr_media_state(details, is_4k)
+        seerr_user = None
+        def member():
+            nonlocal seerr_user
+            if seerr_user is None:
+                seerr_user = seerr_find_user(api, server, _member_identity_keys(db, user_id))
+            if seerr_user is None:
+                get_logger('portal_media_requests').info(
+                    'Seerr request without matching user user_id=%s seerr_id=%s', user_id, server['id'])
+                raise MediaRequestError('portal_requests_seerr_user_missing')
+            return seerr_user
+        default_4k = seerr_is_4k(server)
+        is_4k = bool(is_4k) if is_4k is not None else default_4k
+        # A choice that differs from the server flag needs the member's Seerr permission.
+        if is_4k != default_4k and not seerr_can_request_4k(member()['permissions'], kind):
+            is_4k = default_4k
+        state = seerr_media_state(details, is_4k, seasons)
         if state == 'present': return 'portal_requests_present'
         if state == 'pending': return 'portal_requests_pending'
-        seerr_user_id = seerr_find_user(api, server, _member_identity_keys(db, user_id))
-        if seerr_user_id is None:
-            get_logger('portal_media_requests').info(
-                'Seerr request without matching user user_id=%s seerr_id=%s', user_id, server['id'])
-            raise MediaRequestError('portal_requests_seerr_user_missing')
+        seerr_user = member()
         external_ids = details.get('externalIds')
         tvdb_id = external_ids.get('tvdbId') if isinstance(external_ids, dict) else None
-        payload = seerr_request_payload(kind, external_id, seerr_user_id=seerr_user_id, is_4k=is_4k, tvdb_id=tvdb_id)
+        payload = seerr_request_payload(kind, external_id, seerr_user_id=seerr_user['id'], is_4k=is_4k,
+                                        tvdb_id=tvdb_id, seasons=seasons)
         get_logger('portal_media_requests').info(
-            'Seerr request destination user_id=%s kind=%s external_id=%s library_id=%s seerr_id=%s is_4k=%s',
-            user_id,kind,external_id,library['id'],server['id'],is_4k)
+            'Seerr request destination user_id=%s kind=%s external_id=%s library_id=%s seerr_id=%s is_4k=%s seasons=%s',
+            user_id,kind,external_id,library['id'],server['id'],is_4k,seasons or 'all')
         authorize = _authorized_before_post(db, user_id, library, before_post)
         if authorize is not None:
             authorize()
@@ -669,6 +721,9 @@ def submit_seerr_request(db,user_id,library_id,kind,external_id,resolution='', *
             return mapped
         result = seerr_request_result(created)
         if result is None: raise MediaRequestError('portal_requests_unavailable')
+        if on_submitted is not None:
+            on_submitted({'seerr_server_id': server['id'], 'seerr_request_id': created['id'],
+                          'seerr_state': seerr_request_state(created), 'is_4k': is_4k, 'seasons': seasons})
         return result
     finally:
         _request_deadline.reset(deadline_token)
