@@ -27,12 +27,17 @@ Identical metadata/access values avoid unnecessary rewrites. Removing a vanished
 provider library removes its local grants transactionally; if local constraints
 prevent cleanup, synchronization preserves those grants rather than half-deleting them.
 
-## Sonarr/Radarr routing
+## Sonarr/Radarr and Seerr routing
 
 ARR services support [portal requests](media-requests.md) and optional collection
 acquisition. Add the service, save its request defaults and assign compatible
 routes on the destination library. Radarr handles films and Sonarr handles series.
 A server card can report incomplete request configuration until defaults are saved.
+
+A Seerr server (Overseerr/Jellyseerr) is an alternative request backend: it is
+added with its API key, needs no request defaults and can be routed to both film
+and series libraries. Requests then follow Seerr's own profiles, quotas and
+approvals; see [Media requests](media-requests.md).
 
 Routes are library-specific. The existence of an unrelated ARR server does not
 authorize a portal user to send it requests or expose it in their system status.

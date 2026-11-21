@@ -172,7 +172,7 @@
       </div>
 
       <div class="relative z-[1] text-[11px] text-slate-400 leading-tight">
-        {% if s.type in ["sonarr", "radarr"] %}{{ t("arr_connection_help") }}{% else %}{{ s.libraries_count }} {{ t("libraries") }} · {{ s.users_count }} {{ t("users") }}{% endif %}
+        {% if s.type == "seerr" %}{{ t("seerr_connection_help") }}{% elif s.type in ["sonarr", "radarr"] %}{{ t("arr_connection_help") }}{% else %}{{ s.libraries_count }} {{ t("libraries") }} · {{ s.users_count }} {{ t("users") }}{% endif %}
       </div>
 
       {% if s.server_version %}

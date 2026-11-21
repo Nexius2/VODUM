@@ -1,6 +1,6 @@
 """User-scoped saved health; never probes services or exposes connection data."""
 from db_manager import isolated_read_operation
-from core.library_request_routing import compatible_arr_type
+from core.library_request_routing import compatible_request_server
 
 
 def health_state(value):
@@ -32,10 +32,10 @@ def load_portal_system_status(db, user_id):
         JOIN library_arr_routes r ON r.library_id=l.id AND r.enabled=1
         JOIN servers s ON s.id=r.arr_server_id
         WHERE mu.vodum_user_id=? AND LOWER(TRIM(ms.type)) IN ('plex','jellyfin')
-            AND LOWER(TRIM(s.type)) IN ('sonarr','radarr')
+            AND LOWER(TRIM(s.type)) IN ('sonarr','radarr','seerr')
         ORDER BY s.name,s.id,l.name""",(int(user_id),)):
         row=dict(row)
-        if compatible_arr_type(row['library_type'])!=str(row['type']).strip().lower():continue
+        if not compatible_request_server(row['type'],row['library_type']):continue
         system=indirect.setdefault(row['id'],{'id':row['id'],'name':row['name'],'type':row['type'],
             'status':health_state(row['status']),'last_checked':row['last_checked'],'offline_since':row.get('unavailable_since') if health_state(row['status'])=='down' else None,'libraries':[]})
         label=row['media_server_name']+' / '+row['library_name']

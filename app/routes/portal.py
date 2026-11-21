@@ -306,7 +306,7 @@ def register(app):
                 results = search_media(db,user_id,'all',term)
                 signer = URLSafeTimedSerializer(app.secret_key,salt='portal-media-request')
                 for row in results:
-                    row['selection'] = signer.dumps({'user_id':user_id,'kind':row['kind'],'external_id':row['external_id'],'title':row['title'][:200]})
+                    row['selection'] = signer.dumps({'user_id':user_id,'kind':row['kind'],'external_id':row['external_id'],'title':row['title'][:200],'source':row.get('source','arr')})
             except MediaRequestError as exc: flash(str(exc),'error')
         return render_template('portal/requests.html',libraries=libraries,results=results,
             query=term,backdrop_posters=backdrop_posters,
@@ -323,6 +323,35 @@ def register(app):
         _require_feature(db, "requests")
         response = jsonify(jobs=media_request_jobs(db, int(g.auth_principal["account_id"])))
         response.headers["Cache-Control"] = "private, no-store"
+        return response
+
+    @app.get("/portal/requests/seasons")
+    @portal_login_required
+    @permission_required("portal.media_requests.create_own")
+    @portal_user_required
+    def portal_media_request_seasons():
+        """Seasons of a Seerr series the member is about to request, with the state Seerr knows."""
+        from core.portal_media_requests import MediaRequestError, seerr_season_options
+        from core.portal_rate_limit import portal_request_allowed
+        from web.security import get_client_ip
+        from itsdangerous import URLSafeTimedSerializer, BadSignature
+        db = get_db(); _require_feature(db, 'requests')
+        user_id = int(g.auth_principal['vodum_user_id'])
+        if not portal_request_allowed(db, 'media_seasons:' + str(user_id), get_client_ip(), limit=60): abort(429)
+        try:
+            selection = URLSafeTimedSerializer(app.secret_key, salt='portal-media-request').loads(
+                request.args.get('selection', ''), max_age=3600)
+            if selection['user_id'] != user_id or selection['kind'] != 'series' or selection.get('source') != 'seerr':
+                raise ValueError()
+            is_4k = {'1': True, '0': False}.get(request.args.get('is_4k'))
+            seasons = seerr_season_options(db, user_id, selection['external_id'], is_4k)
+        except MediaRequestError as exc:
+            response = jsonify(result=str(exc)); response.status_code = 409
+        except (BadSignature, KeyError, TypeError, ValueError):
+            response = jsonify(result='portal_requests_invalid'); response.status_code = 422
+        else:
+            response = jsonify(seasons=seasons)
+        response.headers['Cache-Control'] = 'private, no-store'
         return response
 
     @app.get('/portal/requests/backdrop/<int:history_id>')
@@ -350,6 +379,7 @@ def register(app):
     def portal_media_request_submit():
         from core.portal_media_request_jobs import enqueue_media_request
         from core.portal_media_requests import MediaRequestError
+        from core.portal_media_requests_seerr import parse_season_selection
         from core.portal_rate_limit import portal_request_allowed
         from web.security import get_client_ip
         from itsdangerous import URLSafeTimedSerializer, BadSignature
@@ -359,9 +389,19 @@ def register(app):
         try:
             selection = URLSafeTimedSerializer(app.secret_key,salt='portal-media-request').loads(request.form.get('selection',''),max_age=3600)
             if selection['user_id'] != user_id: raise ValueError()
-            g.portal_request_details = {'media_kind':selection['kind'], 'external_id':selection['external_id'], 'media_title':selection.get('title','')[:200]}
+            source = selection.get('source', 'arr')
+            # Member choices only exist for Seerr: 4K when Seerr allows it, seasons for series.
+            # A hidden "0" precedes the checkbox "1", so the last value is the member's choice.
+            is_4k = {'1': True, '0': False}.get((request.form.getlist('is_4k') or [None])[-1]) if source == 'seerr' else None
+            seasons = None
+            if source == 'seerr' and selection['kind'] == 'series' and request.form.get('seasons', '').strip():
+                seasons = parse_season_selection(request.form.get('seasons'))
+            g.portal_request_details = {'media_kind':selection['kind'], 'external_id':selection['external_id'], 'media_title':selection.get('title','')[:200], 'request_source':source}
+            if source == 'seerr':
+                g.portal_request_details.update({'is_4k': is_4k, 'seasons': seasons or 'all'})
             job_id = enqueue_media_request(db, int(g.auth_principal["account_id"]),
-                                           selection["kind"], selection["external_id"], selection.get("title"))
+                                           selection["kind"], selection["external_id"], selection.get("title"), source,
+                                           is_4k=is_4k, seasons=seasons)
             g.portal_request_queued = True
             if request.headers.get('Accept') == 'application/json':
                 return jsonify(job_id=job_id, result="portal_requests_queued"), 202

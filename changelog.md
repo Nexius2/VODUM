@@ -4,6 +4,100 @@ Les changements non publiés sont regroupés dans ce fichier. Les dates indiquen
 la mise à jour du journal, sans confirmation de déploiement en production.
 L’historique antérieur est conservé dans le [journal archivé](changelog-archive-2026-11-19.md).
 
+## Non publié — mise à jour du 2026-11-21
+
+### Portail : statut Seerr, choix 4K, saisons et suivi des demandes
+
+- Les résultats de recherche issus de Seerr affichent le statut que Seerr
+  connaît déjà (disponible, partiellement disponible, déjà demandé), pour la
+  version standard et, le cas échéant, pour la version 4K
+  ([aide Seerr](app/core/portal_media_requests_seerr.py), [gabarit](templates/portal/requests.html)).
+- Choix 4K par demande : si l'utilisateur Seerr associé au membre possède la
+  permission « demander en 4K » (ou sa variante films/séries), la fiche propose
+  une case 4K préréglée sur l'option du serveur ; sinon l'option du serveur
+  s'applique comme avant. Le choix est revérifié côté serveur à la soumission
+  ([demandes](app/core/portal_media_requests.py)). La recherche lit l'utilisateur
+  Seerr du membre en parallèle de la recherche (un appel `/api/v1/user` de plus).
+- Sélection des saisons : la demande d'une série via Seerr ouvre un sélecteur
+  alimenté par la nouvelle route `/portal/requests/seasons` (sélection signée,
+  limitée en fréquence, [routes](app/routes/portal.py)). Les saisons non encore
+  disponibles sont présélectionnées, les saisons connues de Seerr sont
+  verrouillées, les épisodes spéciaux ne sont pas proposés. Sans JavaScript ou
+  si la liste ne se charge pas, toute la série est demandée comme avant.
+  La charge utile Seerr envoie la liste des saisons au lieu de `all`.
+- Suivi après soumission : la liste « Demandes récentes » affiche les choix (4K,
+  saisons) et l'état rapporté par Seerr (en attente d'approbation, approuvée,
+  partiellement disponible, disponible, refusée, échouée, supprimée), lu via
+  `/api/v1/request/{id}` au chargement et lors du rafraîchissement, au plus une
+  fois par minute et par demande dans un délai court
+  ([suivi](app/core/portal_media_request_tracking.py)). Le dernier état connu
+  est conservé si Seerr ne répond pas ; le suivi s'arrête une fois la demande
+  disponible, refusée ou supprimée. Le script interroge la liste toutes les
+  minutes tant qu'une demande Seerr reste ouverte
+  ([script](static/js/pages/portal-requests.js)).
+- Migration additive au démarrage : colonnes `is_4k`, `seasons`,
+  `seerr_server_id`, `seerr_request_id`, `seerr_state`, `seerr_checked_at` sur
+  `portal_media_request_jobs` ([travaux](app/core/portal_media_request_jobs.py)),
+  ajoutées par le bootstrap portail existant. Déployer Python, gabarit, script,
+  feuille de style et traductions ensemble puis redémarrer. Traductions dans les
+  cinq langues. Tests locaux uniquement (logique pure, flux de soumission et
+  file de travaux simulés) ; lectures seules vérifiées contre une instance Seerr
+  3.5 réelle (forme des réponses de recherche, utilisateurs, séries, demandes),
+  sans validation en production. Correction : Seerr refuse les espaces encodés
+  en `+` dans la recherche (HTTP 400) ; la requête est désormais encodée en
+  pourcentage, ce qui corrige aussi la recherche multi-mots du service Seerr
+  introduit précédemment. Seerr répond 202 « No seasons available to request »
+  sans rien créer lorsque les saisons choisies sont déjà prises en charge ou
+  n'ont pas encore d'épisodes : le portail l'affiche comme « plus rien à
+  demander » et le sélecteur verrouille les saisons sans épisodes. Une demande
+  de saisons est suivie d'après l'état de ses propres saisons (`media.seasons`),
+  car l'état global de la série reste « partiel » à cause des autres saisons.
+  Une demande réelle (série, une saison, au nom du membre) a été créée via le
+  flux VODUM contre l'instance Seerr réelle, approuvée automatiquement, puis
+  supprimée. Limites : les
+  permissions Seerr sont lues à chaque recherche sans cache ; un refus 4K par
+  Seerr à la soumission est rapporté comme demande refusée par le service.
+- Documentation : [demandes de médias](vodum-docs/docs/media-requests.md).
+
+### Seerr comme service de demandes du portail
+
+- Nouveau type de serveur `seerr` (Overseerr/Jellyseerr) détecté automatiquement
+  à l'ajout via `/api/v1/auth/me` ([détection](app/core/server_detection.py)),
+  vérifié par la tâche de contrôle des serveurs ([connexion](app/core/seerr_connections.py)).
+  La clé API est chiffrée comme les autres secrets ; aucune synchronisation.
+- Les [routes de demandes](app/core/library_request_routing.py) acceptent un
+  serveur Seerr pour les bibliothèques de films et de séries, avec les mêmes
+  conditions (genres, collections). La fiche serveur Seerr propose uniquement
+  l'option « demander les versions 4K » ; profils et dossiers restent gérés par Seerr.
+- Portail : la recherche interroge Seerr (`/api/v1/search`) pour les bibliothèques
+  routées vers lui et conserve l'origine de chaque résultat. La soumission
+  ([Seerr](app/core/portal_media_requests_seerr.py), [demandes](app/core/portal_media_requests.py))
+  associe le membre à l'utilisateur Seerr par identifiant Plex ou Jellyfin, lit le
+  statut déjà connu de Seerr (disponible / en cours) et envoie la demande au nom du
+  membre (`/api/v1/request`). Sans utilisateur Seerr correspondant, message
+  explicite et aucune demande. Les réponses « doublon » et « quota/permission »
+  de Seerr sont traduites ; une demande en attente d'approbation est signalée.
+  Aucune analyse de bibliothèque par VODUM pour ces routes.
+- Le réglage « Demandes de médias » du portail est activable dès qu'un ARR
+  configuré ou un serveur Seerr existe ([réglages portail](app/routes/portal_admin.py)).
+  Le statut système du portail inclut les Seerr routés.
+- Migration additive au démarrage : colonne `portal_media_request_jobs.source`
+  (`arr` par défaut) ajoutée par le [bootstrap portail](app/core/db_bootstrap_portal.py),
+  index des travaux actifs recréé avec cette colonne. Déployer Python, templates,
+  script et traductions ensemble puis redémarrer. Traductions dans les cinq langues ;
+  tests locaux (logique de correspondance, charge utile, flux de soumission simulé)
+  uniquement, sans validation en production. Limites : toutes les saisons sont
+  demandées pour une série ; pas de suivi de l'approbation après la soumission.
+- Documentation : [demandes de médias](vodum-docs/docs/media-requests.md) et
+  [serveurs & bibliothèques](vodum-docs/docs/servers-libraries.md).
+- Fiche serveur Seerr simplifiée : la section de routage ([template](templates/servers/_request_routing.html))
+  n'affiche pour un Seerr qu'une case par bibliothèque (« les membres peuvent
+  demander via Seerr »), sans ordre ARR, priorités ni critères, puisque Seerr
+  choisit lui-même la cible, le profil et le dossier. La priorité est calculée
+  automatiquement pour ne pas entrer en conflit avec un ARR déjà lié. Les fiches
+  Sonarr/Radarr sont inchangées. Trois nouveaux libellés dans les cinq langues ;
+  rendu et aller-retour du formulaire vérifiés par tests locaux.
+
 ## Non publié — mise à jour du 2026-11-19
 
 ### Libellés intégrés aux jauges CPU/RAM

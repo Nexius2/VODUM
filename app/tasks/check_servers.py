@@ -12,6 +12,7 @@ check_servers.py - VERSION TXT LOGGING
 from core.error_reporting import log_handled_failure
 
 from core.arr_connections import arr_get_status
+from core.seerr_connections import seerr_get_status
 from core.jellyfin_auth import jellyfin_headers
 import urllib3
 import xml.etree.ElementTree as ET
@@ -291,6 +292,15 @@ def run(task_id: int, db):
                         base_url = candidate_url
                         new_name = found_name or old_name
                         server_version = meta
+                        break
+
+            elif s["type"] == "seerr":
+                for candidate_url in base_urls:
+                    status, found_name, _, meta = seerr_get_status(s, candidate_url, s["token"])
+                    if status == "up":
+                        base_url = candidate_url
+                        new_name = found_name or old_name
+                        server_version = meta or server_version
                         break
 
             # -----------------------------

@@ -1,5 +1,5 @@
 from core.error_reporting import log_handled_failure
-from core.portal_media_requests import has_saved_request_defaults
+from core.portal_media_requests import media_requests_backend_ready
 from mailing_utils import build_portal_login_url
 from flask import abort, current_app, flash, redirect, render_template, request, url_for, jsonify
 
@@ -224,7 +224,7 @@ def register(app):
         return render_template(
             "settings/portal.html",
             settings=dict(settings),
-            portal_arr_ready=any(has_saved_request_defaults(dict(s)) for s in db.query("SELECT settings_json FROM servers WHERE LOWER(type) IN ('sonarr','radarr')")),
+            portal_arr_ready=media_requests_backend_ready(db),
             active_page="portal_settings",
             portal_runtime_ready=readiness["ready"],
             portal_readiness=readiness,
@@ -340,8 +340,7 @@ def register(app):
         current = get_db().query_one(
             f"SELECT {PORTAL_READINESS_COLUMNS} FROM settings WHERE id = 1"
         )
-        from core.portal_media_requests import has_saved_request_defaults
-        arr_ready = any(has_saved_request_defaults(dict(s)) for s in get_db().query("SELECT settings_json FROM servers WHERE LOWER(type) IN ('sonarr','radarr')"))
+        arr_ready = media_requests_backend_ready(get_db())
         debug_mode = bool(current and int(current["debug_mode"] or 0) == 1)
         preview = normalize_portal_settings(
             request.form, activation_ready=True, debug_mode=debug_mode, arr_ready=arr_ready
