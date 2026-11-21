@@ -1,4 +1,4 @@
-SUPPORTED_SERVER_TYPES = ("plex", "jellyfin", "sonarr", "radarr")
+SUPPORTED_SERVER_TYPES = ("plex", "jellyfin", "sonarr", "radarr", "seerr")
 
 
 def normalize_server_type(form) -> str:

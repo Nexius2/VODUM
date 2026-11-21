@@ -16,6 +16,7 @@ def detect_server(url, token):
     try:
         probes = [
             ("arr", "/api/v3/system/status", {"X-Api-Key":token,"Accept":"application/json"}),
+            ("seerr", "/api/v1/auth/me", {"X-Api-Key":token,"Accept":"application/json"}),
             ("jellyfin", "/System/Info", jellyfin_headers(token)),
             ("plex", "/", {"X-Plex-Token":token,"Accept":"application/xml"}),
         ]
@@ -43,6 +44,20 @@ def detect_server(url, token):
                         continue
                     return {"type":app,"name":data.get("instanceName") or app.capitalize(),
                             "identifier":None,"version":str(data["version"])}
+                if provider == "seerr":
+                    from core.seerr_connections import seerr_identity
+                    if seerr_identity(data) is None:
+                        continue
+                    version = None
+                    try:
+                        status = http.get(url.rstrip("/")+"/api/v1/status",headers=headers,
+                                          timeout=4,allow_redirects=False)
+                        if status.status_code == 200 and isinstance(status.json(),dict):
+                            version = status.json().get("version")
+                    except Exception:
+                        version = None
+                    return {"type":"seerr","name":"Seerr","identifier":None,
+                            "version":str(version) if version else None}
                 if (str(data.get("ProductName") or "").lower() != "jellyfin"
                         or not data.get("Id") or not data.get("Version")):
                     continue

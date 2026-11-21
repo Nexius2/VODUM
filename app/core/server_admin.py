@@ -72,7 +72,7 @@ def commit_server_creation(db) -> bool:
 
 
 def queue_server_discovery(server_type: str, logger) -> bool:
-    if server_type in ("sonarr", "radarr"):
+    if server_type in ("sonarr", "radarr", "seerr"):
         return True
     try:
         enqueue_server_discovery_sequence(server_type)
