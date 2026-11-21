@@ -4,6 +4,40 @@ Les changements non publiés sont regroupés dans ce fichier. Les dates indiquen
 la mise à jour du journal, sans confirmation de déploiement en production.
 L’historique antérieur est conservé dans le [journal archivé](changelog-archive-2026-11-19.md).
 
+## Non publié — mise à jour du 2026-11-21
+
+### Seerr comme service de demandes du portail
+
+- Nouveau type de serveur `seerr` (Overseerr/Jellyseerr) détecté automatiquement
+  à l'ajout via `/api/v1/auth/me` ([détection](app/core/server_detection.py)),
+  vérifié par la tâche de contrôle des serveurs ([connexion](app/core/seerr_connections.py)).
+  La clé API est chiffrée comme les autres secrets ; aucune synchronisation.
+- Les [routes de demandes](app/core/library_request_routing.py) acceptent un
+  serveur Seerr pour les bibliothèques de films et de séries, avec les mêmes
+  conditions (genres, collections). La fiche serveur Seerr propose uniquement
+  l'option « demander les versions 4K » ; profils et dossiers restent gérés par Seerr.
+- Portail : la recherche interroge Seerr (`/api/v1/search`) pour les bibliothèques
+  routées vers lui et conserve l'origine de chaque résultat. La soumission
+  ([Seerr](app/core/portal_media_requests_seerr.py), [demandes](app/core/portal_media_requests.py))
+  associe le membre à l'utilisateur Seerr par identifiant Plex ou Jellyfin, lit le
+  statut déjà connu de Seerr (disponible / en cours) et envoie la demande au nom du
+  membre (`/api/v1/request`). Sans utilisateur Seerr correspondant, message
+  explicite et aucune demande. Les réponses « doublon » et « quota/permission »
+  de Seerr sont traduites ; une demande en attente d'approbation est signalée.
+  Aucune analyse de bibliothèque par VODUM pour ces routes.
+- Le réglage « Demandes de médias » du portail est activable dès qu'un ARR
+  configuré ou un serveur Seerr existe ([réglages portail](app/routes/portal_admin.py)).
+  Le statut système du portail inclut les Seerr routés.
+- Migration additive au démarrage : colonne `portal_media_request_jobs.source`
+  (`arr` par défaut) ajoutée par le [bootstrap portail](app/core/db_bootstrap_portal.py),
+  index des travaux actifs recréé avec cette colonne. Déployer Python, templates,
+  script et traductions ensemble puis redémarrer. Traductions dans les cinq langues ;
+  tests locaux (logique de correspondance, charge utile, flux de soumission simulé)
+  uniquement, sans validation en production. Limites : toutes les saisons sont
+  demandées pour une série ; pas de suivi de l'approbation après la soumission.
+- Documentation : [demandes de médias](vodum-docs/docs/media-requests.md) et
+  [serveurs & bibliothèques](vodum-docs/docs/servers-libraries.md).
+
 ## Non publié — mise à jour du 2026-11-19
 
 ### Libellés intégrés aux jauges CPU/RAM
