@@ -6,6 +6,46 @@ L’historique antérieur est conservé dans le [journal archivé](changelog-arc
 
 ## Non publié — mise à jour du 2026-11-21
 
+### Portail : statut Seerr, choix 4K, saisons et suivi des demandes
+
+- Les résultats de recherche issus de Seerr affichent le statut que Seerr
+  connaît déjà (disponible, partiellement disponible, déjà demandé), pour la
+  version standard et, le cas échéant, pour la version 4K
+  ([aide Seerr](app/core/portal_media_requests_seerr.py), [gabarit](templates/portal/requests.html)).
+- Choix 4K par demande : si l'utilisateur Seerr associé au membre possède la
+  permission « demander en 4K » (ou sa variante films/séries), la fiche propose
+  une case 4K préréglée sur l'option du serveur ; sinon l'option du serveur
+  s'applique comme avant. Le choix est revérifié côté serveur à la soumission
+  ([demandes](app/core/portal_media_requests.py)). La recherche lit l'utilisateur
+  Seerr du membre en parallèle de la recherche (un appel `/api/v1/user` de plus).
+- Sélection des saisons : la demande d'une série via Seerr ouvre un sélecteur
+  alimenté par la nouvelle route `/portal/requests/seasons` (sélection signée,
+  limitée en fréquence, [routes](app/routes/portal.py)). Les saisons non encore
+  disponibles sont présélectionnées, les saisons connues de Seerr sont
+  verrouillées, les épisodes spéciaux ne sont pas proposés. Sans JavaScript ou
+  si la liste ne se charge pas, toute la série est demandée comme avant.
+  La charge utile Seerr envoie la liste des saisons au lieu de `all`.
+- Suivi après soumission : la liste « Demandes récentes » affiche les choix (4K,
+  saisons) et l'état rapporté par Seerr (en attente d'approbation, approuvée,
+  partiellement disponible, disponible, refusée, supprimée), lu via
+  `/api/v1/request/{id}` au chargement et lors du rafraîchissement, au plus une
+  fois par minute et par demande dans un délai court
+  ([suivi](app/core/portal_media_request_tracking.py)). Le dernier état connu
+  est conservé si Seerr ne répond pas ; le suivi s'arrête une fois la demande
+  disponible, refusée ou supprimée. Le script interroge la liste toutes les
+  minutes tant qu'une demande Seerr reste ouverte
+  ([script](static/js/pages/portal-requests.js)).
+- Migration additive au démarrage : colonnes `is_4k`, `seasons`,
+  `seerr_server_id`, `seerr_request_id`, `seerr_state`, `seerr_checked_at` sur
+  `portal_media_request_jobs` ([travaux](app/core/portal_media_request_jobs.py)),
+  ajoutées par le bootstrap portail existant. Déployer Python, gabarit, script,
+  feuille de style et traductions ensemble puis redémarrer. Traductions dans les
+  cinq langues. Tests locaux uniquement (logique pure, flux de soumission et
+  file de travaux simulés), sans validation en production. Limites : les
+  permissions Seerr sont lues à chaque recherche sans cache ; un refus 4K par
+  Seerr à la soumission est rapporté comme demande refusée par le service.
+- Documentation : [demandes de médias](vodum-docs/docs/media-requests.md).
+
 ### Seerr comme service de demandes du portail
 
 - Nouveau type de serveur `seerr` (Overseerr/Jellyseerr) détecté automatiquement
