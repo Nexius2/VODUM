@@ -15,7 +15,7 @@ ALLOWED_EVENTS = {
     "friend_invitation", "identity_linked", "identity_unlinked", "reauthentication",
     "media_requested", "media_profile_updated", "support_message_sent",
 }
-SAFE_DETAIL_KEYS = {"reason", "method", "provider", "action", "status", "page", "media_kind", "external_id", "media_title", "request_result"}
+SAFE_DETAIL_KEYS = {"reason", "method", "provider", "action", "status", "page", "media_kind", "external_id", "media_title", "request_result", "request_source"}
 
 
 def _fingerprint(kind: str, value: str | None) -> str | None:
