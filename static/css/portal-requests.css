@@ -45,3 +45,15 @@
 .portal-request-dialog h2 { margin: 0 0 1rem; }
 .portal-request-dialog .portal-request-progress { align-items: flex-start; line-height: 1.6; }
 .portal-request-dialog .portal-request-spinner { width: 1.4rem; height: 1.4rem; margin-top: .2rem; }
+
+.portal-request-badge { display: inline-block; margin-left: .35rem; border-radius: 9999px; padding: .125rem .6rem; font-size: .75rem; font-weight: 500; border: 1px solid #334155; background: #1e293b; color: #cbd5e1; }
+.portal-request-badge[data-state="available"] { border-color: #10b981; background: #064e3b; color: #d1fae5; }
+.portal-request-badge[data-state="partial"] { border-color: #f59e0b; background: #78350f; color: #fef3c7; }
+.portal-request-badge[data-state="pending"], .portal-request-badge[data-state="pending_approval"], .portal-request-badge[data-state="approved"] { border-color: #6366f1; background: #312e81; color: #e0e7ff; }
+.portal-request-badge[data-state="declined"], .portal-request-badge[data-state="failed"], .portal-request-badge[data-state="removed"] { border-color: #fb7185; background: #881337; color: #ffe4e6; }
+.portal-request-badge[data-state="unaired"] { border-color: #475569; background: #0f172a; color: #94a3b8; }
+.portal-request-seasons { max-height: 50vh; overflow-y: auto; }
+.portal-request-seasons label { display: flex; align-items: center; gap: .6rem; padding: .35rem .5rem; border-radius: .5rem; }
+.portal-request-seasons label:hover { background: #1e293b; }
+.portal-request-seasons label[data-disabled] { color: #64748b; }
+.portal-request-seasons .portal-request-badge { margin-left: auto; }

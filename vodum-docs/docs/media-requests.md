@@ -42,6 +42,32 @@ member's quota and, if needed, keeps the request waiting for an administrator's
 approval; the portal shows that outcome. VODUM does not scan libraries itself
 for Seerr routes.
 
+Search results from Seerr carry its own status for the title: **Available**,
+**Partially available** or **Already requested**, for the regular copy and,
+when Seerr tracks one, for the 4K copy. Members then choose per request:
+
+- **4K.** When the member's Seerr user holds the *Request 4K* permission (or
+  its movie/series variant), the card offers a 4K checkbox preset to the
+  server's 4K flag. Without that permission the server flag applies as before;
+  a hidden or manually changed field cannot bypass the permission check, which
+  is repeated when the request is submitted.
+- **Seasons.** Requesting a series opens a season picker read from Seerr.
+  Every season not yet available is preselected; seasons already available or
+  in progress are shown locked. Specials are not offered. Without JavaScript,
+  or if the season list cannot be loaded, the whole series is requested, which
+  Seerr resolves to the seasons still missing.
+
+After submission the recent-request list follows the Seerr request itself:
+*waiting for approval*, *approved* (being processed), *partially available*,
+*available*, *declined by an administrator*, *failed* (Seerr could not process
+it) or *removed* when the request no longer exists in Seerr. A season request
+is judged by the seasons it asked for, not by the show-wide status, which
+stays partial as long as other seasons are missing. The state is read from Seerr when the page loads or
+polls, at most once a minute per request and within a short deadline, so a
+slow Seerr only delays the update. The list keeps the last known state while
+Seerr is unreachable and stops following a request once it is available,
+declined or removed; entries leave the list after 24 hours as usual.
+
 Access is checked on the server. A hidden or manually changed browser field
 cannot grant access to another user's library or an unrelated ARR instance.
 
