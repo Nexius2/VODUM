@@ -109,7 +109,7 @@
     const toast = document.createElement('div');
     toast.className = 'portal-request-toast';
     toast.dataset.requestToast = '';
-    toast.dataset.tone = ['portal_requests_present', 'portal_requests_added'].includes(result) ? 'success' : (['portal_requests_pending', 'portal_requests_queued'].includes(result) ? 'info' : 'error');
+    toast.dataset.tone = ['portal_requests_present', 'portal_requests_added'].includes(result) ? 'success' : (['portal_requests_pending', 'portal_requests_queued', 'portal_requests_seerr_awaiting_approval'].includes(result) ? 'info' : 'error');
     const text = document.createElement('span');
     text.textContent = messages[result] || messages.portal_requests_unavailable;
     const button = document.createElement('button');

@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS portal_media_request_jobs (
     kind TEXT NOT NULL CHECK(kind IN ('movie', 'series')),
     external_id INTEGER NOT NULL,
     title TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'arr' CHECK(source IN ('arr', 'seerr')),
     status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued', 'checking', 'submitting', 'done')),
     result TEXT,
     attempts INTEGER NOT NULL DEFAULT 0,
@@ -28,9 +29,13 @@ CREATE TABLE IF NOT EXISTS portal_media_request_jobs (
     finished_at TEXT
 )
 """
+JOB_COLUMNS = {
+    # Existing databases predate the Seerr backend; ARR stays the default.
+    "source": "TEXT NOT NULL DEFAULT 'arr' CHECK(source IN ('arr', 'seerr'))",
+}
 JOB_INDEXES = (
     """CREATE UNIQUE INDEX IF NOT EXISTS idx_portal_request_active
-       ON portal_media_request_jobs(account_id, kind, external_id) WHERE status <> 'done'""",
+       ON portal_media_request_jobs(account_id, kind, external_id, source) WHERE status <> 'done'""",
     """CREATE INDEX IF NOT EXISTS idx_portal_request_queue
        ON portal_media_request_jobs(status, created_at)""",
 )
@@ -50,14 +55,16 @@ def _can_submit(row):
     return row and state_allows_portal(row["account_status"], row["user_status"])
 
 
-def enqueue_media_request(db, account_id, kind, external_id, title):
+def enqueue_media_request(db, account_id, kind, external_id, title, source="arr"):
     if kind not in ("movie", "series") or type(external_id) is not int or not 0 < external_id <= 2**63 - 1:
+        raise MediaRequestError("portal_requests_invalid")
+    if source not in ("arr", "seerr"):
         raise MediaRequestError("portal_requests_invalid")
     with db.transaction() as cursor:
         cursor.execute("""
             SELECT id FROM portal_media_request_jobs
-            WHERE account_id = ? AND kind = ? AND external_id = ? AND status <> 'done'
-        """, (account_id, kind, external_id))
+            WHERE account_id = ? AND kind = ? AND external_id = ? AND source = ? AND status <> 'done'
+        """, (account_id, kind, external_id, source))
         existing = cursor.fetchone()
         if existing:
             return existing["id"]
@@ -70,9 +77,9 @@ def enqueue_media_request(db, account_id, kind, external_id, title):
             raise MediaRequestError("portal_requests_busy")
         job_id = uuid4().hex
         cursor.execute("""
-            INSERT INTO portal_media_request_jobs(id, account_id, kind, external_id, title)
-            VALUES (?, ?, ?, ?, ?)
-        """, (job_id, account_id, kind, external_id, str(title or "")[:200]))
+            INSERT INTO portal_media_request_jobs(id, account_id, kind, external_id, title, source)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (job_id, account_id, kind, external_id, str(title or "")[:200], source))
     _WAKE.set()
     return job_id
 
@@ -103,7 +110,7 @@ def _claim(db):
             WHERE status IN ('checking', 'submitting') AND lease_until <= CURRENT_TIMESTAMP
         """)
         cursor.execute("""
-            SELECT j.id, j.account_id, j.kind, j.external_id, j.title, a.vodum_user_id
+            SELECT j.id, j.account_id, j.kind, j.external_id, j.title, j.source, a.vodum_user_id
             FROM portal_media_request_jobs j JOIN portal_accounts a ON a.id = j.account_id
             WHERE j.status = 'queued' AND NOT EXISTS (
                 SELECT 1 FROM portal_media_request_jobs WHERE status IN ('checking', 'submitting')
@@ -151,7 +158,7 @@ def process_media_request_job(db):
         if not _can_submit(db.query_one(_ALLOWED, account)):
             raise MediaRequestError("portal_requests_unavailable")
         result = submit_request(db, job["vodum_user_id"], None, job["kind"], job["external_id"],
-                                before_post=before_post)
+                                before_post=before_post, source=job["source"] or "arr")
     except MediaRequestError as exc:
         result = str(exc)
         if submitting and result == "portal_requests_unavailable":
@@ -165,11 +172,13 @@ def process_media_request_job(db):
         WHERE id = ? AND lease_id = ?
     """, (result, *lease))
     if updated.rowcount:
-        success = result in {"portal_requests_added", "portal_requests_pending", "portal_requests_present"}
+        success = result in {"portal_requests_added", "portal_requests_pending", "portal_requests_present",
+                             "portal_requests_seerr_awaiting_approval"}
         record_portal_event(db, "media_requested", "success" if success else "failure",
                             portal_account_id=job["account_id"],
                             details={"media_kind": job["kind"], "external_id": job["external_id"],
-                                     "media_title": job["title"], "request_result": result})
+                                     "media_title": job["title"], "request_result": result,
+                                     "request_source": job["source"] or "arr"})
     return True
 
 

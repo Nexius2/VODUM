@@ -4,9 +4,13 @@ from __future__ import annotations
 def ensure_portal_foundation_schema(conn, cursor, *, table_exists, ensure_column):
     """Create the disabled-by-default user portal authentication foundation."""
     from core.portal_media_requests import CLAIM_SCHEMA
-    from core.portal_media_request_jobs import JOB_INDEXES, JOB_SCHEMA
+    from core.portal_media_request_jobs import JOB_COLUMNS, JOB_INDEXES, JOB_SCHEMA
     cursor.execute(CLAIM_SCHEMA)
     cursor.execute(JOB_SCHEMA)
+    for column, definition in JOB_COLUMNS.items():
+        ensure_column(cursor, "portal_media_request_jobs", column, definition)
+    # The active-job index gained the source column; rebuild it when it predates that.
+    cursor.execute("DROP INDEX IF EXISTS idx_portal_request_active")
     for statement in JOB_INDEXES:
         cursor.execute(statement)
     from core.db_bootstrap_activation import ensure_activation_schema

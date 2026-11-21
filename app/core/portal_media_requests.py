@@ -9,6 +9,9 @@ from urllib.parse import quote, urlsplit
 from core.http_security import server_http_session
 from logging_utils import get_logger
 from core.library_request_routing import compatible_arr_type, route_matches_media
+from core.portal_media_requests_seerr import (seerr_details, seerr_error_result, seerr_find_user,
+    seerr_is_4k, seerr_media_state, seerr_metadata, seerr_request_payload, seerr_request_result,
+    seerr_search, seerr_user_lookup_keys)
 from core.portal_provider_identity_state import row_media_identity_is_usable
 from core.plex_guids import plex_external_guid
 from db_manager import isolated_read_operation
@@ -136,7 +139,13 @@ def accessible_libraries(db, user_id):
     return list(result.values())
 
 
-def linked_arrs(db, library):
+def linked_arrs(db, library, backend=None):
+    """Request services routed to a library, ordered by priority.
+
+    ``backend`` restricts the result to ``'arr'`` (Sonarr/Radarr) or ``'seerr'``.
+    Without explicit routes, the first ready ARR of the compatible kind applies,
+    then the first Seerr instance.
+    """
     provider = compatible_arr_type(library['type'])
     configured = db.query('SELECT * FROM library_arr_routes WHERE library_id=? ORDER BY priority,arr_server_id', (library['id'],)) or []
     if configured:
@@ -144,17 +153,36 @@ def linked_arrs(db, library):
     else:
         first = next((row for row in (db.query('SELECT * FROM servers WHERE LOWER(type)=? ORDER BY id', (provider,)) or [])
                       if has_saved_request_defaults(dict(row))), None)
+        if first is None:
+            first = db.query_one("SELECT * FROM servers WHERE LOWER(type)='seerr' ORDER BY id")
         ids = [(first['id'],1)] if first else []
     result = []
     for arr_id, priority in ids:
-        server = db.query_one('SELECT * FROM servers WHERE id=? AND LOWER(type)=?', (arr_id,provider))
-        if server and has_saved_request_defaults(dict(server)):
+        server = db.query_one("SELECT * FROM servers WHERE id=? AND LOWER(type) IN (?,'seerr')", (arr_id,provider))
+        if server and request_backend_ready(dict(server)) and (backend is None or request_backend(server) == backend):
             server = dict(server)
             row = db.query_one('SELECT conditions_json FROM library_arr_conditions WHERE library_id=? AND arr_server_id=?', (library['id'],arr_id))
             server['conditions'] = json.loads(row['conditions_json']) if row else {}
             server['priority'] = priority
             result.append(server)
     return result
+
+
+def request_backend(server):
+    return 'seerr' if str(server['type']).strip().lower() == 'seerr' else 'arr'
+
+
+def request_backend_ready(server):
+    """Seerr needs only its API key; an ARR also needs saved request defaults."""
+    if request_backend(server) == 'seerr':
+        return True
+    return has_saved_request_defaults(server)
+
+
+def media_requests_backend_ready(db):
+    """True when the portal can route at least one request somewhere."""
+    rows = db.query("SELECT type, settings_json FROM servers WHERE LOWER(type) IN ('sonarr','radarr','seerr')") or []
+    return any(request_backend_ready(dict(row)) for row in rows)
 
 
 def request_libraries(db, user_id):
@@ -181,27 +209,42 @@ def search_media(db, user_id, kind, term):
     kinds = ('movie','series') if kind == 'all' else (kind,)
     libraries = request_libraries(db,user_id)
     jobs, identities = [], []
+    seerr_servers, seerr_kinds = {}, set()
     for media_kind in kinds:
         provider = 'radarr' if media_kind == 'movie' else 'sonarr'
-        if not any(compatible_arr_type(library['type']) == provider for library in libraries):
+        routed = [library for library in libraries if compatible_arr_type(library['type']) == provider]
+        if not routed:
             continue
-        servers = [dict(row) for row in db.query(
-            'SELECT * FROM servers WHERE LOWER(type)=? ORDER BY id', (provider,))]
-        for server in servers:
-            identities.append(media_kind)
-            jobs.append(lambda server=server, media_kind=media_kind:
-                api(server, '/api/v3/' + media_kind + '/lookup', params={'term':term.strip()}))
+        if any(linked_arrs(db, library, 'arr') for library in routed):
+            servers = [dict(row) for row in db.query(
+                'SELECT * FROM servers WHERE LOWER(type)=? ORDER BY id', (provider,))]
+            for server in servers:
+                identities.append(('arr', media_kind))
+                jobs.append(lambda server=server, media_kind=media_kind:
+                    api(server, '/api/v3/' + media_kind + '/lookup', params={'term':term.strip()}))
+        for library in routed:
+            for server in linked_arrs(db, library, 'seerr'):
+                seerr_servers.setdefault(server['id'], server)
+                seerr_kinds.add(media_kind)
+    # One Seerr search covers movies and series; ask each linked instance once.
+    for server in seerr_servers.values():
+        identities.append(('seerr', None))
+        jobs.append(lambda server=server: seerr_search(api, server, term.strip(), seerr_kinds))
     if not jobs: raise MediaRequestError('portal_requests_no_libraries')
     results = {media_kind:{} for media_kind in kinds}
     success = False
-    for media_kind, rows in zip(identities, parallel_reads(jobs)):
+    for (source, media_kind), rows in zip(identities, parallel_reads(jobs)):
         if not isinstance(rows,list): continue
         success = True
+        if source == 'seerr':
+            for row in rows:
+                results[row['kind']].setdefault(('seerr', row['external_id']), row)
+            continue
         id_key = 'tmdbId' if media_kind == 'movie' else 'tvdbId'
         for item in rows:
             external_id = item.get(id_key)
             if not isinstance(external_id,int) or external_id <= 0: continue
-            results[media_kind].setdefault(external_id, {'external_id':external_id, 'kind':media_kind,
+            results[media_kind].setdefault(('arr', external_id), {'source':'arr', 'external_id':external_id, 'kind':media_kind,
                 'title':item.get('title') or '', 'year':item.get('year'), 'overview':item.get('overview') or '',
                 'poster':poster_url(item)})
     if not success: raise MediaRequestError('portal_requests_unavailable')
@@ -411,17 +454,15 @@ def has_saved_request_defaults(server):
         return False
 
 
-def submit_request(db,user_id,library_id,kind,external_id,resolution='', *, before_post=None):
-    if kind not in ('movie','series') or type(external_id) is not int or external_id <= 0 or resolution not in ('','720p','1080p','2160p'):
-        raise MediaRequestError('portal_requests_invalid')
-    all_libraries = accessible_libraries(db,user_id)
+def _request_destinations(db, user_id, library_id, kind, backend):
+    """Eligible (library, routed services) pairs for one backend, best first."""
     provider = 'radarr' if kind == 'movie' else 'sonarr'
     automatic = library_id is None
     destinations = []
-    for candidate in all_libraries:
+    for candidate in accessible_libraries(db,user_id):
         if not candidate['requests_enabled'] or compatible_arr_type(candidate['type']) != provider: continue
         if not automatic and candidate['id'] != library_id: continue
-        linked = linked_arrs(db,candidate)
+        linked = linked_arrs(db,candidate,backend)
         if linked: destinations.append((candidate,linked))
     if not destinations:
         raise MediaRequestError('portal_requests_no_libraries' if automatic else 'portal_requests_invalid')
@@ -433,6 +474,44 @@ def submit_request(db,user_id,library_id,kind,external_id,resolution='', *, befo
         item[0]['id'] not in explicit_library_ids,
         not item[0]['preferred'], item[0]['request_priority'],
         item[0]['id']))
+    return destinations, explicit_library_ids
+
+
+def _eligible_destinations(destinations, metadata, automatic):
+    eligible = []
+    for candidate, linked in destinations:
+        matching = []
+        for server in linked:
+            # Quality belongs to the ARR profile, not a user resolution.
+            conditions = {k:v for k,v in server['conditions'].items() if not automatic or k != 'resolutions'}
+            if route_matches_media(conditions,metadata): matching.append(server)
+        if matching:
+            eligible.append((candidate,linked,matching))
+    if not eligible: raise MediaRequestError('portal_requests_no_match')
+    return eligible
+
+
+def _authorized_before_post(db, user_id, library, before_post):
+    if before_post is None:
+        return None
+    def authorize_post():
+        if not any(row['id'] == library['id'] and row['requests_enabled']
+                   for row in accessible_libraries(db, user_id)):
+            raise MediaRequestError('portal_requests_no_libraries')
+        before_post()
+    return authorize_post
+
+
+def submit_request(db,user_id,library_id,kind,external_id,resolution='', *, before_post=None, source='arr'):
+    if kind not in ('movie','series') or type(external_id) is not int or external_id <= 0 or resolution not in ('','720p','1080p','2160p'):
+        raise MediaRequestError('portal_requests_invalid')
+    if source not in ('arr','seerr'):
+        raise MediaRequestError('portal_requests_invalid')
+    if source == 'seerr':
+        return submit_seerr_request(db,user_id,library_id,kind,external_id,resolution,before_post=before_post)
+    provider = 'radarr' if kind == 'movie' else 'sonarr'
+    automatic = library_id is None
+    destinations, explicit_library_ids = _request_destinations(db, user_id, library_id, kind, 'arr')
     get_logger('portal_media_requests').info(
         'ARR request candidates user_id=%s kind=%s destinations=%s', user_id, kind,
         [{'library_id':library['id'], 'server_id':library['server_id'],
@@ -452,16 +531,7 @@ def submit_request(db,user_id,library_id,kind,external_id,resolution='', *, befo
         metadata = {'genres':media.get('genres',[]),'collections':
             [media['collection']['title']] if isinstance(media.get('collection'),dict) and media['collection'].get('title') else [],
             'resolution':resolution}
-        eligible = []
-        for candidate, linked in destinations:
-            matching = []
-            for server in linked:
-                # Quality belongs to the ARR profile, not a user resolution.
-                conditions = {k:v for k,v in server['conditions'].items() if not automatic or k != 'resolutions'}
-                if route_matches_media(conditions,metadata): matching.append(server)
-            if matching:
-                eligible.append((candidate,linked,matching))
-        if not eligible: raise MediaRequestError('portal_requests_no_match')
+        eligible = _eligible_destinations(destinations, metadata, automatic)
         # Equal library priorities previously fell back to the database ID,
         # selecting an unconfigured specialized library before a ready one.
         # Never reorder the ARR instances themselves or bypass explicit preferences.
@@ -528,17 +598,77 @@ def submit_request(db,user_id,library_id,kind,external_id,resolution='', *, befo
             'ARR request destination user_id=%s kind=%s external_id=%s library_id=%s arr_id=%s arr_name=%s explicit=%s arr_priority=%s linked_arr_ids=%s',
             user_id,kind,external_id,library['id'],matching[0]['id'],matching[0].get('name'),
             library['id'] in explicit_library_ids,matching[0]['priority'],[s['id'] for s in selected_arrs])
-        if before_post is None:
-            add_media(matching[0],media,kind)
-        else:
-            def authorize_post():
-                if not any(row['id'] == library['id'] and row['requests_enabled']
-                           for row in accessible_libraries(db, user_id)):
-                    raise MediaRequestError('portal_requests_no_libraries')
-                before_post()
-
-            add_media(matching[0],media,kind,before_post=authorize_post)
+        add_media(matching[0],media,kind,before_post=_authorized_before_post(db, user_id, library, before_post))
         return 'portal_requests_added'
     finally:
         _request_deadline.reset(deadline_token)
         db.execute('DELETE FROM portal_media_request_claims WHERE kind=? AND external_id=? AND owner=?',(kind,external_id,owner))
+
+
+def _member_identity_keys(db, user_id):
+    rows = db.query("SELECT type, external_user_id FROM media_users WHERE vodum_user_id=? AND LOWER(type) IN ('plex','jellyfin')", (user_id,)) or []
+    return seerr_user_lookup_keys([dict(row) for row in rows])
+
+
+def submit_seerr_request(db,user_id,library_id,kind,external_id,resolution='', *, before_post=None):
+    """Request through Seerr on behalf of the member; Seerr decides duplicates and approval."""
+    automatic = library_id is None
+    destinations, explicit_library_ids = _request_destinations(db, user_id, library_id, kind, 'seerr')
+    get_logger('portal_media_requests').info(
+        'Seerr request candidates user_id=%s kind=%s destinations=%s', user_id, kind,
+        [{'library_id':library['id'], 'library_name':library['name'],
+          'explicit':library['id'] in explicit_library_ids, 'seerr_ids':[s['id'] for s in linked]}
+         for library,linked in destinations])
+    deadline_token = _request_deadline.set(time.monotonic() + 120)
+    try:
+        servers = list({s['id']:s for _,linked in destinations for s in linked}.values())
+        details, details_server_id = None, None
+        for server in servers:
+            try:
+                candidate = seerr_details(api, server, kind, external_id)
+            except MediaRequestError:
+                continue
+            if isinstance(candidate, dict) and candidate.get('id') == external_id:
+                details, details_server_id = candidate, server['id']
+                break
+        if details is None: raise MediaRequestError('portal_requests_unavailable')
+        metadata = {**seerr_metadata(details), 'resolution': resolution}
+        eligible = _eligible_destinations(destinations, metadata, automatic)
+        eligible.sort(key=lambda item: (
+            item[0]['id'] not in explicit_library_ids,
+            not item[0]['preferred'], item[0]['request_priority'], item[0]['id']))
+        library, _, matching = eligible[0]
+        server = matching[0]
+        is_4k = seerr_is_4k(server)
+        if server['id'] != details_server_id:
+            details = seerr_details(api, server, kind, external_id)
+            if not isinstance(details, dict) or details.get('id') != external_id:
+                raise MediaRequestError('portal_requests_unavailable')
+        state = seerr_media_state(details, is_4k)
+        if state == 'present': return 'portal_requests_present'
+        if state == 'pending': return 'portal_requests_pending'
+        seerr_user_id = seerr_find_user(api, server, _member_identity_keys(db, user_id))
+        if seerr_user_id is None:
+            get_logger('portal_media_requests').info(
+                'Seerr request without matching user user_id=%s seerr_id=%s', user_id, server['id'])
+            raise MediaRequestError('portal_requests_seerr_user_missing')
+        external_ids = details.get('externalIds')
+        tvdb_id = external_ids.get('tvdbId') if isinstance(external_ids, dict) else None
+        payload = seerr_request_payload(kind, external_id, seerr_user_id=seerr_user_id, is_4k=is_4k, tvdb_id=tvdb_id)
+        get_logger('portal_media_requests').info(
+            'Seerr request destination user_id=%s kind=%s external_id=%s library_id=%s seerr_id=%s is_4k=%s',
+            user_id,kind,external_id,library['id'],server['id'],is_4k)
+        authorize = _authorized_before_post(db, user_id, library, before_post)
+        if authorize is not None:
+            authorize()
+        try:
+            created = api(server, '/api/v1/request', payload=payload)
+        except MediaRequestError as exc:
+            mapped = seerr_error_result(getattr(exc, 'http_status', None))
+            if mapped is None: raise
+            return mapped
+        result = seerr_request_result(created)
+        if result is None: raise MediaRequestError('portal_requests_unavailable')
+        return result
+    finally:
+        _request_deadline.reset(deadline_token)

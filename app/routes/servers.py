@@ -178,8 +178,8 @@ def register(app):
         db = get_db()
 
         servers = load_servers_list(db)
-        from core.portal_media_requests import has_saved_request_defaults
-        servers = [{**dict(server), 'requests_configured': has_saved_request_defaults(dict(server))}
+        from core.portal_media_requests import request_backend_ready
+        servers = [{**dict(server), 'requests_configured': request_backend_ready(dict(server))}
                    for server in servers]
         deleting_server_ids = snapshot_deleting_server_ids(
             SERVER_DELETE_LOCK,
@@ -480,7 +480,7 @@ def register(app):
             db, server_id, per_page=per_page, offset=users_offset,
         )
 
-        from core.portal_media_requests import has_saved_request_defaults
+        from core.portal_media_requests import request_backend_ready
         arr_request_choices = None
         if server["type"] in ("sonarr", "radarr"):
             from core.portal_media_requests import arr_defaults, MediaRequestError
@@ -490,8 +490,8 @@ def register(app):
         return render_template(
             "servers/server_detail.html",
             arr_request_choices=arr_request_choices,
-            arr_requests_configured=has_saved_request_defaults(dict(server)),
-            request_routing=load_arr_request_routing(db, server_id) if server["type"] in ("sonarr", "radarr") else [],
+            arr_requests_configured=request_backend_ready(dict(server)),
+            request_routing=load_arr_request_routing(db, server_id) if server["type"] in ("sonarr", "radarr", "seerr") else [],
             server=server,
             libraries=libraries,
             libraries_pagination=libraries_pagination,
@@ -558,6 +558,10 @@ def register(app):
                 flash('portal_requests_not_configured','error')
                 return redirect(url_for('server_detail',server_id=server_id))
 
+        if server_type == 'seerr':
+            # Seerr applies its own profiles and folders; only the 4K flag is ours.
+            settings['media_requests'] = {'is_4k': request.form.get('seerr_request_4k') == '1'}
+
         settings_json, token = prepare_updated_server_secrets(
             settings,
             token,
@@ -575,7 +579,7 @@ def register(app):
             status=status,
         )
 
-        if server_type in ('sonarr','radarr'):
+        if server_type in ('sonarr','radarr','seerr'):
             from core.library_request_routing import save_arr_page, RoutingConfigurationError
             try:
                 save_arr_page(db, server_id, request.form, server_values)

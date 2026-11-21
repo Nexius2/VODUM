@@ -306,7 +306,7 @@ def register(app):
                 results = search_media(db,user_id,'all',term)
                 signer = URLSafeTimedSerializer(app.secret_key,salt='portal-media-request')
                 for row in results:
-                    row['selection'] = signer.dumps({'user_id':user_id,'kind':row['kind'],'external_id':row['external_id'],'title':row['title'][:200]})
+                    row['selection'] = signer.dumps({'user_id':user_id,'kind':row['kind'],'external_id':row['external_id'],'title':row['title'][:200],'source':row.get('source','arr')})
             except MediaRequestError as exc: flash(str(exc),'error')
         return render_template('portal/requests.html',libraries=libraries,results=results,
             query=term,backdrop_posters=backdrop_posters,
@@ -359,9 +359,10 @@ def register(app):
         try:
             selection = URLSafeTimedSerializer(app.secret_key,salt='portal-media-request').loads(request.form.get('selection',''),max_age=3600)
             if selection['user_id'] != user_id: raise ValueError()
-            g.portal_request_details = {'media_kind':selection['kind'], 'external_id':selection['external_id'], 'media_title':selection.get('title','')[:200]}
+            source = selection.get('source', 'arr')
+            g.portal_request_details = {'media_kind':selection['kind'], 'external_id':selection['external_id'], 'media_title':selection.get('title','')[:200], 'request_source':source}
             job_id = enqueue_media_request(db, int(g.auth_principal["account_id"]),
-                                           selection["kind"], selection["external_id"], selection.get("title"))
+                                           selection["kind"], selection["external_id"], selection.get("title"), source)
             g.portal_request_queued = True
             if request.headers.get('Accept') == 'application/json':
                 return jsonify(job_id=job_id, result="portal_requests_queued"), 202

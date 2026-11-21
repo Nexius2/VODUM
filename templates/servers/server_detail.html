@@ -53,7 +53,7 @@
 			 class="mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 opacity-60"
 			 value="{% if server.type == 'plex' %}{{ t('plex') }}
 					{% elif server.type == 'jellyfin' %}{{ t('jellyfin') }}
-					{% elif server.type in ['sonarr', 'radarr'] %}{{ t(server.type) }}
+					{% elif server.type in ['sonarr', 'radarr', 'seerr'] %}{{ t(server.type) }}
                     {% elif server.type == 'other' %}{{ t('other') }}
 					{% endif %}"
 			 readonly>
@@ -76,7 +76,7 @@
     </label>
 
 	<label class="flex flex-col">
-	  {{ t("api_key") if server.type in ["sonarr", "radarr"] else t("server_token") }}
+	  {{ t("api_key") if server.type in ["sonarr", "radarr", "seerr"] else t("server_token") }}
 
 	  <div class="relative mt-1">
 		<input
@@ -137,6 +137,18 @@
     <p class="md:col-span-2 text-xs text-slate-400">{{ t('portal_requests_defaults_help') }}</p>
     {% else %}<p class="md:col-span-2 text-xs text-amber-300">{{ t('portal_requests_not_configured') }}</p>{% endif %}
     {% endif %}
+    {% if server.type == 'seerr' %}
+    {% set request_defaults = server_settings.get('media_requests', {}) %}
+    <label class="flex items-start gap-2 md:col-span-2">
+      <input type="checkbox" name="seerr_request_4k" value="1"
+             {% if request_defaults.get('is_4k') %}checked{% endif %}
+             class="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-800">
+      <span>
+        <span class="block text-sm text-slate-300">{{ t('seerr_requests_4k') }}</span>
+        <span class="block text-xs text-slate-500 mt-1">{{ t('seerr_requests_4k_help') }}</span>
+      </span>
+    </label>
+    {% endif %}
 
     <label class="flex items-start gap-2 md:col-span-2">
       <input type="checkbox" name="verify_tls" value="1"
@@ -158,9 +170,9 @@
       action="{{ url_for('server_delete', server_id=server.id) }}">
 </form>
 
-{% if server.type in ['sonarr', 'radarr'] %}
+{% if server.type in ['sonarr', 'radarr', 'seerr'] %}
 {% include "servers/_request_routing.html" %}
-<div class="mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-5 text-sm text-slate-400">{{ t('arr_connection_help') }}</div>
+<div class="mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-5 text-sm text-slate-400">{{ t('seerr_connection_help' if server.type == 'seerr' else 'arr_connection_help') }}</div>
 {% else %}
 <!-- SECTION BIBLIOTHÈQUES -->
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 mt-8">

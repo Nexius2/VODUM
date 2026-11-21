@@ -3,7 +3,7 @@
 {% block head %}<link rel="stylesheet" href="{{ url_for('static',filename='css/portal-requests.css',v=g.app_version|default('dev')) }}">{% endblock %}
 {% block flash_messages %}
 {% with messages=get_flashed_messages(with_categories=true) %}{% for category,msg in messages %}
-<div data-request-toast class="portal-request-toast" data-tone="{{ 'error' if category=='error' else ('info' if msg=='portal_requests_pending' else 'success') }}" role="status"><span>{{ t(msg) }}</span><button type="button" data-close-toast aria-label="{{ t('portal_requests_close') }}">×</button></div>
+<div data-request-toast class="portal-request-toast" data-tone="{{ 'error' if category=='error' else ('info' if msg in ['portal_requests_pending', 'portal_requests_seerr_awaiting_approval'] else 'success') }}" role="status"><span>{{ t(msg) }}</span><button type="button" data-close-toast aria-label="{{ t('portal_requests_close') }}">×</button></div>
 {% endfor %}{% endwith %}
 {% endblock %}
 {% block content %}
@@ -12,7 +12,7 @@
 {% for poster in backdrop_posters %}<img src="{{ poster }}" alt="" loading="lazy" decoding="async" width="200" height="300">{% endfor %}
 </div>{% endif %}
 <div class="portal-requests-content">
-<div id="request-feedback" aria-live="polite" aria-atomic="true" data-close="{{ t('portal_requests_close') }}" data-messages='{{ {'portal_requests_present':t('portal_requests_present'),'portal_requests_pending':t('portal_requests_pending'),'portal_requests_added':t('portal_requests_added'),'portal_requests_invalid':t('portal_requests_invalid'),'portal_requests_unavailable':t('portal_requests_unavailable'),'portal_requests_busy':t('portal_requests_busy'),'portal_requests_no_match':t('portal_requests_no_match'),'portal_requests_no_libraries':t('portal_requests_no_libraries'),'portal_requests_not_configured':t('portal_requests_not_configured'),'portal_requests_media_unavailable':t('portal_requests_media_unavailable'),'portal_requests_arr_unavailable':t('portal_requests_arr_unavailable'),'portal_requests_add_failed':t('portal_requests_add_failed'),'portal_requests_add_uncertain':t('portal_requests_add_uncertain')}|tojson }}'></div>
+<div id="request-feedback" aria-live="polite" aria-atomic="true" data-close="{{ t('portal_requests_close') }}" data-messages='{{ {'portal_requests_present':t('portal_requests_present'),'portal_requests_pending':t('portal_requests_pending'),'portal_requests_added':t('portal_requests_added'),'portal_requests_invalid':t('portal_requests_invalid'),'portal_requests_unavailable':t('portal_requests_unavailable'),'portal_requests_busy':t('portal_requests_busy'),'portal_requests_no_match':t('portal_requests_no_match'),'portal_requests_no_libraries':t('portal_requests_no_libraries'),'portal_requests_not_configured':t('portal_requests_not_configured'),'portal_requests_media_unavailable':t('portal_requests_media_unavailable'),'portal_requests_arr_unavailable':t('portal_requests_arr_unavailable'),'portal_requests_add_failed':t('portal_requests_add_failed'),'portal_requests_add_uncertain':t('portal_requests_add_uncertain'),'portal_requests_seerr_user_missing':t('portal_requests_seerr_user_missing'),'portal_requests_seerr_rejected':t('portal_requests_seerr_rejected'),'portal_requests_seerr_awaiting_approval':t('portal_requests_seerr_awaiting_approval')}|tojson }}'></div>
 <h1 class="text-2xl font-semibold">{{ t('portal_requests_title') }}</h1>
 <p class="mt-2 text-sm text-slate-400">{{ t('portal_requests_help') }}</p>
 {% if libraries %}

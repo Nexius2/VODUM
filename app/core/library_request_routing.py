@@ -15,6 +15,13 @@ def compatible_arr_type(library_type):
     return None
 
 
+def compatible_request_server(server_type, library_type):
+    """Sonarr/Radarr match one media kind; a Seerr instance serves both kinds."""
+    kind=str(server_type or "").strip().lower()
+    provider=compatible_arr_type(library_type)
+    return bool(provider) and kind in (provider, "seerr")
+
+
 def load_request_routing(db, server_id):
     libraries=[dict(r) for r in (db.query("""SELECT l.id,l.name,l.type,s.name AS media_server_name,
         COALESCE(rs.requests_enabled,1) AS requests_enabled,
@@ -25,7 +32,7 @@ def load_request_routing(db, server_id):
         WHERE (? IS NULL OR l.server_id=?) AND LOWER(TRIM(s.type)) IN ('plex','jellyfin')
         ORDER BY s.name,l.name,l.id""",(server_id,server_id)) or [])]
     instances=[dict(r) for r in (db.query("""SELECT id,name,LOWER(TRIM(type)) AS type,status
-        FROM servers WHERE LOWER(TRIM(type)) IN ('sonarr','radarr') ORDER BY id""") or [])]
+        FROM servers WHERE LOWER(TRIM(type)) IN ('sonarr','radarr','seerr') ORDER BY id""") or [])]
     routes=[dict(r) for r in (db.query("""SELECT r.library_id,r.arr_server_id,r.priority,r.enabled
         FROM library_arr_routes r JOIN libraries l ON l.id=r.library_id
         WHERE (? IS NULL OR l.server_id=?) ORDER BY r.priority,r.arr_server_id""",(server_id,server_id)) or [])]
@@ -37,14 +44,14 @@ def load_request_routing(db, server_id):
         associated={r["arr_server_id"]:r for r in routes if r["library_id"]==library["id"]}
         candidates=[]
         for instance in instances:
-            if instance["type"]!=provider:
+            if not compatible_request_server(instance["type"],library["type"]):
                 continue
             row=dict(instance); row.update(associated.get(row["id"],{}))
             row["associated"]=row["id"] in associated
             candidates.append(row)
         candidates.sort(key=lambda r:(not r["associated"],r.get("priority",r["id"])))
         library.update(arr_type=provider,candidates=candidates,
-                       fallback=next((i for i in instances if i["type"]==provider),None))
+                       fallback=next((i for i in instances if compatible_request_server(i["type"],library["type"])),None))
         result.append(library)
     return result
 
@@ -72,7 +79,7 @@ def save_request_routing(db,server_id,library_id,form):
             raise RoutingConfigurationError("request_routing_invalid")
         for target in selected:
             row=cur.execute("SELECT type FROM servers WHERE id=?",(target,)).fetchone()
-            if not row or str(row["type"]).strip().lower()!=provider:
+            if not row or not compatible_request_server(row["type"],library["type"]):
                 raise RoutingConfigurationError("request_routing_invalid")
         cur.execute("""INSERT INTO library_request_settings
             (library_id,requests_enabled,request_priority,default_for_requests)
@@ -138,7 +145,7 @@ def save_arr_request_routing(db,arr_id,library_id,form):
         arr=cur.execute("SELECT type FROM servers WHERE id=?",(arr_id,)).fetchone()
         lib=cur.execute("""SELECT l.type FROM libraries l JOIN servers s ON s.id=l.server_id
             WHERE l.id=? AND LOWER(TRIM(s.type)) IN ('plex','jellyfin')""",(library_id,)).fetchone()
-        if not arr or not lib or compatible_arr_type(lib['type'])!=str(arr['type']).lower():
+        if not arr or not lib or not compatible_request_server(arr['type'],lib['type']):
             raise RoutingConfigurationError("request_routing_invalid")
         if form.get('arr_order_present') == '1':
             existing = cur.execute('SELECT arr_server_id,priority FROM library_arr_routes WHERE library_id=? ORDER BY priority', (library_id,)).fetchall()
