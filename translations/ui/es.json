@@ -3049,6 +3049,8 @@
   "portal_requests_seerr_state_available": "Disponible",
   "portal_requests_seerr_state_declined": "Rechazada por un administrador",
   "portal_requests_seerr_state_removed": "La solicitud ya no existe en el servicio de solicitudes",
+  "portal_requests_seerr_state_failed": "El procesamiento falló en el servicio de solicitudes",
+  "portal_requests_season": "Temporada",
   "portal_request_count_total": "Solicitudes realizadas",
   "portal_request_count_added": "Adiciones enviadas",
   "portal_request_count_present": "Ya disponibles",

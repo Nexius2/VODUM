@@ -27,7 +27,7 @@ L’historique antérieur est conservé dans le [journal archivé](changelog-arc
   La charge utile Seerr envoie la liste des saisons au lieu de `all`.
 - Suivi après soumission : la liste « Demandes récentes » affiche les choix (4K,
   saisons) et l'état rapporté par Seerr (en attente d'approbation, approuvée,
-  partiellement disponible, disponible, refusée, supprimée), lu via
+  partiellement disponible, disponible, refusée, échouée, supprimée), lu via
   `/api/v1/request/{id}` au chargement et lors du rafraîchissement, au plus une
   fois par minute et par demande dans un délai court
   ([suivi](app/core/portal_media_request_tracking.py)). Le dernier état connu
@@ -41,7 +41,12 @@ L’historique antérieur est conservé dans le [journal archivé](changelog-arc
   ajoutées par le bootstrap portail existant. Déployer Python, gabarit, script,
   feuille de style et traductions ensemble puis redémarrer. Traductions dans les
   cinq langues. Tests locaux uniquement (logique pure, flux de soumission et
-  file de travaux simulés), sans validation en production. Limites : les
+  file de travaux simulés) ; lectures seules vérifiées contre une instance Seerr
+  3.5 réelle (forme des réponses de recherche, utilisateurs, séries, demandes),
+  sans validation en production. Correction : Seerr refuse les espaces encodés
+  en `+` dans la recherche (HTTP 400) ; la requête est désormais encodée en
+  pourcentage, ce qui corrige aussi la recherche multi-mots du service Seerr
+  introduit précédemment. Limites : les
   permissions Seerr sont lues à chaque recherche sans cache ; un refus 4K par
   Seerr à la soumission est rapporté comme demande refusée par le service.
 - Documentation : [demandes de médias](vodum-docs/docs/media-requests.md).

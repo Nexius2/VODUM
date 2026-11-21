@@ -3023,6 +3023,8 @@
   "portal_requests_seerr_state_available": "Disponible",
   "portal_requests_seerr_state_declined": "Refusée par un administrateur",
   "portal_requests_seerr_state_removed": "La demande n'existe plus dans le service de demandes",
+  "portal_requests_seerr_state_failed": "Le traitement a échoué dans le service de demandes",
+  "portal_requests_season": "Saison",
   "portal_request_count_total": "Demandes effectuées",
   "portal_request_count_added": "Ajouts envoyés",
   "portal_request_count_present": "Déjà disponibles",

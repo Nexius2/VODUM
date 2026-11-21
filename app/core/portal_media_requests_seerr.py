@@ -11,10 +11,12 @@ _STATUS_PENDING = (2, 3)
 _STATUS_PARTIAL = (4,)
 _STATUS_AVAILABLE = (5,)
 _BADGES = {2: 'pending', 3: 'pending', 4: 'partial', 5: 'available'}
-# Seerr MediaRequestStatus: 1 pending approval, 2 approved, 3 declined.
+# Seerr MediaRequestStatus: 1 pending approval, 2 approved, 3 declined, 4 failed, 5 completed.
 _REQUEST_PENDING_APPROVAL = 1
 _REQUEST_APPROVED = 2
 _REQUEST_DECLINED = 3
+_REQUEST_FAILED = 4
+_REQUEST_COMPLETED = 5
 # Seerr permission bits (server/lib/permissions.ts); ADMIN implies everything.
 PERMISSION_ADMIN = 2
 PERMISSION_REQUEST_4K = 1024
@@ -23,7 +25,7 @@ PERMISSION_REQUEST_4K_TV = 4096
 _SEERR_KINDS = {'movie': 'movie', 'series': 'tv'}
 _USER_PAGE = 100
 MAX_SEASONS = 100
-FINAL_REQUEST_STATES = ('declined', 'available')
+FINAL_REQUEST_STATES = ('declined', 'failed', 'available')
 
 
 def seerr_media_type(kind):
@@ -226,13 +228,17 @@ def seerr_request_state(data):
     """Portal tracking state of one Seerr request from GET /api/v1/request/{id}.
 
     Approval comes first; once approved, the media status says whether the
-    download finished. 'declined' and 'available' are final.
+    download finished. 'declined', 'failed' and 'available' are final.
     """
     if not isinstance(data, dict) or type(data.get('id')) is not int:
         return None
     status = data.get('status')
     if status == _REQUEST_DECLINED:
         return 'declined'
+    if status == _REQUEST_FAILED:
+        return 'failed'
+    if status == _REQUEST_COMPLETED:
+        return 'available'
     if status == _REQUEST_PENDING_APPROVAL:
         return 'pending_approval'
     if status != _REQUEST_APPROVED:
@@ -264,8 +270,13 @@ def seerr_is_4k(server):
     return bool(isinstance(settings, dict) and settings.get('is_4k'))
 
 
+def seerr_search_path(term):
+    """Seerr rejects '+' for spaces in the query (HTTP 400); it wants percent-encoding."""
+    return '/api/v1/search?query=' + quote(str(term), safe='') + '&page=1'
+
+
 def seerr_search(api, server, term, kinds):
-    data = api(server, '/api/v1/search', params={'query': term, 'page': 1})
+    data = api(server, seerr_search_path(term))
     return seerr_search_rows(data, kinds)
 
 

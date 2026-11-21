@@ -3049,6 +3049,8 @@
   "portal_requests_seerr_state_available": "Verfügbar",
   "portal_requests_seerr_state_declined": "Von einem Administrator abgelehnt",
   "portal_requests_seerr_state_removed": "Die Anfrage existiert im Anfragedienst nicht mehr",
+  "portal_requests_seerr_state_failed": "Verarbeitung im Anfragedienst fehlgeschlagen",
+  "portal_requests_season": "Staffel",
   "portal_request_count_total": "Anfragen",
   "portal_request_count_added": "Übermittelte Hinzufügungen",
   "portal_request_count_present": "Bereits verfügbar",

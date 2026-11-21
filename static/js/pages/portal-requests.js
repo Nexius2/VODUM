@@ -11,7 +11,7 @@
   let refreshRequested = false;
   let jobTimer;
   let lastJobs;
-  const FINAL_SEERR_STATES = ['declined', 'available', 'removed'];
+  const FINAL_SEERR_STATES = ['declined', 'failed', 'available', 'removed'];
 
   function scheduleJobsPoll() {
     clearTimeout(jobTimer);
@@ -157,7 +157,11 @@
       box.checked = season.requestable; box.disabled = !season.requestable;
       if (!season.requestable) label.dataset.disabled = '';
       const text = document.createElement('span');
-      text.textContent = season.name || String(season.number);
+      // Seerr may name a season by its bare number; the portal always says "Season N".
+      text.textContent = `${messages.portal_requests_season} ${season.number}`;
+      if (season.name && season.name !== String(season.number) && !/^season\s+\d+$/i.test(season.name)) {
+        text.textContent += ` · ${season.name}`;
+      }
       if (season.episodes) text.textContent += ` · ${season.episodes} ${messages.portal_requests_episodes}`;
       label.append(box, text);
       if (season.status && messages[`portal_requests_badge_${season.status}`]) {
