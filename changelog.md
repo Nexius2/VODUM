@@ -46,7 +46,10 @@ L’historique antérieur est conservé dans le [journal archivé](changelog-arc
   sans validation en production. Correction : Seerr refuse les espaces encodés
   en `+` dans la recherche (HTTP 400) ; la requête est désormais encodée en
   pourcentage, ce qui corrige aussi la recherche multi-mots du service Seerr
-  introduit précédemment. Limites : les
+  introduit précédemment. Seerr répond 202 « No seasons available to request »
+  sans rien créer lorsque les saisons choisies sont déjà prises en charge ou
+  n'ont pas encore d'épisodes : le portail l'affiche comme « plus rien à
+  demander » et le sélecteur verrouille les saisons sans épisodes. Limites : les
   permissions Seerr sont lues à chaque recherche sans cache ; un refus 4K par
   Seerr à la soumission est rapporté comme demande refusée par le service.
 - Documentation : [demandes de médias](vodum-docs/docs/media-requests.md).
