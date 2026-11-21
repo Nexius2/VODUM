@@ -63,6 +63,37 @@ def create_web_server(application, *, threads, measure_queue=False, **settings):
     return server
 
 
+def _truthy(value):
+    return str(value or '').strip().lower() in ('1', 'true', 'yes')
+
+
+def waitress_proxy_settings(environ=os.environ):
+    """Keep X-Forwarded-* headers when VODUM is configured to trust a proxy.
+
+    Waitress 2.x/3.x defaults to ``clear_untrusted_proxy_headers=True`` with
+    ``trusted_proxy=None`` and strips every ``X-Forwarded-*`` header before the
+    WSGI application runs. ``core.proxy_security.ConditionalProxyFix`` then never
+    sees the headers it should validate: ``request.is_secure`` stays false behind
+    an HTTPS proxy (session cookies lose ``Secure``), and every client shares the
+    proxy's address for rate limiting and login lockouts.
+
+    With ``VODUM_TRUST_PROXY=1`` Waitress accepts the headers from its direct
+    peer; ``ConditionalProxyFix`` still checks that peer against
+    ``VODUM_TRUSTED_PROXY_NETS``. ``VODUM_WAITRESS_TRUSTED_PROXY`` may pin a single
+    proxy address instead of the default ``*`` (Waitress takes one IP or ``*``).
+    """
+    if not _truthy(environ.get('VODUM_TRUST_PROXY')):
+        return {}
+    return {
+        'trusted_proxy': (environ.get('VODUM_WAITRESS_TRUSTED_PROXY') or '*').strip(),
+        'trusted_proxy_count': 1,
+        'trusted_proxy_headers': {
+            'x-forwarded-for', 'x-forwarded-proto', 'x-forwarded-host', 'x-forwarded-port',
+        },
+        'clear_untrusted_proxy_headers': True,
+    }
+
+
 def main():
     started_at = float(os.environ.get('VODUM_STARTUP_STARTED_AT') or time.time())
     print('VODUM startup: loading application and background services...', flush=True)
@@ -71,7 +102,8 @@ def main():
     server = create_web_server(app, host='0.0.0.0', port=port,
         measure_queue=os.environ.get("VODUM_WAITRESS_QUEUE_TIMING") == "1",
         threads=int(os.environ.get('VODUM_WAITRESS_THREADS', '6')),
-        max_request_body_size=int(os.environ.get('VODUM_MAX_UPLOAD_MB', '4096'))*1024*1024)
+        max_request_body_size=int(os.environ.get('VODUM_MAX_UPLOAD_MB', '4096'))*1024*1024,
+        **waitress_proxy_settings())
     stopped = threading.Event()
     threading.Thread(target=announce_when_ready, args=(port, started_at, stopped),
                      name='vodum-readiness', daemon=True).start()
