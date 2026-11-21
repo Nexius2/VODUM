@@ -37,6 +37,13 @@ L’historique antérieur est conservé dans le [journal archivé](changelog-arc
   demandées pour une série ; pas de suivi de l'approbation après la soumission.
 - Documentation : [demandes de médias](vodum-docs/docs/media-requests.md) et
   [serveurs & bibliothèques](vodum-docs/docs/servers-libraries.md).
+- Fiche serveur Seerr simplifiée : la section de routage ([template](templates/servers/_request_routing.html))
+  n'affiche pour un Seerr qu'une case par bibliothèque (« les membres peuvent
+  demander via Seerr »), sans ordre ARR, priorités ni critères, puisque Seerr
+  choisit lui-même la cible, le profil et le dossier. La priorité est calculée
+  automatiquement pour ne pas entrer en conflit avec un ARR déjà lié. Les fiches
+  Sonarr/Radarr sont inchangées. Trois nouveaux libellés dans les cinq langues ;
+  rendu et aller-retour du formulaire vérifiés par tests locaux.
 
 ## Non publié — mise à jour du 2026-11-19
 

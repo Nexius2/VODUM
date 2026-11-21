@@ -25,9 +25,11 @@ quality profile or destination folder: Seerr applies its own defaults, quotas
 and approval rules. Optionally flag the server so that portal requests ask for
 the 4K version.
 
-Assign the Seerr server as a request route on the destination libraries, exactly
-like an ARR. One Seerr instance can serve movie and series libraries at the same
-time, and the same routing conditions (genres, collections) apply. A library may
+On the Seerr server page, tick the libraries whose members may request through
+it. That is the only routing decision for Seerr: it serves movie and series
+libraries alike and picks the Radarr/Sonarr target, profile and folder itself.
+Without any linked library, every library may request as long as Seerr is the
+only request service. A library may
 route to Sonarr/Radarr or to Seerr; when both kinds of routes exist for a user,
 the search results carry their origin and each request follows the route it came
 from.

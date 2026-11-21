@@ -1,5 +1,27 @@
 {% if request_routing %}
 <section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-6">
+{% if server.type == 'seerr' %}
+{# Seerr picks the Radarr/Sonarr target, profile and folder itself: a library
+   link only decides which members may request. No ordering or criteria. #}
+<h2 class="text-sm font-semibold mb-2">{{ t('seerr_routing_title') }}</h2>
+<p class="text-xs text-slate-400 mb-4">{{ t('seerr_routing_help') }}</p>
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 items-start">
+{% for library in request_routing %}
+{% set arr = library.current_arr %}
+{% set used = library.candidates|selectattr('associated')|rejectattr('id', 'equalto', arr.id)|map(attribute='priority')|list %}
+<label class="flex items-start gap-3 rounded-xl border border-slate-800 bg-slate-950/40 p-4 cursor-pointer hover:border-slate-600">
+<input type="hidden" form="server_config" name="routing_library_id" value="{{ library.id }}">
+<input type="hidden" form="server_config" name="routing_{{ library.id }}_single_activation" value="1">
+<input type="hidden" form="server_config" name="routing_{{ library.id }}_request_priority" value="{{ library.request_priority }}">
+{% if library.default_for_requests %}<input type="hidden" form="server_config" name="routing_{{ library.id }}_default_for_requests" value="1">{% endif %}
+<input type="hidden" form="server_config" name="routing_{{ library.id }}_arr_priority" value="{{ arr.priority if arr.associated else ((used|max) + 1 if used else 1) }}">
+<input type="checkbox" form="server_config" name="routing_{{ library.id }}_associated" value="1" {% if arr.associated and arr.enabled %}checked{% endif %} class="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-600 bg-slate-800">
+<span class="min-w-0"><span class="block text-sm font-semibold">{{ library.media_server_name }} / {{ library.name }}</span>
+<span class="block text-xs text-slate-400">{{ t('portal_requests_movies' if library.arr_type == 'radarr' else 'portal_requests_series') }} · {{ t('seerr_routing_allow') }}</span></span>
+</label>
+{% endfor %}
+</div>
+{% else %}
 <h2 class="text-sm font-semibold mb-2">{{ t('request_routing_title') }}</h2>
 <p class="text-xs text-slate-400 mb-4">{{ t('request_routing_help') }}</p>
 <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
@@ -44,5 +66,6 @@
 </div>
 {% endfor %}
 </div>
+{% endif %}
 </section>
 {% endif %}
