@@ -1,3 +1,6 @@
+{% set historical_snapshot = g.monitoring_snapshot|default(none) %}
+{% include "monitoring/partials/_statistics_status.html" %}
+{% if not historical_snapshot or historical_snapshot.ready %}
 <div class="space-y-6">
 
   <!-- Monitoring dashboard -->
@@ -539,3 +542,5 @@
 }|tojson }}
 </script>
 <script src="{{ url_for('static', filename='js/pages/monitoring-policies.js', v=g.app_version|default('dev')) }}"></script>
+
+{% endif %}

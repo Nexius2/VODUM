@@ -3,6 +3,23 @@ from typing import Optional
 import json
 
 
+def _plex_owner_for_local_id(db, server_id):
+    return db.query_one(
+        """
+        SELECT MIN(id) AS id, MIN(username) AS username
+        FROM media_users
+        WHERE server_id = ? AND type = 'plex' AND role = 'owner'
+        HAVING COUNT(*) = 1 AND COUNT(vodum_user_id) = 1
+           AND NULLIF(TRIM(MIN(username)), '') IS NOT NULL
+           AND NOT EXISTS (
+               SELECT 1 FROM media_users
+               WHERE server_id = ? AND type = 'plex' AND external_user_id = '1'
+           )
+        """,
+        (server_id, server_id),
+    )
+
+
 def apply_playback_username(session):
     """Show Plex's reported name while synchronization is still pending."""
     if str(session.get('username') or '').strip() not in ('', '-'):
@@ -40,6 +57,11 @@ def resolve_media_user_id(
         if row:
             return int(row["id"])
 
+    if provider == "plex" and str(external_user_id) == "1" and username:
+        owner = _plex_owner_for_local_id(db, server_id)
+        if owner and str(owner["username"] or "").strip().casefold() == str(username).strip().casefold():
+            return int(owner["id"])
+
     # 2) fallback by username
     if username and str(username).strip() not in ('-', ''):
         row = db.query_one(
@@ -64,7 +86,7 @@ def repair_unmapped_sessions(db, server_id: int) -> None:
     """Recover playback collected before the provider account was synchronized.
 
     Only an unambiguous provider ID on the same server is authoritative.
-    Never infer ownership from display names or from another server's IDs.
+    Plex's local owner ID also requires the name of the unique synced owner.
     """
     for table in ('media_sessions', 'media_session_history', 'media_events'):
         db.execute(f"""
@@ -84,3 +106,18 @@ def repair_unmapped_sessions(db, server_id: int) -> None:
                   AND mu.external_user_id = playback.external_user_id
               )
         """, (server_id,))
+
+    owner = _plex_owner_for_local_id(db, server_id)
+    if not owner:
+        return
+    for table in ("media_sessions", "media_session_history"):
+        db.execute(f"""
+            UPDATE OR IGNORE {table}
+            SET media_user_id = ?
+            WHERE server_id = ? AND provider = 'plex' AND media_user_id IS NULL
+              AND external_user_id = '1'
+              AND CASE WHEN json_valid(raw_json) THEN
+                    CAST(json_extract(raw_json, '$.User.id') AS TEXT) = '1'
+                    AND LOWER(TRIM(json_extract(raw_json, '$.User.title'))) = LOWER(TRIM(?))
+                  ELSE 0 END
+        """, (owner["id"], server_id, owner["username"]))

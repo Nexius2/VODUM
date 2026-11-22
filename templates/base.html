@@ -28,10 +28,11 @@
 
   <link rel="stylesheet" href="{{ url_for('static', filename='css/vodum.css', v=g.app_version|default('dev')) }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css', v=g.app_version|default('dev')) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin-mobile.css', v=g.app_version|default('dev'), revision='table-cards-2') }}">
   {% block head %}{% endblock %}
 </head>
 
-<body class="bg-slate-950 text-slate-100">
+<body class="admin-shell bg-slate-950 text-slate-100" data-admin-page="{{ active_page }}">
   {% set brand_length = (app_brand_name or '')|length %}
   {% set brand_text_size = 'text-xl' if brand_length <= 20 else ('text-base' if brand_length <= 32 else ('text-sm' if brand_length <= 44 else 'text-xs')) %}
   <svg aria-hidden="true" class="hidden">
@@ -52,16 +53,16 @@
   </svg>
 <div class="min-h-screen md:flex">
     <!-- Mobile top bar -->
-    <div class="md:hidden sticky top-0 z-40 h-14 bg-slate-950/95 border-b border-slate-800 backdrop-blur flex items-center justify-between px-4">
+    <div class="admin-mobile-header md:hidden sticky top-0 z-40 h-14 bg-slate-950/95 border-b border-slate-800 backdrop-blur flex items-center justify-between px-4">
       <a href="{{ url_for('dashboard') }}"
          class="flex min-w-0 flex-1 items-center justify-start gap-3 rounded-lg {{ brand_text_size }} font-bold leading-tight tracking-tight transition-colors hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
          aria-label="{{ t('dashboard') }}">
         {% if portal_logo_url %}<img src="{{ portal_logo_url }}" alt="" class="h-8 w-8 shrink-0 rounded object-contain">{% endif %}<span class="min-w-0 truncate">{{ app_brand_name }}</span>
       </a>
-      <button id="mobileMenuOpen"
+      <button id="mobileMenuOpen" aria-controls="mobileMenu" aria-expanded="false" aria-label="{{ t('portal_menu') }}"
               type="button"
               class="inline-flex items-center justify-center rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100">
-        &#9776;
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
     </div>
 
@@ -69,14 +70,14 @@
     <div id="mobileMenu" class="fixed inset-0 z-50 hidden md:hidden">
       <div id="mobileMenuBackdrop" class="absolute inset-0 bg-black/70"></div>
 
-      <div class="absolute left-0 top-0 h-full w-72 max-w-[85vw] bg-slate-900 border-r border-slate-800 flex flex-col">
+      <div role="dialog" aria-modal="true" aria-label="{{ t('portal_menu') }}" class="admin-menu-panel absolute left-0 top-0 h-full w-72 max-w-[85vw] bg-slate-900 border-r border-slate-800 flex flex-col">
         <div class="h-14 flex items-center justify-between px-4 border-b border-slate-800">
           <a href="{{ url_for('dashboard') }}"
              class="flex min-w-0 flex-1 items-center justify-start gap-3 rounded-lg {{ brand_text_size }} font-bold leading-tight tracking-tight transition-colors hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
              aria-label="{{ t('dashboard') }}">
             {% if portal_logo_url %}<img src="{{ portal_logo_url }}" alt="" class="h-8 w-8 shrink-0 rounded object-contain">{% endif %}<span class="min-w-0 truncate">{{ app_brand_name }}</span>
           </a>
-          <button id="mobileMenuClose"
+          <button id="mobileMenuClose" aria-label="{{ t('common.close') }}"
                   type="button"
                   class="rounded-lg border border-slate-700 px-3 py-1.5 text-slate-100">
             &times;
@@ -143,11 +144,13 @@
           {{ t("communications") }}
         </a>
 
+        {% if migration_navigation_available is defined and migration_navigation_available() %}
         <a href="{{ url_for('migrations_page') }}"
            class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='migrations' }}">
           <svg class="mr-2 h-4 w-4 shrink-0" aria-hidden="true"><use href="#vodum-icon-move"></use></svg>
           {{ t("migrations") }}
         </a>
+        {% endif %}
 
         <a href="{{ url_for('backup_page') }}"
            class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='backup' }}">
@@ -267,7 +270,7 @@
     <!-- Main content -->
     <div class="flex-1 flex flex-col min-w-0">
       <!-- Header -->
-      <header class="min-h-16 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 md:px-6 py-3 bg-slate-950/80 backdrop-blur">
+      <header class="admin-page-header min-h-16 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 md:px-6 py-3 bg-slate-950/80 backdrop-blur">
         <div class="flex flex-col">
           <h1 class="text-xl font-semibold text-slate-200">
             {% block header_title %}{% endblock %}
@@ -284,7 +287,7 @@
       </header>
 
       <!-- Page content -->
-      <main class="flex-1 p-4 md:p-6 overflow-x-hidden">
+      <main class="admin-content flex-1 p-4 md:p-6 overflow-x-hidden">
         <div id="clientFlash" class="space-y-2 mb-4 hidden"></div>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -307,6 +310,8 @@
     </div>
   </div>
 
+  {% include "partials/_admin_mobile_dock.html" %}
+
   <div id="vodumNavigationLoader" class="vodum-navigation-loader" role="status" aria-live="polite" aria-label="{{ t('loading') }}" hidden>
     <div class="vodum-navigation-loader__backdrop"></div>
     <div class="vodum-navigation-loader__panel">
@@ -315,8 +320,9 @@
     </div>
   </div>
 
-  <script src="{{ url_for('static', filename='js/app.js', v=g.app_version|default('dev'), revision='collections-activity-1') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js', v=g.app_version|default('dev'), revision='server-status-date-or-time-1') }}"></script>
   <script src="{{ url_for('static', filename='js/modal_manager.js', v=g.app_version|default('dev')) }}"></script>
+  <script src="{{ url_for('static', filename='js/admin-mobile.js', v=g.app_version|default('dev'), revision='table-cards-2') }}"></script>
   {% block scripts %}{% endblock %}
 
 </body>

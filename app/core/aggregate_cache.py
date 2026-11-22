@@ -4,6 +4,8 @@ from copy import deepcopy
 import threading
 import time
 
+from core.provider_cache_timing import provider_cache_timing
+
 
 _CACHE = {}
 _LOCK = threading.Lock()
@@ -19,18 +21,42 @@ def cached_aggregate(key, ttl_seconds, loader):
     read-only queries during page refreshes without adding database writes or
     affecting live/session state.
     """
+    timing = provider_cache_timing.get()
+    if timing is None:
+        return _cached_aggregate(key, ttl_seconds, loader, timing)
+    started_at = time.perf_counter_ns()
+    try:
+        return _cached_aggregate(key, ttl_seconds, loader, timing)
+    finally:
+        duration_ns = time.perf_counter_ns() - started_at
+        with timing.lock:
+            timing.cache_ns += duration_ns
+
+
+def _cached_aggregate(key, ttl_seconds, loader, timing):
     key = str(key)
     ttl = max(1, int(ttl_seconds))
     while True:
         with _LOCK:
             entry = _CACHE.get(key)
             if entry and entry["expires_at"] > time.monotonic():
-                return deepcopy(entry["value"])
-            pending = _IN_FLIGHT.get(key)
-            if pending is None:
-                pending = threading.Event()
-                _IN_FLIGHT[key] = pending
-                break
+                if timing is not None:
+                    timing.cache_hits += 1
+                value = entry["value"]
+                hit = True
+            else:
+                hit = False
+                pending = _IN_FLIGHT.get(key)
+                if pending is None:
+                    pending = threading.Event()
+                    _IN_FLIGHT[key] = pending
+                    if timing is not None:
+                        timing.cache_misses += 1
+                    break
+        if hit:
+            # Published values are never mutated. Copy outside the global lock
+            # so a large report cannot stall cache reads for unrelated pages.
+            return deepcopy(value)
         # Share work for this key without blocking unrelated aggregates.
         pending.wait()
 
@@ -74,7 +100,8 @@ def peek_aggregate(key):
     """Reuse an existing snapshot for decoration without invoking a loader."""
     with _LOCK:
         entry = _CACHE.get(str(key))
-        return deepcopy(entry['value']) if entry else None
+        value = entry['value'] if entry else None
+    return deepcopy(value)
 
 
 def cached_query_rows(db, key, ttl_seconds, sql, params=()):

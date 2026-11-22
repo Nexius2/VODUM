@@ -41,6 +41,16 @@
         <input type="text" name="name" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs" value="{{ loaded_campaign.name if loaded_campaign else '' }}" required>
       </div>
 
+      <div class="text-xs">
+        <label for="campaign-user-scope" class="block mb-1">{{ t('comm_campaign_audience') }}</label>
+        {% set campaign_user_scope = loaded_campaign.user_scope if loaded_campaign else 'active' %}
+        <select id="campaign-user-scope" name="user_scope" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-2 text-sm">
+          <option value="active" {% if campaign_user_scope == 'active' %}selected{% endif %}>{{ t('comm_campaign_active_users') }}</option>
+          <option value="all" {% if campaign_user_scope != 'active' %}selected{% endif %}>{{ t('all_users') }}</option>
+        </select>
+        <p class="mt-1 text-[11px] text-slate-400">{{ t('comm_campaign_active_users_help') }}</p>
+      </div>
+
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div class="text-xs">
           <label class="block mb-1">{{ t('target_server') }}</label>
@@ -79,17 +89,9 @@
         </div>
       </div>
 
-      <div class="text-xs">
-        <label class="block mb-1">{{ t('comm_delivery_channels') }}</label>
-        {% set campaign_channels = loaded_campaign.delivery_channels if loaded_campaign and loaded_campaign.delivery_channels else 'inherit' %}
-        <select name="delivery_channels" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
-          <option value="inherit" {% if campaign_channels == 'inherit' %}selected{% endif %}>{{ t('comm_delivery_inherit') }}</option>
-          <option value="email" {% if campaign_channels == 'email' %}selected{% endif %}>{{ t('email') }}</option>
-          <option value="discord" {% if campaign_channels == 'discord' %}selected{% endif %}>{{ t('discord') }}</option>
-          <option value="all" {% if campaign_channels == 'all' %}selected{% endif %}>{{ t('comm_delivery_all') }}</option>
-        </select>
-        <p class="mt-1 text-[11px] text-slate-500">{{ t('comm_delivery_help') }}</p>
-      </div>
+      {% with selected_delivery_channels=loaded_campaign.delivery_channels if loaded_campaign and loaded_campaign.delivery_channels else 'inherit' %}
+        {% include "communications/_delivery_channels.html" %}
+      {% endwith %}
 
       <div class="text-xs">
         <label class="block mb-1">{{ t('subject') }}</label>
@@ -100,7 +102,7 @@
       <div class="text-xs">
         <label class="block mb-1">{{ t('body') }}</label>
         <textarea id="campaign_body" name="body" rows="14" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-2 text-xs resize-none" required>{{ loaded_campaign.body if loaded_campaign else '' }}</textarea>
-        <div id="campaign_discord_counter" data-label="{{ t('comm_discord_body_counter') }}" class="mt-1 text-[11px] text-slate-500"></div>
+        <div id="campaign_discord_counter" data-label="{{ t('comm_discord_body_counter') }}" class="mt-1 text-[11px] text-slate-500" hidden></div>
         <p class="text-[11px] text-slate-500 mt-2">
           {{ t('comm_vars_help') }}
           <code>{username}</code>, <code>{email}</code>, <code>{expiration_date}</code>, <code>{portal_login_url}</code>
@@ -178,7 +180,7 @@
         <tbody>
         {% for c in campaigns %}
           <tr class="border-t border-slate-800 hover:bg-slate-800/40">
-            <td class="px-4 py-2">{{ c.name }}</td>
+            <td class="px-4 py-2">{{ c.name }}<small class="block text-xs text-slate-400">{{ t('comm_campaign_active_users') if c.user_scope == 'active' else t('all_users') }}</small></td>
             <td class="px-4 py-2">{{ c.subject }}</td>
             <td class="px-4 py-2">
               {% if not c.server_id %}

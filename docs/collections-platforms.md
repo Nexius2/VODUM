@@ -31,10 +31,8 @@ within a time budget and resumed after successful progress. Unknown metadata kee
 existing members; complete metadata permits reconciliation. External collections
 remain protected by ownership checks. Preview does not publish collections.
 
-Posters are generated with `image_gen.imagegen`, stored in
-`app/core/assets/collection_posters/platform-*-v1.png`; prompts are recorded in
-`docs/platform-posters-v1-prompts.json`. They are original collection artwork,
-not official platform posters.
+The collection artwork is stored in
+`app/core/assets/collection_posters/platform-*-v1.png`.
 
 Hidden gems, Returning shows and Rediscover are removed from the discovery choices.
 

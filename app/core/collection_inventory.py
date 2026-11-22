@@ -281,7 +281,15 @@ class CachedCollectionMedia:
             args=(*args[:3],{**args[3],'_order_seed':utcnow().date().isoformat()},*args[4:])
         record_plan(self.db,*args[:4])
         remote=self.remote()
-        warnings=remote.sync(*args)
+        try:
+            warnings=remote.sync(*args)
+        except Exception as exc:
+            from core.collections_media import CollectionOwnershipError
+            # A verified title conflict is not unfinished membership work.
+            # Never replay a plan for a collection we cannot own or publish.
+            if isinstance(exc,CollectionOwnershipError) and str(exc)=='collections.title_collision' and args[0].get('id'):
+                finish_plan(self.db,args[0]['id'],[])
+            raise
         if args[0].get('instance_id') and args[0].get('id') and not args[0].get('remote_id'):
             if not hasattr(self,'_new_collection_instances'):self._new_collection_instances=set()
             self._new_collection_instances.add(args[0]['instance_id'])

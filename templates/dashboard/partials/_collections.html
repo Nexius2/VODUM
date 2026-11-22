@@ -1,0 +1,22 @@
+{% if collection_summary.configured %}
+<a href="{{ url_for('collections_page') }}"
+   class="block bg-slate-900 border border-slate-800 rounded-2xl p-6 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/40">
+  <div class="text-xs uppercase tracking-wide text-slate-400 mb-4">
+    {{ t("collections.title") }}
+  </div>
+  <div class="flex flex-wrap items-end gap-x-4 gap-y-2">
+    <div>
+      <div class="text-4xl font-bold text-primary leading-none">{{ collection_summary.configured }}</div>
+      <div class="text-xs text-slate-300 mt-1">{{ t("dashboard_collections_configured") }}</div>
+    </div>
+    <div>
+      <div class="text-xl font-semibold text-emerald-400 leading-none">{{ collection_summary.succeeded }}</div>
+      <div class="text-xs text-slate-400 mt-1">{{ t("dashboard_collections_succeeded") }}</div>
+    </div>
+    <div>
+      <div class="text-xl font-semibold text-amber-400 leading-none">{{ collection_summary.needs_review }}</div>
+      <div class="text-xs text-slate-400 mt-1">{{ t("dashboard_collections_needs_review") }}</div>
+    </div>
+  </div>
+</a>
+{% endif %}

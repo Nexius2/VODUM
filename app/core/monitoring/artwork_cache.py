@@ -6,8 +6,10 @@ from core.error_reporting import log_handled_failure
 import hashlib
 import json
 import os
+import threading
 import time
 from pathlib import Path
+from uuid import uuid4
 
 
 ARTWORK_CACHE_DIR = Path(
@@ -16,6 +18,7 @@ ARTWORK_CACHE_DIR = Path(
 ARTWORK_CACHE_TTL_SECONDS = int(
     os.environ.get("VODUM_ARTWORK_CACHE_TTL_SECONDS", str(7 * 24 * 3600))
 )
+_PUBLISH_LOCK = threading.Lock()
 
 
 def detect_image_content_type(content: bytes) -> str | None:
@@ -68,6 +71,7 @@ def read_artwork_cache(cache_key: str, *, allow_stale: bool = False) -> dict | N
     try:
         with img_path.open("rb") as handle:
             detected_content_type = detect_image_content_type(handle.read(32))
+            age = time.time() - os.fstat(handle.fileno()).st_mtime
     except OSError:
         log_handled_failure("artwork.read_cache_file")
         return None
@@ -75,7 +79,6 @@ def read_artwork_cache(cache_key: str, *, allow_stale: bool = False) -> dict | N
         _remove_cache_pair(img_path, meta_path)
         return None
 
-    age = time.time() - img_path.stat().st_mtime
     is_stale = age > ARTWORK_CACHE_TTL_SECONDS
     if is_stale and not allow_stale:
         return None
@@ -101,19 +104,25 @@ def write_artwork_cache(cache_key: str, content: bytes, content_type: str) -> bo
     if not img_path or not meta_path:
         return False
 
-    tmp_img_path = img_path.with_suffix(".img.tmp")
-    tmp_meta_path = meta_path.with_suffix(".json.tmp")
-    tmp_img_path.write_bytes(content)
-    tmp_meta_path.write_text(
-        json.dumps(
-            {
-                "content_type": detected_content_type,
-                "saved_at": int(time.time()),
-            },
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
-    )
-    os.replace(tmp_img_path, img_path)
-    os.replace(tmp_meta_path, meta_path)
+    write_id = uuid4().hex
+    tmp_img_path = img_path.with_suffix(f".img.{write_id}.tmp")
+    tmp_meta_path = meta_path.with_suffix(f".json.{write_id}.tmp")
+    try:
+        tmp_img_path.write_bytes(content)
+        tmp_meta_path.write_text(
+            json.dumps(
+                {
+                    "content_type": detected_content_type,
+                    "saved_at": int(time.time()),
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        with _PUBLISH_LOCK:
+            os.replace(tmp_img_path, img_path)
+            os.replace(tmp_meta_path, meta_path)
+    finally:
+        tmp_img_path.unlink(missing_ok=True)
+        tmp_meta_path.unlink(missing_ok=True)
     return True

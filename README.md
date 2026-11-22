@@ -41,7 +41,7 @@ Spend less time switching between dashboards. See who has access, when it expire
 | **Administration** | Run scheduled tasks, inspect logs, create backups and import Tautulli history. |
 | **Migration tools** | Prepare and analyze access migration plans, with execution controls and access snapshots. |
 
-Availability depends on connected providers, their APIs and your configuration. Portal modules and authentication methods are optional. Planned work is tracked separately in [TODO.md](TODO.md).
+Availability depends on connected providers, their APIs and your configuration. Portal modules and authentication methods are optional.
 
 ### One view across your servers
 
@@ -196,7 +196,15 @@ docker compose logs --tail=100 vodum
 
 ## Install on Unraid
 
-Use the repository's [Unraid template](vodum.xml), or add a container from Unraid's Docker tab with:
+VODUM is available in the **Unraid Community Applications store**.
+
+1. Open **Apps** in the Unraid web interface.
+2. Search for **VODUM** and choose **Install**.
+3. Review the ports, persistent paths and timezone, then apply the template.
+4. Open the container's Web UI and complete the initial setup.
+
+You can also use the repository's [Unraid template](vodum.xml), or add a container
+manually from Unraid's Docker tab with:
 
 | Setting | Value |
 | --- | --- |
@@ -284,7 +292,7 @@ If VODUM helps you run your community, [support its development](https://buymeac
 
 ## Contributing
 
-Bug reports, documentation improvements, translations and code contributions are welcome. Discuss substantial changes in an issue first and check [TODO.md](TODO.md) for planned work.
+Bug reports, documentation improvements, translations and code contributions are welcome. Discuss substantial changes in an issue first.
 
 ### Local development
 

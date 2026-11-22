@@ -2,7 +2,8 @@ from core.error_reporting import log_handled_failure
 import json
 from datetime import datetime
 
-from flask import Response, flash, jsonify, redirect, render_template, request, url_for
+from flask import Response, abort, flash, g, jsonify, redirect, render_template, request, url_for
+from core.migrations.availability import migrations_available
 
 from core.migrations.analysis import (
     analyze_migration,
@@ -48,6 +49,20 @@ from logging_utils import get_logger
 logger = get_logger("migrations")
 
 def register(app):
+    def navigation_available():
+        if not hasattr(g, 'vodum_migrations_available'):
+            g.vodum_migrations_available = migrations_available(get_db())
+        return g.vodum_migrations_available
+
+    @app.context_processor
+    def migration_navigation_context():
+        return {'migration_navigation_available': navigation_available}
+
+    @app.before_request
+    def migration_configuration_guard():
+        if (request.path == '/migrations' or request.path.startswith('/migrations/')) and not navigation_available():
+            abort(404)
+
     @app.get("/migrations")
     def migrations_page():
         db = get_db()

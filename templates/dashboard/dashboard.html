@@ -6,12 +6,19 @@
 {% block header_subtitle %}{{ t("dashboard_subtitle") }}{% endblock %}
 {% block content %}
 
+{% if initial_sync_notice_seconds|default(0) > 0 %}
+<aside role="status" data-initial-sync-remaining="{{ initial_sync_notice_seconds }}" class="mb-6 rounded-xl border border-indigo-700 bg-indigo-950/30 p-4">
+  <h2 class="font-semibold text-indigo-200">{{ t('initial_sync_notice_title') }}</h2>
+  <p class="mt-1 text-sm text-slate-300">{{ t('initial_sync_notice_body') }}</p>
+</aside>
+{% endif %}
+
 {% set server_count = servers|length %}
 {% set single_server = servers|first %}
 
 {% if server_count <= 1 %}
 
-<div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-6">
+<div class="grid grid-cols-1 {{ 'xl:grid-cols-2' if collection_summary.configured else 'xl:grid-cols-3' }} gap-4 mb-6">
 
     <!-- Users -->
     <section
@@ -76,6 +83,7 @@
       </div>
     </section>
 
+    {% include "dashboard/partials/_collections.html" %}
     {% include "dashboard/partials/_servers.html" %}
 
     <div class="h-full" hx-get="{{ url_for('dashboard_subscription_summary_partial') }}"
@@ -162,7 +170,7 @@
 
 {% else %}
 
-<div class="grid grid-cols-1 xl:grid-cols-[0.85fr_1.15fr] gap-4 mb-6">
+<div class="grid grid-cols-1 {{ 'dashboard-collections-grid' if collection_summary.configured else 'xl:grid-cols-[0.85fr_1.15fr]' }} gap-4 mb-6">
 
     <!-- Users -->
     <section
@@ -226,6 +234,8 @@
 
       </div>
     </section>
+
+    {% include "dashboard/partials/_collections.html" %}
 
     <div class="h-full" hx-get="{{ url_for('dashboard_subscription_summary_partial') }}"
          hx-trigger="load"

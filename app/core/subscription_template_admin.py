@@ -49,7 +49,7 @@ def duplicate_subscription_template(db, template_id: int) -> dict:
             new_name,
             template.get("notes") or "",
             template.get("duration_days") or 30,
-            template.get("subscription_value") or 0,
+            template.get("subscription_value"),
             0,
             int(template.get("is_enabled") or 0),
             int(template.get("is_lifetime") or 0),

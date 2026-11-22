@@ -268,25 +268,54 @@
     });
   }
 
-  function loadGiftHistory() {
-    const box = document.getElementById("gift-history");
-    if (!box) return;
+  const historyIntervalMs = 30000;
+  const historyTimeoutMs = 10000;
+  let historyTimer;
+  let historyLoading = false;
+  let historyRefreshPending = false;
+  let previousHistory = null;
 
-    fetch("/api/subscriptions/gifts", { cache: "no-store" })
-      .then(function (response) { return response.json(); })
-      .then(function (response) {
-        if (!response || response.status !== "ok") {
-          box.className = "text-sm text-slate-200";
-          box.innerHTML = `<div class="text-red-300">${escapeHtml(response?.error || i18n.unknownError || "Unknown error")}</div>`;
-          return;
-        }
-        renderGiftHistory(response.items || []);
-      })
-      .catch(function (error) {
-        console.error("Gift history fetch error:", error);
-        box.className = "text-sm text-slate-200";
-        box.innerHTML = `<div class="text-red-300">${escapeHtml(i18n.requestFailed || "Request failed")}</div>`;
+  async function loadGiftHistory() {
+    const box = document.getElementById("gift-history");
+    window.clearTimeout(historyTimer);
+    if (!box || document.hidden) return;
+    if (historyLoading) {
+      historyRefreshPending = true;
+      return;
+    }
+
+    historyLoading = true;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), historyTimeoutMs);
+    try {
+      const response = await fetch("/api/subscriptions/gifts", {
+        cache: "no-store",
+        signal: controller.signal,
       });
+      const data = await response.json();
+      if (!response.ok || data?.status !== "ok" || !Array.isArray(data.items)) {
+        throw new Error(data?.error || i18n.requestFailed || "Request failed");
+      }
+      if (historyRefreshPending) return;
+      const snapshot = JSON.stringify(data.items);
+      if (snapshot !== previousHistory) {
+        renderGiftHistory(data.items);
+        previousHistory = snapshot;
+      }
+    } catch (error) {
+      if (previousHistory === null) {
+        const message = error.name === "AbortError" ? null : error.message;
+        box.innerHTML = `<div class="text-red-300">${escapeHtml(message || i18n.requestFailed || "Request failed")}</div>`;
+      }
+    } finally {
+      window.clearTimeout(timeout);
+      historyLoading = false;
+      const refreshNow = historyRefreshPending;
+      historyRefreshPending = false;
+      if (!document.hidden) {
+        historyTimer = window.setTimeout(loadGiftHistory, refreshNow ? 0 : historyIntervalMs);
+      }
+    }
   }
 
   function submitGift(form) {
@@ -304,13 +333,6 @@
         console.error("[vodum] subscription gift submit failed");
         showAlert("error", escapeHtml(i18n.requestFailed || "Request failed"));
       });
-  }
-
-  function startGiftHistoryLive() {
-    loadGiftHistory();
-    window.setInterval(function () {
-      if (!document.hidden) loadGiftHistory();
-    }, 5000);
   }
 
   document.addEventListener("DOMContentLoaded", function () {
@@ -333,7 +355,8 @@
       if (event.key === "Escape") closeGiftModal();
     });
     document.addEventListener("visibilitychange", function () {
-      if (!document.hidden) loadGiftHistory();
+      if (document.hidden) window.clearTimeout(historyTimer);
+      else loadGiftHistory();
     });
 
     const form = document.querySelector("[data-gift-form]");
@@ -346,6 +369,6 @@
 
     initGiftUserSearch();
     toggleGiftTarget("all");
-    startGiftHistoryLive();
+    loadGiftHistory();
   });
 })();

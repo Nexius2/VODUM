@@ -62,10 +62,8 @@
           </button>
 
         </form>
-        {% if plex_suggestions %}
-          <div class="my-5 flex items-center gap-3 text-xs text-slate-500"><span class="h-px flex-1 bg-slate-800"></span>{{ t("plex_discovery_or_manual") }}<span class="h-px flex-1 bg-slate-800"></span></div>
-          {% set plex_suggestions_return_to = "servers" %}
-          {% include "servers/_plex_suggestions.html" %}
+        {% if plex_suggestions_deferred %}
+          {% include "servers/_plex_suggestions_loader.html" %}
         {% endif %}
       </div>
 
@@ -126,12 +124,8 @@
     </form>
   </div>
 
-  {% if plex_suggestions %}
-  <div>
-    {% set plex_suggestions_top_row = true %}
-    {% set plex_suggestions_return_to = "servers" %}
-    {% include "servers/_plex_suggestions.html" %}
-  </div>
+  {% if plex_suggestions_deferred %}
+    {% include "servers/_plex_suggestions_loader.html" %}
   {% endif %}
 </div>
 

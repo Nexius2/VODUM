@@ -1,0 +1,77 @@
+{% set historical_snapshot = g.monitoring_snapshot|default(none) %}
+{% include "monitoring/partials/_statistics_status.html" %}
+<div class="location-stats" aria-live="polite">
+  {% for key, icon in [('countries', '◎'), ('cities', '◇'), ('online', '◉'), ('active', '▶')] %}
+  {% set label = 'historical_' ~ key if location_period and key in ['online', 'active'] else key %}
+  <div class="location-stat"><span aria-hidden="true">{{ icon }}</span>
+    <div><strong>{{ location.stats[key] }}</strong><span>{{ t('monitoring_location_' ~ label) }}</span></div>
+  </div>
+  {% endfor %}
+</div>
+<span data-map-countries="{{ location.countries|tojson|forceescape }}" hidden></span>
+<div class="location-map-layout">
+<div class="location-map">
+  <canvas aria-hidden="true"></canvas>
+  <div class="location-map-points">
+    {% for point in location.points %}
+    <div class="location-map-detail" data-identity="{{ point.identity }}" data-lat="{{ point.latitude }}" data-lon="{{ point.longitude }}" data-state="{{ point.state }}" hidden>
+      <div class="location-map-user">
+        <span class="location-map-initial" aria-hidden="true">
+          {{ (point.username or '?')[:1]|upper }}
+          {% if point.avatar or point.provider_avatar %}
+          <img alt="" hidden data-location-avatar="{{ point.avatar or url_for('api_monitoring_avatar', account_id=point.account_id) }}">
+          {% endif %}
+        </span>
+        <div><strong>{{ point.username }}</strong><span class="location-map-state">{{ t('monitoring_location_' ~ point.state) }}</span></div>
+      </div>
+      {% if point.title %}<span>{{ point.title }}</span>{% endif %}
+      {% if point.location %}<span>{{ point.location }}</span>{% endif %}
+      {% if point.ip %}<span class="location-map-ip">{{ point.ip }}</span>{% endif %}
+      <span>{{ point.server }} · {{ point.provider }}</span>
+      {% if point.client or point.library %}<span>{{ [point.client, point.library]|select|join(' · ') }}</span>{% endif %}
+      <span>{{ point.seen_at|browser_datetime }}</span>
+      {% if point.progress is not none %}
+        <progress value="{{ point.progress }}" max="100" aria-label="{{ t('monitoring_location_progress') }}"></progress>
+        <span>{{ point.progress }} %</span>
+      {% endif %}
+      {% if point.account_id %}
+        <a href="{{ url_for('monitoring_user_detail', user_id=point.account_id, view='profile') }}">{{ t('monitoring_location_details') }}</a>
+      {% endif %}
+      {% if point.risk_level %}<span>{{ t('usage_risk_risk') }} · {{ t('usage_risk_' ~ point.risk_level ~ '_risk') }}</span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% if not location.points %}
+    <p class="location-map-message">{{ t('monitoring_location_empty') }}</p>
+  {% endif %}
+  <p class="location-map-message" data-location-error hidden>{{ t('monitoring_location_error') }}</p>
+  <div class="location-map-controls">
+    {% for action, icon in [('in','+'), ('out','−'), ('fit','⌖'), ('world','◎')] %}
+    <button type="button" data-map-action="{{ action }}" title="{{ t('monitoring_location_' ~ action) }}"
+            aria-label="{{ t('monitoring_location_' ~ action) }}">{{ icon }}</button>
+    {% endfor %}
+  </div>
+  <small class="location-map-credit">Natural Earth</small>
+</div>
+<aside id="location-group" class="location-group" aria-labelledby="location-group-title" hidden>
+  <header>
+    <h3 id="location-group-title">{{ t('users') }} <span data-group-count></span></h3>
+    <button type="button" data-group-close aria-label="{{ t('close') }}" title="{{ t('close') }}">×</button>
+  </header>
+  <div class="location-group-list"></div>
+</aside>
+</div>
+<div class="location-legend">
+  {% if location_heat %}
+    <span><i class="location-heat-gradient"></i>{{ t('monitoring_location_heat_scale') }}</span>
+  {% elif location_period %}
+    {% for state in ['recorded', 'recorded_paused', 'recorded_playing'] %}
+    <span><i data-state="{{ state }}"></i>{{ t('monitoring_location_' ~ state) }}</span>
+    {% endfor %}
+  {% else %}
+    {% for state in ['offline', 'online', 'playing'] %}
+    <span><i data-state="{{ state }}"></i>{{ t('monitoring_location_' ~ state) }}</span>
+    {% endfor %}
+  {% endif %}
+  <span>{{ t('monitoring_location_approximate') }}</span>
+</div>

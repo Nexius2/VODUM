@@ -341,6 +341,69 @@ def start_wizard_plex_link(db):
         return _redirect_after_wizard_link()
 
 
+def add_wizard_plex_selection(db, form):
+    """Add the submitted selection before advancing; retain failed choices."""
+    from core.i18n import get_translator
+
+    selected = set(form.getlist("candidate_id"))
+    context = session.get(DISCOVERY_SESSION_KEY) or {}
+    if (not context.get("id") or int(context.get("expires_at") or 0) < int(time.time())
+            or len(selected) > MAX_DISCOVERY_SELECTION):
+        flash("plex_discovery_expired", "error")
+        return False
+    candidates = load_discovery(db, discovery_id=str(context["id"]),
+                                session_secret=str(context.get("nonce") or ""))
+    by_id = {item["id"]: item for item in candidates}
+    linked = get_admin_auth_identity(db, "plex")
+    if (not selected <= by_id.keys() or not linked or int(linked.get("is_active") or 0) != 1
+            or any(by_id[key].get("provider_subject") != linked.get("provider_subject") for key in selected)):
+        flash("plex_discovery_expired", "error")
+        return False
+    ready, failed, ids, failed_ids, urls = [], [], [], [], {}
+    for candidate in candidates:
+        key = candidate["id"]
+        if key not in selected:
+            continue
+        name = candidate.get("name") or "Plex Media Server"
+        preferred = str(form.get(f"preferred_url_{key}") or "").strip()
+        allowed = [item["uri"] for item in candidate.get("connections") or []]
+        if preferred in allowed:
+            urls[key] = preferred
+        try:
+            existing = db.query_one("SELECT id FROM servers WHERE type='plex' AND server_identifier=?",
+                                    (candidate["machine_identifier"],))
+            if existing:
+                outcome, server_id = "skipped", existing["id"]
+            elif not candidate.get("presence") or not candidate.get("access_token") or not allowed:
+                outcome, server_id = "failed", None
+            else:
+                outcome, server_id = _add_discovered_server(db, candidate, preferred)
+            if outcome in {"added", "skipped"} and server_id:
+                ids.append(server_id)
+                ready.append(name)
+            else:
+                failed.append(name)
+                failed_ids.append(key)
+        except Exception:
+            logger.warning("AUTH Plex wizard server add failed")
+            failed.append(name)
+            failed_ids.append(key)
+    record_setup_media_servers(db, ids)
+    t = get_translator(load_setup_wizard_settings(db))
+    if ready:
+        flash(t("wizard.plex_servers_ready").format(servers=", ".join(ready)), "success")
+    if failed:
+        context = dict(context)
+        context["wizard_selected"] = failed_ids
+        context["wizard_urls"] = {key: urls[key] for key in failed_ids if key in urls}
+        session[DISCOVERY_SESSION_KEY] = context
+        flash(t("wizard.plex_servers_failed").format(servers=", ".join(failed)), "error")
+        return False
+    delete_discovery(db, str(context["id"]))
+    session.pop(DISCOVERY_SESSION_KEY, None)
+    return True
+
+
 def register(app):
     @app.post("/auth/plex/discovery/start")
     def plex_discovery_start():
@@ -457,6 +520,8 @@ def register(app):
         ) or []
         existing_ids = {row["server_identifier"] for row in existing_rows}
         for item in candidates:
+            if not item.get("presence"):
+                continue
             safe = dict(item)
             safe.pop("access_token", None)
             safe["already_added"] = safe["machine_identifier"] in existing_ids

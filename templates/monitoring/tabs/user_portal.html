@@ -1,3 +1,9 @@
+{% set historical_snapshot = g.monitoring_snapshot|default(none) %}
+{% include "monitoring/partials/_statistics_status.html" %}
+{% if historical_snapshot and not historical_snapshot.ready %}
+<div class="mb-4 text-sm" data-monitoring-portal-live>{{ t('online') }}: {{ g.monitoring_portal_online|default(0) }}</div>
+{% endif %}
+{% if not historical_snapshot or historical_snapshot.ready %}
 {% set p = portal_usage %}
 <form method="get" class="flex flex-wrap items-center justify-between gap-3 mb-5">
   <input type="hidden" name="tab" value="user_portal">
@@ -24,3 +30,5 @@
 <section class="rounded-xl bg-slate-900 border border-slate-800 p-5"><h2 class="font-semibold mb-3">{{ t('portal_usage_events_table') }} · {{ p.total_events }}</h2><div class="overflow-x-auto"><table class="w-full text-sm text-left"><thead class="text-slate-400"><tr>{% for key in ['date','user','action','outcome'] %}<th class="p-3">{{ t('portal_usage_' ~ key) }}</th>{% endfor %}</tr></thead><tbody>{% for event in p.events %}<tr class="border-t border-slate-800"><td class="p-3">{{ event.created_at }}</td><td class="p-3">{{ event.username or '—' }}</td><td class="p-3">{{ t('portal_event_' ~ event.event_type) }}</td><td class="p-3 {% if event.outcome!='success' %}text-amber-400{% else %}text-emerald-400{% endif %}">{{ t('portal_outcome_' ~ event.outcome) }}</td></tr>{% else %}<tr><td colspan="4" class="p-4 text-slate-400">{{ t('portal_usage_empty') }}</td></tr>{% endfor %}</tbody></table></div><nav class="mt-4 flex gap-4 items-center">{% if p.page>1 %}<a class="text-primary" href="{{ url_for('monitoring_page', tab='user_portal', days=p.days, page=p.page-1) }}">←</a>{% endif %}<span>{{ p.page }} / {{ p.pages }}</span>{% if p.page<p.pages %}<a class="text-primary" href="{{ url_for('monitoring_page', tab='user_portal', days=p.days, page=p.page+1) }}">→</a>{% endif %}</nav></section>
 <script type="application/json" id="portal-usage-data">{{ {'timeline':p.timeline,'logins':t('portal_usage_logins'),'invitations':t('portal_usage_invitations'),'changes':t('portal_usage_changes')}|tojson }}</script>
 <script src="{{ url_for('static', filename='js/pages/monitoring-portal.js', v=g.app_version|default('dev')) }}"></script>
+
+{% endif %}

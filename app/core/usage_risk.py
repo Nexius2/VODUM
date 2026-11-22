@@ -2,6 +2,8 @@ from core.error_reporting import log_handled_failure
 import ipaddress
 import json
 
+from db_manager import isolated_read_operation
+
 from core.stream_session_identity import extract_machine_identifier
 from core.stream_enforcer_repository import load_enabled_policies
 from core.stream_policy_resolution import effective_policies_for_session
@@ -477,10 +479,25 @@ def _upsert_recommendation_history(db, item_out, cooldown_days):
             ),
         )
 
-def build_usage_risk_report(db, filters=None, persist_history=True):
+def build_usage_risk_report(db, filters=None, persist_history=False):
+    report, cooldown_days = _build_usage_risk_report(db, filters)
+    if persist_history:
+        for item in report["rows"]:
+            if item.get("suggested_subscription"):
+                _upsert_recommendation_history(db, item, cooldown_days)
+    return report
+
+
+@isolated_read_operation
+def _build_usage_risk_report(db, filters):
     filters = filters or {}
 
-    settings = dict(db.query_one("SELECT id, mail_from, smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_auth_method, smtp_oauth_access_token, email_history_retention_years, disable_on_expiry, delete_after_expiry_days, send_reminders, preavis_days, reminder_days, default_language, timezone, admin_email, contact_email, admin_password_hash, auth_enabled, admin_totp_enabled, admin_totp_secret, wizard_active, wizard_completed, wizard_step, wizard_state_json, web_secure_cookies, web_cookie_samesite, web_trust_proxy, enable_cron_jobs, default_expiration_days, default_subscription_days, maintenance_mode, debug_mode, backup_retention_days, backup_retention_count, data_retention_years, brand_name, notifications_order, user_notifications_can_override, notifications_send_mode, expiry_mode, warn_then_disable_days, discord_enabled, discord_bot_token, discord_bot_id, mailing_enabled, skip_never_used_accounts, plex_user_import_mode, enable_anonymous_telemetry, telemetry_instance_id, telemetry_last_sent_at, task_defaults_version, stream_enforcer_boost_until, usage_risk_enabled, usage_risk_send_upgrade_suggestions, usage_risk_send_stream_blocked_message, usage_risk_min_kills_before_suggestion, usage_risk_analysis_window_days, usage_risk_suggestion_cooldown_days, usage_risk_medium_threshold, usage_risk_high_threshold FROM settings WHERE id = 1") or {})
+    settings = dict(db.query_one("""
+        SELECT usage_risk_enabled, usage_risk_analysis_window_days,
+               usage_risk_min_kills_before_suggestion, usage_risk_medium_threshold,
+               usage_risk_high_threshold, usage_risk_suggestion_cooldown_days
+        FROM settings WHERE id = 1
+    """) or {})
 
     enabled = _safe_int(settings.get("usage_risk_enabled"), 1) == 1
     window_days = _safe_int(settings.get("usage_risk_analysis_window_days"), 30)
@@ -495,7 +512,7 @@ def build_usage_risk_report(db, filters=None, persist_history=True):
             "summary": {"high": 0, "medium": 0, "low": 0, "suggested": 0},
             "rows": [],
             "filters": filters,
-        }
+        }, suggestion_cooldown_days
 
     q = " ".join((filters.get("q") or "").split()).strip().lower()
     risk_level = (filters.get("risk_level") or "").strip().lower()
@@ -794,9 +811,6 @@ def build_usage_risk_report(db, filters=None, persist_history=True):
         if risk_level and item_out["risk_level"] != risk_level:
             continue
 
-        if persist_history and item_out.get("suggested_subscription"):
-            _upsert_recommendation_history(db, item_out, suggestion_cooldown_days)
-
         output.append(item_out)
 
     output.sort(key=lambda r: (r["risk_score"], r["kills_30d"], r["last_activity"] or ""), reverse=True)
@@ -813,7 +827,7 @@ def build_usage_risk_report(db, filters=None, persist_history=True):
         "summary": summary,
         "rows": output,
         "filters": filters,
-    }
+    }, suggestion_cooldown_days
 
 
 def build_usage_risk_for_user(db, vodum_user_id):

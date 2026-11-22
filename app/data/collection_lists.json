@@ -1,0 +1,1714 @@
+{
+  "schema_version": 1,
+  "catalog_version": 1,
+  "status": "draft",
+  "provenance": {
+    "snapshot_date": "2026-10-29",
+    "note": "Offline seed only. Cross-provider deduplication, completeness and descriptive metadata require review before activation."
+  },
+  "lists": [
+    {
+      "id": "vodum.franchise.dcu",
+      "name": "DC Universe",
+      "description": "All DC Comics films, including animation, across cinematic continuities.",
+      "legacy_key": "universe_v2_dcu",
+      "members": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0044091"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0060153"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0072419"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0073449"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0078346"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0081573"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0084745"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0086393"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0088206"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0094074"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0094017"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0098193"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0096895"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0103776"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0106364"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0114614"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0112462"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0118365"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0118688"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0120207"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0119185"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0257044"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0311429"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0305206"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0327554"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0360486"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0434409"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0372784"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0399146"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0348150"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0486655"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0468569"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0831887"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0409459"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0480255"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1075747"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1245526"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1133985"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1345836"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0770828"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1821694"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2975590"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1386697"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4116284"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0451279"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0974015"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7424200"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1477834"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0448115"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5822564"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7286456"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7713068"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7126948"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt12361974"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6334354"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1877830"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt8912936"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6443346"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10151854"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0439572"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt9362930"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt9663764"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt11315808"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5950044"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt8814476"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt34890576"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt19850008"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0143127"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0233298"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0346578"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0472219"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0800226"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0816671"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0934706"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0902272"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1117563"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1186373"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1295071"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1384590"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1398941"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1494772"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1569923"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1673430"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1699114"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1683043"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1672723"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2027128"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2224455"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2313197"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2166834"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2617456"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2820466"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3468260"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3060952"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3139072"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3139086"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3878542"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4324274"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4324302"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4729754"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4437640"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4870838"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5091548"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4853102"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5836262"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5896146"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5973626"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2494376"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6315800"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6869644"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6556890"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6142314"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7112166"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7578566"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7167630"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7167602"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7451284"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7167658"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt8634256"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7167686"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt8752474"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt9775360"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt8752440"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10548944"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt8752498"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10985510"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt11079148"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt11079116"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt12885852"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt13804084"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt14851194"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt14324650"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt14402926"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5012504"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt15248702"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt15352516"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt18250460"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt20192230"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt21197740"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt22769820"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt24223450"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt24548912"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt27687527"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt28508231"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt28786861"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt29195117"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt30150907"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt30150917"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt32627540"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt32627545"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt32508210"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt21110654"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt32333324"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3366668"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0982860"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1601188"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1606600"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1773355"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1663633"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1696202"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1701223"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1986806"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3254454"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2465238"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3643208"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3643216"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4189294"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7516768"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4189260"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4938416"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5251438"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5612702"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6945882"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7158814"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt8421602"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7877382"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt8050266"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt8457394"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt9293522"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10736082"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt11229556"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10327712"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt11802028"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt12093878"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt12272414"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt12794046"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt12876132"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt14577038"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt14948338"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt15129756"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt18305072"
+        }
+      ]
+    },
+    {
+      "id": "vodum.franchise.avp",
+      "name": "Alien & Predator",
+      "description": "",
+      "legacy_key": "universe_v2_avp",
+      "members": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt11866324"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt36463894"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0093773"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0100403"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0370263"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0758730"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3829266"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5362760"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1424381"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5362738"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5362730"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5362752"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1446714"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6878760"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6971180"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7309934"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6571148"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2316204"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7309938"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt12058458"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0078748"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt18412256"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0090605"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0103644"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0118583"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt31227572"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10110646"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10135070"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10150302"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10090626"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10172856"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10015040"
+        }
+      ]
+    },
+    {
+      "id": "vodum.franchise.fast",
+      "name": "Fast & Furious",
+      "description": "",
+      "legacy_key": "universe_v2_fast",
+      "members": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0232500"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0322259"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2055789"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0463985"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1013752"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1538503"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1596343"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1905041"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2820852"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4630562"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6806448"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5433138"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5433140"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt27550022"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3401738"
+        }
+      ]
+    },
+    {
+      "id": "vodum.franchise.mcu",
+      "name": "Marvel Cinematic Universe",
+      "description": "",
+      "legacy_key": "universe_v2_mcu",
+      "members": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0458339"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3067038"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4154664"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0371746"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1228705"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2011109"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0800369"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0800080"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2011118"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0848228"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2247732"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1300854"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3438640"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1981115"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1843866"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2015381"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3896198"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2395427"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0478970"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1431045"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3498820"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3480822"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6016776"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1825683"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2250912"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6599818"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1211837"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3501632"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt8023090"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5095030"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4154756"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5463162"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4154796"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt9032400"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt9376612"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10648342"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt11107678"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6320628"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10872600"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt9419884"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt9114286"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt15318872"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt13623136"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10954600"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6791350"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10676048"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6263850"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt14513804"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt20969586"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10676052"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt36042156"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt22084616"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt21357150"
+        }
+      ]
+    },
+    {
+      "id": "vodum.franchise.starwars",
+      "name": "Star Wars",
+      "description": "Skywalker saga, theatrical spin-offs and official standalone shorts, videos and television specials. Series and normal television episodes excluded.",
+      "legacy_key": "universe_v2_starwars",
+      "members": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0490479"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2008565"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1509637"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1808255"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2005268"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2402600"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt23626160"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt12885438"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt15164924"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt20784210"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt43679852"
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "11"
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "1891"
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "1892"
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "1893"
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "1894"
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "1895"
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "140607"
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "181808"
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "181812"
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "12180"
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "330459"
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "348350"
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "1228710"
+        }
+      ]
+    },
+    {
+      "id": "vodum.franchise.trek",
+      "name": "Star Trek",
+      "description": "",
+      "legacy_key": "universe_v2_trek",
+      "members": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0117731"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0079945"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0084726"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0088170"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0092007"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0098382"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0102975"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0111280"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt9603060"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0120844"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0253754"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt30833980"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0796366"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1408101"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2660888"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4756228"
+        }
+      ]
+    }
+  ]
+}

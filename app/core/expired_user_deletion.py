@@ -3,13 +3,15 @@ from core.error_reporting import log_handled_failure
 from datetime import date
 import json
 
+from requests.exceptions import ConnectionError, Timeout, SSLError
+
 from secret_store import decrypt_server_record
-from core.native_user_deletion import NativeUserDeletion, NativeDeletionError
+from core.native_user_deletion import NativeUserDeletion, NativeDeletionError, NativeServerUnavailable
 from core.user_deletion import delete_local_user
 from core.expiration_rules import parse_expiration_date
 
 
-def delete_expired_user(db, user_id, *, today=None, adapter=NativeUserDeletion):
+def delete_expired_user(db, user_id, *, today=None, adapter=NativeUserDeletion, unavailable_servers=None):
     today = today or date.today()
     result = {"status": "skipped", "confirmed": [], "reason": "not_eligible"}
     targets = []
@@ -54,9 +56,12 @@ def delete_expired_user(db, user_id, *, today=None, adapter=NativeUserDeletion):
             ).fetchone():
                 result["reason"] = "native_job_running"
                 return result
+            failed_account = None
+            failed_step = "inspect"
             try:
                 # Preflight every server before performing any destructive request.
                 for account in accounts:
+                    failed_account = account
                     if str(account.get("role") or "").lower() in ("owner", "admin", "home") or not str(account.get("external_user_id") or "").strip():
                         result["reason"] = "protected_or_pending_account"
                         return result
@@ -77,6 +82,8 @@ def delete_expired_user(db, user_id, *, today=None, adapter=NativeUserDeletion):
                     if not row or str(row["type"]).lower() != str(account["type"]).lower():
                         raise NativeDeletionError("Missing or mismatched server")
                     server = dict(decrypt_server_record(row))
+                    if unavailable_servers is not None and account["server_id"] in unavailable_servers:
+                        raise NativeServerUnavailable("Server already unreachable during this run")
                     target = adapter(account, server)
                     targets.append(target)
                     target.inspect()
@@ -86,14 +93,25 @@ def delete_expired_user(db, user_id, *, today=None, adapter=NativeUserDeletion):
                            processed_at=CURRENT_TIMESTAMP,last_error='Canceled by expiration deletion'
                        WHERE vodum_user_id=? AND processed=0 AND status='queued'""", (user_id,),
                 )
+                failed_step = "delete_and_confirm"
                 for account, target in zip(accounts, targets):
+                    failed_account = account
                     target.delete_and_confirm()
                     result["confirmed"].append({"server_id": account["server_id"], "media_user_id": account["id"]})
             except Exception as exc:
                 # Keep local identities on partial failure. Next run rechecks native state.
                 # Commit canceled queued jobs even when a server operation failed.
-                log_handled_failure("users.delete_expired_native_account")
-                result.update(status="failed", reason=str(exc) if isinstance(exc, NativeDeletionError) else type(exc).__name__)
+                account = failed_account or {}
+                unavailable = isinstance(exc, (ConnectionError, Timeout, NativeServerUnavailable)) and not isinstance(exc, SSLError)
+                if unavailable and unavailable_servers is not None:
+                    unavailable_servers.add(account.get("server_id"))
+                if not unavailable:
+                    log_handled_failure("users.delete_expired_native_account", user_id=user_id,
+                                        server_id=account.get("server_id"), media_user_id=account.get("id"))
+                result.update(status="deferred" if unavailable else "failed",
+                              reason="server_unavailable" if unavailable else str(exc) if isinstance(exc, NativeDeletionError) else type(exc).__name__,
+                              failed_server_id=account.get("server_id"), failed_media_user_id=account.get("id"),
+                              failed_provider=str(account.get("type") or "unknown").strip().lower(), failed_step=failed_step)
                 return result
             delete_local_user(cur, user_id)
             result.update(status="deleted", reason="all_native_accounts_confirmed")

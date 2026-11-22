@@ -82,6 +82,8 @@ def register(app):
         endpoint = request.endpoint
         if endpoint not in actions and endpoint not in pages:
             return response
+        if endpoint == "portal_media_request_submit" and getattr(g, "portal_request_queued", False):
+            return response  # The worker audits the actual result.
         principal = getattr(g, "auth_principal", None) or {}
         account_id = principal.get("account_id") if principal.get("account_type") == "portal" else None
         # Authorized user pages only; polling/assets are deliberately excluded.
@@ -285,6 +287,7 @@ def register(app):
     @permission_required("portal.media_requests.create_own")
     @portal_user_required
     def portal_media_requests():
+        from core.portal_media_request_jobs import media_request_jobs
         from core.portal_media_requests import request_libraries, search_media, MediaRequestError
         from core.portal_rate_limit import portal_request_allowed
         from web.security import get_client_ip
@@ -306,7 +309,21 @@ def register(app):
                     row['selection'] = signer.dumps({'user_id':user_id,'kind':row['kind'],'external_id':row['external_id'],'title':row['title'][:200]})
             except MediaRequestError as exc: flash(str(exc),'error')
         return render_template('portal/requests.html',libraries=libraries,results=results,
-            query=term,backdrop_posters=backdrop_posters,**ui,active_portal_page='requests')
+            query=term,backdrop_posters=backdrop_posters,
+            request_jobs=media_request_jobs(db, int(g.auth_principal["account_id"])),
+            **ui,active_portal_page='requests')
+
+    @app.get("/portal/requests/jobs")
+    @portal_login_required
+    @permission_required("portal.media_requests.create_own")
+    @portal_user_required
+    def portal_media_request_status():
+        from core.portal_media_request_jobs import media_request_jobs
+        db = get_db()
+        _require_feature(db, "requests")
+        response = jsonify(jobs=media_request_jobs(db, int(g.auth_principal["account_id"])))
+        response.headers["Cache-Control"] = "private, no-store"
+        return response
 
     @app.get('/portal/requests/backdrop/<int:history_id>')
     @portal_login_required
@@ -331,7 +348,8 @@ def register(app):
     @permission_required("portal.media_requests.create_own")
     @portal_user_required
     def portal_media_request_submit():
-        from core.portal_media_requests import submit_request, MediaRequestError
+        from core.portal_media_request_jobs import enqueue_media_request
+        from core.portal_media_requests import MediaRequestError
         from core.portal_rate_limit import portal_request_allowed
         from web.security import get_client_ip
         from itsdangerous import URLSafeTimedSerializer, BadSignature
@@ -342,10 +360,12 @@ def register(app):
             selection = URLSafeTimedSerializer(app.secret_key,salt='portal-media-request').loads(request.form.get('selection',''),max_age=3600)
             if selection['user_id'] != user_id: raise ValueError()
             g.portal_request_details = {'media_kind':selection['kind'], 'external_id':selection['external_id'], 'media_title':selection.get('title','')[:200]}
-            result = submit_request(db,user_id,None,selection['kind'],selection['external_id'])
-            g.portal_request_details['request_result'] = result
-            if request.headers.get('Accept') == 'application/json': return jsonify(result=result)
-            flash(result,'success')
+            job_id = enqueue_media_request(db, int(g.auth_principal["account_id"]),
+                                           selection["kind"], selection["external_id"], selection.get("title"))
+            g.portal_request_queued = True
+            if request.headers.get('Accept') == 'application/json':
+                return jsonify(job_id=job_id, result="portal_requests_queued"), 202
+            return redirect(url_for("portal_media_requests", _anchor="request-jobs"), code=303)
         except (BadSignature,KeyError,TypeError,ValueError) as exc:
             result = str(exc) if isinstance(exc,MediaRequestError) else 'portal_requests_invalid'
             g.portal_request_details = {**getattr(g,'portal_request_details',{}), 'request_result':result}

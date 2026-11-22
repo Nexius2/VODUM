@@ -12,16 +12,9 @@ from web.helpers import get_db
 from web.pagination import normalize_page, normalize_page_size, page_bounds
 from core.referral_bulk import bulk_update_referrals, normalize_referral_ids
 from core.user_merge import build_merge_preview
+from core.user_list_queries import load_users_page
 
 task_logger = get_logger("tasks_ui")
-USER_LIST_COLUMNS = """
-                    u.id,
-                    u.username,
-                    u.email,
-                    u.status,
-                    u.expiration_date
-"""
-
 USER_REFERRAL_SETTINGS_COLUMNS = """
             enabled,
             reward_enabled,
@@ -239,148 +232,11 @@ def register(app):
         total_pages = 1
 
         if tab == "users":
-            sort_map = {
-                "username": "u.username",
-                "email": "u.email",
-                "status": "u.status",
-                "subscription": "subscription_sort_label",
-                "expiration_date": "u.expiration_date",
-                "servers_count": "servers_count",
-                "libraries_count": "libraries_count",
-            }
-            sort_column = sort_map.get(sort, "u.username")
-
-            query = f"""
-                SELECT
-                    {USER_LIST_COLUMNS},
-                    st.name AS subscription_name,
-                    CASE
-                        WHEN MAX(CASE WHEN LOWER(COALESCE(s.type, '')) = 'plex'
-                                       AND LOWER(COALESCE(mu.role, '')) = 'owner'
-                                      THEN 1 ELSE 0 END) = 1
-                            THEN 'Owner'
-                        WHEN MAX(CASE WHEN LOWER(COALESCE(s.type, '')) = 'jellyfin'
-                                       AND (
-                                            LOWER(COALESCE(mu.role, '')) = 'admin'
-                                            OR COALESCE(mu.raw_json, '') LIKE '%"IsAdministrator":true%'
-                                            OR COALESCE(mu.raw_json, '') LIKE '%"IsAdministrator": true%'
-                                       )
-                                      THEN 1 ELSE 0 END) = 1
-                            THEN 'Admin'
-                        ELSE NULL
-                    END AS subscription_role_label,
-                    COALESCE(
-                        CASE
-                            WHEN MAX(CASE WHEN LOWER(COALESCE(s.type, '')) = 'plex'
-                                           AND LOWER(COALESCE(mu.role, '')) = 'owner'
-                                          THEN 1 ELSE 0 END) = 1
-                                THEN 'Owner'
-                            WHEN MAX(CASE WHEN LOWER(COALESCE(s.type, '')) = 'jellyfin'
-                                           AND (
-                                                LOWER(COALESCE(mu.role, '')) = 'admin'
-                                                OR COALESCE(mu.raw_json, '') LIKE '%"IsAdministrator":true%'
-                                                OR COALESCE(mu.raw_json, '') LIKE '%"IsAdministrator": true%'
-                                           )
-                                          THEN 1 ELSE 0 END) = 1
-                                THEN 'Admin'
-                            ELSE NULL
-                        END,
-                        st.name
-                    ) AS subscription_sort_label,
-                    COUNT(DISTINCT mu.server_id) AS servers_count,
-                    COUNT(DISTINCT mul.library_id) AS libraries_count
-                                    FROM vodum_users u
-                                    LEFT JOIN subscription_templates st ON st.id = u.subscription_template_id
-                                    LEFT JOIN media_users mu ON mu.vodum_user_id = u.id
-                                    LEFT JOIN servers s ON s.id = mu.server_id
-                                    LEFT JOIN media_user_libraries mul ON mul.media_user_id = mu.id
-                                """
-
-            conditions = []
-            params = []
-
-            if status_none_requested:
-                conditions.append("1 = 0")
-            elif selected_statuses:
-                placeholders = ",".join(["?"] * len(selected_statuses))
-                conditions.append(f"u.status IN ({placeholders})")
-                params.extend(selected_statuses)
-
-            if search:
-                like = f"%{search}%"
-                conditions.append(
-                    "("
-                    "COALESCE(u.username,'') LIKE ? OR "
-                    "COALESCE(u.email,'') LIKE ? OR "
-                    "COALESCE(u.second_email,'') LIKE ? OR "
-                    "COALESCE(u.phone,'') LIKE ? OR "
-                    "COALESCE(u.firstname,'') LIKE ? OR "
-                    "COALESCE(u.lastname,'') LIKE ? OR "
-                    "COALESCE(u.notes,'') LIKE ? OR "
-                    "EXISTS ("
-                    "   SELECT 1 FROM media_users mu_search "
-                    "   WHERE mu_search.vodum_user_id = u.id "
-                    "   AND COALESCE(mu_search.username,'') LIKE ?"
-                    ")"
-                    ")"
-                )
-
-                params.extend([
-                    like,  # username
-                    like,  # email
-                    like,  # second_email
-                    like,  # phone
-                    like,  # firstname
-                    like,  # lastname
-                    like,  # notes
-                    like,  # media_users.username
-                ])
-
-            if conditions:
-                query += " WHERE " + " AND ".join(conditions)
-
-            query += f"""
-                GROUP BY u.id
-                ORDER BY
-                    CASE
-                        WHEN u.status IN ('active', 'pre_expired', 'reminder') THEN 0
-                        ELSE 1
-                    END ASC,
-
-                    CASE
-                        WHEN {sort_column} IS NULL OR {sort_column} = '' THEN 1
-                        ELSE 0
-                    END ASC,
-
-                    {sort_column} {order.upper()},
-                    LOWER(COALESCE(u.username, '')) ASC,
-                    u.id ASC
-                LIMIT ?
-                OFFSET ?
-            """
-            params.extend([per_page, offset])
-
-            count_query = """
-                SELECT COUNT(DISTINCT u.id) as total
-                FROM vodum_users u
-                LEFT JOIN media_users mu ON mu.vodum_user_id = u.id
-                LEFT JOIN media_user_libraries mul ON mul.media_user_id = mu.id
-            """
-            if conditions:
-                count_query += " WHERE " + " AND ".join(conditions)
-
-            count_params = params[:-2]
-            total_row = db.query_one(count_query, count_params) or {"total": 0}
-            total_users = int(total_row["total"] or 0)
-            pagination = page_bounds(page, per_page, total_users)
-            total_pages = pagination["total_pages"]
-
-            if page > total_pages:
-                page = total_pages
-                offset = (page - 1) * per_page
-                params = count_params + [per_page, offset]
-
-            users = db.query(query, params) or []
+            users, total_users, total_pages, page = load_users_page(
+                db, sort=sort, order=order, selected_statuses=selected_statuses,
+                status_none_requested=status_none_requested, search=search,
+                page=page, per_page=per_page,
+            )
 
         # --------------------------------------------------
         # TAB = REFERRALS

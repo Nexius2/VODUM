@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from core.monitoring.ip_location import load_ip_locations
 from core.monitoring.resource_stats import apply_server_resource_stats
 from core.monitoring.snapshots import get_live_session_stats
 from db_manager import isolated_read_operation
@@ -165,4 +166,8 @@ def load_monitoring_live_context(
                      live_window_seconds=live_window_seconds)
     for session in context["sessions"]:
         session.update(_enrich_live_session_artwork(session, db))
+    if tab == "now_playing":
+        locations = load_ip_locations(session.get("ip") for session in context["sessions"])
+        for session in context["sessions"]:
+            session["ip_is_local"], session["ip_location"] = locations[session.get("ip")]
     return context

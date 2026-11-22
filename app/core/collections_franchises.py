@@ -82,6 +82,11 @@ class FranchiseSource(UniverseLists, StreamingSource):
         self.diagnostics = []
         self.franchise_identity_network_blocked=False
         groups = self.universe_groups(kind)
+        selected=getattr(self,'selected_lists',None)
+        if selected is None:
+            from core.collections_franchise_lists import default_list_ids
+            selected=default_list_ids(getattr(self,'db',None))
+        if selected is not None:groups=[group for group in groups if group['universe'] in selected]
         self.resolved_local_ids = self.local_ids(inventory, kind) if groups else set()
         self.local_franchise_media={str(row['imdb']):{'id':int(row['tmdb']),'title':row['title'],
             'release_date':str(row.get('release_date') or '')[:10]}
@@ -91,6 +96,32 @@ class FranchiseSource(UniverseLists, StreamingSource):
 
     def members(self, group, kind):
         return self.universe_members(group['universe'], kind)
+
+
+def recover_franchise_keys(db, instance_id, groups, media_type, objects):
+    """Keep the UUID/ownership marker of an existing child when its key evolves.
+
+    A failed earlier run may already have reserved the new key without ever
+    creating a remote collection. Never transfer a remote object across configs.
+    """
+    for group in groups:
+        target='franchise:'+media_type+':'+group['key']
+        current=next((obj for obj in objects if obj['person_key']==target),None)
+        if current and current.get('remote_id'):continue
+        previous=[obj for obj in objects if obj['instance_id']==instance_id
+                  and obj['person_key']!=target and obj['title']==group['title']
+                  and obj['person_key'].startswith('franchise:'+media_type+':')
+                  and obj.get('remote_id') and obj['state']!='deleted']
+        if len(previous)!=1:continue
+        old=previous[0]
+        # Only the unused local reservation is removed; its remote ID is empty.
+        with db.transaction() as cursor:
+            if current:
+                cursor.execute("DELETE FROM collection_objects WHERE id=? AND COALESCE(remote_id,'')=''",(current['id'],))
+            cursor.execute('UPDATE collection_objects SET person_key=? WHERE id=? AND instance_id=?',
+                           (target,old['id'],instance_id))
+        if current:objects.remove(current)
+        old['person_key']=target
 
 
 def run_franchises(db,instance,*,kind='sync',heartbeat=lambda:None,
@@ -121,7 +152,7 @@ def run_franchises(db,instance,*,kind='sync',heartbeat=lambda:None,
             self.rows=rows;self.collection_profile_path=poster
             self.partial=source.partial
             self.local_identity_uncertain=any(not row.get('tmdb') for row in inventory)
-            self.diagnostics=[{'id':'franchise_members','name':{'imdb':'IMDb','imdb_lists':'IMDb','tmdb':'TMDb','tmdb_collection':'TMDb'}.get(provider,provider),'state':'success','count':len(rows),'source_kind':'franchise_universe' if provider!='TMDb' else 'tmdb_franchise'}]
+            self.diagnostics=[{'id':'franchise_members','name':{'vodum':'VODUM','imdb':'IMDb','imdb_lists':'IMDb','tmdb':'TMDb','tmdb_collection':'TMDb'}.get(provider,provider),'state':'success','count':len(rows),'source_kind':'franchise_universe' if provider!='TMDb' else 'tmdb_franchise'}]
         def discover(self,*args):return self.rows
         def close(self):pass
         def media_external_ids(self,*args):return source.media_external_ids(*args)
@@ -155,6 +186,7 @@ def run_franchises(db,instance,*,kind='sync',heartbeat=lambda:None,
         shared=db.query_one('SELECT secret_tmdb FROM collection_settings WHERE id=1')
         key=decrypt_secret(shared['secret_tmdb']) if shared and shared['secret_tmdb'] else os.environ.get('TMDB_API_KEY')
         source=source_factory(key,config['language']);source.db=db;source.heartbeat=heartbeat
+        source.selected_lists=config.get('franchise_lists')
         groups=source.groups(inventory,media_type)
         local_ids=source.resolved_local_ids
         result['diagnostics']['providers']=source.diagnostics
@@ -176,7 +208,7 @@ def run_franchises(db,instance,*,kind='sync',heartbeat=lambda:None,
                 result['errors'].append('collections.franchises_source_failed')
                 result['diagnostics']['providers'].append({
                     'id':group['key'],'name':group['title'],'state':'error',
-                    'failure':source.failure(exc,UNIVERSES[group['universe']]['provider'],
+                    'failure':source.failure(exc,UNIVERSES.get(group['universe'],{'provider':'vodum'})['provider'],
                                              'franchises',media_type,'members')})
         any_partial = identity_partial or any(group_partials.values())
         source.partial = any_partial
@@ -184,6 +216,8 @@ def run_franchises(db,instance,*,kind='sync',heartbeat=lambda:None,
         if any_partial:
             result['warnings'].append('collections.streaming_partial')
         can_retire = not result['errors'] and not any_partial
+        if not preview:
+            recover_franchise_keys(db,instance['id'],groups,media_type,objects)
         new_keys = {'franchise:'+media_type+':'+group['key'] for group in groups}
         if not preview and can_retire:
             for obj in objects:
@@ -210,7 +244,7 @@ def run_franchises(db,instance,*,kind='sync',heartbeat=lambda:None,
                         matched_titles.add(credit['id'])
                 local_count=len(matched_titles)
                 # Match upstream's minimum: two distinct titles, not two editions.
-                if local_count<2:
+                if local_count<(1 if media_type=='tv' else 2):
                     old=next((obj for obj in objects if obj['person_key']==object_key),None)
                     if old and not preview and not source.partial:remove(old)
                     continue
@@ -231,7 +265,7 @@ def run_franchises(db,instance,*,kind='sync',heartbeat=lambda:None,
                 child=run_streaming_country(db,{**instance,'config_json':json.dumps(child_config)},kind=kind,
                     heartbeat=child_heartbeat,source_factory=factory,adapter_factory=lambda *args:SharedAdapter(),
                     object_key_override=object_key,title_override=title,
-                    poster_key_override='universe_'+group['universe'] if group.get('universe') else 'franchises')
+                    poster_key_override='universe_'+group['universe'] if group.get('universe') in UNIVERSES else 'franchises')
                 report(object_key,child)
             except CollectionRunCancelled:raise
             except CollectionOwnershipError as exc:
@@ -239,15 +273,16 @@ def run_franchises(db,instance,*,kind='sync',heartbeat=lambda:None,
                 # An external collection with this title blocks only
                 # this saga. Do not adopt it and do not stop the other sagas.
                 child=getattr(exc,'result',{})
+                child['errors']=[code for code in child.get('errors',[]) if code!='collections.title_collision']
                 child.setdefault('warnings',[]).append('collections.title_collision')
                 child.setdefault('diagnostics',{}).setdefault('providers',[]).append({
                     'id':object_key,'name':title,'state':'error','source_kind':'collection_publication',
-                    'failure':{'stage':'title_collision'}})
+                    'failure':{'stage':'title_collision'},'conflict':getattr(exc,'conflict',{})})
                 report(object_key,child)
             except Exception as exc:
                 log_handled_failure('collections.franchises.collection',level='error')
                 result['errors'].append('collections.franchises_source_failed')
-                provider=UNIVERSES[group['universe']]['provider'] if group.get('universe') else 'tmdb'
+                provider=UNIVERSES.get(group['universe'],{'provider':'vodum'})['provider'] if group.get('universe') else 'tmdb'
                 report(object_key,{'errors':['collections.franchises_source_failed'],'diagnostics':{'providers':[{
                     'id':object_key,'name':group.get('title') or object_key,'state':'error',
                     'source_kind':'franchise_universe' if group.get('universe') else 'tmdb_franchise',

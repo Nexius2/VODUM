@@ -1,0 +1,90 @@
+{% set historical_snapshot = (g.monitoring_top_snapshot if g.monitoring_top_snapshot is defined else g.monitoring_snapshot)|default(none) %}
+{% include "monitoring/partials/_statistics_status.html" %}
+{% if not historical_snapshot or historical_snapshot.ready %}
+{% if library_top_cards %}
+  <div class="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-5">
+    {% for card in library_top_cards %}
+      <div class="rounded-2xl border border-slate-800 overflow-hidden bg-slate-950/70">
+        <div class="relative h-36 border-b border-slate-800 overflow-hidden">
+          {% set top_item = card["items"][0] if card["items"] else None %}
+
+          {% if top_item and (top_item.backdrop_url or top_item.poster_url) %}
+            <img
+              src="{{ top_item.backdrop_url or top_item.poster_url }}"
+              alt="{{ top_item.display_title }}"
+              class="absolute inset-0 w-full h-full object-cover opacity-75"
+              loading="lazy"
+              decoding="async"
+            >
+          {% else %}
+            <div class="absolute inset-0 bg-slate-800"></div>
+          {% endif %}
+
+			<div class="absolute inset-0 bg-gradient-to-r from-slate-950/40 via-slate-950/10 to-slate-950/40"></div>
+			<div class="absolute inset-0 bg-gradient-to-b from-transparent via-slate-950/20 to-slate-950/75"></div>
+
+          <div class="relative z-10 h-full flex flex-col justify-between p-4">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <div class="text-xl font-semibold text-white">{{ card.library_name }}</div>
+                <div class="text-xs text-slate-300 mt-1">
+                  {{ card.server_name }}
+                </div>
+                <div class="text-[11px] text-slate-400 mt-1">
+                  {{ card.total_plays }} {{ t("monitoring_libraries_play") if card.total_plays == 1 else t("monitoring_user_plays") }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="divide-y divide-slate-800">
+          {% for item in card["items"] %}
+            <div class="relative overflow-hidden flex items-start gap-3 p-3">
+              {% if item.backdrop_url %}
+                <img
+                  src="{{ item.backdrop_url }}"
+                  alt=""
+                  class="absolute inset-0 h-full w-full object-cover opacity-20 pointer-events-none"
+                  loading="lazy"
+                  decoding="async"
+                >
+                <div class="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-950/80 to-slate-950/95"></div>
+              {% endif %}
+
+              <div class="relative z-10 w-12 h-16 rounded-lg overflow-hidden bg-slate-800 shrink-0">
+                {% if item.poster_url %}
+                  <img
+                    src="{{ item.poster_url }}"
+                    alt="{{ item.display_title }}"
+                    class="w-full h-full object-cover"
+                    loading="lazy"
+                    decoding="async"
+                  >
+                {% endif %}
+              </div>
+
+              <div class="relative z-10 min-w-0 flex-1">
+                <div class="text-sm font-medium text-slate-100 truncate">
+                  {{ item.display_title }}
+                </div>
+                <div class="text-xs text-slate-400 mt-1">
+                  {{ item.plays }} {{ t("monitoring_libraries_play") if item.plays == 1 else t("monitoring_user_plays") }}
+                </div>
+                <div class="text-xs text-slate-500">
+                  {{ item.user_count }} {{ t("user") if item.user_count == 1 else t("users") }}
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="text-sm text-slate-500">
+    {{ t("monitoring_libraries_no_watched") }}
+  </div>
+{% endif %}
+
+{% endif %}

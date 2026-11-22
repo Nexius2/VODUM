@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS collection_external_ids (
  media_type TEXT NOT NULL, media_id INTEGER NOT NULL, data_json TEXT NOT NULL, updated_at TEXT NOT NULL,
  PRIMARY KEY(media_type,media_id)
 );
-CREATE TABLE IF NOT EXISTS collection_settings (id INTEGER PRIMARY KEY CHECK(id=1), secret_tmdb TEXT, suppress_empty INTEGER NOT NULL DEFAULT 1);
+CREATE TABLE IF NOT EXISTS collection_settings (id INTEGER PRIMARY KEY CHECK(id=1), secret_tmdb TEXT, secret_myanimelist TEXT, suppress_empty INTEGER NOT NULL DEFAULT 1);
 INSERT OR IGNORE INTO collection_settings(id) VALUES(1);
 CREATE TABLE IF NOT EXISTS collection_instances (
  id TEXT PRIMARY KEY, group_id TEXT, retired INTEGER NOT NULL DEFAULT 0, model TEXT NOT NULL, library_id INTEGER NOT NULL REFERENCES libraries(id),
@@ -65,6 +65,10 @@ CREATE TABLE IF NOT EXISTS collection_last_counts (
  instance_id TEXT PRIMARY KEY REFERENCES collection_instances(id) ON DELETE CASCADE,
  count_json TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS collection_last_sync (
+ instance_id TEXT PRIMARY KEY REFERENCES collection_instances(id) ON DELETE CASCADE,
+ run_id INTEGER NOT NULL, state TEXT NOT NULL, reasons_json TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS collection_run_daily_totals (
  day TEXT PRIMARY KEY, runs INTEGER NOT NULL, failures INTEGER NOT NULL, warnings INTEGER NOT NULL
 );
@@ -104,6 +108,9 @@ CREATE TABLE IF NOT EXISTS collection_seasonal_windows (
 """
 
 
+from core.collections_franchise_lists import SCHEMA as FRANCHISE_LIST_SCHEMA, seed_lists
+SCHEMA += FRANCHISE_LIST_SCHEMA
+
 from core.collections_spotlight_store import SCHEMA as SPOTLIGHT_SCHEMA
 SCHEMA += SPOTLIGHT_SCHEMA
 from core.collection_inventory import SCHEMA as INVENTORY_SCHEMA
@@ -114,7 +121,16 @@ def ensure_collection_schema(conn, cursor):
     for statement in SCHEMA.split(';'):
         if statement.strip():
             cursor.execute(statement)
+    list_columns = {row[1] for row in cursor.execute('PRAGMA table_info(franchise_list_items)')}
+    for name, definition in (
+            ('poster_path', 'TEXT'), ('metadata_state', "TEXT NOT NULL DEFAULT 'pending'"),
+            ('metadata_error', 'TEXT'), ('metadata_checked_at', 'TEXT')):
+        if name not in list_columns:
+            cursor.execute('ALTER TABLE franchise_list_items ADD COLUMN '+name+' '+definition)
+    seed_lists(cursor)
     settings_columns = {row[1] for row in cursor.execute('PRAGMA table_info(collection_settings)')}
+    if 'secret_myanimelist' not in settings_columns:
+        cursor.execute('ALTER TABLE collection_settings ADD COLUMN secret_myanimelist TEXT')
     if 'suppress_empty' not in settings_columns:
         cursor.execute('ALTER TABLE collection_settings ADD COLUMN suppress_empty INTEGER NOT NULL DEFAULT 1')
     columns = {row[1] for row in cursor.execute('PRAGMA table_info(collection_instances)')}
@@ -127,6 +143,8 @@ def ensure_collection_schema(conn, cursor):
     if 'retired' not in columns:
         cursor.execute('ALTER TABLE collection_instances ADD COLUMN retired INTEGER NOT NULL DEFAULT 0')
     cursor.execute('UPDATE collection_instances SET group_id=id WHERE group_id IS NULL')
+    from core.collections_franchise_lists import upgrade_franchise_selections
+    upgrade_franchise_selections(cursor)
     repair=cursor.execute("INSERT OR IGNORE INTO collection_discovery_cache(cache_key,data_json,updated_at) VALUES('collection-presentation-repair-v1','{}',CURRENT_TIMESTAMP)")
     if repair.rowcount:
         # Repair already published temporary titles/artwork without rebuilding

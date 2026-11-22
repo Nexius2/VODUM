@@ -145,4 +145,15 @@ class TaskConfigurationService:
                enabled_prev=CASE WHEN enabled_prev IS NULL THEN enabled ELSE enabled_prev END,
                enabled=0, status='disabled', updated_at=CURRENT_TIMESTAMP"""
         )
+        if restored_db.query_one(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='portal_media_request_jobs'"
+        ):
+            restored_db.execute("""
+                UPDATE portal_media_request_jobs
+                SET status = 'done', finished_at = CURRENT_TIMESTAMP,
+                    result = CASE WHEN status = 'submitting' THEN 'portal_requests_add_uncertain'
+                                  ELSE 'portal_requests_unavailable' END,
+                    lease_id = NULL, lease_until = NULL
+                WHERE status <> 'done'
+            """)
         return True

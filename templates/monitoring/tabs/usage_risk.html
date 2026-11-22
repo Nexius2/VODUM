@@ -1,3 +1,6 @@
+{% set historical_snapshot = g.monitoring_snapshot|default(none) %}
+{% include "monitoring/partials/_statistics_status.html" %}
+{% if not historical_snapshot or historical_snapshot.ready %}
 {% macro usage_reason(item) -%}
   {% if item.code == "public_ips" %}{{ t("usage_risk_reason_public_ips").format(count=item.count) }}
   {% elif item.code == "fixed_devices" %}{{ t("usage_risk_reason_fixed_devices").format(count=item.count) }}
@@ -320,3 +323,5 @@
   </div>
 
 </div>
+
+{% endif %}

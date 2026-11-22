@@ -172,7 +172,7 @@ def run(task_id: int, db: DBManager):
 
         if not settings:
             log.warning("Telemetry aborted: settings row not found")
-            return {"success": False, "reason": "settings_missing"}
+            return _failure("settings_missing", "Telemetry settings row not found")
         settings = dict(settings)
 
         telemetry_enabled = int(settings["enable_anonymous_telemetry"] or 0) == 1
@@ -365,17 +365,21 @@ def run(task_id: int, db: DBManager):
 
     except requests.RequestException as exc:
         log.warning(f"Telemetry network error: {type(exc).__name__}")
-        return {"success": False, "reason": "network_error"}
+        return _failure("network_error", f"Telemetry network error: {type(exc).__name__}")
     except Exception as exc:
         log.exception(
             f"Telemetry fatal error: {type(exc).__name__}"
         )
-        return {"success": False, "reason": "internal_error"}
+        return _failure("internal_error", f"Telemetry internal error: {type(exc).__name__}")
     finally:
         _SEND_LOCK.release()
 
 
-def _post_payload(db, payload, user_agent):
+def _failure(reason, message, **details):
+    return {"success": False, "status": "error", "reason": reason, "message": message, **details}
+
+
+def _send_payload(payload, user_agent):
     response = requests.post(
         TELEMETRY_URL,
         json=validate_anonymous_payload(payload),
@@ -384,6 +388,28 @@ def _post_payload(db, payload, user_agent):
     )
 
     log.info(f"Telemetry HTTP response: {response.status_code}")
+    return response
+
+
+def _payload_rejected(response):
+    if response.status_code != 400:
+        return False
+    try:
+        body = response.json()
+    except ValueError:
+        return False
+    return isinstance(body, dict) and body.get("success") is False and body.get("error") == "Invalid telemetry payload"
+
+
+def _post_payload(db, payload, user_agent):
+    response = _send_payload(payload, user_agent)
+    if payload.get("schema_version") == 4 and _payload_rejected(response):
+        # A schema 3 worker rejects unknown fields before writing to D1.
+        # Keep reporting aggregates while that worker is being upgraded.
+        compatible = {key: value for key, value in payload.items() if key != "language_observations_json"}
+        compatible["schema_version"] = 3
+        log.warning("Telemetry schema 4 rejected; retrying aggregate report with schema 3")
+        response = _send_payload(compatible, user_agent)
 
     if 200 <= response.status_code < 300:
 
@@ -395,4 +421,5 @@ def _post_payload(db, payload, user_agent):
         return {"success": True}
 
     log.warning(f"Telemetry failed with HTTP {response.status_code}")
-    return {"success": False, "reason": "http_error", "status_code": response.status_code}
+    return _failure("http_error", f"Telemetry failed with HTTP {response.status_code}",
+                    status_code=response.status_code)

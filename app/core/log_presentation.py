@@ -1,6 +1,7 @@
 """Human-readable explanations without changing or guessing historical events."""
 import json
 import re
+from core.collection_sync_status import actionable_collection_warnings
 
 
 def explain_log(record):
@@ -66,6 +67,27 @@ def explain_log(record):
             value=re.search(r'\b'+key+r'=(\d+)',message)
             if value:context.append(('log_help.'+key,value[1]))
     if code and code[1]=='collections.execution_failed':code=None
-    return {'title':'log_help.title_'+kind,'cause':'log_help.cause_'+cause,
-            'action':'log_help.action_'+('arr' if cause=='uncertain' else 'network' if cause in {'timeout','tls','connection'} else kind),
+    title = 'log_help.title_' + kind
+    cause_key = 'log_help.cause_' + cause
+    action = 'log_help.action_' + ('arr' if cause=='uncertain' else 'network' if cause in {'timeout','tls','connection'} else kind)
+    # Historical WARNING records keep their original level and raw text. Explain
+    # the structured result instead of labeling every collection warning a failure.
+    if level == 'WARNING' and kind == 'collection' and named and re.search(r'\bstate=warning\b', message):
+        title = 'log_help.title_collection_warning'
+        position = message.find('details=')
+        details = None
+        if position >= 0:
+            try:
+                details, _ = json.JSONDecoder().raw_decode(message[position + 8:])
+            except (ValueError, TypeError):
+                pass
+        if (isinstance(details, dict) and isinstance(details.get('warnings'), list)
+                and details['warnings'] and not details.get('errors')
+                and not actionable_collection_warnings(details['warnings'])
+                and cause == 'unknown' and not code):
+            title = 'log_help.title_collection_information'
+            cause_key = 'log_help.cause_collection_information'
+            action = 'log_help.action_collection_information'
+    return {'title':title,'cause':cause_key,
+            'action':action,
             'code':code[1] if code else None,'context':context,'unidentified':kind in {'collection','presentation','inventory','arr'} and not context}

@@ -3,6 +3,7 @@ import time
 import importlib
 from datetime import datetime
 import os
+from contextlib import nullcontext
 
 from db_manager import DBManager
 from logging_utils import get_logger, is_debug_mode_enabled
@@ -14,6 +15,7 @@ from core.tasks.result_validation import validate_task_result
 from core.tasks.runtime_signals import TaskRuntimeSignals
 from core.tasks.sequences import TaskSequenceRunner, discovery_sequence_for_provider
 from core.tasks.worker_lease import WorkerLease
+from core.tasks.database_restore_gate import database_restore_gate
 from core.tasks.auto_enable import TaskAutoEnableService
 from core.tasks.configuration import TaskConfigurationService
 from core.tasks.execution import TaskExecutionRunner
@@ -69,8 +71,27 @@ def _cron_jobs_enabled() -> bool:
 # -------------------------------------------------------------------
 # LOCKS / QUEUES
 # -------------------------------------------------------------------
-task_worker_lease = WorkerLease()
-collection_worker_lease = WorkerLease()
+_COLLECTIONS_TASKS = ("run_collections", "refresh_collection_inventory")
+_MONITORING_TASKS = ("monitor_collect_sessions", "monitor_enqueue_refresh", "media_jobs_worker", "stream_enforcer")
+_WORKER_LEASES = {lane: WorkerLease() for lane in ("general", "collections", "monitoring")}
+
+
+def _task_lane(task_name):
+    if task_name in _COLLECTIONS_TASKS:
+        return "collections"
+    if task_name in _MONITORING_TASKS:
+        return "monitoring"
+    return "general"
+
+
+def _lane_filter(lane):
+    if lane == "general":
+        names = _COLLECTIONS_TASKS + _MONITORING_TASKS
+        operator = "NOT IN"
+    else:
+        names = _COLLECTIONS_TASKS if lane == "collections" else _MONITORING_TASKS
+        operator = "IN"
+    return f"name {operator} ({', '.join('?' for _ in names)})", names
 
 
 # In-memory signals are isolated from the scheduler orchestration so their
@@ -101,33 +122,20 @@ def consume_forced_task_run(task_name: str) -> bool:
 	return runtime_signals.consume_forced_task_run(task_name)
 
 
-def _start_task_worker():
-    """
-    Démarre le worker de tâches.
-    L'attribution thread-safe garantit qu'un seul worker est demarre.
-    """
-    if not task_worker_lease.claim():
+def _start_task_worker(lane="general"):
+    lease = _WORKER_LEASES[lane]
+    if database_restore_gate.blocked() or not lease.claim():
         return False
 
     try:
         threading.Thread(
             target=_task_worker,
-            name="vodum-task-worker",
+            args=(lane,),
+            name="vodum-task-worker" if lane == "general" else f"vodum-{lane}-worker",
             daemon=True
         ).start()
     except Exception:
-        task_worker_lease.release()
-        raise
-    return True
-
-def _start_collection_worker():
-    if not collection_worker_lease.claim():
-        return False
-    try:
-        threading.Thread(target=_task_worker, kwargs={'collections':True},
-                         name='vodum-collections-worker', daemon=True).start()
-    except Exception:
-        collection_worker_lease.release()
+        lease.release()
         raise
     return True
 
@@ -347,7 +355,7 @@ def prepare_restored_database(restored_db):
 def recover_stuck_tasks(max_minutes=30):
     # A live worker may legitimately own a long-running task. Resetting its DB
     # state here would allow the scheduler to enqueue a duplicate execution.
-    if task_worker_lease.is_claimed() or collection_worker_lease.is_claimed():
+    if database_restore_gate.blocked() or any(lease.is_claimed() for lease in _WORKER_LEASES.values()):
         return
 
     try:
@@ -501,7 +509,7 @@ def enqueue_task(task_id: int):
         return False
 
     row = db.query_one(
-        "SELECT enabled FROM tasks WHERE id = ?",
+        "SELECT enabled, name FROM tasks WHERE id = ?",
         (task_id,)
     )
     if not row or not row["enabled"]:
@@ -528,110 +536,80 @@ def enqueue_task(task_id: int):
     )
 
     # Démarrage du worker SI nécessaire
-    task = db.query_one('SELECT name FROM tasks WHERE id=?',(task_id,))
-    (_start_collection_worker if task and task['name'] in ('run_collections','refresh_collection_inventory') else _start_task_worker)()
+    _start_task_worker(_task_lane(row["name"]))
 
     return True
 
 def _kick_worker_if_needed():
-    """
-    Si la DB contient des tâches en attente (queued_count > 0) et que le worker
-    n'est pas en cours, on le démarre.
-
-    Important: au boot, le recovery peut laisser des tasks en 'queued' sans
-    jamais repasser par enqueue_task() -> donc sans démarrer le worker.
-    """
-    try:
-        if not collection_worker_lease.is_claimed():
-            pending_collection = db.query_one("SELECT id FROM tasks WHERE name IN ('run_collections','refresh_collection_inventory') AND queued_count>0 AND enabled=1")
-            if pending_collection:
-                _start_collection_worker()
-    except Exception:
-        logger.error('[COLLECTIONS WORKER] Unable to check pending queue',exc_info=True)
-    # -------------------------------------------------
-    # Worker déjà actif → inutile de requêter SQLite
-    # -------------------------------------------------
-    if task_worker_lease.is_claimed():
+    """Start idle lanes that already have persisted work, including after recovery."""
+    if database_restore_gate.blocked():
         return
+    for lane, lease in _WORKER_LEASES.items():
+        if lease.is_claimed():
+            continue
+        predicate, params = _lane_filter(lane)
+        try:
+            pending = db.query_one(
+                f"SELECT id FROM tasks WHERE queued_count > 0 AND enabled = 1 AND {predicate} LIMIT 1",
+                params,
+            )
+            if pending:
+                _start_task_worker(lane)
+        except Exception:
+            logger.error("Unable to check or start task queue | lane=%s", lane, exc_info=True)
 
-    try:
-        row = db.query_one("SELECT COUNT(*) AS cnt FROM tasks WHERE queued_count > 0 AND enabled = 1 AND name NOT IN ('run_collections','refresh_collection_inventory')")
-        pending = int(row["cnt"]) if row else 0
-    except Exception as e:
-        logger.error(f"[WORKER] Unable to check pending queue: {e}", exc_info=True)
-        return
 
-    if pending <= 0:
-        return
-
-    if _start_task_worker():
-        logger.warning(f"[WORKER] Kick worker: {pending} queued task(s) detected in DB")
-
-
-def _task_worker(collections=False):
-    worker_lease = collection_worker_lease if collections else task_worker_lease
+def _task_worker(lane="general"):
+    predicate, params = _lane_filter(lane)
     try:
         while True:
-            # 1) Récupère une tâche en file d'attente
-            try:
-                row = db.query_one(
-                    """
-                    SELECT id
-                    FROM tasks
-                    WHERE queued_count > 0
-                      AND enabled = 1
-                      AND ((?=1 AND name IN ('run_collections','refresh_collection_inventory')) OR (?=0 AND name NOT IN ('run_collections','refresh_collection_inventory')))
-                      ORDER BY
-                          CASE name
-                              WHEN 'refresh_collection_inventory' THEN -1
-                              WHEN 'monitor_enqueue_refresh' THEN 1
-                              WHEN 'media_jobs_worker' THEN 2
-                              WHEN 'stream_enforcer' THEN 0
-                              WHEN 'monitor_collect_sessions' THEN 99
-                              ELSE 10
-                        END ASC,
-                        updated_at ASC,
-                        id ASC
-                    LIMIT 1
-                    """, (int(collections),int(collections))
-                )
-            except Exception as e:
-                logger.error(f"[WORKER] DB error while fetching queued task: {e}", exc_info=True)
-                return
-
-            # 2) Plus rien à traiter => on sort et on libère le worker
-            if not row:
-                return
-
-            task_id = int(row["id"])
-
-            # 3) Exécute réellement la tâche
-            try:
-                run_task(task_id)
-            except Exception as e:
-                # run_task gère déjà beaucoup de cas, mais on sécurise
-                logger.error(f"[WORKER] Unhandled error while running task id={task_id}: {e}", exc_info=True)
+            scope = nullcontext(True) if lane == "general" else database_restore_gate.background()
+            with scope as allowed:
+                if not allowed:
+                    return
                 try:
-                    task_logs(task_id, "error", f"Unhandled worker error: {e}")
-                except Exception as log_exc:
-                    logger.warning(
-                        f"[WORKER] Unable to write task_logs for task id={task_id}: {log_exc}",
-                        exc_info=True,
+                    row = db.query_one(
+                        f"""
+                        SELECT id, name FROM tasks
+                        WHERE queued_count > 0 AND enabled = 1 AND {predicate}
+                        ORDER BY CASE name
+                            WHEN 'refresh_collection_inventory' THEN -1
+                            WHEN 'stream_enforcer' THEN 0
+                            WHEN 'monitor_enqueue_refresh' THEN 1
+                            WHEN 'media_jobs_worker' THEN 2
+                            WHEN 'monitor_collect_sessions' THEN 99
+                            ELSE 10
+                        END, updated_at ASC, id ASC
+                        LIMIT 1
+                        """,
+                        params,
                     )
+                except Exception:
+                    logger.exception("Unable to read task queue | lane=%s", lane)
+                    return
+                if not row:
+                    return
 
-            # 4) Petite pause pour éviter de marteler la DB
+                task_id = int(row["id"])
+                try:
+                    if row["name"] == "restore_backup":
+                        with database_restore_gate.restore():
+                            run_task(task_id)
+                        if database_restore_gate.blocked():
+                            return
+                    else:
+                        run_task(task_id)
+                except Exception as exc:
+                    logger.exception("Unhandled task error | id=%s", task_id)
+                    try:
+                        task_logs(task_id, "error", f"Unhandled worker error: {exc}")
+                    except Exception:
+                        logger.warning("Unable to write task log | id=%s", task_id, exc_info=True)
+
             time.sleep(0.2)
-
     finally:
-        # GARANTIE : le worker se libère toujours
-        worker_lease.release()
-
-        # Si une tâche a été ajoutée juste avant l'arrêt du worker,
-        # on relance immédiatement un worker pour ne rien laisser bloqué.
+        _WORKER_LEASES[lane].release()
         _kick_worker_if_needed()
-
-
-
 
 
 # -------------------------------------------------------------------

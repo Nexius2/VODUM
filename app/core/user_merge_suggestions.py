@@ -18,11 +18,6 @@ def _email_local(email: str) -> str:
     return email.split("@", 1)[0] if "@" in email else email
 
 
-def _sim(left: str, right: str) -> float:
-    left, right = _norm(left), _norm(right)
-    return SequenceMatcher(None, left, right).ratio() if left and right else 0.0
-
-
 def _tokens_from_user(user: dict) -> list[str]:
     raw = " ".join([
         _norm(user.get("firstname") or ""), _norm(user.get("lastname") or ""),
@@ -34,11 +29,28 @@ def _tokens_from_user(user: dict) -> list[str]:
     ))
 
 
-def score_candidate(user: dict, candidate: dict) -> int:
+def _prepare_user(user):
+    prepared = {key: _norm(user.get(key) or '')
+                for key in ('username', 'firstname', 'lastname', 'email', 'second_email')}
+    prepared['email_similarity'] = _norm(_email_local(user.get('email') or ''))
+    prepared['tokens'] = _tokens_from_user(user)
+    return prepared
+
+
+def _prepared_similarity(left, right):
+    return SequenceMatcher(None, left, right).ratio() if left and right else 0.0
+
+
+def _score_prepared(user, candidate):
     score = 0
-    user_email, user_second = _norm(user.get("email") or ""), _norm(user.get("second_email") or "")
+    user_email, user_second = user['email'], user['second_email']
     candidate_email = _norm(candidate.get("email") or "")
     candidate_second = _norm(candidate.get("second_email") or "")
+    candidate_username = _norm(candidate.get('username') or '')
+    candidate_firstname = _norm(candidate.get('firstname') or '')
+    candidate_lastname = _norm(candidate.get('lastname') or '')
+    candidate_local = _email_local(candidate_email)
+    candidate_second_local = _email_local(candidate_second)
     for matches, points in (
         (user_email and candidate_email and user_email == candidate_email, 500),
         (user_email and candidate_second and user_email == candidate_second, 420),
@@ -49,13 +61,13 @@ def score_candidate(user: dict, candidate: dict) -> int:
             score += points
 
     fields = (
-        (_norm(candidate.get("username") or ""), (260, 220, 180)),
-        (_norm(candidate.get("firstname") or ""), (200, 160, 120)),
-        (_norm(candidate.get("lastname") or ""), (200, 160, 120)),
-        (_email_local(candidate.get("email") or ""), (170, 140, 110)),
-        (_email_local(candidate.get("second_email") or ""), (120, 90, 70)),
+        (candidate_username, (260, 220, 180)),
+        (candidate_firstname, (200, 160, 120)),
+        (candidate_lastname, (200, 160, 120)),
+        (candidate_local, (170, 140, 110)),
+        (candidate_second_local, (120, 90, 70)),
     )
-    for token in _tokens_from_user(user):
+    for token in user['tokens']:
         for value, (exact, prefix, contains) in fields:
             if value == token:
                 score += exact
@@ -64,11 +76,15 @@ def score_candidate(user: dict, candidate: dict) -> int:
             elif token in value:
                 score += contains
 
-    score += int(120 * _sim(_email_local(user.get("email") or ""), _email_local(candidate.get("email") or "")))
-    score += int(80 * _sim(user.get("firstname") or "", candidate.get("firstname") or ""))
-    score += int(80 * _sim(user.get("lastname") or "", candidate.get("lastname") or ""))
-    score += int(50 * _sim(user.get("username") or "", candidate.get("username") or ""))
+    score += int(120 * _prepared_similarity(user['email_similarity'], _norm(candidate_local)))
+    score += int(80 * _prepared_similarity(user['firstname'], candidate_firstname))
+    score += int(80 * _prepared_similarity(user['lastname'], candidate_lastname))
+    score += int(50 * _prepared_similarity(user['username'], candidate_username))
     return score
+
+
+def score_candidate(user: dict, candidate: dict) -> int:
+    return _score_prepared(_prepare_user(user), candidate)
 
 
 @isolated_read_operation
@@ -91,10 +107,11 @@ def get_merge_suggestions(db, user_id: int, limit: int | None = None):
     if user is None:
         return []
     # Scoring is CPU work: release the SQLite snapshot before ranking.
+    prepared_user = _prepare_user(user)
     scored = []
     for candidate in candidates:
         candidate = dict(candidate)
-        candidate["merge_score"] = score_candidate(user, candidate)
+        candidate["merge_score"] = _score_prepared(prepared_user, candidate)
         scored.append(candidate)
     scored.sort(key=lambda item: item["merge_score"], reverse=True)
     return scored if limit is None else scored[:limit]

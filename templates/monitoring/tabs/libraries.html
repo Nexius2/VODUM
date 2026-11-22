@@ -1,10 +1,23 @@
+{% set historical_snapshot = g.monitoring_snapshot|default(none) %}
+{% include "monitoring/partials/_statistics_status.html" %}
+{% if not historical_snapshot or historical_snapshot.ready %}
 <div class="space-y-6">
 
   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-    <div class="flex items-center justify-between mb-4">
-      <div class="text-sm font-semibold">{{ t("libraries") }}</div>
-      <div class="text-xs text-slate-400">{{ t("monitoring_user_rows_page") }}</div>
+
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
+      <h2 class="text-sm font-semibold">{{ t("libraries") }}</h2>
+      <nav class="flex gap-1 rounded-lg bg-slate-950 p-1" aria-label="{{ t('monitoring_library_growth') }}">
+        {% for period, label in [("7", "monitoring_libraries_last_7_days"), ("30", "monitoring_libraries_last_30_days"), ("365", "monitoring_library_growth_year")] %}
+          {% set args = dict(request.args) %}
+          {% set _ = args.update({"tab": "libraries", "growth": period}) %}
+          <a href="{{ url_for('monitoring_page', **args) }}"
+             {% if period == growth_period %}aria-current="true"{% endif %}
+             class="rounded-md px-3 py-2 text-xs {{ 'bg-slate-800 text-emerald-300' if period == growth_period else 'text-slate-400 hover:text-white' }}">{{ t(label) }}</a>
+        {% endfor %}
+      </nav>
     </div>
+    <p class="text-xs text-slate-400 mb-4">{{ t("monitoring_library_growth_help") }}</p>
 
     {% if rows is not defined %}
       <div class="text-slate-500">
@@ -12,7 +25,7 @@
       </div>
     {% else %}
       <div class="overflow-x-auto">
-        <table class="w-full text-sm">
+        <table data-mobile-primary="1" class="w-full text-sm">
           <thead>
           {% set current_sort = sort_key or "last" %}
           {% set current_dir  = sort_dir or "desc" %}
@@ -29,15 +42,11 @@
               "dir": next_dir,
               "page": 1
             }) %}
-            <th class="py-2 pr-4 whitespace-nowrap">
+            <th scope="col" aria-sort="{{ ('ascending' if current_dir == 'asc' else 'descending') if active else 'none' }}" class="py-2 pr-4 whitespace-nowrap">
               <a href="{{ url_for('monitoring_page', **args) }}"
                  class="inline-flex items-center gap-2 {{ 'text-emerald-400 font-semibold' if active else 'text-slate-400 hover:text-slate-200' }}">
                 {{ label }}
-                {% if active %}
-                  {{ '▲' if current_dir == 'asc' else '▼' }}
-                {% else %}
-                  ↕
-                {% endif %}
+                <span aria-hidden="true">{% if active %}{% if current_dir == 'asc' %}&#9650;{% else %}&#9660;{% endif %}{% else %}&#8597;{% endif %}</span>
               </a>
             </th>
           {% endmacro %}
@@ -50,27 +59,51 @@
           {{ th(t("monitoring_libraries_last_stream"), "last") }}
           {{ th(t("monitoring_user_plays"), "plays") }}
           {{ th(t("duration"), "duration") }}
+          <th scope="col" class="py-2 pr-4 text-right text-slate-400">{{ t("monitoring_library_growth_added") }}</th>
+          <th scope="col" class="py-2 pr-4 text-right text-slate-400">{{ t("monitoring_library_growth_size") }}</th>
+          <th scope="col" class="py-2 text-slate-400">{{ t("monitoring_library_growth_measured") }}</th>
 
           </tr>
           </thead>
 
           <tbody>
             {% for r in rows %}
-              <tr class="border-b border-slate-800 {% if not r.has_last_stream %}hidden library-extra-row{% endif %}">
+              <tr class="border-b border-slate-800">
                 <td class="py-3 pr-4">{{ r.server_name }}</td>
                 <td class="py-3 pr-4 font-semibold">{{ r.library_name }}</td>
                 <td class="py-3 pr-4">{{ r.media_type or "-" }}</td>
                 <td class="py-3 pr-4">{{ r.users_with_access or 0 }}</td>
                 <td class="py-3 pr-4">{{ r.item_count or "-" }}</td>
-                <td class="py-3 pr-4">{{ r.last_stream_at|browser_datetime if r.last_stream_at else "-" }}</td>
+                <td class="py-3 pr-4 whitespace-nowrap">{{ r.last_stream_at|browser_datetime if r.last_stream_at else "-" }}</td>
                 <td class="py-3 pr-4">{{ r.total_plays or 0 }}</td>
-                <td class="py-3 pr-4">{{ r.played_duration or "0h 0m" }}</td>
+                <td class="py-3 pr-4 whitespace-nowrap">{{ r.played_duration or "0h 0m" }}</td>
+                {% if r.growth is not none %}
+                  <td class="py-3 pr-4 text-right tabular-nums">{{ r.growth["items"] }}</td>
+                  <td class="py-3 pr-4 text-right whitespace-nowrap tabular-nums">
+                    {% if r.growth.missing %}
+                      {% if r.growth.bytes %}&ge; {{ r.growth.bytes | filesizeformat(true) }}{% else %}&mdash;{% endif %}
+                      <span class="block text-xs text-slate-400">{{ t("monitoring_library_growth_incomplete") }}</span>
+                    {% else %}
+                      {{ r.growth.bytes | filesizeformat(true) }}
+                    {% endif %}
+                  </td>
+                  <td class="py-3 text-xs text-slate-400 whitespace-nowrap">{{ r.growth_measured_at }}
+                    {% if r.growth_last_error %}<span class="block text-amber-300">{{ t('monitoring_library_growth_' ~ r.growth_last_error) }} · {{ r.growth_last_attempt_at }}</span>{% endif %}</td>
+                {% else %}
+                  <td colspan="3" class="py-3 text-right text-xs text-slate-400">
+                    {% if r.growth_last_error %}
+                      <span class="block text-amber-300">{{ t('monitoring_library_growth_' ~ r.growth_last_error) }} · {{ r.growth_last_attempt_at }}</span>
+                    {% else %}
+                    {% if r.growth_supported %}{{ t("monitoring_library_growth_pending") }}{% else %}&mdash;{% endif %}
+                    {% endif %}
+                  </td>
+                {% endif %}
               </tr>
             {% endfor %}
 
             {% if rows|length == 0 %}
               <tr>
-                <td colspan="8" class="py-6 text-slate-500">{{ t("no_data") }}</td>
+                <td colspan="11" class="py-6 text-slate-500">{{ t("no_data") }}</td>
               </tr>
             {% endif %}
           </tbody>
@@ -110,6 +143,7 @@
 
       <form method="get" action="{{ url_for('monitoring_page') }}" class="flex flex-wrap items-center gap-2">
         <input type="hidden" name="tab" value="libraries">
+        <input type="hidden" name="growth" value="{{ growth_period }}">
 
         {% if request.args.get("sort") %}
           <input type="hidden" name="sort" value="{{ request.args.get('sort') }}">
@@ -145,91 +179,18 @@
       </form>
     </div>
 
-    {% if library_top_cards and library_top_cards|length > 0 %}
-      <div class="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-5">
-        {% for card in library_top_cards %}
-          <div class="rounded-2xl border border-slate-800 overflow-hidden bg-slate-950/70">
-            <div class="relative h-36 border-b border-slate-800 overflow-hidden">
-              {% set top_item = card["items"][0] if card["items"] else None %}
-
-              {% if top_item and (top_item.backdrop_url or top_item.poster_url) %}
-                <img
-                  src="{{ top_item.backdrop_url or top_item.poster_url }}"
-                  alt="{{ top_item.display_title }}"
-                  class="absolute inset-0 w-full h-full object-cover opacity-75"
-                  loading="lazy"
-                  decoding="async"
-                >
-              {% else %}
-                <div class="absolute inset-0 bg-slate-800"></div>
-              {% endif %}
-
-			<div class="absolute inset-0 bg-gradient-to-r from-slate-950/40 via-slate-950/10 to-slate-950/40"></div>
-			<div class="absolute inset-0 bg-gradient-to-b from-transparent via-slate-950/20 to-slate-950/75"></div>
-
-              <div class="relative z-10 h-full flex flex-col justify-between p-4">
-                <div class="flex items-start justify-between gap-3">
-                  <div>
-                    <div class="text-xl font-semibold text-white">{{ card.library_name }}</div>
-                    <div class="text-xs text-slate-300 mt-1">
-                      {{ card.server_name }}
-                    </div>
-                    <div class="text-[11px] text-slate-400 mt-1">
-                      {{ card.total_plays }} {{ t("monitoring_libraries_play") if card.total_plays == 1 else t("monitoring_user_plays") }}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="divide-y divide-slate-800">
-              {% for item in card["items"] %}
-                <div class="relative overflow-hidden flex items-start gap-3 p-3">
-                  {% if item.backdrop_url %}
-                    <img
-                      src="{{ item.backdrop_url }}"
-                      alt=""
-                      class="absolute inset-0 h-full w-full object-cover opacity-20 pointer-events-none"
-                      loading="lazy"
-                      decoding="async"
-                    >
-                    <div class="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-950/80 to-slate-950/95"></div>
-                  {% endif %}
-
-                  <div class="relative z-10 w-12 h-16 rounded-lg overflow-hidden bg-slate-800 shrink-0">
-                    {% if item.poster_url %}
-                      <img
-                        src="{{ item.poster_url }}"
-                        alt="{{ item.display_title }}"
-                        class="w-full h-full object-cover"
-                        loading="lazy"
-                        decoding="async"
-                      >
-                    {% endif %}
-                  </div>
-
-                  <div class="relative z-10 min-w-0 flex-1">
-                    <div class="text-sm font-medium text-slate-100 truncate">
-                      {{ item.display_title }}
-                    </div>
-                    <div class="text-xs text-slate-400 mt-1">
-                      {{ item.plays }} {{ t("monitoring_libraries_play") if item.plays == 1 else t("monitoring_user_plays") }}
-                    </div>
-                    <div class="text-xs text-slate-500">
-                      {{ item.user_count }} {{ t("user") if item.user_count == 1 else t("users") }}
-                    </div>
-                  </div>
-                </div>
-              {% endfor %}
-            </div>
-          </div>
-        {% endfor %}
-      </div>
+    {% if library_top_cards is not none %}
+      {% include "monitoring/partials/_library_top_cards.html" %}
     {% else %}
-      <div class="text-sm text-slate-500">
-        {{ t("monitoring_libraries_no_watched") }}
-      </div>
+      {% set top_args = dict(request.args, tab="libraries", library_top="1") %}
+      {% set top_url = url_for("monitoring_page", **top_args) %}
+      <a href="{{ top_url }}" hx-get="{{ top_url }}" hx-trigger="intersect once, click"
+         hx-swap="outerHTML" hx-sync="this:drop" class="text-sm text-slate-400 hover:text-slate-200">
+        {{ t("monitoring_libraries_view_more") }}
+      </a>
     {% endif %}
   </div>
 
 </div>
+
+{% endif %}

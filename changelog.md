@@ -1,981 +1,602 @@
 # Changelog
 
-Les changements non publiés sont regroupés en tête de ce fichier. Les dates
-indiquent la mise à jour du journal, pas une confirmation de déploiement.
-
-## Non publié — mise à jour du 2026-11-10
-
-### Exclusions Git et Docker
-
-- Le [contexte Docker](.dockerignore) inclut explicitement le module Python
-  des migrations masqué par le filtre des fichiers d’identifiants. Le
-  [Dockerfile](Dockerfile) vérifie aussi la présence des fichiers de démarrage.
-  Reconstruire l’image et recréer le conteneur. Aucune migration.
-- Les [règles Git](.gitignore) excluent les tests, rapports d’audit et formats
-  courants de données locales. Les tests précédemment suivis sont retirés de
-  l’index et restent disponibles localement. L’historique Git est conservé.
-- Le [contexte Docker](.dockerignore) est limité aux fichiers nécessaires au
-  Dockerfile et exclut aussi les artefacts locaux dans les sous-dossiers
-  applicatifs. Reconstruire l’image pour appliquer ces exclusions. Aucune migration.
-
-### Déploiement de la télémétrie
-
-- La procédure du Worker inclut la migration D1 du 2 novembre pour le schéma 4.
-  Appliquer uniquement les migrations manquantes, puis déployer le Worker avant
-  de mettre à jour les clients VODUM. Aucun changement au schéma SQLite local.
-  Voir l'[ordre de déploiement](docs/telemetry-languages.md).
-
-### Limites de lectures Plex
-
-- Le [contrôle des flux](app/tasks/stream_enforcer.py) diffère la coupure
-  pendant les 30 premières secondes d'une nouvelle session Plex si le
-  [chevauchement](app/core/stream_sync_dedupe.py) avec une lecture du même
-  contenu suffit à expliquer le dépassement de la limite par utilisateur ou
-  par IP. Le serveur, le compte, l'identifiant de l'appareil et l'IP doivent
-  correspondre. Un dépassement persistant est de nouveau sanctionnable après
-  ce délai. Une limite à zéro reste immédiate.
-- Déployer ensemble le contrôle et son module de détection. Aucune migration.
-
-### Top streaming par pays
-
-- Le [moteur régional](app/core/collections_country_availability.py) fusionne
-  les dix premiers films de chacune des six plateformes de référence
-  disponibles dans le pays choisi, puis trie les films par popularité TMDb.
-  Pour les séries, il parcourt cinq pages de tendances mondiales TMDb de la
-  semaine et ne garde que les titres accessibles en streaming dans ce pays.
-  La disponibilité est locale, le classement des tendances reste mondial.
-- Le [moteur de publication](app/core/collections_streaming.py) applique la
-  limite avant de chercher les titres en bibliothèque. La clé TMDb partagée
-  sert aux deux classements. Une collecte incomplète préserve la publication.
-- Déployer le moteur, la [reprise de publication](app/core/collections_publication.py)
-  et les libellés ensemble, puis relancer les collections. Aucune migration.
-
-### Collections par plateforme et journaux
-
-- Le [moteur par plateforme](app/core/collections_platforms.py) enregistre la
-  reprise lorsque le budget de recherche de disponibilité est atteint.
-  Le [planificateur](app/tasks/run_collections.py) conserve le code connu
-  d'échec de publication et les [journaux](app/core/log_presentation.py)
-  affichent la collection, la bibliothèque et l'exécution figurant dans
-  les résumés d'échec. Déployer les trois fichiers ensemble. Aucune migration.
-
-## Changements précédant la publication du 2026-11-09
-
-### Langues et acquisition des collections
-
-- Le [moteur](app/core/collections_streaming.py) ignore le filtre de piste
-  audio en mode ARR seul et applique la limite configurée. En mode
-  publication, la piste audio reste un critère pour les fichiers locaux.
-  Les filtres explicites de langue originale et de pays restent actifs.
-  Déployer avec les [libellés](translations/ui/fr.json) mis à jour.
-  Aucune migration.
-
-### Acquisition des titres absents avec filtre audio
-
-- Le [moteur](app/core/collections_streaming.py) applique le filtre audio
-  aux titres présents et soumet les titres absents éligibles selon le
-  classement configuré. Le [popup](static/js/pages/collections.js) affiche
-  le résultat ARR de chaque titre listé. Le formulaire retire le message
-  permanent de demande en cours. Déployer le moteur et l’interface ensemble.
-  Aucune migration.
-
-### Liste des films absents
-
-- Le [moteur](app/core/collections_streaming.py) relève les titres absents
-  avant le filtre audio et conserve la règle d’acquisition existante.
-  Le [popup](static/js/pages/collections.js) indique quand une ancienne
-  exécution doit être relancée ou quand aucun titre absent n’a été confirmé.
-  Déployer le moteur, le template, le script et les traductions ensemble.
-  Aucune migration.
-
-### Identifiants des comptes médias dans le portail
-
-- [Mon profil](templates/portal/profile.html) affiche les identifiants Plex
-  et Jellyfin et permet de modifier le nom Jellyfin. La sauvegarde revient
-  sur le profil. [État des systèmes](templates/portal/_profile_media.html)
-  affiche les accès et leur état en lecture seule. Déployer les templates
-  avec la route du portail. Aucune migration.
-
-### Titres manquants dans les collections
-
-- Le [popup des sources](static/js/pages/collections.js) affiche les titres
-  absents identifiés lors de la dernière synchronisation, à concurrence des
-  places libres. La liste est calculée par le [moteur](app/core/collections_streaming.py)
-  sans modifier les demandes ARR. Aucune migration. Déployer le moteur,
-  l’interface et les traductions ensemble, puis relancer la collection.
-
-### Bibliothèques Jellyfin supprimées
-
-- La [synchronisation Jellyfin](app/tasks/sync_jellyfin.py) retire les
-  bibliothèques absentes d’une réponse complète et leurs liens d’accès locaux.
-  Une réponse invalide conserve les données. Les bibliothèques encore
-  référencées par une configuration sont conservées et signalées.
-  Aucune migration. La mise à jour intervient lors de la prochaine
-  synchronisation Jellyfin, planifiée ou manuelle.
-
-### Périmètre de l’inventaire des collections
-
-- Le [scan partagé](app/tasks/refresh_collection_inventory.py) cible les
-  bibliothèques liées à une collection configurée. Une ancienne bibliothèque
-  sans collection ne peut plus provoquer d’échec du scan. Un HTTP 5xx sur
-  une bibliothèque laisse les autres bibliothèques du serveur être scannées.
-  Aucune migration. Déployer le moteur et les catalogues de traduction ensemble.
-
-### Inventaire Jellyfin
-
-- Un [inventaire incomplet ou illisible](app/core/collections_media.py) produit
-  un avertissement et conserve le dernier inventaire complet. Le scan continue
-  sur les autres bibliothèques. Les réponses HTTP 408 et 5xx sont également
-  traitées comme des indisponibilités temporaires.
-- Les [journaux](app/core/log_presentation.py) affichent le motif fourni par la
-  tâche avec le nom de la bibliothèque et du serveur. Aucune migration.
-
-### Historique et taille de la base des collections
-
-- Le [moteur des collections](app/tasks/run_collections.py) conserve le dernier
-  résultat terminé par configuration et bibliothèque, ainsi que le suivi du
-  traitement actif. Les derniers compteurs disponibles et le détail de la
-  dernière publication de chaque objet sont conservés séparément.
-- Déployer le [schéma](app/core/db_bootstrap_collections.py) avec le moteur et
-  les lecteurs mis à jour. Le [nettoyage](app/core/collections_history.py)
-  s'exécute au prochain passage du moteur, configuration par configuration.
-  Les anciens résultats détaillés sont supprimés. L'espace libéré est
-  réutilisable par SQLite. Pour réduire le fichier sur disque, prévoir un
-  VACUUM séparé après sauvegarde, avec suffisamment d'espace libre.
-
-### Profil et accès du portail
-
-- Le [catalogue français](translations/ui/fr.json) traduit Last name par Nom.
-  Les alertes du profil sont traduites dans les cinq langues.
-- [Mes accès](templates/portal/system_status.html) est déplié par défaut et
-  reste repliable. [Documentation](vodum-docs/docs/user-portal.md) actualisée.
-- Aucune migration. Déployer le template et les catalogues ensemble.
-
-### Inventaire des collections et incidents temporaires
-
-- La [tâche d'inventaire](app/tasks/refresh_collection_inventory.py) signale
-  les timeouts, ruptures de connexion, limitations HTTP 429 et indisponibilités
-  HTTP 502/503/504 en avertissement. Elle poursuit le scan des autres serveurs
-  et conserve les instantanés précédents. Le journal identifie le serveur et
-  la bibliothèque concernés sans déclencher les erreurs génériques du moteur.
-- Les serveurs déjà hors ligne sont ignorés et comptés dans le bilan.
-  Les refus d'accès, certificats invalides, données invalides et échecs
-  d'écriture restent des erreurs.
-- Aucune migration. Déployer le code puis redémarrer le worker. Le prochain
-  inventaire suit le rythme habituel. Les anciens journaux sont conservés.
-  [Tests locaux](tests/test_collection_inventory.py), sans validation en production.
-
-### Remplissage des collections selon le nombre demandé
-
-- Le [moteur de publication partagé](app/core/collections_streaming.py)
-  continue dans le classement après les titres absents pour remplir le
-  quota de titres locaux. Les demandes ARR restent limitées aux premiers
-  titres du classement. Le mode ARR seul conserve sa limite de candidats.
-- [Kids](app/core/collections_kids.py) examine jusqu'à 25 pages TMDb au lieu
-  de cinq. Les [classements par pays](app/core/collections_top_country.py)
-  recherchent jusqu'à 250 candidats, dans leur budget de pagination.
-- La [liste des collections](static/js/pages/collections.js) affiche l'écart
-  si les titres locaux admissibles ne suffisent pas. Les filtres de date,
-  pays, genre et langue ainsi que les limites des sources restent en vigueur.
-- Aucune migration. Déployer code, template, script et traductions ensemble,
-  puis relancer les collections concernées. Tests locaux, dont un cas Kids
-  avec 23 titres locaux sur les cinq premières pages et 50 après pagination.
-
-### Reprise automatique du bloc Serveurs
-
-- Après un échec, le [bloc Serveurs](templates/dashboard/partials/_servers.html)
-  conserve ses dernières données et affiche l'avertissement.
-  Le [tableau de bord](static/js/pages/dashboard.js) retente le chargement
-  toutes les cinq secondes sur l'onglet visible. La première réponse
-  réussie remplace le bloc et retire l'avertissement.
-- Aucune migration. Déployer le template et le script ensemble.
-
-### Recherche et confirmation des fusions d'utilisateurs
-
-- La [fenêtre de fusion](templates/users/partials/_user_servers.html) filtre
-  tous les candidats par nom, identifiant ou e-mail. Afficher tout et
-  revenir aux cinq suggestions utilisent une seule liste défilante.
-- Le [script](static/js/pages/user-detail.js) gère les boutons directement,
-  annule une sélection masquée et attend un aperçu réussi pour le compte
-  choisi avant d'activer la confirmation. Le formulaire inclut son jeton CSRF.
-- Les [écritures de fusion](app/core/user_merge.py) sont regroupées en une
-  transaction SQLite. Un échec annule les transferts déjà effectués.
-  Les règles existantes de suppression du compte absorbé s'appliquent aussi
-  à ses données du portail liées par suppression en cascade.
-- Aucune migration. Déployer le serveur, le template et le script ensemble.
-  Vérifications locales avec des comptes de test.
-
-### Portail : état des serveurs en un seul tableau
-
-- La [page État des systèmes](templates/portal/system_status.html) remplace les
-  cartes et explications techniques par un tableau : nom du serveur, état,
-  dernier contrôle et hors ligne depuis. Les détails des accès restent dans
-  une section repliée pour garder la vue principale simple.
-- Les [serveurs hors ligne](app/core/portal_system_status.py) apparaissent en
-  premier. La date de début de panne utilise `unavailable_since` uniquement
-  pour une panne actuelle ; une date absente est indiquée comme non renseignée.
-  Aucun historique de panne n'est inventé après le retour en ligne.
-- [Tests de tri et d'isolation](tests/test_portal_system_status.py), de pages
-  et de traductions locaux. Aucune migration. Déployer code, template et
-  traductions ensemble. Données du dernier contrôle enregistré ; aucune sonde
-  supplémentaire ni validation sur le serveur utilisateur.
-
-### Bouton de fusion depuis la fiche utilisateur
-
-- Le [bouton Merge user](templates/users/partials/_user_general.html) ouvre
-  l'onglet Accès avec la fenêtre et les suggestions de fusion, au lieu de
-  recharger Général où cette fenêtre n'est pas présente.
-- La [route de la fiche](app/routes/users_detail.py) dirige aussi les anciennes
-  URL `?merge=1` vers Accès. Le choix du compte et la confirmation finale
-  restent requis ; aucune fusion n'est effectuée par cette navigation.
-- Aucune migration. Déployer route et template ensemble. Vérifications locales
-  du lien et de l'ouverture ; aucune fusion réelle ni validation en production.
-
-### Avatar Plex/Jellyfin illisible dans la fiche utilisateur
-
-- Le [composant avatar](templates/users/partials/_provider_avatar.html) affiche
-  une icône de profil lorsque l'image est absente ou inaccessible, au lieu du
-  texte alternatif coupé dans le cercle. Les images chargées restent cadrées
-  dans un cercle de taille fixe, sans compression.
-- Le [script de la fiche](static/js/pages/user-detail.js) traite aussi les
-  erreurs d'image survenues avant son initialisation et après navigation HTMX.
-- Aucune migration. Déployer templates et JavaScript ensemble. Cela corrige
-  l'affichage de secours sans confirmer la cause d'indisponibilité de l'avatar.
-
-### Portail utilisateur : État des systèmes
-
-- La section Media access des [réglages du portail](templates/settings/portal.html)
-  devient État des systèmes. Les [accès](templates/portal/_profile_media.html)
-  quittent le profil pour un [onglet dédié](templates/portal/system_status.html)
-  avec navigation et aperçu administrateur. L'ancien lien redirige vers cet onglet.
-- Le [chargement des états](app/core/portal_system_status.py) reprend les statuts
-  et dates de contrôle enregistrés des serveurs Plex/Jellyfin liés au compte,
-  ainsi que Sonarr/Radarr via les routages activés et compatibles de ses seules
-  bibliothèques autorisées. Services dédupliqués ; états en ligne, hors ligne
-  et inconnu distincts. Aucun accès aux adresses, secrets ou autres utilisateurs.
-- Lecture et services de demandes sont distingués. Un bouton Actualiser recharge
-  la base sans sonder les serveurs. Les états reflètent le dernier contrôle,
-  pas une mesure en direct. Les noms et badges sont traduits dans les cinq langues.
-- [Tests d'isolation utilisateur](tests/test_portal_system_status.py), routes,
-  affichage, permissions et traductions locaux ; [documentation](vodum-docs/docs/user-portal.md)
-  actualisée. La suite générale du portail reste limitée par la dépendance
-  locale `websocket` absente pour les sept tests de suivi global.
-  Aucune migration : réutilisation de `portal_show_media_access`
-  et des permissions existantes. Déployer code, templates et traductions ensemble,
-  puis redémarrer l'application. Pas de validation en production.
-
-### Allègement de la colonne des compteurs
-
-- Suppression de la ligne Last count et de sa date dans la
-  [liste des collections](static/js/pages/collections.js). La colonne voisine
-  conserve les dates de dernière fin et de prochain démarrage ; les indications
-  de comptage partiel ou non calculé restent affichées.
-- Aucune migration ; déployer le JavaScript actualisé. Vérification locale.
-
-### Compteurs des collections conservés hors de la limite d'historique
-
-- La [réponse Collections](app/routes/collections.py) fournit le dernier
-  [comptage exploitable](app/core/collections_diagnostics.py) de chaque
-  bibliothèque indépendamment des 100 passages récents. Les aperçus,
-  commandes de présentation et zéros initiaux d'un traitement en cours
-  n'effacent plus le dernier comptage. Les bibliothèques retirées sont exclues
-  des totaux affichés.
-- La [liste](static/js/pages/collections.js) affiche la date du dernier
-  comptage, un total partiel explicite si une bibliothèque n'est pas mesurée,
-  ou Non calculé avec invitation à lancer Play. ARR reste toujours renseigné :
-  nombre, désactivé, non applicable ou non comptabilisé pour un ancien passage
-  sans cette mesure. Aucun zéro fictif n'est utilisé pour une donnée inconnue.
-  Spotlight enregistre désormais explicitement son compteur ARR nul.
-- [Tests des instantanés](tests/test_collections_diagnostics.py), du rendu et
-  de l'API locaux. Aucune migration ; déployer backend, template, JavaScript
-  et traductions ensemble. Les chiffres restent ceux du dernier traitement
-  mesuré, pas un inventaire temps réel ; relancer pour les actualiser.
-  Si aucun historique chiffré n'existe plus, un nouveau calcul est nécessaire.
-  Pas de validation sur l'instance utilisateur.
-
-### Journaux lisibles et incidents identifiables
-
-- La [page Logs](templates/logs/logs.html) affiche pour les avertissements et
-  erreurs un titre compréhensible, le contexte disponible, la cause connue et
-  l'action conseillée. Les traces et JSON restent dans Détails techniques.
-- Le [lecteur de diagnostics](app/core/log_presentation.py) couvre collections,
-  présentation, inventaire, ARR, tâches, sauvegardes, communications, suivi,
-  accès et serveurs. Il distingue timeout, connexion, TLS, refus d'accès et
-  ajout incertain ; une cause inconnue est annoncée comme telle. Un compteur
-  de relances 0/3 n'est plus expliqué comme trois tentatives épuisées.
-- Les [nouveaux diagnostics](app/core/error_reporting.py) de présentation et
-  de passage de collection incluent noms et identifiants autorisés. Les anciens
-  messages sont expliqués sans inventer les noms absents. Aucune réponse brute
-  de fournisseur ni message d'exception ajouté au contexte.
-- [Guide des messages](docs/log-messages.md) et [tests de rendu et de sécurité](tests/test_log_presentation.py).
-  Explications françaises et anglaises ; repli anglais explicite pour les autres
-  langues. Fichiers historiques, niveaux, compteurs et export anonymisé conservés.
-  La recherche reste basée sur le texte enregistré. Les incidents ne sont pas
-  dédupliqués et toutes les causes ne peuvent pas être déduites d'anciens logs.
-- Aucune migration. Déployer code, template et dictionnaires ensemble, puis
-  redémarrer les workers pour les nouveaux contextes. Tests locaux ; pas de
-  validation production ni correction de la cause réseau par ce seul affichage.
-
-### Lecture des collections Jellyfin avec une clé API
-
-- La [lecture des éléments Jellyfin](app/core/collections_media.py) utilise
-  `/Items?Ids=...` avec les champs requis au lieu de `/Items/{id}`, route
-  qui exige un contexte utilisateur. L'identifiant retourné et la marque
-  de propriété restent contrôlés ; aucune collection externe n'est adoptée.
-- Les réponses invalides et éléments absents disposent de messages traduits.
-  Le [worker](app/tasks/run_collections.py) conserve le statut HTTP et
-  l'opération en échec, sans corps de réponse ni secrets.
-- [Test de lecture par clé API](tests/test_collection_inventory.py) local.
-  Aucune migration ; déployer code, template et traductions ensemble puis
-  redémarrer les workers. Relancer la collection Jellyfin. La capture ne
-  contient pas l'exception initiale du passage 1785 : correspondance exacte
-  avec ce défaut et publication sur le serveur utilisateur non confirmées.
-
-### Premier inventaire Jellyfin et timeouts des priorités Plex
-
-- Le [worker Collections](app/tasks/run_collections.py) autorise la création du
-  [premier inventaire](app/core/collection_inventory.py) d'une bibliothèque
-  avant utilisation du cache, pour Jellyfin comme Plex. La collection ne
-  s'arrête plus uniquement parce qu'aucun instantané n'a encore été construit.
-  Le scan conserve le heartbeat d'annulation et de renouvellement du bail.
-  Un scan échoué ne devient pas un inventaire vide réussi ; les inventaires
-  anciens ou invalides restent soumis au contrôle existant de rafraîchissement.
-- Le [réglage des priorités Plex](app/core/collections_media.py) s'arrête au
-  premier timeout ou échec de connexion pendant la vérification des objets.
-  Il signale une priorité non appliquée en avertissement, sans multiplier les
-  timeouts par collection ni déplacer les hubs sur la base d'un ordre incomplet.
-  La commande durable reste en attente de reprise.
-- Le chemin Sonarr de réponse perdue a été contrôlé : il réconcilie déjà
-  l'ajout par identifiant stable, sans rejouer aveuglément le POST. Aucune
-  confirmation de l'ajout particulier de la capture sans accès au serveur.
-- [Tests d'inventaire](tests/test_collection_inventory.py), de
-  [priorités](tests/test_collections_visibility.py) et de reprise ARR locaux.
-  Aucune migration ; déployer le code puis redémarrer les workers. Relancer
-  la collection Jellyfin pour initialiser sa bibliothèque. Pas de validation
-  sur le serveur utilisateur ; les erreurs historiques restent conservées.
-
-### Tri Plex et métadonnées des sorties récentes
-
-- Le [tri Plex](app/core/collections_media.py) dispose d'une reprise unique par
-  l'endpoint documenté `/library/collections/{id}/items/{id}/move` si PlexAPI
-  refuse le déplacement avec une autre clé (par exemple metadata). Pas de
-  recréation, de suppression ni de boucle de tentatives ; si l'endpoint canonique
-  refuse aussi, l'erreur reste visible. La même protection couvre Spotlight.
-- Les [sorties récentes](app/core/collections_recent_releases.py) ne demandent
-  plus de résolution TVDB pour un film, combinaison non prise en charge par
-  TMDB Find. Les identifiants externes malformés ne sont plus envoyés.
-- Les identités ou langues inconnues deviennent des avertissements avec un
-  code de raison dans les médias non résolus ; les erreurs réseau ou imprévues
-  restent des erreurs. La sélection reste partielle et préserve les membres
-  existants sans deviner leur langue ni leur identité.
-- [Tests de tri](tests/test_collections_ordering.py) et de
-  [sorties récentes](tests/test_collections_recent_releases.py) locaux.
-  Aucune migration. Déployer le code puis redémarrer les workers et relancer
-  les collections concernées. Sans accès au serveur de la capture, le chemin
-  exact du refus Plex et sa résolution en production restent à confirmer.
-  Les erreurs historiques IMDb et les résumés de tâche restent conservés.
-
-### Audit des autres sources après le rejet IMDb
-
-- [Contrôle documenté](docs/collections-source-validation-audit-2026-11-05.md)
-  des validations TMDB, streaming, franchises, saisons et récompenses.
-  Les 8 datasets de récompenses, JustWatch/Netflix France films et séries et
-  une liste MDBList saisonnière passent les lectures et validations en direct.
-  Une liste IMDb saisonnière répond HTTP 202 : indisponibilité constatée,
-  distincte du rejet de type IMDb précédemment corrigé.
-- Les [récompenses](app/core/collections_awards.py) ne présentent plus un
-  échec global des identités TMDB comme un dataset inaccessible. Elles signalent
-  une résolution incomplète ou une sélection vide selon le cas. Une erreur de
-  dataset marque correctement le diagnostic en échec, à cette étape.
-- [Tests de régression](tests/test_collections_awards.py) et suites de sources
-  locaux. Pas de clé TMDB dans le processus : requêtes authentifiées et chaîne
-  de publication non validées en direct. Aucun contrôle d'intégrité relâché
-  sans anomalie reproduite. Aucune migration ; déployer le code puis redémarrer
-  les workers. Pas de validation en production.
-
-### IMDb : classement des films populaires contenant un téléfilm
-
-- Le [lecteur IMDb](app/core/collections_imdb.py) accepte le type `tvMovie`
-  dans le classement officiel des films populaires (`moviemeter`), en plus
-  des films et courts-métrages. Le 2026-11-05, une requête réelle a renvoyé
-  HTTP 200 et 100 titres dont un téléfilm : la validation locale rejetait alors
-  tout le classement. Les 100 rangs sont conservés ; le filtrage des autres
-  classements reste inchangé.
-- Une validation de classement en échec conserve désormais le code
-  `imdb_source_invalid`, au lieu d'être transformée en source inaccessible.
-  La protection des collections existantes en cas d'échec reste en place.
-- Les [24 tests IMDb](tests/test_collections_imdb.py) passent. Les 11 classements
-  configurés ont aussi été récupérés et validés contre l'API publique IMDb
-  depuis l'environnement de développement. Cela ne valide pas la résolution
-  TMDB, les demandes ARR ni la publication Plex dans l'instance utilisateur.
-- Aucune migration. Déployer le lecteur et redémarrer les workers, puis relancer
-  la collection IMDb concernée. Les erreurs de validation ne sont pas mises en
-  cache ; aucune purge n'est nécessaire. Pas de validation en production.
-
-### Bouton Play et suivi des synchronisations de collections
-
-- Le bouton [Play](static/js/pages/collections.js) reprend sa forme compacte
-  ▷ et demande toujours une synchronisation des médias. Il ne rejoue plus
-  uniquement une commande de configuration. Une synchronisation manuelle
-  peut remplacer une demande de configuration en attente ; les traitements
-  actifs, aperçus, suppressions et nettoyages restent protégés.
-- Les [états de collection](app/core/collections_repository.py) ne comptent plus
-  les changements de présentation comme des synchronisations en attente. Leur
-  état reste indiqué sur la ligne Configuration. Les anciennes demandes de
-  présentation déjà appliquées sont réconciliées automatiquement.
-- Le résumé affiche le dernier traitement terminé, son résultat, son heure et
-  sa durée si disponible, même lorsqu'un passage est plus rapide que le suivi
-  toutes les deux secondes. Il n'annonce pas Running avant la prise en charge.
-- [Tests HTTP](tests/test_collection_resume_api.py), de commandes, de rendu
-  et de traductions locaux ; pas de validation en production. Aucune migration.
-  Déployer backend, template, JavaScript et traductions ensemble puis redémarrer.
-  Le lancement respecte le planificateur activé, l'activation de la collection
-  et les contrôles de disponibilité du serveur.
-
-### Reprise exploitable des demandes de collections
-
-- La [liste](static/js/pages/collections.js) remplace le badge Queued par
-  En attente, Suspendue ou Démarrage à relancer selon le diagnostic. Le résumé
-  compte les demandes en attente ; les causes identiques sont regroupées entre
-  bibliothèques. Suppression du message contradictoire « task is not queued ».
-- Un bouton Relancer visible reprend la demande enregistrée, y compris aperçu,
-  nettoyage, suppression et configuration, sans remplacer son action. Il reste
-  disponible pour un nettoyage de collection désactivée. Les baux actifs restent
-  protégés. La [route](app/routes/collections.py) réveille aussi les commandes
-  de configuration avant de transmettre le traitement au worker.
-- Le [planificateur](app/core/collections_repository.py) ne bloque plus une
-  demande sur le seul statut Queued d'une tâche dont le compteur de file est nul.
-  Ce cas dispose d'un test de régression ; aucune conclusion sur sa présence
-  dans l'instance utilisateur n'est tirée de la capture seule.
-- [Tests de reprise HTTP](tests/test_collection_resume_api.py), de demandes et
-  [d'affichage](tests/test_collection_queue.js), ainsi que la suite Memoria,
-  vérifiés localement. Aucune migration. Déployer backend, template, JavaScript
-  et traductions ensemble puis redémarrer l'application. Le bouton ne contourne
-  ni un serveur inaccessible ni la désactivation du planificateur. Pas de
-  validation en production.
-
-### Comprendre et relancer les collections en attente
-
-- Le [backend](app/core/collections_repository.py) expose, par bibliothèque, le
-  motif d'attente observé : planificateur ou tâche désactivés, serveur
-  inaccessible, pause réseau, inventaire occupant le worker, traitement en cours,
-  demande transmise ou demande enregistrée sans tâche en file.
-- La [liste](static/js/pages/collections.js) affiche ce diagnostic et permet
-  de retransmettre une synchronisation en attente. Les exécutions actives et
-  demandes d'aperçu restent protégées contre leur remplacement.
-- Le [template](templates/collections/collections.html) transmet désormais les
-  traductions des nouveaux messages au navigateur, dont `none_running` et
-  le refus de tri Plex, auparavant ajoutés aux dictionnaires seulement.
-- Aucune migration. Déployer backend, template, scripts et traductions ensemble.
-  Diagnostic fondé sur l'état enregistré : la cause d'un worker bloqué ne peut
-  pas être confirmée par cet état seul. Tests locaux, pas de validation production.
-
-### Visibilité des collections en cours
-
-- La [liste](static/js/pages/collections.js) place les collections Running et
-  Stopping en tête et actualise les états toutes les deux secondes. Un
-  [résumé](templates/collections/collections.html) nomme les collections en cours
-  et compte celles en attente, même quand les lignes sont hors écran.
-- Un [bail de travail actif](app/core/collections_repository.py) prime sur un
-  état stocké Queued. La phase affichée provient du membre actuellement en cours,
-  plutôt que du dernier passage d'une autre bibliothèque.
-- Aucune migration. Déployer backend, template, JavaScript et traductions ensemble.
-  Le suivi reste périodique : un passage de moins de deux secondes peut ne pas
-  être observé. Le compteur global de tâches inclut d'autres traitements.
-  Vérifications locales, sans validation en production.
-
-### Diagnostic des erreurs de collections
-
-- Un refus Plex lors du [tri des titres](app/core/collections_media.py) affiche
-  une cause traduite : ordre non garanti, publication inachevée, motif exact
-  inconnu et conseils de relance et de vérification dans Plex.
-- Les [logs du worker](app/tasks/run_collections.py) identifient collection,
-  bibliothèque, serveur, passage, étape et code de cause. Le résumé de la tâche
-  cite les collections en échec. Aucune réponse brute de Plex n'est exposée.
-- Aucune migration. Déployer code et [traductions](translations/ui/fr.json)
-  ensemble puis redémarrer les workers. Anciens historiques inchangés ;
-  diagnostic testé localement, sans correction du refus Plex ni validation
+Les changements non publiés sont regroupés dans ce fichier. Les dates indiquent
+la mise à jour du journal, sans confirmation de déploiement en production.
+L’historique antérieur est conservé dans le [journal archivé](changelog-archive-2026-11-19.md).
+
+## Non publié — mise à jour du 2026-11-22
+
+
+
+
+
+
+
+
+
+### Portail — ignorer les instances indisponibles et poursuivre selon les priorités (2026-11-22)
+
+- Le [traitement des demandes](app/core/portal_media_requests.py) ne bloque plus un ajout parce qu'un Sonarr/Radarr secondaire, lié ou non à la bibliothèque retenue, ne répond pas. Les contrôles défaillants restent journalisés en avertissement ; les doublons effectivement trouvés sur une instance accessible continuent de renvoyer présent/en cours sans nouvel ajout. L'indisponibilité du serveur média sélectionné ne bloque plus non plus l'envoi à un ARR accessible.
+- Si l'ARR prioritaire est indisponible au contrôle d'inventaire, le traitement choisit la destination admissible suivante en conservant priorités, préférences et critères de routage. Le repli est également permis si la lecture des profils/dossiers échoue avant tout POST. Les erreurs de configuration des profils/dossiers restent explicites ; droits et accès sont revérifiés avant soumission. Aucun POST envoyé ou à réponse incertaine n'est rejoué sur une autre instance.
+- Nouveau message traduit `portal_requests_no_arr_available` lorsqu'aucune destination admissible n'est disponible, sans réécrire les anciens résultats. Limite : un doublon présent uniquement sur une instance indisponible ne peut pas être détecté. Les ajouts sur les instances disponibles poursuivent leur traitement conformément au comportement demandé. [Documentation](vodum-docs/docs/media-requests.md).
+- Aucune migration. Déployer module et traductions ensemble puis redémarrer application/worker. Relancer les demandes précédemment bloquées ; les anciens échecs ne sont pas relancés automatiquement. Validation locale : 54 tests passent, couvrant instances secondaires indisponibles, repli vers la priorité suivante, lecture de préparation en échec, absence de repli après POST, doublons confirmés et routes du portail. Aucun ajout réel ni validation en production.
+
+### Diagnostics — rendre visibles les blocages Portail et les vues Monitoring en échec (2026-11-22)
+
+- Le résumé final d'un [blocage anti-doublon ARR](app/core/portal_media_requests.py) est désormais de niveau `ERROR`, visible avec le filtre Erreur de la page Logs ; les incidents intermédiaires des appels API restent en `WARNING`. Les diagnostics ajoutés précédemment étaient masqués par ce filtre, sans être nécessairement absents du fichier.
+- Le [précalcul Monitoring](app/core/monitoring/precomputed.py) journalise ses échecs en `ERROR` avec un contexte autorisé contenant la clé de vue. Le paramètre texte `snapshot_key` utilisé auparavant était ignoré par le journaliseur sécurisé. Le [résumé de tâche](app/tasks/refresh_monitoring_statistics.py) nomme désormais les vues échouées, la classe d'exception et une catégorie de cause, notamment `sql_budget_exceeded`, table ou colonne SQLite absente. Aucun message d'exception externe ni recherche utilisateur en clair n'est ajouté à ce résumé ; les résultats précédents restent conservés.
+- La capture montre un Sonarr Coréen hors ligne et son conteneur arrêté : le contrôle global peut être bloqué même si les autres Sonarr fonctionnent. Les captures seules ne permettent pas d'attribuer la dernière tentative à une instance précise ni d'identifier la vue Monitoring échouée ; le journal complet actuel reste nécessaire.
+- Aucune migration. Déployer les modules puis redémarrer application/worker. Ces changements améliorent les diagnostics ; ils ne réparent ni un serveur arrêté ni la cause encore inconnue de l'échec de calcul en production. Validation locale : 76 tests ciblés passent (Portail et précalcul Monitoring).
+
+### Portail — diagnostic du blocage anti-doublon Sonarr/Radarr (2026-11-22)
+
+- Le [contrôle des demandes](app/core/portal_media_requests.py) journalise désormais un résumé lorsqu'une vérification ARR bloque l'ajout : bibliothèque choisie, destination, instances en échec, association à cette bibliothèque, endpoint, statut HTTP ou classe d'erreur réseau. Les clés API et URLs configurées ne sont pas ajoutées à ce diagnostic.
+- Le message traduit précise qu'une instance **enregistrée dans VODUM** peut bloquer la demande : il ne prétend plus qu'elle est nécessairement liée à la bibliothèque retenue. La vérification globale des doublons et l'interdiction de rejouer un POST restent conservées. [Documentation de dépannage](vodum-docs/docs/media-requests.md).
+- Le journal fourni confirme sur la tentative Broute 24 du 21 novembre un `ReadTimeout` de Sonarr 9 sur `/api/v3/series` et une erreur de connexion de Sonarr 12, alors que la bibliothèque 17 était liée aux Sonarr 8 et 9. Cette observation n'établit pas l'état de l'essai du 22 novembre à 10:57, absent de cette capture ; un voyant vert d'une autre instance ne valide pas ces appels. La connectivité/configuration de ces instances reste à corriger sur l'hôte ; aucun ajout réel n'a été envoyé.
+- Aucune migration. Déployer Python et traductions ensemble puis redémarrer application/worker. Les demandes bloquées doivent être relancées après résolution de la cause. Validation locale : 50 tests ciblés du contrôle, de ses diagnostics et des routes du portail passent ; aucune résolution de production revendiquée.
+
+### Monitoring — extension du précalcul aux autres onglets (2026-11-22)
+
+- Le [registre des vues préparées](app/core/monitoring/precomputed_tabs.py) couvre désormais Historique, Utilisateurs, rapports Serveurs/ARR, Activité, Politiques, Usage à risque, Portail et historique de la Carte. Les recherches, tris, pages, périodes et instants personnalisés sont normalisés et préparés par la tâche existante ; les liens de pagination restent construits dans la requête courante. Les onze vues par défaut sont protégées du nettoyage.
+- La [route Monitoring](app/routes/monitoring_overview.py) conserve à jour sessions, états des serveurs, CPU/RAM, derniers échantillons ARR, présence du portail, règles éditables et suivi actif des politiques. Les statistiques historiques Serveurs excluent désormais les lectures en cours, affichées séparément dans les compteurs live. La [Carte](app/core/monitoring/overview_locations.py) fusionne ses observations historiques préparées avec les sessions actuelles ; son mode live seul reste direct. La timeline attend chaque instant préparé et fixe la borne `until` pour éviter qu'une demande en attente dérive dans le temps.
+- Les [graphiques historiques](app/core/monitoring/activity_statistics.py), y compris le journal quotidien d'une fiche utilisateur, sont calculés hors HTTP. Les [API](app/routes/monitoring_api.py) renvoient 202 pendant la préparation et 429 si la file bornée est pleine. Les scripts conservent le graphique précédent, affichent l'attente/date puis réessaient, avec arrêt après navigation. Les nouveaux templates distinguent résultat vide et préparation ; les variantes privées sont servies sans cache HTTP.
+- Migration de données additive et idempotente : huit vues par défaut supplémentaires dans `monitoring_precomputed`, sans nouvelle table ni changement d'INFO. Déployer Python, templates et JavaScript ensemble puis redémarrer application/worker ; lancer au besoin « Actualiser les statistiques historiques du monitoring ». La cible de cinq minutes, le plafond de 128 entrées, le budget SQL de 90 secondes et le commutateur global des tâches restent en vigueur. Un nouveau filtre peut attendre le passage suivant ; les lectures individuelles de détail, la configuration et les actions opérationnelles restent directes. [Documentation](vodum-docs/docs/performance.md).
+- Validation locale : 120 tests Python ciblés et deux tests JavaScript passent, couvrant vues vides/peuplées, filtres/cookies, pagination, réponses 202/200, fusion Carte et compteurs live après recalcul, borne de timeline stable et absence de SQL historique lourd dans les vues préparées testées. Pas de déploiement ni mesure de gain sur Unraid pour cette extension.
+
+### Monitoring — statistiques historiques préparées en arrière-plan (2026-11-22)
+
+- Nouvelle [tâche](app/tasks/refresh_monitoring_statistics.py), vérifiée chaque minute et activée par défaut, pour préparer l'aperçu Monitoring, les totaux de toutes les bibliothèques, le sélecteur d'utilisateurs et les classements des bibliothèques. Les [résultats persistants](app/core/monitoring/precomputed.py) deviennent éligibles à une actualisation après cinq minutes ; l'ancien résultat reste lisible pendant le calcul et en cas d'échec. Les classements personnalisés par période/utilisateur sont demandés puis préparés par la tâche, sans calcul historique dans la requête HTTP.
+- La [route Monitoring](app/routes/monitoring_overview.py) lit les résultats préparés. Tri, pagination et choix de période de croissance utilisent la table précalculée. Les vues distinguent préparation et résultat vide, affichent la date UTC du calcul et signalent données anciennes/échec. Les compteurs live restent actuels, y compris pendant la première préparation. Le premier rendu de l'aperçu ne charge plus les événements destinés au fragment suivant.
+- Migration additive et idempotente : table `monitoring_precomputed` et tâche `refresh_monitoring_statistics`. Déployer modules Python, templates, traductions et schéma ensemble puis redémarrer application/worker. Attendre le premier passage de la tâche ou la lancer depuis Tâches ; le réglage global des tâches planifiées reste respecté. Aucune modification d'INFO ni déploiement effectué ici.
+- Calculs sur une connexion de lecture séparée, publication atomique par vue, budget SQL de 90 secondes par passage et maximum de 12 vues candidates. Les demandes personnalisées sont bornées à 128 entrées au total et nettoyées après sept jours d'inactivité. Limites : les calculs sont déplacés en arrière-plan, pas tous rendus incrémentaux ; la cible de cinq minutes dépend de la charge. Historique détaillé, Utilisateurs, rapports Serveurs, carte, politiques et usage à risque conservent leurs chemins existants. Voir la [documentation des performances](vodum-docs/docs/performance.md).
+- Validation locale : 85 tests Python ciblés et le test JavaScript du polling passent, dont migration, persistance, premier affichage, concurrence, budget SQL, conservation après échec, filtres différés et équivalence des huit tris dans les deux sens avec pagination. Sur 50 002 lectures synthétiques : 170 ms de calcul direct des bibliothèques contre 7 ms de lecture préparée, et 1,30 s pour préparer les trois vues par défaut ; mêmes lignes. Mesures locales, sans garantie de latence ni validation sur Unraid.
+
+### Déploiement Unraid — diagnostic des lenteurs (2026-11-22)
+
+- Le [script de création du conteneur](create-container.sh) accepte `VODUM_PERFORMANCE_DIAGNOSTICS=1 bash create-container.sh` pour activer les mesures SQL, verrou, fournisseurs/cache et file HTTP, avec un seuil de route de 300 ms. Sans cette option, il conserve les réglages habituels. Le script affiche le chemin hôte du journal `app.log`.
+- Aucune migration. Relancer le script reconstruit l'image et recrée `vodum-test` avec ses volumes existants ; relancer sans l'option retire les mesures supplémentaires. Les mesures doivent être recueillies sur l'instance pour identifier la cause des lenteurs ; aucun gain de performance n'est revendiqué par cet ajout.
+
+### Collections — nouvelle affiche Jurassic Park / World (2026-11-22)
+
+- Nouvelle [affiche Jurassic v3](app/core/assets/collection_posters/universe-jurassic-v3.png) créée avec ImageGen : jungle émeraude, T. rex, portail et titre doré, en harmonie avec les autres franchises. Le [catalogue des affiches](app/core/collections_posters.py) sélectionne ce PNG pour les collections films et séries ; le JPEG précédent est conservé.
+- [Provenance et prompt](docs/collections-poster-sources.md) documentés. Validation locale : contrôle visuel, format 1024 × 1536 et résolution de la clé `universe_jurassic`. Aucun envoi en production.
+- Aucune migration. Déployer image et module ensemble, redémarrer application/worker puis synchroniser Jurassic : le changement de digest déclenche la republication du poster.
+
+### Monitoring — budget du worker et page des tâches (2026-11-22)
+
+- Le [worker média](app/tasks/media_jobs_worker.py) transmet une échéance monotone de 25 secondes au [collecteur](app/core/monitoring/collector.py). Les requêtes Plex/Jellyfin adaptent leur timeout au budget restant et refusent les nouvelles tentatives après expiration. L'attente du créneau Plex et la [collecte CPU/RAM](app/core/monitoring/resource_stats.py) respectent aussi cette échéance ; les chemins de reprise et de conservation des sessions restent actifs.
+- La [page des tâches](static/js/pages/tasks.js) ne remonte plus l'annulation attendue du polling comme erreur navigateur, puis réessaie au prochain intervalle. Les autres erreurs restent signalées. Le [diagnostic de durée](app/core/tasks/result_validation.py) arrondit vers le haut pour éviter « 120s > 120s ».
+- Validation locale : 40 tests Python ciblés et le test JavaScript du polling passent. Aucune validation en production. Limites : les timeouts réseau ne constituent pas une interruption forcée du SQL ou d'une réponse envoyée au compte-gouttes ; les anciennes erreurs Franchise et HTTP 502 de la capture ne sont pas déclarées résolues.
+- Aucune migration. Déployer les modules Python et JavaScript ensemble, puis redémarrer application et worker. La file restante est reprise aux passages suivants ; les logs historiques sont conservés.
+
+### Collections — reprise des nouvelles franchises dans les configurations existantes (2026-11-21)
+
+- Le [démarrage de la base](app/core/db_bootstrap_collections.py) applique une migration de données idempotente : une ancienne sélection contenant exactement les neuf franchises historiques est étendue aux 32 listes VODUM. Le catalogue seul était enrichi auparavant, laissant les collections existantes sur leurs neuf liens. La migration s'applique aussi si les 23 listes ont déjà été ajoutées à la base par un déploiement précédent.
+- Les sélections partielles ou vides sont conservées. Un marqueur dans la configuration empêche de rétablir ensuite une liste déliée ; les choix effectués dans le [formulaire](app/core/collections_repository.py) et le [gestionnaire de liens](app/core/collections_lists_admin.py) sont marqués immédiatement. Limite : une sélection historique de neuf listes ne permet pas de distinguer l'ancien choix complet par défaut d'un choix volontaire identique ; elle est traitée comme l'ancien défaut. Aucun média, objet Plex ni réglage ARR n'est modifié par la migration.
+- Déployer les modules ensemble, redémarrer application et worker pour appliquer la migration, puis synchroniser Franchise pour les bibliothèques films/séries. Les seuils habituels restent deux films ou une série présents ; les conflits avec une collection externe homonyme restent protégés. Les captures d'erreurs du 20 novembre ne valident pas l'état de la dernière synchronisation. Validation locale par tests de migration, de conservation des sélections et de publication ; pas de validation en production.
+- Validation : 37 tests ciblés passent. La suite élargie de 169 tests relève deux échecs hors du chemin modifié : le test de calendrier omet la liste désormais obligatoire pour le modèle `media_list`, et le test de proxy fournit les octets `JPEG`, qui ne constituent pas une image JPEG valide. Ces deux tests ne sont pas corrigés dans ce travail.
+
+### Collections — affiches des 23 nouvelles listes (2026-11-21)
+
+- Ajout de 23 affiches spécifiques aux listes de franchises supplémentaires : 21 créations cinématographiques ImageGen et deux affiches existantes pour Jurassic Park / World et Game of Thrones après refus de génération. Les fichiers restent [livrés localement](app/core/assets/collection_posters/) ; leurs [sources et associations](docs/collections-poster-sources.md) sont documentées.
+- L'[allowlist](app/core/collections_posters.py) sélectionne les PNG dédiés et les deux JPEG de repli, pour les collections films et séries. Les anciennes versions sont conservées. Déployer les images et le module ensemble, redémarrer application/worker puis synchroniser les franchises : le contrôle de digest existant republie les visuels modifiés. Aucune migration de schéma.
+- Validation : contrôle visuel de la planche des 32 franchises, signature des fichiers et test des 23 associations films/séries. Aucun envoi vers les bibliothèques de production.
+
+### Monitoring — fiabilité de la confirmation d'un kill Plex (2026-11-21)
+
+- Le [fournisseur Plex](app/core/providers/plex.py) refuse désormais un relevé `/status/sessions` dont le XML n'est pas un `MediaContainer` ou dont le nombre de sessions déclaré est incohérent. Une réponse XML de proxy ou un relevé tronqué ne doit pas être assimilé à la disparition du flux et à un kill réussi. Les diagnostics enregistrent le refus ; l'enforcer passe par son chemin d'échec existant.
+- Validation : 67 tests ciblés passent pour les affiches, le catalogue, les franchises, la terminaison Plex et les politiques. Trois régressions couvrent un faux document XML, un relevé incomplet et le refus d'envoyer une commande depuis un relevé initial invalide.
+- Le cas précis de double lecture signalé par les captures reste à confirmer avec le JSON complet de l'événement et son diagnostic de terminaison : les sessions affichées dans la fenêtre sont un instantané avant action. Cette correction n'est pas présentée comme une résolution validée de cet incident en production. Aucun kill réel n'a été envoyé pendant ce travail ; redémarrer le worker après déploiement du module, sans migration.
+
+### Collections — suppression des listes personnelles (2026-11-21)
+
+- Ajout d'une poubelle dans l'en-tête de l'[éditeur de liste](static/js/pages/collection-lists.js), uniquement pour les listes personnelles. Une liste encore liée affiche l'action désactivée et demande de retirer les associations ; le serveur conserve ses protections contre la suppression des listes VODUM ou utilisées.
+- La confirmation réutilise la [boîte de dialogue VODUM](templates/collections/_lists.html), avec le nom de la liste, un titre spécifique et Annuler sélectionné par défaut. Les confirmations de suppression de médias conservent leur texte propre. Après suppression, le catalogue et les sélecteurs sont actualisés et une liste restante est ouverte.
+- Traductions des cinq langues et styles actualisés. Aucune migration ; déployer JavaScript, template, CSS et traductions ensemble. Les fichiers médias des bibliothèques ne sont pas supprimés.
+- Validation locale : 14 tests Python ciblés passent ; parcours Chromium de confirmation, annulation par Échap, suppression et protections des listes liées/VODUM vérifié. Aucune validation de production.
+
+### Collections — 23 listes de franchises supplémentaires (2026-11-21)
+
+- Ajout dans le [catalogue livré](app/data/franchise_lists.json) de Jurassic Park / World, Terminator, Matrix / Animatrix, James Bond, Mission: Impossible, Conjuring, Indiana Jones, Pirates of the Caribbean, Planet of the Apes, Ghostbusters, Transformers, Rocky / Creed, John Wick, Resident Evil, Godzilla / Kong, Narnia, Dune, Shrek / Puss in Boots, Walking Dead, Game of Thrones, Yellowstone, Doctor Who et Dragon Ball. Le catalogue passe de 9 à 32 listes, avec 307 nouvelles identités IMDb typées, titres et années vérifiés directement auprès d'IMDb le 2026-11-21.
+- Les films, séries, principaux spin-offs et courts retenus sont décrits dans le [périmètre détaillé](docs/collections-franchise-expansion-2026-11-21.md). Jeux vidéo, documentaires de fabrication, podcasts et projets postérieurs à la date de vérification sont exclus. Les variantes de continuité et adaptations anciennes sont explicitées ; il ne s'agit pas d'un inventaire exhaustif de tous les contenus promotionnels.
+- Le [chargement initial](app/core/collections_franchise_lists.py) ajoute aussi les années des nouvelles entrées. Insertion additive et idempotente, sans modification des noms personnalisés, activations/exclusions, ajouts personnels ou associations explicites existantes. Les listes supplémentaires sont disponibles dans la gestion des liens Franchise ; elles ne sont pas ajoutées automatiquement à une sélection explicite déjà enregistrée. [Documentation des sources](vodum-docs/docs/collection-sources.md) actualisée.
+- Aucune migration de schéma. Déployer le JSON et son module de chargement ensemble puis redémarrer pour ajouter les listes en base. Les lier aux configurations souhaitées, puis lancer leur synchronisation. Les correspondances TMDB et les bibliothèques locales continuent de déterminer les collections effectivement publiées. Aucun déploiement ni contrôle sur l'instance de production.
+- Validation locale : 80 tests ciblés passent ; vérification en direct des 307 identifiants et de leur type/année/date de sortie ; tests du catalogue, du classement films/séries, de l'ajout sur une ancienne base, du second démarrage et de la conservation des personnalisations et associations.
+
+### Collections — listes liées et gestion des associations (2026-11-21)
+
+- L'[éditeur Franchise](static/js/pages/collections.js) affiche uniquement les listes liées à sa configuration, dans une zone de hauteur limitée. Les listes personnelles non liées, comme « test », restent accessibles dans l'onglet Listes mais ne sont plus ajoutées au formulaire Franchise. Le formulaire conserve les sélections explicites et accepte une sélection vide après déliaison de la dernière liste.
+- Dans [Collections et bibliothèques associées](static/js/pages/collection-lists.js), ajout de « Gérer les liens Franchise » avec recherche par collection/bibliothèque et huit configurations par page. Les actions [API](app/routes/collection_lists.py) lient ou délient la liste pour toutes les bibliothèques d'une configuration dans une transaction ; une configuration occupée est refusée. L'interface des collections est rafraîchie après modification.
+- Les [configurations historiques sans sélection explicite](app/core/collections_franchises.py) utilisent désormais uniquement les listes VODUM par défaut : une nouvelle liste personnelle ne rejoint plus implicitement toutes les franchises. Les liens explicites existants sont préservés. Les collections du modèle « Liste de médias » conservent leur source unique, modifiable dans leur propre éditeur.
+- Aucune migration de schéma. Déployer backend, [template](templates/collections/collections.html), CSS, JavaScript et traductions ensemble, puis redémarrer. Les associations prennent effet à la prochaine synchronisation ; délier retire alors uniquement les collections VODUM concernées, sans supprimer les médias. [Documentation](vodum-docs/docs/collections.md) et traductions des cinq langues actualisées.
+- Validation : 77 tests Python ciblés passent, plus le test JavaScript du sélecteur. Parcours Chromium ordinateur/mobile avec 1 009 listes : seuls les liens choisis apparaissent dans l'éditeur, liaison/déliaison et rafraîchissement vérifiés. Aucun changement exécuté sur l'instance de production.
+
+### Collections — nouvelles affiches Stargate et Terre du Milieu (2026-11-21)
+
+- Remplacement de l'affiche du film Stargate et du visuel minimaliste Middle-earth par deux illustrations cinématographiques dédiées aux franchises films/séries, cohérentes avec Harry Potter / Fantastic Beasts. Les [associations d'affiches](app/core/collections_posters.py) et leur [provenance](docs/collections-poster-sources.md) sont actualisées ; les anciennes images sont conservées.
+- Déployer les deux nouveaux PNG et le module d'association ensemble. Aucune migration ; le contrôle de digest existant appliquera les affiches aux collections VODUM à leur prochaine synchronisation. Visuels et sélection locale vérifiés, sans validation dans Plex en production.
+
+### Sécurité web — en-têtes du reverse proxy sous Waitress (2026-11-21)
+
+- Correction du problème décrit dans la [PR #8](https://github.com/Nexius2/VODUM/pull/8) : le [serveur de production](app/serve.py) conserve désormais les en-têtes transférés sans les interpréter. Le middleware VODUM reste seul responsable de vérifier le pair direct contre `VODUM_TRUSTED_PROXY_NETS`, puis de résoudre HTTPS, le nom d'hôte et l'adresse du client. Cette correction couvre aussi l'activation depuis les réglages en base et les deux modes de mesure de la file Waitress.
+- Le choix `trusted_proxy="*"` proposé dans la PR n'est pas repris : Waitress réécrirait l'adresse du pair avant son contrôle par VODUM. Aucun nouveau paramètre d'environnement n'est nécessaire ; le HTTP local et le rejet des en-têtes des pairs non autorisés sont conservés. [Documentation](vodum-docs/docs/security.md) complétée.
+- Validation : 13 tests ciblés passent, dont des requêtes HTTP réelles sous Waitress 3.0.2, avec et sans mesure de file. Cookies `Secure`, HSTS, adresses clients distinctes, usurpation d'une adresse de proxy, désactivation et changement de réseaux à chaud, dernier saut transféré et HTTP direct vérifiés. Aucune validation en production.
+- Aucune migration. Déployer le serveur Python puis redémarrer VODUM pour appliquer les ajustements Waitress ; les réseaux autorisés et la configuration du reverse proxy restent à adapter à chaque installation.
+
+### Collections — cache des affiches et récupération des franchises (2026-11-21)
+
+- Correction du 502 sur certaines affiches IMDb : les originaux, dont « Meet Walter », dépassaient la limite de 2 Mo. Le [proxy](app/core/collections_portraits.py) demande désormais des miniatures adaptées et conserve les images sur disque dans `collection_posters` à côté de la base (`/appdata/collection_posters` par défaut, configurable avec `VODUM_COLLECTION_POSTER_CACHE_DIR`). Réutilisation pendant 30 jours, conservation d'une image périmée en cas de panne amont, écritures atomiques et nettoyage périodique vers un plafond de 256 Mio. Le cache se remplit à la consultation et couvre aussi les listes personnalisées.
+- L'[éditeur des listes](static/js/pages/collection-lists.js) retente brièvement une image en échec sans la masquer pour toute la session. Les médias déjà marqués comme résolus mais sans affiche sont à nouveau enrichissables ; les informations partielles restent relançables. [Documentation du cache](vodum-docs/docs/collections.md) actualisée.
+- Le [moteur Franchise](app/core/collections_franchises.py) conserve l'identifiant et le marqueur de propriété d'une ancienne collection de la même configuration lors d'un changement de clé, même si un précédent échec a réservé la nouvelle clé sans créer de collection distante. L'aperçu ne modifie pas ces références. La propriété distante reste vérifiée ; une collection externe de même nom n'est ni adoptée ni écrasée.
+- Les collisions traitées restent des avertissements avec le détail disponible des identifiants en conflit, sans être réintroduites comme erreurs de tâche par un résultat enfant ou une [reprise de publication](app/core/collections_publication.py). Stargate séries est déjà présent dans les listes ; le log fourni signalait une collision de titre et non l'absence de sa source.
+- Association d'[affiches spécifiques](app/core/collections_posters.py) à Stargate, Harry Potter / Fantastic Beasts et Terre du Milieu au lieu du visuel générique. [Provenance des visuels](docs/collections-poster-sources.md) documentée ; les versions précédentes sont conservées. Une génération ImageGen refusée a été remplacée par une affiche Stargate existante, sans contournement du filtre.
+- Aucune migration de schéma. Déployer modules, JavaScript et fichiers d'affiches, puis redémarrer application et worker. Garder le répertoire de cache sur le volume persistant. Les nouvelles affiches de franchises sont appliquées lors de leur prochaine synchronisation ; aucun changement n'a été exécuté sur l'instance Plex de production.
+- Validation : 72 tests Python ciblés passent, plus le test JavaScript de pagination des listes. « Meet Walter » vérifié en direct avec une miniature JPEG de 5 519 octets puis une relecture locale ; couverture du cache concurrent, de la panne amont, de son nettoyage, des références de collections et des états partiels. L'identité exacte de la collection distante qui bloque Stargate en production reste à vérifier sur l'instance.
+
+### Collections — collection issue d'une liste de médias (2026-11-21)
+
+- Ajout du modèle « Liste de médias » dans « More ways to discover » au [catalogue](app/core/collection_catalog.py). Une configuration choisit une liste VODUM ou personnelle et reprend son nom ; bibliothèques films/séries ou paire de bibliothèques, limite, tri, fréquence, visibilité, priorité et acquisition Arr utilisent les réglages habituels.
+- Le [sélecteur de liste](static/js/pages/collections.js) propose une recherche insensible aux accents, huit résultats par page dans une zone de hauteur limitée et un rappel permanent de la sélection. Une recherche ou un changement de page conserve le choix. [Interface](templates/collections/collections.html), [styles](static/css/collections.css), traductions des cinq langues et compteur du catalogue actualisés.
+- Le [moteur](app/core/collections_media_list.py) publie une seule liste par bibliothèque, avec uniquement ses entrées activées du type correspondant, sans minimum de deux films présents. Aperçu, acquisitions, suppressions et protections de propriété réutilisent le moteur partagé. Les listes utilisées apparaissent dans les [collections associées](app/core/collections_lists_admin.py) et ne peuvent pas être supprimées.
+- Les correspondances TMDB restent nécessaires pour la publication ; un titre affichable grâce à IMDb ne garantit pas sa présence dans une nouvelle collection. En cas d'identification partielle, les membres existants sont préservés. Les modifications de contenu prennent effet à la prochaine exécution ; les listes absentes ou désactivées sont refusées. [Documentation utilisateur](vodum-docs/docs/collections.md) et [sources](vodum-docs/docs/collection-sources.md) complétées.
+- Aucune migration de schéma : configuration stockée dans le JSON existant. Déployer modules, worker, template, JavaScript, CSS et traductions ensemble, puis redémarrer application et worker avant de créer ce modèle.
+- Validation : 63 tests Python ciblés passent, plus le test JavaScript du sélecteur avec 1 000 listes. Parcours Chromium ordinateur/mobile avec 1 009 listes, recherche, pagination, choix, enregistrement et réouverture vérifiés localement. La suite streaming élargie conserve 3 échecs et 10 erreurs identiques avec ou sans la modification du moteur partagé ; un ancien test JavaScript Continents échoue aussi sur un helper absent de son contexte simulé. Aucune validation en production.
+
+### Collections — navigation des listes plus compacte (2026-11-21)
+
+- Dans l'[éditeur de listes](static/js/pages/collection-lists.js), retrait de l'origine « VODUM / Custom » sous les noms dans la navigation pour afficher davantage de listes. L'origine apparaît désormais sous le titre du contenu, avant le libellé et le nombre de médias. L'indication des listes désactivées reste visible.
+- Aucune migration ; mise à jour du JavaScript uniquement. Syntaxe et rendu HTML généré vérifiés localement, sans validation en production.
+
+### Collections — métadonnées IMDb et recherche par identifiants (2026-11-21)
+
+- Ajout d'un [recours direct à IMDb](app/core/collections_list_metadata.py) par identifiant exact lorsque TMDB n'a pas de correspondance : titre, année et affiche sans remplacer l'identité d'origine ni rechercher un titre approximatif. Les titres vérifiés du catalogue VODUM servent de secours si IMDb est indisponible ; cet état partiel reste relançable sans inventer d'année ou d'affiche.
+- L'[éditeur](static/js/pages/collection-lists.js) retente automatiquement les anciens échecs IMDb une fois avec ce nouveau mécanisme. Les nouveaux échecs restent relançables manuellement. Les titres personnalisés, activations et origines sont préservés par l'[API](app/routes/collection_lists.py).
+- Le [proxy d'affiches](app/core/collections_portraits.py) accepte aussi les images IMDb sur un hôte fixe, sans redirection, avec validation du chemin, du type et de la taille. Aucun accès à une URL arbitraire.
+- Recherche par titre, `tt123` ou `imdb:tt123`, `tvdb:123`, `tmdb:123`, ainsi que `tmdb:movie:123` / `tmdb:tv:123`. Un numéro TMDB sans type vérifie films et séries ; TVDB passe par la correspondance TMDB des séries. Les numéros seuls restent des recherches de titre pour éviter de deviner le fournisseur. Libellés actualisés dans les cinq langues.
+- Aucune migration de schéma ; déployer modules, API, JavaScript et traductions ensemble puis redémarrer. Les métadonnées sont conservées dans les colonnes existantes à l'ouverture des listes. IMDb reste une dépendance externe susceptible d'être indisponible.
+- Validation : dix tests locaux ciblés (recherche, identité, secours, persistance et proxy), vérification directe des huit identifiants de la capture avec titre/année/affiche et chargement réel d'une affiche via le proxy. Aucune validation de l'instance de production.
+
+### Collections — activation et suppression des médias (2026-11-21)
+
+- Dans l'[éditeur de listes](static/js/pages/collection-lists.js), la colonne d'activation porte désormais le titre « Activé » et utilise un interrupteur accessible au clavier. La poubelle occupe une colonne réservée sur toutes les lignes, y compris celles des médias VODUM non supprimables, pour conserver l'alignement.
+- La confirmation native est remplacée par une [boîte de dialogue](templates/collections/_lists.html) utilisant les [styles VODUM](static/css/collections.css), le titre du média et l'avertissement sur la conservation dans les bibliothèques. Annulation sélectionnée par défaut ; Échap annule. Une navigation vers une autre liste annule l'action en attente.
+- Aucune migration ; déployer template, JavaScript et CSS ensemble. Vérifications locales, sans validation en production.
+
+### Collections — recherche unifiée et affiches (2026-11-21)
+
+- L'[ajout de médias](static/js/pages/collection-lists.js) recherche films et séries ensemble sans sélecteur de type ; chaque résultat garde son type pour permettre le choix en cas d'ambiguïté. Les identifiants IMDb recherchent aussi les deux catégories ; les personnes sont exclues.
+- L'[API de recherche](app/routes/collection_lists.py) transmet désormais le chemin validé des affiches TMDB, qui manquait dans ses résultats. Le proxy d'images existant est conservé, avec une vignette de remplacement en l'absence d'affiche.
+- Aucune migration. Déployer API, JavaScript et [CSS](static/css/collections.css) ensemble. Validation locale avec réponses TMDB simulées ; pas de validation en production.
+
+### Collections — retrait des paramètres de liste (2026-11-21)
+
+- Suppression du bloc « List settings » dans l'[éditeur de listes](static/js/pages/collection-lists.js), avec ses champs de nom et d'activation, son bouton Enregistrer et la suppression des listes personnalisées qui y figurait. Les commandes de contenu des médias sont conservées.
+- Retrait des styles associés dans la [feuille Collections](static/css/collections.css). Aucune migration nécessaire ; déployer les deux fichiers statiques ensemble. Vérification syntaxique JavaScript locale, sans validation en production.
+
+### Collections — tableaux de contenu et identification des médias (2026-11-21)
+
+- Réorganisation de l'[éditeur de listes](static/js/pages/collection-lists.js) : les
+  collections associées sont affichées en haut dans un petit tableau lorsqu'il y
+  en a plusieurs, ou sur une ligne sans tableau pour une seule. Une configuration
+  regroupant films et séries est comptée une seule fois, avec ses bibliothèques.
+  Le contenu apparaît en dessous dans un tableau avec mini-affiche, titre, type,
+  origine et activation. La navigation de gauche est conservée.
+- L'ajout de média dispose de son encadré avec recherche et résultats ; le filtre
+  du contenu est séparé. Les réglages de nom/activation de la liste sont repliables.
+  Adaptation mobile et traductions des cinq langues actualisées.
+- Correction du chargement des titres : le premier identifiant sans correspondance
+  interrompait la boucle et empêchait le traitement des suivants. Deux requêtes au
+  maximum sont maintenant traitées en parallèle ; une absence de correspondance
+  est conservée et affichée sur sa ligne avec identifiant, type et action Réessayer.
+  Le bandeau générique sans média concerné n'est plus utilisé pour ce traitement.
+  Les pannes réseau restent visibles sur les lignes traitées et un arrêt après
+  erreurs répétées évite de solliciter inutilement TMDB.
+- Les [métadonnées](app/routes/collection_lists.py) enrichissent aussi les entrées
+  possédant déjà un titre pour récupérer leur affiche, sans écraser leur titre ni
+  leur activation/origine. Les affiches utilisent le proxy TMDB existant, avec
+  remplacement discret lorsqu'une image manque. Aucune recherche par titre
+  approximative ne remplace une identité introuvable.
+- Migration additive au [démarrage](app/core/db_bootstrap_collections.py) de la table
+  `franchise_list_items` : `poster_path`, `metadata_state`, `metadata_error` et
+  `metadata_checked_at`. Déployer schéma, modules, templates, CSS, JavaScript et
+  traductions ensemble, puis redémarrer avant de rouvrir les listes. Le chargement
+  reprend à l'ouverture de la liste ; il ne s'agit pas d'un traitement en arrière-plan.
+- Validation : 228 tests ciblés passent, dont migration répétée sur ancien schéma,
+  conservation des personnalisations, absence de correspondance suivie d'une entrée
+  valide, cache des métadonnées et regroupement des bibliothèques. Parcours Chromium
+  vérifié sur ordinateur/mobile, avec une ou plusieurs collections liées et reprise
+  après identifiant introuvable. Réponses TMDB simulées ; aucune validation sur
+  l'instance de production ni promesse de résoudre les identifiants absents de TMDB.
+
+
+### Développement — rangement des fichiers de travail des agents (2026-11-21)
+
+- Déplacement des trois logs de diagnostic présents à la racine dans
+  `tools/codex/logs/`. Les fichiers sont conservés ; aucune donnée d'exécution
+  utilisée par VODUM n'est déplacée.
+- Ajout d'une [consigne persistante](AGENTS.md) pour placer les prochains logs,
+  audits, rapports et fichiers temporaires des agents sous `tools/codex/`.
+  Les exclusions Git et Docker existantes de `tools/` suffisent ; aucune règle
+  supplémentaire ajoutée à `.gitignore`. Les sources et documents du projet
+  conservent leurs emplacements. Aucune migration ni déploiement nécessaire.
+
+
+### Dashboard — jauges CPU/RAM à gauche du statut (2026-11-21)
+
+- Dans la [carte Serveurs](templates/dashboard/partials/_servers.html), les jauges
+  CPU/RAM passent à gauche du statut Online/Offline. L'heure ou la date reste sous
+  le statut ; les valeurs et leurs conditions d'affichage sont conservées.
+- Aucune migration ni changement du JavaScript ; déployer le template actualisé.
+
+
+### Collections — reprise Franchise bloquée par une collision de nom (2026-11-21)
+
+- Un refus de publication pour nom déjà utilisé ne reste plus dans les
+  [plans de publication](app/core/collection_inventory.py). Il ne sera donc pas
+  rejoué comme une mise à jour d'adhésion inachevée lors d'une reprise.
+- Les [reprises des anciens lots Franchise](app/core/collections_publication.py)
+  traitent également ces collisions par franchise : avertissement avec son nom,
+  suppression de son seul plan bloqué, puis poursuite des autres publications.
+  La collection bloquée n'est pas marquée synchronisée et aucune collection distante
+  non reconnue comme appartenant à VODUM n'est adoptée, modifiée ou supprimée.
+- Une véritable collision reste à résoudre en renommant la liste ou la collection
+  existante concernée. Les échecs de vérification de propriété restent bloquants ;
+  leurs plans sont conservés pour diagnostic/reprise. Aucune nouvelle migration ni
+  purge manuelle requise : déployer les deux modules puis redémarrer le worker.
+- Régression reproduite dans les [tests de plans](tests/test_collection_publication_plans.py),
+  avec un ancien lot de deux franchises dont la première rencontre une collision,
+  la poursuite de la seconde, et l'absence de rejeu du plan rejeté. Contrôles locaux
+  sur adaptateurs simulés : 224 tests ciblés passent. Aucune validation de publication
+  sur l'instance réelle.
+
+
+### Collections — onglet Listes générique et navigation compacte
+
+- Les textes de l'[onglet Listes](templates/collections/_lists.html) parlent de
+  listes de films et séries et de collections associées, sans les limiter au modèle
+  Franchise. Ce changement de présentation ne crée pas le futur modèle permettant
+  de sélectionner une liste librement ; le raccordement actuel reste inchangé.
+- Le [panneau de navigation](static/js/pages/collection-lists.js) utilise des lignes
+  compactes dans un cadre unique, une sélection mise en évidence, des compteurs
+  alignés et une recherche par nom. La création d'une liste est regroupée dans
+  un volet dépliable. Le filtrage conserve la liste ouverte et affiche un état vide.
+- Traductions adaptées dans les cinq langues et révision des ressources actualisée.
+  Aucune migration ; déployer templates, CSS, JavaScript et traductions ensemble.
+  Rendu et parcours contrôlés dans Chromium sur grand écran et mobile, avec recherche,
+  création et suppression personnelle ; template vérifié dans les cinq langues et
+  syntaxe JavaScript contrôlée. Les métadonnées sont simulées pour ces contrôles.
+
+
+### Collections — sélection des franchises en grille
+
+- Dans la [configuration Franchise](templates/collections/collections.html), les
+  listes sont présentées dans une grille de cases encadrées, comme les événements
+  Seasonal : deux colonnes sur grand écran et une sur mobile. Chaque case contient
+  uniquement la sélection et le nom de la liste, sans date ni emoji ajouté.
+- Le même rendu est conservé après création ou modification d'une liste dans
+  l'éditeur. Sélection et enregistrement restent inchangés. Aucune migration ;
+  déployer le template et le [JavaScript](static/js/pages/collections.js) ensemble.
+  Rendu vérifié dans Chromium sur grand écran et mobile, cases à cocher contrôlées ;
+  validation du template dans les cinq langues et syntaxe JavaScript vérifiées.
+
+
+### Collections — Stargate, Harry Potter et Terre du Milieu
+
+- Ajout de trois [listes locales](app/data/franchise_lists.json) sélectionnables
+  dans Franchise : Stargate (4 films, 5 séries), Harry Potter & Fantastic Beasts
+  (11 films), The Lord of the Rings & The Hobbit (10 films, 1 série).
+  Les adaptations animées et séries dérivées sont incluses ; les épisodes
+  individuels, documentaires et projets non sortis ne sont pas ajoutés.
+- Les titres des nouvelles entrées sont conservés en base pour la future édition.
+  L'identifiant du film Stargate Origins: Catherine est distinct de la série :
+  [correction publiée par IMDb](https://community-imdb.sprinklr.com/conversations/data-issues-policy-discussions/incorrectly-merged-stargate-origins-catherine-movie-with-tv-series/683e9a3840333655d36a376b).
+- Ces trois univers utilisent provisoirement l'[affiche Franchise commune](app/core/assets/collection_posters/franchises-v1.png).
+  Aucune nouvelle table : déployer données et code ensemble, puis redémarrer
+  pour initialiser les ajouts sans écraser les personnalisations. Une sélection
+  déjà enregistrée reste inchangée : cocher les nouvelles listes pour l'étendre.
+  Validation : 174 tests ciblés passent ; formulaire vérifié dans Chromium.
+  Aucune validation en production.
+
+### Collections — onglet Listes et édition du contenu
+
+- Ajout de l'[onglet Listes](templates/collections/_lists.html) : consultation et
+  filtrage des films/séries, création et renommage de listes, activation des listes
+  et médias, recherche par titre ou identifiant IMDb, puis ajout d'un média vérifié.
+  Les nouvelles listes sont proposées dans la configuration Franchise sans recharger
+  la page et sont utilisables par le moteur existant.
+- La [gestion des listes](app/core/collections_lists_admin.py) distingue les éléments
+  fournis par VODUM des ajouts personnels. Les listes et médias VODUM peuvent être
+  désactivés mais pas supprimés, y compris par requête directe. Seuls les ajouts
+  personnels sont supprimables ; une liste personnelle utilisée doit d'abord être
+  retirée des configurations associées. Aucun fichier média n'est supprimé.
+- Chaque liste affiche les configurations Franchise qui la sélectionnent et leurs
+  serveurs/bibliothèques, y compris les configurations désactivées. Un lien ouvre
+  leur configuration. Les changements de contenu prennent effet lors d'une prochaine
+  synchronisation ; aucune exécution automatique n'est ajoutée par l'éditeur.
+- Les [routes d'administration](app/routes/collection_lists.py) utilisent les contrôles
+  administrateur et CSRF existants. Les titres manquants sont chargés progressivement
+  via TMDB, enregistrés sans modifier les activations et peuvent être relancés en cas
+  d'échec. Recherche, ajout et identification nécessitent la clé TMDB configurée ;
+  les titres déjà enregistrés et les changements d'activation restent accessibles
+  sans appel réseau. Aucune liste publique n'est téléchargée.
+- Retrait de l'encadré technique « Local VODUM lists… » de la configuration Franchise
+  et de son récapitulatif, à la demande de l'utilisateur. Traductions de l'éditeur
+  dans les cinq langues ; affichage adapté aux petits écrans. Les listes personnelles
+  utilisent l'affiche Franchise commune.
+- Aucune nouvelle migration : réutilisation des deux tables de listes déjà créées.
+  Déployer ensemble routes, moteur, templates, CSS, JavaScript et traductions, puis
+  redémarrer. Validation : 188 tests ciblés, contrôle de syntaxe JavaScript et parcours
+  Chromium sur base temporaire (création, recherche/ajout, suppression personnelle,
+  désactivation, associations, mise à jour de la configuration et format mobile).
+  Les réponses TMDB sont simulées dans ces contrôles ; aucune validation sur serveur
+  Plex/Jellyfin réel ni en production.
+
+### Collections — listes locales pour Franchise
+
+- Franchise utilise désormais six [listes intégrées à VODUM](app/data/franchise_lists.json)
+  plutôt que de télécharger le contenu de listes publiques. Dans sa
+  [configuration](templates/collections/collections.html), seuls leurs noms sont
+  affichés avec des cases à cocher, ainsi que dans le récapitulatif.
+- Une liste peut contenir films et séries ; chaque bibliothèque utilise les entrées
+  de son type. La sélection accepte une bibliothèque ou une paire films/séries.
+  Les configurations existantes sélectionnent les six listes par défaut et
+  conservent leurs identifiants de publication.
+- Deux tables additives sont initialisées au démarrage par le
+  [bootstrap](app/core/db_bootstrap_collections.py). L'initialisation répétée préserve
+  les noms modifiés et les désactivations. Les listes et entrées fournies portent
+  un indicateur VODUM ; leur interface d'édition et de désactivation reste à faire
+  dans un futur onglet, sans action de suppression exposée ici.
+- Le contenu initial provient du catalogue déjà embarqué, arrêté au 2026-10-29.
+  TMDB reste utilisé pour résoudre les identités et les métadonnées ; cette
+  modification ne constitue pas une validation actuelle de chaque titre.
+- Déployer ensemble code, données JSON, traductions, templates et JavaScript,
+  puis redémarrer pour créer les tables et initialiser les listes. Pas de migration
+  destructive. Validation : 172 tests ciblés passent, syntaxe JavaScript vérifiée
+  et formulaire contrôlé dans Chromium. Aucune validation en production.
+
+### Dashboard — date compacte et libellés CPU/RAM lisibles
+
+- Dans la [carte Serveurs](templates/dashboard/partials/_servers.html), le dernier
+  contrôle affiche uniquement l'heure lorsqu'il date d'aujourd'hui, sinon uniquement
+  la date, selon le jour local du navigateur. L'horodatage complet reste en infobulle.
+  Ce format est limité à cette carte ; les autres dates gardent leur affichage.
+- Les libellés [CPU et RAM](templates/dashboard/partials/_server_resource_mini_bars.html)
+  passent sous leurs barres verticales, à côté du statut et de son horodatage.
+  Les valeurs absentes ou les serveurs hors ligne ne reçoivent pas de jauge fictive.
+- Mise à jour de la [révision du JavaScript](templates/base.html) pour charger le
+  nouveau [formatage](static/js/app.js). Aucune migration ; déployer templates et
+  JavaScript ensemble. Rendu vérifié dans Chromium avec le CSS de l'application,
+  date locale et passage de minuit contrôlés ; aucune validation en production.
+
+### Annulation des développements Collections du 2026-11-20
+
+- Retrait des ajouts Lists, préparation/migration de catalogue, nettoyage et
+  multi-cibles réalisés depuis 7 h ; retour des fichiers concernés à leur état
+  antérieur, en conservant les travaux plus anciens. Les changements annulés ne
+  sont plus annoncés comme disponibles. Aucune migration de base réelle exécutée
+  par ce travail ; une copie de l'état annulé est conservée hors du dépôt.
+
+### Planification — gestionnaire de listes internes Collections
+
+- Ajout du chantier au [TODO](TODO.md), avant Configuration Manager, avec
+  audit, conception, catalogue officiel, personnalisations, interface Lists,
+  intégration, migration idempotente et validation.
+- Conservation du [cahier des charges complet](docs/collections-internal-lists.md).
+  Cette mise à jour documentaire ne modifie pas le moteur Collections et
+  n'exécute aucune migration.
+
+### P0 — fiche utilisateur moins dépendante des écritures SQLite
+
+- Les lectures initiales de la [fiche utilisateur](app/routes/users_detail.py)
+  passent par un [snapshot indépendant](app/core/user_detail_repository.py) :
+  profil, abonnement, réglages et informations propres à chaque onglet peuvent
+  être lus pendant qu'une écriture utilise la connexion partagée. Les lectures
+  d'enregistrement restent inchangées, sans cache.
+- [Mesure locale et limites](docs/performance-user-profile-header-2026-11-19.md) :
+  avec une écriture simulée de 250 ms, ce bloc passe d'environ 250 ms à 2–6 ms,
+  avec des résultats identiques sur les cinq onglets. Cette mesure ne représente
+  pas le temps HTTP complet ; validation réelle conservée au [TODO](TODO.md).
+- 50 tests passent et Flask démarre avec 220 routes sur base temporaire.
+  Aucune migration ; déployer ensemble la route et le repository, puis
+  redémarrer. Aucune validation en production.
+
+### P0 — supprimer les écritures optionnelles sans changement sur les pages
+
+- Les [observations de langues](app/core/language_telemetry.py) vérifient l'état
+  enregistré avant de prendre le verrou d'écriture SQLite. Une combinaison déjà
+  connue aujourd'hui, ou une journée ayant atteint sa limite, ne déclenche plus
+  de transaction tant qu'aucune donnée ancienne n'est à purger.
+- Consentement, champs anonymes, exclusion HTMX, normalisation, rétention,
+  déduplication et plafond de 32 restent inchangés. Les écritures nécessaires
+  gardent leur vérification atomique ; aucun cache ni donnée collectée n'est
+  ajouté. Les contrôles d'autorisation ne sont pas modifiés.
+- [Mesure et limites](docs/performance-language-observations-2026-11-19.md) : sur
+  100 visites répétées, 100 transactions et 200 instructions DELETE/INSERT passent
+  à zéro, pour la même observation finale. Les timings locaux variables ne
+  permettent pas d'annoncer un gain stable de latence ; la lecture préalable et
+  l'ouverture de connexion restent présentes. Mesure sous charge réelle au
+  [TODO](TODO.md).
+- Aucune migration ; déployer le module et redémarrer. Neuf tests de télémétrie,
+  cinq tests des réglages par requête et six tests de résolution de langue
+  passent localement ; aucune validation en production.
+
+### P0 — suivi Collections sans transaction d'écriture inutile
+
+- Le [suivi Collections](app/routes/collections.py) charge ses données dans un
+  snapshot SQLite indépendant et récupère les publications par jointure. Sur
+  500 cartes avec snapshots, les SELECT passent de 519 à 19 ; les réponses JSON
+  complètes restent identiques. Détail individuel, mode compact et repli des
+  anciennes publications sont conservés.
+- La [récupération des runs](app/core/collections_repository.py) contrôle d'abord
+  en lecture isolée si une réparation est nécessaire. Elle évite la transaction
+  d'écriture à vide ; les réparations effectives conservent leur transaction et
+  revérifient les leases et commandes avant modification.
+- [Mesure et limites](docs/performance-collections-poll-2026-11-19.md) : avec un
+  écrivain maintenu artificiellement 250 ms, médiane Flask locale de 267 à 13 ms
+  sur cinq mesures. Ce résultat n'est pas une mesure de production ; si une
+  réparation est requise, l'attente du verrou reste possible. Le
+  [TODO](TODO.md) conserve la validation sur l'instance réelle et le coût du
+  repli historique comme travaux ouverts.
+- Aucune migration ni nouvel index ; déployer route et dépôt Collections
+  ensemble, puis redémarrer. Tests locaux du payload, des lectures concurrentes,
+  des reprises et des moteurs Collections/Memoria ; pas de changement visuel.
+
+### P0 — calcul des suggestions de fusion d'utilisateurs
+
+- Le [scoreur](app/core/user_merge_suggestions.py) prépare une seule fois les
+  identités et tokens du compte source et réutilise les champs normalisés des
+  candidats. Poids, similarités, scores entiers, ordre des ex æquo et limites
+  restent identiques ; les comptes ne sont pas modifiés. Les calculs restent
+  après fermeture du snapshot SQLite.
+- [Mesure locale et limites](docs/performance-merge-ranking-2026-11-19.md) :
+  classement de 5 000 candidats de 315 à 212 ms, médianes de cinq exécutions,
+  soit environ 33 % de temps CPU en moins. Le
+  [benchmark](tools/benchmark_merge_suggestions.py) vérifie les résultats complets.
+  Les 288 scores de référence et différentes limites conservent leurs résultats.
+- Le [TODO](TODO.md) conserve l'audit des autres calculs CPU redondants comme
+  travail ouvert. Aucune migration ni modification d'interface ; déployer le
+  module Python et redémarrer. Aucun gain HTTP ou global en production n'est
+  déduit de ce benchmark CPU synthétique.
+
+### P0 — réutilisation des filtres de recherche des logs
+
+- Le [lecteur de logs](app/logging_utils.py) réutilise un filtre par niveau et
+  recherche entre les pages d'un même snapshot stable. Le cache supplémentaire
+  est limité à 512 Kio et ne duplique pas les messages. Les résultats ne sont
+  jamais tronqués pour respecter ce budget.
+- Ajout, rotation, remplacement, purge et erreurs de lecture invalident le filtre.
+  Recherche sur les traces multilignes, casse, compteurs, pagination, export et
+  copies défensives sont conservés. Le filtrage initial reste hors du verrou
+  partagé des caches.
+- [Mesure locale et limites](docs/performance-log-search-2026-11-19.md) : sur
+  5 000 événements, recherche répétée de 3,50 à 0,62 ms, médiane de dix mesures.
+  La première recherche reste à environ 3,57 ms ; aucun gain HTTP ou en production
+  n'est annoncé. Le [TODO](TODO.md) conserve les recherches initiales, fichiers
+  changeant continuellement et gros volumes comme travaux ouverts.
+- Aucune migration ; déployer le module Python et redémarrer. Vérifications
+  locales de régression, d'invalidation et de concurrence uniquement.
+
+### P0 — recherches simples du monitoring utilisateurs
+
+- La [recherche utilisateurs](app/core/monitoring/overview_users.py) utilise les
+  identités des comptes ayant un historique pour les requêtes sans espace ni
+  joker SQL. Elle évite de répéter les identités pour chaque lecture. Les listes
+  n'agrègent plus l'historique des utilisateurs exclus par ce filtre ; les tris
+  non agrégés sélectionnent d'abord la page. Comptes liés, déduplication, durées,
+  classement et pagination conservent leurs résultats.
+- Les recherches avec espaces, `%` ou `_` conservent leur parcours exact.
+  Les tris Lectures/Durée sans recherche et la matérialisation des totaux restent
+  dans le [TODO](TODO.md), mis à jour sans y réintroduire de lots terminés.
+- [Mesure locale](docs/performance-monitoring-users-2026-11-19.md) : sur 100 082
+  lectures et une recherche correspondant à dix groupes, liste par dernière
+  lecture de 384 à 18 ms, compteur de 77 à 2,5 ms (médianes de cinq mesures).
+  Le [benchmark](tools/benchmark_monitoring_users_page.py) accepte `--search`.
+  Résultats SQL comparés, plans indexés et lectures concurrentes vérifiés.
+- Aucune migration ni nouvel index ; déployer le module Python et redémarrer.
+  Ces chiffres ne sont pas des temps HTTP ni une validation sur l'instance
+  de production ; les recherches très larges restent proportionnelles au volume
+  de sessions des groupes retenus.
+
+### Planification du Configuration Manager & Compliance
+
+- Ajout au [TODO](TODO.md) du chantier en cinq phases : audit et consultation,
+  profils/groupes, conformité et intégration à `check_servers`, déploiement,
+  puis correction des écarts. Les contraintes de sécurité, compatibilité,
+  performance, traduction et tests sont conservées.
+- Le [cahier des charges complet](docs/configuration-manager-compliance.md) est
+  conservé dans le dépôt. Ajout documentaire uniquement : aucune implémentation,
+  migration ou modification de comportement ; faisabilité des API à vérifier
+  lors de l'audit prévu. Liens locaux vérifiés.
+
+### Nettoyage du dossier de développement
+
+- Retrait du projet des temporaires `.tmp`, caches Ruff/Python, dépendances
+  Node et cache pnpm régénérables, journaux de diagnostic, anciens rapports
+  d'audit déjà retirés des sources versionnées et deux anciens scripts de
+  diagnostic. 4 571 fichiers, environ 230 Mo, déplacés dans une quarantaine
+  locale hors du projet : `C:\Users\sylva\AppData\Local\Temp\vodum-cleanup-20261119`.
+  Le manifeste de ce dossier permet de retrouver leurs emplacements initiaux.
+  La suppression définitive a été refusée par le contrôle automatique ; aucun
+  fichier n'a été détruit pour contourner ce refus.
+- Tests de régression, outils de validation/benchmark, environnement Python,
+  `.env.example`, manifestes Node, sources, assets, migrations, traductions et
+  documentation utile conservés pour le fonctionnement et la maintenance.
+  Une reconstruction du CSS nécessite de réinstaller les dépendances Node
+  depuis les manifestes conservés ; les assets déjà construits restent présents.
+- Le [TODO](TODO.md) et une note technique ne pointent plus vers les rapports
+  retirés. La [documentation de configuration](vodum-docs/docs/configuration.md)
+  couvre aussi les variables de compression et de budget du snapshot de sauvegarde.
+- Aucune migration, aucune modification d'INFO ni des données de production.
+  Démarrage réel local sur base temporaire : 220 routes et contrôles HTTP de base
+  vérifiés. Documentation vérifiée ; le validateur des traductions signale des
+  écarts de clés préexistants, sans modification des catalogues par ce nettoyage.
+
+### Libellés intégrés aux jauges CPU/RAM
+
+- Les libellés des [mini-jauges](templates/dashboard/partials/_server_resource_mini_bars.html)
+  se lisent désormais de bas en haut et sont superposés au remplissage.
+  L'emplacement total reste de 28 pixels pour préserver l'alignement des statuts.
+- Aucune migration ; déployer le template. Rendu et tests locaux vérifiés,
+  sans modification des mesures ni des conditions d'affichage.
+
+### Jauges de ressources verticales et alignement des statuts
+
+- Les [jauges CPU/RAM](templates/dashboard/partials/_server_resource_mini_bars.html)
+  sont désormais verticales, avec leurs libellés écrits verticalement et un
+  remplissage de bas en haut. Leur emplacement occupe seulement 28 pixels et
+  reste réservé sans données, pour aligner les badges Online/Offline de toutes
+  les cartes. Aucun pourcentage n'est affiché.
+- Aucune migration ; déployer les templates de la carte Serveurs. Rendu et
+  tests du dashboard vérifiés localement ; collecte des mesures inchangée.
+
+### Barres CPU et RAM dans la carte Serveurs du dashboard
+
+- La [carte Serveurs](templates/dashboard/partials/_servers.html) affiche à
+  droite du statut deux [mini-barres CPU/RAM](templates/dashboard/partials/_server_resource_mini_bars.html),
+  sans pourcentages visibles. Chaque barre apparaît uniquement si sa mesure
+  est disponible ; une charge nulle reste une mesure valide.
+- Le [chargement des mesures](app/core/dashboard_servers.py) réutilise les
+  données du monitoring de moins de dix minutes, pour les serveurs affichés,
+  au premier rendu et lors des actualisations. Aucun appel réseau ni nouvelle
+  collecte ; mesures absentes, périmées, invalides ou serveur hors ligne :
+  aucune barre trompeuse à zéro. Les fournisseurs sans métriques compatibles
+  conservent leur carte habituelle.
+- Aucune migration ; déployer les modules Python et les deux templates ensemble.
+  Les 34 tests locaux du dashboard passent, dont disponibilité partielle, zéro,
+  fraîcheur, absence de table et rendu sans nombres visibles. Pas de validation
   en production.
 
-### Échec visible et diagnostic du rafraîchissement des serveurs
-
-- Le [bloc Serveurs](templates/dashboard/partials/_servers.html) conserve ses
-  données mais affiche un avertissement et un bouton Réessayer si son
-  actualisation échoue. Les états et pics peuvent être anciens ; ce signal ne
-  signifie pas que les serveurs médias sont hors ligne. Message traduit.
-- Les [logs navigateur](app/core/error_reporting.py) des widgets identifient
-  le bloc, la nature de l'échec, son impact et la corrélation avec le diagnostic
-  HTTP. Timeout et rupture de transport deviennent des avertissements ; les
-  réponses HTTP en échec et erreurs d'insertion restent des erreurs.
-- Le [calcul des pics](app/core/dashboard_widgets.py) mesure le temps consacré
-  au cache et à la requête, séparément du reste du bloc, pour le diagnostic HTTP. La cause d'un timeout
-  n'est pas présentée comme connue sur la seule base du signal navigateur.
-- Aucune migration. Déployer code, templates, traductions et JavaScript ensemble,
-  puis redémarrer l'application. Anciens logs inchangés ; vérifications locales,
-  sans validation en production ni confirmation de la cause du retard observé.
-
-### Reprise des collections après une interruption réseau
-
-- Une connexion interrompue, un délai réseau dépassé ou une réponse HTTP
-  502/503/504 pendant une collection reporte son action de dix minutes.
-  Les autres collections du même serveur patientent également ; les autres
-  serveurs continuent. À la reprise, le contrôle hors ligne reste obligatoire.
-- Avertissement explicite : connexion interrompue, redémarrage possible et
-  nouvelle tentative dans dix minutes après vérification de disponibilité.
-  Les erreurs TLS et les autres erreurs restent des erreurs ; aucun
-  redémarrage n'est présenté comme confirmé.
-- Ajout automatique de la table `collection_server_retries` au démarrage pour
-  conserver la pause après redémarrage des workers. Déployer ensemble le
-  [schéma](app/core/db_bootstrap_collections.py) et le
-  [worker](app/tasks/run_collections.py), puis redémarrer l'application avant
-  les traitements. La reprise utilise les contrôles de publication existants ;
-  une écriture interrompue n'est pas immédiatement rejouée.
-- [Tests de reprise](tests/test_collection_inventory.py) locaux ; pas de
-  validation en production. Les acquisitions ARR hors ligne restent signalées
-  séparément comme avertissements et ne sont plus considérées terminées dans
-  les [lots de publication](app/core/collections_publication.py).
-
-### Message compréhensible pour un serveur ARR hors ligne
-
-- Lorsqu'un serveur Radarr/Sonarr est marqué hors ligne ou temporairement
-  suspendu, les collections ignorent sa préparation sans appel réseau et
-  indiquent : « Serveur Radarr/Sonarr hors ligne : impossible d'ajouter les
-  médias pour le moment. » Le journal utilise un avertissement plutôt qu'une
-  erreur pour cette situation attendue ; le serveur concerné reste identifié.
-- Message traduit dans les cinq langues et disponible dans les détails et
-  avertissements des collections streaming et plateformes. Les anciennes
-  lignes de logs ne sont pas réécrites.
-- [Code ARR](app/core/collections_arr.py),
-  [tests](tests/test_collections_platforms_arr.py). Aucune migration ; déployer
-  le code et redémarrer les workers. Vérification locale uniquement.
-
-### Diagnostic des acquisitions Radarr et Sonarr
-
-- Les erreurs ARR des collections streaming indiquent désormais le nom et
-  l'identifiant de la collection, de la bibliothèque et du serveur ARR, l'étape,
-  le statut HTTP et le point d'API reconnu, avec une explication de l'échec.
-  L'identité du serveur est également conservée dans les détails du résultat
-  lorsque la préparation des profils qualité ou dossiers racines échoue.
-- Les messages bruts d'exception, tokens et réponses fournisseur ne sont pas
-  journalisés. Les anciennes lignes de logs restent inchangées.
-- Fichiers : [diagnostic ARR](app/core/collections_arr.py),
-  [collections streaming](app/core/collections_streaming.py),
-  [tests](tests/test_collections_platforms_arr.py). Aucune migration ; déployer
-  le code puis redémarrer les workers. Vérification locale uniquement, sans
-  confirmation de correction de la connexion ARR en production.
-
-### Serveurs hors ligne et collections
-
-- Le [rafraîchissement des inventaires](app/tasks/refresh_collection_inventory.py)
-  ignore les serveurs marqués `down` ou en période de refroidissement, sans
-  connexion, erreur ni modification des instantanés existants.
-- Les [actions de collections](app/tasks/run_collections.py) sur ces serveurs
-  restent en attente sans lancer de traitement. Elles redeviennent exécutables
-  après confirmation du retour en ligne par le contrôle des serveurs ; les
-  inventaires reprennent au prochain rafraîchissement planifié ou manuel.
-- Aucune migration ; déployer le code puis redémarrer les workers. Le contrôle
-  de disponibilité continue de sonder les serveurs pour détecter leur retour.
-  Vérification locale dans les [tests d'inventaire](tests/test_collection_inventory.py),
-  sans validation en production.
-
-### Diagnostic des connexions d'inventaire
-
-- Les échecs de rafraîchissement indiquent désormais la cause réseau détectée
-  (DNS, connexion refusée, délai dépassé, réseau inaccessible, connexion coupée
-  ou TLS), y compris lorsqu'elle est encapsulée par Requests/urllib3. Les
-  messages bruts, adresses et secrets ne sont pas ajoutés aux logs.
-- Fichiers : [classification](app/core/collection_inventory.py),
-  [tâche](app/tasks/refresh_collection_inventory.py) et
-  [tests](tests/test_collection_inventory.py). Aucune migration ; déployer le
-  code puis redémarrer les workers. Ce diagnostic ne rétablit pas une connexion
-  indisponible et ne constitue pas une validation en production.
-
-### Collections
-
-- Ajout de la gestion des collections thématiques Plex et Jellyfin, avec aperçu,
-  planification, synchronisation et contrôles de publication.
-
-### Activation et invitations Plex
-
-- Traces détaillées du parcours d'activation et de connexion Plex, avec étapes,
-  identifiants de corrélation et statuts HTTP, sans secrets ni réponses brutes
-  du fournisseur.
-- Distinction entre invitation en attente, accès non encore confirmés et erreur
-  technique pendant la préparation des accès ; une erreur persistante renvoie
-  désormais HTTP 422 avec `ok=false`.
-- Bouton « Ouvrir Plex » proposé seulement lorsque l'activation de tous les
-  serveurs est terminée, pour éviter une sortie prématurée du parcours.
-- Analyse et limites documentées dans
-  `docs/audit-activation-plex-2026-11-01.md` ; une simple connexion ne déclenche
-  pas automatiquement une nouvelle autorisation de partage.
-
-### Identité Plex et historique de lecture
-
-- Rattachement des sessions, événements et historiques restés sans compte média
-  après une synchronisation tardive, sur identifiant fournisseur non ambigu
-  et sur le même serveur.
-- Conservation des références de lecture lors de la déduplication des comptes
-  après fusion ; une ligne encore référencée n'est pas supprimée.
-- Nom transmis par Plex utilisé pour l'affichage en direct lorsqu'aucun nom de
-  profil n'est encore disponible. Un nom identique ne remplace plus un
-  identifiant fournisseur contradictoire lors du rapprochement.
-
-### Coupures de lecture et diagnostic
-
-- Tentatives compatibles GET/POST et vérifications de disparition de session,
-  avec suivi d'une recréation de session identifiée pendant la coupure.
-- Diagnostic structuré par tentative : identifiant de corrélation, durée,
-  méthode et statut HTTP, étapes de résolution et de vérification, état du
-  lecteur et évolution de la position observée.
-- Distinction entre cible absente, identifiant manquant, commande refusée,
-  arrêt confirmé, présence persistante et exception HTTP/réseau.
-- Exceptions de coupure également conservées en `kill_failed` dans l'historique
-  des règles. Les détails incluent un résumé des observations et ne contiennent
-  ni tokens, ni corps de réponse, ni texte brut d'exception.
-- Documentation : `docs/stream-kill-diagnostics.md`.
-
-### Télémétrie des langues
-
-- Schéma 4 : distinction entre configuration automatique ou imposée, préférence
-  du navigateur et langue effectivement affichée, pour l'administration et le
-  portail.
-- Tableau des trois distributions et des parcours croisés, comptés par
-  installation distincte, pour identifier les langues à examiner en vue de
-  nouvelles traductions. Les anciens `unknown` ne sont pas reclassés sans preuve.
-- Observations anonymes limitées à 30 jours, uniquement si la télémétrie est
-  activée ; seuls des codes de langue normalisés sont collectés.
-- Migration D1 `worker_telemetry/migration_20261102.sql` à appliquer avant le
-  worker mis à jour, puis les clients VODUM. Procédure :
-  `docs/telemetry-languages.md`.
-
-### Communications et erreurs navigateur
-
-- Rafraîchissements du dashboard : réglages d'affichage lus sur un snapshot
-  indépendant du verrou d'écriture partagé ; aucune collecte de langue sur les
-  fragments HTMX. Les observations des pages complètes utilisent une connexion
-  séparée sans attente de verrou et sont ignorées si la base est occupée.
-- Délais HTMX du dashboard : bloc concerné, durée observée, délai configuré et
-  identifiant aléatoire de requête dans les rapports navigateur ; corrélation
-  avec les requêtes lentes côté serveur et mesure des étapes de chargement,
-  d'illustration et de carte de veille. Suppression du doublon console HTMX.
-- Rapports navigateur enrichis avec la zone de l'interface, une opération
-  prédéfinie et le statut HTTP des erreurs HTMX ; scripts HTMX locaux et
-  scripts intégrés à la page distingués des sources inconnues, sans exporter
-  d'URL de navigation, de paramètres ou de messages arbitraires.
-- Bouton explicite d'ajout de pièces jointes dans l'éditeur de modèles ; fichiers
-  enregistrés séparés des nouveaux fichiers en attente de sauvegarde.
-- Sélections de fichiers successives conservées et possibilité de retirer un
-  nouveau fichier avant envoi du formulaire.
-- Retrait d'une pièce jointe du modèle par case à cocher, appliqué à
-  l'enregistrement et limité au modèle concerné. Le retrait concerne son
-  association au modèle, pas l'effacement physique du fichier stocké.
-- Libellés disponibles dans les cinq langues de l'interface.
-- Rapports d'erreurs navigateur : recherche d'une localisation de script
-  exploitable dans les erreurs et rejets asynchrones, sans transmettre leur
-  contenu ni les paramètres des URL.
-
-### Documentation et suivi du développement
-
-- Règle de mise à jour du changelog ajoutée à `AGENTS.md` : toute modification
-  fonctionnelle ou documentaire significative doit être accompagnée de son
-  entrée avant la fin du travail.
-
-## Entrées précédentes — regroupement historique après le 2026-10-09
-
-Les entrées ci-dessous sont conservées avec leurs résultats et limites de
-validation d'origine. Ce regroupement ne constitue pas un historique exhaustif
-et daté de toutes les versions publiées.
-
-### Demarrage : detection des anciennes references de cles etrangeres
-
-- Recherche des parents de tables legacy dans le schema SQLite au lieu d'un
-  foreign_key_check global de toutes les donnees avant le bootstrap. Detection
-  des suffixes _old, __rebuild et __rebuild_old, y compris tables vides et noms
-  quotes ; aucun parcours des historiques necessaire pour cette detection.
-- Verification complete conservee apres une reparation effective. Etapes de
-  detection journalisees et sortie Python du bootstrap non tamponnee pour
-  identifier un traitement lent avant le lancement de Waitress.
-- Tests de detection et d'absence de lecture des donnees/ecriture valides ;
-  demarrage Flask sur base temporaire valide avec 194 routes. Le blocage signale
-  sur le conteneur reel n'a pas ete reproduit ; cause a confirmer avec les
-  nouveaux logs ou la liste des processus du conteneur.
-
-### Performances du suivi personnel du portail
-
-- Statistiques personnelles chargees dans un snapshot SQLite commun aux
-  periodes, historique, types de medias, serveurs, bibliotheques, courbe,
-  lecteurs et IP. Lecture independante du verrou Python des ecritures.
-- Requetes et regles conservees : isolation par utilisateur, deduplication,
-  plafonnement des durees, pourcentages et masquage des IP. Autorisations
-  de route inchangees ; aucune ecriture ajoutee.
-- Comparaisons pendant transaction concurrente, utilisateur absent et
-  regressions du suivi personnel validees.
-- Benchmark synthetique, cinq repetitions avec ecriture de 250 ms : mediane
-  de 263,344 a 7,470 ms, resultats identiques. Reproduction :
-  `python tools/benchmark_dashboard_live_reads.py --personal-monitoring`.
-  Gain sur base representative toujours a mesurer.
-
-### Performances des resumes Taches et Abonnements du dashboard
-
-- Deux blocs de lecture isoles sur snapshots SQLite independants du verrou
-  Python des ecritures. Execution des taches et gestion des abonnements inchangees.
-- Ordre des prochaines taches, compteurs actifs/erreurs, exclusions des forfaits
-  desactives, blocages sur sept jours et pourcentages/couleurs du graphique
-  conserves. Resultats compares pendant transaction concurrente ; tables
-  optionnelles absentes et absence d'ecriture testees.
-- Benchmark synthetique des deux blocs, cinq repetitions avec ecriture de
-  250 ms : mediane de 261,786 a 8,608 ms, resultats identiques. Reproduction :
-  `python tools/benchmark_dashboard_live_reads.py --dashboard-summaries`.
-  Gain sur base representative toujours a mesurer.
-
-### Performances des suggestions de fusion
-
-- Utilisateur et candidats lus dans un snapshot SQLite commun, independant du
-  verrou Python des ecritures. Snapshot ferme avant le calcul des scores.
-- Candidats, scores, classement et limites conserves ; action de fusion inchangee.
-  Resultats compares pendant transaction concurrente, limites 0/1/sans limite
-  et utilisateur absent testes, sans ecriture par le lecteur.
-- Benchmark synthetique de la lecture (hors calcul des scores), cinq repetitions
-  avec ecriture de 250 ms : mediane de 260,470 a 6,702 ms, resultats identiques.
-  Reproduction : `python tools/benchmark_dashboard_live_reads.py --merge-candidates`.
-  Gain sur base representative toujours a mesurer.
-
-### Performances des politiques affichees sur la fiche utilisateur
-
-- Identites et politiques actives de la fiche utilisateur lues dans un snapshot
-  SQLite commun, independant du verrou Python des ecritures. Fonction reservee
-  a l'affichage ; moteur d'application des restrictions inchange.
-- Portee globale/utilisateur/serveur, filtrage du fournisseur, priorite,
-  origine et valeurs affichees conserves. Comparaison pendant transaction
-  concurrente et utilisateur absent testee, sans ecriture par le lecteur.
-- Benchmark synthetique, cinq repetitions avec ecriture de 250 ms : mediane
-  de 262,339 a 6,733 ms, resultats identiques. Reproduction :
-  `python tools/benchmark_dashboard_live_reads.py --user-policies`.
-  Gain sur base representative toujours a mesurer.
-
-### Performances du parrainage affiche sur la fiche utilisateur
-
-- Contexte de parrainage et noms des comptes fusionnes charges sur snapshots
-  SQLite independants du verrou Python des ecritures, pour l'affichage uniquement.
-- Compteurs pending/qualified/rewarded, liste des filleuls, parrain de repli,
-  tri et deduplication des noms conserves. Actions administratives inchangees.
-- Comparaison pendant transaction concurrente et utilisateurs absents testees ;
-  absence d'ecriture et contraintes referentielles verifiees.
-- Benchmark synthetique des deux chargements, cinq repetitions avec ecriture
-  de 250 ms : mediane de 262,234 a 8,789 ms, resultats identiques. Reproduction :
-  `python tools/benchmark_dashboard_live_reads.py --user-referrals`.
-  Gain sur base representative toujours a mesurer.
-
-### Message des demandes medias deja en recherche
-
-- Message du portail reformule sans Sonarr/Radarr : le media est deja pris en
-  charge par les outils de recherche et sera prochainement disponible en streaming.
-  Texte harmonise dans les cinq langues et les fichiers de traduction legacy.
-
-### Fiabilite de l'indicateur de mise a jour
-
-- Version locale chargee par le meme mecanisme que l'application, avec prise
-  en compte de VODUM_VERSION et des fichiers INFO hors conteneur.
-- Comparaison numerique des formats de version reconnus ; statut invalide
-  signale en erreur. Badge obsolete masque immediatement apres mise a niveau.
-- Confirmation precedente conservee en cas de panne GitHub, pour la meme source,
-  et recomparee avec la version installee. Erreurs visibles dans le moteur de
-  taches, y compris echec de publication du statut.
-- Publication atomique du JSON avec reprise bornee sous Windows et nettoyage
-  des temporaires. Cache conserve, anciennete recalculee sans relecture JSON.
-- Horaire personnalise de verification preserve lors de la relance au demarrage.
-- Audit complet et limites de distribution documentes dans
-  `docs/audit-update-badge-2026-10-20.md` ; tests de detection, erreurs, cache,
-  concurrence, scheduler et rendu Jinja ajoutes.
-
-### Performances des pages de communication
-
-- Pages Campagnes et Modeles chargees chacune dans un snapshot SQLite en
-  lecture seule, independant du verrou Python des ecritures.
-- Listes, editeurs, traductions et metadonnees des pieces jointes conserves.
-  Enregistrements, restauration des modeles et envois inchanges.
-- Comparaisons pendant transaction concurrente, langues avec/sans traduction,
-  selection absente/inexistante, modeles desactives, pagination et cas vides
-  testes ; absence d'ecriture et contraintes referentielles verifiees.
-- Benchmark synthetique des deux chargements, cinq repetitions avec ecriture
-  de 250 ms : mediane de 260,767 a 8,537 ms, resultats identiques.
-  Reproduction : `python tools/benchmark_dashboard_live_reads.py --communication-pages`.
-  Gain sur base representative toujours a mesurer.
-
-### Performances du detail et de la configuration Communications
-
-- Detail de l'historique et configuration charges sur des snapshots SQLite
-  independants du verrou Python des ecritures. Lectures utilisees uniquement
-  pour la consultation ; enregistrement et envois inchangees.
-- Conservation du message archive et du rendu des anciens messages, des
-  substitutions historiques, du masquage des trois secrets et des compteurs
-  pending/error. Comparaisons pendant transaction concurrente et cas vides
-  verifies, sans ecriture depuis les lecteurs.
-- Benchmark synthetique des deux chargements, cinq repetitions avec ecriture
-  de 250 ms : mediane de 261,966 a 9,386 ms, resultats identiques.
-  Reproduction : `python tools/benchmark_dashboard_live_reads.py --communication-details`.
-  Gain sur base representative toujours a mesurer.
-
-### Performances du tableau d'acces utilisateur
-
-- Serveurs et bibliotheques de la fiche utilisateur charges dans un meme
-  snapshot SQLite, independant du verrou Python des ecritures. Aucun snapshot
-  ouvert quand les deux listes sont inutiles pour l'onglet consulte.
-- Selection du compte le plus renseigne par serveur et droits bibliotheques
-  issus de tous les comptes lies conserves. Lectures de profil/parametres et
-  autres lectures partagees avec l'enregistrement inchangees.
-- Comparaison pendant transaction concurrente pour trois utilisateurs et
-  trois combinaisons de chargement ; identite absente, droits et absence
-  d'ecriture verifies.
-- Benchmark synthetique, cinq repetitions avec ecriture de 250 ms : mediane
-  de 262,973 a 7,247 ms, resultats identiques. Reproduction :
-  `python tools/benchmark_dashboard_live_reads.py --user-access`.
-  Gain sur base representative toujours a mesurer.
-
-### Performances de l'historique des notifications utilisateur
-
-- Compteurs et pages email/Discord de la fiche utilisateur lus dans un snapshot
-  SQLite commun, independant du verrou Python des ecritures. Aucun snapshot
-  ouvert lorsque l'historique est desactive pour l'onglet consulte.
-- Isolation par utilisateur/canal, pagination independante, libelles de
-  modeles/campagnes et metadonnees archivees conserves. Requetes et tri inchanges.
-- Comparaison pendant transaction concurrente, pages hors limites/invalides,
-  utilisateur absent, envois echoues et absence d'ecriture testes.
-- Benchmark synthetique, cinq repetitions avec ecriture de 250 ms : mediane
-  de 260,329 a 7,423 ms, resultats identiques. Reproduction :
-  `python tools/benchmark_dashboard_live_reads.py --user-notifications`.
-  Gain sur base representative toujours a mesurer.
-
-### Performances du dashboard : lectures en cours
-
-- Sessions, compteurs et verification de la file de taches charges dans un meme
-  snapshot SQLite en lecture seule, sans attendre le verrou Python des ecritures.
-- Conservation de la limite de six sessions, des identites et du repli de
-  trente minutes lorsque la file de taches est occupee.
-- Tests : comparaison avec le parcours precedent, sessions absentes/anciennes,
-  sessions manquantes et lecture des donnees commitees pendant une transaction.
-- Benchmark synthetique local (cinq repetitions, verrou d'ecriture de 250 ms) :
-  mediane de 262,767 ms a 7,179 ms, resultats identiques. Script reproductible :
-  `tools/benchmark_dashboard_live_reads.py`. Gain reel a mesurer sur une base
-  representative ; le prealable global de mesure du TODO reste ouvert.
-
-### Performances du monitoring en direct
-
-- Sessions, statistiques et serveurs des onglets Overview/Now playing lus dans
-  un snapshot SQLite commun, independant du verrou Python des ecritures.
-- Enrichissement et corrections des references artwork executes apres fermeture
-  du lecteur, sur la connexion d'ecriture existante. Les autres onglets
-  n'ouvrent pas de snapshot ; regles de repli et progression conservees.
-- Comparaison des resultats, lecture pendant transaction non commitee et
-  preservation des ecritures artwork testees. Benchmark synthetique local sur
-  cinq repetitions avec ecriture de 250 ms : mediane de 261,163 a 6,837 ms
-  pour la phase de lecture (hors artwork). Commande reproductible :
-  `python tools/benchmark_dashboard_live_reads.py --monitoring`.
-  Validation sur base representative toujours restante.
-
-### Performances des evenements et filtres du monitoring
-
-- Evenements recents Overview/Activity et utilisateurs du filtre Bibliotheques
-  lus sur snapshots independants du verrou Python des ecritures.
-- Requetes, ordre, limites, details JSON des series et libelles inchanges.
-  Les onglets sans evenements n'ouvrent aucune connexion supplementaire.
-- Comparaisons pendant transaction non commitee et regressions fonctionnelles
-  validees. Benchmark synthetique local, cinq repetitions avec ecriture de
-  250 ms : evenements de 262,586 a 6,379 ms ; filtre utilisateurs de 263,174
-  a 6,743 ms. Resultats identiques ; mesure representative encore necessaire.
-- Commandes : `python tools/benchmark_dashboard_live_reads.py --activity`
-  et `python tools/benchmark_dashboard_live_reads.py --library-users`.
-
-### Performances du rapport d'usage du portail
-
-- Compteurs, chronologie, utilisateurs, evenements pagines et demandes medias
-  charges dans un snapshot SQLite commun, independant du verrou des ecritures.
-  Periodes, limites et calculs existants conserves.
-- Resultats compares aux anciennes lectures pour 7/30/90 jours, valeurs de
-  repli et pages hors limites ; cas vide, transactions concurrentes, compteurs
-  de demandes et integrite SQLite testes. Les controles d'acces restent dans
-  le parcours de route existant.
-- Benchmark synthetique local avec 100 evenements, cinq repetitions et ecriture
-  de 250 ms : mediane de 262,185 a 7,825 ms, resultats identiques. Reproduction :
-  `python tools/benchmark_dashboard_live_reads.py --portal-usage`.
-  Mesure sur base representative toujours necessaire.
-
-### Performances du monitoring des politiques
-
-- Neuf fonctions de lecture de l'onglet Politiques sur snapshots SQLite
-  independants du verrou Python des ecritures. Catalogue, statistiques,
-  regroupements, chronologie et pagination conservent leurs requetes et regles.
-  Les actions et controles d'acces existants restent sur leur parcours actuel.
-- Resultats compares aux anciennes lectures sur donnees presentes/absentes,
-  identites natives, regles systeme/verrouillees et transaction concurrente ;
-  absence d'ecriture par les lecteurs et integrite SQLite verifiees.
-- Benchmark synthetique des neuf lectures, cinq repetitions avec ecriture de
-  250 ms : mediane de 260,858 a 23,856 ms, resultats identiques. Reproduction :
-  `python tools/benchmark_dashboard_live_reads.py --policies`.
-  Validation sur base representative toujours restante.
-
-### Performances du monitoring Sonarr/Radarr
-
-- Consultation des statistiques ARR sur un snapshot SQLite commun, sans attendre
-  le verrou Python des ecritures. Collecte HTTP, insertion et purge conservees.
-  Aucun snapshot ouvert lorsqu'aucun serveur ARR n'est fourni.
-- Comparaison des six plages avec les lectures precedentes pendant transaction
-  concurrente. Dernier releve (y compris egalite de date), valeurs nulles,
-  serveur sans releve et exclusion Plex/Jellyfin des agregats verifies.
-- Benchmark synthetique local, cinq repetitions avec ecriture de 250 ms :
-  mediane de 261,492 a 7,249 ms, resultats identiques. Reproduction :
-  `python tools/benchmark_dashboard_live_reads.py --arr`.
-  Gain sur base representative toujours a mesurer.
-
-### Performances des listes Serveurs et Bibliotheques
-
-- Liste des serveurs, compteur et page de bibliotheques isoles sur des snapshots
-  SQLite de lecture, sans attendre le verrou Python des ecritures.
-- Conservation des requetes et compteurs distincts, des types normalises,
-  des tris et de la pagination. Lectures de detail et actions inchangees.
-- Comparaison des tris et directions (y compris valeurs de repli), pages vides,
-  compteurs et resultats pendant transaction concurrente ; absence d'ecriture
-  et contraintes referentielles verifiees.
-- Benchmark synthetique des trois lectures, cinq repetitions avec ecriture de
-  250 ms : mediane de 262,269 a 11,078 ms, resultats identiques. Reproduction :
-  `python tools/benchmark_dashboard_live_reads.py --server-pages`.
-  Mesure representative toujours restante.
-
-### Performances des fiches serveur
-
-- Cinq fonctions de lecture (detail, bibliotheques, utilisateurs et compteurs)
-  isolees sur snapshots SQLite independants du verrou Python des ecritures.
-  Appels limites a l'affichage de la fiche ; mutations inchangees.
-- Comparaison pendant transaction concurrente, isolation entre serveurs,
-  deduplication des utilisateurs, pagination et serveur inexistant testees.
-- Benchmark synthetique des cinq lectures, cinq repetitions avec ecriture de
-  250 ms : mediane de 261,696 a 13,753 ms, resultats identiques. Reproduction :
-  `python tools/benchmark_dashboard_live_reads.py --server-detail`.
-  Validation representative toujours restante.
-- Controle supplementaire `test_sqlite_connection_policy.py` : un echec sur les
-  connexions directes deja presentes dans `app/diagnose_stream_policies.py` et
-  `app/core/backup.py`, hors fichiers modifies dans ce lot ; analyse distincte
-  necessaire, notamment pour respecter la sauvegarde sur connexion dediee.
-
-### Simplification du portail utilisateur
-
-- Accueil, Mon profil et Acces aux medias regroupes dans un seul onglet
-  Mon profil, affiche a l'entree du portail.
-- Informations personnelles et reglages de connexion toujours visibles en tete
-  de page, sans bandeau depliable ; statut en vignette compacte coloree pres du
-  titre : vert actif, jaune preavis/invitation, orange rappel, rouge acces termine
-  ou suspendu, gris pour les etats inconnus.
-  Acces aux bibliotheques affiches ensuite.
-- Cartes Abonnement, Serveurs & bibliotheques et Activite personnelle retirees
-  de Mon profil pour eviter les informations en double.
-- Anciennes adresses conservees et apercu administrateur aligne sur la page
-  regroupee. Options de visibilite des fonctionnalites conservees.
-
-### Mise a jour des dependances Python
-
-- PlexAPI : 4.18.2 -> 4.18.3.
-- pytz : 2026.3.post1 -> 2026.5.
-- websocket-client : 1.9.0 -> 1.9.2.
-- cryptography : 50.0.1 -> 50.0.2.
-- Autres dependances deja sur les dernieres versions disponibles lors de la
-  verification PyPI du 2026-10-09. Validation du conteneur a effectuer.
+### Icônes du tableau des bibliothèques
+
+- Les flèches de tri du [tableau Monitoring / Bibliothèques](templates/monitoring/tabs/libraries.html)
+  utilisent des entités HTML à la place des caractères corrompus. Les symboles
+  de taille minimale et de valeur absente du même tableau sont également réparés.
+  L'état du tri est annoncé aux lecteurs d'écran ; les liens de tri sont conservés.
+- Aucune migration ; déployer le template. Rendu vérifié localement pour les
+  deux sens de tri et les colonnes inactives, sans validation en production.
+
+### Information sur la collecte initiale
+
+- Le [tableau de bord](templates/dashboard/dashboard.html) affiche pendant les
+  24 premières heures de l’instance un message indiquant que les synchronisations
+  et collectes peuvent prendre plusieurs heures et que les données apparaissent
+  progressivement. Le bandeau disparaît aussi si la page reste ouverte.
+- La [date persistante](app/core/initial_sync_notice.py) ne repart pas à zéro lors
+  d’un redémarrage ou d’une relance de l’assistant. Sur une base existante, la
+  date historique la plus ancienne des marqueurs d’initialisation ou des
+  utilisateurs est reprise. Sans date exploitable, une ancienne base ne reçoit
+  pas artificiellement une nouvelle période de 24 heures.
+- Migration additive au démarrage : colonne `settings.instance_started_at`,
+  ajoutée par le [bootstrap](app/core/db_bootstrap_settings.py) et initialisée
+  pour les nouvelles instances par les [réglages initiaux](app/core/db_bootstrap_base_settings.py).
+  Déployer Python, schéma, template, script et traductions ensemble, puis
+  redémarrer avant de consulter le dashboard. Message traduit dans les cinq
+  langues ; vérifications locales uniquement.
+
+### Nettoyage après publication
+
+- Le [TODO](TODO.md) ne conserve plus les éléments cochés comme terminés ; les
+  objectifs et validations encore ouverts sont préservés.
+- Le journal précédent a été archivé puis ce fichier réinitialisé à la demande
+  de l’administrateur après publication. Aucune version ni date de publication
+  n’a été ajoutée, et INFO n’a pas été modifié par ce nettoyage.

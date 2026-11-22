@@ -33,7 +33,10 @@ def authenticate_smtp(server: smtplib.SMTP, settings: Dict) -> None:
     server.login(smtp_user, settings.get("smtp_pass") or "")
 
 
-def send_email(subject: str, body: str, to_email: str, smtp_settings: Dict, attachments: list[dict] | None = None) -> Tuple[bool, str | None]:
+def send_email(
+    subject: str, body: str, to_email: str, smtp_settings: Dict,
+    attachments: list[dict] | None = None, *, automated: bool = True,
+) -> Tuple[bool, str | None]:
     """Send an email using current SMTP settings.
 
     Returns (success, error_message).
@@ -54,7 +57,7 @@ def send_email(subject: str, body: str, to_email: str, smtp_settings: Dict, atta
     except (TypeError, ValueError):
         smtp_port = 587
 
-    plain, full_html = build_email_parts(body, smtp_settings)
+    plain, full_html = build_email_parts(body, smtp_settings, automated=automated)
 
     msg = EmailMessage()
     msg["From"] = mail_from

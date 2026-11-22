@@ -242,13 +242,13 @@ CREATE TABLE IF NOT EXISTS media_users (
 	stored_password TEXT DEFAULT NULL,
     preferred_language TEXT DEFAULT NULL,
 
-    type TEXT,                            -- 'plex', 'jellyfin', …
+    type TEXT,                            -- 'plex', 'jellyfin', â€¦
 
     role TEXT,
     joined_at TEXT,
     accepted_at TEXT,
 
-    raw_json TEXT,                        -- on garde brut l'objet renvoyé par l'API
+    raw_json TEXT,                        -- on garde brut l'objet renvoyÃ© par l'API
 
 	details_json TEXT,
 
@@ -317,9 +317,17 @@ CREATE TABLE IF NOT EXISTS libraries (
 CREATE INDEX IF NOT EXISTS idx_libraries_server
 ON libraries(server_id);
 
+CREATE TABLE IF NOT EXISTS monitoring_library_growth (
+    library_id INTEGER PRIMARY KEY REFERENCES libraries(id) ON DELETE CASCADE,
+    measured_at TEXT NOT NULL,
+    totals_json TEXT NOT NULL,
+    last_attempt_at TEXT,
+    last_error TEXT
+);
+
 
 -----------------------------------------------------------------------
---  ACCESS : USER ↔ LIBRARY
+--  ACCESS : USER â†” LIBRARY
 -----------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS media_user_libraries (
     media_user_id INTEGER NOT NULL,
@@ -375,7 +383,7 @@ CREATE TABLE IF NOT EXISTS sent_emails (
 
     user_id INTEGER NOT NULL,
     template_type TEXT NOT NULL,          -- preavis / relance / fin
-    expiration_date DATE NOT NULL,        -- cycle d’abonnement
+    expiration_date DATE NOT NULL,        -- cycle dâ€™abonnement
 
     sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
@@ -406,6 +414,7 @@ CREATE TABLE IF NOT EXISTS mail_campaigns (
 -----------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS settings (
     id INTEGER PRIMARY KEY,
+    instance_started_at TEXT DEFAULT NULL,
     mail_from TEXT,
     smtp_host TEXT,
     smtp_port INTEGER,
@@ -717,7 +726,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 );
 
 -- ------------------------------------------------------------
--- MEDIA JOBS (queue générique Plex/Jellyfin/Autre)
+-- MEDIA JOBS (queue gÃ©nÃ©rique Plex/Jellyfin/Autre)
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS media_jobs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -726,22 +735,22 @@ CREATE TABLE IF NOT EXISTS media_jobs (
     provider TEXT NOT NULL CHECK (provider IN ('plex', 'jellyfin')),   -- extensible plus tard
     action   TEXT NOT NULL CHECK (action IN ('grant', 'revoke', 'sync', 'refresh')),
 
-    -- Références CANONIQUES (internes)
+    -- RÃ©fÃ©rences CANONIQUES (internes)
     vodum_user_id INTEGER,      -- NULL si job global (ex: sync all users)
-    server_id     INTEGER,      -- souvent NOT NULL ; peut être NULL si provider global (rare)
-    library_id    INTEGER,      -- NULL = toutes les libs concernées
+    server_id     INTEGER,      -- souvent NOT NULL ; peut Ãªtre NULL si provider global (rare)
+    library_id    INTEGER,      -- NULL = toutes les libs concernÃ©es
 
-    -- Données libres (options, liste de sections, flags, etc.)
+    -- DonnÃ©es libres (options, liste de sections, flags, etc.)
     payload_json  TEXT,
 
-    -- Statut (remplace l’ancien couple processed/success dans la logique moderne)
+    -- Statut (remplace lâ€™ancien couple processed/success dans la logique moderne)
     status TEXT NOT NULL DEFAULT 'queued'
         CHECK (status IN ('queued','running','success','error','canceled')),
 
-    -- Priorité (plus petit = plus prioritaire)
+    -- PrioritÃ© (plus petit = plus prioritaire)
     priority INTEGER NOT NULL DEFAULT 100,
 
-    -- Backoff / planification (job exécutable après cette date)
+    -- Backoff / planification (job exÃ©cutable aprÃ¨s cette date)
     run_after TIMESTAMP,
 
     -- Lease / lock (anti double-execution multi-workers)
@@ -761,7 +770,7 @@ CREATE TABLE IF NOT EXISTS media_jobs (
     processed_at TIMESTAMP,
     executed_at  TIMESTAMP,
 
-    -- Optionnel mais très pratique : empêcher certains doublons en file
+    -- Optionnel mais trÃ¨s pratique : empÃªcher certains doublons en file
     -- Exemple: "plex:sync:server=1:user=12" ou "monitor:refresh:server=12"
     dedupe_key TEXT,
 
@@ -784,11 +793,15 @@ ON media_jobs(server_id);
 CREATE INDEX IF NOT EXISTS idx_media_jobs_server_action
 ON media_jobs(server_id, provider, action, status);
 
+CREATE INDEX IF NOT EXISTS idx_media_jobs_refresh_retention
+ON media_jobs(status, processed_at)
+WHERE action = 'refresh' AND processed_at IS NOT NULL;
+
 
 
 
 -- ---------------------------------------------------------------------
--- Schema versioning (source de vérité)
+-- Schema versioning (source de vÃ©ritÃ©)
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS schema_migrations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -799,7 +812,7 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
   UNIQUE(name)
 );
 
--- Version courante du schéma (1 ligne)
+-- Version courante du schÃ©ma (1 ligne)
 CREATE TABLE IF NOT EXISTS schema_version (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   version INTEGER NOT NULL
@@ -808,7 +821,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
 -- Initialisation version V2 (idempotent)
 INSERT OR IGNORE INTO schema_version (id, version) VALUES (1, 2);
 
--- (optionnel mais utile) journaliser l'init si pas déjà présent
+-- (optionnel mais utile) journaliser l'init si pas dÃ©jÃ  prÃ©sent
 INSERT OR IGNORE INTO schema_migrations (version, name)
 VALUES (2, 'init_v2');
 
@@ -846,13 +859,13 @@ CREATE TABLE IF NOT EXISTS media_sessions (
   provider TEXT NOT NULL CHECK (provider IN ('plex','jellyfin')),
 
   session_key TEXT NOT NULL,                  -- id session natif (plex session key / jellyfin id)
-  media_user_id INTEGER,                      -- FK media_users si résolu
-  external_user_id TEXT,                      -- fallback si pas résolu
+  media_user_id INTEGER,                      -- FK media_users si rÃ©solu
+  external_user_id TEXT,                      -- fallback si pas rÃ©solu
 
   media_key TEXT,                             -- ratingKey (plex) / itemId (jellyfin) si dispo
   media_type TEXT,                            -- movie/episode/track/unknown
   title TEXT,
-  grandparent_title TEXT,                     -- série pour episode, album pour track
+  grandparent_title TEXT,                     -- sÃ©rie pour episode, album pour track
   parent_title TEXT,                          -- saison pour episode
 
   state TEXT,
@@ -930,7 +943,7 @@ ON media_events(event_type, ts);
 
 
 -- ------------------------------------------------------------
--- MONITORING (history / agrégations)
+-- MONITORING (history / agrÃ©gations)
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS media_session_history (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1014,7 +1027,7 @@ CREATE TABLE IF NOT EXISTS stream_policies (
   scope_id INTEGER, -- NULL pour global ; servers.id pour server ; vodum_users.id pour user
 
   provider TEXT NULL CHECK (provider IN ('plex','jellyfin')), -- NULL => both
-  server_id INTEGER NULL,   -- optionnel (si tu veux cibler un serveur précis)
+  server_id INTEGER NULL,   -- optionnel (si tu veux cibler un serveur prÃ©cis)
   is_enabled INTEGER NOT NULL DEFAULT 1 CHECK (is_enabled IN (0,1)),
   priority INTEGER NOT NULL DEFAULT 100,
 
@@ -1028,7 +1041,7 @@ CREATE TABLE IF NOT EXISTS stream_policies (
     'device_allowlist'
   )),
 
-  rule_value_json TEXT NOT NULL, -- JSON (valeurs de règle + options)
+  rule_value_json TEXT NOT NULL, -- JSON (valeurs de rÃ¨gle + options)
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -1049,7 +1062,7 @@ CREATE TABLE IF NOT EXISTS stream_enforcement_state (
   policy_id INTEGER NOT NULL,
   server_id INTEGER NOT NULL,
 
-  actor_key TEXT NOT NULL,       -- ✅ clé normalisée (vodum:ID ou ext:XYZ)
+  actor_key TEXT NOT NULL,       -- âœ… clÃ© normalisÃ©e (vodum:ID ou ext:XYZ)
   vodum_user_id INTEGER,
   external_user_id TEXT,
 
@@ -1279,6 +1292,7 @@ CREATE TABLE IF NOT EXISTS comm_campaigns (
   subject TEXT NOT NULL,
   body TEXT NOT NULL,
   server_id INTEGER,
+  user_scope TEXT NOT NULL DEFAULT 'all' CHECK(user_scope IN ('all','active')),
   status TEXT DEFAULT 'pending',
   is_test INTEGER DEFAULT 0 CHECK(is_test IN (0,1)),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -1582,6 +1596,24 @@ CREATE TABLE IF NOT EXISTS portal_media_request_claims (
  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(kind, external_id)
 );
 
+CREATE TABLE IF NOT EXISTS portal_media_request_jobs (
+    id TEXT PRIMARY KEY,
+    account_id INTEGER NOT NULL REFERENCES portal_accounts(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK(kind IN ('movie', 'series')),
+    external_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued', 'checking', 'submitting', 'done')),
+    result TEXT,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    lease_id TEXT,
+    lease_until TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    finished_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_portal_request_active
+ON portal_media_request_jobs(account_id, kind, external_id) WHERE status <> 'done';
+CREATE INDEX IF NOT EXISTS idx_portal_request_queue
+ON portal_media_request_jobs(status, created_at);
 
 -- Smart collections: instances, engine runs and VODUM ownership
 
@@ -1605,6 +1637,10 @@ CREATE TABLE IF NOT EXISTS collection_runs (
  result_json TEXT NOT NULL DEFAULT '{}', error_type TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_collection_runs_instance ON collection_runs(instance_id,id DESC);
+CREATE TABLE IF NOT EXISTS collection_last_sync (
+ instance_id TEXT PRIMARY KEY REFERENCES collection_instances(id) ON DELETE CASCADE,
+ run_id INTEGER NOT NULL, state TEXT NOT NULL, reasons_json TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS collection_people (
  instance_id TEXT NOT NULL REFERENCES collection_instances(id) ON DELETE CASCADE,
  person_key TEXT NOT NULL, tmdb_id INTEGER NOT NULL, name TEXT NOT NULL, death_date TEXT NOT NULL,
@@ -1670,3 +1706,33 @@ CREATE TABLE IF NOT EXISTS collection_inventory_runs (
  id INTEGER PRIMARY KEY, started_at TEXT NOT NULL, finished_at TEXT,
  duration_seconds REAL, libraries INTEGER NOT NULL DEFAULT 0,
  media_count INTEGER NOT NULL DEFAULT 0, failures INTEGER NOT NULL DEFAULT 0);
+
+-- Internal typed membership for Franchise collections.
+
+CREATE TABLE IF NOT EXISTS franchise_lists (
+ id TEXT PRIMARY KEY, name TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
+ is_vodum INTEGER NOT NULL DEFAULT 1
+);
+CREATE TABLE IF NOT EXISTS franchise_list_items (
+ list_id TEXT NOT NULL REFERENCES franchise_lists(id) ON DELETE CASCADE,
+ provider TEXT NOT NULL CHECK(provider IN ('tmdb','imdb','tvdb')),
+ media_type TEXT NOT NULL CHECK(media_type IN ('movie','tv')),
+ external_id TEXT NOT NULL, title TEXT, year TEXT,
+ poster_path TEXT, metadata_state TEXT NOT NULL DEFAULT 'pending',
+ metadata_error TEXT, metadata_checked_at TEXT,
+ enabled INTEGER NOT NULL DEFAULT 1, is_vodum INTEGER NOT NULL DEFAULT 1,
+ PRIMARY KEY(list_id,provider,media_type,external_id)
+);
+
+
+-- Persisted historical Monitoring views.
+CREATE TABLE IF NOT EXISTS monitoring_precomputed (
+    cache_key TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    options_json TEXT NOT NULL DEFAULT '{}',
+    payload_json TEXT,
+    computed_at TEXT,
+    attempted_at TEXT,
+    requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_error TEXT
+);

@@ -11,8 +11,14 @@ class NativeDeletionError(RuntimeError):
     pass
 
 
+class NativeServerUnavailable(NativeDeletionError):
+    """Temporary upstream outage; retain identities for the next scheduled run."""
+
+
 def _success(response, expected=(200,)):
     # Do not expose provider bodies, URLs or credentials in task errors.
+    if response.status_code in (502, 503, 504):
+        raise NativeServerUnavailable(f"Server unavailable (HTTP {response.status_code})")
     if response.status_code not in expected:
         raise NativeDeletionError(f"Provider returned HTTP {response.status_code}")
 

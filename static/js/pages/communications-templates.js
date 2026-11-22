@@ -221,9 +221,13 @@
   function bindDiscordCounter() {
     const body = document.getElementById("template_body");
     const counter = document.getElementById("template_discord_counter");
-    if (!body || !counter) return;
+    const channels = body?.form?.elements.namedItem("delivery_channels");
+    if (!body || !counter || !channels) return;
 
     const refresh = function () {
+      const includesDiscord = channels.selectedOptions[0]?.dataset.discord === "1";
+      counter.hidden = !includesDiscord;
+      if (!includesDiscord) return;
       const count = body.value.length;
       const parts = Math.max(1, Math.ceil(count / 1900));
       counter.textContent = (counter.dataset.label || "{count} · Discord: {parts}")
@@ -234,6 +238,7 @@
     };
 
     body.addEventListener("input", refresh);
+    channels.addEventListener("change", refresh);
     refresh();
   }
 

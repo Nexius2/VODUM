@@ -87,6 +87,7 @@ def _send_test_campaign(db, settings: dict, campaign: dict) -> bool:
         body=campaign.get("body") or "",
         attachments=attachments,
         forced_channels=["email"],
+        automated=False,
     )
 
     for att in attempts:
@@ -369,6 +370,7 @@ def run(task_id: int, db):
                 body=row.get("body") or "",
                 attachments=attachments,
                 forced_channels=forced_channels,
+                automated=False,
             )
 
             updated_channels_sent = set(already_sent_channels)

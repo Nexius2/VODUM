@@ -40,6 +40,19 @@ def _save_last_counts(cursor, instance_id):
 def prune_finished_runs(cursor, instance_id):
     """Keep counters before pruning and roll up the telemetry for removed runs."""
     _save_last_counts(cursor, instance_id)
+    cursor.execute("""
+        INSERT INTO collection_last_sync(instance_id, run_id, state, reasons_json)
+        SELECT instance_id, id, state,
+               json_object('warnings', json_extract(result_json, '$.warnings'),
+                           'errors', json_extract(result_json, '$.errors'))
+        FROM collection_runs
+        WHERE instance_id = ? AND kind = 'sync' AND finished_at IS NOT NULL
+          AND state IN ('success', 'warning', 'error')
+        ORDER BY id DESC LIMIT 1
+        ON CONFLICT(instance_id) DO UPDATE SET
+          run_id = excluded.run_id, state = excluded.state, reasons_json = excluded.reasons_json
+        WHERE excluded.run_id > collection_last_sync.run_id
+    """, (instance_id,))
     latest = cursor.execute("""SELECT MAX(id) FROM collection_runs
         WHERE instance_id=? AND state!='running'""", (instance_id,)).fetchone()[0]
     if latest is None:

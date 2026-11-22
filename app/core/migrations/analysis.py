@@ -51,8 +51,8 @@ def _plex_owner_id(db, server_id: int) -> str:
         SELECT external_user_id
         FROM media_users
         WHERE server_id = ?
-          AND type = 'plex'
-          AND lower(COALESCE(role, '')) = 'owner'
+          AND LOWER(TRIM(type)) = 'plex'
+          AND LOWER(TRIM(COALESCE(role, ''))) = 'owner'
           AND TRIM(COALESCE(external_user_id, '')) <> ''
         ORDER BY id ASC
         LIMIT 1
@@ -67,15 +67,14 @@ def migration_workspace_blocker(db, servers: list[dict]) -> str:
     if len(servers) < 2:
         return "single_server"
 
-    if all(_clean(server.get("type")).lower() == "plex" for server in servers):
-        owner_ids = {_plex_owner_id(db, int(server["id"])) for server in servers}
-        owner_ids.discard("")
-        if len(owner_ids) == 1 and len(owner_ids) == len({
-            _plex_owner_id(db, int(server["id"])) for server in servers
-        }):
-            return "shared_plex_account"
-
-    return ""
+    from core.migrations.availability import migration_topology, has_migration_pair
+    eligible_ids = {int(server['id']) for server in servers}
+    topology = [item for item in migration_topology(db) if item['id'] in eligible_ids]
+    if has_migration_pair(topology):
+        return ""
+    if topology and all(item['type'] == 'plex' for item in topology):
+        return "plex_owner_unknown" if any(not item.get('owner_id') for item in topology) else "shared_plex_account"
+    return "no_compatible_servers"
 
 
 def migration_pair_blocker(db, source_server_id: int, destination_server_id: int) -> str:
@@ -105,7 +104,9 @@ def migration_pair_blocker(db, source_server_id: int, destination_server_id: int
     if _clean(source.get("type")).lower() == "plex" and _clean(destination.get("type")).lower() == "plex":
         source_owner = _plex_owner_id(db, source_server_id)
         destination_owner = _plex_owner_id(db, destination_server_id)
-        if source_owner and destination_owner and source_owner == destination_owner:
+        if not source_owner or not destination_owner:
+            return "plex_owner_unknown"
+        if source_owner == destination_owner:
             return "shared_plex_pair"
     return ""
 

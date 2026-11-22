@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="{{ active_lang or 'en' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>{{ t('jellyfin_admin_login_action') }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/vodum.css', v=g.app_version|default('dev')) }}">
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
+  <main class="w-full max-w-lg rounded-xl border border-slate-800 bg-slate-900 p-6 space-y-4">
+    <h1 class="text-xl font-semibold">{{ t('jellyfin_admin_login_action') }}</h1>
+    {% for category, message in get_flashed_messages(with_categories=true) %}
+      <p class="text-sm text-amber-200">{{ t(message) }}</p>
+    {% endfor %}
+    <p class="text-sm text-slate-400">{{ t('jellyfin_admin_approve_help') }}</p>
+    <p class="break-all text-sm">{{ server_url }}</p>
+    <p class="text-center text-3xl font-mono tracking-widest py-4">{{ code }}</p>
+    <p class="text-xs text-slate-400">{{ t('jellyfin_admin_expiry_help') }}</p>
+    <form method="post" class="flex flex-wrap gap-3">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+      <button class="rounded-lg bg-indigo-500 px-4 py-2 text-sm">{{ t('jellyfin_admin_check') }}</button>
+      <button name="action" value="cancel" class="rounded-lg border border-slate-700 px-4 py-2 text-sm">{{ t('cancel') }}</button>
+    </form>
+  </main>
+</body>
+</html>

@@ -146,3 +146,10 @@ def campaign_attempts_satisfy_mode(db, settings: dict, user: dict, attempts: lis
         return all(ch in sent_channels for ch in required)
 
     return any(getattr(a, "status", None) == "sent" for a in attempts)
+
+
+def normalize_campaign_user_scope(value, *, default="active"):
+    """Missing legacy scope can retain all; malformed explicit input stays narrow."""
+    if value is None:
+        return default
+    return "all" if str(value).strip().lower() == "all" else "active"

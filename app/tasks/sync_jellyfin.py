@@ -438,6 +438,7 @@ def _sync_libraries_for_server(
         raise ValueError("Jellyfin returned an invalid library list; existing access preserved")
 
     updated_counts = 0
+    unchanged_counts = 0
     skipped_counts = 0
     count_deadline = time.monotonic() + 15
     counts_unavailable = False
@@ -475,11 +476,17 @@ def _sync_libraries_for_server(
             skipped_counts += 1
             continue
 
-        db.execute(
-            "UPDATE libraries SET item_count = ? WHERE server_id = ? AND section_id = ?",
-            (int(count), server_id, item_id),
+        cursor = db.execute(
+            """
+            UPDATE libraries SET item_count = ?
+            WHERE server_id = ? AND section_id = ? AND item_count IS NOT ?
+            """,
+            (int(count), server_id, item_id, int(count)),
         )
-        updated_counts += 1
+        if cursor.rowcount:
+            updated_counts += 1
+        else:
+            unchanged_counts += 1
 
 
     retained = prune_jellyfin_libraries(db, server_id, set(mapping.values()))
@@ -489,7 +496,7 @@ def _sync_libraries_for_server(
 
     logger.info(
         f"Jellyfin libraries: {len(mapping)} importées/mises à jour "
-        f"(item_count updated={updated_counts}, skipped={skipped_counts}) "
+        f"(item_count updated={updated_counts}, unchanged={unchanged_counts}, skipped={skipped_counts}) "
         f"(server_id={server_id}, elapsed={time.monotonic() - started_at:.1f}s)"
     )
     return mapping

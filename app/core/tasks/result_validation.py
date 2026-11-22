@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 
 def validate_task_result(task_name: str, result, duration_seconds: float, max_duration: int):
     """Raise the scheduler-level error represented by a task result."""
@@ -11,7 +13,7 @@ def validate_task_result(task_name: str, result, duration_seconds: float, max_du
     if duration_seconds > max_duration:
         raise TimeoutError(
             f"Task {task_name} exceeded maximum duration "
-            f"({int(duration_seconds)}s > {max_duration}s)"
+            f"({math.ceil(duration_seconds)}s > {max_duration}s)"
         )
 
     if isinstance(result, dict):

@@ -10,6 +10,8 @@ from core.http_security import server_http_session
 from logging_utils import get_logger
 from core.library_request_routing import compatible_arr_type, route_matches_media
 from core.portal_provider_identity_state import row_media_identity_is_usable
+from core.plex_guids import plex_external_guid
+from db_manager import isolated_read_operation
 
 CLAIM_SCHEMA = """CREATE TABLE IF NOT EXISTS portal_media_request_claims (
  kind TEXT NOT NULL, external_id INTEGER NOT NULL, owner TEXT NOT NULL,
@@ -17,6 +19,7 @@ CLAIM_SCHEMA = """CREATE TABLE IF NOT EXISTS portal_media_request_claims (
 )"""
 
 _request_deadline = ContextVar('media_request_deadline', default=None)
+PROVIDER_ID_FIELDS = (('tmdb', 'tmdbId'), ('tvdb', 'tvdbId'), ('imdb', 'imdbId'))
 
 class MediaRequestError(ValueError):
     pass
@@ -218,10 +221,99 @@ def canonical_media(arrs, kind, external_id):
     raise MediaRequestError('portal_requests_unavailable')
 
 
+def _arr_contains_media(server, kind, external_id):
+    key = 'tmdbId' if kind == 'movie' else 'tvdbId'
+    path = '/api/v3/' + kind
+    try:
+        rows = api(server, path, params={key: external_id})
+    except MediaRequestError as exc:
+        # Older servers may reject the query parameter. An HTTP or transport
+        # failure unrelated to query validation still blocks the submission.
+        if getattr(exc, 'http_status', None) not in (400, 422):
+            raise
+        rows = api(server, path)
+    if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+        raise MediaRequestError('portal_requests_arr_unavailable')
+    # Also works on servers which ignore the parameter and return all rows.
+    return any(row.get(key) == external_id for row in rows)
+
+
+def _provider_ids(media):
+    return {provider: str(media[key]) for provider, key in PROVIDER_ID_FIELDS if media.get(key)}
+
+
+def _has_plex_identity(item, expected):
+    guids = item.get('Guid') or []
+    if plex_external_guid(str(item.get('guid') or '')) in expected:
+        return True
+    return isinstance(guids, list) and any(
+        isinstance(guid, dict) and plex_external_guid(str(guid.get('id') or '')) in expected
+        for guid in guids
+    )
+
+
+def _has_jellyfin_identity(item, expected):
+    providers = item.get('ProviderIds')
+    if not isinstance(providers, dict):
+        return False
+    ids = {key.casefold(): str(value) for key, value in providers.items()}
+    return any(ids.get(provider) == value for provider, value in expected.items())
+
+
+@isolated_read_operation
+def _inventory_hints(db, media):
+    """Get at most one candidate per library without trusting inventory absence."""
+    if not db.query_one("SELECT 1 FROM sqlite_master WHERE type='table' AND name='collection_inventory_media'"):
+        return {}
+    ids = _provider_ids(media)
+    if not ids:
+        return {}
+    rows = db.query("""
+        SELECT library_id, MIN(media_id) AS media_id
+        FROM collection_inventory_media
+        WHERE CASE WHEN json_valid(data_json) THEN
+              CAST(json_extract(data_json, '$.tmdb') AS TEXT) = ?
+           OR CAST(json_extract(data_json, '$.tvdb') AS TEXT) = ?
+           OR CAST(json_extract(data_json, '$.imdb') AS TEXT) = ?
+        END
+        GROUP BY library_id
+    """, tuple(ids.get(provider) for provider, _ in PROVIDER_ID_FIELDS))
+    return {row['library_id']: row['media_id'] for row in rows}
+
+
+def _confirm_inventory_hint(server, library, media, kind, item_id):
+    ids = _provider_ids(media)
+    if str(server['type']).lower() == 'plex':
+        data = api(server, '/library/metadata/' + quote(str(item_id), safe=''), params={'includeGuids': 1})
+        container = data.get('MediaContainer', {}) if isinstance(data, dict) else {}
+        rows = container.get('Metadata') if isinstance(container, dict) else None
+        if not isinstance(rows, list):
+            return False
+        return any(
+            isinstance(item, dict)
+            and str(item.get('ratingKey')) == str(item_id)
+            and str(item.get('librarySectionID', container.get('librarySectionID'))) == str(library['section_id'])
+            and item.get('type') == ('movie' if kind == 'movie' else 'show')
+            and _has_plex_identity(item, ids.items())
+            for item in rows
+        )
+    data = api(server, '/Items', params={
+        'Ids': item_id, 'ParentId': library['section_id'], 'Recursive': 'true',
+        'IncludeItemTypes': 'Movie' if kind == 'movie' else 'Series', 'Fields': 'ProviderIds',
+        'Limit': 1,
+    })
+    rows = data.get('Items') if isinstance(data, dict) else None
+    return isinstance(rows, list) and any(
+        isinstance(item, dict)
+        and str(item.get('Id', '')).replace('-', '').lower() == str(item_id).replace('-', '').lower()
+        and _has_jellyfin_identity(item, ids)
+        for item in rows
+    )
+
+
 def plex_present(server, library, media):
     # Stable provider identifiers, never a title-only match.
-    expected = {f'{provider}://{media[key]}' for provider,key in
-                [('tmdb','tmdbId'),('tvdb','tvdbId'),('imdb','imdbId')] if media.get(key)}
+    expected = _provider_ids(media).items()
     offset = 0
     deadline = time.monotonic() + 90
     while True:
@@ -235,10 +327,13 @@ def plex_present(server, library, media):
         for item in rows:
             if time.monotonic() > deadline: raise MediaRequestError('portal_requests_unavailable')
             guids = item.get('Guid',[]) or []
+            if _has_plex_identity(item, expected):
+                return True
             if not guids and item.get('ratingKey'):
                 detail = api(server,'/library/metadata/'+quote(str(item['ratingKey']),safe=''),params={'includeGuids':1})
-                guids = (detail.get('MediaContainer',{}).get('Metadata') or [{}])[0].get('Guid',[]) or []
-            if expected.intersection(g.get('id') for g in guids): return True
+                item = (detail.get('MediaContainer',{}).get('Metadata') or [{}])[0]
+                if _has_plex_identity(item, expected):
+                    return True
         offset += len(rows)
         total = container.get('totalSize')
         if not rows or (total is not None and offset >= int(total)) or (total is None and len(rows) < 200): return False
@@ -246,6 +341,7 @@ def plex_present(server, library, media):
 
 def media_present(server, library, media, kind):
     if str(server['type']).lower() == 'plex': return plex_present(server,library,media)
+    expected = _provider_ids(media)
     offset = 0
     deadline = time.monotonic() + 90
     while True:
@@ -257,9 +353,7 @@ def media_present(server, library, media, kind):
             raise MediaRequestError('portal_requests_unavailable')
         rows = data['Items']
         for row in rows:
-            ids = row.get('ProviderIds') or {}
-            if any(media.get(key) and str(ids.get(provider)) == str(media[key]) for provider,key in
-                   [('Tmdb','tmdbId'),('Tvdb','tvdbId'),('Imdb','imdbId')]): return True
+            if _has_jellyfin_identity(row, expected): return True
         offset += len(rows)
         total = data.get('TotalRecordCount')
         if not rows or (total is not None and offset >= int(total)) or (total is None and len(rows) < 200): return False
@@ -279,8 +373,12 @@ def arr_defaults(server):
     return {'profiles':profiles, 'roots':roots}
 
 
-def add_media(server, media, kind, *, choices=None):
-    choices = choices if choices is not None else arr_defaults(server)
+def add_media(server, media, kind, *, choices=None, before_post=None):
+    try:
+        choices = choices if choices is not None else arr_defaults(server)
+    except MediaRequestError as exc:
+        exc.before_submission = True
+        raise
     settings = json.loads(server.get('settings_json') or '{}').get('media_requests',{})
     profiles, roots = choices['profiles'], choices['roots']
     profile = next((r for r in profiles if r['id'] == settings.get('quality_profile_id')),None)
@@ -300,6 +398,8 @@ def add_media(server, media, kind, *, choices=None):
         payload.update(seasonFolder=True, seriesType=media.get('seriesType') or 'standard',
             seasons=[{**s,'monitored':s.get('seasonNumber',0) > 0} for s in (media.get('seasons') or [])],
             addOptions={'searchForMissingEpisodes':True})
+    if before_post is not None:
+        before_post()
     result = api(server,'/api/v3/'+kind,payload=payload)
     if not isinstance(result,dict) or not result.get('id'):
         raise MediaRequestError('portal_requests_unavailable')
@@ -315,7 +415,7 @@ def has_saved_request_defaults(server):
         return False
 
 
-def submit_request(db,user_id,library_id,kind,external_id,resolution=''):
+def submit_request(db,user_id,library_id,kind,external_id,resolution='', *, before_post=None):
     if kind not in ('movie','series') or type(external_id) is not int or external_id <= 0 or resolution not in ('','720p','1080p','2160p'):
         raise MediaRequestError('portal_requests_invalid')
     all_libraries = accessible_libraries(db,user_id)
@@ -378,16 +478,28 @@ def submit_request(db,user_id,library_id,kind,external_id,resolution=''):
         # Routing only controls where we add, never where we detect duplicates.
         registered_arrs = [dict(row) for row in db.query(
             'SELECT * FROM servers WHERE LOWER(type)=? ORDER BY id', (provider,))]
-        arr_failed = False
-        arr_present = False
-        key = 'tmdbId' if kind == 'movie' else 'tvdbId'
-        for existing in parallel_reads([
-                lambda server=server: api(server,'/api/v3/'+kind)
-                for server in registered_arrs]):
-            if not isinstance(existing,list):
-                arr_failed = True
-            elif any(r.get(key) == external_id for r in existing):
-                arr_present = True
+        arr_outcomes = parallel_reads([
+            lambda server=server: _arr_contains_media(server, kind, external_id)
+            for server in registered_arrs
+        ])
+        availability = dict(zip((server['id'] for server in registered_arrs), arr_outcomes))
+        available_destinations = [(candidate, linked, [server])
+            for candidate, linked, candidates in eligible for server in candidates
+            if availability.get(server['id']) is False]
+        if available_destinations:
+            library, selected_arrs, matching = available_destinations[0]
+        linked_ids = {server['id'] for server in selected_arrs}
+        failed_arr_checks = [
+            {'server_id': server['id'], 'server_name': server.get('name'),
+             'linked_to_selected_library': server['id'] in linked_ids,
+             'destination': server['id'] == matching[0]['id'],
+             'endpoint': getattr(outcome, 'endpoint', '/api/v3/' + kind),
+             'http_status': getattr(outcome, 'http_status', None),
+             'error_type': getattr(outcome, 'connection_error', None) or type(outcome).__name__}
+            for server, outcome in zip(registered_arrs, arr_outcomes)
+            if isinstance(outcome, MediaRequestError)
+        ]
+        arr_present = any(outcome is True for outcome in arr_outcomes)
 
         # Materialize DB rows before dispatching HTTP-only workers. Check all
         # registered media libraries, including those without request routing.
@@ -397,12 +509,21 @@ def submit_request(db,user_id,library_id,kind,external_id,resolution=''):
             WHERE LOWER(s.type) IN ('plex','jellyfin') ORDER BY l.id""")]
         for candidate in [library] + [r for r in registered_libraries if r['id'] != library['id']]:
             if compatible_arr_type(candidate['type']) != provider: continue
-            server = dict(db.query_one('SELECT * FROM servers WHERE id=?',(candidate['server_id'],)))
-            media_checks.setdefault(server['id'], []).append((server,candidate))
+            media_checks.setdefault(candidate['server_id'], []).append(candidate)
 
-        def check_libraries(checks):
+        inventory_hints = _inventory_hints(db, media) if media_checks else {}
+
+        def check_libraries(server, candidates):
+            for candidate in candidates:
+                hint = inventory_hints.get(candidate['id'])
+                if hint is not None:
+                    try:
+                        if _confirm_inventory_hint(server, candidate, media, kind, hint):
+                            return True, False
+                    except MediaRequestError:
+                        pass  # The regular scan still decides how to handle a provider failure.
             failed = False
-            for server,candidate in checks:
+            for candidate in candidates:
                 try:
                     if media_present(server,candidate,media,kind): return True, failed
                 except MediaRequestError:
@@ -410,7 +531,10 @@ def submit_request(db,user_id,library_id,kind,external_id,resolution=''):
                     break  # Avoid retrying an unavailable server for every library.
             return False, failed
 
-        jobs = [lambda checks=checks: check_libraries(checks) for checks in media_checks.values()]
+        jobs = []
+        for server_id, candidates in media_checks.items():
+            server = dict(db.query_one('SELECT * FROM servers WHERE id=?', (server_id,)))
+            jobs.append(lambda server=server, candidates=candidates: check_libraries(server, candidates))
         outcomes = parallel_reads(jobs)
         media_failed = False
         for outcome in outcomes:
@@ -418,14 +542,47 @@ def submit_request(db,user_id,library_id,kind,external_id,resolution=''):
             if present: return 'portal_requests_present'
             media_failed = media_failed or failed
         if arr_present: return 'portal_requests_pending'
-        if media_failed: raise MediaRequestError('portal_requests_media_unavailable')
-        if arr_failed: raise MediaRequestError('portal_requests_arr_unavailable')
-        get_logger('portal_media_requests').info(
-            'ARR request destination user_id=%s kind=%s external_id=%s library_id=%s arr_id=%s arr_name=%s explicit=%s arr_priority=%s linked_arr_ids=%s',
-            user_id,kind,external_id,library['id'],matching[0]['id'],matching[0].get('name'),
-            library['id'] in explicit_library_ids,matching[0]['priority'],[s['id'] for s in selected_arrs])
-        add_media(matching[0],media,kind)
-        return 'portal_requests_added'
+        if not available_destinations:
+            get_logger('portal_media_requests').error(
+                'ARR request has no reachable eligible destination user_id=%s kind=%s external_id=%s library_id=%s destination_arr_id=%s failed_checks=%s',
+                user_id, kind, external_id, library['id'], matching[0]['id'], failed_arr_checks)
+            raise MediaRequestError('portal_requests_no_arr_available')
+        if failed_arr_checks:
+            get_logger('portal_media_requests').warning(
+                'ARR duplicate checks skipped for unavailable servers user_id=%s kind=%s external_id=%s library_id=%s destination_arr_id=%s failed_checks=%s',
+                user_id, kind, external_id, library['id'], matching[0]['id'], failed_arr_checks)
+        if media_failed:
+            get_logger('portal_media_requests').warning(
+                'Media library duplicate check skipped for unavailable server user_id=%s library_id=%s server_id=%s destination_arr_id=%s',
+                user_id, library['id'], library['server_id'], matching[0]['id'])
+        for library, selected_arrs, matching in available_destinations:
+            get_logger('portal_media_requests').info(
+                'ARR request destination user_id=%s kind=%s external_id=%s library_id=%s arr_id=%s arr_name=%s explicit=%s arr_priority=%s linked_arr_ids=%s',
+                user_id,kind,external_id,library['id'],matching[0]['id'],matching[0].get('name'),
+                library['id'] in explicit_library_ids,matching[0]['priority'],[s['id'] for s in selected_arrs])
+            try:
+                if before_post is None:
+                    add_media(matching[0],media,kind)
+                else:
+                    def authorize_post():
+                        if not any(row['id'] == library['id'] and row['requests_enabled']
+                                   for row in accessible_libraries(db, user_id)):
+                            raise MediaRequestError('portal_requests_no_libraries')
+                        before_post()
+
+                    add_media(matching[0],media,kind,before_post=authorize_post)
+            except MediaRequestError as exc:
+                if not getattr(exc, 'before_submission', False) or str(exc) != 'portal_requests_unavailable':
+                    raise
+                get_logger('portal_media_requests').warning(
+                    'ARR destination skipped before submission user_id=%s library_id=%s arr_id=%s',
+                    user_id, library['id'], matching[0]['id'])
+                continue
+            return 'portal_requests_added'
+        get_logger('portal_media_requests').error(
+            'ARR request has no destination passing preflight user_id=%s kind=%s external_id=%s',
+            user_id, kind, external_id)
+        raise MediaRequestError('portal_requests_no_arr_available')
     finally:
         _request_deadline.reset(deadline_token)
         db.execute('DELETE FROM portal_media_request_claims WHERE kind=? AND external_id=? AND owner=?',(kind,external_id,owner))

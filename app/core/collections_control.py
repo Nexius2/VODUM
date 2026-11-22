@@ -1,3 +1,4 @@
+from core.collection_sync_status import actionable_collection_warnings
 """Durable, independent lane for small presentation commands."""
 import json
 import threading
@@ -49,7 +50,7 @@ def process_controls(db, *, runner=run_visibility):
         try:
             result=runner(db,instance,heartbeat=heartbeat,reorder=bool(job['priority_dirty']))
             unsupported='collections.jellyfin_home_not_supported' in result.get('warnings',[])
-            failed=bool(result.get('errors') or result.get('warnings') or result.get('diagnostics',{}).get('visibility_failures'))
+            failed=bool(result.get('errors') or actionable_collection_warnings(result.get('warnings') or []) or result.get('diagnostics',{}).get('visibility_failures'))
         except CollectionRunCancelled:
             superseded=True
         except Exception:

@@ -7,6 +7,7 @@ def upgrade_media_jobs_schema(conn, cursor, *, table_exists, column_exists, ensu
         ensure_column(cursor, "media_jobs", "locked_until", "TIMESTAMP")
         ensure_column(cursor, "media_jobs", "max_attempts", "INTEGER NOT NULL DEFAULT 10")
         ensure_column(cursor, "media_jobs", "processed", "INTEGER NOT NULL DEFAULT 0 CHECK (processed IN (0,1))")
+        ensure_column(cursor, "media_jobs", "processed_at", "TIMESTAMP")
         ensure_column(cursor, "media_jobs", "success", "INTEGER NOT NULL DEFAULT 0 CHECK (success IN (0,1))")
         ensure_column(cursor, "media_jobs", "attempts", "INTEGER NOT NULL DEFAULT 0")
         ensure_column(cursor, "media_jobs", "dedupe_key", "TEXT")
@@ -25,6 +26,11 @@ def upgrade_media_jobs_schema(conn, cursor, *, table_exists, column_exists, ensu
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_jobs_user ON media_jobs(vodum_user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_jobs_server ON media_jobs(server_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_jobs_server_action ON media_jobs(server_id, provider, action, status)")
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_media_jobs_refresh_retention
+            ON media_jobs(status, processed_at)
+            WHERE action = 'refresh' AND processed_at IS NOT NULL
+        """)
         cursor.execute("""
             CREATE UNIQUE INDEX IF NOT EXISTS uq_media_jobs_dedupe_active
             ON media_jobs(dedupe_key)

@@ -6,10 +6,22 @@ from db_manager import isolated_read_operation
 
 from core.error_reporting import request_phase
 from core.aggregate_cache import cached_aggregate
-from core.dashboard_servers import dashboard_server_preview
+from core.collection_sync_status import load_collection_sync_issues
+from core.dashboard_servers import dashboard_server_preview, load_dashboard_server_resources
 from core.dashboard_usage_risk import build_usage_risk_trend
 from core.usage_risk import build_usage_risk_report
 from web.helpers import table_exists
+
+
+@isolated_read_operation
+def get_dashboard_collection_summary(db):
+    status = load_collection_sync_issues(db)
+    succeeded = sum(not issues for issues in status.values())
+    return {
+        "configured": len(status),
+        "succeeded": succeeded,
+        "needs_review": len(status) - succeeded,
+    }
 
 
 @isolated_read_operation
@@ -200,4 +212,4 @@ def get_dashboard_servers(db):
         for server in servers:
             server["peak_streams_7d"] = peaks.get(int(server["id"]), 0)
 
-    return servers, dashboard_server_preview(servers)
+    return servers, load_dashboard_server_resources(db, dashboard_server_preview(servers))

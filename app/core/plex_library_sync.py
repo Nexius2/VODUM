@@ -1,6 +1,7 @@
 from __future__ import annotations
 from core.error_reporting import log_handled_failure
 
+from core.library_access_repository import prune_missing_libraries
 from core.plex_library_access import plex_section_total_items
 from logging_utils import get_logger
 
@@ -123,8 +124,11 @@ def sync_plex_libraries(db, server, libraries):
         matched = by_section.get(section_id)
         if matched:
             db.execute(
-                "UPDATE libraries SET name = ?, type = ? WHERE id = ?",
-                (name, library_type, matched["id"]),
+                """
+                UPDATE libraries SET name = ?, type = ?
+                WHERE id = ? AND (name IS NOT ? OR type IS NOT ?)
+                """,
+                (name, library_type, matched["id"], name, library_type),
             )
         elif identity in by_identity:
             matched = dict(by_identity[identity])
@@ -184,20 +188,14 @@ def sync_plex_libraries(db, server, libraries):
                 db.execute(
                     """
                     UPDATE libraries SET item_count = ?
-                    WHERE server_id = ? AND section_id = ?
+                    WHERE server_id = ? AND section_id = ? AND item_count IS NOT ?
                     """,
-                    (int(count), server_id, section_id),
+                    (int(count), server_id, section_id, int(count)),
                 )
 
-    for row in rows:
-        library_id = int(row["id"])
-        if library_id in found_ids:
-            continue
-        db.execute(
-            "DELETE FROM media_user_libraries WHERE library_id = ?",
-            (library_id,),
-        )
-        db.execute(
-            "DELETE FROM libraries WHERE id = ?",
-            (library_id,),
+    retained = prune_missing_libraries(db, server_id, rows, found_ids)
+    if retained:
+        log.warning(
+            "[SYNC LIBRARIES] Server %s: missing libraries still referenced by local settings: %s",
+            server_id, ", ".join(str(name or "") for name in retained),
         )

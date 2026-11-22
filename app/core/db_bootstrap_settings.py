@@ -43,6 +43,9 @@ def upgrade_task_settings_auth_schema(
     # 2.1 Vérifier colonnes SETTINGS (migrations légères)
     # -------------------------------------------------
     ensure_column(cursor, "settings", "brand_name", "TEXT DEFAULT NULL")
+    ensure_column(cursor, "settings", "instance_started_at", "TEXT DEFAULT NULL")
+    from core.initial_sync_notice import backfill_instance_started_at
+    backfill_instance_started_at(cursor, table_exists)
     ensure_column(cursor, "settings", "subscription_currency", "TEXT NOT NULL DEFAULT 'EUR'")
     ensure_column(cursor, "settings", "email_history_retention_years", "INTEGER DEFAULT 2")
     ensure_column(cursor, "settings", "backup_retention_days", "INTEGER DEFAULT 30")

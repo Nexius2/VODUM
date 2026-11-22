@@ -1,4 +1,14 @@
 (function vodumDashboardPage() {
+  const initialNotice = document.querySelector('[data-initial-sync-remaining]');
+  if (initialNotice) {
+    const remaining = Number(initialNotice.dataset.initialSyncRemaining);
+    if (Number.isFinite(remaining) && remaining > 0) {
+      window.setTimeout(() => initialNotice.remove(), Math.min(remaining, 86400) * 1000);
+    } else {
+      initialNotice.remove();
+    }
+  }
+
   function navigateTo(url) {
     if (!url) return;
     window.vodumShowMobileNavigationLoader?.();

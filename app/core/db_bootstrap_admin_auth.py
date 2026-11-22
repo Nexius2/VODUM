@@ -10,6 +10,16 @@ def ensure_admin_auth_schema(conn, cursor, *, table_exists):
     schema records which identities may authenticate the singleton VODUM admin
     without coupling them to media users, servers, or provider sync tokens.
     """
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS admin_auth_flows (
+            nonce_hash TEXT PRIMARY KEY,
+            provider TEXT NOT NULL,
+            expires_at INTEGER NOT NULL
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_admin_auth_flows_expiry ON admin_auth_flows(expires_at)")
+    cursor.execute("DELETE FROM admin_auth_flows WHERE expires_at < CAST(strftime('%s','now') AS INTEGER)")
+
     if not table_exists(cursor, "admin_accounts"):
         cursor.execute(
             """

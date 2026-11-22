@@ -1,8 +1,39 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
+import os
 
 
 _ACCESS_ACTIONS = "('grant', 'revoke', 'sync')"
+
+
+def log_media_job_queue_wait(job, *, kind):
+    """Record the time an eligible media job waited for its first claim."""
+    if os.environ.get("VODUM_MEDIA_JOB_QUEUE_TIMING") != "1":
+        return
+    if job["attempts"] != 1:
+        return
+
+    try:
+        created_at = _utc_job_timestamp(job["created_at"])
+        claimed_at = _utc_job_timestamp(job["executed_at"])
+        eligible_at = max(created_at, _utc_job_timestamp(job["run_after"])) if job["run_after"] else created_at
+    except (TypeError, ValueError):
+        return
+    if claimed_at < eligible_at:
+        return
+
+    from logging_utils import get_logger
+
+    get_logger("performance").info(
+        "media_job_queue | kind=%s | wait_s=%s",
+        kind,
+        int((claimed_at - eligible_at).total_seconds()),
+    )
+
+
+def _utc_job_timestamp(value):
+    timestamp = datetime.fromisoformat(value)
+    return timestamp.replace(tzinfo=timezone.utc) if timestamp.tzinfo is None else timestamp
 
 
 def _queued_after_running_key(dedupe_key: str) -> str:

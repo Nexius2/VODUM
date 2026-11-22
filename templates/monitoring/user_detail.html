@@ -253,6 +253,11 @@
     {
       "mediaTypes30d": {{ (user.media_types_30d or []) | tojson }},
       "serverUsage30d": {{ (user.server_usage_30d or []) | tojson }},
+      "preparingLabel": {{ t("monitoring_statistics_pending") | tojson }},
+      "failedLabel": {{ t("monitoring_statistics_failed") | tojson }},
+    "staleLabel": {{ t("monitoring_statistics_stale") | tojson }},
+    "computedLabel": {{ t("monitoring_statistics_computed") | tojson }},
+      "queueFullLabel": {{ t("monitoring_statistics_queue_full") | tojson }},
       "dailyUrl": {{ (url_for('api_monitoring_user_daily', user_id=user.id) ~ '?range=30d') | tojson }},
       "playsLabel": {{ t("monitoring_user_plays")|tojson }},
       "hoursLabel": {{ t("monitoring_user_hours")|tojson }}

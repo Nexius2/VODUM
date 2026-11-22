@@ -51,35 +51,8 @@ def ensure_subscription_template_schema(
     """)
     conn.commit()
 
-    bundled_templates = [
-        (
-            "base sub",
-            "2 streams / Same IP",
-            365,
-            10,
-            0,
-            0,
-            '[{"rule_type":"max_streams_per_user","provider":null,"server_id":null,"is_enabled":1,"priority":100,"rule":{"selector":"kill_newest","warn_title":"Streaming limit reached","warn_text":"You have reached the allowed number of simultaneous streams","max":2}},{"rule_type":"max_streams_per_ip","provider":null,"server_id":null,"is_enabled":1,"priority":100,"rule":{"selector":"kill_newest","warn_title":"Streaming limit reached","warn_text":"You have reached the allowed number of simultaneous streams","max":2,"allow_local_ip":true}}]',
-        ),
-        (
-            "Family sub",
-            "4 streams",
-            365,
-            30,
-            0,
-            0,
-            '[{"rule_type":"max_streams_per_user","provider":null,"server_id":null,"is_enabled":1,"priority":100,"rule":{"selector":"kill_newest","warn_title":"Streaming limit reached","warn_text":"You have reached the allowed number of simultaneous streams","max":4}}]',
-        ),
-        (
-            "Plus sub",
-            "3 streams / 2 IP",
-            365,
-            20,
-            0,
-            0,
-            '[{"rule_type":"max_streams_per_user","provider":null,"server_id":null,"is_enabled":1,"priority":100,"rule":{"selector":"kill_newest","warn_title":"Streaming limit reached","warn_text":"You have reached the allowed number of simultaneous streams","max":3}},{"rule_type":"max_ips_per_user","provider":null,"server_id":null,"is_enabled":1,"priority":100,"rule":{"selector":"kill_newest","warn_title":"Streaming limit reached","warn_text":"You have reached the allowed number of simultaneous streams","max":2,"allow_local_ip":true}}]',
-        ),
-    ]
+    from core.default_subscription_templates import DEFAULT_SUBSCRIPTION_TEMPLATES
+    bundled_templates = DEFAULT_SUBSCRIPTION_TEMPLATES
 
     cursor.execute(
         "SELECT seed_key FROM subscription_template_seed_state WHERE seed_key = ?",
@@ -93,7 +66,7 @@ def ensure_subscription_template_schema(
 
         if templates_count == 0:
             print("🛠 Creating bundled default subscription templates")
-            for name, notes, duration_days, subscription_value, is_default, is_enabled, policies_json in bundled_templates:
+            for name, notes, duration_days, subscription_value, is_default, is_enabled, policies_json, is_lifetime, hide_from_portal in bundled_templates:
                 cursor.execute(
                     """
                     INSERT INTO subscription_templates(
@@ -103,8 +76,10 @@ def ensure_subscription_template_schema(
                         subscription_value,
                         is_default,
                         is_enabled,
-                        policies_json
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                        policies_json,
+                        is_lifetime,
+                        hide_from_portal
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         name,
@@ -114,6 +89,8 @@ def ensure_subscription_template_schema(
                         is_default,
                         is_enabled,
                         policies_json,
+                        is_lifetime,
+                        hide_from_portal,
                     ),
                 )
 

@@ -1,4 +1,5 @@
 /* Shared VODUM UI helpers extracted from base.html. */
+
 .log-update {
       background: linear-gradient(
         90deg,
@@ -493,6 +494,9 @@ svg {
   .portal-readiness-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (min-width: 80rem) {
+  .dashboard-collections-grid {
+    grid-template-columns: minmax(0, .85fr) minmax(13rem, .5fr) minmax(0, 1.15fr);
+  }
   .portal-settings-layout {
     grid-template-columns: minmax(0, 56rem) minmax(20rem, 1fr);
     grid-template-areas: "main checks";

@@ -375,11 +375,11 @@ def register(app):
             duration_days = 30
 
         try:
-            subscription_value = float(subscription_value_raw) if subscription_value_raw else 0
+            subscription_value = float(subscription_value_raw) if subscription_value_raw else None
         except Exception:
             subscription_value = 0
 
-        if subscription_value < 0:
+        if subscription_value is not None and subscription_value < 0:
             subscription_value = 0
 
         policies_json = (request.form.get("policies_json") or "[]").strip()

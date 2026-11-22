@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% set active_page = 'collections' %}
+{% block title %}{{ t('lists.title') }} · {{ app_brand_name }}{% endblock %}
+{% block header_title %}{{ t('collections.title') }}{% endblock %}
+{% block header_subtitle %}{{ t('lists.title') }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/collections.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='css/collection-lists.css') }}">{% endblock %}
+{% block content %}
+<div class="cl-workspace cl-lists">
+<nav class="cl-section-bar" aria-label="{{ t('collections.title') }}"><a class="cl-button" href="{{ url_for('collections_page') }}#lists">← {{ t('collections.title') }}</a><a class="cl-button cl-button-primary" aria-current="page" href="{{ url_for('collection_lists_page') }}">{{ t('lists.title') }}</a></nav>
+{% include 'collections/_lists_content.html' %}
+</div>
+{% endblock %}

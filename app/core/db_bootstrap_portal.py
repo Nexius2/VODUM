@@ -4,7 +4,11 @@ from __future__ import annotations
 def ensure_portal_foundation_schema(conn, cursor, *, table_exists, ensure_column):
     """Create the disabled-by-default user portal authentication foundation."""
     from core.portal_media_requests import CLAIM_SCHEMA
+    from core.portal_media_request_jobs import JOB_INDEXES, JOB_SCHEMA
     cursor.execute(CLAIM_SCHEMA)
+    cursor.execute(JOB_SCHEMA)
+    for statement in JOB_INDEXES:
+        cursor.execute(statement)
     from core.db_bootstrap_activation import ensure_activation_schema
     ensure_activation_schema(cursor)
     for column, definition in {

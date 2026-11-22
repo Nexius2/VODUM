@@ -26,6 +26,7 @@ from plexapi.collection import Collection as PlexCollection
 from core.http_security import server_http_session
 from core.jellyfin_auth import jellyfin_headers
 from core.plex_connection import get_plex_server
+from core.plex_guids import plex_external_guid
 
 _visibility_locks=WeakValueDictionary()
 _visibility_lock_guard=threading.Lock()
@@ -82,17 +83,9 @@ def plex_snapshot_ids(item):
     raw_ids.append(str(fields.get('guid') or ''))
     providers = {}
     for raw in raw_ids:
-        if '://' not in raw:
-            continue
-        provider,value = raw.split('://',1)
-        provider = {'com.plexapp.agents.imdb':'imdb','com.plexapp.agents.themoviedb':'tmdb',
-                    'com.plexapp.agents.thetvdb':'tvdb'}.get(provider.lower(),provider.lower())
-        value = value.split('?',1)[0].strip('/')
-        if provider in ('tmdb','tvdb'):
-            if not value.isdigit() or int(value)<=0:
-                continue
-            value = str(int(value))
-        if provider in ('tmdb','imdb','tvdb') and value:
+        identity = plex_external_guid(raw)
+        if identity:
+            provider, value = identity
             providers.setdefault(provider,set()).add(value)
     return {provider:next(iter(values)) for provider,values in providers.items() if len(values)==1}
 
@@ -469,7 +462,13 @@ class PlexCollections:
             if created_now:
                 items=[]
             elif isinstance(obj,PlexCollection):
-                items=obj.fetchItems(obj.key+'/children',container_size=1000)
+                children_key=obj.key+'/children'
+                try:
+                    items=obj.fetchItems(children_key,container_size=1000)
+                except BadRequest:
+                    # Restart the read with PlexAPI's standard pagination.
+                    # Membership changes require a complete snapshot.
+                    items=obj.fetchItems(children_key)
             else:
                 items=obj.items()
             current = {str(row['id']):row['item'] for row in seed} if created_now else {str(item.ratingKey):item for item in items}

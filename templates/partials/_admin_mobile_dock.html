@@ -1,0 +1,12 @@
+<nav class="admin-dock" aria-label="{{ t('portal_menu') }}">
+  {% for page, endpoint, icon, label in [('dashboard', 'dashboard', 'dashboard', 'dashboard'), ('users', 'users_list', 'users', 'users'), ('monitoring', 'monitoring_page', 'tv', 'monitoring'), ('servers', 'servers_list', 'server', 'servers')] %}
+  <a href="{{ url_for(endpoint) }}" {% if active_page == page %}aria-current="page"{% endif %}>
+    <svg aria-hidden="true"><use href="#vodum-icon-{{ icon }}"></use></svg>
+    <span>{{ t(label) }}</span>
+  </a>
+  {% endfor %}
+  <button type="button" id="adminDockMenu" aria-controls="mobileMenu" aria-expanded="false" aria-label="{{ t('portal_menu') }}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    <span>{{ t('portal_menu') }}</span>
+  </button>
+</nav>

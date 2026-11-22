@@ -3,6 +3,24 @@ from core.communication_template_admin import apply_template_translation
 from core.communications.default_templates import is_stream_blocked_template
 from core.communication_history_rendering import render_communication_history_message
 from db_manager import isolated_read_operation
+from discord_utils import enrich_discord_settings, is_discord_ready
+from notifications_utils import is_email_ready, normalize_notifications_order
+
+
+def _configured_global_delivery_channels(db) -> list[str]:
+    row = db.query_one("""
+        SELECT notifications_order, mailing_enabled, mail_from, smtp_host, smtp_port,
+               smtp_user, smtp_pass, smtp_auth_method, smtp_oauth_access_token,
+               discord_enabled, discord_bot_id, discord_bot_token
+        FROM settings WHERE id = 1
+    """)
+    settings = dict(row) if row else {}
+    ready = {
+        "email": is_email_ready(settings),
+        "discord": is_discord_ready(enrich_discord_settings(db, settings)),
+    }
+    order = dict.fromkeys([*normalize_notifications_order(settings), "email", "discord"])
+    return [channel for channel in order if ready[channel]]
 
 
 @isolated_read_operation
@@ -29,6 +47,7 @@ def load_campaign_page_data(db, load_id, editor_columns: str, list_columns: str)
         "servers": servers,
         "subscription_templates": subscriptions,
         "loaded_campaign": loaded,
+        "global_delivery_channels": _configured_global_delivery_channels(db),
     }
 
 
@@ -68,6 +87,7 @@ def load_template_page_data(
         "subscription_templates": [dict(row) for row in subscriptions],
         "page": page, "per_page": per_page,
         "total_rows": total_rows, "total_pages": total_pages,
+        "global_delivery_channels": _configured_global_delivery_channels(db),
     }
 
 

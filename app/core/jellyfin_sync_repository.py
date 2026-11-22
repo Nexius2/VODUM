@@ -1,6 +1,7 @@
 import json
-import sqlite3
 from datetime import datetime, timezone
+
+from core.library_access_repository import apply_media_user_library_diff_for_server, prune_missing_libraries
 
 
 def set_jellyfin_media_user_presence(
@@ -43,6 +44,8 @@ def upsert_jellyfin_library(db, server_id, section_id, name, library_type) -> in
         VALUES (?, ?, ?, ?)
         ON CONFLICT(server_id, section_id) DO UPDATE SET
             name = excluded.name, type = excluded.type
+        WHERE libraries.name IS NOT excluded.name
+           OR libraries.type IS NOT excluded.type
         """,
         (server_id, section_id, name, library_type),
     )
@@ -55,20 +58,8 @@ def upsert_jellyfin_library(db, server_id, section_id, name, library_type) -> in
 
 def prune_jellyfin_libraries(db, server_id, current_ids):
     """Remove stale libraries while preserving rows referenced by configurations."""
-    retained = []
-    for row in db.query("SELECT id, name FROM libraries WHERE server_id = ?", (server_id,)):
-        if row["id"] in current_ids:
-            continue
-        try:
-            with db.transaction() as cursor:
-                cursor.execute("DELETE FROM media_user_libraries WHERE library_id = ?", (row["id"],))
-                cursor.execute("DELETE FROM libraries WHERE id = ? AND server_id = ?",
-                               (row["id"], server_id))
-        except sqlite3.IntegrityError as exc:
-            if str(exc) != "FOREIGN KEY constraint failed":
-                raise
-            retained.append(row["name"])
-    return retained
+    existing = db.query("SELECT id, name FROM libraries WHERE server_id = ?", (server_id,))
+    return prune_missing_libraries(db, server_id, existing, current_ids)
 
 
 def set_jellyfin_media_user_state(
@@ -90,18 +81,4 @@ def set_jellyfin_media_user_state(
 def replace_jellyfin_library_access(
     db, media_user_id: int, server_id: int, allowed_library_ids: list[int],
 ):
-    db.execute(
-        """
-        DELETE FROM media_user_libraries
-        WHERE media_user_id = ?
-          AND library_id IN (SELECT id FROM libraries WHERE server_id = ?)
-        """,
-        (media_user_id, server_id),
-    )
-    for library_id in allowed_library_ids:
-        db.execute(
-            """INSERT OR IGNORE INTO media_user_libraries (media_user_id, library_id)
-            VALUES (?, ?)""",
-            (media_user_id, library_id),
-        )
-
+    apply_media_user_library_diff_for_server(db, media_user_id, server_id, set(allowed_library_ids))

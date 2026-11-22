@@ -4,7 +4,7 @@ import uuid
 import json
 import threading
 from flask import (
-    render_template, request, redirect, url_for, flash, current_app, session, jsonify,
+    render_template, request, redirect, url_for, flash, current_app, session, jsonify, make_response,
 )
 
 from logging_utils import get_logger
@@ -187,6 +187,24 @@ def register(app):
         )
 
         plex_identity = get_admin_auth_identity(db, "plex")
+        return render_template(
+            "servers/servers.html",
+            servers=servers,
+            deleting_server_ids=deleting_server_ids,
+            active_page="servers",
+            active_tab="servers",
+            plex_auth_identity=plex_identity,
+            plex_suggestions_deferred=bool(plex_identity and int(plex_identity.get("is_active") or 0) == 1),
+        )
+
+
+
+
+    @app.get("/servers/_plex_suggestions")
+    def server_plex_suggestions_partial():
+        db = get_db()
+        plex_identity = get_admin_auth_identity(db, "plex")
+        discovery_failed = False
         plex_suggestions = []
         if plex_identity and int(plex_identity.get("is_active") or 0) == 1:
             try:
@@ -201,19 +219,16 @@ def register(app):
                     )
                     session["vodum_plex_discovery"] = discovery_context
             except Exception:
+                discovery_failed = True
                 logger.warning("Automatic Plex server suggestions unavailable")
 
-        return render_template(
-            "servers/servers.html",
-            servers=servers,
-            deleting_server_ids=deleting_server_ids,
-            active_page="servers",
-            active_tab="servers",
-            plex_auth_identity=plex_identity,
+        response = make_response(render_template(
+            "servers/_plex_suggestions_result.html",
             plex_suggestions=plex_suggestions,
-        )
-
-
+            discovery_failed=discovery_failed,
+        ))
+        response.cache_control.no_store = True
+        return response
 
 
     @app.route("/libraries", methods=["GET"])

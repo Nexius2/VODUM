@@ -1,6 +1,5 @@
 # Auto-split from app.py (keep URLs/endpoints intact)
 import json
-import ipaddress
 
 import requests
 from flask import request, Response, current_app, jsonify, abort, send_file
@@ -8,7 +7,9 @@ from flask import request, Response, current_app, jsonify, abort, send_file
 from core.monitoring.artwork_cache import (
     ARTWORK_CACHE_TTL_SECONDS,
 )
-from core.monitoring.artwork_proxy import ArtworkProxyError, fetch_monitoring_artwork
+from core.auth_principal import admin_required
+from core.monitoring.artwork_proxy import ArtworkProxyError, fetch_monitoring_artwork, fetch_monitoring_avatar
+from core.monitoring.ip_location import format_ip_location, is_public_ip, parse_stream_ip
 from web.helpers import get_db
 from logging_utils import get_logger
 
@@ -42,7 +43,52 @@ def _is_safe_relative_media_path(path: str) -> bool:
     return True
 
 
+
+def _prepared_chart_response(metric, user_id=None):
+    from core.monitoring.precomputed_tabs import load_tab_snapshot
+    kind = 'user_daily' if user_id is not None else 'activity'
+    options = {'range': request.args.get('range', '30d' if user_id is not None else '7d')}
+    if user_id is not None:
+        options['user_id'] = user_id
+    payload, status = load_tab_snapshot(get_db(), kind, options)
+    response = jsonify((payload or {}).get(metric, []))
+    response.status_code = 200 if status['ready'] else (429 if status['queue_full'] else 202)
+    if not status['ready']:
+        response.headers['Retry-After'] = '5'
+    response.headers['Cache-Control'] = 'no-store'
+    response.headers['X-VODUM-Statistics-Stale'] = '1' if status['stale'] else '0'
+    response.headers['X-VODUM-Statistics-Failed'] = '1' if status['failed'] else '0'
+    response.headers['X-VODUM-Statistics-Ready'] = '1' if status['ready'] else '0'
+    if status['computed_at']:
+        response.headers['X-VODUM-Statistics-Computed-At'] = status['computed_at']
+    return response
+
+
 def register(app):
+    @app.route("/api/monitoring/avatar/<int:account_id>")
+    @admin_required
+    def api_monitoring_avatar(account_id):
+        row = get_db().query_one(
+            """
+            SELECT s.id, LOWER(TRIM(s.type)) AS type, s.url, s.local_url, s.public_url,
+                   s.token, s.settings_json, mu.avatar, mu.external_user_id
+            FROM media_users mu JOIN servers s ON s.id = mu.server_id
+            WHERE mu.id = ?
+            """,
+            (account_id,),
+        )
+        if not row or not row["avatar"]:
+            abort(404)
+        result = fetch_monitoring_avatar(dict(row), row["avatar"], row["external_user_id"])
+        if not result:
+            abort(404)
+        if result["kind"] == "file":
+            response = send_file(result["path"], mimetype=result["content_type"], conditional=True)
+        else:
+            response = Response(result["content"], mimetype=result["content_type"])
+        response.headers["Cache-Control"] = "private, no-store"
+        return response
+
     # -----------------------------------------------------------------
     # Route explicitement autorisée à proxyfier un média distant
     # pour le monitoring (poster / art uniquement).
@@ -96,47 +142,7 @@ def register(app):
 
     @app.route("/api/monitoring/activity")
     def api_monitoring_activity():
-        db = get_db()
-        rng = request.args.get("range", "7d")
-
-        if rng == "all":
-            where = "1=1"
-            params = ()
-        else:
-            delta = {"7d": "-7 days", "1m": "-1 month", "6m": "-6 months", "12m": "-12 months"}.get(rng, "-7 days")
-            where = "stopped_at >= datetime('now', ?)"
-            params = (delta,)
-
-        rows = db.query(
-            f"""
-            WITH base AS (
-              SELECT
-                stopped_at,
-                (CAST(server_id AS TEXT) || '|' ||
-                 CAST(media_user_id AS TEXT) || '|' ||
-                 COALESCE(NULLIF(TRIM(media_key), ''), 'no_media') || '|' ||
-                 strftime('%Y-%m-%d %H:%M', started_at)
-                ) AS play_key
-              FROM media_session_history
-              WHERE {where}
-            ),
-            plays AS (
-              SELECT
-                play_key,
-                MAX(stopped_at) AS stopped_at
-              FROM base
-              GROUP BY play_key
-            )
-            SELECT
-              strftime('%Y-%m-%d', stopped_at) AS day,
-              COUNT(*) AS sessions
-            FROM plays
-            GROUP BY strftime('%Y-%m-%d', stopped_at)
-            ORDER BY day ASC
-            """,
-            params,
-        )
-        return json_rows(rows)
+        return _prepared_chart_response("activity")
 
 
 
@@ -144,165 +150,19 @@ def register(app):
 
     @app.route("/api/monitoring/media_types")
     def api_monitoring_media_types():
-        db = get_db()
-        rng = request.args.get("range", "7d")
-
-        if rng == "all":
-            where = "1=1"
-            params = ()
-        else:
-            delta = {"7d": "-7 days", "1m": "-1 month", "6m": "-6 months", "12m": "-12 months"}.get(rng, "-7 days")
-            where = "stopped_at >= datetime('now', ?)"
-            params = (delta,)
-
-        rows = db.query(
-            f"""
-            WITH base AS (
-              SELECT
-                (CAST(server_id AS TEXT) || '|' ||
-                 CAST(media_user_id AS TEXT) || '|' ||
-                 COALESCE(NULLIF(TRIM(media_key), ''), 'no_media') || '|' ||
-                 strftime('%Y-%m-%d %H:%M', started_at)
-                ) AS play_key,
-
-                CASE
-                  -- Règle prioritaire : si grandparent_title existe, c'est une série/épisode
-                  WHEN TRIM(COALESCE(grandparent_title, '')) <> '' THEN 'series'
-
-                  WHEN LOWER(TRIM(COALESCE(media_type,''))) IN ('serie', 'series', 'episode', 'show', 'season') THEN 'series'
-                  WHEN LOWER(TRIM(COALESCE(media_type,''))) IN ('movie', 'film', 'video') THEN 'movie'
-                  WHEN LOWER(TRIM(COALESCE(media_type,''))) IN ('music', 'audio', 'song', 'track', 'tracks') THEN 'music'
-                  WHEN LOWER(TRIM(COALESCE(media_type,''))) IN ('photo', 'photos', 'image', 'picture', 'pictures') THEN 'photo'
-                  ELSE 'other'
-                END AS media_type,
-
-                CASE
-                  -- On évite MAX(text) alphabétique ; on choisit un rang métier
-                  WHEN TRIM(COALESCE(grandparent_title, '')) <> '' THEN 400
-                  WHEN LOWER(TRIM(COALESCE(media_type,''))) IN ('serie', 'series', 'episode', 'show', 'season') THEN 400
-                  WHEN LOWER(TRIM(COALESCE(media_type,''))) IN ('movie', 'film', 'video') THEN 300
-                  WHEN LOWER(TRIM(COALESCE(media_type,''))) IN ('music', 'audio', 'song', 'track', 'tracks') THEN 200
-                  WHEN LOWER(TRIM(COALESCE(media_type,''))) IN ('photo', 'photos', 'image', 'picture', 'pictures') THEN 100
-                  ELSE 0
-                END AS media_rank
-              FROM media_session_history
-              WHERE {where}
-            ),
-            plays AS (
-              SELECT
-                play_key,
-                CASE MAX(media_rank)
-                  WHEN 400 THEN 'series'
-                  WHEN 300 THEN 'movie'
-                  WHEN 200 THEN 'music'
-                  WHEN 100 THEN 'photo'
-                  ELSE 'other'
-                END AS media_type
-              FROM base
-              GROUP BY play_key
-            )
-            SELECT media_type, COUNT(*) AS sessions
-            FROM plays
-            GROUP BY media_type
-            ORDER BY sessions DESC
-            """,
-            params,
-        )
-
-        return json_rows(rows)
+        return _prepared_chart_response("media_types")
 
 
     @app.route("/api/monitoring/per_server")
     def api_monitoring_per_server():
-        db = get_db()
-        rng = request.args.get("range", "7d")
-
-        if rng == "all":
-            where = "1=1"
-            params = ()
-        else:
-            delta = {"7d": "-7 days", "1m": "-1 month", "6m": "-6 months", "12m": "-12 months"}.get(rng, "-7 days")
-            where = "h.stopped_at >= datetime('now', ?)"
-            params = (delta,)
-
-        rows = db.query(
-            f"""
-            WITH base AS (
-              SELECT
-                h.server_id,
-                (CAST(h.server_id AS TEXT) || '|' ||
-                 CAST(h.media_user_id AS TEXT) || '|' ||
-                 COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                 strftime('%Y-%m-%d %H:%M', h.started_at)
-                ) AS play_key
-              FROM media_session_history h
-              WHERE {where}
-            ),
-            plays AS (
-              SELECT
-                MAX(server_id) AS server_id,
-                play_key
-              FROM base
-              GROUP BY play_key
-            )
-            SELECT
-              COALESCE(NULLIF(s.name, ''), 'Server ' || p.server_id) AS server_name,
-              COUNT(*) AS sessions
-            FROM plays p
-            LEFT JOIN servers s ON s.id = p.server_id
-            GROUP BY p.server_id
-            ORDER BY sessions DESC
-            """,
-            params,
-        )
-        return json_rows(rows)
+        return _prepared_chart_response("per_server")
 
 
 
 
     @app.route("/api/monitoring/weekday")
     def api_monitoring_weekday():
-        db = get_db()
-        rng = request.args.get("range", "1m")
-
-        if rng == "all":
-            where = "1=1"
-            params = ()
-        else:
-            delta = {"1m": "-1 month", "6m": "-6 months", "12m": "-12 months"}.get(rng, "-1 month")
-            where = "stopped_at >= datetime('now', ?)"
-            params = (delta,)
-
-        rows = db.query(
-            f"""
-            WITH base AS (
-              SELECT
-                stopped_at,
-                (CAST(server_id AS TEXT) || '|' ||
-                 CAST(media_user_id AS TEXT) || '|' ||
-                 COALESCE(NULLIF(TRIM(media_key), ''), 'no_media') || '|' ||
-                 strftime('%Y-%m-%d %H:%M', started_at)
-                ) AS play_key
-              FROM media_session_history
-              WHERE {where}
-            ),
-            plays AS (
-              SELECT
-                play_key,
-                MAX(stopped_at) AS stopped_at
-              FROM base
-              GROUP BY play_key
-            )
-            SELECT
-              CAST(strftime('%w', stopped_at) AS INTEGER) AS weekday,
-              COUNT(*) AS sessions
-            FROM plays
-            GROUP BY CAST(strftime('%w', stopped_at) AS INTEGER)
-            ORDER BY weekday
-            """,
-            params,
-        )
-        return json_rows(rows)
+        return _prepared_chart_response("weekday")
 
     @app.route("/api/monitoring/ip_lookup")
     def api_monitoring_ip_lookup():
@@ -310,19 +170,11 @@ def register(app):
         if not raw_ip:
             return jsonify({"ok": False, "error": "missing_ip"}), 400
 
-        try:
-            ip_obj = ipaddress.ip_address(raw_ip)
-        except ValueError:
+        ip_obj = parse_stream_ip(raw_ip)
+        if ip_obj is None:
             return jsonify({"ok": False, "error": "invalid_ip"}), 400
 
-        if (
-            ip_obj.is_private
-            or ip_obj.is_loopback
-            or ip_obj.is_link_local
-            or ip_obj.is_multicast
-            or ip_obj.is_reserved
-            or ip_obj.is_unspecified
-        ):
+        if not is_public_ip(ip_obj):
             return jsonify({
                 "ok": True,
                 "ip": raw_ip,
@@ -365,7 +217,7 @@ def register(app):
             "query",
         ])
 
-        lookup_url = f"http://ip-api.com/json/{raw_ip}"
+        lookup_url = f"http://ip-api.com/json/{ip_obj}"
         try:
             resp = requests.get(
                 lookup_url,
@@ -402,9 +254,7 @@ def register(app):
             "ok": True,
             "ip": data.get("query") or raw_ip,
             "is_private": False,
-            "display_name": ", ".join(
-                [x for x in [data.get("city"), data.get("regionName"), data.get("country")] if x]
-            ) or raw_ip,
+            "display_name": format_ip_location(data) or raw_ip,
             "country": data.get("country"),
             "region": data.get("regionName"),
             "city": data.get("city"),
@@ -424,60 +274,4 @@ def register(app):
 
     @app.route("/api/monitoring/user/<int:user_id>/daily")
     def api_monitoring_user_daily(user_id: int):
-        db = get_db()
-        rng = request.args.get("range", "30d")
-
-        if rng == "all":
-            where = "1=1"
-            params = (user_id,)
-        else:
-            delta = {
-                "7d": "-7 days",
-                "30d": "-30 days",
-                "90d": "-90 days",
-                "12m": "-12 months",
-            }.get(rng, "-30 days")
-            where = "h.stopped_at >= datetime('now', ?)"
-            params = (user_id, delta)
-
-        rows = db.query(
-            f"""
-            WITH base AS (
-              SELECT
-                h.started_at,
-                h.stopped_at,
-                MIN(
-                  COALESCE(h.watch_ms, 0),
-                  CASE
-                    WHEN COALESCE(h.duration_ms, 0) > 0 THEN h.duration_ms
-                    ELSE COALESCE(h.watch_ms, 0)
-                  END
-                ) AS watch_ms_capped,
-                (CAST(h.server_id AS TEXT) || '|' ||
-                 CAST(h.media_user_id AS TEXT) || '|' ||
-                 COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
-                 strftime('%Y-%m-%d %H:%M', h.started_at)
-                ) AS play_key
-              FROM media_session_history h
-              WHERE h.media_user_id = ?
-                AND {where}
-            ),
-            plays AS (
-              SELECT
-                play_key,
-                MAX(stopped_at) AS stopped_at,
-                MAX(watch_ms_capped) AS watch_ms
-              FROM base
-              GROUP BY play_key
-            )
-            SELECT
-              strftime('%Y-%m-%d', stopped_at) AS day,
-              COUNT(*) AS plays,
-              COALESCE(SUM(watch_ms), 0) AS watch_ms
-            FROM plays
-            GROUP BY strftime('%Y-%m-%d', stopped_at)
-            ORDER BY day ASC
-            """,
-            params,
-        )
-        return json_rows(rows)
+        return _prepared_chart_response("user_daily", user_id=user_id)

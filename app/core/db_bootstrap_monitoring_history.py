@@ -1,8 +1,14 @@
 import sqlite3
 from core.db_bootstrap_daily_refresh import ensure_daily_refresh_schema
+from core.monitoring.library_growth import SCHEMA as LIBRARY_GROWTH_SCHEMA
 
 
 def ensure_monitoring_history_schema(conn, cursor, *, table_exists, ensure_column) -> None:
+    from core.monitoring.precomputed import ensure_schema
+    ensure_schema(cursor)
+    cursor.execute(LIBRARY_GROWTH_SCHEMA)
+    ensure_column(cursor, "monitoring_library_growth", "last_attempt_at", "TEXT")
+    ensure_column(cursor, "monitoring_library_growth", "last_error", "TEXT")
     if not table_exists(cursor, "media_session_history"):
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS media_session_history (

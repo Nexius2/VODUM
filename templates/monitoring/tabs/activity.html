@@ -1,3 +1,6 @@
+{% set historical_snapshot = g.monitoring_snapshot|default(none) %}
+{% include "monitoring/partials/_statistics_status.html" %}
+{% if not historical_snapshot or historical_snapshot.ready %}
 <!-- Range selector -->
 <div class="flex items-center justify-between mb-4">
   <div class="text-sm text-slate-400">{{ t("monitoring_servers_range") }}</div>
@@ -66,6 +69,11 @@
 
 <script type="application/json" id="monitoring-activity-config">
   {
+    "preparingLabel": {{ t("monitoring_statistics_pending")|tojson }},
+    "failedLabel": {{ t("monitoring_statistics_failed") | tojson }},
+    "staleLabel": {{ t("monitoring_statistics_stale") | tojson }},
+    "computedLabel": {{ t("monitoring_statistics_computed")|tojson }},
+    "queueFullLabel": {{ t("monitoring_statistics_queue_full")|tojson }},
     "sessionsLabel": {{ t("monitoring_servers_sessions")|tojson }},
     "weekdayNames": [
       {{ t("weekday_sun")|tojson }},
@@ -80,3 +88,5 @@
 </script>
 <script src="{{ url_for('static', filename='js/pages/monitoring-activity.js', v=g.app_version|default('dev')) }}"></script>
 
+
+{% endif %}

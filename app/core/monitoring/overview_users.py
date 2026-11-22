@@ -12,22 +12,30 @@ USER_SORT_COLUMNS = {
 }
 
 
+def _account_identity_search(query):
+    # Without whitespace or LIKE wildcards a match cannot span the spaces
+    # separating identities. Repeated identities from history add no matches.
+    return bool(query) and not any(char.isspace() or char in '%_' for char in query)
+
+
 @isolated_read_operation
 def load_monitoring_users_total(db, query):
     if query:
         like = f"%{query}%"
+        identity_source = """media_users mu
+              WHERE EXISTS (SELECT 1 FROM media_session_history h WHERE h.media_user_id=mu.id)""" if _account_identity_search(query) else """media_session_history h
+              JOIN media_users mu ON mu.id = h.media_user_id
+              WHERE h.media_user_id IS NOT NULL"""
         row = db.query_one(
-            """
+            f"""
             WITH base AS (
-              SELECT h.media_user_id, mu.username AS mu_username,
+              SELECT mu.id AS media_user_id, mu.username AS mu_username,
                 mu.email AS mu_email, mu.vodum_user_id,
                 CASE WHEN mu.vodum_user_id IS NOT NULL
                   THEN ('v:' || mu.vodum_user_id)
                   ELSE ('m:' || mu.id)
                 END AS group_key
-              FROM media_session_history h
-              JOIN media_users mu ON mu.id = h.media_user_id
-              WHERE h.media_user_id IS NOT NULL
+              FROM {identity_source}
             ),
             names AS (
               SELECT b.group_key,
@@ -85,14 +93,44 @@ def load_monitoring_users_rows(db, options):
     query = options["q"]
     where_sql = ""
     params = []
-    # Only filtered searches use the concatenated identity text. Keep the
-    # original concatenation for searches, including SQL wildcard semantics.
+    account_search = _account_identity_search(query)
+    # Complex patterns keep the exact historical concatenation and ordering.
     media_search_sql = """
             , GROUP_CONCAT(
               COALESCE(b.mu_username, '') || ' ' ||
               COALESCE(b.mu_email, ''), ' '
             ) AS media_search
     """ if query else ""
+    names_source = "base" if query and not account_search else "last_candidates"
+    # These sorts depend only on identity/latest playback, so choose the page
+    # before aggregating its history. Aggregate sorts still need every group.
+    page_first = (not query or account_search) and options["order_sql"] in {
+        f"({column} IS NULL) ASC, {column} {direction}"
+        for key, column in USER_SORT_COLUMNS.items()
+        if key not in {"plays", "watch"}
+        for direction in ("ASC", "DESC")
+    }
+    page_cte = ""
+    history_source = "media_session_history h JOIN media_users mu ON mu.id = h.media_user_id"
+    if page_first:
+        page_cte = f""",
+        selected_groups AS MATERIALIZED (
+          SELECT n.group_key
+          FROM names n JOIN last_rows lr ON lr.group_key = n.group_key
+          LEFT JOIN vodum_users vu ON vu.id = n.vodum_user_id
+          __FILTER__
+          ORDER BY {options["order_sql"]}, n.group_key
+          LIMIT ? OFFSET ?
+        ),
+        selected_accounts AS (
+          SELECT c.media_user_id
+          FROM last_candidates c
+          JOIN selected_groups s ON s.group_key = c.group_key
+        )
+        """
+        history_source = """selected_accounts selected
+          CROSS JOIN media_session_history h ON h.media_user_id = selected.media_user_id
+          JOIN media_users mu ON mu.id = h.media_user_id"""
     if query:
         like = f"%{query}%"
         where_sql = """
@@ -110,12 +148,29 @@ def load_monitoring_users_rows(db, options):
         """
         params.extend([like] * 9)
 
+    page_cte = page_cte.replace('__FILTER__', where_sql)
+    if account_search and not page_first:
+        # Aggregate sorts still rank all matching groups, but need no history
+        # from groups excluded by the identity search.
+        page_cte = f""",
+        selected_groups AS MATERIALIZED (
+          SELECT n.group_key FROM names n
+          LEFT JOIN vodum_users vu ON vu.id = n.vodum_user_id
+          {where_sql}
+        ),
+        selected_accounts AS (
+          SELECT c.media_user_id FROM last_candidates c
+          JOIN selected_groups s ON s.group_key = c.group_key
+        )
+        """
+        history_source = """selected_accounts selected
+          CROSS JOIN media_session_history h ON h.media_user_id = selected.media_user_id
+          JOIN media_users mu ON mu.id = h.media_user_id"""
+
     rows = db.query(
         f"""
         WITH base AS (
-          SELECT h.server_id, h.started_at, h.stopped_at, h.media_key,
-            h.watch_ms, h.duration_ms, h.ip, h.device, h.client_name,
-            h.client_product, h.media_user_id,
+          SELECT h.media_user_id,
             mu.username AS mu_username, mu.email AS mu_email,
             mu.vodum_user_id,
             CASE WHEN mu.vodum_user_id IS NOT NULL
@@ -138,36 +193,51 @@ def load_monitoring_users_rows(db, options):
               COALESCE(NULLIF(TRIM(h.media_key), ''), 'no_media') || '|' ||
               strftime('%Y-%m-%d %H:%M', h.started_at)
             ) AS play_key
-          FROM media_session_history h
-          JOIN media_users mu ON mu.id = h.media_user_id
+          FROM {history_source}
           WHERE h.media_user_id IS NOT NULL
         ),
         plays AS (
-          SELECT group_key, play_key, MAX(stopped_at) AS stopped_at,
+          SELECT group_key, play_key,
             MAX(watch_ms_capped) AS watch_ms
           FROM base
           GROUP BY play_key
         ),
         agg AS (
-          SELECT group_key, MAX(stopped_at) AS last_watch_at,
+          SELECT group_key,
             COUNT(*) AS total_plays,
             COALESCE(SUM(watch_ms), 0) AS watch_ms
           FROM plays
           GROUP BY group_key
         ),
+        last_candidates AS (
+          SELECT h.id, h.stopped_at, mu.id AS media_user_id,
+            mu.username AS mu_username, mu.email AS mu_email, mu.vodum_user_id,
+            CASE WHEN mu.vodum_user_id IS NOT NULL
+              THEN ('v:' || mu.vodum_user_id)
+              ELSE ('m:' || mu.id)
+            END AS group_key
+          FROM media_users mu
+          JOIN media_session_history h ON h.id = (
+            SELECT recent.id
+            FROM media_session_history recent
+            WHERE recent.media_user_id = mu.id
+            ORDER BY recent.stopped_at DESC, recent.id ASC
+            LIMIT 1
+          )
+        ),
         ranked AS (
-          SELECT group_key, stopped_at, ip, device, client_name,
-            client_product,
+          SELECT group_key, id,
             ROW_NUMBER() OVER (
-              PARTITION BY group_key ORDER BY stopped_at DESC
+              PARTITION BY group_key ORDER BY stopped_at DESC, id ASC
             ) AS rn
-          FROM base
+          FROM last_candidates
         ),
         last_rows AS (
-          SELECT group_key, stopped_at AS last_watch_at, ip, device,
-            client_name, client_product
-          FROM ranked
-          WHERE rn = 1
+          SELECT r.group_key, h.stopped_at AS last_watch_at, h.ip, h.device,
+            h.client_name, h.client_product
+          FROM ranked r
+          JOIN media_session_history h ON h.id = r.id
+          WHERE r.rn = 1
         ),
         names AS (
           SELECT b.group_key,
@@ -175,10 +245,11 @@ def load_monitoring_users_rows(db, options):
             MIN(b.media_user_id) AS user_id,
             COALESCE(vu.username, MIN(b.mu_username)) AS username
             {media_search_sql}
-          FROM base b
+          FROM {names_source} b
           LEFT JOIN vodum_users vu ON vu.id = b.vodum_user_id
           GROUP BY b.group_key
         )
+        {page_cte}
         SELECT n.user_id, n.username, lr.last_watch_at,
           a.total_plays, a.watch_ms, lr.ip AS last_ip,
           COALESCE(lr.device, lr.client_product, '-') AS platform,
@@ -187,9 +258,9 @@ def load_monitoring_users_rows(db, options):
         JOIN last_rows lr ON lr.group_key = a.group_key
         JOIN names n ON n.group_key = a.group_key
         LEFT JOIN vodum_users vu ON vu.id = n.vodum_user_id
-        {where_sql}
+        {"" if page_first or account_search else where_sql}
         ORDER BY {options["order_sql"]}
-        LIMIT ? OFFSET ?
+        {"" if page_first else "LIMIT ? OFFSET ?"}
         """,
         tuple(params + [options["per_page"], options["offset"]]),
     )

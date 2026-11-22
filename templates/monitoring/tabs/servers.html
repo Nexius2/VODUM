@@ -1,3 +1,14 @@
+{% set historical_snapshot = g.monitoring_snapshot|default(none) %}
+{% include "monitoring/partials/_statistics_status.html" %}
+{% if historical_snapshot and not historical_snapshot.ready %}
+<div class="mb-4 flex flex-wrap gap-4 text-sm" data-monitoring-server-live>
+{% for server in g.monitoring_live_servers|default([]) %}
+  <span>{{ server.name }} · {{ server.status }} · {{ server.live_sessions }} {{ t('monitoring.cards.live_sessions') }}</span>
+{% endfor %}
+</div>
+{% endif %}
+{% if not historical_snapshot or historical_snapshot.ready %}
+<p class="mb-4 text-sm text-slate-400">{{ t("monitoring_server_history_completed") }}</p>
 <div class="flex items-center justify-between mb-4">
   <div class="text-sm text-slate-400">{{ t("monitoring_servers_range") }}</div>
   <select id="serversRangePicker" class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm">
@@ -210,3 +221,5 @@
 <script src="{{ url_for('static', filename='js/pages/monitoring-servers.js', v=g.app_version|default('dev')) }}"></script>
 
 
+
+{% endif %}

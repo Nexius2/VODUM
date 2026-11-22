@@ -2,6 +2,11 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
+from core.library_access_repository import (
+    apply_media_user_library_diff_for_server as apply_media_user_library_diff_for_server,
+    get_media_user_library_ids_for_server as get_media_user_library_ids_for_server,
+)
+
 
 def plex_section_total_items(
     session,
@@ -33,59 +38,3 @@ def plex_section_total_items(
         return int(total)
     except (TypeError, ValueError):
         return None
-
-
-def get_media_user_library_ids_for_server(
-    db,
-    media_user_id: int,
-    server_id: int,
-) -> set[int]:
-    rows = db.query(
-        """
-        SELECT mul.library_id
-        FROM media_user_libraries mul
-        JOIN libraries l ON l.id = mul.library_id
-        WHERE mul.media_user_id = ?
-          AND l.server_id = ?
-        """,
-        (media_user_id, server_id),
-    ) or []
-    return {
-        int(row["library_id"])
-        for row in rows
-        if row["library_id"] is not None
-    }
-
-
-def apply_media_user_library_diff_for_server(
-    db,
-    media_user_id: int,
-    server_id: int,
-    desired_library_ids: set[int],
-):
-    current = get_media_user_library_ids_for_server(
-        db,
-        media_user_id,
-        server_id,
-    )
-    to_add = sorted(desired_library_ids - current)
-    to_remove = sorted(current - desired_library_ids)
-    for library_id in to_add:
-        db.execute(
-            """
-            INSERT OR IGNORE INTO media_user_libraries(
-                media_user_id, library_id
-            )
-            VALUES (?, ?)
-            """,
-            (media_user_id, library_id),
-        )
-    for library_id in to_remove:
-        db.execute(
-            """
-            DELETE FROM media_user_libraries
-            WHERE media_user_id = ? AND library_id = ?
-            """,
-            (media_user_id, library_id),
-        )
-    return current, to_add, to_remove
