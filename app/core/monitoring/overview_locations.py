@@ -6,7 +6,7 @@ from db_manager import isolated_read_operation
 
 
 @isolated_read_operation
-def _load_playbacks(db, live_only, live_window_seconds, server_id, instant):
+def _load_playbacks(db, live_only, live_window_seconds, server_id, instant, *, source="both"):
     return db.query(
         """
         WITH playbacks AS (
@@ -18,18 +18,18 @@ def _load_playbacks(db, live_only, live_window_seconds, server_id, instant):
                         AND LOWER(COALESCE(state, '')) <> 'stopped'
                         THEN LOWER(COALESCE(state, '')) ELSE 'offline' END AS state
             FROM media_sessions
-            WHERE :instant IS NULL OR (
+            WHERE :source <> 'history' AND (:instant IS NULL OR (
                 datetime(started_at) <= datetime(:instant, 'unixepoch')
                 AND datetime(last_seen_at) >= datetime(:instant, 'unixepoch')
-            )
+            ))
             UNION ALL
             SELECT id, server_id, provider, media_user_id, external_user_id, session_key, media_key, started_at,
                    ip, title, grandparent_title,
                    CASE WHEN :instant IS NULL THEN stopped_at ELSE started_at END, 0, 'offline'
             FROM media_session_history
-            WHERE (:instant IS NULL AND NOT :live_only)
+            WHERE :source <> 'current' AND ((:instant IS NULL AND NOT :live_only)
                OR (:instant IS NOT NULL AND datetime(started_at) <= datetime(:instant, 'unixepoch')
-                   AND datetime(stopped_at) >= datetime(:instant, 'unixepoch'))
+                   AND datetime(stopped_at) >= datetime(:instant, 'unixepoch')))
         ), identified AS (
             SELECT p.*, mu.id AS account_id, mu.avatar, vu.id AS vodum_user_id,
                    COALESCE(NULLIF(TRIM(vu.username), ''), mu.username) AS username,
@@ -91,6 +91,7 @@ def _load_playbacks(db, live_only, live_window_seconds, server_id, instant):
         ORDER BY julianday(seen_at) DESC
         """,
         {
+            "source": source,
             "window": f"-{int(live_window_seconds)} seconds",
             "live_only": live_only,
             "playing_only": live_only,
@@ -104,8 +105,8 @@ def _load_playbacks(db, live_only, live_window_seconds, server_id, instant):
 
 
 def load_monitoring_locations(db, *, live_only, live_window_seconds, server_id=None,
-                              instant=None, playing_only=False, country=""):
-    rows = _load_playbacks(db, live_only or playing_only, live_window_seconds, server_id, instant)
+                              instant=None, playing_only=False, country="", prepared_rows=None):
+    rows = prepared_rows if prepared_rows is not None else _load_playbacks(db, live_only or playing_only, live_window_seconds, server_id, instant)
     rows = [row for row in rows if not playing_only or instant is not None or row["active"]]
     observations = []
     for row in rows:

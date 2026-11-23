@@ -1,6 +1,7 @@
 """Presentation definitions only; each model reserves its own future engine key."""
 
 COLLECTION_MODELS = (
+    {"id":"media_list", "glyph":"☷", "theme":"spotlight", "media_types":["movie","shows"], "default_limit":0, "default_sort":"release", "daily":False, "secondary":True},
     {"id":"hidden_gems", "glyph":"◇", "theme":"spotlight", "media_types":["movie","shows"], "default_limit":30, "default_sort":"rank", "daily":False, "secondary":True},
     {"id": "memoria", "glyph": "✦", "theme": "memoria", "media_types": ["movie", "shows"], "default_limit": 30, "default_sort": "release", "daily": False},
     {"id": "streaming_country", "glyph": "↗", "theme": "country", "media_types": ["movie", "shows"], "default_limit": 0, "default_sort": "rank", "daily": False},
@@ -17,16 +18,16 @@ COLLECTION_MODELS = (
     {"id":"family", "glyph":"⌂", "theme":"releases", "media_types":["movie","shows"], "default_limit":30, "default_sort":"rank", "daily":False, "secondary":True},
     {"id":"awards", "glyph":"♛", "theme":"spotlight", "media_types":["movie","shows"], "default_limit":30, "default_sort":"rank", "daily":False, "secondary":True},
     {"id":"top_country", "glyph":"⚑", "theme":"country", "media_types":["movie","shows"], "default_limit":30, "default_sort":"rank", "daily":False, "secondary":True},
-    {"id":"franchises", "glyph":"◫", "theme":"spotlight", "media_types":["movie"], "default_limit":0, "default_sort":"release", "daily":False, "secondary":True},
+    {"id":"franchises", "glyph":"◫", "theme":"spotlight", "media_types":["movie","shows"], "default_limit":0, "default_sort":"release", "daily":False, "secondary":True},
     {"id":"continents", "glyph":"◍", "theme":"world", "media_types":["movie","shows"], "default_limit":0, "default_sort":"added", "daily":False, "secondary":True},
     {"id":"platforms", "glyph":"▶", "theme":"world", "media_types":["movie","shows"], "default_limit":0, "default_sort":"added", "daily":False, "secondary":True},
 )
 
 FUTURE_MODELS = (
     "imdb", "tmdb", "myanimelist", "anilist", "recently_added", "kids", "family", "awards", "top_country", "franchises",
-    "platforms", "continents", "hidden_gems",
+    "platforms", "continents", "hidden_gems", "media_list",
 )
 
 
 def collection_catalog():
-    return [{**model, "engine_key": model["id"], "engine_available":model['id'] in ('memoria','spotlight','streaming_country','streaming_worldwide','recent_releases','seasonal','imdb','myanimelist','anilist','recently_added','kids','tmdb','family','awards','top_country','franchises','continents','platforms','hidden_gems')} for model in COLLECTION_MODELS]
+    return [{**model, "engine_key": model["id"], "engine_available":model['id'] in ('memoria','spotlight','streaming_country','streaming_worldwide','recent_releases','seasonal','imdb','myanimelist','anilist','recently_added','kids','tmdb','family','awards','top_country','franchises','continents','platforms','hidden_gems','media_list')} for model in COLLECTION_MODELS]

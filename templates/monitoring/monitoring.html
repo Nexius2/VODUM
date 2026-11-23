@@ -80,7 +80,7 @@
         <form action="{{ url_for('monitoring_page') }}" method="get">
           <input type="hidden" name="tab" value="location">
           <input type="hidden" name="heat" value="{{ '1' if location_heat else '0' }}">
-          {% if location_instant is not none %}<input type="hidden" name="at" value="{{ location_instant }}">{% endif %}
+          {% if location_instant is not none %}<input type="hidden" name="at" value="{{ location_instant }}"><input type="hidden" name="until" value="{{ location_end }}">{% endif %}
           <label>{{ t('monitoring_location_server') }}
             <select name="server">
               <option value="">{{ t('monitoring_location_all') }}</option>
@@ -109,7 +109,7 @@
         </form>
       </details>
     </div>
-    <div id="monitoring-content" data-location-map
+    <div id="monitoring-content" data-location-map data-statistics-pending="{{ t('monitoring_statistics_pending') }}"
          data-basemap="{{ url_for('static', filename='vendor/natural-earth/countries-110m.json') }}"
          data-heat="{{ 1 if location_heat else 0 }}"
          {% if not location_period %}

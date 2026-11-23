@@ -18,7 +18,6 @@ from core.user_subscription_snapshots import (
     clear_template_snapshot,
 )
 from core.user_profile_context import (
-    has_user_playback,
     enrich_media_servers,
     load_expiration_lock,
     load_merged_usernames,
@@ -35,6 +34,7 @@ from core.user_detail_repository import (
     load_user_detail,
     load_user_detail_settings,
     load_user_provider_types,
+    load_user_profile_header,
 )
 
 
@@ -273,17 +273,6 @@ def register(app):
         sent_emails = []
         sent_discord = []
 
-
-        # --------------------------------------------------
-        # Charger l’utilisateur (VODUM)
-        # --------------------------------------------------
-        user = load_user_detail(db, user_id)
-
-        if not user:
-            flash("user_not_found", "error")
-            return redirect(url_for("users_list"))
-
-        # on convertit en dict pour éviter les surprises sqlite3.Row
         tab = (request.args.get("tab") or "general").strip().lower()
         # The merge dialog and candidates belong to the Access tab. Preserve
         # legacy ?merge=1 links as well as the explicit navigation button.
@@ -296,70 +285,20 @@ def register(app):
         if mview not in ("profile", "history", "ip"):
             mview = "profile"
 
-        # --------------------------------------------------
-        # Include ongoing sessions as well as completed playback history.
-        # --------------------------------------------------
-        never_used = not has_user_playback(db, user_id) if tab == "general" else False
-
-        # --------------------------------------------------
-        # Subscription template (optional)
-        # --------------------------------------------------
-        subscription_template = None
-        try:
-            if user.get("subscription_template_id") is not None:
-                subscription_template = db.query_one(
-                    "SELECT id, name FROM subscription_templates WHERE id=?",
-                    (int(user["subscription_template_id"]),),
-                )
-        except Exception:
-            log_handled_failure("users.load_subscription_template")
-            subscription_template = None
-
-        user["subscription_template_name"] = subscription_template["name"] if subscription_template else None
-
-        subscription_templates = db.query(
-            """
-            SELECT id, name, is_lifetime
-            FROM subscription_templates
-            WHERE is_enabled = 1
-            ORDER BY name ASC
-            """
-        ) or [] if tab == "general" else []
-
-        # --------------------------------------------------
-        # Settings (needed for per-user notification override)
-        # --------------------------------------------------
-        settings = load_user_detail_settings(db) if tab in ("general", "access") else {}
-
+        header = load_user_profile_header(db, user_id, tab)
+        user = header['user']
+        if not user:
+            flash("user_not_found", "error")
+            return redirect(url_for("users_list"))
+        never_used = header['never_used']
+        subscription_templates = header['subscription_templates']
+        settings = header['settings']
+        allowed_types = header['allowed_types']
+        monitoring_mu_id = header['monitoring_mu_id']
         try:
             user_notifications_can_override = int(settings.get("user_notifications_can_override") or 0) == 1
         except Exception:
             user_notifications_can_override = False
-
-
-        # --------------------------------------------------
-        # Types de serveurs réellement liés à l'utilisateur
-        # (basé sur media_users + servers)
-        # --------------------------------------------------
-        allowed_types = (
-            load_user_provider_types(db, user_id)
-            if tab in ("general", "access", "media")
-            else []
-        )
-
-        # --------------------------------------------------
-        # Monitoring: on a besoin d'un media_users.id pour ouvrir la page monitoring/user/<id>
-        # (on prend le premier media_user lié au vodum_user)
-        # --------------------------------------------------
-        monitoring_mu = db.query_one(
-            "SELECT id FROM media_users WHERE vodum_user_id = ? ORDER BY id LIMIT 1",
-            (user_id,),
-        ) if tab == "monitoring" else None
-        monitoring_mu_id = int(monitoring_mu["id"]) if (monitoring_mu and monitoring_mu["id"] is not None) else None
-
-
-
-
 
         # ==================================================
         # GET ? Chargement infos complètes
@@ -430,7 +369,7 @@ def register(app):
         referred_users = referral_context["referred_users"]
 
         usage_risk = build_usage_risk_for_user(db, user_id) if tab == "general" else {}
-        expiration_lock = load_expiration_lock(db, user_id) if tab == "general" else None
+        expiration_lock = header['expiration_lock']
         return render_template(
             "users/user_detail.html",
             user=user,

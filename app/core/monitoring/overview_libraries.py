@@ -188,7 +188,8 @@ def load_monitoring_library_table(db, options, growth_period="7"):
     libraries = [dict(row) for row in (rows or [])]
     for library in libraries:
         growth_totals = library.pop("growth_totals")
-        library["growth"] = json.loads(growth_totals).get(growth_period) if growth_totals else None
+        library["growth_by_period"] = json.loads(growth_totals) if growth_totals else {}
+        library["growth"] = library["growth_by_period"].get(growth_period)
         played_ms = library.get("played_ms") or 0
         library["played_duration"] = (
             f"{played_ms // 3600000}h "
@@ -211,9 +212,9 @@ def load_monitoring_library_users(db):
             NULLIF(TRIM(vu.email), ''),
             'User #' || vu.id
           ) AS label
-        FROM media_session_history h
-        JOIN media_users mu ON mu.id = h.media_user_id
+        FROM media_users mu
         JOIN vodum_users vu ON vu.id = mu.vodum_user_id
+        WHERE EXISTS (SELECT 1 FROM media_session_history h WHERE h.media_user_id = mu.id)
         ORDER BY label COLLATE NOCASE
         """
     )
@@ -489,6 +490,10 @@ def load_monitoring_library_top_cards(db, options):
     else:
         top_rows = _load_monitoring_library_top_rows(db, options)
 
+    return build_library_top_cards(db, top_rows)
+
+
+def build_library_top_cards(db, top_rows):
     cards_by_library = {}
     for r in top_rows:
         card = cards_by_library.get(r["library_id"])

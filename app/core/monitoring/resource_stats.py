@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, Optional
 
@@ -140,7 +141,7 @@ def candidate_bases(server_row) -> list[str]:
     return bases
 
 
-def collect_plex_server_resources(srv: Dict[str, Any], timeout: int = 4) -> Dict[str, Any]:
+def collect_plex_server_resources(srv: Dict[str, Any], timeout: int = 4, *, deadline=None) -> Dict[str, Any]:
     token = (srv.get("token") or "").strip()
     bases = candidate_bases(srv)
     if not token or not bases:
@@ -151,12 +152,17 @@ def collect_plex_server_resources(srv: Dict[str, Any], timeout: int = 4) -> Dict
     last_error = None
     http = server_http_session(srv)
     for base in bases:
+        if deadline is not None and time.monotonic() >= deadline:
+            break
+        request_timeout = timeout if deadline is None else min(timeout, deadline - time.monotonic())
+        if request_timeout <= 0:
+            break
         try:
             response = http.get(
                 f"{base}/statistics/resources",
                 params={"timespan": 6},
                 headers={"Accept": "application/xml", "X-Plex-Token": token},
-                timeout=timeout,
+                timeout=request_timeout,
             )
             response.raise_for_status()
             parsed = extract_plex_resource_percentages(response.text)
@@ -170,9 +176,9 @@ def collect_plex_server_resources(srv: Dict[str, Any], timeout: int = 4) -> Dict
     return {"cpu_pct": None, "ram_pct": None, "is_available": 0, "note": "unreachable"}
 
 
-def collect_server_resource_stats(srv: Dict[str, Any], provider_name: str) -> Dict[str, Any]:
+def collect_server_resource_stats(srv: Dict[str, Any], provider_name: str, *, deadline=None) -> Dict[str, Any]:
     if (provider_name or "").lower().strip() == "plex":
-        return collect_plex_server_resources(srv)
+        return collect_plex_server_resources(srv, deadline=deadline)
     return {"cpu_pct": None, "ram_pct": None, "is_available": 0, "note": "unsupported"}
 
 

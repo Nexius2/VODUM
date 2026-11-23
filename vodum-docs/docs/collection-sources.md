@@ -6,6 +6,7 @@ published membership also depends on local inventory, matching and filters.
 
 | Family | Models / source | Main choices |
 | --- | --- | --- |
+| Local lists | Media list | One searchable VODUM/custom list, enabled entries and compatible movie/series libraries |
 | Rankings | IMDb, TMDb | Source chart, movie/series library, ranking and limits |
 | Anime rankings | MyAnimeList, AniList | Top TV Anime, Top Anime Films, Most Popular Anime |
 | Streaming discovery | By country, worldwide | Country/region, content language and offered filters |
@@ -60,3 +61,17 @@ A run can publish local members, submit acquisition work when enabled, or use
 ARR-only mode. Existing ARR entries and confirmed previous requests are
 deduplicated. Bounded passes and saved offsets mean a large catalog can require
 more than one execution. See [Collections](collections.md) for run states.
+
+## Bundled franchise lists
+
+VODUM includes 32 editable movie/series lists. The catalogue now also covers
+Jurassic Park/World, Terminator, Matrix/Animatrix, James Bond, Mission: Impossible,
+Conjuring, Indiana Jones, Pirates of the Caribbean, Planet of the Apes,
+Ghostbusters, Transformers, Rocky/Creed, John Wick, Resident Evil, Godzilla/Kong,
+Narnia, Dune, Shrek/Puss in Boots, The Walking Dead, Game of Thrones, Yellowstone,
+Doctor Who and Dragon Ball.
+
+Use **Lists → Linked collections and libraries → Manage Franchise links** to
+add these sources to an existing explicit Franchise selection. Upgrading adds
+the bundled lists without overwriting existing selections or local exclusions.
+Movie and series entries are matched only to their compatible library type.

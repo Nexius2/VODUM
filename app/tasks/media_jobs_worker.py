@@ -2,6 +2,7 @@ from core.error_reporting import log_handled_failure
 import json
 import os
 import socket
+import time
 import uuid
 from datetime import datetime, timezone, timedelta
 from core.monitoring.collector import collect_sessions_for_server
@@ -205,7 +206,7 @@ def _mark_retry_or_error(db, job, err: str):
     """, (run_after, err[:2000], job["id"], job["locked_by"]))
 
 
-def _execute_job(db, job):
+def _execute_job(db, job, *, deadline=None):
     """
     Exécute la collecte MONITORING pour 1 serveur.
 
@@ -229,11 +230,12 @@ def _execute_job(db, job):
         server_id=server_id,
         provider=provider,
         payload=payload,
+        deadline=deadline,
     )
 
 
 def run(task_id, db):
-    start = _utcnow()
+    deadline = time.monotonic() + TIME_BUDGET_SECONDS
     processed = 0
     errors = 0
     recovered = 0
@@ -256,7 +258,7 @@ def run(task_id, db):
     _cleanup_finished_refresh_jobs(db)
 
     while processed + errors < MAX_BATCH:
-        if (_utcnow() - start).total_seconds() >= TIME_BUDGET_SECONDS:
+        if time.monotonic() >= deadline:
             break
 
         job = _claim_one(db)
@@ -264,7 +266,7 @@ def run(task_id, db):
             break
 
         try:
-            result = _execute_job(db, job) or {}
+            result = _execute_job(db, job, deadline=deadline) or {}
 
             if result.get("warning"):
                 warnings.append({

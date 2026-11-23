@@ -1,4 +1,5 @@
 from __future__ import annotations
+import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -21,6 +22,16 @@ class BaseProvider:
     def __init__(self, server: ServerConfig, timeout: int = 8) -> None:
         self.server = server
         self.timeout = timeout
+        self.deadline = None
+
+    def request_timeout(self):
+        """Bound each monitoring request by the remaining monotonic budget."""
+        if self.deadline is None:
+            return self.timeout
+        remaining = self.deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("Monitoring collection deadline expired")
+        return min(self.timeout, remaining)
 
     def get_active_sessions(self) -> List[Dict[str, Any]]:
         """

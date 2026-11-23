@@ -65,7 +65,10 @@ def load_monitoring_servers_tab(
     args,
     live_window_sql,
     server_resource_stats,
+    *, include_live=True,
 ):
+    if not include_live:
+        live_window_sql = '+100 years'
     server_range = args.get("range", "7d")
     # Range filter.
     # Les stats historiques utilisent media_session_history.

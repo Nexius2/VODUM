@@ -16,6 +16,18 @@ VODUM_TRUSTED_PROXY_NETS=127.0.0.1/32,::1/128,172.18.0.0/16
 
 Use HTTPS, a firewall and the narrowest possible CIDRs.
 
+The production Waitress server preserves forwarded headers without interpreting
+them. VODUM's conditional proxy middleware checks the original direct peer
+against `VODUM_TRUSTED_PROXY_NETS` before applying those headers. This also works
+when trust is enabled in the interface rather than through `VODUM_TRUST_PROXY`.
+Do not configure Waitress with `trusted_proxy=*`: rewriting the peer address
+before this middleware runs would undermine its network check.
+
+After upgrading the server code, restart VODUM. Verify through the HTTPS proxy
+that session cookies carry `Secure`, HSTS is present and the client IP is resolved
+correctly. Direct HTTP LAN requests retain their existing HTTP cookie behaviour.
+
+
 ### Public user portal checklist
 
 1. Create a full backup and verify its integrity before publication.

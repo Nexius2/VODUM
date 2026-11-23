@@ -171,7 +171,7 @@ class JellyfinProvider(BaseProvider):
         for base in bases:
             url = self._build_api_url(base, path)
             try:
-                r = self.http.get(url, headers=headers, timeout=self.timeout)
+                r = self.http.get(url, headers=headers, timeout=self.request_timeout())
                 r.raise_for_status()
                 return r.json()
             except requests.exceptions.RequestException as e:

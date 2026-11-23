@@ -5,7 +5,7 @@ from db_manager import isolated_read_operation
 
 
 @isolated_read_operation
-def load_portal_usage(db, days=30, page=1):
+def load_portal_usage(db, days=30, page=1, *, include_live=True):
     days = days if days in (7, 30, 90) else 30
     page = max(1, int(page))
     today = datetime.now(timezone.utc).date()
@@ -24,7 +24,7 @@ def load_portal_usage(db, days=30, page=1):
     stats['online'] = (db.query_one(
         "SELECT COUNT(DISTINCT portal_account_id) AS n FROM portal_sessions "
         "WHERE revoked_at IS NULL AND expires_at>CURRENT_TIMESTAMP "
-        "AND last_seen_at >= datetime('now','-5 minutes')") or {})['n']
+        "AND last_seen_at >= datetime('now','-5 minutes')") or {})['n'] if include_live else None
     login_days = {row['day']: row['n'] for row in db.query(
         "SELECT date(created_at) AS day, COUNT(*) AS n FROM portal_sessions "
         "WHERE created_at>=? GROUP BY day", (start,))}

@@ -13,7 +13,12 @@ POSTERS={**{f'{provider}_{chart}':f'{provider}-{chart}-v1.png' for provider in (
          'streaming_country':'top-streaming-country-v1.png',
          'kids':'kids-v1.png', 'family':'family-v1.png', 'recently_added':'recently-added-v1.png',
          'memoria':'memoria-v1.png', 'franchises':'franchises-v1.png',
-         **{'universe_'+key:'universe-'+key+'-v2.png' for key in UNIVERSES},
+         **{'universe_'+key:('universe-'+key+'-v2.png' if (Path(__file__).parent/'assets'/'collection_posters'/('universe-'+key+'-v2.png')).is_file() else 'franchises-v1.png') for key in UNIVERSES},
+         'universe_game_thrones':'universe-game_thrones-v2.jpg',
+         'universe_jurassic':'universe-jurassic-v3.png',
+         'universe_stargate':'universe-stargate-v2.png',
+         'universe_wizarding_world':'universe-wizarding_world-v2.png',
+         'universe_middle_earth':'universe-middle_earth-v2.png',
          'top_country_popular':'top-country-most-popular-v1.png',
          'top_country_top':'top-country-top-rated-v1.png',
          'spotlight':'spotlight-v1.png', 'recent_releases':'latest-releases-country-v1.png',
@@ -48,6 +53,7 @@ def object_poster_key(record,config):
     tail=child.rsplit(':',1)[-1]
     if child.startswith('franchise:') and tail.startswith('universe_v2_'):
         key='universe_'+tail.removeprefix('universe_v2_')
+        if key not in POSTERS:key='franchises'
     elif child.startswith('platform:'):key='platform_'+tail
     elif child.startswith('continent:'):key='continent_'+tail
     elif child.startswith('seasonal:'):key='seasonal_'+tail

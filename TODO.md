@@ -40,11 +40,14 @@ extension ; une amelioration de performance ne justifie aucune perte fonctionnel
   Reste a mesurer sur une base representative et etendre aux autres parcours
   apres audit de leurs eventuelles ecritures.
 
-  Validation representative restante. Controle general de fabrique SQLite en
-  echec hors lot : connexions directes dans `app/diagnose_stream_policies.py`
-  et `app/core/backup.py`, a qualifier avant de modifier ces parcours.
+  Mesurer le suivi Collections sur l'installation cible et qualifier le cout
+  du repli historique pour les anciennes publications sans snapshot.
 
-  Validation representative toujours restante.
+  Validation representative restante. Qualifier les connexions SQLite directes
+  restantes dans `app/core/backup.py` avant de modifier ce parcours.
+
+  Mesurer la fiche utilisateur complete sous charge representative ; les
+  lectures initiales seules ont ete qualifiees avec une ecriture concurrente.
 - [ ] 2. Liberer les threads web : executer les operations longues dans des jobs
   bornes, avec reponse rapide, suivi de progression et reprise idempotente.
   Prioriser demandes medias et recuperations lentes ; verifier qu'une operation
@@ -59,8 +62,9 @@ extension ; une amelioration de performance ne justifie aucune perte fonctionnel
   par lecture dans `GROUP_CONCAT`, charger les identites depuis leurs tables.
   Verifier les plans SQL et la deduplication ; ajouter uniquement les index utiles.
 
-  Restent à matérialiser les totaux de lecture, optimiser les recherches filtrées
-  et les tris Lectures/Durée, et mesurer les gains sur l'installation réelle.
+  Restent à matérialiser les totaux de lecture, optimiser les recherches avec
+  espaces ou jokers SQL (`%`, `_`) et les tris Lectures/Durée sans recherche,
+  et mesurer les gains sur l'installation réelle.
 - [ ] 4. Rendre la consultation des logs proportionnelle a la page affichee :
   separer entretien/rotation et consultation, eviter le nettoyage force et la
   relecture de toutes les archives a chaque ouverture. Mettre les compteurs en
@@ -68,7 +72,8 @@ extension ; une amelioration de performance ne justifie aucune perte fonctionnel
   conserver recherche, traces multilignes, anonymisation et retention.
 
   Reste a borner les lectures lors d'un changement ou pour les gros historiques,
-  et a optimiser la recherche au-dela du cache.
+  et a optimiser la premiere recherche, les changements de filtre et les recherches
+  lorsque les fichiers evoluent en continu ou depassent le budget de cache.
 - [ ] 5. Reduire les parcours des demandes medias : qualifier les recherches
   ciblees par identifiant fournisseur Plex/Jellyfin/ARR et un index local
   actualise. Eviter les scans complets et appels de details repetes ; conserver
@@ -91,6 +96,9 @@ extension ; une amelioration de performance ne justifie aucune perte fonctionnel
   reduire les commits par session/evenement/droit et les reecritures de
   metadonnees inchangees. Garder les transactions courtes, sans appel reseau,
   et verifier coherence, reprise et comportement lors d'une erreur partielle.
+
+  Mesurer sur l'instance cible la pression des ecritures restantes, notamment
+  les premieres observations optionnelles et les collectes frequentes.
 
 - [ ] 8. Separer les taches urgentes des travaux lourds : files/workers bornes
   pour monitoring et actions interactives, distincts des imports, campagnes,
@@ -120,6 +128,9 @@ extension ; une amelioration de performance ne justifie aucune perte fonctionnel
   des sessions et les controles de droits ; ne pas cacher les autorisations
   sans politique d'invalidation explicite.
 
+  Poursuivre l'audit des autres calculs CPU redondants des ecrans
+  d'administration, en conservant leurs scores et classements exacts.
+
 - [ ] 12. Borner la maintenance : purges par lots, sauvegardes/checkpoints et
   entretien des caches sans longues pauses du traitement interactif. Verifier
   la restauration, la coherence des sauvegardes et les effets sur les lecteurs.
@@ -139,7 +150,7 @@ locaux ne permettent de les cocher sans observation sur l'installation cible.
 - [ ] Indicateur de mise a jour : verifier la connexion GitHub depuis le conteneur,
   la detection via check_update et le badge apres rechargement de page. Definir
   si le signal doit suivre main/INFO ou une image effectivement publiee ;
-  voir `docs/audit-update-badge-2026-10-20.md`. Traduction des infobulles et
+  voir `app/core/update_badge.py` et `app/tasks/check_update.py`. Traduction des infobulles et
   indication de fraicheur du dernier controle a etudier.
 
 - [ ] Communications : verifier les traductions de l'historique, des anciens
@@ -189,7 +200,8 @@ locaux ne permettent de les cocher sans observation sur l'installation cible.
 - Les evolutions ci-dessous sont a etudier puis a mettre en place si leur
   faisabilite et leur utilite sont confirmees. Elles ne changent pas les
   comportements existants par defaut.
-- Reference technique : [audit Plex/Jellyfin du 6 septembre 2026](docs/audit-couverture-plex-jellyfin-2026-09-06.md).
+- References techniques : [architecture](vodum-docs/docs/architecture.md) et
+  [securite](vodum-docs/docs/security.md).
 
 ## P1 - Cycle de vie des utilisateurs et fins d'abonnement
 
@@ -299,8 +311,9 @@ droits du serveur et l'acces aux sauvegardes ; le ZIP reste un fichier sensible.
 
 ## Securite - controles restant a terminer
 
-Les audits deja termines sont dans `docs/security-*-audit.md`,
-`docs/container-runtime-audit.md` et `changelog.md`. Ne pas les recreer ici.
+Les exigences encore ouvertes restent ci-dessous ; les anciens rapports
+d’audit termines ont ete retires du depot. Consulter la documentation de securite
+et le changelog archive pour le contexte historique.
 
 ### Uploads et imports volumineux
 
@@ -384,6 +397,100 @@ les versions disponibles au moment de chaque intervention.
   conservant SQLite CLI et Bash tant que l'entrypoint les utilise.
 - [ ] Fiabiliser les metadonnees `INFO` : versions Python/SQLite de l'image
   construite, au lieu de celles de la machine hote dans `create-container.sh`.
+
+
+
+## Configuration Manager & Compliance — chantier planifié après les priorités P0
+
+Cahier des charges complet : [Configuration Manager & Compliance](docs/configuration-manager-compliance.md).
+Parcours cible : configurer, enregistrer un profil, sélectionner les serveurs,
+prévisualiser et déployer, vérifier la conformité, puis corriger les écarts.
+Le périmètre ci-dessous est à développer ; aucune capacité API n'est considérée
+comme acquise avant l'audit. Conserver l'indépendance Docker/OS et une expérience
+adaptée à un serveur unique comme à plusieurs dizaines de serveurs.
+
+### Phase 1 — Audit et consultation des paramètres
+
+- [ ] Auditer serveurs, connexions et authentification API, interface Servers /
+  Libraries, tâches et `check_servers`, monitoring/alertes, modèles, traductions
+  et permissions. Présenter l'existant, les capacités API réelles par plateforme
+  et version, leurs limites et les fichiers à modifier avant l'implémentation.
+- [ ] Réutiliser les composants Flask/services existants et définir les adapters
+  Plex/Jellyfin, profils, groupes, moteurs de diff, conformité et déploiement,
+  sans multiplier inutilement les modules, tables ou tâches.
+- [ ] Créer Server Configuration : espaces Plex/Jellyfin selon les serveurs
+  configurés, état vide sans serveur et actualisation après ajout/suppression.
+  Afficher uniquement les catégories disposant de paramètres : General, Network,
+  Remote Access, Transcoding, Streaming, Libraries, Metadata, Subtitles,
+  Scheduled Tasks, Security et Advanced.
+- [ ] Présenter valeur actuelle, compatibilité et droits de lecture/écriture
+  pour chaque paramètre ; conserver en lecture seule les informations utiles
+  non modifiables. Ajouter recherche, filtres et états de chargement.
+
+### Phase 2 — Profils et groupes statiques
+
+- [ ] Créer, importer depuis un serveur, modifier, dupliquer, renommer et supprimer
+  des profils distincts Plex/Jellyfin. Conserver la version courante et les seules
+  informations nécessaires au déploiement, sans historisation exhaustive.
+- [ ] Gérer nom, description et membres des groupes, ajout/retrait de serveurs,
+  renommage/suppression et appartenance multiple. Autoriser les groupes mixtes
+  tout en filtrant les cibles compatibles avec chaque profil.
+- [ ] Affecter un profil à un serveur ou groupe ; détecter les profils
+  contradictoires et demander une résolution explicite. Garder les groupes
+  dynamiques pour une évolution éventuelle.
+
+### Phase 3 — Comparaison, conformité et contrôle périodique
+
+- [ ] Développer le diff et Compliance : conformes, non conformes, non vérifiés,
+  inaccessibles, nombre d'écarts et date du dernier contrôle. Les serveurs sans
+  profil sont non gérés, jamais implicitement conformes.
+- [ ] Ajouter les vues par serveur et paramètre, avec catégorie, valeurs attendue
+  et actuelle, profil et correction possible. Créer une Configuration Matrix
+  filtrable dont les cellules détaillent les valeurs et actions.
+- [ ] Enrichir `check_servers` après audit : contrôle des paramètres référencés,
+  comparaison, dernier résultat et indicateurs. Réutiliser son ordonnanceur et
+  sa cadence ; étudier une cadence de conformité distincte seulement si utile.
+  Éviter les appels inutiles, borner les délais et isoler les serveurs lents,
+  sans alourdir ou bloquer les contrôles existants.
+- [ ] Détecter les modifications effectuées directement dans Plex/Jellyfin,
+  conserver la traçabilité administrative nécessaire et dédupliquer les alertes
+  d'écarts inchangés, sans historique exhaustif de configuration.
+
+### Phase 4 — Déploiements prévisualisés et vérifiés
+
+- [ ] Choisir serveur source ou profil, cibles individuelles/par groupe/globales
+  et paramètres à appliquer. Comparer, afficher incompatibilités et exclusions,
+  prévisualiser les modifications puis demander confirmation avant application.
+- [ ] Exclure par défaut tokens/clés API, identifiants uniques, mots de passe,
+  certificats privés, chemins locaux, interfaces réseau, ports spécifiques,
+  URL propres aux serveurs et paramètres matériels incompatibles.
+- [ ] Déployer indépendamment par serveur, relire les valeurs via API pour
+  confirmer leur prise en compte, afficher réussites/échecs et permettre de
+  relancer les seuls échecs sans annuler les autres réussites.
+
+### Phase 5 — Corrections et modes de fonctionnement
+
+- [ ] Prévoir Monitoring Only par défaut et Manual Remediation sur validation
+  explicite. Corriger un paramètre, des écarts sélectionnés, un serveur, un
+  groupe ou la flotte avec prévisualisation et vérification après écriture.
+- [ ] Gérer les exceptions locales sans forcer de paramètres incompatibles ;
+  intégrer les notifications de nouveaux écarts lorsqu'elles sont activées.
+- [ ] Préparer Auto Remediation sans l'activer implicitement ; son implémentation
+  peut être différée et doit rester limitée aux paramètres explicitement autorisés.
+
+### Conditions transversales et validation de chaque phase
+
+- [ ] Réutiliser les connexions configurées, protéger les actions groupées et
+  vérifier les droits administrateur côté backend ; ne jamais exposer les secrets,
+  exécuter de commandes système arbitraires ni imposer SSH ou un agent distant.
+- [ ] Respecter l'interface existante, traduire en EN/FR/DE/ES/IT et fournir
+  sélection multiple, comparaison, erreurs explicites et résultats partiels.
+- [ ] Tester sans serveur, un seul Plex, un seul Jellyfin, les deux plateformes,
+  plusieurs dizaines de serveurs, groupes mixtes, profils et paramètres
+  incompatibles/indisponibles, serveur inaccessible, déploiement partiel,
+  corrections, exceptions, permissions et traductions.
+- [ ] Vérifier l'intégration à `check_servers` et l'absence de régression des
+  contrôles et fonctionnalités actuels, avec tests à chaque phase.
 
 ## Notes de prudence
 

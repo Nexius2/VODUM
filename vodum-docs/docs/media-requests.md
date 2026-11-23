@@ -81,9 +81,9 @@ available for playback.
 
 For ARR routes, the worker checks local media and compatible ARR entries by
 external identifiers to avoid duplicates. Local inventory can accelerate the
-check, but an unconfirmed candidate is not enough to declare a title present. An
-inaccessible service can block an addition when duplicate safety cannot be
-established. For Seerr routes, the status reported by Seerr decides.
+check, but an unconfirmed candidate is not enough to declare a title present.
+Unavailable verification services are skipped. An addition requires a reachable
+eligible destination. For Seerr routes, the status reported by Seerr decides.
 
 ## Queue limits and interrupted work
 
@@ -104,3 +104,36 @@ availability, saved defaults, library routing, the user's current access and
 [Tasks](tasks.md). A global scheduler change, server outage or queue backlog
 can affect processing. Never publish API keys or provider URLs in user-facing
 support messages.
+
+### Unavailable servers and destination failover
+
+VODUM checks every registered compatible ARR and media library for duplicates.
+A confirmed existing title still returns present/pending without posting another
+addition. A failed check on an unavailable instance is logged as WARNING and
+skipped, whether that instance is unrelated or linked as a secondary route.
+The selected Plex/Jellyfin library being unavailable no longer prevents submitting
+a request to a reachable ARR. A title present only on an unavailable instance
+cannot be detected by that check.
+
+Destination selection preserves library preferences, ARR priorities and media
+criteria. If the highest-priority eligible ARR fails its inventory check, VODUM
+tries the next reachable eligible destination. If it passes that check but its
+quality-profile/root-folder API reads fail, VODUM may also try the next destination
+before submission. Invalid saved defaults remain a configuration error, rather
+than silently overriding the administrator's configuration.
+
+The account/library permissions are checked before submission. Once an addition
+POST has started, its failure or uncertain response is never replayed on another
+instance: the first instance may already have accepted it. Only pre-submission
+read failures permit failover. If no eligible destination is available, the portal
+reports `portal_requests_no_arr_available`. Previous result keys and historical
+records are preserved.
+
+A green status test and an inventory request such as `GET /api/v3/series` are
+separate operations. Check `Media request API connection failure` / `Media request
+API failure` warnings and the destination/skip messages for the relevant server
+IDs. Errors are reserved for an unavailable final destination or failed addition.
+**Download logs** exports all retained levels with anonymization, independently
+of the selected UI filter. Earlier builds could block a request on any registered
+ARR failure and logged `ARR duplicate verification blocked`; this policy was
+replaced on 2026-11-22 with skip-and-continue behavior.

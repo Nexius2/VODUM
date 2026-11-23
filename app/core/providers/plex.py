@@ -86,8 +86,11 @@ class PlexProvider(BaseProvider):
         for base in bases:
             url = f"{base}{path}"
             try:
-                wait_for_plex_slot(base)
-                r = self.http.get(url, headers=self._headers(), timeout=self.timeout)
+                if self.deadline is None:
+                    wait_for_plex_slot(base)
+                else:
+                    wait_for_plex_slot(base, deadline=self.deadline)
+                r = self.http.get(url, headers=self._headers(), timeout=self.request_timeout())
                 # on veut une VRAIE réponse du serveur
                 r.raise_for_status()
                 return r.text
@@ -169,8 +172,21 @@ class PlexProvider(BaseProvider):
         """
         # 1) charger /status/sessions (XML brut)
         diagnostics.event('snapshot_read', phase='initial')
-        xml_text = self._get("/status/sessions")
-        root = ET.fromstring(xml_text)
+        def read_session_snapshot():
+            container=ET.fromstring(self._get("/status/sessions"))
+            if container.tag!='MediaContainer':
+                diagnostics.event('snapshot_rejected',reason='unexpected_container')
+                raise ValueError('Invalid Plex session snapshot container')
+            declared=container.get('size')
+            if declared is not None:
+                try:complete=int(declared)==len(container) and int(declared)>=0
+                except (TypeError,ValueError):complete=False
+                if not complete:
+                    diagnostics.event('snapshot_rejected',reason='incomplete_container')
+                    raise ValueError('Incomplete Plex session snapshot')
+            return container
+
+        root = read_session_snapshot()
 
         original_node = next((node for node in root if str(
             node.attrib.get("sessionKey") or node.attrib.get("sessionId") or node.attrib.get("key")
@@ -246,7 +262,7 @@ class PlexProvider(BaseProvider):
                 error_text = str(e2)
 
                 if "404" in error_text:
-                    refreshed = ET.fromstring(self._get("/status/sessions"))
+                    refreshed = read_session_snapshot()
                     if find_session_id(refreshed) is None and target_identity is None:
                         diagnostics.event('result', outcome='absent_after_not_found')
                         log.info(
@@ -271,7 +287,7 @@ class PlexProvider(BaseProvider):
             if delay:
                 time.sleep(delay)
             diagnostics.event('snapshot_read', phase='verification', poll=attempt + 1)
-            refreshed = ET.fromstring(self._get("/status/sessions"))
+            refreshed = read_session_snapshot()
             current_session_id = find_session_id(refreshed)
             matching = next((node for node in refreshed if str(
                 node.get('sessionKey') or node.get('sessionId') or node.get('key')

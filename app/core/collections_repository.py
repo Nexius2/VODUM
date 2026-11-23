@@ -6,6 +6,7 @@ from core.collections_tmdb_catalog import CHARTS as TMDB_CHARTS, tmdb_collection
 import json
 import os
 import uuid
+from db_manager import isolated_read_operation
 from datetime import datetime, timezone
 from pytz import timezone as collection_timezone, UnknownTimeZoneError
 
@@ -355,6 +356,14 @@ def normalize_config(db, payload):
         name = imdb_collection_name(chart,payload.get('language','fr'))
         if CHARTS[chart][0] != ('tv' if library['type']=='shows' else 'movie'):
             raise ValueError('collections.imdb_chart_library')
+    if model['id']=='media_list':
+        selected=payload.get('media_list')
+        if not isinstance(selected,str) or not selected:
+            raise ValueError('collections.media_list_required')
+        media_list=db.query_one('SELECT id,name,enabled FROM franchise_lists WHERE id=?',(selected,))
+        if media_list is None or not media_list['enabled']:
+            raise ValueError('collections.media_list_required')
+        name=media_list['name']
     if not name or len(name) > 120:
         raise ValueError('collections.name_required')
     mode = payload.get('mode', 'published')
@@ -362,7 +371,7 @@ def normalize_config(db, payload):
     if mode not in ('published','private','arr') or language not in ('fr','en','de','es','it'):
         raise ValueError('collections.invalid_configuration')
     # Configurations for other models remain inactive until their own engine exists.
-    enabled = payload.get('enabled') is True and model['id'] in ('memoria','spotlight','streaming_country','streaming_worldwide','recent_releases','seasonal','imdb','myanimelist','anilist','recently_added','kids','tmdb','family','awards','top_country','franchises','continents','platforms','hidden_gems')
+    enabled = payload.get('enabled') is True and model['id'] in ('memoria','spotlight','streaming_country','streaming_worldwide','recent_releases','seasonal','imdb','myanimelist','anilist','recently_added','kids','tmdb','family','awards','top_country','franchises','continents','platforms','hidden_gems','media_list')
     frequency = payload.get('frequency', 'daily')
     slot = db.query_one('SELECT COUNT(*) AS n FROM libraries WHERE id<?',(library_id,))['n']
     schedules = {frequency:default_collection_schedule(model['id'],frequency,slot) for frequency in ('daily','weekly','monthly')}
@@ -428,7 +437,17 @@ def normalize_config(db, payload):
         config.update(tmdb_chart=tmdb_chart,sort='rank')
     if model['id']=='imdb':
         config.update(imdb_chart=chart,sort='rank')
+    if model['id']=='media_list':
+        config['media_list']=media_list['id']
     if model['id']=='franchises':
+        from core.collections_franchise_lists import definitions,default_list_ids
+        known=[row['id'] for row in definitions(db)]
+        selected=payload.get('franchise_lists',default_list_ids(db))
+        if not isinstance(selected,list) or any(not isinstance(key,str) or key not in known for key in selected):
+            raise ValueError('collections.franchise_lists_required')
+        config['franchise_lists']=list(dict.fromkeys(selected))
+        from core.collections_franchise_lists import SELECTION_VERSION
+        config['franchise_selection_version']=SELECTION_VERSION
         if config['limit']==1:raise ValueError('collections.invalid_configuration')
         config.update(sort='release',limit=0)
     if model['id']=='spotlight':
@@ -513,7 +532,7 @@ def normalize_config(db, payload):
         config.update({f'{anime_provider}_chart':anime_chart,'sort':payload.get('sort') or 'rank'})
     # Reserved presentation options for models with no engine yet.
     for key in ('country','events','period'):
-        if key in payload and not (key=='country' and model['id'] in ('streaming_country','streaming_worldwide','recent_releases','seasonal','imdb','myanimelist','anilist','recently_added','kids','tmdb','family','awards','top_country','franchises','continents','platforms','hidden_gems')) and not (key=='events' and model['id']=='seasonal'):
+        if key in payload and not (key=='country' and model['id'] in ('streaming_country','streaming_worldwide','recent_releases','seasonal','imdb','myanimelist','anilist','recently_added','kids','tmdb','family','awards','top_country','franchises','continents','platforms','hidden_gems','media_list')) and not (key=='events' and model['id']=='seasonal'):
             config[key] = payload[key]
     return model['id'], library_id, name, config, int(enabled), schedule, zone
 
@@ -628,7 +647,7 @@ def request_run(db, instance_id, kind):
                         ('sync' if row['enabled'] and not row['retired'] else 'cleanup',now,row['id']))
             return
         for row in rows:
-            if row['model'] not in ('memoria','spotlight','streaming_country','streaming_worldwide','recent_releases','seasonal','imdb','myanimelist','anilist','recently_added','kids','tmdb','family','awards','top_country','franchises','continents','platforms','hidden_gems') and kind!='delete':
+            if row['model'] not in ('memoria','spotlight','streaming_country','streaming_worldwide','recent_releases','seasonal','imdb','myanimelist','anilist','recently_added','kids','tmdb','family','awards','top_country','franchises','continents','platforms','hidden_gems','media_list') and kind!='delete':
                 raise ValueError('collections.engine_unavailable')
             if (row['requested'] and not (row['requested']=='sync' and row['state']=='queued') and not (kind=='sync' and row['requested']=='visibility')) or row['lease_until'] and row['lease_until']>now:
                 raise ValueError('collections.busy')
@@ -657,8 +676,22 @@ def due_sql():
         ORDER BY i.created_at,i.id"""
 
 
+@isolated_read_operation
+def _collection_recovery_needed(db, now):
+    row = db.query_one("""SELECT EXISTS(
+        SELECT 1 FROM collection_instances i
+        WHERE (i.lease_until IS NULL OR i.lease_until<=?) AND
+          (i.state='running' OR (i.requested='visibility' AND EXISTS(
+            SELECT 1 FROM collection_controls c WHERE c.instance_id=i.id
+              AND c.state='applied' AND c.revision=c.applied_revision)))
+    ) AS needed""", (now,))
+    return bool(row and row['needed'])
+
+
 def recover_stale_collection_runs(db):
     now = stamp()
+    if not _collection_recovery_needed(db, now):
+        return 0
     with db.transaction() as cur:
         cur.execute("""UPDATE collection_instances SET requested=NULL,state='idle'
             WHERE requested='visibility' AND (lease_until IS NULL OR lease_until<=?)

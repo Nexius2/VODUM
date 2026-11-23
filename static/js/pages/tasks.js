@@ -55,7 +55,10 @@
         lastMarkup = markup;
       }
     } catch (error) {
-      console.error("[vodum] refreshTasksTable failed", error);
+      // An expired background poll is retried on the next interval.
+      if (error.name !== "AbortError") {
+        console.error("[vodum] refreshTasksTable failed", error);
+      }
     } finally {
       window.clearTimeout(timeout);
       inFlight = false;

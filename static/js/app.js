@@ -226,6 +226,15 @@ function vodumFormatDateTime(value, mode = "datetime") {
     return value || "-";
   }
 
+  if (mode === "date_or_time") {
+    const today = new Date();
+    const sameDay = date.getFullYear() === today.getFullYear()
+      && date.getMonth() === today.getMonth() && date.getDate() === today.getDate();
+    return sameDay
+      ? date.toLocaleTimeString(undefined, {hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23"})
+      : date.toLocaleDateString(undefined, {year: "numeric", month: "2-digit", day: "2-digit"});
+  }
+
   if (mode === "short") {
     return date.toLocaleString(undefined, {
       day: "2-digit",
@@ -250,6 +259,7 @@ function vodumRefreshBrowserDateTimes(root = document) {
     const value = el.dataset.vodumDatetime;
     const mode = el.dataset.vodumDatetimeMode || "datetime";
     el.textContent = vodumFormatDateTime(value, mode);
+    if (mode === "date_or_time") el.title = vodumFormatDateTime(value);
   });
 }
 

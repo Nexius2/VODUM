@@ -1706,3 +1706,33 @@ CREATE TABLE IF NOT EXISTS collection_inventory_runs (
  id INTEGER PRIMARY KEY, started_at TEXT NOT NULL, finished_at TEXT,
  duration_seconds REAL, libraries INTEGER NOT NULL DEFAULT 0,
  media_count INTEGER NOT NULL DEFAULT 0, failures INTEGER NOT NULL DEFAULT 0);
+
+-- Internal typed membership for Franchise collections.
+
+CREATE TABLE IF NOT EXISTS franchise_lists (
+ id TEXT PRIMARY KEY, name TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
+ is_vodum INTEGER NOT NULL DEFAULT 1
+);
+CREATE TABLE IF NOT EXISTS franchise_list_items (
+ list_id TEXT NOT NULL REFERENCES franchise_lists(id) ON DELETE CASCADE,
+ provider TEXT NOT NULL CHECK(provider IN ('tmdb','imdb','tvdb')),
+ media_type TEXT NOT NULL CHECK(media_type IN ('movie','tv')),
+ external_id TEXT NOT NULL, title TEXT, year TEXT,
+ poster_path TEXT, metadata_state TEXT NOT NULL DEFAULT 'pending',
+ metadata_error TEXT, metadata_checked_at TEXT,
+ enabled INTEGER NOT NULL DEFAULT 1, is_vodum INTEGER NOT NULL DEFAULT 1,
+ PRIMARY KEY(list_id,provider,media_type,external_id)
+);
+
+
+-- Persisted historical Monitoring views.
+CREATE TABLE IF NOT EXISTS monitoring_precomputed (
+    cache_key TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    options_json TEXT NOT NULL DEFAULT '{}',
+    payload_json TEXT,
+    computed_at TEXT,
+    attempted_at TEXT,
+    requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_error TEXT
+);

@@ -286,6 +286,8 @@ _LOG_RECORDS_LOCK = threading.Lock()
 _LOG_RECORDS_CACHE = None
 _LOG_ARCHIVE_CACHE = None
 _LOG_RECORDS_CACHE_MAX_BYTES = 8 * 1024 * 1024
+_LOG_SEARCH_CACHE = None
+_LOG_SEARCH_CACHE_MAX_BYTES = 512 * 1024
 
 
 def _log_files_signature(paths):
@@ -341,7 +343,7 @@ def _read_log_records_index():
     Keep one bounded cache, invalidate on append/rotation/retention, and never
     cache partial reads or files that changed while being read.
     """
-    global _LOG_RECORDS_CACHE
+    global _LOG_RECORDS_CACHE, _LOG_SEARCH_CACHE
     with _LOG_RECORDS_LOCK:
         errors = []
         try:
@@ -357,6 +359,7 @@ def _read_log_records_index():
             if _LOG_RECORDS_CACHE[0] == signature:
                 return _LOG_RECORDS_CACHE[1], _LOG_RECORDS_CACHE[2], []
         _LOG_RECORDS_CACHE = None
+        _LOG_SEARCH_CACHE = None
         archive_paths, active_paths = paths[:-1], paths[-1:]
         archive_names = {str(path) for path in archive_paths}
         archive_signature = (
@@ -389,12 +392,35 @@ def read_log_records_snapshot():
     return {"records": [dict(row) for row in records], "errors": errors}
 
 
+def _filter_log_records(selected, needle):
+    return tuple(row for row in selected
+                 if needle in " ".join(str(value) for value in row.values()).lower())
+
+
+def _cached_log_search(records, selected, level, search):
+    """Reuse one filter across pages while its complete source stays cached."""
+    global _LOG_SEARCH_CACHE
+    needle = search.lower()
+    with _LOG_RECORDS_LOCK:
+        cached = _LOG_SEARCH_CACHE
+        if cached is not None and cached[0] is records and cached[1:3] == (level, needle):
+            return cached[3]
+    # Do not hold the shared file/cache lock during a potentially long scan.
+    matches = _filter_log_records(selected, needle)
+    with _LOG_RECORDS_LOCK:
+        cache_bytes = (sys.getsizeof(matches) + sys.getsizeof(needle)
+                       + sys.getsizeof(level) + sys.getsizeof((records, level, needle, matches)))
+        if (_LOG_RECORDS_CACHE is not None and _LOG_RECORDS_CACHE[1] is records
+                and cache_bytes <= _LOG_SEARCH_CACHE_MAX_BYTES):
+            _LOG_SEARCH_CACHE = (records, level, needle, matches)
+    return matches
+
+
 def read_log_page(level, search, page, per_page):
     records, by_level, errors = _read_log_records_index()
     selected = records if level == "ALL" else by_level.get(level, ())
     if search:
-        needle = search.lower()
-        selected = [row for row in selected if needle in " ".join(str(value) for value in row.values()).lower()]
+        selected = _cached_log_search(records, selected, level, search)
     total_pages = max(1, (len(selected) + per_page - 1) // per_page)
     page = max(1, min(page, total_pages))
     end = len(selected) - (page - 1) * per_page

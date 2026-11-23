@@ -1,3 +1,6 @@
+{% set historical_snapshot = (g.monitoring_top_snapshot if g.monitoring_top_snapshot is defined else g.monitoring_snapshot)|default(none) %}
+{% include "monitoring/partials/_statistics_status.html" %}
+{% if not historical_snapshot or historical_snapshot.ready %}
 {% if library_top_cards %}
   <div class="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-5">
     {% for card in library_top_cards %}
@@ -82,4 +85,6 @@
   <div class="text-sm text-slate-500">
     {{ t("monitoring_libraries_no_watched") }}
   </div>
+{% endif %}
+
 {% endif %}

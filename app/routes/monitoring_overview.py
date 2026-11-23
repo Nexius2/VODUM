@@ -1,45 +1,28 @@
 from datetime import datetime, timezone
 
-from core.arr_monitoring import load_arr_monitoring
-from core.arr_connections import load_arr_servers
 # Auto-split from app.py (keep URLs/endpoints intact)
 from flask import (
-    render_template, request, url_for, make_response,
+    render_template, request, url_for, make_response, g,
 )
-from core.monitoring.overview_aggregates import build_monitoring_overview_aggregates
+from core.monitoring.precomputed import load_overview, load_libraries, load_library_top
+from core.monitoring.precomputed_tabs import load_tab_snapshot, normalize, overlay_server_live, portal_online, load_location_view
 from core.monitoring.overview_servers import (
     load_monitoring_server_context,
-    load_monitoring_servers_tab,
 )
 from core.monitoring.overview_live import load_monitoring_live_context
-from core.monitoring.overview_locations import load_monitoring_locations
 from core.monitoring.overview_activity import load_recent_monitoring_events
-from core.monitoring.overview_history import load_monitoring_history
 from core.monitoring.library_growth import PERIODS
 from core.monitoring.overview_libraries import (
     build_monitoring_library_options,
     build_monitoring_library_pagination,
-    load_monitoring_library_top_cards,
-    load_monitoring_library_table,
-    load_monitoring_library_users,
 )
-from core.monitoring.overview_usage_risk import load_usage_risk_context
 from core.monitoring.overview_users import (
     build_monitoring_users_options,
     build_monitoring_users_pagination,
-    load_monitoring_users_rows,
-    load_monitoring_users_total,
 )
 from core.monitoring.overview_policies import (
     load_policy_catalog,
-    load_policy_breakdowns,
-    load_policy_dashboard,
-    load_policy_enforcement_pagination,
-    load_grouped_policy_enforcements,
     load_policy_tracked_state,
-    load_policy_hits_timeline,
-    load_policy_top_users,
-    load_recent_policy_enforcements,
 )
 from logging_utils import get_logger
 from web.helpers import get_db
@@ -65,9 +48,10 @@ def register(app):
             request.environ["vodum.route_view"] = "libraries_top" if show_library_top else tab
         if show_library_top and request.headers.get("HX-Request"):
             options = build_monitoring_library_options(request.args, request.cookies)
+            cards, g.monitoring_snapshot = load_library_top(db, options)
             response = make_response(render_template(
                 "monitoring/partials/_library_top_cards.html",
-                library_top_cards=load_monitoring_library_top_cards(db, options),
+                library_top_cards=cards,
             ))
             response.cache_control.no_store = True
             response.vary.add("HX-Request")
@@ -82,13 +66,14 @@ def register(app):
             now = int(datetime.now(timezone.utc).timestamp())
             period = request.args.get("period", 0, type=int)
             period = period if period in {1, 7, 30} else 0
-            start = now - period * 86400
-            instant = max(start, min(now, request.args.get("at", start, type=int))) if period else None
+            window_end = max(0, min(now, request.args.get('until', now, type=int))) if period else now
+            start = window_end - period * 86400
+            instant = max(start, min(window_end, request.args.get("at", start, type=int))) if period else None
             server_id = request.args.get("server", type=int)
             country = request.args.get("country", "").upper()
             country = country if len(country) == 2 and country.isascii() and country.isalpha() else ""
             playing_only = not period and request.args.get("playing") == "1"
-            location = load_monitoring_locations(
+            location, g.monitoring_snapshot = load_location_view(
                 db, live_only=live_only, live_window_seconds=live_window_seconds,
                 server_id=server_id, instant=instant, country=country, playing_only=playing_only,
             )
@@ -101,17 +86,20 @@ def register(app):
                 template, active_page="monitoring", tab=tab, portal_enabled=portal_enabled,
                 live_only=live_only, location=location, location_servers=servers,
                 location_server_id=server_id, location_country=country, playing_only=playing_only,
-                location_period=period, location_start=start, location_end=now, location_instant=instant,
+                location_period=period, location_start=start, location_end=window_end, location_instant=instant,
                 location_heat=request.args.get("heat") == "1",
             ))
             response.cache_control.no_store = True
+            response.vary.add('HX-Request')
+            response.headers['X-VODUM-Statistics-Ready'] = '1' if not g.monitoring_snapshot or g.monitoring_snapshot['ready'] else '0'
+            if g.monitoring_snapshot and g.monitoring_snapshot['queue_full']:
+                response.status_code = 429
             if not partial and selected in {"0", "1"}:
                 response.set_cookie(preference, selected, max_age=365 * 24 * 60 * 60,
                                     httponly=True, secure=request.is_secure, samesite="Lax")
             return response
         if tab == "user_portal":
             from flask import abort
-            from core.monitoring.portal_usage import load_portal_usage
             if not portal_enabled:
                 abort(404)
             try:
@@ -119,8 +107,16 @@ def register(app):
                 page = int(request.args.get("page", 1))
             except ValueError:
                 abort(400)
-            return render_template("monitoring/monitoring.html", active_page="monitoring",
-                                   tab=tab, portal_enabled=True, portal_usage=load_portal_usage(db, days, page))
+            portal_usage, g.monitoring_snapshot = load_tab_snapshot(db, 'user_portal', dict(days=days, page=page))
+            g.monitoring_portal_online = portal_online(db)
+            if portal_usage is not None:
+                portal_usage['stats']['online'] = g.monitoring_portal_online
+            template = 'monitoring/tabs/user_portal.html' if request.headers.get('HX-Request') else 'monitoring/monitoring.html'
+            response = make_response(render_template(template, active_page='monitoring',
+                tab=tab, portal_enabled=True, portal_usage=portal_usage))
+            response.cache_control.no_store = True
+            response.vary.add('HX-Request')
+            return response
         if tab not in MONITORING_TABS:
             from flask import abort
             abort(400)
@@ -145,7 +141,7 @@ def register(app):
         sessions_stats = live_context["sessions_stats"]
         live_servers = live_context["live_servers"]
         sessions = live_context["sessions"]
-        events = load_recent_monitoring_events(db, tab)
+        events = [] if tab == "overview" and not request.headers.get("HX-Request") else load_recent_monitoring_events(db, tab)
         stats_7d = {"sessions": 0, "active_users": 0, "total_watch_ms": 0, "avg_watch_ms": 0}
         top_users_30d = []
         top_content_30d = []
@@ -156,12 +152,19 @@ def register(app):
         # --------------------------
         overview_deferred = tab == "overview" and not request.headers.get("HX-Request")
         if tab == "overview" and not overview_deferred:
-            overview_aggregates = build_monitoring_overview_aggregates(db, sessions_stats)
+            overview_aggregates, g.monitoring_snapshot = load_overview(db, sessions_stats)
+            overview_aggregates = overview_aggregates or {
+                "stats_7d": stats_7d, "top_users_30d": [], "top_content_30d": [],
+                "top_movies_30d": [], "concurrent_7d": concurrent_7d,
+            }
             stats_7d = overview_aggregates["stats_7d"]
             top_users_30d = overview_aggregates["top_users_30d"]
             top_content_30d = overview_aggregates["top_content_30d"]
             top_movies_30d = overview_aggregates["top_movies_30d"]
             concurrent_7d = overview_aggregates["concurrent_7d"]
+
+        if tab == 'activity':
+            _, g.monitoring_snapshot = load_tab_snapshot(db, 'activity', request.args)
 
         sort_key = None
         sort_dir = None
@@ -213,33 +216,39 @@ def register(app):
                 args["page"] = p
                 return url_for("monitoring_page", **args)
 
-            history_context = load_monitoring_history(
-                db,
-                request.args,
-                request.cookies,
-                build_url,
-            )
-            rows = history_context["rows"]
-            filters = history_context["filters"]
-            pagination = history_context["pagination"]
-            sort_key = history_context["sort_key"]
-            sort_dir = history_context["sort_dir"]
+            options = normalize('history', request.args, request.cookies)
+            history_context, g.monitoring_snapshot = load_tab_snapshot(db, 'history', request.args, request.cookies)
+            if history_context is not None:
+                rows = history_context["rows"]
+                filters = history_context["filters"]
+                pagination = history_context["pagination"]
+                for key in ('first_url', 'prev_url', 'next_url', 'last_url'):
+                    pagination[key] = build_url(pagination[key])
+            else:
+                filters = options
+            sort_key, sort_dir = options['sort'], options['dir']
 
         elif tab == "usage_risk":
-            usage_risk_context = load_usage_risk_context(db, request.args)
+            usage_risk_context, g.monitoring_snapshot = load_tab_snapshot(db, 'usage_risk', request.args)
+            usage_risk_context = usage_risk_context or dict(usage_risk_filters=normalize('usage_risk', request.args),
+                usage_risk_report=usage_risk_report, subscription_templates=[], stream_policy_types=[])
+            enabled = db.query_one('SELECT usage_risk_enabled FROM settings WHERE id=1')
+            if enabled and not int(enabled['usage_risk_enabled'] or 0):
+                usage_risk_context['usage_risk_report'] = dict(enabled=False, rows=[], summary={})
             usage_risk_filters = usage_risk_context["usage_risk_filters"]
             usage_risk_report = usage_risk_context["usage_risk_report"]
             subscription_templates = usage_risk_context["subscription_templates"]
             stream_policy_types = usage_risk_context["stream_policy_types"]
         elif tab == "users":
             user_options = build_monitoring_users_options(request.args, request.cookies)
-            q = user_options["q"]
+            user_options['page'] = max(1, user_options['page'])
+            user_options['offset'] = (user_options['page'] - 1) * user_options['per_page']
             sort_key = user_options["sort_key"]
             sort_dir = user_options["sort_dir"]
 
-            total_rows = load_monitoring_users_total(db, q)
-
-            rows = load_monitoring_users_rows(db, user_options)
+            user_data, g.monitoring_snapshot = load_tab_snapshot(db, 'users', request.args, request.cookies)
+            total_rows = user_data['total_rows'] if user_data else 0
+            rows = user_data['rows'] if user_data else []
 
             # Pagination
             def build_url(p):
@@ -255,44 +264,23 @@ def register(app):
             )
 
         elif tab == "policies":
-            enforcement_pagination = load_policy_enforcement_pagination(
-                db,
-                request.args,
-            )
-            policy_enforcement_page = enforcement_pagination["page"]
-            policy_enforcement_per_page = enforcement_pagination["per_page"]
-            policy_enforcement_total = enforcement_pagination["total"]
-            policy_enforcement_total_pages = enforcement_pagination["total_pages"]
-
-            edit_policy_id = request.args.get("edit_policy_id", type=int)
-            policy_catalog = load_policy_catalog(db, edit_policy_id)
-            policies = policy_catalog["policies"]
-            edit_policy = policy_catalog["edit_policy"]
-
-            policy_dashboard = load_policy_dashboard(db, policy_catalog)
-
-            policy_breakdowns = load_policy_breakdowns(db)
-            policy_scope_breakdown = policy_breakdowns[
-                "policy_scope_breakdown"
-            ]
-            policy_provider_breakdown_30d = policy_breakdowns[
-                "policy_provider_breakdown_30d"
-            ]
-            policy_rule_breakdown_30d = policy_breakdowns[
-                "policy_rule_breakdown_30d"
-            ]
-
-            policy_top_users_30d = load_policy_top_users(db)
-
-            policy_recent_enforcements = load_recent_policy_enforcements(
-                db,
-                enforcement_pagination,
-            )
-            policy_grouped_enforcements = load_grouped_policy_enforcements(db)
+            policy_data, g.monitoring_snapshot = load_tab_snapshot(db, 'policies', request.args)
+            policy_data = policy_data or {}
+            policy_catalog = load_policy_catalog(db, request.args.get('edit_policy_id', type=int))
+            policies, edit_policy = policy_catalog['policies'], policy_catalog['edit_policy']
             policy_tracked_state = load_policy_tracked_state(db)
-
-            policy_hits_30d = load_policy_hits_timeline(db)
-
+            policy_dashboard = policy_data.get("policy_dashboard", policy_dashboard)
+            policy_top_users_30d = policy_data.get("policy_top_users_30d", policy_top_users_30d)
+            policy_recent_enforcements = policy_data.get("policy_recent_enforcements", policy_recent_enforcements)
+            policy_grouped_enforcements = policy_data.get("policy_grouped_enforcements", policy_grouped_enforcements)
+            policy_hits_30d = policy_data.get("policy_hits_30d", policy_hits_30d)
+            policy_scope_breakdown = policy_data.get("policy_scope_breakdown", policy_scope_breakdown)
+            policy_provider_breakdown_30d = policy_data.get("policy_provider_breakdown_30d", policy_provider_breakdown_30d)
+            policy_rule_breakdown_30d = policy_data.get("policy_rule_breakdown_30d", policy_rule_breakdown_30d)
+            policy_enforcement_page = policy_data.get("policy_enforcement_page", policy_enforcement_page)
+            policy_enforcement_per_page = policy_data.get("policy_enforcement_per_page", policy_enforcement_per_page)
+            policy_enforcement_total = policy_data.get("policy_enforcement_total", policy_enforcement_total)
+            policy_enforcement_total_pages = policy_data.get("policy_enforcement_total_pages", policy_enforcement_total_pages)
 
 
         elif tab == "libraries":
@@ -309,7 +297,7 @@ def register(app):
             sort_key = library_options["sort_key"]
             sort_dir = library_options["sort_dir"]
 
-            library_table = load_monitoring_library_table(db, library_options, growth_period)
+            library_table, g.monitoring_snapshot = load_libraries(db, library_options, growth_period)
             rows = library_table["rows"]
             total_rows = library_table["total_rows"]
             hidden_libraries_count = library_table["hidden_libraries_count"]
@@ -325,10 +313,10 @@ def register(app):
                 build_url,
             )
 
-            library_users = load_monitoring_library_users(db)
+            library_users = library_table["users"]
 
             if show_library_top:
-                library_top_cards = load_monitoring_library_top_cards(db, library_options)
+                library_top_cards, g.monitoring_top_snapshot = load_library_top(db, library_options)
 
         server_range = request.args.get("range", "7d")
         servers_combined = None
@@ -341,12 +329,13 @@ def register(app):
         servers_unique_ips = None
 
         if tab == "servers":
-            servers_tab = load_monitoring_servers_tab(
-                db,
-                request.args,
-                live_window_sql,
-                server_resource_stats,
-            )
+            servers_tab, g.monitoring_snapshot = load_tab_snapshot(db, 'servers', request.args)
+            servers_tab = servers_tab or dict(server_range=normalize('servers', request.args)['range'],
+                servers_combined={}, servers_details=[], servers_sessions_day=[], servers_media_types=[],
+                servers_clients=[], servers_top_users=[], servers_top_titles=[], servers_unique_ips=[],
+                arr_monitoring=dict(servers=[], days=[]))
+            servers_tab = overlay_server_live(db, servers_tab, live_window_sql, server_resource_stats)
+            g.monitoring_live_servers = servers_tab.pop('live_servers')
             server_range = servers_tab["server_range"]
             servers_combined = servers_tab["servers_combined"]
             servers_details = servers_tab["servers_details"]
@@ -402,7 +391,7 @@ def register(app):
                 edit_policy=locals().get('edit_policy'),
                 server_range=server_range,
                 servers_combined=servers_combined,
-                arr_monitoring=load_arr_monitoring(db, load_arr_servers(db), server_range) if tab == "servers" else {},
+                arr_monitoring=servers_tab['arr_monitoring'] if tab == "servers" else {},
                 servers_details=servers_details,
                 servers_sessions_day=servers_sessions_day,
                 servers_media_types=servers_media_types,
@@ -438,9 +427,8 @@ def register(app):
                 resp.set_cookie(f"monitoring_{tab}_sort", str(sort_key), max_age=60*60*24*365)
                 resp.set_cookie(f"monitoring_{tab}_dir",  str(sort_dir),  max_age=60*60*24*365)
 
-            if tab == "overview":
-                resp.vary.add("HX-Request")
-                resp.cache_control.no_store = True
+            resp.vary.add("HX-Request")
+            resp.cache_control.no_store = True
             return resp
 
         # Page complete (chargement normal)
@@ -472,7 +460,7 @@ def register(app):
             edit_policy=locals().get('edit_policy'),
             server_range=server_range,
             servers_combined=servers_combined,
-            arr_monitoring=load_arr_monitoring(db, load_arr_servers(db), server_range) if tab == "servers" else {},
+            arr_monitoring=servers_tab['arr_monitoring'] if tab == "servers" else {},
             servers_details=servers_details,
             servers_sessions_day=servers_sessions_day,
             servers_media_types=servers_media_types,
@@ -507,8 +495,8 @@ def register(app):
         
         if show_library_top or tab == "overview":
             resp.vary.add("HX-Request")
-        if tab == "overview":
-            resp.cache_control.no_store = True
+        resp.cache_control.no_store = True
+        resp.vary.add('HX-Request')
         if sort_key and sort_dir:
             resp.set_cookie(f"monitoring_{tab}_sort", str(sort_key), max_age=60*60*24*365)
             resp.set_cookie(f"monitoring_{tab}_dir",  str(sort_dir),  max_age=60*60*24*365)

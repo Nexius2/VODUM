@@ -12,6 +12,8 @@ Compose loads `.env`. Restart the container after changing environment values.
 | `VODUM_ENCRYPTION_KEY_FILE` | Persistent encryption-key path |
 | `VODUM_PORT` | Waitress listening port |
 | `VODUM_WAITRESS_THREADS` | Waitress worker threads |
+| `VODUM_HTTP_GZIP_LEVEL` | Text response compression level, from 1 to 9 (default: 6) |
+| `VODUM_BACKUP_SNAPSHOT_TIMEOUT_SECONDS` | Time budget in seconds for creating the SQLite backup snapshot |
 | `VODUM_DEBUG` | Debug mode (`0` or `1`) |
 | `VODUM_MAX_UPLOAD_MB` | Maximum complete request size |
 | `VODUM_MAX_ZIP_EXTRACTED_MB` | Maximum restored ZIP size after extraction |

@@ -6,7 +6,9 @@ from core.monitoring.artwork import build_history_backdrop_url, build_history_po
 from core.monitoring.daily_stats import load_materialized_window
 
 @isolated_read_operation
-def _load_monitoring_overview_aggregates(db, sessions_stats):
+def _load_monitoring_overview_aggregates(db, sessions_stats, *, use_cache=True):
+    aggregate = cached_aggregate if use_cache else lambda key, ttl, loader: loader()
+    query_rows = cached_query_rows if use_cache else lambda db, key, ttl, sql: [dict(row) for row in (db.query(sql) or [])]
     stats_7d = {"sessions": 0, "active_users": 0, "total_watch_ms": 0, "avg_watch_ms": 0}
     top_users_30d = []
     top_content_30d = []
@@ -14,11 +16,11 @@ def _load_monitoring_overview_aggregates(db, sessions_stats):
     concurrent_7d = {"peak_streams": 0}
 
     
-    materialized_7d = cached_aggregate(
+    materialized_7d = aggregate(
         "monitoring:overview:materialized-7d", 120,
         lambda: load_materialized_window(db, 7),
     )
-    stats_7d = materialized_7d or cached_aggregate(
+    stats_7d = materialized_7d or aggregate(
         "monitoring:overview:stats-7d",
         120,
         lambda: dict(db.query_one(
@@ -70,11 +72,11 @@ def _load_monitoring_overview_aggregates(db, sessions_stats):
     )
     stats_7d = dict(stats_7d) if stats_7d else {"sessions": 0, "active_users": 0, "total_watch_ms": 0, "avg_watch_ms": 0}
     
-    materialized_30d = cached_aggregate(
+    materialized_30d = aggregate(
         "monitoring:overview:materialized-30d", 120,
         lambda: load_materialized_window(db, 30),
     )
-    top_users_30d = (materialized_30d or {}).get("top_users") or cached_aggregate(
+    top_users_30d = (materialized_30d or {}).get("top_users") or aggregate(
         "monitoring:overview:top-users-30d",
         120,
         lambda: [dict(row) for row in (db.query(
@@ -125,7 +127,7 @@ def _load_monitoring_overview_aggregates(db, sessions_stats):
         ) or [])],
     )
     
-    top_content_30d = cached_query_rows(
+    top_content_30d = query_rows(
         db,
         "monitoring:overview:top-series-30d",
         180,
@@ -295,7 +297,7 @@ def _load_monitoring_overview_aggregates(db, sessions_stats):
         """,
     )
     
-    top_movies_30d = cached_query_rows(
+    top_movies_30d = query_rows(
         db,
         "monitoring:overview:top-movies-30d",
         180,
@@ -438,7 +440,7 @@ def _load_monitoring_overview_aggregates(db, sessions_stats):
     top_content_30d = [dict(r) for r in (top_content_30d or [])]
     top_movies_30d = [dict(r) for r in (top_movies_30d or [])]
 
-    concurrent_7d = cached_aggregate(
+    concurrent_7d = aggregate(
         "monitoring:overview:concurrent-7d",
         120,
         lambda: dict(db.query_one(
@@ -468,6 +470,10 @@ def _load_monitoring_overview_aggregates(db, sessions_stats):
 def build_monitoring_overview_aggregates(db, sessions_stats):
     # End the read snapshot before artwork repair writes through the normal DB.
     result = _load_monitoring_overview_aggregates(db, sessions_stats)
+    return decorate_monitoring_overview(db, result)
+
+
+def decorate_monitoring_overview(db, result):
     for key in ("top_content_30d", "top_movies_30d"):
         for item in result[key]:
             item["poster_url"] = build_history_poster_url(item, db)

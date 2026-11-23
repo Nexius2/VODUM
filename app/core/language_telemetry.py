@@ -42,12 +42,24 @@ def observe(db, settings, displayed, request):
 
 
 def _store_observation(db, scope, settings, browser, displayed):
+    identity = (scope, configured_language(settings.get('default_language')), browser, language_code(displayed))
+    # Repeated page renders usually have nothing new to record. Read the
+    # persisted state rather than acquiring SQLite's writer lock for two no-ops.
+    skip = db.execute("""SELECT CASE
+        WHEN EXISTS(SELECT 1 FROM telemetry_language_observations WHERE day < date('now','-30 days')) THEN 0
+        WHEN EXISTS(SELECT 1 FROM telemetry_language_observations
+          WHERE day=date('now') AND scope=? AND configured=? AND browser=? AND displayed=?) THEN 1
+        WHEN (SELECT COUNT(*) FROM telemetry_language_observations WHERE day=date('now')) >= 32 THEN 1
+        ELSE 0 END
+    """, identity).fetchone()[0]
+    if skip:
+        return
     db.execute("""DELETE FROM telemetry_language_observations WHERE day < date('now','-30 days')""")
     db.execute("""INSERT OR IGNORE INTO telemetry_language_observations
         (day,scope,configured,browser,displayed)
         SELECT date('now'),?,?,?,? WHERE
         (SELECT COUNT(*) FROM telemetry_language_observations WHERE day=date('now')) < 32""",
-        (scope, configured_language(settings.get('default_language')), browser, language_code(displayed)))
+        identity)
 
 
 def observations(db):

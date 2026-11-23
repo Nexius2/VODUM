@@ -4,6 +4,8 @@ from core.monitoring.library_growth import SCHEMA as LIBRARY_GROWTH_SCHEMA
 
 
 def ensure_monitoring_history_schema(conn, cursor, *, table_exists, ensure_column) -> None:
+    from core.monitoring.precomputed import ensure_schema
+    ensure_schema(cursor)
     cursor.execute(LIBRARY_GROWTH_SCHEMA)
     ensure_column(cursor, "monitoring_library_growth", "last_attempt_at", "TEXT")
     ensure_column(cursor, "monitoring_library_growth", "last_error", "TEXT")

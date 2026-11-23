@@ -1,6 +1,6 @@
 # Corrections du pipeline Collections — 29 octobre 2026
 
-Implémentation locale de la suite de l'[audit du pipeline](collections-pipeline-audit-2026-10-29.md).
+Implémentation locale de la suite de l'audit du pipeline.
 Les changements n'ont pas été déployés sur l'instance distante pendant ce travail.
 
 ## Commandes de présentation indépendantes

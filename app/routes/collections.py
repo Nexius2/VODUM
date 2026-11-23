@@ -1,3 +1,4 @@
+from core.collections_franchise_lists import definitions as franchise_list_definitions
 from core.collections_page_data import load_collections_page_data
 from core.auth_principal import admin_required
 from core.collections_repository import hidden_gems_name
@@ -10,6 +11,7 @@ from core.collections_tmdb_catalog import tmdb_charts
 """Read-only workspace for designing collections before their engines are added."""
 import json
 import os
+from db_manager import isolated_read_operation
 from flask import render_template, request, jsonify, Response, abort
 
 from core.collections_repository import recently_added_name, kids_collection_name
@@ -47,6 +49,10 @@ def publication_snapshot(db, instance_id, person_key):
     compacted=db.query_one("SELECT history_compacted FROM collection_instances WHERE id=?",(instance_id,))
     if compacted and compacted['history_compacted']:
         return None,None
+    return _legacy_publication_snapshot(db, instance_id, person_key)
+
+
+def _legacy_publication_snapshot(db, instance_id, person_key):
     # Select only the latest successful publication for this object. Do not
     # replay all historical library-sized snapshots on every browser poll.
     row=db.query_one("""SELECT r.id,p.value FROM collection_runs r,
@@ -56,6 +62,58 @@ def publication_snapshot(db, instance_id, person_key):
           AND json_extract(p.value,'$.published')=1
         ORDER BY r.id DESC LIMIT 1""",(instance_id,person_key))
     return (row['id'],json.loads(row['value'])) if row else (None,None)
+
+
+@isolated_read_operation
+def load_collections_poll_data(db, compact=False):
+    runs = []
+    for row in db.query('''SELECT r.id,r.instance_id,r.kind,r.state,r.started_at,r.finished_at,r.error_type,
+            '''+("json_remove(r.result_json,'$.people')" if compact else 'r.result_json')+''' AS result_json,
+            i.name, i.model, COALESCE(i.group_id,i.id) AS group_id, l.name AS library_name FROM collection_runs r JOIN collection_instances i ON i.id=r.instance_id
+            JOIN libraries l ON l.id=i.library_id
+            ORDER BY r.id DESC LIMIT 100'''):
+        row = dict(row)
+        row['result'] = normalize_collection_result(json.loads(row.pop('result_json')),row['model'])
+        runs.append(row)
+    task = db.query_one("SELECT * FROM tasks WHERE name='refresh_collection_inventory'")
+    objects = []
+    source_objects = db.query('''SELECT o.*,i.model,i.name AS configuration_name,COALESCE(i.group_id,i.id) AS group_id,
+            l.name AS library_name,p.name,p.data_json,p.expires_at,
+            i.history_compacted AS publication_history_compacted,
+            snapshot.object_id AS publication_object_id,
+            snapshot.run_id AS publication_snapshot_run_id,
+            snapshot.publication_json AS publication_snapshot_json FROM collection_objects o
+            JOIN collection_instances i ON i.id=o.instance_id JOIN libraries l ON l.id=i.library_id
+            LEFT JOIN collection_people p ON p.instance_id=o.instance_id AND p.person_key=o.person_key
+            LEFT JOIN collection_publication_snapshots snapshot ON snapshot.object_id=o.id
+            WHERE o.remote_id IS NOT NULL AND o.state!='deleted' ORDER BY i.created_at,o.title,l.id''')
+    for row in source_objects:
+        item = dict(row)
+        item['profile_path'] = json.loads(item.pop('data_json') or '{}').get('profile_path')
+        snapshot_id = item.pop('publication_object_id')
+        snapshot_run_id = item.pop('publication_snapshot_run_id')
+        snapshot_json = item.pop('publication_snapshot_json')
+        history_compacted = item.pop('publication_history_compacted')
+        if snapshot_id is not None:
+            publication_id, publication = snapshot_run_id, json.loads(snapshot_json)
+        elif history_compacted:
+            publication_id, publication = None, None
+        else:
+            publication_id, publication = _legacy_publication_snapshot(db,item['instance_id'],item['person_key'])
+        item['publication_run_id']=publication_id
+        if compact and publication:
+            media=publication.get('media') or [{'title':title,'present':True,'arr_status':'not_needed'} for title in publication.get('selected',[])]
+            publication={**publication,'media':media[:5],
+                'present':publication.get('present',sum(row.get('present') is True or row.get('arr_status')=='not_needed' for row in media)),
+                'missing':publication.get('missing',sum(row.get('present') is not True and row.get('arr_status')!='not_needed' for row in media)),
+                'arr_requests':sum(row.get('arr_status')=='added' for row in media),
+                'media_total':len(media),'media_compact':len(media)>5}
+            publication.pop('selected',None)
+        item['publication'] = publication
+        objects.append(item)
+    return dict(ok=True,instances=list_instances(db),counts=collection_count_snapshots(db),settings=collection_settings(db),runs=runs,objects=objects,
+        inventory={'libraries':inventory_status(db),'task':{key:dict(task).get(key) for key in ('status','next_run')} if task else {},
+            'last_run':dict(row) if (row:=db.query_one('SELECT * FROM collection_inventory_runs ORDER BY id DESC LIMIT 1')) else None})
 
 
 def register(app):
@@ -70,6 +128,7 @@ def register(app):
             top_country_names={language:{chart:{country:top_country_name(country,language,chart) for country in countries} for chart in ('top','popular')} for language,countries in STREAMING_COUNTRY_NAMES.items()},
             recently_added_names={language:recently_added_name('recently_added',language) for language in CHART_LABELS},
             kids_names={language:{chart:{country:kids_collection_name(country,language,chart) for country in countries} for chart in ('top','latest')} for language,countries in STREAMING_COUNTRY_NAMES.items()},
+            franchise_lists=franchise_list_definitions(db),
             awards_options=awards_options(), award_years=list(range(utcnow().year,1899,-1)),
             awards_names={language:{award:awards_collection_name(award,'latest',language).split(' · ')[0] for award in AWARDS} for language in CHART_LABELS},
             tmdb_charts={language:tmdb_charts(language) for language in CHART_LABELS},
@@ -95,6 +154,9 @@ def register(app):
         if not key.startswith('collections.') or len(key)>100:
             key = 'collections.invalid_configuration'
         return jsonify(ok=False,error=key), 409 if key in ('collections.busy','collections.task_disabled') else 400
+
+    from routes.collection_lists import register as register_lists
+    register_lists(app, failure, collection_request_payload)
 
     @app.get('/api/collections/seasonal/calendar')
     def collections_seasonal_calendar_api():
@@ -136,40 +198,7 @@ def register(app):
         db = get_db()
         recover_stale_collection_runs(db)
         compact=request.args.get('compact')=='1'
-        runs = []
-        for row in db.query('''SELECT r.id,r.instance_id,r.kind,r.state,r.started_at,r.finished_at,r.error_type,
-                '''+("json_remove(r.result_json,'$.people')" if compact else 'r.result_json')+''' AS result_json,
-                i.name, i.model, COALESCE(i.group_id,i.id) AS group_id, l.name AS library_name FROM collection_runs r JOIN collection_instances i ON i.id=r.instance_id
-                JOIN libraries l ON l.id=i.library_id
-                ORDER BY r.id DESC LIMIT 100'''):
-            row = dict(row)
-            row['result'] = normalize_collection_result(json.loads(row.pop('result_json')),row['model'])
-            runs.append(row)
-        task = db.query_one("SELECT * FROM tasks WHERE name='refresh_collection_inventory'")
-        objects = []
-        source_objects = db.query('''SELECT o.*,i.model,i.name AS configuration_name,COALESCE(i.group_id,i.id) AS group_id,
-                l.name AS library_name,p.name,p.data_json,p.expires_at FROM collection_objects o
-                JOIN collection_instances i ON i.id=o.instance_id JOIN libraries l ON l.id=i.library_id
-                LEFT JOIN collection_people p ON p.instance_id=o.instance_id AND p.person_key=o.person_key
-                WHERE o.remote_id IS NOT NULL AND o.state!='deleted' ORDER BY i.created_at,o.title,l.id''')
-        for row in source_objects:
-            item = dict(row)
-            item['profile_path'] = json.loads(item.pop('data_json') or '{}').get('profile_path')
-            publication_id,publication=publication_snapshot(db,item['instance_id'],item['person_key'])
-            item['publication_run_id']=publication_id
-            if compact and publication:
-                media=publication.get('media') or [{'title':title,'present':True,'arr_status':'not_needed'} for title in publication.get('selected',[])]
-                publication={**publication,'media':media[:5],
-                    'present':publication.get('present',sum(row.get('present') is True or row.get('arr_status')=='not_needed' for row in media)),
-                    'missing':publication.get('missing',sum(row.get('present') is not True and row.get('arr_status')!='not_needed' for row in media)),
-                    'arr_requests':sum(row.get('arr_status')=='added' for row in media),
-                    'media_total':len(media),'media_compact':len(media)>5}
-                publication.pop('selected',None)
-            item['publication'] = publication
-            objects.append(item)
-        return jsonify(ok=True,instances=list_instances(db),counts=collection_count_snapshots(db),settings=collection_settings(db),runs=runs,objects=objects,
-            inventory={'libraries':inventory_status(db),'task':{key:dict(task).get(key) for key in ('status','next_run')} if task else {},
-                'last_run':dict(row) if (row:=db.query_one('SELECT * FROM collection_inventory_runs ORDER BY id DESC LIMIT 1')) else None})
+        return jsonify(load_collections_poll_data(db, compact))
 
     @app.get('/api/collections/objects/<object_id>/publication')
     def collections_publication_api(object_id):

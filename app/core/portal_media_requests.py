@@ -431,7 +431,11 @@ def arr_defaults(server):
 
 
 def add_media(server, media, kind, *, choices=None, before_post=None):
-    choices = choices if choices is not None else arr_defaults(server)
+    try:
+        choices = choices if choices is not None else arr_defaults(server)
+    except MediaRequestError as exc:
+        exc.before_submission = True
+        raise
     settings = json.loads(server.get('settings_json') or '{}').get('media_requests',{})
     profiles, roots = choices['profiles'], choices['roots']
     profile = next((r for r in profiles if r['id'] == settings.get('quality_profile_id')),None)
@@ -564,7 +568,23 @@ def submit_request(db,user_id,library_id,kind,external_id,resolution='', *, befo
             lambda server=server: _arr_contains_media(server, kind, external_id)
             for server in registered_arrs
         ])
-        arr_failed = any(isinstance(outcome, MediaRequestError) for outcome in arr_outcomes)
+        availability = dict(zip((server['id'] for server in registered_arrs), arr_outcomes))
+        available_destinations = [(candidate, linked, [server])
+            for candidate, linked, candidates in eligible for server in candidates
+            if availability.get(server['id']) is False]
+        if available_destinations:
+            library, selected_arrs, matching = available_destinations[0]
+        linked_ids = {server['id'] for server in selected_arrs}
+        failed_arr_checks = [
+            {'server_id': server['id'], 'server_name': server.get('name'),
+             'linked_to_selected_library': server['id'] in linked_ids,
+             'destination': server['id'] == matching[0]['id'],
+             'endpoint': getattr(outcome, 'endpoint', '/api/v3/' + kind),
+             'http_status': getattr(outcome, 'http_status', None),
+             'error_type': getattr(outcome, 'connection_error', None) or type(outcome).__name__}
+            for server, outcome in zip(registered_arrs, arr_outcomes)
+            if isinstance(outcome, MediaRequestError)
+        ]
         arr_present = any(outcome is True for outcome in arr_outcomes)
 
         # Materialize DB rows before dispatching HTTP-only workers. Check all
@@ -608,14 +628,47 @@ def submit_request(db,user_id,library_id,kind,external_id,resolution='', *, befo
             if present: return 'portal_requests_present'
             media_failed = media_failed or failed
         if arr_present: return 'portal_requests_pending'
-        if media_failed: raise MediaRequestError('portal_requests_media_unavailable')
-        if arr_failed: raise MediaRequestError('portal_requests_arr_unavailable')
-        get_logger('portal_media_requests').info(
-            'ARR request destination user_id=%s kind=%s external_id=%s library_id=%s arr_id=%s arr_name=%s explicit=%s arr_priority=%s linked_arr_ids=%s',
-            user_id,kind,external_id,library['id'],matching[0]['id'],matching[0].get('name'),
-            library['id'] in explicit_library_ids,matching[0]['priority'],[s['id'] for s in selected_arrs])
-        add_media(matching[0],media,kind,before_post=_authorized_before_post(db, user_id, library, before_post))
-        return 'portal_requests_added'
+        if not available_destinations:
+            get_logger('portal_media_requests').error(
+                'ARR request has no reachable eligible destination user_id=%s kind=%s external_id=%s library_id=%s destination_arr_id=%s failed_checks=%s',
+                user_id, kind, external_id, library['id'], matching[0]['id'], failed_arr_checks)
+            raise MediaRequestError('portal_requests_no_arr_available')
+        if failed_arr_checks:
+            get_logger('portal_media_requests').warning(
+                'ARR duplicate checks skipped for unavailable servers user_id=%s kind=%s external_id=%s library_id=%s destination_arr_id=%s failed_checks=%s',
+                user_id, kind, external_id, library['id'], matching[0]['id'], failed_arr_checks)
+        if media_failed:
+            get_logger('portal_media_requests').warning(
+                'Media library duplicate check skipped for unavailable server user_id=%s library_id=%s server_id=%s destination_arr_id=%s',
+                user_id, library['id'], library['server_id'], matching[0]['id'])
+        for library, selected_arrs, matching in available_destinations:
+            get_logger('portal_media_requests').info(
+                'ARR request destination user_id=%s kind=%s external_id=%s library_id=%s arr_id=%s arr_name=%s explicit=%s arr_priority=%s linked_arr_ids=%s',
+                user_id,kind,external_id,library['id'],matching[0]['id'],matching[0].get('name'),
+                library['id'] in explicit_library_ids,matching[0]['priority'],[s['id'] for s in selected_arrs])
+            try:
+                if before_post is None:
+                    add_media(matching[0],media,kind)
+                else:
+                    def authorize_post():
+                        if not any(row['id'] == library['id'] and row['requests_enabled']
+                                   for row in accessible_libraries(db, user_id)):
+                            raise MediaRequestError('portal_requests_no_libraries')
+                        before_post()
+
+                    add_media(matching[0],media,kind,before_post=authorize_post)
+            except MediaRequestError as exc:
+                if not getattr(exc, 'before_submission', False) or str(exc) != 'portal_requests_unavailable':
+                    raise
+                get_logger('portal_media_requests').warning(
+                    'ARR destination skipped before submission user_id=%s library_id=%s arr_id=%s',
+                    user_id, library['id'], matching[0]['id'])
+                continue
+            return 'portal_requests_added'
+        get_logger('portal_media_requests').error(
+            'ARR request has no destination passing preflight user_id=%s kind=%s external_id=%s',
+            user_id, kind, external_id)
+        raise MediaRequestError('portal_requests_no_arr_available')
     finally:
         _request_deadline.reset(deadline_token)
         db.execute('DELETE FROM portal_media_request_claims WHERE kind=? AND external_id=? AND owner=?',(kind,external_id,owner))

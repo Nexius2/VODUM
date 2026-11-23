@@ -31,6 +31,43 @@
   const uid = () => window.crypto.randomUUID ? window.crypto.randomUUID() : "draft-" + [...window.crypto.getRandomValues(new Uint8Array(16))].map((value) => value.toString(16).padStart(2, "0")).join("");
   let drafts = [], localDrafts = [], runs = [], collectionObjects = [], examplesVisible = false, step = 0, startStep = 0, editingId = null, duplicateLibrary = null, duplicateSource = null, feedbackTimer, refreshBusy = false, pendingSave = null, saveBusy = false, peopleInstance = null, peopleEditable = false, peopleVersion = 0;
 
+  let franchiseLinkedIds = [];
+  function renderFranchiseLists() {
+    const container=form.querySelector('[data-for-model="franchises"] .cl-event-options');
+    if (!container) return;
+    const rows=(config.franchise_lists || []).filter((row) => franchiseLinkedIds.includes(row.id));
+    container.innerHTML=rows.map((row) => `<label><span><input name="franchise_lists" type="checkbox" value="${escape(row.id)}" checked> <strong>${escape(row.name)}</strong></span></label>`).join('') || `<p class="cl-muted">${escape(t('franchise_lists_empty'))}</p>`;
+  }
+  let mediaListPage = 0;
+  const mediaListPageSize = 8;
+  function renderMediaListPicker() {
+    const input = $('#cl-media-list-search');
+    const normalize = (value) => String(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase();
+    const query = normalize(input.value.trim());
+    const lists = config.franchise_lists || [];
+    const selected = lists.find((row) => row.id === field('media_list').value);
+    $('#cl-media-list-selected').textContent = selected ? t('media_list_selected')+' · '+selected.name : t('media_list_none');
+    const matches = lists.filter((row) => normalize(row.name).includes(query));
+    const pages = Math.max(1, Math.ceil(matches.length / mediaListPageSize));
+    mediaListPage = Math.max(0,Math.min(mediaListPage,pages-1));
+    const offset = mediaListPage*mediaListPageSize;
+    $('#cl-media-list-options').innerHTML = matches.slice(offset,offset+mediaListPageSize).map((row) => `<button type="button" data-media-list="${escape(row.id)}" aria-pressed="${row.id===field('media_list').value}" ${row.enabled ? '' : 'disabled'}><strong>${escape(row.name)}</strong>${row.enabled ? '' : `<small>${escape(t('disabled'))}</small>`}</button>`).join('') || `<p class="cl-muted">${escape(t('no_results'))}</p>`;
+    $('#cl-media-list-count').textContent = matches.length ? `${offset+1}–${Math.min(offset+mediaListPageSize,matches.length)} / ${matches.length}` : '0 / 0';
+    $('#cl-media-list-prev').disabled = mediaListPage===0;
+    $('#cl-media-list-next').disabled = mediaListPage>=pages-1;
+  }
+  $('#cl-media-list-search').addEventListener('input',() => {mediaListPage=0;renderMediaListPicker();});
+  $('#cl-media-list-prev').addEventListener('click',() => {mediaListPage--;renderMediaListPicker();});
+  $('#cl-media-list-next').addEventListener('click',() => {mediaListPage++;renderMediaListPicker();});
+  $('#cl-media-list-options').addEventListener('click',(event) => {
+    const button=event.target.closest('[data-media-list]');
+    if (!button || button.disabled) return;
+    field('media_list').value=button.dataset.mediaList;
+    renderMediaListPicker();
+    updateName();
+    // Preserve keyboard focus after updating the selected appearance.
+    [...$('#cl-media-list-options').querySelectorAll('[data-media-list]')].find((node) => node.dataset.mediaList===field('media_list').value)?.focus();
+  });
   let attachedLibraryIds = new Set();
   let sharedSettings = config.settings;
   let settingsDirty = false;
@@ -87,6 +124,7 @@
       field('name').value=config.awards_names[language][field('award').value || 'oscars']+' · '+winners[language]+' · '+(period==='latest' ? latest[language] : period==='all' ? allYears[language] : period);
     }
     if (field('model').value === 'top_country') field('name').value = config.top_country_names[field('language').value][field('country_chart').value || 'top'][field('country').value];
+    if (field('model').value === 'media_list') field('name').value = (config.franchise_lists || []).find((row) => row.id===field('media_list').value)?.name || t('model.media_list');
     if (field('model').value === 'hidden_gems') field('name').value = config.hidden_gems_names[field('language').value];
     if (field('model').value === 'family') field('name').value = config.family_names[field('language').value];
     if (field('model').value === 'recently_added') field('name').value = config.recently_added_names[field('language').value];
@@ -127,7 +165,7 @@
       warning.hidden = Boolean(sharedSettings.has_myanimelist_key);
       return;
     }
-    warning.hidden = Boolean(sharedSettings.has_tmdb_key) || field('model').value === 'seasonal' && field('seasonal_source').value === 'local' || ['recently_added','family','continents','myanimelist','anilist'].includes(field('model').value) || !['memoria','spotlight','streaming_country','streaming_worldwide','recent_releases','seasonal','imdb','myanimelist','anilist','recently_added','kids','tmdb','family','awards','top_country','franchises','continents','platforms','hidden_gems'].includes(field('model').value);
+    warning.hidden = Boolean(sharedSettings.has_tmdb_key) || field('model').value === 'seasonal' && field('seasonal_source').value === 'local' || ['recently_added','family','continents','myanimelist','anilist'].includes(field('model').value) || !['memoria','spotlight','streaming_country','streaming_worldwide','recent_releases','seasonal','imdb','myanimelist','anilist','recently_added','kids','tmdb','family','awards','top_country','franchises','continents','platforms','hidden_gems','media_list'].includes(field('model').value);
   }
   function renderSettings(settings) {
     sharedSettings = settings;
@@ -336,7 +374,7 @@
       button.setAttribute("aria-selected", String(selected));
       button.tabIndex = selected ? 0 : -1;
     });
-    ["catalog", "instances", "history", "settings"].forEach((name) => {$("#cl-panel-" + name).hidden = name !== id;});
+    ["catalog", "instances", "lists", "history", "settings"].forEach((name) => {$("#cl-panel-" + name).hidden = name !== id;});
   }
 
   all("[data-tab]").forEach((button, index, tabs) => {
@@ -371,7 +409,7 @@
     }));
   }
 
-  const sourceNote = (model) => t(["myanimelist","anilist"].includes(model) ? model+"_source" : model === "hidden_gems" ? "hidden_gems_source" : model === "platforms" ? "platforms_source" : model === "continents" ? "continents_source" : model === "franchises" ? "franchises_source" : model === "top_country" ? "top_country_source" : model === "awards" ? "awards_source" : model === "family" ? "family_source" : model === "tmdb" ? "tmdb_source" : model === "kids" ? "kids_source" : model === "recently_added" ? "recently_added_source" : model === "imdb" ? "imdb_source" : model === "memoria" ? "memoria_source" : model === "seasonal" ? "seasonal_source" : model === "recent_releases" ? "releases_source" : model === "spotlight" ? "spotlight_source" : model === "streaming_country" ? "streaming_source" : model === "streaming_worldwide" ? "worldwide_source" : "source_pending");
+  const sourceNote = (model) => model === "media_list" ? t("media_list_source") : model === "franchises" ? "" : t(["myanimelist","anilist"].includes(model) ? model+"_source" : model === "hidden_gems" ? "hidden_gems_source" : model === "platforms" ? "platforms_source" : model === "continents" ? "continents_source" : model === "franchises" ? "franchises_source" : model === "top_country" ? "top_country_source" : model === "awards" ? "awards_source" : model === "family" ? "family_source" : model === "tmdb" ? "tmdb_source" : model === "kids" ? "kids_source" : model === "recently_added" ? "recently_added_source" : model === "imdb" ? "imdb_source" : model === "memoria" ? "memoria_source" : model === "seasonal" ? "seasonal_source" : model === "recent_releases" ? "releases_source" : model === "spotlight" ? "spotlight_source" : model === "streaming_country" ? "streaming_source" : model === "streaming_worldwide" ? "worldwide_source" : "source_pending");
 
   function summary(item) {
     const model = modelFor(item.model), library = libraryFor(item.library);
@@ -384,6 +422,8 @@
 
     if (item.mode === 'published') for (const key of ['home','shared','recommended']) values.push([t('visibility_'+key),(item.visibility?.[key] ?? true) ? t('enabled') : t('disabled')]);
     if (!['recent_releases','recently_added','family','continents','myanimelist','anilist'].includes(item.model) && !(item.model === 'seasonal' && item.seasonal_source === 'local')) values.push([t('arr_title'),item.arr_enabled ? t('arr_on') : t('arr_off')]);
+    if (item.model === 'media_list') values.push([t('media_list_select'),(config.franchise_lists || []).find((row) => row.id===item.media_list)?.name || item.media_list]);
+    if (item.model === 'franchises') values.push([t('franchise_lists'),(config.franchise_lists || []).filter((row) => Array.isArray(item.franchise_lists) ? item.franchise_lists.includes(row.id) : row.is_vodum).map((row) => row.name).join(' / ')]);
     if (item.model === 'platforms') values.push([t('platforms_select'),(item.platforms || []).map((key) => config.platform_options[key] || key).join(' / ')]);
     if (item.frequency === 'custom') values.push([t('cron'),item.schedule]);
     if (['kids','family','top_country'].includes(item.model) && item.required_audio_language) values.push([t('required_audio_language'),config.content_languages[item.required_audio_language] || item.required_audio_language]);
@@ -409,7 +449,7 @@
       (item.events || []).forEach((event) => {const row = seasonalCalendar.find((entry) => entry.id === event);values.push([row?.name || t("event."+event),row?.available ? `${row.date} · ${row.start} → ${row.end}` : t("seasonal_event_unavailable")]);});
     }
     if (item.model === "spotlight") values.push([t("spotlight_retention"),item.retention],[t("spotlight_window"),item.release_window_days],[t("spotlight_min_score"),item.min_score],[t("spotlight_audio"),item.audio_language]);
-    return `<div class="cl-review-title"><span aria-hidden="true">${escape(model.glyph)}</span><div><strong>${escape(item.name)}</strong><small>${escape(t("model." + item.model))} · ${escape(t(item.local ? "draft" : "configuration"))}</small></div></div><dl class="cl-review-list">${values.map(([label, value]) => `<div><dt>${escape(label)}</dt><dd>${escape(value)}</dd></div>`).join("")}</dl><p class="cl-muted">${escape(sourceNote(item.model))}</p>`;
+    return `<div class="cl-review-title"><span aria-hidden="true">${escape(model.glyph)}</span><div><strong>${escape(item.name)}</strong><small>${escape(t("model." + item.model))} · ${escape(t(item.local ? "draft" : "configuration"))}</small></div></div><dl class="cl-review-list">${values.map(([label, value]) => `<div><dt>${escape(label)}</dt><dd>${escape(value)}</dd></div>`).join("")}</dl>${sourceNote(item.model) ? `<p class="cl-muted">${escape(sourceNote(item.model))}</p>` : ''}`;
   }
 
   function renderRows() {
@@ -443,8 +483,8 @@
       const countNote = snapshots.length ? partialCounts ? t('counts_partial') : '' : t('counts_run_hint');
       const supportsArr = !['recent_releases','recently_added','family','continents','myanimelist','anilist'].includes(item.model) && !(item.model === 'seasonal' && item.seasonal_source === 'local');
       const busy = ['running','queued','stopping'].includes(item.state);
-      const canRun = ['memoria','spotlight','streaming_country','streaming_worldwide','recent_releases','seasonal','imdb','myanimelist','anilist','recently_added','kids','tmdb','family','awards','top_country','franchises','continents','platforms','hidden_gems'].includes(item.model) && !item.example && !item.local && (item.can_run_manual ?? (!busy && item.enabled));
-      const runHint = canRun ? 'run' : ['memoria','spotlight','streaming_country','streaming_worldwide','recent_releases','seasonal','imdb','myanimelist','anilist','recently_added','kids','tmdb','family','awards','top_country','franchises','continents','platforms','hidden_gems'].includes(item.model) && !item.enabled ? 'collection_disabled' : busy ? 'busy' : 'engine_unavailable';
+      const canRun = ['memoria','spotlight','streaming_country','streaming_worldwide','recent_releases','seasonal','imdb','myanimelist','anilist','recently_added','kids','tmdb','family','awards','top_country','franchises','continents','platforms','hidden_gems','media_list'].includes(item.model) && !item.example && !item.local && (item.can_run_manual ?? (!busy && item.enabled));
+      const runHint = canRun ? 'run' : ['memoria','spotlight','streaming_country','streaming_worldwide','recent_releases','seasonal','imdb','myanimelist','anilist','recently_added','kids','tmdb','family','awards','top_country','franchises','continents','platforms','hidden_gems','media_list'].includes(item.model) && !item.enabled ? 'collection_disabled' : busy ? 'busy' : 'engine_unavailable';
       const actions = [["preview", "◉"], ["edit", "✎"], ...(!item.example && !item.local && item.model === "memoria" ? [["people","♙"]] : []), ["duplicate", "⧉"], ["delete", "×"], ...(busy ? [["stop","■"]] : [])];
       const lastExecution = runs.find((run) => (item.running_member_ids || []).includes(run.instance_id) && run.state === 'running') || runs.find((run) => (item.member_ids || [item.id]).includes(run.instance_id));
       const preciseError = item.last_error === 'collections.execution_failed' ? lastExecution?.result?.errors?.find((key) => labels[String(key).replace(/^collections\./,'')]) : null;
@@ -559,9 +599,10 @@
     if (model.daily) field("frequency").value = "daily";
     $("#cl-daily-note").hidden = !model.daily;
     $("#cl-source-note").textContent = sourceNote(model.id);
+    $("#cl-source-note").hidden = !sourceNote(model.id);
     $("#cl-country-label").textContent = t(model.id === "top_country" ? "origin_country" : "country");
     $("#cl-country-hint").textContent = t(model.id === "top_country" ? "top_country_hint" : "country_hint");
-    const nativeSorts = {myanimelist:["rank"],anilist:["rank"],hidden_gems:["rank"],platforms:["added","release"],continents:["added","release"],franchises:["release"],top_country:["rank"],awards:["rank","release","popularity"],family:[field("family_chart").value === "latest" ? "release" : "rank"],tmdb:["rank"],kids:["rank"],recently_added:["added"],imdb:["rank"],memoria:["release","popularity","random"], streaming_country:["rank"], streaming_worldwide:["rank"], seasonal:["daily_random","release","popularity"], recent_releases:["release"], spotlight:["availability"]}[model.id];
+    const nativeSorts = {media_list:["release","rank"],myanimelist:["rank"],anilist:["rank"],hidden_gems:["rank"],platforms:["added","release"],continents:["added","release"],franchises:["release"],top_country:["rank"],awards:["rank","release","popularity"],family:[field("family_chart").value === "latest" ? "release" : "rank"],tmdb:["rank"],kids:["rank"],recently_added:["added"],imdb:["rank"],memoria:["release","popularity","random"], streaming_country:["rank"], streaming_worldwide:["rank"], seasonal:["daily_random","release","popularity"], recent_releases:["release"], spotlight:["availability"]}[model.id];
     const sorts = [...new Set(["rank","added","random",...nativeSorts])];
     const previousSort = field("sort").value;
     field("sort").replaceChildren(...sorts.map((sort) => new Option(t("sort." + sort), sort)));
@@ -577,6 +618,8 @@
       option.disabled = option.hidden;
     });
     if (!['streaming_country','kids','top_country','platforms'].includes(model.id) && field('country').selectedOptions?.[0]?.hasAttribute('data-streaming-country')) field('country').value = 'FR';
+    if (reset) {mediaListPage=0;$("#cl-media-list-search").value="";}
+    renderMediaListPicker();
     updateLibraries(field("library").value);
     updateMode();
     updateSchedule();
@@ -665,7 +708,9 @@
     return {
       id: editingId || uid(), model: model.id, engine_key: model.engine_key,
       name: field("name").value.trim(), library: field("library").value,
-      libraries:[field("library").value, ...(["memoria","streaming_country","streaming_worldwide","recent_releases","recently_added","kids","family","top_country","franchises","continents","platforms","hidden_gems"].includes(model.id) && field("library_secondary").value ? [field("library_secondary").value] : [])],
+      libraries:[field("library").value, ...(["memoria","streaming_country","streaming_worldwide","recent_releases","recently_added","kids","family","top_country","franchises","continents","platforms","hidden_gems","media_list"].includes(model.id) && field("library_secondary").value ? [field("library_secondary").value] : [])],
+      media_list:model.id === 'media_list' ? field('media_list').value : null,
+      franchise_lists:model.id === 'franchises' ? all('[name="franchise_lists"]:checked').map((input) => input.value) : [],
       platforms:model.id === "platforms" ? all('[name="platforms"]:checked').filter((input) => !input.disabled).map((input) => input.value) : [],
       award:field("award").value || "oscars", award_period:field("award_period").value || "latest",
       family_chart:field("family_chart").value || "top",
@@ -693,7 +738,7 @@
       events: model.id === "seasonal" ? all('[name="events"]:checked').map((input) => input.value) : [],
       period: null,
       state: "draft", updated_at: new Date().toISOString(),
-      enabled: ['memoria','spotlight','streaming_country','streaming_worldwide','recent_releases','seasonal','imdb','myanimelist','anilist','recently_added','kids','tmdb','family','awards','top_country','franchises','continents','platforms','hidden_gems'].includes(model.id) && field('enabled').checked,
+      enabled: ['memoria','spotlight','streaming_country','streaming_worldwide','recent_releases','seasonal','imdb','myanimelist','anilist','recently_added','kids','tmdb','family','awards','top_country','franchises','continents','platforms','hidden_gems','media_list'].includes(model.id) && field('enabled').checked,
       schedule: field('schedule').value.trim(),
     };
   }
@@ -718,6 +763,7 @@
 
   function validStep() {
     if (step === 0) return Boolean(modelFor(field("model").value));
+    if (step === 1 && field('model').value === 'media_list' && !(config.franchise_lists || []).some((row) => row.id===field('media_list').value && row.enabled)) {notify(t('media_list_required'));$('#cl-media-list-search').focus();return false;}
     if (step === 1 && field("model").value === "seasonal") {
       const first = form.querySelector('[name="events"]');
       first.setCustomValidity(all('[name="events"]:checked').length ? "" : t("name_required"));
@@ -732,15 +778,17 @@
     form.reset();
     attachedLibraryIds = new Set(item && !duplicate ? (item.libraries || [item.library]).map(String) : []);
     $("#cl-library-arr-status").replaceChildren();
-    all('[name="events"]').forEach((input) => input.setCustomValidity(""));
+    all('[name="events"],[name="franchise_lists"]').forEach((input) => input.setCustomValidity(""));
     editingId = item && !duplicate && !item.example && !item.local ? item.id : null;
     duplicateSource = duplicate && item && !item.example && !item.local ? item.id : null;
     duplicateLibrary = duplicate && item ? item.library : null;
     field("model").value = model;
+    franchiseLinkedIds=Array.isArray(item?.franchise_lists) ? [...item.franchise_lists] : (config.franchise_lists || []).filter((row) => row.is_vodum).map((row) => row.id);
+    renderFranchiseLists();
     all('[name="platforms"]').forEach((input) => {input.checked=true;input.dataset.wanted="1";});
     updateModel(true);
     if (item) {
-      for (const key of ["name","language","region","country","content_language","imdb_chart","myanimelist_chart","anilist_chart","tmdb_chart","kids_chart","family_chart","country_chart","minimum_votes","minimum_rating","maximum_popularity","award","award_period","required_audio_language","frequency","limit","sort","priority","retention","credits","mode","min_score","release_window_days","audio_language","schedule","max_people","min_popularity","seasonal_source"]) {
+      for (const key of ["media_list","name","language","region","country","content_language","imdb_chart","myanimelist_chart","anilist_chart","tmdb_chart","kids_chart","family_chart","country_chart","minimum_votes","minimum_rating","maximum_popularity","award","award_period","required_audio_language","frequency","limit","sort","priority","retention","credits","mode","min_score","release_window_days","audio_language","schedule","max_people","min_popularity","seasonal_source"]) {
         if (item[key] !== undefined && item[key] !== null) field(key).value = String(item[key]);
       }
       if (model === 'spotlight') field('spotlight_retention').value = item.retention || 30;
@@ -751,6 +799,7 @@
       field('enabled').checked = Boolean(item.enabled) && !duplicate;
       for (const key of ['home','shared','recommended']) field('visibility_'+key).checked = item.visibility?.[key] ?? item.mode === 'published';
       if (model === 'platforms') all('[name="platforms"]').forEach((input) => {input.checked=(item.platforms || Object.keys(config.platform_options)).includes(input.value);input.dataset.wanted=input.checked ? '1' : '0';});
+      all('[name="franchise_lists"]').forEach((input) => {input.checked = !Array.isArray(item.franchise_lists) || item.franchise_lists.includes(input.value);});
       all('[name="events"]').forEach((input) => {input.checked = (item.events || []).includes(input.value);});
       updateModel();
       updateLibraries(duplicate ? "" : (item.libraries || [item.library])[0],duplicate ? "" : (item.libraries || [])[1]);
@@ -764,6 +813,22 @@
     editor.showModal();
   }
 
+  root.addEventListener('vodum:lists-updated', (event) => {
+    config.franchise_lists = event.detail;
+    renderMediaListPicker();
+    if (field("model").value === "media_list") updateName();
+    renderFranchiseLists();
+  });
+  root.addEventListener('vodum:list-links-updated',(event) => {
+    drafts=event.detail.instances;
+    config.franchise_lists=event.detail.definitions;
+    renderRows();
+    renderMediaListPicker();
+  });
+  root.addEventListener('vodum:list-usage', (event) => {
+    const item = drafts.find((row) => row.id === event.detail || (row.member_ids || []).includes(event.detail));
+    if (item) openEditor(item.model,item);
+  });
   document.querySelectorAll("[data-create]").forEach((button) => button.addEventListener("click", () => openEditor("memoria", null, false, true)));
   all("[data-configure]").forEach((card) => {
     card.addEventListener("click", () => openEditor(card.dataset.configure));
@@ -884,12 +949,12 @@
     }
     if (button.dataset.action === 'people') {await openPeople(item);return;}
     const backend = !item.example && !item.local;
-    if (button.dataset.action === "preview" && (!backend || !['memoria','spotlight','streaming_country','streaming_worldwide','recent_releases','seasonal','imdb','myanimelist','anilist','recently_added','kids','tmdb','family','awards','top_country','franchises','continents','platforms','hidden_gems'].includes(item.model))) {$("#cl-preview-content").innerHTML = summary(item); preview.showModal();}
+    if (button.dataset.action === "preview" && (!backend || !['memoria','spotlight','streaming_country','streaming_worldwide','recent_releases','seasonal','imdb','myanimelist','anilist','recently_added','kids','tmdb','family','awards','top_country','franchises','continents','platforms','hidden_gems','media_list'].includes(item.model))) {$("#cl-preview-content").innerHTML = summary(item); preview.showModal();}
     if (button.dataset.action === "edit") openEditor(item.model, item);
     if (button.dataset.action === "duplicate") openEditor(item.model, item, true);
     let kind;
     if (button.dataset.action === 'run') kind = 'sync';
-    if (button.dataset.action === 'preview' && backend && ['memoria','spotlight','streaming_country','streaming_worldwide','recent_releases','seasonal','imdb','myanimelist','anilist','recently_added','kids','tmdb','family','awards','top_country','franchises','continents','platforms','hidden_gems'].includes(item.model)) kind = 'preview';
+    if (button.dataset.action === 'preview' && backend && ['memoria','spotlight','streaming_country','streaming_worldwide','recent_releases','seasonal','imdb','myanimelist','anilist','recently_added','kids','tmdb','family','awards','top_country','franchises','continents','platforms','hidden_gems','media_list'].includes(item.model)) kind = 'preview';
     if (button.dataset.action === 'delete' && !item.example) {
       if (!await confirmCollectionDelete(item)) return;
       if (backend) kind = 'delete';

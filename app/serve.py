@@ -22,8 +22,22 @@ def announce_when_ready(port, started_at, stopped, *, opener=None, emit=print):
         stopped.wait(0.25)
 
 
+def waitress_proxy_settings():
+    """Leave proxy validation to ConditionalProxyFix, including live DB settings.
+
+    Waitress must neither strip forwarded headers nor rewrite REMOTE_ADDR before
+    VODUM has checked the direct peer against TRUSTED_PROXY_NETS. In particular,
+    trusted_proxy='*' would bypass that check by replacing the peer prematurely.
+    Preserving headers does not enable trust: the conditional middleware decides
+    whether to use them on every request.
+    """
+    return {'trusted_proxy':None, 'clear_untrusted_proxy_headers':False}
+
+
 def create_web_server(application, *, threads, measure_queue=False, **settings):
     from waitress import create_server
+
+    settings = {**settings, **waitress_proxy_settings()}
 
     if not measure_queue:
         return create_server(application, threads=threads, **settings)

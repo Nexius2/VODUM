@@ -23,6 +23,32 @@
 
   async function fetchJSON(url) {
     const res = await fetch(url, { cache: "no-cache" });
+    const noticeId = 'monitoring-chart-statistics-' + configNode.id;
+    function showStatus(text) {
+      let notice = document.getElementById(noticeId);
+      if (!notice) {
+        notice = document.createElement('p');
+        notice.id = noticeId;
+        notice.className = 'mb-3 text-sm text-slate-400';
+        notice.setAttribute('role', 'status');
+        configNode.before(notice);
+      }
+      notice.textContent = text;
+    }
+    if (res.status === 202) showStatus(config.preparingLabel || 'Preparing statistics…');
+    if (res.status === 429) showStatus(config.queueFullLabel || 'Preparation queue full');
+    const computed = res.headers.get('X-VODUM-Statistics-Computed-At');
+    if (computed) {
+      const warning = res.headers.get('X-VODUM-Statistics-Failed') === '1' ? config.failedLabel
+        : res.headers.get('X-VODUM-Statistics-Stale') === '1' ? config.staleLabel : '';
+      showStatus((config.computedLabel || 'Statistics computed at') + ' ' + computed + ' UTC' + (warning ? ' · ' + warning : ''));
+    }
+
+    if (res.status === 202) {
+      await new Promise(resolve => window.setTimeout(resolve, 5000));
+      if (!configNode || !configNode.isConnected) throw new DOMException("Page changed", "AbortError");
+      return fetchJSON(url);
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status} on ${url}`);
     return res.json();
   }
@@ -321,9 +347,9 @@
 
     if (!picker.__vodumBound) {
       picker.__vodumBound = true;
-      picker.addEventListener("change", () => initOrUpdate(document).catch(console.error), { passive: true });
+      picker.addEventListener("change", () => initOrUpdate(document).catch(error => { if (error.name !== "AbortError") console.error(error); }), { passive: true });
     }
   }
 
-  initOrUpdate(document).catch(console.error);
+  initOrUpdate(document).catch(error => { if (error.name !== "AbortError") console.error(error); });
 })();

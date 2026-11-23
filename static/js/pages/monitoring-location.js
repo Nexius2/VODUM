@@ -426,22 +426,41 @@
     const request = new AbortController();
     pending = request;
     const url = new URL(window.location.href);
+    url.searchParams.set("until", String(endTime));
     url.searchParams.set("at", Math.round(Number(slider.value)));
     root.setAttribute("aria-busy", "true");
-    fetch(url, { headers: { "HX-Request": "true" }, signal: request.signal })
-      .then((response) => {
-        if (!response.ok) throw new Error("Timeline unavailable");
-        return response.text();
-      })
+    async function fetchPreparedInstant() {
+      if (request.signal.aborted) throw new DOMException('Cancelled', 'AbortError');
+      const response = await fetch(url, { headers: { "HX-Request": "true" }, signal: request.signal });
+      if (!response.ok) throw new Error("Timeline unavailable");
+      if (response.headers.get('X-VODUM-Statistics-Ready') === '0') {
+        await response.text();
+        let notice = root.querySelector('[data-timeline-preparing]');
+        if (!notice) {
+          notice = document.createElement('p');
+          notice.dataset.timelinePreparing = '';
+          notice.setAttribute('role', 'status');
+          notice.className = 'text-sm text-slate-400';
+          notice.textContent = root.dataset.statisticsPending;
+          root.prepend(notice);
+        }
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        return fetchPreparedInstant();
+      }
+      return response.text();
+    }
+    fetchPreparedInstant()
       .then((html) => {
         if (request.signal.aborted) return;
         root.innerHTML = html;
+        if (window.htmx) window.htmx.process(root);
         initMap();
         window.vodumRefreshBrowserDateTimes?.(root);
         history.replaceState(history.state, "", url);
         const heatLink = document.querySelector("[data-location-heat]");
         const heatUrl = new URL(heatLink.href);
         heatUrl.searchParams.set("at", url.searchParams.get("at"));
+        heatUrl.searchParams.set("until", url.searchParams.get("until"));
         heatLink.href = heatUrl;
         document.querySelector('.location-filters [name="at"]').value = url.searchParams.get("at");
         error.hidden = true;

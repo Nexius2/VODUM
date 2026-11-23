@@ -23,6 +23,39 @@ USER_LIBRARY_ACCESS_COLUMNS = """
 """
 
 
+@isolated_read_operation
+def load_user_profile_header(db, user_id: int, tab: str):
+    """Read the profile header only; save-time validation keeps its own reads."""
+    from core.error_reporting import log_handled_failure
+    from core.user_profile_context import has_user_playback, load_expiration_lock
+
+    user = load_user_detail(db, user_id)
+    if not user:
+        return {'user': None}
+    never_used = not has_user_playback(db, user_id) if tab == 'general' else False
+    subscription = None
+    try:
+        if user.get('subscription_template_id') is not None:
+            subscription = db.query_one('SELECT id, name FROM subscription_templates WHERE id=?',
+                                         (int(user['subscription_template_id']),))
+    except Exception:
+        log_handled_failure('users.load_subscription_template')
+    user['subscription_template_name'] = subscription['name'] if subscription else None
+    templates = db.query('''SELECT id, name, is_lifetime FROM subscription_templates
+        WHERE is_enabled=1 ORDER BY name ASC''') or [] if tab == 'general' else []
+    monitoring = db.query_one('SELECT id FROM media_users WHERE vodum_user_id=? ORDER BY id LIMIT 1',
+                              (user_id,)) if tab == 'monitoring' else None
+    return {
+        'user': user,
+        'never_used': never_used,
+        'subscription_templates': templates,
+        'settings': load_user_detail_settings(db) if tab in ('general', 'access') else {},
+        'allowed_types': load_user_provider_types(db, user_id) if tab in ('general', 'access', 'media') else [],
+        'monitoring_mu_id': int(monitoring['id']) if monitoring and monitoring['id'] is not None else None,
+        'expiration_lock': load_expiration_lock(db, user_id) if tab == 'general' else None,
+    }
+
+
 def load_user_access_rows(
     db,
     user_id: int,

@@ -4,6 +4,7 @@ from core.collections_hidden_gems import run_hidden_gems
 from core.collections_platforms import run_platforms
 from core.collections_continents import run_continents
 from core.collections_franchises import run_franchises
+from core.collections_media_list import run_media_list
 from core.collections_awards import run_awards
 from core.collections_family import run_family
 from core.collections_top_country import run_top_country
@@ -44,11 +45,12 @@ class CollectionRunTimedOut(CollectionRunCancelled):
     pass
 
 
-ENGINES = {'anilist':run_anilist,'myanimelist':run_myanimelist,'hidden_gems':run_hidden_gems,'platforms':run_platforms,'continents':run_continents,'franchises':run_franchises,'top_country':run_top_country,'awards':run_awards,'family':run_family,'tmdb':run_tmdb,'kids':run_kids,'recently_added':run_recently_added,'imdb':run_imdb,'memoria':run_memoria,'spotlight':run_spotlight,'streaming_country':run_streaming_country,'streaming_worldwide':run_streaming_worldwide,'recent_releases':run_recent_releases,'seasonal':run_seasonal}
+ENGINES = {'media_list':run_media_list,'anilist':run_anilist,'myanimelist':run_myanimelist,'hidden_gems':run_hidden_gems,'platforms':run_platforms,'continents':run_continents,'franchises':run_franchises,'top_country':run_top_country,'awards':run_awards,'family':run_family,'tmdb':run_tmdb,'kids':run_kids,'recently_added':run_recently_added,'imdb':run_imdb,'memoria':run_memoria,'spotlight':run_spotlight,'streaming_country':run_streaming_country,'streaming_worldwide':run_streaming_worldwide,'recent_releases':run_recent_releases,'seasonal':run_seasonal}
 
 
 # Only known public error keys may be shown in collection rows.
 VISIBLE_ERRORS={
+    'collections.media_list_required',
     'collections.franchises_source_failed','collections.platforms_source_failed',
     'collections.awards_source_unavailable','collections.awards_source_invalid',
     'collections.run_timed_out','collections.inventory_required','collections.inventory_unavailable',

@@ -1,3 +1,6 @@
+{% set historical_snapshot = g.monitoring_snapshot|default(none) %}
+{% include "monitoring/partials/_statistics_status.html" %}
+{% if not historical_snapshot or historical_snapshot.ready %}
 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
   <div class="flex items-center justify-between mb-4">
     <div class="text-sm font-semibold">{{ t("history") }}</div>
@@ -86,3 +89,5 @@
     {% endif %}
   {% endif %}
 </div>
+
+{% endif %}

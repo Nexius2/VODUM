@@ -613,6 +613,7 @@ def collect_sessions_for_server(
     server_id: int,
     provider: Optional[str] = None,
     payload: Optional[Dict[str, Any]] = None,
+    deadline: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Collecte Now Playing pour 1 serveur.
@@ -641,13 +642,16 @@ def collect_sessions_for_server(
     # Authentication failures must not be treated as network outages.
     try:
         provider_impl = get_provider(srv)
+        if deadline is not None:
+            provider_impl.deadline = deadline
         prev_map = _fetch_existing_sessions(db, server_id)
 
         current = provider_impl.get_active_sessions()  # liste normalisée
         report["sessions_seen"] = len(current)
 
         try:
-            resource_stats = _collect_server_resource_stats(srv, provider_name)
+            resource_stats = (_collect_server_resource_stats(srv, provider_name) if deadline is None
+                              else _collect_server_resource_stats(srv, provider_name, deadline=deadline))
             _store_server_resource_stats(db, server_id, provider_name, resource_stats)
         except Exception as resource_exc:
             log_handled_failure("monitoring.collect_resource_stats", server_id=server_id)

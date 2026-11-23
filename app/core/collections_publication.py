@@ -79,7 +79,22 @@ def resume_batch(db,instance,*,heartbeat):
                 'person_key':plan['person_key'],'state':plan['state'],'title':plan['title']}
             def created(remote_id):
                 db.execute("UPDATE collection_objects SET remote_id=?,state='created' WHERE id=?",(remote_id,record['id']))
-            result['warnings'].extend(adapter.sync(record,plan['title'],matches,config,created) or [])
+            try:
+                result['warnings'].extend(adapter.sync(record,plan['title'],matches,config,created) or [])
+            except Exception as exc:
+                from core.collections_media import CollectionOwnershipError
+                if instance['model']!='franchises' or not isinstance(exc,CollectionOwnershipError) or str(exc)!='collections.title_collision':
+                    raise
+                # Old batches may still contain blocked franchises. Treat these
+                # exactly as discovery does, and continue the other child plans.
+                finish_plan(db,record['id'],[])
+                result['errors']=[code for code in result.get('errors',[]) if code!='collections.title_collision']
+                result['warnings'].append('collections.title_collision')
+                providers=result['diagnostics'].setdefault('providers',[])
+                if not any(row.get('id')==record['person_key'] and row.get('failure',{}).get('stage')=='title_collision' for row in providers):
+                    providers.append({'id':record['person_key'],'name':plan['title'],'state':'error',
+                        'source_kind':'collection_publication','failure':{'stage':'title_collision'}})
+                continue
             db.execute("UPDATE collection_objects SET state='synced' WHERE id=?",(record['id'],))
         result['warnings']=list(dict.fromkeys(result['warnings']))
         result['stage']='complete'

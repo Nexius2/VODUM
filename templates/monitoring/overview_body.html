@@ -1,3 +1,6 @@
+{% set historical_snapshot = g.monitoring_snapshot|default(none) %}
+{% include "monitoring/partials/_statistics_status.html" %}
+{% if not historical_snapshot or historical_snapshot.ready %}
 {% if configured_server_count|default(0) <= 1 %}
 
 <!-- Row 1: Servers / Live sessions / Usage overview / Total watch time -->
@@ -55,3 +58,9 @@
 <div class="mb-6">
   {% include "monitoring/partials/sections/_now_playing.html" %}
 </div> -->
+{% else %}
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+  {% include "monitoring/partials/cards/_servers.html" %}
+  {% include "monitoring/partials/cards/_live_sessions.html" %}
+</div>
+{% endif %}
