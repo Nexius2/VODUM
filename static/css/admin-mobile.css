@@ -1,0 +1,91 @@
+/* Administrative mobile layout; desktop rules remain in the existing stylesheets. */
+.admin-dock { display: none; }
+
+@media (max-width: 767px) {
+  html:has(.admin-shell) { scroll-padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px)); }
+  .admin-shell { background: #070e1d; padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px)); }
+  .admin-mobile-header { height: auto; min-height: 60px; padding-top: env(safe-area-inset-top, 0px); background: #0b1425f5; }
+  .admin-mobile-header > button { min-width: 44px; min-height: 44px; margin-left: 12px; }
+  .admin-menu-panel { width: min(360px, 90vw); height: 100dvh; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); box-shadow: 20px 0 80px #0008; }
+  #mobileMenuNav a, #mobileMenuNav button { min-height: 48px; border-radius: 12px; padding-inline: 14px; font-size: 14px; }
+  #mobileMenuNav svg { width: 20px; height: 20px; margin-right: 12px; }
+  #mobileMenuClose { min-width: 44px; min-height: 44px; font-size: 24px; }
+  .admin-page-header { padding: 20px 16px 16px; background: transparent; gap: 14px; }
+  .admin-page-header h1 { font-size: 24px; letter-spacing: -.025em; line-height: 1.2; }
+  .admin-page-header p { margin-top: 6px; line-height: 1.6; }
+  .admin-page-header > div:last-child:empty { display: none; }
+  .admin-page-header > div:last-child > button { width: 100%; }
+  .admin-content { padding: 16px 12px 24px; overflow-x: clip; }
+  .admin-content :is(input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=file]):not([type=color]):not([type=range]), select, textarea) { font-size: 16px; min-height: 44px; max-width: 100%; }
+  .admin-content :is(button, summary, a.rounded-lg, a.rounded) { min-height: 44px; }
+  .admin-content :is(input[type=checkbox], input[type=radio]) { width: 20px; height: 20px; flex-shrink: 0; }
+  .admin-content :is(.flex.justify-between, .flex.items-center.justify-between) { flex-wrap: wrap; gap: 12px; }
+  .admin-content .grid > *, .admin-content .flex > * { min-width: 0; }
+  .admin-content :is(.p-6, .p-8) { padding: 16px; }
+  .admin-content :is(.gap-8, .gap-6) { gap: 16px; }
+  .admin-content :is(.space-y-8, .space-y-6) > :not([hidden]) ~ :not([hidden]) { margin-top: 20px; }
+  .admin-shell .admin-content .admin-tab-strip, .admin-shell .admin-content .monitoring-tabs { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 8px; padding: 0 0 8px; scrollbar-width: thin; }
+  .admin-tab-strip > a, .admin-content .monitoring-tab { flex-shrink: 0; display: flex; align-items: center; min-height: 44px; padding: 8px 12px; font-size: 14px; white-space: nowrap; }
+  .admin-content .vodum-mobile-table-scroll { border-radius: 12px; scrollbar-width: thin; }
+  .admin-content .vodum-mobile-table-scroll table { min-width: 100%; }
+  .admin-content .vodum-mobile-table-scroll :is(th, td) { padding: 12px; }
+  #users_filter_form { display: grid; grid-template-columns: 80px minmax(0, 1fr); width: 100%; }
+  #users_filter_form input[name=q] { width: 100%; }
+  #users_filter_form details { grid-column: 1 / -1; }
+  #users_filter_form details > div { width: min(280px, 75vw); }
+  .admin-content div:has(> #users_filter_form) { width: 100%; }
+  .admin-content div:has(> #btn_create_user), #btn_create_user { width: 100%; }
+  .admin-users-table { display: block; }
+  .admin-users-table thead { display: block; overflow-x: auto; border-bottom: 1px solid #29374e; }
+  .admin-users-table thead tr { display: flex; width: max-content; }
+  .admin-users-table th { padding: 4px; }
+  .admin-users-table th a { padding: 12px; min-height: 44px; }
+  .admin-users-table tbody { display: grid; gap: 12px; padding: 12px; }
+  .admin-users-table tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; border: 1px solid #2b3b54; border-radius: 14px; padding: 16px; background: #101b2e; }
+  .admin-users-table td { display: block; padding: 0; overflow-wrap: anywhere; }
+  .admin-users-table td::before { content: attr(data-label); display: block; margin-bottom: 5px; color: #a0afc4; font-size: 11px; }
+  .admin-users-table td:nth-child(-n+2) { grid-column: 1 / -1; }
+  .admin-users-table td:first-child::before { display: none; }
+  .admin-user-name { display: block; color: #f1f5f9; font-size: 18px; font-weight: 650; padding-block: 4px; }
+  .admin-users-table td[colspan] { grid-column: 1 / -1; }
+  .admin-dock { position: fixed; z-index: 40; inset: auto 10px max(8px, env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); padding: 6px; border: 1px solid #33435b; border-radius: 20px; background: #111d30f5; backdrop-filter: blur(16px); box-shadow: 0 8px 32px #0008; }
+  .admin-dock > :is(a, button) { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; min-height: 54px; padding: 6px 2px; color: #aebdd1; border-radius: 14px; font-size: 10px; line-height: 1.2; text-align: center; }
+  .admin-dock svg { width: 21px; height: 21px; flex-shrink: 0; }
+  .admin-dock span { max-width: 100%; overflow-wrap: anywhere; }
+  .admin-dock [aria-current=page], .admin-dock [aria-expanded=true] { color: #6ee7b7; background: #10b9811c; }
+  .admin-shell :is(a, button, input, select, summary):focus-visible { outline: 2px solid #6ee7b7; outline-offset: 3px; }
+}
+
+/* Mobile cards share the original table data and actions, including refreshed rows. */
+@media (max-width: 767px) {
+  .admin-shell .admin-content .admin-card-table-wrap { overflow: visible; min-width: 0; max-width: 100%; }
+  .admin-shell .admin-content table.admin-card-table { display: block; width: 100%; min-width: 0; max-width: 100%; white-space: normal; background: transparent; }
+  .admin-content .admin-card-table caption { display: block; text-align: start; }
+  .admin-content .admin-card-table thead { display: block; max-width: 100%; margin-bottom: 12px; overflow-x: auto; scrollbar-width: thin; border: 0; background: transparent; }
+  .admin-content .admin-card-table[data-mobile-sortable="false"] thead { display: none; }
+  .admin-content .admin-card-table thead tr { display: flex; width: max-content; gap: 6px; border: 0; }
+  .admin-content .admin-card-table th { padding: 0; background: transparent; }
+  .admin-content .admin-card-table thead th:not(:has(a, button, input)) { display: none; }
+  .admin-content .admin-card-table th :is(a, button) { display: inline-flex; align-items: center; min-height: 44px; padding: 10px 12px; border: 1px solid #334155; border-radius: 10px; background: #101b2e; font-size: 12px; white-space: nowrap; }
+  .admin-content .admin-card-table tbody { display: grid; gap: 12px; }
+  .admin-content .admin-card-table tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; padding: 16px; border: 1px solid #2b3b54; border-radius: 16px; background: #101b2e; }
+  .admin-shell .admin-content .admin-card-table :is(td, tbody th) { position: relative; z-index: auto; display: block; width: auto; min-width: 0; max-width: 100%; padding: 0; border: 0; text-align: start; white-space: normal; overflow-wrap: anywhere; font-size: 13px; line-height: 1.6; }
+  .admin-content .admin-card-table :is(td, tbody th)::before { content: attr(data-mobile-label); display: block; margin-bottom: 4px; color: #a0afc4; font-size: 11px; font-weight: 500; line-height: 1.5; }
+  .admin-content .admin-card-table [data-mobile-wide], .admin-content .admin-card-table [data-mobile-title] { grid-column: 1 / -1; }
+  .admin-shell .admin-content .admin-card-table [data-mobile-title] { grid-row: 1; padding-bottom: 10px; border-bottom: 1px solid #29374e; color: #f1f5f9; font-size: 17px; font-weight: 650; }
+  .admin-content .admin-card-table [data-mobile-title]::before, .admin-content .admin-card-table [data-mobile-empty]::before { display: none; }
+  .admin-content .admin-card-table [data-mobile-title] strong { font-weight: 650; }
+  .admin-content .admin-card-table [data-mobile-title] > a { display: flex; align-items: center; min-height: 44px; }
+  .admin-content .admin-card-table :is(p, span, a, code, small) { white-space: normal; overflow-wrap: anywhere; word-break: normal; }
+  .admin-content .admin-card-table small { font-size: 12px; line-height: 1.6; }
+  .admin-content .admin-card-table td [id^="library-menu-"] { position: static; width: 100%; margin-top: 10px; }
+  .admin-content .admin-card-table td :is(button, input[type="submit"]) { min-height: 44px; }
+  .admin-content .admin-card-table td button:has(> svg):not(:has(span)) { min-width: 44px; }
+  .admin-content .admin-card-table .cl-row-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .admin-content .admin-card-table .cl-row-actions button { display: flex; flex: 1 1 28%; flex-direction: column; align-items: center; justify-content: center; gap: 4px; width: auto; height: auto; min-height: 62px; padding: 8px; font-size: 18px; }
+  .admin-content .admin-card-table .cl-row-actions button::after { content: attr(title); font-size: 11px; line-height: 1.35; text-align: center; overflow-wrap: anywhere; }
+  .admin-content .admin-card-table .cl-state { max-width: 100%; font-size: 12px; }
+  .admin-content .admin-card-table .cl-provider-trigger { max-width: 100%; white-space: normal; }
+  .admin-content .admin-card-table .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; }
+  .admin-content .admin-card-table :is([hidden], .hidden) { display: none !important; }
+}

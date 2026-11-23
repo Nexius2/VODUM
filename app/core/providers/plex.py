@@ -1,0 +1,539 @@
+from __future__ import annotations
+import json
+import hashlib
+import requests
+import time
+import xml.etree.ElementTree as ET
+from urllib.parse import quote
+from typing import Any, Dict, List, Optional
+from core.plex_rate_limit import wait_for_plex_slot
+from core.http_security import server_http_session
+from core.providers.base import BaseProvider
+from core import stream_kill_diagnostics as diagnostics
+from logging_utils import get_logger
+
+log = get_logger("plex")
+
+
+class PlexProvider(BaseProvider):
+    provider_name = "plex"
+
+    def __init__(self, server, timeout: int = 15):
+        super().__init__(server, timeout=timeout)
+        self.http = server_http_session(server)
+
+    def _headers(self) -> dict:
+        token = getattr(self.server, "token", None)
+        stable_source = (
+            f"vodum:{getattr(self.server, 'id', 0)}:"
+            f"{getattr(self.server, 'server_identifier', '')}"
+        )
+        client_identifier = "vodum-" + hashlib.sha256(
+            stable_source.encode("utf-8")
+        ).hexdigest()[:32]
+        return {
+            "X-Plex-Token": token,
+            "X-Plex-Client-Identifier": client_identifier,
+            "X-Plex-Product": "VODUM",
+            "X-Plex-Version": "1",
+            "X-Plex-Device": "Server",
+            "Accept": "application/xml",
+        }
+
+    def _candidate_bases(self) -> List[str]:
+        """
+        IMPORTANT: url > local_url > public_url
+        car local_url est souvent un 'localhost' / URL docker / mauvais port.
+        """
+        bases: List[str] = []
+
+        invalid_literals = {"none", "null", "undefined", ""}
+
+        for u in (
+            getattr(self.server, "url", None),
+            getattr(self.server, "local_url", None),
+            getattr(self.server, "public_url", None),
+        ):
+            if not u:
+                continue
+
+            b = str(u).strip().rstrip("/")
+            if b.lower() in invalid_literals:
+                continue
+
+            # Évite les "192.168.1.60:32400" sans schéma
+            if not (b.startswith("http://") or b.startswith("https://")):
+                continue
+
+            if b not in bases:
+                bases.append(b)
+
+        return bases
+
+
+    def _get(self, path: str) -> str:
+        bases = self._candidate_bases()
+        if not bases:
+            raise RuntimeError("Plex server URL missing")
+
+        token = getattr(self.server, "token", None)
+        if not token:
+            raise RuntimeError("Plex token missing")
+
+        last_exc: Optional[Exception] = None
+        errors: List[str] = []
+
+        for base in bases:
+            url = f"{base}{path}"
+            try:
+                if self.deadline is None:
+                    wait_for_plex_slot(base)
+                else:
+                    wait_for_plex_slot(base, deadline=self.deadline)
+                r = self.http.get(url, headers=self._headers(), timeout=self.request_timeout())
+                # on veut une VRAIE réponse du serveur
+                r.raise_for_status()
+                return r.text
+            except requests.exceptions.RequestException as e:
+                last_exc = e
+                code = getattr(getattr(e, "response", None), "status_code", None)
+                errors.append(f"{url} -> {code or type(e).__name__}")
+                # On tente l'URL suivante si ça ressemble à un problème d'URL/réseau/proxy
+                continue
+
+        # Aucune URL n'a fonctionné : on remonte une erreur explicite (utile en logs)
+        raise RuntimeError(f"Plex unreachable via any URL. Attempts: {', '.join(errors)}") from last_exc
+
+    def _request(self, method: str, path: str, params: Optional[dict] = None) -> bool:
+        bases = self._candidate_bases()
+        if not bases:
+            raise RuntimeError("Plex server URL missing")
+
+        token = getattr(self.server, "token", None)
+        if not token:
+            raise RuntimeError("Plex token missing")
+
+        last_exc: Optional[Exception] = None
+        errors: List[str] = []
+
+        for base in bases:
+            url = f"{base}{path}"
+            try:
+                wait_for_plex_slot(base)
+                r = self.http.request(
+                    method,
+                    url,
+                    params=params,
+                    headers=self._headers(),
+                    timeout=self.timeout,
+                )
+                if path == '/status/sessions/terminate':
+                    diagnostics.event('http_response', method=method,
+                                      http_status=r.status_code, address_index=bases.index(base))
+                r.raise_for_status()
+                return True
+            except requests.exceptions.RequestException as e:
+                last_exc = e
+                code = getattr(getattr(e, "response", None), "status_code", None)
+                errors.append(f"{method} {url} -> {code or type(e).__name__}")
+                if path == '/status/sessions/terminate':
+                    diagnostics.event('http_error', method=method, address_index=bases.index(base),
+                                      **diagnostics.exception_fields(e))
+                continue
+
+        raise RuntimeError(f"Plex request failed. Attempts: {', '.join(errors)}") from last_exc
+
+    def refresh_library(self, section_id: str) -> bool:
+        normalized_id = str(section_id or "").strip()
+        if not normalized_id:
+            raise ValueError("Plex library section id is missing")
+        return self._request(
+            "GET",
+            f"/library/sections/{quote(normalized_id, safe='')}/refresh",
+        )
+
+
+    def terminate_session(self, session_key: str, reason: str = "") -> bool:
+        diagnostics.event('resolve_target', session_key=str(session_key))
+        try:
+            return self._terminate_session(session_key, reason)
+        except Exception as exc:
+            diagnostics.event('termination_error', **diagnostics.exception_fields(exc))
+            raise
+
+    def _terminate_session(self, session_key: str, reason: str = "") -> bool:
+        """
+        Plex: /status/sessions/terminate attend sessionId (= l'id de la balise <Session id="...">),
+        qui n'est pas toujours égal au sessionKey.
+        Donc:
+          - on recharge /status/sessions
+          - on retrouve la bonne sessionId
+          - on appelle terminate avec la bonne valeur
+        """
+        # 1) charger /status/sessions (XML brut)
+        diagnostics.event('snapshot_read', phase='initial')
+        def read_session_snapshot():
+            container=ET.fromstring(self._get("/status/sessions"))
+            if container.tag!='MediaContainer':
+                diagnostics.event('snapshot_rejected',reason='unexpected_container')
+                raise ValueError('Invalid Plex session snapshot container')
+            declared=container.get('size')
+            if declared is not None:
+                try:complete=int(declared)==len(container) and int(declared)>=0
+                except (TypeError,ValueError):complete=False
+                if not complete:
+                    diagnostics.event('snapshot_rejected',reason='incomplete_container')
+                    raise ValueError('Incomplete Plex session snapshot')
+            return container
+
+        root = read_session_snapshot()
+
+        original_node = next((node for node in root if str(
+            node.attrib.get("sessionKey") or node.attrib.get("sessionId") or node.attrib.get("key")
+        ) == str(session_key)), None)
+
+        def playback_identity(node):
+            user = node.find("User")
+            player = node.find("Player")
+            if user is None or player is None:
+                return None
+            user_id = user.get("id")
+            machine_id = player.get("machineIdentifier")
+            address = player.get("address")
+            # Device names such as "iPhone" are shared by unrelated players.
+            # Follow reconnects only with an explicit account and client ID.
+            if not user_id or not machine_id or not address:
+                return None
+            return user_id, machine_id, address
+
+        target_identity = playback_identity(original_node) if original_node is not None else None
+
+        def find_session_id(container: ET.Element) -> Optional[str]:
+            # Retrouver la session correspondante au session_key.
+            for node in container:
+                # sessionKey est souvent sur le node (Video/Track/Episode)
+                sk = node.attrib.get("sessionKey") or node.attrib.get("sessionId") or node.attrib.get("key")
+                if not sk or (str(sk) != str(session_key) and (
+                    target_identity is None or playback_identity(node) != target_identity
+                )):
+                    continue
+
+                # La vraie sessionId est généralement dans <Session id="...">.
+                sess = node.find("Session")
+                if sess is not None:
+                    sid = sess.attrib.get("id")
+                    if sid:
+                        return str(sid)
+
+                # Certaines versions exposent sessionId directement.
+                if node.attrib.get("sessionId"):
+                    return str(node.attrib["sessionId"])
+                # Plex may omit Session.id during a playback transition.
+                # Keep this distinct from an absent playback (None).
+                return ""
+            return None
+
+        target_session_id = find_session_id(root)
+        diagnostics.event('target_resolved', session_id=target_session_id,
+                          identity_available=target_identity is not None, snapshot_sessions=len(root))
+
+        # 3) Sans correspondance certaine, ne pas confondre sessionKey et sessionId.
+        if not target_session_id:
+            diagnostics.event('result', outcome='target_absent' if target_session_id is None else 'missing_session_id')
+            log.warning(
+                "Cannot terminate Plex session: session is absent or has no termination ID "
+                f"session_key={session_key}"
+            )
+            return False
+
+        params = {"sessionId": target_session_id}
+        if reason:
+            params["reason"] = reason[:120]
+
+        # GET puis POST (compat)
+        try:
+            requested = self._request("GET", "/status/sessions/terminate", params=dict(params))
+
+        except Exception:
+            try:
+                requested = self._request("POST", "/status/sessions/terminate", params=dict(params))
+
+            except Exception as e2:
+                error_text = str(e2)
+
+                if "404" in error_text:
+                    refreshed = read_session_snapshot()
+                    if find_session_id(refreshed) is None and target_identity is None:
+                        diagnostics.event('result', outcome='absent_after_not_found')
+                        log.info(
+                            f"Session already terminated on Plex "
+                            f"session_key={session_key} session_id={target_session_id}"
+                        )
+                        return True
+
+                raise
+
+        if not requested:
+            diagnostics.event('result', outcome='command_not_accepted')
+            return False
+
+        # Plex can acknowledge termination before a TV client has actually
+        # stopped. Use a bounded backoff, and re-resolve the nested Session.id
+        # on every poll because some clients recreate it during a timeline
+        # transition while retaining the same sessionKey.
+        verify_delays = (0.0, 1.0, 2.0, 4.0, 8.0)
+        absent_once = False
+        for attempt, delay in enumerate(verify_delays):
+            if delay:
+                time.sleep(delay)
+            diagnostics.event('snapshot_read', phase='verification', poll=attempt + 1)
+            refreshed = read_session_snapshot()
+            current_session_id = find_session_id(refreshed)
+            matching = next((node for node in refreshed if str(
+                node.get('sessionKey') or node.get('sessionId') or node.get('key')
+            ) == str(session_key) or (
+                target_identity is not None and playback_identity(node) == target_identity
+            )), None)
+            player = matching.find('Player') if matching is not None else None
+            diagnostics.event('verification', poll=attempt + 1, delay_seconds=delay,
+                              session_id=current_session_id,
+                              session_key=matching.get('sessionKey') if matching is not None else None,
+                              state=player.get('state') if player is not None else None,
+                              progress_ms=matching.get('viewOffset') if matching is not None else None)
+            if current_session_id == "":
+                absent_once = False
+                continue
+            if current_session_id is None:
+                # A reconnect can briefly disappear from the server snapshot.
+                # Require two observations before declaring this client stopped.
+                if target_identity is None or absent_once:
+                    diagnostics.event('result', outcome='stop_confirmed')
+                    return True
+                absent_once = True
+                continue
+
+            absent_once = False
+
+            if current_session_id != target_session_id:
+                diagnostics.event('session_recreated', old_session_id=target_session_id,
+                                  new_session_id=current_session_id)
+                log.info(
+                    "Plex session was recreated during termination "
+                    "session_key=%s old_session_id=%s new_session_id=%s",
+                    session_key,
+                    target_session_id,
+                    current_session_id,
+                )
+                target_session_id = current_session_id
+                params["sessionId"] = target_session_id
+
+            # Plex can acknowledge the request while briefly ignoring it
+            # during a timeline transition. Retry the command, but keep the
+            # session disappearance above as the only success criterion.
+            if attempt < len(verify_delays) - 1:
+                try:
+                    # Some Plex/proxy combinations acknowledge GET without
+                    # stopping playback. Try the compatible POST form once the
+                    # first GET retry has also left the session alive.
+                    method = "POST" if attempt % 2 else "GET"
+                    fallback_method = "GET" if method == "POST" else "POST"
+                    try:
+                        self._request(method, "/status/sessions/terminate", params=dict(params))
+                    except Exception:
+                        self._request(fallback_method, "/status/sessions/terminate", params=dict(params))
+                except Exception:
+                    log.debug(
+                        "Retrying Plex terminate failed session_key=%s session_id=%s",
+                        session_key,
+                        target_session_id,
+                        exc_info=True,
+                    )
+
+        diagnostics.event('result', outcome='still_present_after_retries')
+        log.warning(
+            "Plex accepted terminate request but session is still active "
+            f"session_key={session_key} session_id={target_session_id}"
+        )
+        return False
+
+
+
+    def get_active_sessions(self) -> List[Dict[str, Any]]:
+        xml_text = self._get("/status/sessions")
+        root = ET.fromstring(xml_text)
+
+        def _first_decision(node: ET.Element, attr: str) -> Optional[str]:
+            # 1) Media
+            for m in node.findall("Media"):
+                v = m.attrib.get(attr)
+                if v:
+                    return v
+
+            # 2) Part
+            for p in node.findall(".//Part"):
+                v = p.attrib.get(attr)
+                if v:
+                    return v
+
+            # 3) TranscodeSession (important !)
+            ts = node.find("TranscodeSession")
+            if ts is not None:
+                v = ts.attrib.get(attr)
+                if v:
+                    return v
+
+            return None
+
+
+        def _normalize_decision(v: Optional[str]) -> Optional[str]:
+            if not v:
+                return None
+            v = str(v).strip().lower()
+
+            # normalise "direct play" / "direct_play" / etc -> "directplay"
+            v = v.replace(" ", "").replace("_", "").replace("-", "")
+
+            return v or None
+
+
+        sessions: List[Dict[str, Any]] = []
+        for node in root:
+            session_key = node.attrib.get("sessionKey") or node.attrib.get("sessionId") or node.attrib.get("key")
+            rating_key = node.attrib.get("ratingKey")
+
+            user = node.find("User")
+            external_user_id: Optional[str] = None
+            username: Optional[str] = None
+            if user is not None:
+                external_user_id = user.attrib.get("id")
+                username = user.attrib.get("title")
+
+            player = node.find("Player")
+            client_product = player.attrib.get("product") if player is not None else None
+            client_name = player.attrib.get("title") if player is not None else None
+            device = player.attrib.get("device") if player is not None else None
+            ip = player.attrib.get("address") if player is not None else None
+            state = player.attrib.get("state") if player is not None else None
+            library_section_id = node.attrib.get("librarySectionID") or None
+
+
+            progress_ms = node.attrib.get("viewOffset")
+            duration_ms = node.attrib.get("duration")
+
+            # --- NEW: decisions (truth source)
+            video_decision = _normalize_decision(_first_decision(node, "videoDecision"))
+            audio_decision = _normalize_decision(_first_decision(node, "audioDecision"))
+
+            decisions = {d for d in (video_decision, audio_decision) if d}
+
+            # Play method classification (useful for UI + stats)
+            if "transcode" in decisions:
+                play_method = "transcode"
+                is_transcode = 1
+            elif "copy" in decisions:
+                play_method = "directstream"
+                is_transcode = 0
+            elif decisions and decisions.issubset({"directplay"}):
+                play_method = "directplay"
+                is_transcode = 0
+            else:
+                # fallback: no decision present => don't lie
+                play_method = "unknown"
+                is_transcode = 0
+
+            # Keep transcode session for bitrate/codecs, but don't use it as the "truth" for is_transcode
+            transcode = node.find("TranscodeSession")
+
+            # --- Bitrate (Plex can put it in different places depending on direct play / direct stream / transcode) ---
+            bitrate = None
+
+            # 1) Transcode session bitrate (when transcoding)
+            if transcode is not None:
+                bitrate = transcode.attrib.get("bandwidth") or transcode.attrib.get("peakBandwidth")
+
+            # 2) Sometimes on the session node itself
+            if not bitrate:
+                bitrate = node.attrib.get("bandwidth") or node.attrib.get("bitrate")
+
+            # 3) Sometimes on Player
+            if not bitrate and player is not None:
+                bitrate = player.attrib.get("bandwidth") or player.attrib.get("bitrate")
+
+            # 4) Fallback: Media/Part bitrate
+            if not bitrate:
+                bitrate = _first_decision(node, "bitrate")
+
+            video_codec = transcode.attrib.get("videoCodec") if transcode is not None else None
+            audio_codec = transcode.attrib.get("audioCodec") if transcode is not None else None
+
+
+            title = node.attrib.get("title")
+            grandparent = node.attrib.get("grandparentTitle")
+            parent = node.attrib.get("parentTitle")
+            season_number = node.attrib.get("parentIndex")
+            episode_number = node.attrib.get("index")
+
+            if not session_key:
+                continue
+
+            plex_type = node.attrib.get("type")  # movie / episode / track
+
+            if plex_type == "movie":
+                media_category = "movie"
+            elif plex_type == "episode":
+                media_category = "serie"
+            elif plex_type == "track":
+                media_category = "music"
+            else:
+                media_category = "other"
+
+
+            sessions.append({
+                "provider": "plex",
+                "session_key": str(session_key),
+                "external_user_id": external_user_id,
+                "username": username,
+                "media_key": rating_key,
+                "media_type": media_category,
+                "title": title,
+                "grandparent_title": grandparent,
+                "parent_title": parent,
+                "season_number": int(season_number) if season_number and str(season_number).isdigit() else None,
+                "episode_number": int(episode_number) if episode_number and str(episode_number).isdigit() else None,
+                "state": state or "unknown",
+                "progress_ms": int(progress_ms) if progress_ms and str(progress_ms).isdigit() else None,
+                "duration_ms": int(duration_ms) if duration_ms and str(duration_ms).isdigit() else None,
+                "library_section_id": library_section_id,
+
+
+                # --- NEW: store decisions
+                "video_decision": video_decision,
+                "audio_decision": audio_decision,
+                "play_method": play_method,
+
+                # existing
+                "is_transcode": is_transcode,
+                "bitrate": int(bitrate) if bitrate and str(bitrate).isdigit() else None,
+                "video_codec": video_codec,
+                "audio_codec": audio_codec,
+                "client_name": client_name,
+                "client_product": client_product,
+                "device": device,
+                "ip": ip,
+
+                "raw_json": json.dumps({
+                    "VideoOrTrack": dict(node.attrib),
+                    "User": dict(user.attrib) if user is not None else None,
+                    "Player": dict(player.attrib) if player is not None else None,
+                    "TranscodeSession": dict(transcode.attrib) if transcode is not None else None,
+                    "Media": [dict(m.attrib) for m in node.findall("Media")] if node is not None else [],
+                    "Computed": {
+                        "videoDecision": video_decision,
+                        "audioDecision": audio_decision,
+                        "play_method": play_method,
+                        "is_transcode": is_transcode,
+                    }
+                }, ensure_ascii=False),
+            })
+
+        return sessions

@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% set active_page = 'servers' %}
+{% set active_tab = 'libraries' %}
+
+{% block title %}{{ t("libraries") }} - VODUM{% endblock %}
+{% block header_title %}{{ t("libraries") }}{% endblock %}
+{% block header_subtitle %}{{ t("libraries_subtitle") }}{% endblock %}
+
+{% block content %}
+
+{% include "servers/servers_nav.html" with context %}
+
+{% set current_sort = sort or "server" %}
+{% set current_order = order or "asc" %}
+{% macro library_sort_url(sort_key) -%}
+  {% set next_order = "desc" if current_sort == sort_key and current_order == "asc" else "asc" %}
+  {{ url_for("libraries_list", sort=sort_key, order=next_order) }}
+{%- endmacro %}
+{% macro sortable_header(label, key) -%}
+  {% set active = current_sort == key %}
+  <a href="{{ library_sort_url(key) }}" class="inline-flex items-center gap-1 {{ 'text-emerald-300 font-semibold' if active else 'text-slate-400 hover:text-slate-200' }}">
+    <span>{{ label }}</span>
+    {% if active %}<span>{{ '↑' if current_order == 'asc' else '↓' }}</span>{% else %}<span>↔</span>{% endif %}
+  </a>
+{%- endmacro %}
+
+<div>
+  <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-3">
+    <h2 class="text-sm font-semibold">{{ t("all_libraries") }}</h2>
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+    <table data-mobile-primary="1" class="w-full text-xs">
+      <thead class="bg-slate-950/60 text-slate-400">
+        <tr>
+          <th class="px-3 py-2 text-left">{{ sortable_header(t("server"), "server") }}</th>
+          <th class="px-3 py-2 text-left">{{ sortable_header(t("name"), "name") }}</th>
+          <th class="px-3 py-2 text-left">{{ sortable_header(t("type"), "type") }}</th>
+          <th class="px-3 py-2 text-left">{{ sortable_header(t("id"), "section_id") }}</th>
+          <th class="px-3 py-2 text-left">{{ sortable_header(t("users"), "users") }}</th>
+          <th class="px-3 py-2 text-center">{{ t("actions") }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for lib in libraries %}
+        <tr class="border-t border-slate-800">
+          <td class="px-3 py-2 font-semibold">{{ lib.server_name }}</td>
+          <td class="px-3 py-2">{{ lib.name }}</td>
+          <td class="px-3 py-2 text-slate-400">{{ t(lib.type) }}</td>
+          <td class="px-3 py-2 font-mono text-[11px]">{{ lib.section_id }}</td>
+          <td class="px-3 py-2">{{ lib.users_count }}</td>
+          <td class="px-3 py-2 text-center relative z-[200]">
+            <button type="button"
+                    data-library-menu-toggle="{{ lib.id }}"
+                    aria-label="{{ t('actions') }}"
+                    aria-expanded="false"
+                    class="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-slate-800/80 text-slate-400 hover:text-slate-200 transition">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="5" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="12" cy="19" r="2"></circle>
+              </svg>
+            </button>
+            <div id="library-menu-{{ lib.id }}"
+                 class="hidden absolute right-3 bottom-10 z-[9999] w-64 overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl">
+              <form method="post" action="{{ url_for('bulk_grant_libraries') }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="server_id" value="{{ lib.server_id }}">
+                <input type="hidden" name="library_ids" value="{{ lib.id }}">
+                <button type="submit" class="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-left text-emerald-300 hover:bg-slate-800 transition">
+                  <span aria-hidden="true">+</span><span>{{ t("grant_active_users") }}</span>
+                </button>
+              </form>
+              <button type="button"
+                      data-library-remove="{{ lib.id }}"
+                      data-server-id="{{ lib.server_id }}"
+                      data-server-name="{{ lib.server_name }}"
+                      data-library-name="{{ lib.name }}"
+                      class="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-left text-red-300 hover:bg-slate-800 transition">
+                <span aria-hidden="true">&times;</span><span>{{ t("remove_access_all_users") }}</span>
+              </button>
+              <form method="post" action="{{ url_for('refresh_server_library', library_id=lib.id) }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-left text-sky-300 hover:bg-slate-800 transition">
+                  <span aria-hidden="true">&#8635;</span><span>{{ t("refresh_server_libraries") if lib.server_type == "jellyfin" else t("refresh_library") }}</span>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# servers/libraries pagination #}
+  <div class="mt-4">
+    {% set pagination = dict(pagination, unit_label=t("libraries")) %}
+    {% include "partials/_pagination.html" %}
+  </div>
+</div>
+
+<form method="post" action="{{ url_for('bulk_remove_libraries') }}" id="library-remove-form" class="hidden">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="server_id" id="library-remove-server-id">
+  <input type="hidden" name="library_ids" id="library-remove-library-id">
+</form>
+
+<!-- Bulk remove confirm modal -->
+<div id="bulk-remove-modal"
+     class="fixed inset-0 z-50 hidden"
+     aria-hidden="true">
+  <div class="absolute inset-0 bg-black/70"></div>
+
+  <div class="relative z-10 flex min-h-full items-center justify-center p-4">
+    <div class="w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-950 shadow-2xl">
+      <div class="px-6 py-5 border-b border-slate-800">
+        <div class="text-base font-semibold text-white" id="bulk-remove-modal-title">
+          {{ t("bulk_remove_modal_title") }}
+        </div>
+        <div class="text-sm text-slate-400 mt-1" id="bulk-remove-modal-subtitle">
+          {{ t("bulk_remove_modal_subtitle") }}
+        </div>
+      </div>
+
+      <div class="px-6 py-5 space-y-4">
+        <div class="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          {{ t("bulk_remove_modal_warning") }}
+        </div>
+
+        <div class="grid gap-3 sm:grid-cols-2 text-sm">
+          <div class="rounded-xl border border-slate-800 bg-slate-900 px-4 py-3">
+            <div class="text-slate-400 text-xs mb-1">{{ t("server") }}</div>
+            <div class="text-white font-medium" id="bulk-remove-server">—</div>
+          </div>
+
+          <div class="rounded-xl border border-slate-800 bg-slate-900 px-4 py-3">
+            <div class="text-slate-400 text-xs mb-1">{{ t("selected_libraries") }}</div>
+            <div class="text-white font-medium" id="bulk-remove-count">0</div>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-slate-800 bg-slate-900 px-4 py-3">
+          <div class="text-slate-400 text-xs mb-2">{{ t("libraries") }}</div>
+          <div id="bulk-remove-list" class="flex flex-wrap gap-2"></div>
+        </div>
+      </div>
+
+      <div class="px-6 py-4 border-t border-slate-800 flex justify-end gap-2">
+        <button type="button"
+                id="bulk-remove-cancel"
+                class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800">
+          {{ t("cancel") }}
+        </button>
+        <button type="button"
+                id="bulk-remove-confirm"
+                class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium">
+          {{ t("confirm") }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/pages/servers-libraries.js', v=g.app_version|default('dev')) }}"></script>
+{% endblock %}

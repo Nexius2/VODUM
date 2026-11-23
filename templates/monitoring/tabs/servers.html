@@ -1,0 +1,225 @@
+{% set historical_snapshot = g.monitoring_snapshot|default(none) %}
+{% include "monitoring/partials/_statistics_status.html" %}
+{% if historical_snapshot and not historical_snapshot.ready %}
+<div class="mb-4 flex flex-wrap gap-4 text-sm" data-monitoring-server-live>
+{% for server in g.monitoring_live_servers|default([]) %}
+  <span>{{ server.name }} · {{ server.status }} · {{ server.live_sessions }} {{ t('monitoring.cards.live_sessions') }}</span>
+{% endfor %}
+</div>
+{% endif %}
+{% if not historical_snapshot or historical_snapshot.ready %}
+<p class="mb-4 text-sm text-slate-400">{{ t("monitoring_server_history_completed") }}</p>
+<div class="flex items-center justify-between mb-4">
+  <div class="text-sm text-slate-400">{{ t("monitoring_servers_range") }}</div>
+  <select id="serversRangePicker" class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm">
+    <option value="7d"  {% if server_range=='7d' %}selected{% endif %}>{{ t("seven_days") }}</option>
+    <option value="1m"  {% if server_range=='1m' %}selected{% endif %}>{{ t("one_month") }}</option>
+    <option value="6m"  {% if server_range=='6m' %}selected{% endif %}>{{ t("six_months") }}</option>
+    <option value="12m" {% if server_range=='12m' %}selected{% endif %}>{{ t("one_year") }}</option>
+    <option value="all" {% if server_range=='all' %}selected{% endif %}>{{ t("monitoring_servers_all_time") }}</option>
+  </select>
+</div>
+
+{# --- helpers --- #}
+{% set g_ms = (servers_combined.watch_ms or 0) %}
+{% set g_hours = g_ms // 3600000 %}
+{% set g_mins = (g_ms % 3600000) // 60000 %}
+
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4 mb-6">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-xs text-slate-400">{{ t("monitoring_servers_sessions") }}</div>
+    <div class="text-3xl font-semibold mt-2">{{ servers_combined.sessions or 0 }}</div>
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-xs text-slate-400">{{ t("monitoring_servers_viewers") }}</div>
+    <div class="text-3xl font-semibold mt-2">{{ servers_combined.active_users or 0 }}</div>
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-xs text-slate-400">{{ t("monitoring_servers_watch_time") }}</div>
+    <div class="text-3xl font-semibold mt-2">{{ g_hours }}h {{ g_mins }}m</div>
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-xs text-slate-400">{{ t("monitoring.cards.transcodes") }}</div>
+    <div class="text-3xl font-semibold mt-2">{{ servers_combined.transcodes or 0 }}</div>
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-xs text-slate-400">{{ t("monitoring_servers_unique_ips") }}</div>
+    <div class="text-3xl font-semibold mt-2">{{ servers_combined.unique_ips or 0 }}</div>
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-xs text-slate-400">{{ t("monitoring_servers_peak_bitrate") }}</div>
+    <div class="text-sm mt-2 text-slate-200">
+      {{ t("monitoring_servers_average") }}: {{ (servers_combined.avg_peak_bitrate or 0) | round(0) }} kbps<br>
+      {{ t("monitoring_servers_maximum") }}: {{ (servers_combined.max_peak_bitrate or 0) }} kbps
+    </div>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-sm font-semibold mb-3">{{ t("monitoring_servers_sessions_day") }}</div>
+    <canvas id="chartServersSessionsDay" height="120"></canvas>
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-sm font-semibold mb-3">{{ t("monitoring_servers_media_types") }}</div>
+    <canvas id="chartServersMediaTypes" height="120"></canvas>
+  </div>
+</div>
+
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-6">
+  <div class="text-sm font-semibold mb-3">{{ t("monitoring_servers_summary") }}</div>
+
+  <div class="overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead class="text-slate-400">
+        <tr class="border-b border-slate-800">
+          <th class="text-left py-2 pr-4">{{ t("server") }}</th>
+          <th class="text-left py-2 pr-4">{{ t("status") }}</th>
+          <th class="text-left py-2 pr-4">{{ t("monitoring_servers_live") }}</th>
+          <th class="text-left py-2 pr-4">{{ t("users") }}</th>
+          <th class="text-left py-2 pr-4">{{ t("libraries") }}</th>
+          <th class="text-left py-2 pr-4">{{ t("monitoring_servers_sessions") }}</th>
+          <th class="text-left py-2 pr-4">{{ t("monitoring_servers_viewers") }}</th>
+          <th class="text-left py-2 pr-4">{{ t("monitoring_servers_watch_time") }}</th>
+          <th class="text-left py-2 pr-4">{{ t("monitoring.cards.transcodes") }}</th>
+          <th class="text-left py-2 pr-4">IPs</th>
+          <th class="text-left py-2 pr-4">{{ t("bitrate") }}</th>
+          <th class="text-left py-2 pr-4">{{ t("last_check") }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in servers_details or [] %}
+        {% set ms = s.watch_ms or 0 %}
+        <tr class="border-b border-slate-800">
+          <td class="py-2 pr-4 min-w-[260px]">
+            <div class="font-semibold">{{ s.name or (t("server") ~ ' ' ~ s.server_id) }}</div>
+            <div class="text-xs text-slate-500">{{ (s.type or '')|upper }}</div>
+
+            {% with row=s, max_width_class='max-w-[220px]', show_unavailable_message=True %}
+              {% include "monitoring/partials/_server_resource_bars.html" %}
+            {% endwith %}
+          </td>
+
+          <td class="py-2 pr-4">
+            {% if s.status == 'up' %}
+              <span class="px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">{{ t("monitoring_servers_up") }}</span>
+            {% elif s.status == 'down' %}
+              <span class="px-2 py-1 rounded-lg bg-red-500/10 text-red-300 border border-red-500/30">{{ t("monitoring_servers_down") }}</span>
+            {% else %}
+              <span class="px-2 py-1 rounded-lg bg-slate-500/10 text-slate-300 border border-slate-500/30">{{ t("unknown") }}</span>
+            {% endif %}
+          </td>
+
+          <td class="py-2 pr-4">
+            <div class="font-semibold">{{ s.live_sessions or 0 }}</div>
+            <div class="text-xs text-slate-500">{{ t("monitoring_servers_direct") }}: {{ s.live_direct_plays or 0 }}</div>
+            <div class="text-xs text-slate-500">{{ t("monitoring.cards.transcodes") }}: {{ s.live_transcodes or 0 }}</div>
+          </td>
+
+          <td class="py-2 pr-4">{{ s.users or 0 }}</td>
+          <td class="py-2 pr-4">{{ s.libraries or 0 }}</td>
+          <td class="py-2 pr-4">{{ s.sessions or 0 }}</td>
+          <td class="py-2 pr-4">{{ s.active_users or 0 }}</td>
+
+          <td class="py-2 pr-4">
+            {{ ms // 3600000 }}h {{ (ms % 3600000) // 60000 }}m
+          </td>
+
+          <td class="py-2 pr-4">{{ s.transcodes or 0 }}</td>
+          <td class="py-2 pr-4">{{ s.unique_ips or 0 }}</td>
+
+          <td class="py-2 pr-4 text-xs text-slate-300">
+            {{ t("monitoring_servers_average") }}: {{ (s.avg_peak_bitrate or 0) | round(0) }} kbps<br>
+            {{ t("monitoring_servers_maximum") }}: {{ (s.max_peak_bitrate or 0) }} kbps
+          </td>
+
+          <td class="py-2 pr-4 text-xs text-slate-500">{{ s.last_checked|browser_datetime if s.last_checked else '-' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 h-full">
+    <div class="text-sm font-semibold mb-3">{{ t("monitoring_servers_top_ips") }}</div>
+    <div class="space-y-2 max-h-[360px] overflow-auto pr-2">
+      {% for r in (servers_unique_ips or [])[:40] %}
+        <div class="flex items-center justify-between border border-slate-800 rounded-xl px-3 py-2">
+          <div class="min-w-0">
+            <div class="text-sm font-semibold truncate">{{ r.ip }}</div>
+            <div class="text-xs text-slate-500">{{ r.server_name or (t("server") ~ ' ' ~ r.server_id) }} • {{ t("monitoring_servers_sessions") }} {{ r.sessions }}</div>
+          </div>
+          {% set ms = r.watch_ms or 0 %}
+          <div class="text-xs text-slate-300 text-right whitespace-nowrap">
+            {{ ms // 3600000 }}h {{ (ms % 3600000) // 60000 }}m
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 h-full">
+    <div class="text-sm font-semibold mb-3">{{ t("monitoring_servers_top_clients") }}</div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[360px] overflow-auto pr-2">
+      {% for r in (servers_clients or [])[:80] %}
+        <div class="border border-slate-800 rounded-xl px-3 py-2">
+          <div class="text-sm font-semibold truncate">{{ r.client }}</div>
+          <div class="text-xs text-slate-500">
+            {{ r.server_name or (t("server") ~ ' ' ~ r.server_id) }} • {{ t("monitoring_servers_sessions") }} {{ r.sessions }} • {{ t("monitoring.cards.transcodes") }} {{ r.transcodes }}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+
+
+{% if arr_monitoring and arr_monitoring.servers %}
+<div class="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+{% for provider in ['sonarr', 'radarr'] %}
+{% set instances = arr_monitoring.servers | selectattr('type', 'equalto', provider) | list %}
+{% if instances %}
+<section class="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+<h3 class="font-semibold mb-3">{{ t(provider) }} · {{ t('arr_analysis') }}</h3>
+{% for instance in instances %}
+<a href="{{ url_for('server_detail', server_id=instance.id) }}" class="block mb-3 rounded-xl border border-slate-800 p-3">
+<div class="font-medium">{{ instance.name }} · {{ t('online') if instance.status == 'up' else t('offline') if instance.status == 'down' else t('unknown') }}</div>
+<div class="text-xs text-slate-400 mt-2">{{ t('arr_availability') }}: {{ instance.availability if instance.availability is defined else '-' }}% · {{ t('arr_latency') }}: {{ instance.latency_ms if instance.latency_ms is defined and instance.latency_ms is not none else '-' }} ms</div>
+<div class="text-xs text-slate-400 mt-1">{{ t('arr_queue') }}: {{ instance.queue_count if instance.queue_count is defined and instance.queue_count is not none else '-' }} · {{ t('arr_health') }}: {{ instance.health_count if instance.health_count is defined and instance.health_count is not none else '-' }}</div>
+</a>
+{% endfor %}
+<canvas id="arr-availability-{{ provider }}" height="140"></canvas>
+<canvas id="arr-queue-{{ provider }}" height="140" class="mt-4"></canvas>
+</section>
+{% endif %}
+{% endfor %}
+</div>
+{% endif %}
+
+<script type="application/json" id="monitoring-servers-config">
+  {
+    "serversUrl": {{ url_for('monitoring_page', tab='servers')|tojson }},
+    "serverLabel": {{ t("server")|tojson }},
+    "sessionsLabel": {{ t("monitoring_servers_sessions")|tojson }},
+    "arr": {{ (arr_monitoring or {})|tojson }},
+    "arrAvailabilityLabel": {{ t("arr_availability")|tojson }},
+    "arrQueueLabel": {{ t("arr_queue")|tojson }},
+    "details": {{ (servers_details or [])|tojson }},
+    "sessionsDay": {{ (servers_sessions_day or [])|tojson }},
+    "mediaTypes": {{ (servers_media_types or [])|tojson }}
+  }
+</script>
+<script src="{{ url_for('static', filename='js/pages/monitoring-servers.js', v=g.app_version|default('dev')) }}"></script>
+
+
+
+{% endif %}

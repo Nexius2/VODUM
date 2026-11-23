@@ -1,0 +1,355 @@
+#!/usr/bin/env python3
+
+"""
+check_servers.py - VERSION TXT LOGGING
+--------------------------------------
+✓ Tous les logs détaillés → TXT
+✓ Plus aucune insertion dans la DB pour les logs
+✓ Ultra stable (aucun database locked)
+✓ task_logs() seulement pour START / SUCCESS / ERROR
+✓ Compatibilité run(task_id, db=None)
+"""
+from core.error_reporting import log_handled_failure
+
+from core.arr_connections import arr_get_status
+from core.seerr_connections import seerr_get_status
+from core.jellyfin_auth import jellyfin_headers
+import urllib3
+import xml.etree.ElementTree as ET
+from datetime import datetime
+from tasks_engine import task_logs
+from logging_utils import get_logger, is_debug_mode_enabled
+from core.server_cooldown import (
+    mark_server_unreachable,
+    clear_server_cooldown,
+    is_server_in_cooldown,
+    get_server_cooldown_remaining_seconds,
+)
+from core.http_security import plex_server_http_session, server_http_session
+
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+log = get_logger("check_servers")   # Logger TXT haut niveau
+
+
+# ------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------
+
+def jellyfin_get_status(server_row, base_url, token=None):
+    reachable = False
+    try:
+        http = server_http_session(server_row, retry_reads=True)
+        if is_debug_mode_enabled():
+            log.debug(f"[JELLYFIN] ping url={base_url}/System/Ping")
+        r = http.get(f"{base_url}/System/Ping", timeout=5)
+        if is_debug_mode_enabled():
+            log.debug(f"[JELLYFIN] ping status_code={r.status_code}")
+
+        if r.status_code != 200:
+            return ("down", None, None, f"Ping returned {r.status_code}")
+        reachable = True
+
+        if token:
+            if is_debug_mode_enabled():
+                log.debug(f"[JELLYFIN] info url={base_url}/System/Info (authenticated)")
+            r2 = http.get(
+                f"{base_url}/System/Info",
+                headers=jellyfin_headers(token),
+                timeout=5
+            )
+            if is_debug_mode_enabled():
+                log.debug(f"[JELLYFIN] info status_code={r2.status_code}")
+
+            if r2.status_code != 200:
+                log.warning(
+                    "[JELLYFIN] server #%s reachable, but /System/Info returned HTTP %s; "
+                    "check API credentials/permissions or proxy configuration",
+                    server_row.get("id"), r2.status_code,
+                )
+                return ("up", None, None, None)
+
+            try:
+                info = r2.json()
+                if not isinstance(info, dict):
+                    raise ValueError("Expected a JSON object")
+            except ValueError:
+                log.warning(
+                    "[JELLYFIN] server #%s reachable, but /System/Info returned "
+                    "invalid JSON metadata (HTTP %s); keeping server online",
+                    server_row.get("id"), r2.status_code,
+                )
+                return ("up", None, None, None)
+
+            name = info.get("ServerName")
+            mid = info.get("Id")
+            version = info.get("Version")
+            if is_debug_mode_enabled():
+                log.debug(f"[JELLYFIN] info parsed name={name} id={mid} version={version}")
+
+            return ("up", name, mid, version)
+
+        return ("up", None, None, None)
+
+    except Exception as e:
+        if reachable:
+            log.warning(
+                "[JELLYFIN] server #%s reachable, but /System/Info failed (%s); "
+                "keeping server online",
+                server_row.get("id"), type(e).__name__,
+            )
+            return ("up", None, None, None)
+        log.warning(f"[JELLYFIN] unreachable: {e}")
+        if is_debug_mode_enabled():
+            log.debug("[JELLYFIN] unreachable traceback", exc_info=True)
+        return ("down", None, None, f"Jellyfin error: {e}")
+
+
+
+def choose_server_base_urls(server_row):
+    urls = []
+
+    for key in ("url", "local_url", "public_url"):
+        url = (server_row.get(key) or "").strip().rstrip("/")
+        if not url:
+            continue
+        if not url.startswith(("http://", "https://")):
+            url = "http://" + url
+        if url not in urls:
+            urls.append(url)
+
+    return urls
+
+
+def plex_get_info(server_row, base_url, token):
+    try:
+        if is_debug_mode_enabled():
+            log.debug(f"[PLEX] connecting base_url={base_url} token_present={bool(token)}")
+        session = plex_server_http_session(server_row, retry_reads=True)
+        response = session.get(
+            f"{base_url}/identity",
+            headers={"X-Plex-Token": token, "Accept": "application/xml"},
+            timeout=5,
+        )
+        if response.status_code != 200:
+            return ("down", None, None, f"Plex identity returned HTTP {response.status_code}")
+
+        identity = ET.fromstring(response.content)
+        friendly_name = server_row.get("name")
+        try:
+            root_response = session.get(
+                f"{base_url}/",
+                headers={"X-Plex-Token": token, "Accept": "application/xml"},
+                timeout=5,
+            )
+            if root_response.status_code == 200:
+                friendly_name = ET.fromstring(root_response.content).get("friendlyName") or friendly_name
+        except Exception as exc:
+            log.warning(
+                "[PLEX] server #%s reachable, but name lookup failed (%s); keeping server online",
+                server_row.get("id"), type(exc).__name__,
+            )
+
+        machine_id = identity.get("machineIdentifier")
+        version = identity.get("version")
+        if is_debug_mode_enabled():
+            log.debug(
+                f"[PLEX] connected friendlyName={friendly_name} "
+                f"machineId={machine_id} version={version}"
+            )
+        return ("up", friendly_name or "Plex", machine_id, version)
+
+    except Exception as e:
+        if is_debug_mode_enabled():
+            log.error(f"[PLEX] failed base_url={base_url}", exc_info=True)
+        else:
+            log.warning(f"[PLEX] unreachable base_url={base_url}: {e}")
+        return ("down", None, None, f"PlexAPI error: {e}")
+
+
+
+def check_generic_server(server_row, url):
+    try:
+        r = server_http_session(server_row, retry_reads=True).get(url, timeout=5)
+        return "up" if r.status_code < 400 else "down"
+    except Exception:
+        log_handled_failure("servers.check_http_availability", server_id=server_row.get("id"))
+        return "down"
+
+
+
+
+def run(task_id: int, db):
+    """
+    Tâche check_servers — version UNIFORME et FINALE
+    DBManager fourni par tasks_engine
+    """
+
+    task_logs(task_id, "start", "Tâche check_servers démarrée")
+    log.info("=== CHECK SERVERS : STARTING ===")
+
+    try:
+        servers = db.query("SELECT id, name, server_identifier, type, url, local_url, public_url, token, settings_json, server_version, unavailable_since, cooldown_until, last_failure, last_checked, status FROM servers")
+
+        if not servers:
+            log.warning("No server found in the database.")
+            task_logs(task_id, "warning", "No server found.")
+            return
+
+        now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+
+        for s in servers:
+            s = dict(s) 
+            sid = s["id"]
+            old_name = s["name"]
+            if is_server_in_cooldown(s):
+                remaining = get_server_cooldown_remaining_seconds(s)
+                log.info(
+                    f"--- Server analysis #{sid} ({old_name}) skipped: "
+                    f"cooldown active ({remaining}s remaining) ---"
+                )
+                continue
+            log.info(f"--- Server analysis #{sid} ({old_name}) ---")
+
+            base_urls = choose_server_base_urls(s)
+            base_url = base_urls[0] if base_urls else None
+            if is_debug_mode_enabled():
+                log.debug(
+                    f"[SERVER #{sid}] raw_urls="
+                    f"url={s.get('url')} local={s.get('local_url')} public={s.get('public_url')}"
+                )
+                log.debug(
+                    f"[SERVER #{sid}] chosen_base_url={base_url} type={s.get('type')} "
+                    f"has_token={bool(s.get('token'))}"
+                )
+
+            if not base_url:
+                log.warning(f"Server #{sid} : No valid URL.")
+
+                db.execute(
+                    """
+                    UPDATE servers
+                    SET status=?, last_checked=?
+                    WHERE id=?
+                    """,
+                    ("down", now, sid)
+                )
+                continue
+
+            new_name = old_name
+            machine_id = s["server_identifier"]
+            server_version = s.get("server_version")
+            status = "unknown"
+            meta = None
+
+            # -----------------------------
+            # SERVEUR PLEX
+            # -----------------------------
+            if s["type"] == "plex" and s["token"]:
+                meta = None
+                for candidate_url in base_urls:
+                    status, found_name, found_mid, meta = plex_get_info(s, candidate_url, s["token"])
+                    if status == "up":
+                        base_url = candidate_url
+                        break
+
+                if status == "up":
+                    server_version = meta
+                    if found_name:
+                        new_name = found_name
+                    if found_mid and found_mid != machine_id:
+                        db.execute(
+                            "UPDATE servers SET server_identifier=? WHERE id=?",
+                            (found_mid, sid)
+                        )
+
+            # -----------------------------
+            # SERVEUR JELLYFIN
+            # -----------------------------
+            elif s["type"] == "jellyfin":
+                meta = None
+                for candidate_url in base_urls:
+                    status, found_name, found_mid, meta = jellyfin_get_status(s, candidate_url, s["token"])
+                    if status == "up":
+                        base_url = candidate_url
+                        break
+
+                if status == "up":
+                    server_version = meta or s.get("server_version")
+                    if found_name:
+                        new_name = found_name
+                    if found_mid and found_mid != machine_id:
+                        db.execute(
+                            "UPDATE servers SET server_identifier=? WHERE id=?",
+                            (found_mid, sid)
+                        )
+
+            elif s["type"] in ("sonarr", "radarr"):
+                for candidate_url in base_urls:
+                    status, found_name, _, meta = arr_get_status(s, candidate_url, s["token"])
+                    if status == "up":
+                        base_url = candidate_url
+                        new_name = found_name or old_name
+                        server_version = meta
+                        break
+
+            elif s["type"] == "seerr":
+                for candidate_url in base_urls:
+                    status, found_name, _, meta = seerr_get_status(s, candidate_url, s["token"])
+                    if status == "up":
+                        base_url = candidate_url
+                        new_name = found_name or old_name
+                        server_version = meta or server_version
+                        break
+
+            # -----------------------------
+            # SERVEUR GÉNÉRIQUE
+            # -----------------------------
+            else:
+                status = check_generic_server(s, base_url)
+
+            # -----------------------------
+            # Mise à jour DB
+            # -----------------------------
+            if s["type"] in ("sonarr", "radarr"):
+                from core.arr_monitoring import collect_arr_sample
+                collect_arr_sample(db, s, base_url, status == "up")
+
+            if status == "up":
+                db.execute(
+                    """
+                    UPDATE servers
+                    SET status=?,
+                        last_checked=?,
+                        name=?,
+                        server_version=?,
+                        cooldown_until=NULL,
+                        unavailable_since=NULL,
+                        last_failure=NULL
+                    WHERE id=?
+                    """,
+                    (status, now, new_name, server_version, sid)
+                )
+                clear_server_cooldown(db, sid)
+            else:
+                db.execute(
+                    """
+                    UPDATE servers
+                    SET status=?,
+                        last_checked=?,
+                        name=?,
+                        server_version=?
+                    WHERE id=?
+                    """,
+                    (status, now, new_name, server_version, sid)
+                )
+                mark_server_unreachable(db, sid, meta or "Server check failed", cooldown_seconds=300)
+
+        log.info("=== CHECK SERVERS : COMPLETED SUCCESSFULLY ===")
+        task_logs(task_id, "success", "Server check completed")
+
+    except Exception as e:
+        log.error("Error while check_servers", exc_info=True)
+        task_logs(task_id, "error", f"Error check_servers : {e}")
+        raise

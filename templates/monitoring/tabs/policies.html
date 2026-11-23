@@ -1,0 +1,546 @@
+{% set historical_snapshot = g.monitoring_snapshot|default(none) %}
+{% include "monitoring/partials/_statistics_status.html" %}
+{% if not historical_snapshot or historical_snapshot.ready %}
+<div class="space-y-6">
+
+  <!-- Monitoring dashboard -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_total") }}</div>
+      <div class="mt-2 text-3xl font-bold text-white">{{ policy_dashboard.total or 0 }}</div>
+      <div class="mt-2 text-xs text-slate-400">
+        {{ t("monitoring_policies_enabled") }}: <span class="text-emerald-400">{{ policy_dashboard.enabled or 0 }}</span>
+        <span class="mx-2 text-slate-600">•</span>
+        {{ t("monitoring_policies_disabled") }}: <span class="text-rose-400">{{ policy_dashboard.disabled or 0 }}</span>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_actions_24h") }}</div>
+      <div class="mt-2 text-3xl font-bold text-white">{{ policy_dashboard.actions_24h or 0 }}</div>
+      <div class="mt-2 text-xs text-slate-400">
+        {{ t("monitoring_policies_warn_action") }}: <span class="text-amber-400">{{ policy_dashboard.warn_24h or 0 }}</span>
+        <span class="mx-2 text-slate-600">•</span>
+        {{ t("monitoring_policies_kill_action") }}: <span class="text-rose-400">{{ policy_dashboard.kill_24h or 0 }}</span>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_impacted_24h") }}</div>
+      <div class="mt-2 text-3xl font-bold text-white">{{ policy_dashboard.affected_actors_24h or 0 }}</div>
+      <div class="mt-2 text-xs text-slate-400">
+        {{ t("monitoring_policies_affected_rules") }}:
+        <span class="text-slate-200">{{ policy_dashboard.affected_policies_24h or 0 }}</span>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_tracked_1h") }}</div>
+      <div class="mt-2 text-3xl font-bold text-white">{{ policy_tracked_state.tracked_1h or 0 }}</div>
+      <div class="mt-2 text-xs text-slate-400">
+        {{ t("monitoring_policies_warned") }}: <span class="text-amber-400">{{ policy_tracked_state.warned_1h or 0 }}</span>
+        <span class="mx-2 text-slate-600">•</span>
+        {{ t("monitoring_policies_killed") }}: <span class="text-rose-400">{{ policy_tracked_state.killed_1h or 0 }}</span>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_targeted_users") }}</div>
+      <div class="mt-2 text-3xl font-bold text-white">{{ policy_dashboard.targeted_users or 0 }}</div>
+      <div class="mt-2 text-xs text-slate-400">
+        {{ t("monitoring_policies_targeted_servers") }}:
+        <span class="text-slate-200">{{ policy_dashboard.targeted_servers or 0 }}</span>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_scope_user") }}</div>
+      <div class="mt-2 text-3xl font-bold text-white">{{ policy_dashboard.scope_user or 0 }}</div>
+      <div class="mt-2 text-xs text-slate-400">
+        {{ t("policies_scope_global") }}: <span class="text-slate-200">{{ policy_dashboard.scope_global or 0 }}</span>
+        <span class="mx-2 text-slate-600">•</span>
+        {{ t("server") }}: <span class="text-slate-200">{{ policy_dashboard.scope_server or 0 }}</span>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_system_managed") }}</div>
+      <div class="mt-2 text-3xl font-bold text-white">{{ policy_dashboard.system_count or 0 }}</div>
+      <div class="mt-2 text-xs text-slate-400">
+        {{ t("monitoring_policies_locked") }}: <span class="text-slate-200">{{ policy_dashboard.locked_count or 0 }}</span>
+        <span class="mx-2 text-slate-600">•</span>
+        {{ t("subscription") }}: <span class="text-slate-200">{{ policy_dashboard.subscription_managed_count or 0 }}</span>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_actions_7d") }}</div>
+      <div class="mt-2 text-3xl font-bold text-white">{{ policy_dashboard.actions_7d or 0 }}</div>
+      <div class="mt-2 text-xs text-slate-400">
+        {{ t("monitoring_policies_warn_action") }}: <span class="text-amber-400">{{ policy_dashboard.warn_7d or 0 }}</span>
+        <span class="mx-2 text-slate-600">•</span>
+        {{ t("monitoring_policies_kill_action") }}: <span class="text-rose-400">{{ policy_dashboard.kill_7d or 0 }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold text-white">{{ t("monitoring_policies_hits_30d") }}</h3>
+        <span class="text-xs text-slate-500">{{ t("monitoring_policies_warn_kill") }}</span>
+      </div>
+      <div class="chart-container chart-container-md">
+        <canvas id="chartPolicyHits30d"></canvas>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold text-white">{{ t("monitoring_policies_rules_30d") }}</h3>
+        <span class="text-xs text-slate-500">{{ t("top") }} 10</span>
+      </div>
+      <div class="chart-container chart-container-md">
+        <canvas id="chartPolicyRules30d"></canvas>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold text-white">{{ t("monitoring_policies_scopes") }}</h3>
+        <span class="text-xs text-slate-500">{{ t("current") }}</span>
+      </div>
+      <div class="chart-container chart-container-sm">
+        <canvas id="chartPolicyScopes"></canvas>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold text-white">{{ t("monitoring_policies_providers_30d") }}</h3>
+        <span class="text-xs text-slate-500">{{ t("actions") }}</span>
+      </div>
+      <div class="chart-container chart-container-sm">
+        <canvas id="chartPolicyProviders30d"></canvas>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 xl:col-span-2">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold text-white">{{ t("monitoring_policies_top_users_30d") }}</h3>
+        <span class="text-xs text-slate-500">{{ t("top") }} 10</span>
+      </div>
+      <div class="chart-container chart-container-md">
+        <canvas id="chartPolicyTopUsers30d"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent enforcements -->
+  <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+    <div class="p-4 border-b border-slate-800 flex items-center justify-between gap-3">
+      <div>
+        <h3 id="policyEnforcementTableTitle" class="font-semibold text-white">
+          {{ t("monitoring_policies_recent_enforcements") }}
+        </h3>
+        <div class="mt-1 text-xs text-slate-500">{{ t("monitoring_policies_grouped_view_available") }}</div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+      <form method="get" class="flex items-center">
+        <input type="hidden" name="tab" value="policies">
+        <select name="enforcement_per_page" aria-label="{{ t('rows_per_page') }}" class="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200" onchange="this.form.submit()">
+          {% for size in (20, 50, 100) %}<option value="{{ size }}" {% if policy_enforcement_per_page == size %}selected{% endif %}>{{ size }}</option>{% endfor %}
+        </select>
+      </form>
+      <button
+        type="button"
+        id="policyEnforcementViewToggleBtn"
+        class="rounded-lg border border-indigo-700 bg-indigo-950/40 px-3 py-1.5 text-xs text-indigo-200 hover:bg-indigo-900/60"
+      >
+        {{ t("monitoring_policies_group_by_user") }}
+      </button>
+      </div>
+    </div>
+
+    <div id="policyEnforcementEventView" class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-950 text-slate-400">
+          <tr>
+            <th class="text-left p-3">{{ t("date") }}</th>
+            <th class="text-left p-3">{{ t("user") }}</th>
+            <th class="text-left p-3">{{ t("rule") }}</th>
+            <th class="text-left p-3">{{ t("provider") }}</th>
+            <th class="text-left p-3">{{ t("server") }}</th>
+            <th class="text-left p-3">{{ t("action") }}</th>
+            <th class="text-left p-3">{{ t("reason") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in policy_recent_enforcements %}
+            <tr
+              class="border-t border-slate-800 cursor-pointer hover:bg-slate-800/40 focus-within:bg-slate-800/40"
+              tabindex="0"
+              role="button"
+              data-enforcement='{{ row|tojson|forceescape }}'
+              data-enforcement-url="{{ url_for('monitoring_policy_enforcement_detail', enforcement_id=row.enforcement_id) }}"
+            >
+              <td class="p-3 text-slate-300">{{ row.created_at|browser_datetime if row.created_at else "—" }}</td>
+              <td class="p-3 text-slate-200">{{ row.user_label }}</td>
+              <td class="p-3 text-slate-300">{{ row.rule_type or '—' }}</td>
+              <td class="p-3 text-slate-400">{{ row.provider or '—' }}</td>
+              <td class="p-3 text-slate-400">{{ row.server_name or '—' }}</td>
+              <td class="p-3">
+                {% if row.action == 'kill' %}
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-rose-950/40 border border-rose-800 text-[11px] text-rose-300">{{ t("monitoring_policies_kill_action") }}</span>
+                {% elif row.action == 'kill_failed' %}
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-950/40 border border-slate-600 text-[11px] text-slate-300">{{ t("failed") }}</span>
+                {% else %}
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-950/40 border border-amber-800 text-[11px] text-amber-300">{{ t("monitoring_policies_warn_action") }}</span>
+                {% endif %}
+              </td>
+              <td class="p-3 text-slate-400">{{ row.reason or '—' }}</td>
+            </tr>
+          {% endfor %}
+
+          {% if not policy_recent_enforcements %}
+            <tr>
+              <td class="p-4 text-slate-400" colspan="7">
+                {{ t("monitoring_policies_no_enforcements") }}
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+      {% if policy_enforcement_total_pages > 1 %}
+      <div class="flex items-center justify-between gap-3 border-t border-slate-800 px-4 py-3 text-xs">
+        <span class="text-slate-500">{{ policy_enforcement_total }} · {{ t("page") }} {{ policy_enforcement_page }} / {{ policy_enforcement_total_pages }}</span>
+        <div class="flex gap-2">
+          {% if policy_enforcement_page > 1 %}
+          <a class="rounded-lg bg-slate-800 px-3 py-1.5 text-slate-200 hover:bg-slate-700"
+             href="{{ url_for('monitoring_page', tab='policies', enforcement_page=policy_enforcement_page-1, enforcement_per_page=policy_enforcement_per_page) }}">{{ t("previous") }}</a>
+          {% endif %}
+          {% if policy_enforcement_page < policy_enforcement_total_pages %}
+          <a class="rounded-lg bg-primary px-3 py-1.5 text-white hover:bg-primary-dark"
+             href="{{ url_for('monitoring_page', tab='policies', enforcement_page=policy_enforcement_page+1, enforcement_per_page=policy_enforcement_per_page) }}">{{ t("next") }}</a>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <div id="policyEnforcementGroupView" class="hidden overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-950 text-slate-400">
+          <tr>
+            <th class="text-left p-3">{{ t("user") }}</th>
+            <th class="text-left p-3">{{ t("monitoring_policies_warn_action") }}</th>
+            <th class="text-left p-3">{{ t("monitoring_policies_kill_action") }}</th>
+            <th class="text-left p-3">{{ t("total") }}</th>
+            <th class="text-left p-3">{{ t("monitoring_policies_last_action") }}</th>
+            <th class="text-left p-3">{{ t("monitoring_policies_last_server") }}</th>
+            <th class="text-left p-3">{{ t("monitoring_policies_last_reason") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in policy_grouped_enforcements %}
+            <tr
+              class="border-t border-slate-800 cursor-pointer hover:bg-slate-800/40 focus-within:bg-slate-800/40"
+              tabindex="0"
+              role="button"
+              data-enforcement-group='{{ row|tojson|forceescape }}'
+            >
+              <td class="p-3 text-slate-200 font-medium">{{ row.user_label }}</td>
+              <td class="p-3 text-amber-300">{{ row.warn_count }}</td>
+              <td class="p-3 text-rose-300">{{ row.kill_count }}</td>
+              <td class="p-3 text-slate-300">{{ row.total_count }}</td>
+              <td class="p-3 text-slate-400">
+                {{ row.last_action or "—" }}
+                <div class="text-xs text-slate-500">{{ row.last_created_at|browser_datetime if row.last_created_at else "—" }}</div>
+              </td>
+              <td class="p-3 text-slate-400">{{ row.last_server_name or "—" }}</td>
+              <td class="p-3 text-slate-400">{{ row.last_reason or "—" }}</td>
+            </tr>
+          {% endfor %}
+
+          {% if not policy_grouped_enforcements %}
+            <tr>
+              <td class="p-4 text-slate-400" colspan="7">
+                {{ t("monitoring_policies_no_grouped_24h") }}
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="policyEnforcementGroupModal" class="hidden fixed inset-0 z-50" aria-hidden="true">
+    <div class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+
+    <div class="relative z-10 flex min-h-full items-center justify-center p-4">
+      <div class="vodum-modal-viewport w-full max-w-5xl rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden flex flex-col">
+        <div class="shrink-0 flex items-start justify-between gap-4 border-b border-slate-800 px-4 sm:px-5 py-4">
+          <div>
+            <div id="policyEnforcementGroupModalTitle" class="text-base font-semibold text-white">
+              {{ t("monitoring_policies_user_history") }}
+            </div>
+            <div id="policyEnforcementGroupModalSubtitle" class="mt-1 text-xs text-slate-400">
+              {{ t("monitoring_policies_last_24h") }}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            id="policyEnforcementGroupModalClose"
+            class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div class="vodum-modal-scroll flex-1 overflow-auto">
+          <table class="min-w-full text-sm">
+            <thead class="sticky top-0 bg-slate-950 text-slate-400">
+              <tr>
+                <th class="text-left p-3">{{ t("date") }}</th>
+                <th class="text-left p-3">{{ t("rule") }}</th>
+                <th class="text-left p-3">{{ t("provider") }}</th>
+                <th class="text-left p-3">{{ t("server") }}</th>
+                <th class="text-left p-3">{{ t("action") }}</th>
+                <th class="text-left p-3">{{ t("reason") }}</th>
+              </tr>
+            </thead>
+            <tbody id="policyEnforcementGroupModalRows">
+              <tr>
+                <td class="p-4 text-slate-400" colspan="6">{{ t("monitoring_policies_loading") }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="policyEnforcementModal" class="hidden fixed inset-0 z-50" aria-hidden="true">
+    <div class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+
+    <div class="relative z-10 flex min-h-full items-center justify-center p-4">
+      <div class="vodum-modal-viewport w-full max-w-5xl rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden flex flex-col">
+        <div class="shrink-0 flex items-start justify-between gap-4 border-b border-slate-800 px-4 sm:px-5 py-4">
+          <div>
+            <div class="text-base font-semibold text-white">{{ t("monitoring_policies_enforcement_details") }}</div>
+            <div id="policyEnforcementModalSubtitle" class="mt-1 text-xs text-slate-400">—</div>
+          </div>
+          <button
+            type="button"
+            id="policyEnforcementModalClose"
+            class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div class="vodum-modal-scroll flex-1 px-4 sm:px-5 py-5 space-y-5">
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_enforcement_id") }}</div>
+              <div id="pem_enforcement_id" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("date") }}</div>
+              <div id="pem_created_at" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("action") }}</div>
+              <div id="pem_action" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_user_label") }}</div>
+              <div id="pem_user_label" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_account_username") }}</div>
+              <div id="pem_account_username" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_vodum_username") }}</div>
+              <div id="pem_vodum_username" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_vodum_user_id") }}</div>
+              <div id="pem_vodum_user_id" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_external_user_id") }}</div>
+              <div id="pem_external_user_id" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4 md:col-span-2 xl:col-span-3">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_ips_involved") }}</div>
+              <div id="pem_ips_involved" class="mt-2 flex flex-wrap gap-2">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_target_ip") }}</div>
+              <div id="pem_target_ip" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_target_device") }}</div>
+              <div id="pem_target_device" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_target_client") }}</div>
+              <div id="pem_target_client" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_target_media") }}</div>
+              <div id="pem_target_media" class="mt-2 text-sm text-slate-100 break-words">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_started_at") }}</div>
+              <div id="pem_target_started_at" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_last_seen_at") }}</div>
+              <div id="pem_target_last_seen_at" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("bitrate") }}</div>
+              <div id="pem_target_bitrate" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_transcode") }}</div>
+              <div id="pem_target_transcode" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_sessions_at_cut") }}</div>
+              <div id="pem_session_count" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4 md:col-span-2 xl:col-span-3">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_sessions_snapshot") }}</div>
+              <div id="pem_sessions_snapshot" class="mt-3 space-y-3">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4 md:col-span-2 xl:col-span-3">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_details_json") }}</div>
+              <pre id="pem_details_json" class="mt-2 text-xs text-slate-200 whitespace-pre-wrap break-words overflow-x-auto">—</pre>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("rule") }}</div>
+              <div id="pem_rule_type" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("provider") }}</div>
+              <div id="pem_provider" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("server") }}</div>
+              <div id="pem_server_name" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_policy_id") }}</div>
+              <div id="pem_policy_id" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("scope") }}</div>
+              <div id="pem_scope" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("priority") }}</div>
+              <div id="pem_policy_priority" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4 md:col-span-2 xl:col-span-3">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("reason") }}</div>
+              <div id="pem_reason" class="mt-2 text-sm text-slate-100 break-words">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4 md:col-span-2 xl:col-span-3">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("session_key") }}</div>
+              <div id="pem_session_key" class="mt-2 text-sm text-slate-100 break-all">—</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4 md:col-span-2 xl:col-span-3">
+              <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("monitoring_policies_rule_value_json") }}</div>
+              <pre id="pem_rule_value_json" class="mt-2 text-xs text-slate-200 whitespace-pre-wrap break-words overflow-x-auto">—</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<style>
+  .chart-container { position: relative; width: 100%; }
+  .chart-container-md { height: 280px; min-height: 280px; }
+  .chart-container-sm { height: 220px; min-height: 220px; }
+</style>
+
+<script id="monitoring-policies-config" type="application/json">
+{{ {
+  "hits30d": policy_hits_30d,
+  "rule30d": policy_rule_breakdown_30d,
+  "provider30d": policy_provider_breakdown_30d,
+  "scopeNow": policy_scope_breakdown,
+  "topUsers30d": policy_top_users_30d,
+  "labels": {
+    "warnAction": t("monitoring_policies_warn_action"),
+    "killAction": t("monitoring_policies_kill_action"),
+    "failed": t("failed"),
+    "loading": t("loading"),
+    "requestFailed": t("request_failed"),
+    "total": t("total"),
+    "yes": t("yes"),
+    "no": t("no"),
+    "mediaShow": t("monitoring_policies_media_show"),
+    "mediaParent": t("monitoring_policies_media_parent"),
+    "session": t("monitoring_policies_session"),
+    "serverProvider": t("monitoring_policies_server_provider"),
+    "device": t("device"),
+    "client": t("client"),
+    "startedAt": t("monitoring_policies_started_at"),
+    "lastSeenAt": t("monitoring_policies_last_seen_at"),
+    "bitrate": t("bitrate"),
+    "transcode": t("monitoring_policies_transcode"),
+    "media": t("monitoring_policies_media"),
+    "groupedEnforcements": t("monitoring_policies_grouped_enforcements"),
+    "recentEnforcements": t("monitoring_policies_recent_enforcements"),
+    "eventView": t("monitoring_policies_event_view"),
+    "groupByUser": t("monitoring_policies_group_by_user"),
+    "userHistory": t("monitoring_policies_user_history"),
+    "last24h": t("monitoring_policies_last_24h"),
+    "loading": t("monitoring_policies_loading"),
+    "noUserHistory24h": t("monitoring_policies_no_user_history_24h"),
+    "unableUserHistory": t("monitoring_policies_unable_user_history")
+  }
+}|tojson }}
+</script>
+<script src="{{ url_for('static', filename='js/pages/monitoring-policies.js', v=g.app_version|default('dev')) }}"></script>
+
+{% endif %}

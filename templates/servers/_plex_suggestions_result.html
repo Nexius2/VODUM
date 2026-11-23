@@ -1,0 +1,15 @@
+<div id="plex-suggestions" aria-live="polite">
+  {% if discovery_failed %}
+    <div class="rounded-xl border border-slate-800 p-4">
+      <p class="text-sm text-slate-400">{{ t('plex_discovery_failed') }}</p>
+      <button type="button" class="mt-3 rounded-lg border border-slate-700 px-3 py-2 text-sm"
+              hx-get="{{ url_for('server_plex_suggestions_partial') }}"
+              hx-target="#plex-suggestions" hx-swap="outerHTML" hx-sync="this:drop"
+              hx-request='{"timeout":20000}'>{{ t('retry') }}</button>
+    </div>
+  {% elif plex_suggestions %}
+    {% set plex_suggestions_top_row = true %}
+    {% set plex_suggestions_return_to = "servers" %}
+    {% include "servers/_plex_suggestions.html" %}
+  {% endif %}
+</div>

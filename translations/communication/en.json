@@ -1,0 +1,35 @@
+{
+  "language_name": "English",
+  "common": {
+    "none": "None"
+  },
+  "policy": {
+    "subscription_expired": "Your subscription has ended. Please renew to restore access.",
+    "max_streams_per_user": "Your subscription allows {limit} simultaneous stream(s). VODUM detected {value} stream(s).",
+    "max_ips_per_user": "Too many different IP addresses are using your account.",
+    "max_streams_per_ip": "Too many simultaneous stream(s) are using the same IP address ({ip}).",
+    "max_streams_per_server": "The server stream limit has been reached.",
+    "max_transcodes": "Too many transcoded streams are active.",
+    "max_bitrate": "One stream is above the allowed bitrate limit.",
+    "ban_4k_transcode": "4K transcoding is not allowed.",
+    "unknown": "A playback policy was violated: {rule_type}.",
+    "limit_label_max_ips_per_user": "Maximum IP addresses per user",
+    "limit_label_max_streams_per_user": "Maximum streams per user",
+    "limit_label_max_streams_per_ip": "Maximum streams per IP address",
+    "limit_label_max_streams_per_server": "Maximum streams per server",
+    "limit_label_max_transcodes": "Maximum transcoded streams",
+    "limit_label_max_bitrate": "Maximum bitrate",
+    "limit_label_ban_4k_transcode": "4K transcode blocked",
+    "limit_label_unknown": "Policy limit"
+  },
+  "portal": {
+    "invitation": {"subject": "Your {brand_name} portal invitation", "body": "Hello {username},\n\nActivate your account using this single-use link within 7 days:\n{url}"},
+    "password_reset": {"subject": "Reset your {brand_name} portal password", "body": "Use this single-use link within one hour:\n{url}"},
+    "authentication_changed": {"subject": "Your {brand_name} authentication was reset", "body": "Hello {username},\n\nAn administrator reset your portal login methods. A new invitation is required.\n\n{portal_login_url}"},
+    "suspended": {"subject": "Your {brand_name} portal access was suspended", "body": "Hello {username},\n\nYour portal access has been suspended. Contact support if needed."},
+    "reactivated": {"subject": "Your {brand_name} portal access was reactivated", "body": "Hello {username},\n\nYour portal access has been reactivated.\n\n{portal_login_url}"},
+    "new_login": {"subject": "New login to your {brand_name} portal", "body": "Hello {username},\n\nA new login to your portal account was recorded. Reset your password if this was not you.\n\n{portal_login_url}"},
+    "direct_message": {"subject": "New message in your {brand_name} portal", "body": "Hello {username},\n\nYou received a new message from an administrator. Sign in to your portal to read it.\n\n{portal_login_url}"}
+  },
+  "activation": {"button": "Activate your access", "instructions": "For your first visit, start with the button below. On Plex, create an account or sign in using the email address that received this message, then return to the activation page. Wait until all servers are ready. If an invitation is pending, accept it in Plex and return to check your access. The portal sign-in link is for later visits."}
+}

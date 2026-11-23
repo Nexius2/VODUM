@@ -1,0 +1,372 @@
+{% extends "base.html" %}
+{% set active_page = 'communications' %}
+
+{% block title %}{{ t("communications") }} - VODUM{% endblock %}
+{% block header_title %}{{ t("communications") }}{% endblock %}
+{% block header_subtitle %}{{ t("communications_subtitle") }}{% endblock %}
+
+{% block header_actions %}{% endblock %}
+
+{% block content %}
+
+{% set current_subpage = 'configuration' %}
+{% include "communications/_communications_nav.html" %}
+
+<!-- <p class="text-sm text-slate-400 mb-4">
+  {{ t('comm_config_intro') }}
+</p> -->
+
+<form id="comm_config_form" method="post" action="{{ url_for('communications_configuration_action') }}">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="action" value="save_all">
+
+	<div class="flex items-center justify-end mb-3">
+	  <div id="autosave_status" class="text-xs text-slate-500"></div>
+	</div>
+
+	<div class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+
+    <!-- Email -->
+	<div class="space-y-6 xl:order-2">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-semibold">{{ t('email') }}</h2>
+
+        <!-- iOS-style toggle -->
+        <label class="relative inline-flex items-center cursor-pointer" title="{{ t('comm_email_enable') }}">
+          <input type="checkbox"
+                 name="mailing_enabled"
+                 value="1"
+                 class="sr-only peer"
+                 {% if settings.mailing_enabled %}checked{% endif %}>
+          <div class="w-11 h-6 bg-slate-600 rounded-full peer peer-checked:bg-green-500 transition-colors"></div>
+          <div class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5 shadow"></div>
+        </label>
+      </div>
+
+      <p class="mt-2 text-sm text-slate-400">{{ t('comm_email_help') }}</p>
+
+
+      <div id="email_content" class="mt-4 space-y-3">
+        <div class="text-xs">
+          <label class="block mb-1">{{ t('mail_from') }}</label>
+          <input type="text" name="mail_from" value="{{ settings.mail_from or '' }}"
+                 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+        </div>
+
+        <div class="text-xs">
+          <label class="block mb-1">{{ t('smtp_provider') }}</label>
+          <select id="smtp_provider" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+            <option value="custom">{{ t('custom_smtp') }}</option>
+            <option value="gmail">{{ t('gmail') }}</option>
+            <option value="outlook">{{ t('outlook') }}</option>
+            <option value="yahoo">{{ t('yahoo') }}</option>
+          </select>
+        </div>
+
+        <div class="bg-slate-950/40 border border-slate-800 rounded-2xl p-3">
+          <h3 class="text-sm font-semibold mb-2">{{ t("smtp_help_title") }}</h3>
+
+          <!-- GMAIL -->
+          <div id="help_gmail" class="smtp-help hidden">
+            <div class="font-semibold mb-1 text-red-300">{{ t("gmail") }}</div>
+            <p class="text-slate-400">{{ t("smtp_gmail_requires") }}</p>
+            <ul class="list-disc list-inside text-slate-400 space-y-1 mt-1">
+              <li>✔ {{ t("smtp_gmail_2fa") }}</li>
+              <li>✔ {{ t("smtp_gmail_app_password") }}</li>
+            </ul>
+            <p class="text-slate-400 mt-2">{{ t("smtp_gmail_password_warning") }}</p>
+            <a href="https://myaccount.google.com/apppasswords" target="_blank"
+               class="inline-block mt-3 px-3 py-1.5 rounded-lg bg-yellow-600 hover:bg-yellow-500 text-xs font-semibold text-black">
+              🔐 {{ t("smtp_gmail_create_app_password") }}
+            </a>
+            <p class="text-slate-400 mt-3">
+              {{ t("smtp_server") }} : <strong>smtp.gmail.com</strong><br>
+              {{ t("smtp_port") }} : <strong>587</strong> — {{ t("smtp_tls_recommended") }}
+            </p>
+          </div>
+
+          <!-- OUTLOOK -->
+          <div id="help_outlook" class="smtp-help hidden">
+            <div class="font-semibold mb-1 text-blue-300">{{ t("outlook") }}</div>
+            <p class="text-slate-400 mb-2">{{ t("smtp_outlook_requires") }}</p>
+            <ul class="list-disc list-inside text-slate-400 space-y-1">
+              <li>✔ {{ t("smtp_outlook_account_required") }}</li>
+              <li>✔ {{ t("smtp_outlook_smtp_enabled") }}</li>
+            </ul>
+            <p class="text-slate-400 mt-3">
+              {{ t("smtp_server") }} : <strong>smtp.office365.com</strong><br>
+              {{ t("smtp_port") }} : <strong>587</strong> — {{ t("smtp_tls_required") }}
+            </p>
+          </div>
+
+          <!-- YAHOO -->
+          <div id="help_yahoo" class="smtp-help hidden">
+            <div class="font-semibold mb-1 text-purple-300">{{ t("yahoo") }}</div>
+            <p class="text-slate-400">{{ t("smtp_yahoo_requires_app_password") }}</p>
+            <p class="text-slate-400 mt-3">
+              {{ t("smtp_server") }} : <strong>smtp.mail.yahoo.com</strong><br>
+              {{ t("smtp_port") }} : <strong>587</strong> — {{ t("smtp_tls_recommended") }}
+            </p>
+          </div>
+
+          <!-- CUSTOM -->
+          <div id="help_custom" class="smtp-help">
+            <div class="font-semibold mb-1">{{ t("smtp_provider") }} : {{ t("custom_smtp") }}</div>
+            <p class="text-slate-400">{{ t("smtp_custom_select_provider_help") }}</p>
+            <p class="text-slate-400 mt-3">{{ t("smtp_custom_requirements_intro") }}</p>
+            <ul class="list-disc list-inside text-slate-400 space-y-1 mt-1">
+              <li>✔ {{ t("smtp_custom_host") }}</li>
+              <li>✔ {{ t("smtp_custom_port") }}</li>
+              <li>✔ {{ t("smtp_custom_tls_ssl") }}</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="text-xs">
+          <label class="block mb-1">{{ t('smtp_host') }}</label>
+          <input type="text" id="smtp_host" name="smtp_host" value="{{ settings.smtp_host or '' }}"
+                 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="text-xs">
+            <label class="block mb-1">{{ t('smtp_port') }}</label>
+            <input type="number" id="smtp_port" name="smtp_port" value="{{ settings.smtp_port or '' }}"
+                   class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+          </div>
+          <div class="text-xs flex items-end">
+            <label class="flex items-center gap-2 text-xs">
+              <input type="checkbox" id="smtp_tls" name="smtp_tls" value="1" {% if settings.smtp_tls %}checked{% endif %}>
+              {{ t('smtp_tls') }}
+            </label>
+          </div>
+        </div>
+
+        <div class="text-xs">
+          <label class="block mb-1">{{ t('smtp_user') }}</label>
+          <input type="text" name="smtp_user" value="{{ settings.smtp_user or '' }}"
+                 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+        </div>
+
+        <div class="text-xs">
+          <label class="block mb-1">{{ t('smtp_auth_method') }}</label>
+          {% set smtp_auth_method = settings.smtp_auth_method or 'password' %}
+          <select name="smtp_auth_method" id="smtp_auth_method"
+                  class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+            <option value="password" {% if smtp_auth_method != 'oauth2' %}selected{% endif %}>{{ t('smtp_auth_password') }}</option>
+            <option value="oauth2" {% if smtp_auth_method == 'oauth2' %}selected{% endif %}>{{ t('smtp_auth_oauth2') }}</option>
+          </select>
+        </div>
+
+        <div class="text-xs" id="smtp_password_block">
+          <label class="block mb-1">{{ t('smtp_pass') }}</label>
+          <div class="relative">
+            <input type="password" id="smtp_pass" name="smtp_pass" value="" autocomplete="new-password" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore
+                   placeholder="{% if settings.smtp_pass_configured %}Configured - leave empty to keep{% endif %}"
+                   class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs pr-10">
+            <button type="button" id="toggle_pass"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                    aria-label="Toggle password">👁️</button>
+          </div>
+          <p class="mt-1 text-[11px] text-slate-500">{{ t('comm_password_help') }}</p>
+        </div>
+
+        <div class="text-xs" id="smtp_oauth_block">
+          <label class="block mb-1">{{ t('smtp_oauth_access_token') }}</label>
+          <div class="relative">
+            <input type="password" id="smtp_oauth_access_token" name="smtp_oauth_access_token" value="" autocomplete="new-password" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore
+                   placeholder="{% if settings.smtp_oauth_access_token_configured %}Configured - leave empty to keep{% endif %}"
+                   class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs pr-10">
+            <button type="button" id="toggle_oauth_token"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                    aria-label="Toggle OAuth token">Show</button>
+          </div>
+          <p class="mt-1 text-[11px] text-slate-500">{{ t('smtp_oauth_token_help') }}</p>
+        </div>
+
+        <div class="pt-1">
+          <button form="test_email_form" type="submit" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium">{{ t('test') }}</button>
+          <p class="mt-2 text-[11px] text-slate-500">{{ t('comm_test_email_help') }}</p>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- Discord -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-semibold">{{ t('discord') }}</h2>
+
+        <!-- iOS-style toggle -->
+        <label class="relative inline-flex items-center cursor-pointer" title="{{ t('comm_discord_enable') }}">
+          <input type="checkbox"
+                 name="discord_enabled"
+                 value="1"
+                 class="sr-only peer"
+                 {% if settings.discord_enabled %}checked{% endif %}>
+          <div class="w-11 h-6 bg-slate-600 rounded-full peer peer-checked:bg-green-500 transition-colors"></div>
+          <div class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5 shadow"></div>
+        </label>
+      </div>
+
+      <p class="mt-2 text-sm text-slate-400">{{ t('comm_discord_help') }}</p>
+
+      <div id="discord_content" class="mt-4 space-y-3">
+        <div class="text-xs">
+          <label class="block mb-1">{{ t('discord_bot_token') }}</label>
+          <div class="relative">
+            <input type="password" id="discord_bot_token" name="discord_bot_token" value="" autocomplete="new-password" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore
+                   placeholder="{% if settings.discord_bot_token_configured %}Configured - leave empty to keep{% endif %}"
+                   class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs pr-10">
+            <button type="button" id="toggle_discord_token"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                    aria-label="Toggle discord token">👁️</button>
+          </div>
+          <p class="mt-1 text-[11px] text-slate-500">{{ t('comm_discord_token_help') }}</p>
+        </div>
+
+        <div class="pt-1">
+          <button form="test_discord_form" type="submit" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium">{{ t('test') }}</button>
+          <p class="mt-2 text-[11px] text-slate-500">{{ t('comm_test_discord_help') }}</p>
+        </div>
+      </div>
+    </div>
+	</div>
+
+    <!-- General -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 xl:order-1">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-semibold">{{ t('general') }}</h2>
+      </div>
+
+      <p class="mt-2 text-sm text-slate-400">{{ t('comm_general_help') }}</p>
+
+      <div class="mt-4 space-y-4">
+
+
+        <div class="text-xs">
+          <label class="block mb-1">{{ t('settings_communication_language') }}</label>
+          {% set comm_lang = settings.communication_language or 'en' %}
+          <select name="communication_language" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+            {% for lang in communication_languages %}
+              <option value="{{ lang.code }}" {% if lang.code == comm_lang %}selected{% endif %}>{{ lang.name }}</option>
+            {% endfor %}
+          </select>
+          <p class="mt-1 text-[11px] text-slate-500">{{ t('settings_communication_language_help') }}</p>
+        </div>
+
+        <div class="text-xs">
+          <label class="block mb-1">{{ t('comm_send_mode') }}</label>
+          {% set mode = (settings.notifications_send_mode or 'first') %}
+          <select name="notifications_send_mode" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+            <option value="first" {% if mode=='first' %}selected{% endif %}>{{ t('comm_send_mode_first') }}</option>
+            <option value="all" {% if mode=='all' %}selected{% endif %}>{{ t('comm_send_mode_all') }}</option>
+          </select>
+          <p class="mt-1 text-[11px] text-slate-500">{{ t('comm_send_mode_help') }}</p>
+        </div>
+
+        <div class="text-xs">
+          <label class="block mb-1">{{ t('comm_channels_order') }}</label>
+
+          {% set order_value = (settings.notifications_order or 'email,discord') %}
+          <input type="hidden" id="notifications_order" name="notifications_order" value="{{ order_value }}">
+
+          <div class="bg-slate-950/40 border border-slate-800 rounded-2xl p-3">
+            <div class="flex items-center justify-between mb-2">
+              <div class="text-slate-300 text-xs font-medium">{{ t('comm_channels_order_title') }}</div>
+              <div class="text-[11px] text-slate-500">{{ t('comm_channels_order_hint') }}</div>
+            </div>
+
+            <div id="order_list" class="space-y-2"></div>
+
+            <p class="mt-2 text-[11px] text-slate-500">{{ t('comm_channels_order_example') }}</p>
+          </div>
+        </div>
+
+
+
+	<div class="mt-4">
+	  <label class="flex items-start gap-3 cursor-pointer">
+		<input
+		  type="checkbox"
+		  name="user_notifications_can_override"
+		  value="1"
+		  class="mt-1 h-4 w-4 rounded border-slate-600 bg-slate-900 text-indigo-500 focus:ring-indigo-500"
+		  {% if settings.user_notifications_can_override %}checked{% endif %}
+		>
+
+		<div>
+		  <div class="text-sm font-medium">
+			{{ t("comm_allow_user_override") }}
+		  </div>
+		  <div class="text-xs text-slate-400">
+			{{ t("comm_user_override_note") }}
+		  </div>
+		</div>
+	  </label>
+	</div>
+
+	<div class="mt-4">
+	  <label class="flex items-start gap-3 cursor-pointer">
+		<input
+		  type="checkbox"
+		  name="skip_never_used_accounts"
+		  value="1"
+		  class="mt-1 h-4 w-4 rounded border-slate-600 bg-slate-900 text-indigo-500 focus:ring-indigo-500"
+		  {% if settings.skip_never_used_accounts %}checked{% endif %}
+		>
+
+		<div>
+		  <div class="text-sm font-medium">
+			{{ t("comm_skip_never_used_accounts") }}
+		  </div>
+		  <div class="text-xs text-slate-400">
+			{{ t("comm_skip_never_used_accounts_help") }}
+		  </div>
+		</div>
+	  </label>
+	</div>
+
+        <div class="mt-5 pt-4 border-t border-slate-800">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <div class="text-sm font-medium">{{ t('comm_retry_scheduled_button') }}</div>
+              <p class="mt-1 text-xs text-slate-400">{{ t('comm_retry_scheduled_help') }}</p>
+              <p class="mt-1 text-[11px] text-slate-500">{{ t('pending') }}: {{ queue_summary.pending or 0 }} / {{ t('failed') }}: {{ queue_summary.errors or 0 }}</p>
+            </div>
+            <button form="retry_scheduled_form" type="submit"
+                    class="shrink-0 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 text-xs font-medium"
+                    {% if not queue_summary.errors %}disabled{% endif %}>
+              {{ t('retry') }}
+            </button>
+          </div>
+        </div>
+
+
+      </div>
+    </div>
+
+  </div>
+</form>
+
+<!-- Test forms (outside main save form so they don't overwrite settings) -->
+<form id="test_email_form" method="post" action="{{ url_for('communications_configuration_action') }}" class="hidden">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="action" value="test_email">
+</form>
+
+<form id="test_discord_form" method="post" action="{{ url_for('communications_configuration_action') }}" class="hidden">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="action" value="test_discord">
+  <input type="hidden" name="discord_bot_token" id="test_discord_token" value="">
+</form>
+
+<form id="retry_scheduled_form" method="post" action="{{ url_for('communications_configuration_action') }}" class="hidden">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="action" value="retry_scheduled_errors">
+</form>
+
+<script src="{{ url_for('static', filename='js/pages/communications-configuration.js', v=g.app_version|default('dev')) }}"></script>
+
+{% endblock %}

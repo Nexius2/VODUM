@@ -1,0 +1,22 @@
+<div class="rounded-xl border border-rose-800/50 bg-rose-950/10 p-4">
+  <div class="flex items-start gap-3">
+    <input id="expiry-mode-delete" type="radio" name="expiry_mode" value="delete"
+           {% if _mode == 'delete' %}checked{% endif %}
+           class="mt-1 w-4 h-4 border-slate-600 bg-slate-800">
+    <div class="w-full">
+      <div class="flex items-center gap-2">
+        <label for="expiry-mode-delete" class="text-sm font-semibold text-slate-200 cursor-pointer">{{ t("subscription_expiry_mode_delete_title") }}</label>
+        <details class="relative">
+          <summary aria-label="{{ t('subscription_delete_plex_help_label') }}" class="flex h-5 w-5 cursor-pointer list-none items-center justify-center rounded-full border border-slate-600 text-xs text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">?</summary>
+          <p class="absolute right-0 z-50 mt-2 w-64 max-w-[75vw] rounded-lg border border-slate-700 bg-slate-950 p-3 text-xs text-slate-200 shadow-xl">{{ t("subscription_delete_plex_help") }}</p>
+        </details>
+      </div>
+      <p class="mt-1 text-xs text-slate-400">{{ t("subscription_expiry_mode_delete_help") }}</p>
+      <label for="delete-after-expiry-days" class="mt-4 mb-1 block text-xs text-slate-400">{{ t("subscription_delete_delay") }}</label>
+      <input id="delete-after-expiry-days" type="number" name="delete_after_expiry_days" min="1" max="3650" step="1" required
+             value="{{ settings.delete_after_expiry_days or 30 }}"
+             class="w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm">
+      <p class="mt-2 text-xs text-amber-300">{{ t("subscription_delete_warning") }}</p>
+    </div>
+  </div>
+</div>

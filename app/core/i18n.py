@@ -1,0 +1,334 @@
+# app/core/i18n.py
+from __future__ import annotations
+
+import json
+import os
+from typing import Callable, Dict, Optional
+
+from flask import session, redirect, url_for, request, current_app, has_request_context
+from logging_utils import get_logger, is_debug_mode_enabled
+from web.security import safe_redirect_target
+
+
+# Cache global pour éviter de relire les JSON à chaque requête
+_I18N_CACHE: Dict[str, Dict] = {}
+_I18N_CACHE_SOURCES: Dict[str, tuple] = {}
+_AVAILABLE_LANGUAGES_CACHE: Optional[Dict[str, str]] = None
+
+GLOBAL_TEMPLATE_SETTINGS_COLUMNS = """
+    admin_email,
+    admin_totp_enabled,
+    backup_retention_count,
+    backup_retention_days,
+    brand_name,
+    portal_logo_url,
+    contact_email,
+    communication_language,
+    data_retention_years,
+    debug_mode,
+    default_language,
+    default_subscription_days,
+    delete_after_expiry_days,
+    discord_enabled,
+    enable_anonymous_telemetry,
+    enable_cron_jobs,
+    expiry_mode,
+    mail_from,
+    mailing_enabled,
+    maintenance_mode,
+    notifications_order,
+    notifications_send_mode,
+    plex_user_import_mode,
+    preavis_days,
+    reminder_days,
+    skip_never_used_accounts,
+    smtp_auth_method,
+    smtp_host,
+    smtp_port,
+    smtp_tls,
+    smtp_user,
+    subscription_plans_enabled_only,
+    timezone,
+    usage_risk_analysis_window_days,
+    usage_risk_enabled,
+    usage_risk_high_threshold,
+    usage_risk_medium_threshold,
+    usage_risk_min_kills_before_suggestion,
+    usage_risk_send_stream_blocked_message,
+    usage_risk_send_upgrade_suggestions,
+    usage_risk_suggestion_cooldown_days,
+    user_notifications_can_override,
+    warn_then_disable_days,
+    web_cookie_samesite,
+    web_secure_cookies,
+    web_trust_proxy
+"""
+
+
+# ======================
+#   MULTILINGUAL SYSTEM
+# ======================
+def load_language_dict(lang_code: str) -> dict:
+    """
+    Charge le dictionnaire de traduction pour une langue donnée.
+
+    - Source principale : fichiers JSON du dossier translations/ui
+    - Mise en cache en mémoire par langue
+    """
+    logger = get_logger("i18n")
+
+    translations: dict[str, str] = {}
+
+    lang_dir = current_app.config.get("LANG_DIR") or os.path.join(current_app.root_path, "..", "translations", "ui")
+    json_path = os.path.abspath(os.path.join(lang_dir, f"{lang_code}.json"))
+
+    legacy_lang_dir = os.path.join(current_app.root_path, "..", "lang")
+    legacy_json_path = os.path.abspath(os.path.join(legacy_lang_dir, f"{lang_code}.json"))
+
+    if not os.path.exists(json_path):
+        json_path = legacy_json_path
+
+    def file_signature(path):
+        try:
+            stat = os.stat(path)
+            return path, stat.st_mtime_ns, stat.st_size
+        except OSError:
+            return path, None, None
+
+    # A copied catalogue must become visible without restarting the process.
+    # Include both paths so separate app roots cannot share a stale language.
+    signature = (file_signature(json_path),file_signature(legacy_json_path))
+    if lang_code in _I18N_CACHE and _I18N_CACHE_SOURCES.get(lang_code)==signature:
+        return _I18N_CACHE[lang_code]
+
+    if not os.path.exists(json_path):
+        logger.warning(f"[i18n] Fichier de langue introuvable: {json_path}")
+        _I18N_CACHE[lang_code] = translations
+        _I18N_CACHE_SOURCES[lang_code] = signature
+        return translations
+
+    try:
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        if isinstance(data, dict):
+            translations.update(data)
+            if is_debug_mode_enabled():
+                logger.debug(
+                    f"[i18n] {len(translations)} traductions chargées depuis fichier ({lang_code})"
+                )
+
+        # Portal strings still live in the legacy catalogue. Merge missing keys
+        # so the main UI catalogue remains authoritative without showing raw keys.
+        if json_path != legacy_json_path and os.path.exists(legacy_json_path):
+            with open(legacy_json_path, "r", encoding="utf-8") as legacy_file:
+                legacy_data = json.load(legacy_file)
+            if isinstance(legacy_data, dict):
+                for key, value in legacy_data.items():
+                    translations.setdefault(key, value)
+
+    except Exception as e:
+        logger.error(
+            f"[i18n] Erreur lecture fichier langue {json_path}: {e}",
+            exc_info=True,
+        )
+
+    _I18N_CACHE[lang_code] = translations
+    _I18N_CACHE_SOURCES[lang_code] = signature
+    return translations
+
+
+def get_available_languages():
+    global _AVAILABLE_LANGUAGES_CACHE
+
+    logger = get_logger("i18n")
+
+    if _AVAILABLE_LANGUAGES_CACHE is not None:
+        return dict(_AVAILABLE_LANGUAGES_CACHE)
+
+    lang_dir = current_app.config.get("LANG_DIR") or os.path.join(current_app.root_path, "..", "translations", "ui")
+    lang_dir = os.path.abspath(lang_dir)
+    if not os.path.isdir(lang_dir):
+        legacy_lang_dir = os.path.abspath(os.path.join(current_app.root_path, "..", "lang"))
+        if os.path.isdir(legacy_lang_dir):
+            lang_dir = legacy_lang_dir
+    languages: Dict[str, str] = {}
+
+    if not os.path.isdir(lang_dir):
+        logger.warning(f"[i18n] Dossier de langues introuvable: {lang_dir}")
+        _AVAILABLE_LANGUAGES_CACHE = {"en": "English"}
+        return dict(_AVAILABLE_LANGUAGES_CACHE)
+
+    for filename in os.listdir(lang_dir):
+        if filename.endswith(".json"):
+            code = filename[:-5]
+
+            try:
+                with open(os.path.join(lang_dir, filename), "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    name = data.get("language_name", code.upper())
+            except Exception as e:
+                logger.warning(
+                    f"[i18n] Impossible de lire le nom de langue pour {filename}: {e}",
+                    exc_info=True,
+                )
+                name = code.upper()
+
+            languages[code] = name
+
+    if not languages:
+        languages["en"] = "English"
+
+    _AVAILABLE_LANGUAGES_CACHE = dict(languages)
+    return dict(_AVAILABLE_LANGUAGES_CACHE)
+
+
+def _resolve_active_language(settings: Optional[dict] = None) -> str:
+    """
+    Priorité commune : choix manuel de session. Ensuite, le portail utilise la
+    langue du navigateur par défaut, tandis que l'administration conserve la
+    langue configurée dans ses réglages.
+    """
+    logger = get_logger("i18n")
+    available_langs = tuple(get_available_languages().keys())
+
+    session_lang = session.get("lang")
+    if session_lang in available_langs:
+        return session_lang
+
+    default_lang = (settings or {}).get("default_language")
+    is_portal_request = False
+    try:
+        is_portal_request = request.path == "/portal" or request.path.startswith("/portal/")
+    except Exception:
+        pass
+
+    if not is_portal_request and default_lang in available_langs:
+        return default_lang
+
+    browser_lang = None
+    try:
+        browser_lang = request.accept_languages.best_match(available_langs)
+    except Exception as e:
+        logger.warning(f"[i18n] Impossible de lire Accept-Language: {e}", exc_info=True)
+
+    if browser_lang in available_langs:
+        return browser_lang
+
+    if default_lang in available_langs:
+        return default_lang
+
+    if "en" in available_langs:
+        return "en"
+
+    return available_langs[0]
+
+
+def resolve_active_language(settings: Optional[dict] = None) -> str:
+    """Public resolver for pages that also maintain localized local copy."""
+    return _resolve_active_language(settings)
+
+
+def _load_request_language_settings() -> Optional[dict]:
+    if not has_request_context():
+        return None
+
+    try:
+        from web.helpers import get_db
+
+        from core.request_settings import read_presentation_settings
+        return read_presentation_settings(get_db())
+    except Exception as e:
+        get_logger("i18n").warning(
+            f"[i18n] Impossible de charger la langue UI depuis les settings: {e}",
+            exc_info=True,
+        )
+        return None
+
+
+def get_translator(settings: Optional[dict] = None):
+    logger = get_logger("i18n")
+
+    effective_settings = settings if settings is not None else _load_request_language_settings()
+    lang = _resolve_active_language(effective_settings)
+
+    try:
+        translations = load_language_dict(lang)
+    except Exception as e:
+        logger.error(
+            f"[i18n] Erreur chargement dictionnaire langue '{lang}': {e}",
+            exc_info=True,
+        )
+        translations = {}
+
+    fallback_translations = {}
+    if lang != "en":
+        try:
+            fallback_translations = load_language_dict("en")
+        except Exception as e:
+            logger.error(
+                "[i18n] Erreur chargement du dictionnaire anglais de secours: %s",
+                e,
+                exc_info=True,
+            )
+
+    def _translate(key: str):
+        if not key:
+            return ""
+        return translations.get(key, fallback_translations.get(key, key))
+
+    return _translate
+
+
+def init_i18n(app, get_db: Callable[[], object]) -> None:
+    """
+    Initialise l'i18n pour l'app Flask:
+    - injecte t() et settings dans tous les templates
+    - expose la route /set_language/<lang>
+    """
+    @app.context_processor
+    def inject_globals():
+        """
+        Variables globales injectées dans tous les templates Jinja.
+
+        - settings : paramètres globaux
+        - t        : fonction de traduction
+        """
+        db = get_db()
+
+        from core.request_settings import read_presentation_settings
+        settings = read_presentation_settings(db)
+
+        lang = _resolve_active_language(settings)
+        from core.language_telemetry import observe
+        try:
+            observe(db, settings, lang, request)
+        except Exception:
+            # Telemetry must never prevent a page from rendering.
+            from core.error_reporting import log_handled_failure
+            log_handled_failure('telemetry.language_observation')
+
+        return {
+            "t": get_translator(settings),
+            "settings": settings,
+            "active_lang": lang,
+            "portal_logo_url": settings.get("portal_logo_url"),
+        }
+
+    @app.route("/set_language", methods=["POST"])
+    def set_language():
+        lang = (request.form.get("lang") or "").strip()
+        requested_next = (
+            request.form.get("next")
+            or request.referrer
+        )
+        next_url = safe_redirect_target(requested_next, url_for("dashboard"))
+
+        available_langs = tuple(get_available_languages().keys())
+
+        if lang in available_langs:
+            session["lang"] = lang
+        else:
+            get_logger("i18n").warning(f"[i18n] Tentative de langue invalide: {lang}")
+
+        return redirect(next_url)

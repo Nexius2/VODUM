@@ -1,0 +1,958 @@
+from __future__ import annotations
+from core.error_reporting import log_handled_failure
+
+import json
+import os
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from core.communication_template_selection import select_best_templates
+from typing import Dict, List, Optional, Tuple
+
+from logging_utils import get_logger
+from notifications_utils import effective_notifications_order, is_email_ready
+from discord_utils import enrich_discord_settings, is_discord_ready, send_discord_dm, DiscordSendError
+from email_sender import send_email
+from tasks_engine import enqueue_task
+from mailing_utils import build_portal_login_url, build_user_context, render_mail
+from core.communication_i18n import (
+    resolve_communication_language,
+    resolve_generated_payload_text,
+)
+log = get_logger("communications_engine")
+
+
+DEFAULT_ATTACHMENTS_DIR = os.environ.get("COMM_ATTACHMENTS_DIR", "/appdata/attachments/communications")
+
+
+def _ensure_dir(p: Path) -> None:
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        log_handled_failure("communications.create_storage")
+        pass
+
+
+def _now_ts() -> str:
+    return datetime.now().strftime("%Y%m%d-%H%M%S")
+
+
+
+
+
+def _as_dict(row_or_dict):
+    if row_or_dict is None:
+        return {}
+    if isinstance(row_or_dict, dict):
+        return row_or_dict
+    try:
+        return dict(row_or_dict)
+    except Exception:
+        return {}
+
+
+
+def get_localized_template_content(
+    db,
+    template_id: int,
+    subject: str,
+    body: str,
+    settings: Dict | None = None,
+    user: Dict | None = None,
+    language: str | None = None,
+) -> Tuple[str, str, str]:
+    lang = language or resolve_communication_language(settings, user)
+
+    if db is None or not template_id:
+        return subject or "", body or "", lang
+
+    try:
+        row = db.query_one(
+            """
+            SELECT subject, body
+            FROM comm_template_translations
+            WHERE template_id = ?
+              AND language = ?
+            LIMIT 1
+            """,
+            (int(template_id), lang),
+        )
+        if not row and lang != "en":
+            row = db.query_one(
+                """
+                SELECT subject, body
+                FROM comm_template_translations
+                WHERE template_id = ?
+                  AND language = 'en'
+                LIMIT 1
+                """,
+                (int(template_id),),
+            )
+        if row:
+            row = dict(row)
+            return row.get("subject") or subject or "", row.get("body") or body or "", lang
+    except Exception:
+        log_handled_failure("communications.load_template_translation")
+        pass
+
+    return subject or "", body or "", lang
+
+
+def localize_communication_context(
+    settings: Dict | None,
+    user: Dict | None,
+    context: Dict | None,
+    language: str | None = None,
+) -> Tuple[Dict, str]:
+    lang = language or resolve_communication_language(settings, user)
+    localized = dict(context or {})
+    localized.update(resolve_generated_payload_text(localized, lang))
+    localized["communication_language"] = lang
+    return localized, lang
+
+
+@dataclass
+class SendAttempt:
+    channel: str  # 'email'|'discord'
+    status: str   # 'sent'|'failed'
+    error: Optional[str] = None
+    retryable: bool = True
+
+
+def available_channels(db, settings: Dict, user: Dict) -> Dict[str, bool]:
+    """Return channel availability for this user given current settings."""
+    s = _as_dict(settings)
+    u = _as_dict(user)
+
+    # Email
+    email_ok = is_email_ready(s)
+    user_email_ok = bool((u.get("email") or "").strip() or (u.get("second_email") or "").strip())
+
+    # Discord
+    s = enrich_discord_settings(db, s) if db is not None else s
+    discord_ok = is_discord_ready(s)
+    user_discord_ok = bool((u.get("discord_user_id") or "").strip())
+
+    return {
+        "email": bool(email_ok and user_email_ok),
+        "discord": bool(discord_ok and user_discord_ok),
+    }
+
+
+def store_uploads(kind: str, object_id: int, files) -> List[Dict]:
+    """Save Werkzeug FileStorage list to filesystem.
+
+    Returns a list of attachments dicts: {filename, mime_type, path}
+
+    kind: 'template'|'campaign'
+    object_id: template_id or campaign_id
+    files: request.files.getlist('attachments')
+    """
+    saved: List[Dict] = []
+    base = Path(DEFAULT_ATTACHMENTS_DIR) / kind / str(object_id)
+    _ensure_dir(base)
+
+    for f in files or []:
+        try:
+            if not f or not getattr(f, "filename", ""):
+                continue
+            original = (f.filename or "").strip()
+            # keep it simple: no external deps; remove path separators
+            original = original.replace("/", "_").replace("\\", "_")
+            if not original:
+                continue
+
+            fname = f"{_now_ts()}__{original}"
+            full = base / fname
+            f.save(str(full))
+
+            saved.append({
+                "filename": original,
+                "mime_type": getattr(f, "content_type", None) or None,
+                "path": str(full),
+            })
+        except Exception:
+            log.error("Failed to store attachment", exc_info=True)
+            continue
+
+    return saved
+
+
+def fetch_template_attachments(db, template_id: int) -> List[Dict]:
+    rows = db.query(
+        "SELECT id, filename, mime_type, path FROM comm_template_attachments WHERE template_id = ? ORDER BY id",
+        (template_id,),
+    )
+    return [dict(r) for r in (rows or [])]
+
+
+def fetch_campaign_attachments(db, campaign_id: int) -> List[Dict]:
+    rows = db.query(
+        "SELECT filename, mime_type, path FROM comm_campaign_attachments WHERE campaign_id = ? ORDER BY id",
+        (campaign_id,),
+    )
+    return [dict(r) for r in (rows or [])]
+
+def get_campaign_target_users(db, campaign: Dict) -> List[Dict]:
+    """
+    Returns Vodum users targeted by a campaign.
+
+    Rules:
+    - only Vodum users linked to at least one media user
+    - if campaign.server_id is set, restrict to users linked to this server
+    - if campaign.trigger_provider is plex/jellyfin, restrict to this media provider
+    - if campaign.subscription_scope is all, keep users with a subscription template
+    - if campaign.subscription_scope is specific, keep only this subscription template
+    """
+    campaign = _as_dict(campaign)
+    server_id = campaign.get("server_id")
+    trigger_provider = (campaign.get("trigger_provider") or "all").strip().lower()
+    subscription_scope = (campaign.get("subscription_scope") or "none").strip().lower()
+    subscription_template_id = _safe_nullable_int(campaign.get("subscription_template_id"))
+    from core.communications.rules import normalize_campaign_user_scope
+    user_scope = normalize_campaign_user_scope(campaign.get("user_scope"), default="all")
+
+    conditions = [
+        """
+        EXISTS (
+            SELECT 1
+            FROM media_users mu
+            JOIN servers s ON s.id = mu.server_id
+            WHERE mu.vodum_user_id = u.id
+        """
+    ]
+    params = []
+
+    if server_id:
+        conditions.append("AND mu.server_id = ?")
+        params.append(server_id)
+
+    if trigger_provider in ("plex", "jellyfin"):
+        conditions.append("AND LOWER(COALESCE(s.type, '')) = ?")
+        params.append(trigger_provider)
+
+    conditions.append(")")
+
+    if subscription_scope == "all":
+        conditions.append("AND u.subscription_template_id IS NOT NULL")
+
+    elif subscription_scope == "specific":
+        if subscription_template_id is None:
+            return []
+
+        conditions.append("AND u.subscription_template_id = ?")
+        params.append(subscription_template_id)
+
+    if user_scope == "active":
+        conditions.append("AND u.status IN ('active','pre_expired','reminder')")
+
+    where_sql = "\n".join(conditions)
+
+    rows = db.query(
+        f"""
+        SELECT
+            u.id,
+            u.username,
+            u.email,
+            u.second_email,
+            u.discord_user_id,
+            u.notifications_order_override
+        FROM vodum_users u
+        WHERE {where_sql}
+        ORDER BY u.id ASC
+        """,
+        tuple(params),
+    ) or []
+
+    return [dict(r) for r in rows]
+
+
+def enqueue_named_task(db, task_name: str) -> bool:
+    """
+    Queue a task by name if it exists and is enabled.
+    Returns True only if queued_count increased.
+    """
+    row = db.query_one(
+        """
+        SELECT id, enabled, queued_count
+        FROM tasks
+        WHERE name = ?
+        LIMIT 1
+        """,
+        (task_name,),
+    )
+    row = dict(row) if row else None
+    if not row:
+        return False
+
+    if not int(row.get("enabled") or 0):
+        return False
+
+    before_q = int(row.get("queued_count") or 0)
+
+    try:
+        enqueue_task(int(row["id"]))
+    except Exception:
+        log.error("Failed to enqueue task '%s'", task_name, exc_info=True)
+        return False
+
+    after = db.query_one(
+        "SELECT queued_count FROM tasks WHERE id = ?",
+        (int(row["id"]),),
+    )
+    after_q = int(after["queued_count"] or 0) if after else 0
+    return after_q > before_q
+
+
+def queue_campaign_delivery(db, campaign_id: int, *, rebuild_queue: bool = True) -> Dict:
+    """
+    Build/refresh comm_campaign_targets for a campaign and enqueue send_comm_campaigns.
+
+    Returns:
+    {
+        "ok": bool,
+        "campaign": dict|None,
+        "targets_total": int,
+        "targets_inserted": int,
+        "task_enqueued": bool,
+        "reason": str|None,
+    }
+    """
+    campaign = db.query_one("SELECT id, name, subject, body, server_id, trigger_provider, subscription_scope, subscription_template_id, user_scope, status, is_test, created_at, updated_at, sent_at FROM comm_campaigns WHERE id = ?", (campaign_id,))
+    campaign = dict(campaign) if campaign else None
+    if not campaign:
+        return {
+            "ok": False,
+            "campaign": None,
+            "targets_total": 0,
+            "targets_inserted": 0,
+            "task_enqueued": False,
+            "reason": "campaign_not_found",
+        }
+
+    if int(campaign.get("is_test") or 0) == 1:
+        return {
+            "ok": False,
+            "campaign": campaign,
+            "targets_total": 0,
+            "targets_inserted": 0,
+            "task_enqueued": False,
+            "reason": "test_campaign_not_queueable",
+        }
+
+    target_users = get_campaign_target_users(db, campaign)
+    if not target_users:
+        db.execute(
+            """
+            UPDATE comm_campaigns
+            SET status='error',
+                sent_at=NULL,
+                updated_at=CURRENT_TIMESTAMP
+            WHERE id=?
+            """,
+            (campaign_id,),
+        )
+        return {
+            "ok": False,
+            "campaign": campaign,
+            "targets_total": 0,
+            "targets_inserted": 0,
+            "task_enqueued": False,
+            "reason": "no_target_users",
+        }
+
+    if rebuild_queue:
+        db.execute("DELETE FROM comm_campaign_targets WHERE campaign_id = ?", (campaign_id,))
+
+    inserted = 0
+    for u in target_users:
+        user_id = int(u["id"])
+        dedupe_key = f"campaign:{campaign_id}:user:{user_id}"
+
+        cur = db.execute(
+            """
+            INSERT OR IGNORE INTO comm_campaign_targets(
+                campaign_id, user_id, status,
+                attempt_count, max_attempts, next_attempt_at, last_attempt_at,
+                last_error, channels_sent, dedupe_key,
+                created_at, updated_at
+            )
+            VALUES(
+                ?, ?, 'pending',
+                0, 10, NULL, NULL,
+                NULL, NULL, ?,
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            )
+            """,
+            (campaign_id, user_id, dedupe_key),
+        )
+
+        if getattr(cur, "rowcount", 0):
+            inserted += 1
+
+    db.execute(
+        """
+        UPDATE comm_campaigns
+        SET status='sending',
+            sent_at=NULL,
+            updated_at=CURRENT_TIMESTAMP
+        WHERE id=?
+        """,
+        (campaign_id,),
+    )
+
+    task_enqueued = enqueue_named_task(db, "send_comm_campaigns")
+
+    if not task_enqueued:
+        db.execute(
+            """
+            UPDATE comm_campaigns
+            SET status='error',
+                updated_at=CURRENT_TIMESTAMP
+            WHERE id=?
+            """,
+            (campaign_id,),
+        )
+        return {
+            "ok": False,
+            "campaign": campaign,
+            "targets_total": len(target_users),
+            "targets_inserted": inserted,
+            "task_enqueued": False,
+            "reason": "task_not_enqueued",
+        }
+
+    return {
+        "ok": True,
+        "campaign": campaign,
+        "targets_total": len(target_users),
+        "targets_inserted": inserted,
+        "task_enqueued": True,
+        "reason": None,
+    }
+
+def _safe_nullable_int(value):
+    try:
+        if value is None or value == "":
+            return None
+        return int(value)
+    except Exception:
+        return None
+
+
+def get_user_subscription_context(db, user_id: int) -> Dict:
+    row = db.query_one(
+        """
+        SELECT
+          u.subscription_template_id,
+          st.name AS subscription_name,
+          st.duration_days AS subscription_duration_days,
+          st.subscription_value AS subscription_value
+        FROM vodum_users u
+        LEFT JOIN subscription_templates st ON st.id = u.subscription_template_id
+        WHERE u.id = ?
+        """,
+        (user_id,),
+    )
+    return dict(row) if row else {
+        "subscription_template_id": None,
+        "subscription_name": "",
+        "subscription_duration_days": "",
+        "subscription_value": "",
+    }
+
+
+def select_comm_templates_for_user(
+    *,
+    db,
+    trigger_event: str,
+    provider: str,
+    user_id: int,
+    expiration_change_direction: str | None = None,
+) -> List[Dict]:
+    """
+    Return the best enabled template(s) for a user and event.
+
+    Important:
+    - for events with delay slots (expiration / user_creation / pending_invite_reminder),
+      we keep ONE best template per logical slot
+    - ranking priority:
+        specific subscription > all subscriptions > none
+        exact provider       > all provider
+        exact exp-change dir > all dir
+    """
+    sub_ctx = get_user_subscription_context(db, user_id)
+    user_subscription_template_id = _safe_nullable_int(sub_ctx.get("subscription_template_id"))
+
+    rows = db.query(
+        """
+        SELECT id, key, name, enabled, trigger_event, trigger_provider, expiration_change_direction, subscription_scope, subscription_template_id, days_before, days_after, subject, body, created_at, updated_at FROM comm_templates
+        WHERE enabled = 1
+          AND trigger_event = ?
+          AND trigger_provider IN ('all', ?)
+        ORDER BY id ASC
+        """,
+        (trigger_event, provider),
+    ) or []
+
+    return select_best_templates(
+        rows,
+        trigger_event=trigger_event,
+        provider=provider,
+        subscription_template_id=user_subscription_template_id,
+        expiration_change_direction=expiration_change_direction,
+    )
+
+def select_comm_template_for_user(
+    *,
+    db,
+    trigger_event: str,
+    provider: str,
+    user_id: int,
+    expiration_change_direction: str | None = None,
+) -> Dict | None:
+    templates = select_comm_templates_for_user(
+        db=db,
+        trigger_event=trigger_event,
+        provider=provider,
+        user_id=user_id,
+        expiration_change_direction=expiration_change_direction,
+    )
+    return templates[0] if templates else None
+
+def schedule_template_notification(
+    *,
+    db,
+    template_id: int,
+    user_id: int,
+    provider: str,
+    server_id: int | None,
+    send_at_modifier: str | None = None,
+    payload: Optional[Dict] = None,
+    dedupe_key: Optional[str] = None,
+    max_attempts: int = 10,
+) -> bool:
+    """
+    Queue a notification in comm_scheduled.
+
+    Returns True when a row was inserted or revived for sending.
+
+    - send_at_modifier examples:
+        None            -> now
+        "+3 days"       -> now + 3 days
+        "+15 minutes"   -> now + 15 minutes
+    - dedupe_key:
+        if already present, INSERT OR IGNORE prevents duplicates
+
+    Important:
+    - if a row already exists with the same dedupe_key and is already sent:
+      do nothing
+    - if a row already exists with the same dedupe_key and is in final error
+      (attempt_count >= max_attempts), revive it so the notification can be
+      retried later after a config fix (SMTP, Discord token, etc.)
+    """
+    payload_json = json.dumps(payload or {}, ensure_ascii=False) if payload else None
+
+    existing = None
+    if dedupe_key:
+        existing = db.query_one(
+            """
+            SELECT id, status, attempt_count, max_attempts
+            FROM comm_scheduled
+            WHERE dedupe_key = ?
+            LIMIT 1
+            """,
+            (dedupe_key,),
+        )
+        existing = dict(existing) if existing else None
+
+    if existing:
+        status = (existing.get("status") or "").strip().lower()
+        attempt_count = int(existing.get("attempt_count") or 0)
+        existing_max_attempts = int(existing.get("max_attempts") or max_attempts)
+
+        # Already sent => keep as-is
+        if status == "sent":
+            return False
+
+        # Only revive notifications that are stuck in final error.
+        # Do NOT reset pending / retrying rows, otherwise we would break backoff.
+        is_final_error = status == "error" and attempt_count >= existing_max_attempts
+
+        if is_final_error:
+            if send_at_modifier:
+                db.execute(
+                    """
+                    UPDATE comm_scheduled
+                    SET template_id=?,
+                        vodum_user_id=?,
+                        provider=?,
+                        server_id=?,
+                        send_at=datetime('now', ?),
+                        status='pending',
+                        last_error=NULL,
+                        attempt_count=0,
+                        max_attempts=?,
+                        next_attempt_at=NULL,
+                        last_attempt_at=NULL,
+                        payload_json=?,
+                        updated_at=CURRENT_TIMESTAMP
+                    WHERE id=?
+                    """,
+                    (
+                        int(template_id),
+                        int(user_id),
+                        provider,
+                        server_id,
+                        send_at_modifier,
+                        int(max_attempts),
+                        payload_json,
+                        int(existing["id"]),
+                    ),
+                )
+            else:
+                db.execute(
+                    """
+                    UPDATE comm_scheduled
+                    SET template_id=?,
+                        vodum_user_id=?,
+                        provider=?,
+                        server_id=?,
+                        send_at=CURRENT_TIMESTAMP,
+                        status='pending',
+                        last_error=NULL,
+                        attempt_count=0,
+                        max_attempts=?,
+                        next_attempt_at=NULL,
+                        last_attempt_at=NULL,
+                        payload_json=?,
+                        updated_at=CURRENT_TIMESTAMP
+                    WHERE id=?
+                    """,
+                    (
+                        int(template_id),
+                        int(user_id),
+                        provider,
+                        server_id,
+                        int(max_attempts),
+                        payload_json,
+                        int(existing["id"]),
+                    ),
+                )
+        return bool(is_final_error)
+
+    if send_at_modifier:
+        cur = db.execute(
+            """
+            INSERT OR IGNORE INTO comm_scheduled(
+                template_id, vodum_user_id, provider, server_id,
+                send_at, status, last_error,
+                attempt_count, max_attempts, next_attempt_at, last_attempt_at,
+                payload_json, dedupe_key, channels_sent,
+                created_at, updated_at
+            )
+            VALUES(
+                ?, ?, ?, ?,
+                datetime('now', ?), 'pending', NULL,
+                0, ?, NULL, NULL,
+                ?, ?, NULL,
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            )
+            """,
+            (
+                int(template_id),
+                int(user_id),
+                provider,
+                server_id,
+                send_at_modifier,
+                int(max_attempts),
+                payload_json,
+                dedupe_key,
+            ),
+        )
+    else:
+        cur = db.execute(
+            """
+            INSERT OR IGNORE INTO comm_scheduled(
+                template_id, vodum_user_id, provider, server_id,
+                send_at, status, last_error,
+                attempt_count, max_attempts, next_attempt_at, last_attempt_at,
+                payload_json, dedupe_key, channels_sent,
+                created_at, updated_at
+            )
+            VALUES(
+                ?, ?, ?, ?,
+                CURRENT_TIMESTAMP, 'pending', NULL,
+                0, ?, NULL, NULL,
+                ?, ?, NULL,
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            )
+            """,
+            (
+                int(template_id),
+                int(user_id),
+                provider,
+                server_id,
+                int(max_attempts),
+                payload_json,
+                dedupe_key,
+            ),
+        )
+
+    return bool(getattr(cur, "rowcount", 0) and cur.rowcount > 0)
+
+def _normalize_send_mode(settings: Dict) -> str:
+    mode = (settings or {}).get("notifications_send_mode")
+    mode = (mode or "first").strip().lower()
+    if mode not in ("first", "all"):
+        mode = "first"
+    return mode
+
+
+def required_channels_for_user(db, settings: Dict, user: Dict) -> List[str]:
+    avail = available_channels(db, settings, user)
+    channels: List[str] = []
+    if avail.get("email"):
+        channels.append("email")
+    if avail.get("discord"):
+        channels.append("discord")
+    return channels
+
+
+def attempts_satisfy_mode(db, settings: Dict, user: Dict, attempts: List[SendAttempt] | None) -> bool:
+    mode = _normalize_send_mode(settings)
+    attempts = attempts or []
+
+    sent_channels = {a.channel for a in attempts if getattr(a, "status", None) == "sent"}
+    skipped_only = bool(attempts) and all(getattr(a, "status", None) == "skipped" for a in attempts)
+
+    if skipped_only:
+        return True
+
+    if mode == "all":
+        required = required_channels_for_user(db, settings, user)
+        return bool(required) and all(ch in sent_channels for ch in required)
+
+    return any(getattr(a, "status", None) == "sent" for a in attempts)
+
+
+def send_to_user(
+    *,
+    db,
+    settings: Dict,
+    user: Dict,
+    subject: str,
+    body: str,
+    attachments: List[Dict] | None,
+    forced_channels: List[str] | None = None,
+    bypass_skip_never_used_accounts: bool = False,
+    automated: bool = True,
+) -> List[SendAttempt]:
+
+    """Send according to unified rules (FIRST / ALL).
+
+    Returns the list of attempts.
+    status can be:
+    - sent
+    - failed
+    - skipped
+    """
+    s = _as_dict(settings)
+    u = _as_dict(user)
+    render_input = dict(u)
+
+    if db is not None and render_input.get("id") is not None:
+        try:
+            sub_ctx = get_user_subscription_context(db, int(render_input["id"]))
+            render_input.update({
+                k: v
+                for k, v in sub_ctx.items()
+                if k not in render_input or render_input.get(k) in (None, "")
+            })
+        except Exception:
+            log_handled_failure("communications.load_subscription_context")
+            pass
+
+    render_input["brand_name"] = (
+        s.get("brand_name")
+        or s.get("app_name")
+        or "VODUM"
+    )
+    portal_public_url = s.get("portal_public_url")
+    if not portal_public_url and db is not None:
+        try:
+            portal_row = db.query_one("SELECT portal_public_url FROM settings WHERE id=1")
+            portal_public_url = dict(portal_row).get("portal_public_url") if portal_row else None
+        except Exception:
+            log_handled_failure("communications.load_portal_url")
+            portal_public_url = None
+    render_input["portal_login_url"] = build_portal_login_url(portal_public_url)
+
+    render_context = build_user_context(render_input)
+    subject = render_mail(subject or "", render_context)
+    body = render_mail(body or "", render_context)
+    # ----------------------------------------------------------
+    # Skip users who never used the account
+    # ----------------------------------------------------------
+    if not bypass_skip_never_used_accounts and int(s.get("skip_never_used_accounts") or 0) == 1:
+        user_id = u.get("id")
+
+        if user_id is not None:
+            used = db.query_one(
+                """
+                SELECT 1
+                FROM media_session_history msh
+                JOIN media_users mu ON mu.id = msh.media_user_id
+                WHERE mu.vodum_user_id = ?
+                LIMIT 1
+                """,
+                (user_id,),
+            )
+
+            if not used:
+                log.info(f"Skipping communications for user {user_id} (account never used)")
+                return [SendAttempt(channel="system", status="skipped", error="Skipped: account never used")]
+
+    mode = _normalize_send_mode(s)
+    avail = available_channels(db, s, u)
+
+    # Order: user override (if allowed) else global
+    order = effective_notifications_order(s, u)
+
+    channels_to_try: List[str] = []
+    attempts: List[SendAttempt] = []
+
+    if forced_channels:
+        for ch in forced_channels:
+            ch = (ch or "").strip().lower()
+            if ch not in ("email", "discord"):
+                continue
+            if avail.get(ch):
+                if ch not in channels_to_try:
+                    channels_to_try.append(ch)
+            else:
+                error = "Email channel is unavailable" if ch == "email" else "Discord channel is unavailable"
+                attempts.append(SendAttempt(channel=ch, status="failed", error=error, retryable=False))
+    else:
+        # In "first" mode, we must try channels IN ORDER until one succeeds.
+        # In "all" mode, we try all available channels.
+        for ch in order:
+            if avail.get(ch) and ch not in channels_to_try:
+                channels_to_try.append(ch)
+
+        for ch in ("email", "discord"):
+            if avail.get(ch) and ch not in channels_to_try:
+                channels_to_try.append(ch)
+
+    if not channels_to_try and not attempts:
+        return [SendAttempt(channel="system", status="failed", error="No channel available", retryable=False)]
+
+    # enrich discord token once
+    s2 = enrich_discord_settings(db, s) if db is not None else s
+
+    for ch in channels_to_try:
+        if ch == "email":
+            recipients: List[str] = []
+            for r in ((u.get("email") or "").strip(), (u.get("second_email") or "").strip()):
+                if r and r not in recipients:
+                    recipients.append(r)
+
+            if not recipients:
+                attempts.append(SendAttempt(channel="email", status="failed", error="User has no email", retryable=False))
+                continue
+
+            ok_any = False
+            errors: List[str] = []
+            for r in recipients:
+                ok, err = send_email(subject, body, r, s2, attachments=attachments or [], automated=automated)
+                if ok:
+                    ok_any = True
+                elif err:
+                    errors.append(f"{r}: {err}")
+
+            if ok_any:
+                attempts.append(
+                    SendAttempt(
+                        channel="email",
+                        status="sent",
+                        error=None if not errors else "; ".join(errors)[:1000],
+                    )
+                )
+            else:
+                attempts.append(
+                    SendAttempt(
+                        channel="email",
+                        status="failed",
+                        error=("; ".join(errors) or "Email send failed")[:1000],
+                    )
+                )
+
+        elif ch == "discord":
+            discord_user_id = (u.get("discord_user_id") or "").strip()
+            token = (s2.get("discord_bot_token_effective") or s2.get("discord_bot_token") or "").strip()
+
+            if not discord_user_id:
+                attempts.append(SendAttempt(channel="discord", status="failed", error="User has no discord_user_id", retryable=False))
+                continue
+
+            try:
+                send_discord_dm(token, discord_user_id, body)
+                attempts.append(SendAttempt(channel="discord", status="sent", error=None))
+            except DiscordSendError as e:
+                attempts.append(
+                    SendAttempt(
+                        channel="discord",
+                        status="failed",
+                        error=e.diagnostic()[:1000],
+                        retryable=e.retryable,
+                    )
+                )
+            except Exception as e:
+                log_handled_failure("communications.deliver_discord")
+                attempts.append(SendAttempt(channel="discord", status="failed", error=str(e)[:1000]))
+
+        # In FIRST mode, stop as soon as one channel succeeded.
+        if not forced_channels and mode == "first" and any(a.status == "sent" for a in attempts):
+            break
+
+    return attempts
+
+
+def record_history(
+    *,
+    db,
+    kind: str,
+    template_id: Optional[int],
+    campaign_id: Optional[int],
+    user_id: Optional[int],
+    attempt: SendAttempt,
+    sent_at: Optional[str] = None,
+    meta: Optional[Dict] = None,
+) -> None:
+    channel = (attempt.channel or "").strip().lower()
+    status = (attempt.status or "").strip().lower()
+
+    # comm_history is only for real channel deliveries
+    if channel not in ("email", "discord"):
+        return
+    if status not in ("sent", "failed"):
+        return
+
+    meta_json = json.dumps(meta or {}, ensure_ascii=False)
+    db.execute(
+        """
+        INSERT INTO comm_history(kind, template_id, campaign_id, user_id, channel_used, status, error, sent_at, meta_json)
+        VALUES(?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), ?)
+        """,
+        (
+            kind,
+            template_id,
+            campaign_id,
+            user_id,
+            channel,
+            status,
+            attempt.error,
+            sent_at,
+            meta_json,
+        ),
+    )

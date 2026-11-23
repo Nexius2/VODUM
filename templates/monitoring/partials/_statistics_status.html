@@ -1,0 +1,20 @@
+{% if historical_snapshot %}
+<div class="mb-4 rounded-lg border border-slate-700 bg-slate-900 p-3 text-sm text-slate-400" role="status"
+  {% if tab == 'location' and not historical_snapshot.ready and not historical_snapshot.queue_full %}
+  {% set statistics_args = request.args.to_dict() %}
+  {% if location_instant is defined and location_instant is not none %}
+  {% set _ = statistics_args.update({'at': location_instant, 'until': location_end}) %}
+  {% endif %}
+  hx-get="{{ url_for('monitoring_page', **statistics_args) }}"
+  hx-trigger="every 10s" hx-target="#monitoring-content" hx-swap="innerHTML" hx-sync="#monitoring-content:drop"
+  {% endif %}>
+  {% if historical_snapshot.ready %}
+    {{ t('monitoring_statistics_computed') }} <time>{{ historical_snapshot.computed_at }}</time> {{ t('monitoring_statistics_timezone') }}.
+    {% if historical_snapshot.failed %}<span class="text-amber-300">{{ t('monitoring_statistics_failed') }}</span>
+    {% elif historical_snapshot.stale %}<span class="text-amber-300">{{ t('monitoring_statistics_stale') }}</span>{% endif %}
+  {% else %}
+    {{ t('monitoring_statistics_queue_full') if historical_snapshot.queue_full else t('monitoring_statistics_pending') }}
+    {% if historical_snapshot.failed %}<span class="text-amber-300">{{ t('monitoring_statistics_failed') }}</span>{% endif %}
+  {% endif %}
+</div>
+{% endif %}

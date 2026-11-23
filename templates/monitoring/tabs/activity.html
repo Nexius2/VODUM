@@ -1,0 +1,92 @@
+{% set historical_snapshot = g.monitoring_snapshot|default(none) %}
+{% include "monitoring/partials/_statistics_status.html" %}
+{% if not historical_snapshot or historical_snapshot.ready %}
+<!-- Range selector -->
+<div class="flex items-center justify-between mb-4">
+  <div class="text-sm text-slate-400">{{ t("monitoring_servers_range") }}</div>
+  <select id="rangePicker" class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm">
+    <option value="7d" selected>{{ t("seven_days") }}</option>
+    <option value="1m">{{ t("one_month") }}</option>
+    <option value="6m">{{ t("six_months") }}</option>
+    <option value="12m">{{ t("one_year") }}</option>
+    <option value="all">{{ t("monitoring_servers_all_time") }}</option>
+  </select>
+</div>
+
+<!-- Charts -->
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-sm font-semibold mb-3">{{ t("monitoring_activity_sessions_day") }}</div>
+    <div class="chart-container chart-container-md">
+      <canvas id="chartActivity"></canvas>
+    </div>
+  </div>
+
+	<div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+	  <div id="donutGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+		<!-- LEFT -->
+		<div>
+		  <div class="text-sm font-semibold mb-3">{{ t("monitoring_servers_media_types") }}</div>
+		  <div class="chart-container chart-container-sm">
+			<canvas id="chartMediaTypes"></canvas>
+		  </div>
+		</div>
+
+		<!-- RIGHT -->
+		<div id="perServerBlock">
+		  <div class="text-sm font-semibold mb-3">{{ t("monitoring_activity_per_server") }}</div>
+		  <div class="chart-container chart-container-sm">
+			<canvas id="chartPerServer"></canvas>
+		  </div>
+		</div>
+
+	  </div>
+	</div>
+
+</div>
+
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-6">
+  <div class="text-sm font-semibold mb-3">{{ t("monitoring_activity_weekday") }}</div>
+  <div class="chart-container chart-container-sm">
+    <canvas id="chartWeekday"></canvas>
+  </div>
+</div>
+
+<div class="mb-6">
+  {% include "monitoring/partials/sections/_latest_events.html" %}
+</div>
+
+<style>
+  .chart-container { position: relative; width: 100%; }
+  .chart-container-md { height: 280px; min-height: 280px; }
+  .chart-container-sm { height: 220px; min-height: 220px; }
+  .chart-container canvas { width: 100% !important; height: 100% !important; }
+  @media (max-width: 767px) {
+    .chart-container-md { height: 250px; min-height: 250px; }
+    .chart-container-sm { height: 260px; min-height: 260px; }
+  }
+</style>
+
+<script type="application/json" id="monitoring-activity-config">
+  {
+    "preparingLabel": {{ t("monitoring_statistics_pending")|tojson }},
+    "failedLabel": {{ t("monitoring_statistics_failed") | tojson }},
+    "staleLabel": {{ t("monitoring_statistics_stale") | tojson }},
+    "computedLabel": {{ t("monitoring_statistics_computed")|tojson }},
+    "queueFullLabel": {{ t("monitoring_statistics_queue_full")|tojson }},
+    "sessionsLabel": {{ t("monitoring_servers_sessions")|tojson }},
+    "weekdayNames": [
+      {{ t("weekday_sun")|tojson }},
+      {{ t("weekday_mon")|tojson }},
+      {{ t("weekday_tue")|tojson }},
+      {{ t("weekday_wed")|tojson }},
+      {{ t("weekday_thu")|tojson }},
+      {{ t("weekday_fri")|tojson }},
+      {{ t("weekday_sat")|tojson }}
+    ]
+  }
+</script>
+<script src="{{ url_for('static', filename='js/pages/monitoring-activity.js', v=g.app_version|default('dev')) }}"></script>
+
+
+{% endif %}

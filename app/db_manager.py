@@ -1,0 +1,375 @@
+import sqlite3
+import threading
+import logging
+import time
+from typing import Any, Iterable, Optional
+import os
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass
+from pathlib import Path
+from functools import wraps
+
+from secret_store import decrypt_server_record
+
+
+@dataclass
+class SQLiteTiming:
+    lock_wait_ns: int = 0
+    sql_ns: int = 0
+    sql_calls: int = 0
+
+
+sqlite_timing = ContextVar("sqlite_timing", default=None)
+
+
+@contextmanager
+def _measure_sql(*, count_call=True):
+    timing = sqlite_timing.get()
+    if timing is None:
+        yield
+        return
+    started_at = time.perf_counter_ns()
+    try:
+        yield
+    finally:
+        timing.sql_ns += time.perf_counter_ns() - started_at
+        if count_call:
+            timing.sql_calls += 1
+
+
+class _TimedTransactionCursor(sqlite3.Cursor):
+    """Measure SQLite calls without including application work between them."""
+
+    def execute(self, *args, **kwargs):
+        with _measure_sql():
+            return super().execute(*args, **kwargs)
+
+    def executemany(self, *args, **kwargs):
+        with _measure_sql():
+            return super().executemany(*args, **kwargs)
+
+    def executescript(self, *args, **kwargs):
+        with _measure_sql():
+            return super().executescript(*args, **kwargs)
+
+    def fetchone(self):
+        with _measure_sql(count_call=False):
+            return super().fetchone()
+
+    def fetchmany(self, *args, **kwargs):
+        with _measure_sql(count_call=False):
+            return super().fetchmany(*args, **kwargs)
+
+    def fetchall(self):
+        with _measure_sql(count_call=False):
+            return super().fetchall()
+
+    def __next__(self):
+        with _measure_sql(count_call=False):
+            return super().__next__()
+
+
+def open_sqlite_connection(
+    db_path: str,
+    *,
+    uri: bool = False,
+    check_same_thread: bool = True,
+    timeout: float = 5.0,
+    read_only: bool = False,
+    row_factory=sqlite3.Row,
+    busy_timeout_ms: int = 5000,
+) -> sqlite3.Connection:
+    """
+    Open a consistently configured raw SQLite connection.
+
+    Use this for bootstrap, maintenance and read-only validation paths where a
+    shared DBManager instance would be too long-lived or unsafe.
+    """
+    connect_uri = uri
+    target = db_path
+
+    if read_only:
+        target = Path(db_path).absolute().as_uri() + "?mode=ro"
+        connect_uri = True
+
+    conn = sqlite3.connect(
+        target,
+        uri=connect_uri,
+        check_same_thread=check_same_thread,
+        timeout=timeout,
+    )
+    conn.row_factory = row_factory
+
+    cur = conn.cursor()
+    try:
+        cur.execute("PRAGMA foreign_keys = ON;")
+        if not read_only:
+            cur.execute("PRAGMA journal_mode = WAL;")
+            cur.execute("PRAGMA synchronous = NORMAL;")
+        cur.execute(f"PRAGMA busy_timeout = {int(busy_timeout_ms)};")
+    finally:
+        cur.close()
+
+    return conn
+
+
+class _ReadOnlyDatabase:
+    """Query interface for an operation-scoped, read-only SQLite snapshot."""
+
+    def __init__(self, connection):
+        self.connection = connection
+
+    def query(self, sql, params=()):
+        cursor = self.connection.cursor()
+        try:
+            with _measure_sql():
+                cursor.execute(sql, params)
+                rows = cursor.fetchall()
+        finally:
+            cursor.close()
+        if "servers" in sql.lower():
+            return [decrypt_server_record(row)
+                    if "token" in row.keys() or "settings_json" in row.keys()
+                    else row for row in rows]
+        return rows
+
+    def query_one(self, sql, params=()):
+        cursor = self.connection.cursor()
+        try:
+            with _measure_sql():
+                cursor.execute(sql, params)
+                row = cursor.fetchone()
+        finally:
+            cursor.close()
+        if row is not None and "servers" in sql.lower():
+            if "token" in row.keys() or "settings_json" in row.keys():
+                return decrypt_server_record(row)
+        return row
+
+
+def isolated_read_operation(function):
+    """Opt in only audited read-only builders; leave legacy transactions intact."""
+    @wraps(function)
+    def wrapped(db, *args, **kwargs):
+        if not isinstance(db, DBManager):
+            return function(db, *args, **kwargs)
+        with db.readonly_snapshot() as reader:
+            return function(reader, *args, **kwargs)
+    return wrapped
+
+
+class DBManager:
+    """
+    DBManager = 1 instance par chemin de base.
+
+    - même chemin DB => même instance
+    - autre chemin DB => autre instance
+    - connexion SQLite partagée par chemin
+    - accès thread-safe
+    """
+
+    _instances: dict[str, "DBManager"] = {}
+    _instance_lock = threading.Lock()
+
+    @staticmethod
+    def _resolve_db_path(db_path: str | None = None) -> str:
+        raw_path = db_path or os.environ.get("DATABASE_PATH", "/appdata/database.db")
+        return os.path.abspath(raw_path)
+
+    def __new__(cls, db_path: str | None = None):
+        resolved_path = cls._resolve_db_path(db_path)
+
+        with cls._instance_lock:
+            instance = cls._instances.get(resolved_path)
+            if instance is None:
+                instance = super().__new__(cls)
+                instance._initialized = False
+                instance._instance_key = resolved_path
+                cls._instances[resolved_path] = instance
+
+        return instance
+
+    def __init__(self, db_path: str | None = None):
+        resolved_path = self._resolve_db_path(db_path)
+
+        if getattr(self, "_initialized", False):
+            if getattr(self, "db_path", None) != resolved_path:
+                raise ValueError(
+                    f"DBManager already initialized for '{self.db_path}', "
+                    f"cannot reuse same instance for '{resolved_path}'"
+                )
+            return
+
+        self.db_path = resolved_path
+        self._lock = threading.Lock()
+
+        self.conn = open_sqlite_connection(
+            self.db_path,
+            check_same_thread=False,
+        )
+
+        self._initialized = True
+        logging.getLogger(__name__).info(
+            "DBManager initialized for %s",
+            self.db_path,
+        )
+
+
+    @contextmanager
+    def readonly_snapshot(self):
+        """Read committed data without holding the shared writer's Python lock.
+
+        A dedicated connection and snapshot belong to this operation only and
+        are closed on success or failure. This API must not be used inside a
+        write transaction or for reads requiring uncommitted writer changes.
+        """
+        connection = open_sqlite_connection(self.db_path, read_only=True)
+        try:
+            connection.execute("PRAGMA query_only = ON")
+            connection.execute("BEGIN")
+            yield _ReadOnlyDatabase(connection)
+        finally:
+            connection.close()
+
+    @contextmanager
+    def _locked(self):
+        timing = sqlite_timing.get()
+        started_at = time.perf_counter_ns() if timing is not None else 0
+        with self._lock:
+            if timing is not None:
+                timing.lock_wait_ns += time.perf_counter_ns() - started_at
+            yield
+
+    def execute(
+        self,
+        sql: str,
+        params: Iterable[Any] = (),
+        *,
+        commit: bool = True
+    ) -> sqlite3.Cursor:
+        with self._locked():
+            cur = self.conn.cursor()
+            try:
+                with _measure_sql():
+                    cur.execute(sql, params)
+                    if commit:
+                        self.conn.commit()
+                return cur
+            except Exception:
+                self.conn.rollback()
+                cur.close()
+                raise
+
+    @contextmanager
+    def transaction(self):
+        """Yield one cursor while holding the connection lock for an atomic unit."""
+        with self._locked():
+            timing_enabled = sqlite_timing.get() is not None
+            cursor = self.conn.cursor(factory=_TimedTransactionCursor) if timing_enabled else self.conn.cursor()
+            try:
+                if timing_enabled:
+                    with _measure_sql(count_call=False):
+                        sqlite3.Cursor.execute(cursor, "BEGIN IMMEDIATE")
+                else:
+                    cursor.execute("BEGIN IMMEDIATE")
+                yield cursor
+                with _measure_sql(count_call=False):
+                    self.conn.commit()
+            except Exception:
+                with _measure_sql(count_call=False):
+                    self.conn.rollback()
+                raise
+            finally:
+                cursor.close()
+
+    def executemany(
+        self,
+        sql: str,
+        seq_of_params: Iterable[Iterable[Any]],
+        *,
+        commit: bool = True
+    ) -> None:
+        with self._locked():
+            cur = self.conn.cursor()
+            try:
+                with _measure_sql():
+                    cur.executemany(sql, seq_of_params)
+                    if commit:
+                        self.conn.commit()
+            except Exception:
+                self.conn.rollback()
+                raise
+            finally:
+                cur.close()
+
+    def query(
+        self,
+        sql: str,
+        params: Iterable[Any] = ()
+    ) -> list[sqlite3.Row | dict]:
+        with self._locked():
+            cur = self.conn.cursor()
+            try:
+                with _measure_sql():
+                    cur.execute(sql, params)
+                    rows = cur.fetchall()
+                if "servers" in sql.lower():
+                    return [
+                        decrypt_server_record(row)
+                        if "token" in row.keys() or "settings_json" in row.keys()
+                        else row
+                        for row in rows
+                    ]
+                return rows
+            finally:
+                cur.close()
+
+    def query_one(
+        self,
+        sql: str,
+        params: Iterable[Any] = ()
+    ) -> Optional[sqlite3.Row | dict]:
+        with self._locked():
+            cur = self.conn.cursor()
+            try:
+                with _measure_sql():
+                    cur.execute(sql, params)
+                    row = cur.fetchone()
+                if row is not None and "servers" in sql.lower():
+                    if "token" in row.keys() or "settings_json" in row.keys():
+                        return decrypt_server_record(row)
+                return row
+            finally:
+                cur.close()
+
+    def close(self) -> None:
+        """
+        Ferme la connexion associée à CETTE base uniquement
+        puis enlève l'instance du cache.
+        """
+        with self._lock:
+            try:
+                if getattr(self, "conn", None) is not None:
+                    self.conn.close()
+            except Exception as e:
+                logging.getLogger(__name__).warning(
+                    "DBManager close warning for %s: %s",
+                    getattr(self, "db_path", "<unknown>"),
+                    e,
+                    exc_info=True,
+                )
+            finally:
+                self.conn = None
+                self._initialized = False
+
+        with type(self)._instance_lock:
+            key = getattr(self, "_instance_key", None)
+            if key and type(self)._instances.get(key) is self:
+                del type(self)._instances[key]
+
+        logging.getLogger(__name__).info(
+            "DBManager connection closed + cache entry removed for %s",
+            getattr(self, "db_path", "<unknown>"),
+        )
+

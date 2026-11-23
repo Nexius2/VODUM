@@ -1,0 +1,474 @@
+from __future__ import annotations
+
+from logging_utils import get_logger
+from tasks_engine import task_logs
+from communications_engine import (
+    fetch_campaign_attachments,
+    send_to_user,
+    record_history,
+    available_channels,
+)
+from core.communications.campaign_recovery import recover_campaigns
+from core.communication_channels import explicit_delivery_channels
+
+log = get_logger("send_comm_campaigns")
+
+
+def _split_channels(raw: str | None) -> set[str]:
+    if not raw:
+        return set()
+    return {x.strip() for x in str(raw).split(",") if x.strip()}
+
+
+def _join_channels(values: set[str]) -> str | None:
+    vals = sorted({x.strip() for x in values if x and x.strip()})
+    return ",".join(vals) if vals else None
+
+
+def _send_mode(settings: dict) -> str:
+    mode = (settings or {}).get("notifications_send_mode")
+    mode = (mode or "first").strip().lower()
+    return mode if mode in ("first", "all") else "first"
+
+
+def _next_retry_modifier(next_attempt_number: int) -> str:
+    if next_attempt_number <= 1:
+        return "+15 minutes"
+    if next_attempt_number == 2:
+        return "+1 hour"
+    if next_attempt_number == 3:
+        return "+6 hours"
+    return "+1 day"
+
+
+def _required_channels(db, settings: dict, user: dict) -> list[str]:
+    avail = available_channels(db, settings, user)
+    channels = []
+    if avail.get("email"):
+        channels.append("email")
+    if avail.get("discord"):
+        channels.append("discord")
+    return channels
+
+
+def _send_test_campaign(db, settings: dict, campaign: dict) -> bool:
+    admin_email = (settings.get("contact_email") or "").strip()
+    campaign_id = int(campaign["id"])
+
+    if not admin_email:
+        db.execute(
+            """
+            UPDATE comm_campaigns
+            SET status='error',
+                sent_at=CURRENT_TIMESTAMP,
+                updated_at=CURRENT_TIMESTAMP
+            WHERE id=?
+            """,
+            (campaign_id,),
+        )
+        return False
+
+    attachments = fetch_campaign_attachments(db, campaign_id)
+
+    fake_user = {
+        "id": None,
+        "username": "admin",
+        "email": admin_email,
+        "second_email": None,
+        "discord_user_id": None,
+        "notifications_order_override": None,
+    }
+
+    attempts = send_to_user(
+        db=db,
+        settings=settings,
+        user=fake_user,
+        subject=campaign.get("subject") or "",
+        body=campaign.get("body") or "",
+        attachments=attachments,
+        forced_channels=["email"],
+        automated=False,
+    )
+
+    for att in attempts:
+        record_history(
+            db=db,
+            kind="campaign",
+            template_id=None,
+            campaign_id=campaign_id,
+            user_id=None,
+            attempt=att,
+            meta={
+                "is_test": True,
+                "campaign_id": campaign_id,
+                "campaign_name": campaign.get("name"),
+            },
+        )
+
+    ok = any(att.status == "sent" and att.channel == "email" for att in attempts)
+
+    db.execute(
+        """
+        UPDATE comm_campaigns
+        SET status=?,
+            sent_at=CURRENT_TIMESTAMP,
+            updated_at=CURRENT_TIMESTAMP
+        WHERE id=?
+        """,
+        ("finished" if ok else "error", campaign_id),
+    )
+    return ok
+
+
+def _apply_campaign_status(db, campaign_ids: set[int]) -> None:
+    for campaign_id in campaign_ids:
+        row = db.query_one(
+            """
+            SELECT
+              COUNT(*) AS total_count,
+              SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent_count,
+              SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
+              SUM(CASE WHEN status = 'error' AND COALESCE(next_attempt_at, '') <> '' AND COALESCE(attempt_count, 0) < COALESCE(max_attempts, 10) THEN 1 ELSE 0 END) AS retry_count,
+              SUM(CASE WHEN status = 'error' AND (next_attempt_at IS NULL OR COALESCE(attempt_count, 0) >= COALESCE(max_attempts, 10)) THEN 1 ELSE 0 END) AS failed_final_count
+            FROM comm_campaign_targets
+            WHERE campaign_id = ?
+            """,
+            (campaign_id,),
+        )
+        row = dict(row) if row else {}
+
+        total_count = int(row.get("total_count") or 0)
+        sent_count = int(row.get("sent_count") or 0)
+        pending_count = int(row.get("pending_count") or 0)
+        retry_count = int(row.get("retry_count") or 0)
+        failed_final_count = int(row.get("failed_final_count") or 0)
+
+        if total_count == 0:
+            db.execute(
+                "UPDATE comm_campaigns SET status='draft', sent_at=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (campaign_id,),
+            )
+            continue
+
+        if pending_count > 0 or retry_count > 0:
+            db.execute(
+                "UPDATE comm_campaigns SET status='sending', sent_at=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (campaign_id,),
+            )
+            continue
+
+        if failed_final_count > 0:
+            final_status = "error"
+        elif sent_count == total_count and total_count > 0:
+            final_status = "finished"
+        else:
+            final_status = "error"
+
+        db.execute(
+            "UPDATE comm_campaigns SET status=?, sent_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            (final_status, campaign_id),
+        )
+
+
+def run(task_id: int, db):
+    task_logs(task_id, "start", "Task send_comm_campaigns started")
+    log.debug("=== SEND COMM CAMPAIGNS : START ===")
+
+    try:
+        recovery = recover_campaigns(db)
+        if any(recovery.values()):
+            log.warning("Recovered interrupted communication campaigns: %s", recovery)
+            task_logs(task_id, "warning", "Recovered interrupted communication campaigns", details=recovery)
+
+        settings = db.query_one("SELECT id, mail_from, smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_auth_method, smtp_oauth_access_token, email_history_retention_years, disable_on_expiry, delete_after_expiry_days, send_reminders, preavis_days, reminder_days, default_language, communication_language, timezone, admin_email, contact_email, admin_password_hash, auth_enabled, admin_totp_enabled, admin_totp_secret, wizard_active, wizard_completed, wizard_step, wizard_state_json, web_secure_cookies, web_cookie_samesite, web_trust_proxy, enable_cron_jobs, default_expiration_days, default_subscription_days, maintenance_mode, debug_mode, backup_retention_days, backup_retention_count, data_retention_years, brand_name, notifications_order, user_notifications_can_override, notifications_send_mode, expiry_mode, warn_then_disable_days, discord_enabled, discord_bot_token, discord_bot_id, mailing_enabled, skip_never_used_accounts, plex_user_import_mode, enable_anonymous_telemetry, telemetry_instance_id, telemetry_last_sent_at, task_defaults_version, stream_enforcer_boost_until, usage_risk_enabled, usage_risk_send_upgrade_suggestions, usage_risk_send_stream_blocked_message, usage_risk_min_kills_before_suggestion, usage_risk_analysis_window_days, usage_risk_suggestion_cooldown_days, usage_risk_medium_threshold, usage_risk_high_threshold FROM settings WHERE id = 1")
+        settings = dict(settings) if settings else {}
+
+        test_campaign_rows = db.query(
+            """
+            SELECT id, name, subject, body, server_id, status, is_test, delivery_channels
+            FROM comm_campaigns
+            WHERE is_test = 1
+              AND status = 'pending'
+            ORDER BY id ASC
+            LIMIT 20
+            """
+        )
+        test_campaigns = [dict(r) for r in (test_campaign_rows or [])]
+
+        rows = db.query(
+            """
+            SELECT
+              ct.id AS target_id,
+              ct.campaign_id,
+              ct.user_id,
+              ct.status,
+              ct.attempt_count,
+              ct.max_attempts,
+              ct.next_attempt_at,
+              ct.last_attempt_at,
+              ct.last_error,
+              ct.channels_sent,
+              c.name AS campaign_name,
+              c.subject,
+              c.body,
+              c.server_id,
+              c.delivery_channels,
+              c.status AS campaign_status
+            FROM comm_campaign_targets ct
+            JOIN comm_campaigns c ON c.id = ct.campaign_id
+            WHERE c.is_test = 0
+              AND (
+                    ct.status = 'pending'
+                 OR (
+                        ct.status = 'error'
+                    AND COALESCE(ct.attempt_count, 0) < COALESCE(ct.max_attempts, 10)
+                    AND ct.next_attempt_at IS NOT NULL
+                    AND datetime(ct.next_attempt_at) <= datetime('now')
+                 )
+              )
+            ORDER BY
+              CASE WHEN ct.status = 'pending' THEN 0 ELSE 1 END,
+              ct.id ASC
+            LIMIT 100
+            """
+        )
+        due = [dict(r) for r in (rows or [])]
+
+        if not test_campaigns and not due:
+            task_logs(task_id, "debug", "No queued communication campaigns")
+            return {"status": "idle", "processed": 0, "recovery": recovery}
+
+        processed = 0
+        success = 0
+        failed = 0
+        touched_campaign_ids: set[int] = set()
+
+        for campaign in test_campaigns:
+            processed += 1
+            campaign_id = int(campaign["id"])
+            touched_campaign_ids.add(campaign_id)
+
+            db.execute(
+                """
+                UPDATE comm_campaigns
+                SET status='sending',
+                    updated_at=CURRENT_TIMESTAMP
+                WHERE id=?
+                """,
+                (campaign_id,),
+            )
+
+            ok = _send_test_campaign(db, settings, campaign)
+            if ok:
+                success += 1
+            else:
+                failed += 1
+
+        for row in due:
+            processed += 1
+            target_id = int(row["target_id"])
+            campaign_id = int(row["campaign_id"])
+            user_id = int(row["user_id"])
+            touched_campaign_ids.add(campaign_id)
+
+            user = db.query_one(
+                """
+                SELECT
+                    u.id,
+                    u.username,
+                    u.firstname,
+                    u.lastname,
+                    u.email,
+                    u.second_email,
+                    u.discord_user_id,
+                    u.notifications_order_override,
+                    (
+                SELECT mu.preferred_language
+                FROM media_users mu
+                WHERE mu.vodum_user_id = u.id
+                  AND TRIM(COALESCE(mu.preferred_language, '')) <> ''
+                ORDER BY mu.id ASC
+                LIMIT 1
+              ) AS preferred_language,
+                    u.expiration_date,
+                    u.subscription_template_id,
+                    st.name AS subscription_name,
+                    st.duration_days AS subscription_duration_days,
+                    st.subscription_value AS subscription_value
+                FROM vodum_users u
+                LEFT JOIN subscription_templates st ON st.id = u.subscription_template_id
+                WHERE u.id = ?
+                """,
+                (user_id,),
+            )
+            user = dict(user) if user else None
+            if not user:
+                next_attempt = int(row.get("attempt_count") or 0) + 1
+                max_attempts = int(row.get("max_attempts") or 10)
+                if next_attempt >= max_attempts:
+                    db.execute(
+                        """
+                        UPDATE comm_campaign_targets
+                        SET status='error',
+                            attempt_count=?,
+                            next_attempt_at=NULL,
+                            last_attempt_at=CURRENT_TIMESTAMP,
+                            last_error=?,
+                            updated_at=CURRENT_TIMESTAMP
+                        WHERE id=?
+                        """,
+                        (next_attempt, "User not found", target_id),
+                    )
+                else:
+                    db.execute(
+                        """
+                        UPDATE comm_campaign_targets
+                        SET status='error',
+                            attempt_count=?,
+                            next_attempt_at=datetime('now', ?),
+                            last_attempt_at=CURRENT_TIMESTAMP,
+                            last_error=?,
+                            updated_at=CURRENT_TIMESTAMP
+                        WHERE id=?
+                        """,
+                        (next_attempt, _next_retry_modifier(next_attempt), "User not found", target_id),
+                    )
+                failed += 1
+                continue
+
+            attachments = fetch_campaign_attachments(db, campaign_id)
+            already_sent_channels = _split_channels(row.get("channels_sent"))
+            selected_channels = explicit_delivery_channels(row.get("delivery_channels"))
+            mode = "all" if selected_channels is not None else _send_mode(settings)
+            required_channels = list(selected_channels or _required_channels(db, settings, user))
+
+            if selected_channels is not None or mode == "all":
+                missing_channels = [ch for ch in required_channels if ch not in already_sent_channels]
+                if not missing_channels and required_channels:
+                    db.execute(
+                        """
+                        UPDATE comm_campaign_targets
+                        SET status='sent',
+                            last_error=NULL,
+                            next_attempt_at=NULL,
+                            updated_at=CURRENT_TIMESTAMP
+                        WHERE id=?
+                        """,
+                        (target_id,),
+                    )
+                    success += 1
+                    continue
+                forced_channels = missing_channels
+            else:
+                forced_channels = None
+
+            attempts = send_to_user(
+                db=db,
+                settings=settings,
+                user=user,
+                subject=row.get("subject") or "",
+                body=row.get("body") or "",
+                attachments=attachments,
+                forced_channels=forced_channels,
+                automated=False,
+            )
+
+            updated_channels_sent = set(already_sent_channels)
+            for att in attempts:
+                if att.status == "sent":
+                    updated_channels_sent.add(att.channel)
+                record_history(
+                    db=db,
+                    kind="campaign",
+                    template_id=None,
+                    campaign_id=campaign_id,
+                    user_id=user_id,
+                    attempt=att,
+                    meta={
+                        "campaign_id": campaign_id,
+                        "campaign_name": row.get("campaign_name"),
+                        "server_id": row.get("server_id"),
+                        "target_id": target_id,
+                        "attachments": [a.get("filename") for a in (attachments or [])],
+                    },
+                )
+
+            skipped_only = bool(attempts) and all(a.status == "skipped" for a in attempts)
+
+            if skipped_only:
+                target_ok = True
+            elif mode == "all":
+                target_ok = bool(required_channels) and all(ch in updated_channels_sent for ch in required_channels)
+            else:
+                target_ok = any(a.status == "sent" for a in attempts)
+
+            if target_ok:
+                db.execute(
+                    """
+                    UPDATE comm_campaign_targets
+                    SET status='sent',
+                        last_error=NULL,
+                        next_attempt_at=NULL,
+                        last_attempt_at=CURRENT_TIMESTAMP,
+                        channels_sent=?,
+                        updated_at=CURRENT_TIMESTAMP
+                    WHERE id=?
+                    """,
+                    (_join_channels(updated_channels_sent), target_id),
+                )
+                success += 1
+            else:
+                next_attempt = int(row.get("attempt_count") or 0) + 1
+                max_attempts = int(row.get("max_attempts") or 10)
+                err = "; ".join([a.error for a in attempts if a.error])[:1000] if attempts else "No channel available"
+                has_retryable_failure = any(a.status == "failed" and a.retryable for a in attempts)
+                if not has_retryable_failure:
+                    next_attempt = max_attempts
+                if next_attempt >= max_attempts:
+                    db.execute(
+                        """
+                        UPDATE comm_campaign_targets
+                        SET status='error',
+                            attempt_count=?,
+                            next_attempt_at=NULL,
+                            last_attempt_at=CURRENT_TIMESTAMP,
+                            last_error=?,
+                            channels_sent=?,
+                            updated_at=CURRENT_TIMESTAMP
+                        WHERE id=?
+                        """,
+                        (next_attempt, err, _join_channels(updated_channels_sent), target_id),
+                    )
+                else:
+                    db.execute(
+                        """
+                        UPDATE comm_campaign_targets
+                        SET status='error',
+                            attempt_count=?,
+                            next_attempt_at=datetime('now', ?),
+                            last_attempt_at=CURRENT_TIMESTAMP,
+                            last_error=?,
+                            channels_sent=?,
+                            updated_at=CURRENT_TIMESTAMP
+                        WHERE id=?
+                        """,
+                        (next_attempt, _next_retry_modifier(next_attempt), err, _join_channels(updated_channels_sent), target_id),
+                    )
+                failed += 1
+
+        _apply_campaign_status(db, touched_campaign_ids)
+
+        msg = f"send_comm_campaigns finished — processed={processed} success={success} failed={failed}"
+        task_logs(task_id, "success" if success else "debug", msg, details={"campaign_ids": sorted(touched_campaign_ids)})
+        if success or failed:
+            log.info(msg)
+        else:
+            log.debug(msg)
+        return {"status": "ok", "processed": processed, "success": success, "failed": failed, "recovery": recovery}
+
+    except Exception as e:
+        log.error("Error in send_comm_campaigns", exc_info=True)
+        task_logs(task_id, "error", f"Error send_comm_campaigns: {e}")
+        raise
+    finally:
+        log.debug("=== SEND COMM CAMPAIGNS : END ===")

@@ -1,0 +1,16 @@
+<script type="application/json" id="subscriptions-gifts-config">
+  {
+    "usersUpdated": {{ t('subscription_users_updated')|tojson }},
+    "daysAdded": {{ t('subscription_days_added')|tojson }},
+    "unknownError": {{ t('subscription_unknown_error')|tojson }},
+    "requestFailed": {{ t('subscription_request_failed')|tojson }},
+    "giftHistoryEmpty": {{ t('subscription_gift_history_empty')|tojson }},
+    "giftHistoryUser": {{ t('subscription_gift_history_user')|tojson }},
+    "giftHistoryScopeAll": {{ t('subscription_gift_history_scope_all')|tojson }},
+    "giftHistoryScopeServer": {{ t('subscription_gift_history_scope_server')|tojson }},
+    "giftHistoryDays": {{ t('subscription_gift_history_days')|tojson }},
+    "loading": {{ t('subscription_loading')|tojson }},
+    "noUserFound": {{ t('no_user_found')|tojson }}
+  }
+</script>
+<script src="{{ url_for('static', filename='js/pages/subscriptions-gifts.js', v=g.app_version|default('dev')) }}"></script>

@@ -1,0 +1,508 @@
+import time
+from flask import abort, flash, g, jsonify, redirect, render_template, request, session, url_for
+
+from core.auth_principal import permission_required, portal_login_required, portal_user_required
+from core.portal_page_data import (
+    load_portal_home, load_portal_media_access, load_portal_monitoring,
+    load_portal_profile, load_portal_subscription, load_portal_support,
+    normalize_portal_profile, update_portal_profile,
+)
+from web.helpers import get_db, send_email_via_settings
+from core.portal_messages import add_message, conversation_for_user, message_page, mark_read, unread_messages_for_user
+from core.portal_system_status import load_portal_system_status
+from core.portal_provider_profile import update_portal_provider_profile
+from core.portal_auth_methods import list_auth_methods, local_reauthentication_valid, recently_reauthenticated, unlink_identity, link_identity
+from core.portal_jellyfin_auth import authenticate_jellyfin_user, JellyfinPortalAuthError
+from core.portal_provider_identity_state import row_media_identity_is_usable
+from core.portal_local_auth import change_local_password
+from core.portal_sessions import revoke_other_portal_sessions
+from core.i18n import get_available_languages
+from discord_utils import enrich_discord_settings, is_discord_ready
+from notifications_utils import is_email_ready
+
+_FEATURE_COLUMNS = {"subscription": "portal_show_subscription", "media": "portal_show_media_access", "requests": "portal_show_media_requests", "monitoring": "portal_show_monitoring", "support": "portal_show_support"}
+
+
+def _profile_communication_state(db, settings: dict) -> tuple[bool, bool]:
+    discord_enabled = bool(int(settings.get("discord_enabled") or 0))
+    email_ready = is_email_ready(settings)
+    discord_ready = is_discord_ready(enrich_discord_settings(db, settings))
+    can_override = bool(
+        int(settings.get("user_notifications_can_override") or 0)
+        and email_ready
+        and discord_ready
+    )
+    return can_override, discord_enabled
+
+
+def _portal_ui(db) -> dict:
+    row = db.query_one(
+        "SELECT brand_name,portal_logo_url,"
+        "portal_show_invitations,portal_show_subscription,portal_show_media_access,portal_show_media_requests,portal_show_monitoring,portal_show_support FROM settings WHERE id=1"
+    ) or {}
+    values = dict(row)
+    unread_messages = 0
+    principal = getattr(g, "auth_principal", None) or {}
+    if principal.get("vodum_user_id"):
+        unread_messages = unread_messages_for_user(db, int(principal["vodum_user_id"]))
+    return {
+        "portal_brand_name": values.get("brand_name"), "portal_logo_url": values.get("portal_logo_url"),
+        "portal_terms_url": None, "portal_privacy_url": None,
+        "portal_features": {key: int(values.get(column, 1) if values.get(column) is not None else 1) == 1 for key, column in _FEATURE_COLUMNS.items()},
+        "portal_unread_messages": unread_messages,
+        "portal_invitations_enabled": int(values.get("portal_show_invitations") or 0) == 1,
+    }
+
+
+def _require_feature(db, name: str) -> dict:
+    ui = _portal_ui(db)
+    if not ui["portal_features"].get(name, False):
+        abort(404)
+    return ui
+
+
+def register(app):
+    from core.portal_audit import record_portal_event
+    actions = {
+        "portal_profile_save": "profile_updated", "portal_password_change": "password_changed",
+        "portal_friend_invite": "friend_invitation", "portal_method_link_jellyfin": "identity_linked",
+        "portal_method_unlink": "identity_unlinked", "portal_methods_reauthenticate": "reauthentication",
+        "portal_media_request_submit": "media_requested",
+        "portal_media_profile_save": "media_profile_updated", "portal_support_message_send": "support_message_sent",
+    }
+    pages = {"portal_media_requests", "portal_home", "portal_profile", "portal_subscription", "portal_media_access", "portal_system_status", "portal_monitoring", "portal_support"}
+
+    @app.before_request
+    def portal_audit_request_start():
+        if request.endpoint in actions:
+            g.portal_audit_flash_count = len(session.get("_flashes", []))
+
+    @app.after_request
+    def portal_audit_request_end(response):
+        endpoint = request.endpoint
+        if endpoint not in actions and endpoint not in pages:
+            return response
+        if endpoint == "portal_media_request_submit" and getattr(g, "portal_request_queued", False):
+            return response  # The worker audits the actual result.
+        principal = getattr(g, "auth_principal", None) or {}
+        account_id = principal.get("account_id") if principal.get("account_type") == "portal" else None
+        # Authorized user pages only; polling/assets are deliberately excluded.
+        if endpoint in pages and (not account_id or response.status_code != 200):
+            return response
+        outcome = "success"
+        if response.status_code >= 400:
+            outcome = "blocked" if response.status_code in (401, 403, 404, 429) else "failure"
+        elif endpoint in actions:
+            flashes = session.get("_flashes", [])[getattr(g, "portal_audit_flash_count", 0):]
+            if any(category == "error" for category, _ in flashes) or not account_id:
+                outcome = "failure"
+        try:
+            record_portal_event(get_db(), actions.get(endpoint, "page_view"), outcome,
+                                portal_account_id=account_id, details={"page": endpoint, **getattr(g,"portal_request_details",{})})
+        except Exception:
+            from logging_utils import get_logger
+            get_logger("portal_audit").error("Unable to persist portal event endpoint=%s", endpoint)
+        return response
+
+    def _portal_error(message_key: str, status=404):
+        return render_template("portal/error.html", message_key=message_key, **_portal_ui(get_db()), active_portal_page=""), status
+
+    @app.get("/portal")
+    @portal_login_required
+    @permission_required("portal.home.read_own")
+    @portal_user_required
+    def portal_home():
+        return portal_profile()
+
+    @app.get("/portal/profile")
+    @portal_login_required
+    @permission_required("portal.profile.read_own")
+    @portal_user_required
+    def portal_profile():
+        db = get_db()
+        user_id = int(g.auth_principal["vodum_user_id"])
+        profile = load_portal_profile(db, user_id)
+        if not profile:
+            return _portal_error("portal_account_missing")
+        ui = _portal_ui(db)
+        overview = load_portal_home(db, user_id)
+        if not overview:
+            return _portal_error("portal_account_missing")
+        accounts = load_portal_media_access(db, user_id) if ui["portal_features"]["media"] else []
+        account_id = int(g.auth_principal["account_id"])
+        setting = dict(db.query_one(
+            "SELECT user_notifications_can_override,portal_local_auth_enabled,portal_plex_auth_enabled,portal_jellyfin_auth_enabled,"
+            "discord_enabled,discord_bot_id,discord_bot_token,mailing_enabled,mail_from,smtp_host,smtp_port,"
+            "smtp_user,smtp_pass,smtp_auth_method,smtp_oauth_access_token FROM settings WHERE id=1"
+        ) or {})
+        notifications_can_override, discord_enabled = _profile_communication_state(db, setting)
+        methods = list_auth_methods(db, account_id)
+        media_rows = [dict(row) for row in (db.query(
+            "SELECT mu.type,mu.server_id,mu.details_json FROM media_users mu WHERE mu.vodum_user_id=?",
+            (user_id,),
+        ) or [])]
+        usable = [row for row in media_rows if row_media_identity_is_usable(row)]
+        has_provider = lambda provider: any(str(row.get("type") or "").lower() == provider for row in usable)
+        linked_providers = {str(method.get("provider") or "").lower() for method in methods}
+        linked_jellyfin_server_ids = {int(method["provider_server_id"]) for method in methods if str(method.get("provider") or "").lower() == "jellyfin" and method.get("provider_server_id") is not None}
+        jellyfin_server_ids = {int(row["server_id"]) for row in usable if str(row.get("type") or "").lower() == "jellyfin" and row.get("server_id") is not None}
+        servers = [dict(row) for row in (db.query(
+            "SELECT id,name FROM servers WHERE LOWER(type)='jellyfin' ORDER BY name,id"
+        ) or []) if int(row["id"]) in jellyfin_server_ids and int(row["id"]) not in linked_jellyfin_server_ids]
+        can_link_plex = bool(int(setting.get("portal_plex_auth_enabled") or 0) and has_provider("plex") and "plex" not in linked_providers)
+        can_link_jellyfin = bool(int(setting.get("portal_jellyfin_auth_enabled") or 0) and servers)
+        has_local = "local" in linked_providers and bool(int(setting.get("portal_local_auth_enabled") or 0))
+        return render_template(
+            "portal/profile.html", profile=profile, auth_methods=methods, jellyfin_servers=servers,
+            has_local_auth=has_local, can_link_plex=can_link_plex, can_link_jellyfin=can_link_jellyfin,
+            show_auth_management=bool(has_local or can_link_plex or can_link_jellyfin),
+            recently_reauthenticated=recently_reauthenticated(session), languages=get_available_languages(),
+            notifications_can_override=notifications_can_override, discord_enabled=discord_enabled,
+            **overview, accounts=accounts, **ui, active_portal_page="profile",
+        )
+
+    @app.post("/portal/profile/methods/reauthenticate")
+    @portal_login_required
+    @portal_user_required
+    def portal_methods_reauthenticate():
+        if local_reauthentication_valid(get_db(), int(g.auth_principal["account_id"]), request.form.get("password") or ""):
+            session["portal_reauthenticated_at"] = int(time.time()); flash("portal_reauthentication_done", "success")
+        else:
+            flash("portal_reauthentication_failed", "error")
+        return redirect(url_for("portal_profile"))
+
+    @app.post("/portal/profile/methods/jellyfin")
+    @portal_login_required
+    @portal_user_required
+    def portal_method_link_jellyfin():
+        try:
+            identity = authenticate_jellyfin_user(get_db(), int(request.form.get("server_id") or 0), request.form.get("username") or "", request.form.get("password") or "")
+            link_identity(get_db(), int(g.auth_principal["account_id"]), "jellyfin", identity.subject, server_id=identity.server_id, identifier=identity.username)
+            session["portal_reauthenticated_at"] = int(time.time()); flash("portal_method_linked", "success")
+        except (JellyfinPortalAuthError, ValueError) as exc:
+            flash(str(exc), "error")
+        return redirect(url_for("portal_profile"))
+
+    @app.post("/portal/profile/methods/<int:identity_id>/unlink")
+    @portal_login_required
+    @portal_user_required
+    def portal_method_unlink(identity_id):
+        try:
+            if not recently_reauthenticated(session): raise ValueError("portal_reauthentication_required")
+            unlink_identity(get_db(), int(g.auth_principal["account_id"]), identity_id)
+            flash("portal_method_unlinked", "success")
+        except ValueError as exc:
+            flash(str(exc), "error")
+        return redirect(url_for("portal_profile"))
+
+    @app.post("/portal/profile")
+    @portal_login_required
+    @permission_required("portal.profile.update_own")
+    @portal_user_required
+    def portal_profile_save():
+        db = get_db()
+        values, errors = normalize_portal_profile(request.form)
+        if errors:
+            for error in errors:
+                flash(error, "error")
+            return redirect(url_for("portal_profile"))
+        setting = dict(db.query_one(
+            "SELECT user_notifications_can_override,discord_enabled,discord_bot_id,discord_bot_token,"
+            "mailing_enabled,mail_from,smtp_host,smtp_port,smtp_user,smtp_pass,smtp_auth_method,"
+            "smtp_oauth_access_token FROM settings WHERE id=1"
+        ) or {})
+        notifications_can_override, discord_enabled = _profile_communication_state(db, setting)
+        update_portal_profile(
+            db, int(g.auth_principal["vodum_user_id"]), values,
+            notifications_can_override=notifications_can_override, discord_enabled=discord_enabled,
+        )
+        if values.get("preferred_language"):
+            session["lang"] = values["preferred_language"]
+        flash("portal_profile_saved", "success")
+        return redirect(url_for("portal_profile"))
+
+    @app.post("/portal/profile/password")
+    @portal_login_required
+    @portal_user_required
+    def portal_password_change():
+        new_password = request.form.get("new_password") or ""
+        try:
+            if new_password != (request.form.get("new_password_confirm") or ""):
+                raise ValueError("portal_password_mismatch")
+            change_local_password(get_db(), int(g.auth_principal["account_id"]), request.form.get("current_password") or "", new_password)
+            revoke_other_portal_sessions(get_db(), int(g.auth_principal["account_id"]), int(g.auth_principal["portal_session_id"]), reason="password_changed")
+            session["portal_reauthenticated_at"] = int(time.time())
+            flash("portal_password_changed", "success")
+        except ValueError as exc:
+            flash(str(exc), "error")
+        return redirect(url_for("portal_profile"))
+
+    @app.get("/portal/subscription")
+    @portal_login_required
+    @permission_required("portal.subscription.read_own")
+    @portal_user_required
+    def portal_subscription():
+        db = get_db(); ui = _require_feature(db, "subscription")
+        subscription = load_portal_subscription(
+            db, int(g.auth_principal["vodum_user_id"]), include_available_plans=True
+        )
+        if not subscription:
+            return _portal_error("portal_account_missing")
+        return render_template("portal/subscription.html", subscription=subscription, **ui, active_portal_page="subscription")
+
+    @app.post("/portal/subscription/invitations")
+    @portal_login_required
+    @permission_required("portal.subscription.read_own")
+    @portal_user_required
+    def portal_friend_invite():
+        from core.portal_user_invitations import build_invitation_payload, invitation_lock
+        from core.portal_rate_limit import portal_request_allowed
+        from blueprints.users import create_user_from_payload
+        db = get_db()
+        ui = _require_feature(db, "subscription")
+        if not ui["portal_invitations_enabled"]:
+            abort(404)
+        user_id = int(g.auth_principal["vodum_user_id"])
+        if not portal_request_allowed(db, "user_invitation", str(user_id), limit=5):
+            flash("portal_user_invitation_rate_limited", "error")
+            return redirect(url_for("portal_subscription"))
+        try:
+            # Serialize duplicate detection and creation, including concurrent requests.
+            with invitation_lock:
+                payload, source = build_invitation_payload(db, user_id, request.form)
+                response = create_user_from_payload(db, payload, invitation_source=source)
+            result = response[0].get_json() if isinstance(response, tuple) else response.get_json()
+            if not result.get("ok"):
+                flash("portal_user_invitation_failed", "error")
+            elif result.get("provider_errors") or result.get("mailing_errors"):
+                flash("portal_user_invitation_partial", "warning")
+            else:
+                flash("portal_user_invitation_sent", "success")
+        except ValueError as exc:
+            flash(str(exc), "error")
+        return redirect(url_for("portal_subscription"))
+
+    @app.get("/portal/requests")
+    @portal_login_required
+    @permission_required("portal.media_requests.create_own")
+    @portal_user_required
+    def portal_media_requests():
+        from core.portal_media_request_jobs import media_request_jobs
+        from core.portal_media_requests import request_libraries, search_media, MediaRequestError
+        from core.portal_rate_limit import portal_request_allowed
+        from web.security import get_client_ip
+        from itsdangerous import URLSafeTimedSerializer
+        db = get_db(); ui = _require_feature(db, "requests")
+        user_id = int(g.auth_principal["vodum_user_id"])
+        libraries = request_libraries(db,user_id)
+        from core.portal_request_backdrop import request_backdrop_posters
+        backdrop_posters = request_backdrop_posters(db, libraries)
+        term = (request.args.get('q') or '').strip()
+        results = []
+        if term:
+            if not portal_request_allowed(db,'media_search:'+str(user_id),get_client_ip(),limit=60):
+                abort(429)
+            try:
+                results = search_media(db,user_id,'all',term)
+                signer = URLSafeTimedSerializer(app.secret_key,salt='portal-media-request')
+                for row in results:
+                    row['selection'] = signer.dumps({'user_id':user_id,'kind':row['kind'],'external_id':row['external_id'],'title':row['title'][:200],'source':row.get('source','arr')})
+            except MediaRequestError as exc: flash(str(exc),'error')
+        return render_template('portal/requests.html',libraries=libraries,results=results,
+            query=term,backdrop_posters=backdrop_posters,
+            request_jobs=media_request_jobs(db, int(g.auth_principal["account_id"])),
+            **ui,active_portal_page='requests')
+
+    @app.get("/portal/requests/jobs")
+    @portal_login_required
+    @permission_required("portal.media_requests.create_own")
+    @portal_user_required
+    def portal_media_request_status():
+        from core.portal_media_request_jobs import media_request_jobs
+        db = get_db()
+        _require_feature(db, "requests")
+        response = jsonify(jobs=media_request_jobs(db, int(g.auth_principal["account_id"])))
+        response.headers["Cache-Control"] = "private, no-store"
+        return response
+
+    @app.get("/portal/requests/seasons")
+    @portal_login_required
+    @permission_required("portal.media_requests.create_own")
+    @portal_user_required
+    def portal_media_request_seasons():
+        """Seasons of a Seerr series the member is about to request, with the state Seerr knows."""
+        from core.portal_media_requests import MediaRequestError, seerr_season_options
+        from core.portal_rate_limit import portal_request_allowed
+        from web.security import get_client_ip
+        from itsdangerous import URLSafeTimedSerializer, BadSignature
+        db = get_db(); _require_feature(db, 'requests')
+        user_id = int(g.auth_principal['vodum_user_id'])
+        if not portal_request_allowed(db, 'media_seasons:' + str(user_id), get_client_ip(), limit=60): abort(429)
+        try:
+            selection = URLSafeTimedSerializer(app.secret_key, salt='portal-media-request').loads(
+                request.args.get('selection', ''), max_age=3600)
+            if selection['user_id'] != user_id or selection['kind'] != 'series' or selection.get('source') != 'seerr':
+                raise ValueError()
+            is_4k = {'1': True, '0': False}.get(request.args.get('is_4k'))
+            seasons = seerr_season_options(db, user_id, selection['external_id'], is_4k)
+        except MediaRequestError as exc:
+            response = jsonify(result=str(exc)); response.status_code = 409
+        except (BadSignature, KeyError, TypeError, ValueError):
+            response = jsonify(result='portal_requests_invalid'); response.status_code = 422
+        else:
+            response = jsonify(seasons=seasons)
+        response.headers['Cache-Control'] = 'private, no-store'
+        return response
+
+    @app.get('/portal/requests/backdrop/<int:history_id>')
+    @portal_login_required
+    @permission_required('portal.media_requests.create_own')
+    @portal_user_required
+    def portal_request_backdrop_poster(history_id):
+        from flask import send_file
+        from core.portal_media_requests import request_libraries
+        from core.portal_request_backdrop import cached_request_poster
+        db = get_db()
+        _require_feature(db, 'requests')
+        user_id = int(g.auth_principal['vodum_user_id'])
+        cached = cached_request_poster(db, history_id, request_libraries(db, user_id))
+        if not cached:
+            abort(404)
+        response = send_file(cached['path'], mimetype=cached['content_type'], conditional=False)
+        response.headers['Cache-Control'] = 'private, no-store'
+        return response
+
+    @app.post("/portal/requests")
+    @portal_login_required
+    @permission_required("portal.media_requests.create_own")
+    @portal_user_required
+    def portal_media_request_submit():
+        from core.portal_media_request_jobs import enqueue_media_request
+        from core.portal_media_requests import MediaRequestError
+        from core.portal_media_requests_seerr import parse_season_selection
+        from core.portal_rate_limit import portal_request_allowed
+        from web.security import get_client_ip
+        from itsdangerous import URLSafeTimedSerializer, BadSignature
+        db = get_db(); _require_feature(db,'requests')
+        user_id = int(g.auth_principal['vodum_user_id'])
+        if not portal_request_allowed(db,'media_submit:'+str(user_id),get_client_ip(),limit=30): abort(429)
+        try:
+            selection = URLSafeTimedSerializer(app.secret_key,salt='portal-media-request').loads(request.form.get('selection',''),max_age=3600)
+            if selection['user_id'] != user_id: raise ValueError()
+            source = selection.get('source', 'arr')
+            # Member choices only exist for Seerr: 4K when Seerr allows it, seasons for series.
+            # A hidden "0" precedes the checkbox "1", so the last value is the member's choice.
+            is_4k = {'1': True, '0': False}.get((request.form.getlist('is_4k') or [None])[-1]) if source == 'seerr' else None
+            seasons = None
+            if source == 'seerr' and selection['kind'] == 'series' and request.form.get('seasons', '').strip():
+                seasons = parse_season_selection(request.form.get('seasons'))
+            g.portal_request_details = {'media_kind':selection['kind'], 'external_id':selection['external_id'], 'media_title':selection.get('title','')[:200], 'request_source':source}
+            if source == 'seerr':
+                g.portal_request_details.update({'is_4k': is_4k, 'seasons': seasons or 'all'})
+            job_id = enqueue_media_request(db, int(g.auth_principal["account_id"]),
+                                           selection["kind"], selection["external_id"], selection.get("title"), source,
+                                           is_4k=is_4k, seasons=seasons)
+            g.portal_request_queued = True
+            if request.headers.get('Accept') == 'application/json':
+                return jsonify(job_id=job_id, result="portal_requests_queued"), 202
+            return redirect(url_for("portal_media_requests", _anchor="request-jobs"), code=303)
+        except (BadSignature,KeyError,TypeError,ValueError) as exc:
+            result = str(exc) if isinstance(exc,MediaRequestError) else 'portal_requests_invalid'
+            g.portal_request_details = {**getattr(g,'portal_request_details',{}), 'request_result':result}
+            if request.headers.get('Accept') == 'application/json': return jsonify(result=result),422
+            flash(result,'error')
+        return redirect(url_for('portal_media_requests',q=(request.form.get('search_query') or '')[:100]))
+
+    @app.get('/portal/system-status')
+    @portal_login_required
+    @permission_required('portal.media_access.read_own')
+    @portal_user_required
+    def portal_system_status():
+        db=get_db()
+        ui=_require_feature(db,'media')
+        user_id=int(g.auth_principal['vodum_user_id'])
+        return render_template('portal/system_status.html',accounts=load_portal_media_access(db,user_id),
+            health=load_portal_system_status(db,user_id),**ui,active_portal_page='system-status')
+
+    @app.get("/portal/media-access")
+    @portal_login_required
+    @permission_required("portal.media_access.read_own")
+    @portal_user_required
+    def portal_media_access():
+        _require_feature(get_db(), "media")
+        return redirect(url_for("portal_system_status"))
+
+    @app.post("/portal/media-access/<int:media_user_id>/profile")
+    @portal_login_required
+    @permission_required("portal.media_access.update_own")
+    @portal_user_required
+    def portal_media_profile_save(media_user_id):
+        _require_feature(get_db(), "media")
+        try:
+            update_portal_provider_profile(get_db(), int(g.auth_principal["vodum_user_id"]), media_user_id, request.form.get("username") or "")
+            flash("portal_provider_profile_saved", "success")
+        except ValueError as exc:
+            flash(str(exc), "error")
+        return redirect(url_for("portal_profile", _anchor="media-usernames"))
+
+    @app.get("/portal/monitoring")
+    @portal_login_required
+    @permission_required("portal.monitoring.read_own")
+    @portal_user_required
+    def portal_monitoring():
+        db = get_db(); ui = _require_feature(db, "monitoring")
+        monitoring = load_portal_monitoring(db, int(g.auth_principal["vodum_user_id"]))
+        return render_template("portal/monitoring.html", monitoring=monitoring, **ui, active_portal_page="monitoring")
+
+    @app.get("/portal/support")
+    @portal_login_required
+    @permission_required("portal.support.read")
+    @portal_user_required
+    def portal_support():
+        db = get_db(); ui = _require_feature(db, "support")
+        user_id = int(g.auth_principal["vodum_user_id"])
+        support = load_portal_support(db, user_id)
+        if not support:
+            return _portal_error("portal_account_missing")
+        conversation = conversation_for_user(db, user_id) if support.get("quick_messages_enabled") else None
+        messages, message_pagination = [], None
+        if conversation and conversation.get("id"):
+            messages, message_pagination = message_page(db, conversation["id"], request.args.get("page", 1))
+            mark_read(db, conversation["id"], "user", message_ids=[item["id"] for item in messages])
+        return render_template(
+            "portal/support.html",
+            support=support,
+            conversation=conversation,
+            messages=messages,
+            message_pagination=message_pagination,
+            **ui,
+            active_portal_page="support",
+        )
+
+    @app.post("/portal/support/messages")
+    @portal_login_required
+    @permission_required("portal.support.read")
+    @portal_user_required
+    def portal_support_message_send():
+        db = get_db(); _require_feature(db, "support")
+        enabled = db.query_one("SELECT portal_quick_messages_enabled,contact_email,admin_email,brand_name FROM settings WHERE id=1") or {}
+        enabled = dict(enabled)
+        if not enabled.get("portal_quick_messages_enabled"):
+            abort(404)
+        conversation = conversation_for_user(db, int(g.auth_principal["vodum_user_id"]), create=True)
+        try:
+            add_message(db, conversation["id"], "user", request.form.get("body"))
+        except ValueError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("portal_support"))
+        recipient = (enabled.get("contact_email") or enabled.get("admin_email") or "").strip()
+        if recipient:
+            brand_name = str(enabled.get("brand_name") or "VODUM").strip()
+            sender = conversation.get("username") or conversation.get("email") or "un utilisateur"
+            send_email_via_settings(
+                recipient,
+                f"{brand_name} - nouveau message utilisateur",
+                f"Un nouveau message de {sender} est disponible dans Communications > Inbox.",
+            )
+        flash("portal_message_sent", "success")
+        return redirect(url_for("portal_support"))

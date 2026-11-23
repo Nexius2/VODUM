@@ -1,0 +1,15 @@
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+  {% include "monitoring/partials/cards/_servers.html" %}
+  {% include "monitoring/partials/cards/_live_sessions.html" %}
+</div>
+<section class="rounded-2xl border border-slate-800 bg-slate-900 p-5" aria-live="polite">
+  <p class="text-sm text-slate-400" role="status">{{ t('loading') }}</p>
+  <div class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4" aria-hidden="true">
+    {% for _ in range(3) %}
+      <div class="h-24 animate-pulse rounded-xl bg-slate-800/60"></div>
+    {% endfor %}
+  </div>
+  <button type="button" class="mt-4 rounded-lg border border-slate-700 px-3 py-2 text-sm"
+          hx-get="{{ url_for('monitoring_page', **args) }}" hx-target="#monitoring-content"
+          hx-swap="innerHTML" hx-sync="#monitoring-content:drop">{{ t('retry') }}</button>
+</section>

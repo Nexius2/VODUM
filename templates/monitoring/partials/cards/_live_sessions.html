@@ -1,0 +1,113 @@
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+  <div class="text-xs text-slate-400">
+    {{ t("monitoring.cards.live_sessions") }}
+  </div>
+
+  {% set live = sessions_stats.live_sessions or 0 %}
+  {% set direct = sessions_stats.direct_plays or 0 %}
+  {% set transcodes = sessions_stats.transcodes or 0 %}
+
+  {% if sessions_stats.is_snapshot_fallback %}
+    <div class="mt-2 text-[11px] text-amber-300">
+      {{ t("monitoring.cards.snapshot_fallback") }}
+    </div>
+  {% endif %}
+
+  {% if configured_server_count|default(0) <= 1 %}
+
+    <div class="mt-3">
+      <div class="text-3xl font-semibold {% if live > 0 %}text-white{% else %}text-slate-500{% endif %}">
+        {{ live }}
+      </div>
+
+      <div class="mt-2 text-xs whitespace-nowrap">
+        {% if live == 0 %}
+          <span class="text-slate-500 font-medium">0 {{ t("monitoring_servers_live") }}</span>
+        {% else %}
+          <span class="text-white font-medium">{{ live }}</span> {{ t("monitoring_servers_live") }}
+
+          {% if direct > 0 %}
+            · <span class="text-emerald-300 font-medium">{{ direct }}</span> {{ t("monitoring_live_direct_play") }}
+          {% endif %}
+
+          {% if transcodes > 0 %}
+            · <span class="text-orange-300 font-medium">{{ transcodes }}</span> {{ t("monitoring_policies_transcode") }}
+          {% endif %}
+        {% endif %}
+      </div>
+
+      <!-- <div class="text-xs text-slate-500 mt-2">
+        last {{ live_window_seconds }}s
+      </div> -->
+    </div>
+
+  {% else %}
+
+    <div class="grid grid-cols-3 gap-3 mt-4 text-center">
+      <div>
+        <div class="text-2xl font-semibold {% if live > 0 %}text-white{% else %}text-slate-500{% endif %}">
+          {{ live }}
+        </div>
+        <div class="text-[11px] text-slate-400">{{ t("monitoring_servers_live") }}</div>
+      </div>
+
+      <div>
+        <div class="text-2xl font-semibold {% if direct > 0 %}text-emerald-300{% else %}text-slate-500{% endif %}">
+          {{ direct }}
+        </div>
+        <div class="text-[11px] text-slate-400">{{ t("monitoring_servers_direct") }}</div>
+      </div>
+
+      <div>
+        <div class="text-2xl font-semibold {% if transcodes > 0 %}text-orange-300{% else %}text-slate-500{% endif %}">
+          {{ transcodes }}
+        </div>
+        <div class="text-[11px] text-slate-400">{{ t("monitoring_policies_transcode") }}</div>
+      </div>
+    </div>
+
+    <!-- <div class="text-xs text-slate-500 mt-3">
+      last {{ live_window_seconds }}s
+    </div>-->
+
+    {% if live_servers and live_servers|length > 0 %}
+      <div class="mt-4 flex items-center justify-between text-[11px] text-slate-500">
+        <span>{{ t("monitoring_live_active_servers") }}</span>
+        <span>{{ t("monitoring_servers_live") }} / {{ t("monitoring_servers_direct") }} / {{ t("monitoring_policies_transcode") }}</span>
+      </div>
+
+      <div class="mt-2 space-y-2">
+        {% for item in live_servers %}
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0 flex-1">
+              <div class="text-sm font-medium text-white truncate">
+                {{ item.server_name }}
+              </div>
+
+              {% with row=item, max_width_class='max-w-full', show_unavailable_message=True %}
+                {% include "monitoring/partials/_server_resource_bars.html" %}
+              {% endwith %}
+            </div>
+
+            <div class="shrink-0 text-[11px] whitespace-nowrap pt-0.5">
+              <span class="text-white font-medium">{{ item.live_sessions }}</span>
+              <span class="text-slate-600">/</span>
+              <span class="text-emerald-300 font-medium">{{ item.direct_plays }}</span>
+              <span class="text-slate-600">/</span>
+              <span class="text-orange-300 font-medium">{{ item.transcodes }}</span>
+            </div>
+          </div>
+
+          {% if not loop.last %}
+            <div class="border-t border-slate-800"></div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% elif not sessions_stats.is_snapshot_fallback %}
+      <div class="mt-4 text-sm text-slate-500">
+        {{ t("monitoring.cards.live_sessions_no_sessions") }} {{ live_window_seconds }}s.
+      </div>
+    {% endif %}
+
+  {% endif %}
+</div>

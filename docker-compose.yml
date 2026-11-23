@@ -1,0 +1,23 @@
+services:
+  vodum:
+    image: nexius2/vodum:latest
+    container_name: vodum
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    ports:
+      - "8097:5000"
+
+    volumes:
+      - ./appdata:/appdata
+      - ./logs:/appdata/logs
+      - ./backups:/appdata/backups
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=5).read()"]
+      interval: 240s
+      timeout: 8s
+      retries: 5
+      start_period: 30s

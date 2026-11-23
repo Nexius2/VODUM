@@ -1,0 +1,16 @@
+<nav class="portal-dock" aria-label="{{ t('portal_navigation') }}">
+  {% for page, label, endpoint, enabled, icon in [
+    ('requests', 'portal_mobile_requests', 'portal_media_requests', portal_features.requests, 'M3 5h18v14H3z M3 9h18 M8 5v4 M16 5v4 M12 12v4 M10 14h4'),
+    ('subscription', 'portal_subscription', 'portal_subscription', portal_features.subscription, 'M3 6h18v12H3z M3 10h18 M7 14h4'),
+    ('profile', 'portal_mobile_profile', 'portal_profile', true, 'M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 21v-2a5 5 0 0 1 5-5h6a5 5 0 0 1 5 5v2')
+  ] if enabled %}
+    <a href="{{ url_for('portal_admin_user_preview', user_id=preview_user_id, page=page) if admin_preview else url_for(endpoint) }}"{% if active_portal_page == page %} aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ icon }}"/></svg>
+      <span>{{ t(label) }}</span>
+    </a>
+  {% endfor %}
+  <button type="button" aria-controls="portal-navigation" aria-expanded="false" data-portal-menu-toggle{% if active_portal_page and active_portal_page not in primary_pages %} data-current-section{% endif %}>
+    <svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    <span>{{ t('portal_menu') }}{% if portal_features.support and not admin_preview and portal_unread_messages|default(0) > 0 %} <span class="portal-dock-badge">{{ portal_unread_messages }}</span>{% endif %}</span>
+  </button>
+</nav>
