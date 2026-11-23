@@ -8,7 +8,8 @@ from uuid import uuid4
 from core.portal_account_state import state_allows_portal
 from core.portal_request_options import request_options
 from core.portal_media_requests import MediaRequestError, submit_request
-from core.portal_media_request_tracking import refresh_seerr_states
+from core.portal_media_request_tracking import reconcile_uncertain_seerr_jobs, refresh_seerr_states
+from core.portal_media_requests_tvdb import valid_tvdb_id
 from core.portal_audit import record_portal_event
 from core.tasks.worker_lease import WorkerLease
 from core.tasks.database_restore_gate import database_restore_gate
@@ -35,7 +36,8 @@ CREATE TABLE IF NOT EXISTS portal_media_request_jobs (
     seerr_server_id INTEGER,
     seerr_request_id INTEGER,
     seerr_state TEXT,
-    seerr_checked_at TEXT
+    seerr_checked_at TEXT,
+    tvdb_id INTEGER
 )
 """
 JOB_COLUMNS = {
@@ -48,6 +50,8 @@ JOB_COLUMNS = {
     "seerr_request_id": "INTEGER",
     "seerr_state": "TEXT",
     "seerr_checked_at": "TEXT",
+    # TVDB series the member picked when Seerr has no TVDB id for the title.
+    "tvdb_id": "INTEGER",
 }
 JOB_INDEXES = (
     """CREATE UNIQUE INDEX IF NOT EXISTS idx_portal_request_active
@@ -71,13 +75,18 @@ def _can_submit(row):
     return row and state_allows_portal(row["account_status"], row["user_status"])
 
 
-def enqueue_media_request(db, account_id, kind, external_id, title, source="arr", *, is_4k=None, seasons=None):
+def enqueue_media_request(db, account_id, kind, external_id, title, source="arr", *, is_4k=None, seasons=None,
+                          tvdb_id=None):
     if kind not in ("movie", "series") or type(external_id) is not int or not 0 < external_id <= 2**63 - 1:
         raise MediaRequestError("portal_requests_invalid")
     if source not in ("arr", "seerr") or source != request_options(db)[0]:
         raise MediaRequestError("portal_requests_invalid")
+    if source != "seerr" or kind != "series":
+        tvdb_id = None
     if source != "seerr":
         is_4k, seasons = None, None
+    if tvdb_id is not None and not valid_tvdb_id(tvdb_id):
+        raise MediaRequestError("portal_requests_invalid")
     if is_4k is not None:
         is_4k = 1 if is_4k else 0
     if seasons is not None:
@@ -102,9 +111,9 @@ def enqueue_media_request(db, account_id, kind, external_id, title, source="arr"
             raise MediaRequestError("portal_requests_busy")
         job_id = uuid4().hex
         cursor.execute("""
-            INSERT INTO portal_media_request_jobs(id, account_id, kind, external_id, title, source, is_4k, seasons)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (job_id, account_id, kind, external_id, str(title or "")[:200], source, is_4k, seasons))
+            INSERT INTO portal_media_request_jobs(id, account_id, kind, external_id, title, source, is_4k, seasons, tvdb_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (job_id, account_id, kind, external_id, str(title or "")[:200], source, is_4k, seasons, tvdb_id))
     _WAKE.set()
     return job_id
 
@@ -127,7 +136,7 @@ def media_request_jobs(db, account_id, *, refresh=True):
     limit = request_options(db)[1]
     jobs = []
     for row in db.query("""
-        SELECT id, title, status, result, source, kind, is_4k, seasons, seerr_server_id,
+        SELECT id, title, status, result, source, kind, external_id, finished_at, is_4k, seasons, seerr_server_id,
                seerr_request_id, seerr_state,
                seerr_checked_at IS NULL OR seerr_checked_at <= datetime('now', '-60 seconds') AS stale
         FROM portal_media_request_jobs
@@ -139,9 +148,13 @@ def media_request_jobs(db, account_id, *, refresh=True):
         job["is_4k"] = None if job["is_4k"] is None else bool(job["is_4k"])
         jobs.append(job)
     if refresh:
+        reconcile_uncertain_seerr_jobs(db, account_id, jobs)
         refresh_seerr_states(db, jobs)
     for job in jobs:
-        for key in ("source", "seerr_server_id", "seerr_request_id", "stale"):
+        # Seerr never answered clearly: say so in Seerr terms, not "Sonarr/Radarr".
+        if job["source"] == "seerr" and job["result"] == "portal_requests_add_uncertain":
+            job["result"] = "portal_requests_seerr_unconfirmed"
+        for key in ("source", "seerr_server_id", "seerr_request_id", "stale", "external_id", "finished_at"):
             job.pop(key, None)
     return jobs
 
@@ -164,7 +177,7 @@ def _claim(db):
             WHERE status IN ('checking', 'submitting') AND lease_until <= CURRENT_TIMESTAMP
         """)
         cursor.execute("""
-            SELECT j.id, j.account_id, j.kind, j.external_id, j.title, j.source, j.is_4k, j.seasons,
+            SELECT j.id, j.account_id, j.kind, j.external_id, j.title, j.source, j.is_4k, j.seasons, j.tvdb_id,
                    a.vodum_user_id
             FROM portal_media_request_jobs j JOIN portal_accounts a ON a.id = j.account_id
             WHERE j.status = 'queued' AND NOT EXISTS (
@@ -219,7 +232,8 @@ def process_media_request_job(db):
         result = submit_request(db, job["vodum_user_id"], None, job["kind"], job["external_id"],
                                 before_post=before_post, source=job["source"] or "arr",
                                 is_4k=None if job["is_4k"] is None else bool(job["is_4k"]),
-                                seasons=_job_seasons(job["seasons"]), on_submitted=tracking.update)
+                                seasons=_job_seasons(job["seasons"]), on_submitted=tracking.update,
+                                tvdb_choice=job["tvdb_id"])
     except MediaRequestError as exc:
         result = str(exc)
         if submitting and result == "portal_requests_unavailable":

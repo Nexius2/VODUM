@@ -181,7 +181,7 @@
       const response = await fetch(url, {credentials: 'same-origin', signal: controller.signal, headers: {Accept: 'application/json'}});
       if (response.redirected || !response.ok) return null;
       const data = await response.json();
-      return Array.isArray(data.seasons) ? data.seasons : null;
+      return Array.isArray(data.seasons) ? data : null;
     } catch (_) {
       return null;
     } finally {
@@ -215,6 +215,56 @@
       seasonsDialog.addEventListener('close', onClose);
       seasonsDialog.showModal();
       seasonsDialog.querySelector('h2').focus();
+    });
+  }
+  // TVDB series picker for titles Seerr cannot map to TVDB. Resolves to the TVDB id or null when cancelled.
+  const tvdbDialog = document.getElementById('request-tvdb-dialog');
+  const tvdbForm = document.getElementById('request-tvdb-form');
+  const tvdbList = tvdbDialog?.querySelector('[data-tvdb-list]');
+  const tvdbError = tvdbDialog?.querySelector('[data-tvdb-error]');
+  tvdbDialog?.querySelector('[data-tvdb-cancel]').addEventListener('click', () => tvdbDialog.close('cancel'));
+  function chooseTvdb(candidates) {
+    if (!tvdbDialog || typeof tvdbDialog.showModal !== 'function') return Promise.resolve(null);
+    tvdbList.replaceChildren(...candidates.map((item) => {
+      const label = document.createElement('label');
+      label.className = 'flex items-center gap-3';
+      const radio = document.createElement('input');
+      radio.type = 'radio'; radio.name = 'tvdb_choice'; radio.value = String(item.tvdb_id);
+      label.append(radio);
+      if (item.poster) {
+        const img = document.createElement('img');
+        img.src = item.poster; img.alt = ''; img.loading = 'lazy'; img.referrerPolicy = 'no-referrer';
+        img.width = 40; img.height = 60; img.className = 'w-10 shrink-0 rounded object-cover';
+        label.append(img);
+      }
+      const text = document.createElement('span');
+      text.textContent = item.year ? `${item.title} (${item.year})` : item.title;
+      label.append(text);
+      return label;
+    }));
+    tvdbError.hidden = true;
+    return new Promise((resolve) => {
+      function finish(value) {
+        tvdbForm.removeEventListener('submit', onSubmit);
+        tvdbDialog.removeEventListener('close', onClose);
+        resolve(value);
+      }
+      function onSubmit(event) {
+        event.preventDefault();
+        const picked = tvdbList.querySelector('input[type="radio"]:checked');
+        if (!picked) {
+          tvdbError.textContent = messages.portal_requests_tvdb_none_selected;
+          tvdbError.hidden = false;
+          return;
+        }
+        tvdbDialog.close('confirm');
+        finish(picked.value);
+      }
+      function onClose() { finish(null); }
+      tvdbForm.addEventListener('submit', onSubmit);
+      tvdbDialog.addEventListener('close', onClose);
+      tvdbDialog.showModal();
+      tvdbDialog.querySelector('h2').focus();
     });
   }
   let timer;
@@ -271,11 +321,21 @@
       try {
         const body = new FormData(form);
         if (form.dataset.seasonsUrl) {
-          const seasons = await loadSeasons(form);
-          if (seasons === null) {
+          const data = await loadSeasons(form);
+          const seasons = data && data.seasons;
+          const tvdb = (data && data.tvdb) || {};
+          if (data === null) {
             show('portal_requests_seasons_unavailable');
+          } else if (tvdb.state === 'none') {
+            show('portal_requests_seerr_tvdb_unresolved');
+            return;
           } else {
             stopProgress(form);
+            if (tvdb.state === 'choose' && Array.isArray(tvdb.candidates) && tvdb.candidates.length) {
+              const tvdbId = await chooseTvdb(tvdb.candidates);
+              if (tvdbId === null) return;
+              body.set('tvdb_id', tvdbId);
+            }
             const chosen = await chooseSeasons(seasons);
             if (chosen === null) return;
             if (chosen.length) body.set('seasons', chosen.join(','));

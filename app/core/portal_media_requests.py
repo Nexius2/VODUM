@@ -12,6 +12,9 @@ from core.library_request_routing import compatible_arr_type, route_matches_medi
 from core.portal_media_requests_seerr import (seerr_can_request_4k, seerr_details, seerr_error_result,
     seerr_find_user, seerr_is_4k, seerr_media_state, seerr_metadata, seerr_request_payload,
     seerr_request_result, seerr_request_state, seerr_search, seerr_seasons, seerr_user_lookup_keys)
+from core.portal_media_requests_tvdb import (covers_seasons, default_server_missing, details_tvdb_id,
+                                              find_existing_request,
+                                              resolve_tvdb, sonarr_candidates, tvdb_options)
 from core.portal_provider_identity_state import row_media_identity_is_usable
 from core.plex_guids import plex_external_guid
 from core.portal_request_options import request_options
@@ -537,14 +540,15 @@ def _authorized_before_post(db, user_id, library, before_post):
 
 
 def submit_request(db,user_id,library_id,kind,external_id,resolution='', *, before_post=None, source='arr',
-                   is_4k=None, seasons=None, on_submitted=None):
+                   is_4k=None, seasons=None, on_submitted=None, tvdb_choice=None):
     if kind not in ('movie','series') or type(external_id) is not int or external_id <= 0 or resolution not in ('','720p','1080p','2160p'):
         raise MediaRequestError('portal_requests_invalid')
     if source not in ('arr','seerr') or source != request_options(db)[0]:
         raise MediaRequestError('portal_requests_invalid')
     if source == 'seerr':
         return submit_seerr_request(db,user_id,library_id,kind,external_id,resolution,before_post=before_post,
-                                    is_4k=is_4k, seasons=seasons, on_submitted=on_submitted)
+                                    is_4k=is_4k, seasons=seasons, on_submitted=on_submitted,
+                                    tvdb_choice=tvdb_choice)
     provider = 'radarr' if kind == 'movie' else 'sonarr'
     automatic = library_id is None
     destinations, explicit_library_ids = _request_destinations(db, user_id, library_id, kind, 'arr')
@@ -707,8 +711,11 @@ def _seerr_details_from(servers, kind, external_id):
     raise MediaRequestError('portal_requests_unavailable')
 
 
-def seerr_season_options(db, user_id, external_id, is_4k=None):
-    """Seasons the member may pick for a series, read from a Seerr routed to one of their libraries."""
+def seerr_season_options(db, user_id, external_id, is_4k=None, tvdb_out=None):
+    """Seasons the member may pick for a series, read from a Seerr routed to one of their libraries.
+
+    A dict passed as ``tvdb_out`` receives the TVDB mapping state (see tvdb_options).
+    """
     if type(external_id) is not int or external_id <= 0:
         raise MediaRequestError('portal_requests_invalid')
     if request_options(db)[0] != 'seerr':
@@ -721,16 +728,23 @@ def seerr_season_options(db, user_id, external_id, is_4k=None):
     finally:
         _request_deadline.reset(deadline_token)
     server = next(s for s in servers if s['id'] == server_id)
+    if tvdb_out is not None:
+        token = _request_deadline.set(time.monotonic() + 15)
+        try:
+            tvdb_out.update(tvdb_options(api, server, details, external_id))
+        finally:
+            _request_deadline.reset(token)
     return seerr_seasons(details, seerr_is_4k(server) if is_4k is None else bool(is_4k))
 
 
 def submit_seerr_request(db,user_id,library_id,kind,external_id,resolution='', *, before_post=None,
-                         is_4k=None, seasons=None, on_submitted=None):
+                         is_4k=None, seasons=None, on_submitted=None, tvdb_choice=None):
     """Request through Seerr on behalf of the member; Seerr decides duplicates and approval.
 
     ``is_4k`` is the member's choice (None when they made none); it only counts
     when their Seerr user may request 4K, otherwise the server flag applies.
     ``seasons`` lists the chosen seasons of a series; None asks for all of them.
+    ``tvdb_choice`` is the TVDB series the member picked when Seerr has no TVDB id.
     """
     automatic = library_id is None
     seasons = list(seasons) if kind == 'series' and seasons else None
@@ -772,10 +786,34 @@ def submit_seerr_request(db,user_id,library_id,kind,external_id,resolution='', *
             is_4k = default_4k
         state = seerr_media_state(details, is_4k, seasons)
         if state == 'present': return 'portal_requests_present'
+        known_tvdb = details_tvdb_id(details) if kind == 'series' else None
+        if kind == 'series' and (state == 'pending' or known_tvdb is None):
+            # A request the member already made (lost answer, or never handed to Sonarr) is followed, not repeated.
+            existing = find_existing_request(api, server, member()['id'], kind, external_id, is_4k)
+            if existing is not None and covers_seasons(existing, seasons):
+                if on_submitted is not None:
+                    on_submitted({'seerr_server_id': server['id'], 'seerr_request_id': existing['id'],
+                                  'seerr_state': seerr_request_state(existing), 'is_4k': is_4k, 'seasons': seasons})
+                return seerr_request_result(existing) or 'portal_requests_pending'
         if state == 'pending': return 'portal_requests_pending'
         seerr_user = member()
-        external_ids = details.get('externalIds')
-        tvdb_id = external_ids.get('tvdbId') if isinstance(external_ids, dict) else None
+        if default_server_missing(api, server, kind, is_4k):
+            get_logger('portal_media_requests').warning(
+                'Seerr has no default %s server for 4k=%s seerr_id=%s', 'Sonarr' if kind == 'series' else 'Radarr', is_4k, server['id'])
+            raise MediaRequestError('portal_requests_seerr_no_default_server')
+        tvdb_id = known_tvdb
+        if kind == 'series' and tvdb_id is None:
+            try:
+                candidates = sonarr_candidates(api, server, external_id)
+            except MediaRequestError:
+                candidates = []
+            outcome, value = resolve_tvdb(candidates, external_id, tvdb_choice)
+            if outcome != 'auto':
+                get_logger('portal_media_requests').info(
+                    'Seerr request without TVDB mapping user_id=%s external_id=%s candidates=%s',
+                    user_id, external_id, len(candidates))
+                raise MediaRequestError('portal_requests_seerr_tvdb_unresolved')
+            tvdb_id = value
         payload = seerr_request_payload(kind, external_id, seerr_user_id=seerr_user['id'], is_4k=is_4k,
                                         tvdb_id=tvdb_id, seasons=seasons)
         get_logger('portal_media_requests').info(
@@ -786,12 +824,21 @@ def submit_seerr_request(db,user_id,library_id,kind,external_id,resolution='', *
             raise MediaRequestError('portal_requests_invalid')
         if authorize is not None:
             authorize()
+        if on_submitted is not None:
+            # Remember the server before the POST, so a lost answer can be reconciled later.
+            on_submitted({'seerr_server_id': server['id'], 'seerr_request_id': None, 'is_4k': is_4k, 'seasons': seasons})
         try:
             created = api(server, '/api/v1/request', payload=payload)
         except MediaRequestError as exc:
             mapped = seerr_error_result(getattr(exc, 'http_status', None))
-            if mapped is None: raise
-            return mapped
+            if mapped is not None: return mapped
+            if str(exc) != 'portal_requests_add_uncertain': raise
+            # The answer was lost: the request may exist. Take it over so its status can be followed.
+            try:
+                created = find_existing_request(api, server, seerr_user['id'], kind, external_id, is_4k)
+            except MediaRequestError:
+                created = None
+            if created is None: raise
         result = seerr_request_result(created)
         if result is None: raise MediaRequestError('portal_requests_unavailable')
         if on_submitted is not None:

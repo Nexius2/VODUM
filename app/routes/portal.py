@@ -344,13 +344,14 @@ def register(app):
             if selection['user_id'] != user_id or selection['kind'] != 'series' or selection.get('source') != 'seerr':
                 raise ValueError()
             is_4k = {'1': True, '0': False}.get(request.args.get('is_4k'))
-            seasons = seerr_season_options(db, user_id, selection['external_id'], is_4k)
+            tvdb = {}
+            seasons = seerr_season_options(db, user_id, selection['external_id'], is_4k, tvdb_out=tvdb)
         except MediaRequestError as exc:
             response = jsonify(result=str(exc)); response.status_code = 409
         except (BadSignature, KeyError, TypeError, ValueError):
             response = jsonify(result='portal_requests_invalid'); response.status_code = 422
         else:
-            response = jsonify(seasons=seasons)
+            response = jsonify(seasons=seasons, tvdb=tvdb)
         response.headers['Cache-Control'] = 'private, no-store'
         return response
 
@@ -396,12 +397,17 @@ def register(app):
             seasons = None
             if source == 'seerr' and selection['kind'] == 'series' and request.form.get('seasons', '').strip():
                 seasons = parse_season_selection(request.form.get('seasons'))
+            tvdb_id = None
+            if source == 'seerr' and selection['kind'] == 'series' and request.form.get('tvdb_id', '').strip():
+                tvdb_text = request.form.get('tvdb_id').strip()
+                if not tvdb_text.isdigit() or len(tvdb_text) > 10: raise ValueError('tvdb_id')
+                tvdb_id = int(tvdb_text)
             g.portal_request_details = {'media_kind':selection['kind'], 'external_id':selection['external_id'], 'media_title':selection.get('title','')[:200], 'request_source':source}
             if source == 'seerr':
                 g.portal_request_details.update({'is_4k': is_4k, 'seasons': seasons or 'all'})
             job_id = enqueue_media_request(db, int(g.auth_principal["account_id"]),
                                            selection["kind"], selection["external_id"], selection.get("title"), source,
-                                           is_4k=is_4k, seasons=seasons)
+                                           is_4k=is_4k, seasons=seasons, tvdb_id=tvdb_id)
             g.portal_request_queued = True
             if request.headers.get('Accept') == 'application/json':
                 return jsonify(job_id=job_id, result="portal_requests_queued"), 202

@@ -3,6 +3,8 @@ Unreleased — November 23, 2026
 Media Requests
 - Added Seerr integration (Overseerr/Jellyseerr) as an alternative to VODUM's built-in Sonarr/Radarr request engine, with per-library configuration, account matching, availability indicators, season and 4K options, and request tracking.
 - Added a configurable recent-requests limit in the user portal.
+- Fixed Seerr requests for series without a TVDB id: the portal now looks up the TVDB series through Seerr's Sonarr lookup, picks a single match automatically and otherwise asks the member to choose, so the request reaches Sonarr.
+- Improved Seerr request tracking: a request whose answer was lost is matched to the member's existing Seerr request so its status shows in the portal, and requests are no longer sent when Seerr has no default Sonarr/Radarr for the requested tier.
 - Improved Sonarr/Radarr request reliability: unavailable instances no longer block eligible destinations, and requests can fall back to the next available instance according to configured priorities. Uncertain submissions are never automatically repeated.
 - Improved error reporting for failed media requests.
 Collections & Lists
