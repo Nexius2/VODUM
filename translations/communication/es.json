@@ -1,0 +1,35 @@
+{
+  "language_name": "Español",
+  "common": {
+    "none": "Ninguno"
+  },
+  "policy": {
+    "subscription_expired": "Tu suscripción ha terminado. Renuévala para restaurar el acceso.",
+    "max_streams_per_user": "Tu suscripción permite {limit} reproducción(es) simultánea(s). VODUM detectó {value} reproducción(es).",
+    "max_ips_per_user": "Demasiadas direcciones IP diferentes están usando tu cuenta.",
+    "max_streams_per_ip": "Demasiadas reproducciones simultáneas usan la misma dirección IP ({ip}).",
+    "max_streams_per_server": "Se ha alcanzado el límite de reproducciones del servidor.",
+    "max_transcodes": "Hay demasiadas reproducciones transcodificadas activas.",
+    "max_bitrate": "Una reproducción supera el límite de bitrate permitido.",
+    "ban_4k_transcode": "La transcodificación 4K no está permitida.",
+    "unknown": "Se infringió una política de reproducción: {rule_type}.",
+    "limit_label_max_ips_per_user": "Máximo de direcciones IP por usuario",
+    "limit_label_max_streams_per_user": "Máximo de reproducciones por usuario",
+    "limit_label_max_streams_per_ip": "Máximo de reproducciones por dirección IP",
+    "limit_label_max_streams_per_server": "Máximo de reproducciones por servidor",
+    "limit_label_max_transcodes": "Máximo de reproducciones transcodificadas",
+    "limit_label_max_bitrate": "Bitrate máximo",
+    "limit_label_ban_4k_transcode": "Transcodificación 4K bloqueada",
+    "limit_label_unknown": "Límite de la política"
+  },
+  "portal": {
+    "invitation": {"subject": "Invitacion a tu portal {brand_name}", "body": "Hola {username},\n\nActiva tu cuenta con este enlace de un solo uso, valido durante 7 dias:\n{url}"},
+    "password_reset": {"subject": "Restablece tu contrasena de {brand_name}", "body": "Utiliza este enlace de un solo uso durante la proxima hora:\n{url}"},
+    "authentication_changed": {"subject": "Tu autenticacion de {brand_name} fue restablecida", "body": "Hola {username},\n\nUn administrador restablecio tus metodos de acceso. Se requiere una nueva invitacion.\n\n{portal_login_url}"},
+    "suspended": {"subject": "Tu acceso al portal {brand_name} fue suspendido", "body": "Hola {username},\n\nTu acceso al portal fue suspendido. Contacta con soporte si es necesario."},
+    "reactivated": {"subject": "Tu acceso al portal {brand_name} fue reactivado", "body": "Hola {username},\n\nTu acceso al portal fue reactivado.\n\n{portal_login_url}"},
+    "new_login": {"subject": "Nuevo acceso a tu portal {brand_name}", "body": "Hola {username},\n\nSe registro un nuevo acceso a tu cuenta. Restablece tu contrasena si no fuiste tu.\n\n{portal_login_url}"},
+    "direct_message": {"subject": "Nuevo mensaje en tu portal {brand_name}", "body": "Hola {username},\n\nHas recibido un nuevo mensaje de un administrador. Inicia sesion en tu portal para leerlo.\n\n{portal_login_url}"}
+  },
+  "activation": {"button": "Activar mi acceso", "instructions": "Para tu primer acceso, empieza por el botón de abajo. En Plex, crea una cuenta o inicia sesión con la dirección que recibió este correo y vuelve a la página de activación. Espera a que todos los servidores estén listos. Si queda una invitación pendiente, acéptala en Plex y vuelve a comprobar el acceso. El enlace de inicio de sesión del portal es para visitas posteriores."}
+}

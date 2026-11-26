@@ -1,0 +1,23 @@
+<section id="cl-panel-lists" role="tabpanel" aria-labelledby="cl-tab-lists" hidden>
+  <div class="cl-section-heading"><div><h3>{{ t('collections.lists_title') }}</h3><p>{{ t('collections.lists_hint') }}</p></div></div>
+  <p id="cl-lists-message" class="cl-notice" role="status" aria-live="polite" hidden></p>
+  <div class="cl-lists-layout">
+    <aside class="cl-lists-sidebar">
+      <div class="cl-lists-sidebar-heading"><strong>{{ t('collections.lists_title') }}</strong><span id="cl-lists-total"></span></div>
+      <label class="cl-field cl-lists-search"><span class="sr-only">{{ t('collections.lists_search') }}</span><input id="cl-lists-search" type="search" placeholder="{{ t('collections.lists_search') }}"></label>
+      <nav id="cl-lists-nav" aria-label="{{ t('collections.lists_title') }}"></nav>
+      <details class="cl-list-create-disclosure"><summary>{{ t('collections.lists_new') }}</summary><form id="cl-list-create" class="cl-list-create"><label class="cl-field">{{ t('collections.lists_name') }}<input name="name" required maxlength="120"></label><button class="cl-button" type="submit">{{ t('collections.lists_create') }}</button></form></details>
+    </aside>
+    <div id="cl-list-detail" class="cl-list-detail"><p class="cl-muted">{{ t('collections.lists_choose') }}</p></div>
+  </div>
+</section>
+<dialog id="cl-list-delete-confirm" class="cl-dialog cl-delete-dialog" aria-labelledby="cl-list-delete-title" aria-describedby="cl-list-delete-description">
+  <form method="dialog" data-no-navigation-loader hx-boost="false">
+    <header class="cl-dialog-header"><h2 id="cl-list-delete-title">{{ t('collections.lists_delete') }}</h2><button type="submit" value="cancel" class="cl-icon-button" aria-label="{{ t('collections.close') }}">×</button></header>
+    <div class="cl-dialog-body"><div class="cl-delete-target"><strong id="cl-list-delete-name"></strong></div><p id="cl-list-delete-description" class="cl-muted">{{ t('collections.lists_delete_confirm') }}</p></div>
+    <footer class="cl-dialog-footer"><button type="submit" value="cancel" class="cl-button" autofocus>{{ t('collections.cancel') }}</button><button type="submit" value="delete" class="cl-button cl-button-danger">{{ t('collections.lists_delete') }}</button></footer>
+  </form>
+</dialog>
+<script id="cl-lists-labels" type="application/json">{
+{% for key in ['lists_order','lists_order_hint','lists_order_state_release','lists_order_state_custom','lists_order_unplaced','lists_order_save','lists_order_reset','lists_order_up','lists_order_down','lists_order_position','lists_order_stale','lists_order_state_vodum','lists_order_reset_vodum','lists_order_use_release','lists_order_use_chronological','lists_delete_list','deleted','media_list_previous','media_list_next','lists_manage_links','lists_links_hint','lists_search_collections','busy','lists_collection','lists_libraries','lists_status','lists_media','lists_type','lists_origin','lists_settings','lists_add_search','lists_filter_hint','lists_retry','lists_metadata_pending','lists_unmatched','lists_metadata_progress','lists_add_hint','lists_resolve','lists_search','lists_no_results','lists_name','lists_title','lists_hint','lists_new','lists_create','lists_choose','lists_builtin','lists_custom','lists_contents','lists_uses','lists_unused','lists_add_media','lists_query','lists_find','lists_add','lists_delete','lists_delete_confirm','lists_delete_list_confirm','lists_enabled','lists_disabled','lists_save','lists_search_content','lists_empty','lists_loading','lists_resolve','lists_identity_pending','lists_next_sync','lists_count','lists_saved','lists_name_required','lists_not_found','lists_protected','lists_in_use','lists_duplicate','lists_identity_failed','lists_metadata_unavailable','movies','shows','enabled','disabled','request_failed','tmdb_key_required','invalid_configuration','search_query_required','session_expired'] %}{{ key|tojson }}:{{ t('collections.' ~ key)|tojson }}{{ ',' if not loop.last }}{% endfor %}
+}</script>

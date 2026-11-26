@@ -1,0 +1,15 @@
+.cl-lists-box{padding:1.25rem;margin:1rem 0;border:1px solid var(--border-color,#334155);border-radius:1rem;background:var(--card-bg,#111827)}
+.cl-lists-row{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;padding:.75rem 0}
+.cl-lists-row>div:first-of-type{flex:1;min-width:10rem}
+.cl-lists-row p{overflow-wrap:anywhere;margin:.35rem 0;color:#94a3b8}
+.cl-lists-actions{display:flex;gap:.5rem;flex-wrap:wrap}
+.cl-lists .cl-field{margin:.5rem 0;min-width:0}
+.cl-lists input[type=search],.cl-lists input[name=name],.cl-lists textarea{width:100%;box-sizing:border-box}
+.cl-list-poster{width:60px;height:90px;object-fit:cover;border-radius:.4rem}
+.cl-lists h2,.cl-lists h3{overflow-wrap:anywhere}
+.cl-lists form>button{margin:.5rem 0}
+@media(max-width:600px){.cl-lists-row>.cl-field{width:100%}.cl-lists-box{padding:.85rem}.cl-lists-actions{width:100%}}
+
+.cl-lists textarea{background:#091223;color:#d4deed;border:1px solid #33415b;border-radius:7px;padding:10px 12px;font:inherit;min-height:5rem;resize:vertical}
+
+.cl-lists a:not(.cl-button){color:#c7d2fe;text-decoration:underline}

@@ -1,0 +1,310 @@
+.location-mode-switch {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 0.5rem;
+  color: #94a3b8;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.location-mode-switch[aria-checked="false"] > :first-child,
+.location-mode-switch[aria-checked="true"] > :last-child {
+  color: #f8fafc;
+}
+
+.location-mode-switch:focus-visible {
+  outline: 2px solid #a5b4fc;
+  outline-offset: 2px;
+}
+
+.location-mode-track {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  width: 2rem;
+  height: 1.125rem;
+  padding: 0.1875rem;
+  border-radius: 9999px;
+  background: #475569;
+}
+
+.location-mode-track::before {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  background: #fff;
+  content: "";
+}
+
+.location-mode-switch[aria-checked="true"] .location-mode-track {
+  justify-content: flex-end;
+  background: #6366f1;
+}
+
+.location-map {
+  position: relative;
+  height: clamp(340px, 62vh, 700px);
+  isolation: isolate;
+  overflow: hidden;
+  background: #080f1e;
+  touch-action: none;
+  cursor: grab;
+  border: 1px solid #27364c;
+  border-radius: 0.75rem;
+}
+
+.location-map canvas,
+.location-map-points {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.location-map-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+}
+
+.location-map-marker:hover,
+.location-map-marker:focus-within {
+  z-index: 1;
+}
+
+.location-map-marker button {
+  display: block;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.location-map-marker button::after {
+  display: block;
+  width: 10px;
+  height: 10px;
+  margin: auto;
+  border: 1px solid #e0e7ff;
+  border-radius: 50%;
+  background: var(--marker, #a78bfa);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--marker, #a78bfa) 28%, transparent);
+  content: "";
+}
+
+.location-map-tooltip {
+  display: none;
+  position: absolute;
+  top: 5px;
+  left: 100%;
+  width: min(260px, 37vw);
+  max-height: 150px;
+  overflow: auto;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid #405673;
+  border-radius: 0.5rem;
+  background: #0f172a;
+  color: #e2e8f0;
+  box-shadow: 0 6px 20px #02061799;
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.location-map-marker:hover .location-map-tooltip,
+.location-map-marker:focus-within .location-map-tooltip {
+  display: block;
+}
+
+.location-map-marker-right .location-map-tooltip {
+  right: 100%;
+  left: auto;
+}
+
+.location-map-marker-top .location-map-tooltip {
+  top: auto;
+  bottom: 5px;
+}
+
+.location-map-detail > * {
+  display: block;
+}
+
+.location-map-detail + .location-map-detail {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #334155;
+}
+
+.location-map-message {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  width: max-content;
+  max-width: 90%;
+  transform: translateX(-50%);
+  border-radius: 0.5rem;
+  background: #0f172a;
+  padding: 0.5rem 0.75rem;
+  color: #e2e8f0;
+  text-align: center;
+  font-size: 0.875rem;
+}
+
+.location-map-credit {
+  position: absolute;
+  right: 0.6rem;
+  bottom: 0.35rem;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+[data-state="online"], [data-state="paused"], [data-state="recorded_paused"] { --marker: #22d3ee; }
+[data-state="playing"], [data-state="recorded_playing"] { --marker: #34d399; }
+[data-state="recorded"] { --marker: #a78bfa; }
+
+.location-map-marker button[data-state="cluster"] {
+  background: #5145a7;
+  border: 1px solid #a5b4fc;
+  color: #fff;
+  font-size: 0.75rem;
+}
+
+.location-map-marker button[data-state="cluster"]::after { display: none; }
+.location-map-marker button[data-state="playing"]::after { animation: location-pulse 2.7s ease-out infinite; }
+
+@keyframes location-pulse {
+  0% { box-shadow: 0 0 0 2px #34d39988; }
+  75%, 100% { box-shadow: 0 0 0 9px #34d39900; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .location-map-marker button[data-state="playing"]::after { animation: none; }
+}
+
+.location-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 0.9rem;
+}
+
+.location-stat {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem;
+  border: 1px solid #27364c;
+  border-radius: 0.75rem;
+  background: #101b2e;
+}
+
+.location-stat > span { color: #a5b4fc; }
+.location-stat div { display: grid; color: #aabbd1; font-size: 0.75rem; }
+.location-stat strong { color: #f1f5f9; font-size: 1.1rem; }
+.location-control,
+.location-map-controls button {
+  display: inline-block;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid #334155;
+  border-radius: 0.45rem;
+  background: #17243a;
+  color: #e2e8f0;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.location-control[aria-current="true"] { background: #4f46a5; }
+.location-mode-switch:disabled { opacity: 0.55; cursor: default; }
+.location-filters { position: relative; }
+.location-filters form {
+  position: absolute;
+  z-index: 4;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  display: grid;
+  gap: 0.55rem;
+  width: min(230px, 65vw);
+  padding: 0.75rem;
+  border: 1px solid #334155;
+  border-radius: 0.6rem;
+  background: #101b2e;
+  font-size: 0.8rem;
+}
+.location-filters select { display: block; width: 100%; background: #1e293b; color: #f1f5f9; }
+.location-map-controls { position: absolute; top: 0.55rem; right: 0.55rem; display: grid; gap: 4px; }
+.location-map-controls button { font-size: 1rem; min-width: 34px; }
+.location-map-user { display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.25rem; }
+.location-map-state { display: block; color: var(--marker, #c4b5fd); }
+.location-map-initial {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: none;
+  border-radius: 50%;
+  color: #e0e7ff;
+  background: #37306b;
+}
+.location-map-initial img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.location-map-layout.has-group {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 32%);
+  gap: 0.75rem;
+}
+
+.location-group {
+  height: clamp(340px, 62vh, 700px);
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #27364c;
+  border-radius: 0.75rem;
+  background: #0d1727;
+}
+
+.location-group:not([hidden]) { display: flex; flex-direction: column; }
+.location-group header { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; }
+.location-group header button { min-width: 2rem; font-size: 1.25rem; cursor: pointer; }
+.location-group-list { overflow: auto; padding: 0 0.75rem 0.75rem; }
+.location-group-list .location-map-detail {
+  padding: 0.75rem;
+  border: 1px solid #334155;
+  border-radius: 0.6rem;
+  background: #152136;
+  color: #e2e8f0;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .location-map-layout.has-group { grid-template-columns: minmax(0, 1fr); }
+  .location-group { height: auto; }
+}
+.location-map-detail a { color: #a5b4fc; text-decoration: underline; }
+.location-map-ip { font-family: ui-monospace, monospace; color: #aabbd1; }
+.location-map-detail progress { width: 100%; accent-color: #818cf8; }
+.location-map-tooltip { max-height: 220px; touch-action: pan-y; }
+.location-legend,
+.location-timeline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.9rem;
+  margin-top: 0.7rem;
+  font-size: 0.8rem;
+  color: #aabbd1;
+}
+.location-legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.location-legend i { width: 8px; height: 8px; border-radius: 50%; background: var(--marker, #a78bfa); }
+.location-legend .location-heat-gradient { width: 42px; border-radius: 99px; background: linear-gradient(90deg, #a78bfa, #4f69ff, #22d3ee); }
+.location-timeline input { flex: 1 1 140px; accent-color: #818cf8; }
+[data-location-map][aria-busy="true"] { opacity: 0.76; }
+
+@media (max-width: 650px) {
+  .location-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .location-filters form { position: static; margin-top: 0.35rem; }
+  .location-map-tooltip { width: min(180px, 30vw); }
+}

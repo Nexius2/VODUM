@@ -1,0 +1,35 @@
+{
+  "language_name": "Italiano",
+  "common": {
+    "none": "Nessuno"
+  },
+  "policy": {
+    "subscription_expired": "Il tuo abbonamento è terminato. Rinnovalo per ripristinare l'accesso.",
+    "max_streams_per_user": "Il tuo abbonamento consente {limit} riproduzione/i simultanea/e. VODUM ha rilevato {value} riproduzione/i.",
+    "max_ips_per_user": "Troppe indirizzi IP diversi stanno usando il tuo account.",
+    "max_streams_per_ip": "Troppe riproduzioni simultanee usano lo stesso indirizzo IP ({ip}).",
+    "max_streams_per_server": "Il limite di riproduzioni del server è stato raggiunto.",
+    "max_transcodes": "Sono attive troppe riproduzioni transcodificate.",
+    "max_bitrate": "Una riproduzione supera il limite di bitrate consentito.",
+    "ban_4k_transcode": "La transcodifica 4K non è consentita.",
+    "unknown": "Una regola di riproduzione è stata violata: {rule_type}.",
+    "limit_label_max_ips_per_user": "Numero massimo di indirizzi IP per utente",
+    "limit_label_max_streams_per_user": "Numero massimo di riproduzioni per utente",
+    "limit_label_max_streams_per_ip": "Numero massimo di riproduzioni per indirizzo IP",
+    "limit_label_max_streams_per_server": "Numero massimo di riproduzioni per server",
+    "limit_label_max_transcodes": "Numero massimo di riproduzioni transcodificate",
+    "limit_label_max_bitrate": "Bitrate massimo",
+    "limit_label_ban_4k_transcode": "Transcodifica 4K bloccata",
+    "limit_label_unknown": "Limite della regola"
+  },
+  "portal": {
+    "invitation": {"subject": "Invito al portale {brand_name}", "body": "Ciao {username},\n\nAttiva il tuo account con questo link monouso valido 7 giorni:\n{url}"},
+    "password_reset": {"subject": "Reimposta la password {brand_name}", "body": "Usa questo link monouso entro un'ora:\n{url}"},
+    "authentication_changed": {"subject": "L'autenticazione {brand_name} e stata reimpostata", "body": "Ciao {username},\n\nUn amministratore ha reimpostato i tuoi metodi di accesso. E necessario un nuovo invito.\n\n{portal_login_url}"},
+    "suspended": {"subject": "L'accesso al portale {brand_name} e stato sospeso", "body": "Ciao {username},\n\nIl tuo accesso al portale e stato sospeso. Contatta il supporto se necessario."},
+    "reactivated": {"subject": "L'accesso al portale {brand_name} e stato riattivato", "body": "Ciao {username},\n\nIl tuo accesso al portale e stato riattivato.\n\n{portal_login_url}"},
+    "new_login": {"subject": "Nuovo accesso al portale {brand_name}", "body": "Ciao {username},\n\nE stato registrato un nuovo accesso. Reimposta la password se non eri tu.\n\n{portal_login_url}"},
+    "direct_message": {"subject": "Nuovo messaggio nel portale {brand_name}", "body": "Ciao {username},\n\nHai ricevuto un nuovo messaggio da un amministratore. Accedi al portale per leggerlo.\n\n{portal_login_url}"}
+  },
+  "activation": {"button": "Attiva il mio accesso", "instructions": "Per il primo accesso, inizia dal pulsante qui sotto. Su Plex, crea un account o accedi con l’indirizzo che ha ricevuto questa email, poi torna alla pagina di attivazione. Attendi che tutti i server siano pronti. Se un invito è in attesa, accettalo su Plex e torna a verificare l’accesso. Il collegamento di accesso al portale serve per le visite successive."}
+}

@@ -1,0 +1,1259 @@
+{
+  "retrieved_at": "2026-10-29",
+  "purpose": "Verified curated IMDb list identities and supplemental title/type provenance. Lists are community curated, not studio-maintained.",
+  "universes": {
+    "mcu": [
+      {
+        "imdb_id": "tt3067038",
+        "title": "Marvel One-Shot: Agent Carter",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls539646485/"
+      },
+      {
+        "imdb_id": "tt2011109",
+        "title": "Marvel One-Shot: A Funny Thing Happened on the Way to Thor's Hammer",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls539646485/"
+      },
+      {
+        "imdb_id": "tt2011118",
+        "title": "Marvel One-Shot: The Consultant",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls539646485/"
+      },
+      {
+        "imdb_id": "tt2247732",
+        "title": "Marvel One-Shot: Item 47",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls539646485/"
+      },
+      {
+        "imdb_id": "tt3438640",
+        "title": "Marvel One-Shot: All Hail the King",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls539646485/"
+      },
+      {
+        "imdb_id": "tt6016776",
+        "title": "Team Thor",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls539646485/"
+      },
+      {
+        "imdb_id": "tt6599818",
+        "title": "Team Thor: Part 2",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls539646485/"
+      },
+      {
+        "imdb_id": "tt8023090",
+        "title": "Team Darryl",
+        "type": "short",
+        "source": "https://www.imdb.com/list/ls539646485/"
+      },
+      {
+        "imdb_id": "tt11107678",
+        "title": "Peter's To-Do List",
+        "type": "short",
+        "source": "https://www.imdb.com/list/ls539646485/"
+      },
+      {
+        "imdb_id": "tt13623136",
+        "title": "The Guardians of the Galaxy Holiday Special",
+        "type": "tvSpecial",
+        "source": "https://www.imdb.com/list/ls539646485/"
+      },
+      {
+        "imdb_id": "tt36042156",
+        "title": "The Punisher: One Last Kill",
+        "type": "tvSpecial",
+        "source": "https://www.imdb.com/list/ls539646485/"
+      }
+    ],
+    "avp": [
+      {
+        "imdb_id": "tt5362760",
+        "title": "The Peter Weyland Files: TED Conference, 2023",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls543971628/"
+      },
+      {
+        "imdb_id": "tt5362738",
+        "title": "The Peter Weyland Files: Happy Birthday, David",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls543971628/"
+      },
+      {
+        "imdb_id": "tt5362730",
+        "title": "The Peter Weyland Files: Quiet Eye, Elizabeth Shaw",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls543971628/"
+      },
+      {
+        "imdb_id": "tt5362752",
+        "title": "The Peter Weyland Files: 'Prometheus' Transmission",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls543971628/"
+      },
+      {
+        "imdb_id": "tt6878760",
+        "title": "Alien: Covenant - Prologue: The Crossing",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls543971628/"
+      },
+      {
+        "imdb_id": "tt6971180",
+        "title": "Alien: Covenant - Meet Walter",
+        "type": "short",
+        "source": "https://www.imdb.com/list/ls543971628/"
+      },
+      {
+        "imdb_id": "tt7309934",
+        "title": "Alien: Covenant - Phobos",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls543971628/"
+      },
+      {
+        "imdb_id": "tt6571148",
+        "title": "Alien: Covenant - Prologue: Last Supper",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls543971628/"
+      },
+      {
+        "imdb_id": "tt7309938",
+        "title": "Alien: Covenant - Advent",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls543971628/"
+      },
+      {
+        "imdb_id": "tt12058458",
+        "title": "Last Signs of Life",
+        "type": "short",
+        "source": "https://www.imdb.com/list/ls543971628/"
+      },
+      {
+        "imdb_id": "tt10110646",
+        "title": "Alien: Containment",
+        "type": "short",
+        "source": "https://www.imdb.com/list/ls042156304/"
+      },
+      {
+        "imdb_id": "tt10135070",
+        "title": "Alien: Specimen",
+        "type": "short",
+        "source": "https://www.imdb.com/list/ls042156304/"
+      },
+      {
+        "imdb_id": "tt10150302",
+        "title": "Alien: Night Shift",
+        "type": "short",
+        "source": "https://www.imdb.com/list/ls042156304/"
+      },
+      {
+        "imdb_id": "tt10090626",
+        "title": "Alien: Ore",
+        "type": "short",
+        "source": "https://www.imdb.com/list/ls042156304/"
+      },
+      {
+        "imdb_id": "tt10172856",
+        "title": "Alien: Alone",
+        "type": "short",
+        "source": "https://www.imdb.com/list/ls042156304/"
+      },
+      {
+        "imdb_id": "tt10015040",
+        "title": "Alien: Harvest",
+        "type": "short",
+        "source": "https://www.imdb.com/list/ls042156304/"
+      }
+    ],
+    "fast": [
+      {
+        "imdb_id": "tt2055789",
+        "title": "The Turbo-Charged Prelude for 2 Fast 2 Furious",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls4102351575/"
+      },
+      {
+        "imdb_id": "tt1538503",
+        "title": "Los Bandoleros",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls4102351575/"
+      },
+      {
+        "imdb_id": "tt3401738",
+        "title": "Fast & Furious 6: Take Control",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls4102351575/"
+      }
+    ],
+    "dcu": [
+      {
+        "imdb_id": "tt0119185",
+        "title": "GenÃ‚Â¹Ã‚Â³",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls020636102/"
+      },
+      {
+        "imdb_id": "tt0143127",
+        "title": "Batman & Mr. Freeze: SubZero",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt0119185",
+        "title": "GenÃ‚Â¹Ã‚Â³",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt0233298",
+        "title": "Batman Beyond: Return of the Joker",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt0346578",
+        "title": "Batman: Mystery of the Batwoman",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt0472219",
+        "title": "The Batman vs. Dracula",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt0800226",
+        "title": "Superman: Brainiac Attacks",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt0934706",
+        "title": "Superman: Doomsday",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt0902272",
+        "title": "Justice League: The New Frontier",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt1117563",
+        "title": "Batman: Gotham Knight",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt1186373",
+        "title": "Wonder Woman",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt1295071",
+        "title": "Tales of the Black Freighter",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt1384590",
+        "title": "Green Lantern: First Flight",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt1398941",
+        "title": "Superman/Batman: Public Enemies",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt1494772",
+        "title": "Justice League: Crisis on Two Earths",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt1569923",
+        "title": "Batman: Under the Red Hood",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt1673430",
+        "title": "Superman/Batman: Apocalypse",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt1699114",
+        "title": "All-Star Superman",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt1683043",
+        "title": "Green Lantern: Emerald Knights",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt1672723",
+        "title": "Batman: Year One",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt2027128",
+        "title": "Justice League: Doom",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt2224455",
+        "title": "Superman vs. The Elite",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt2313197",
+        "title": "Batman: The Dark Knight Returns, Part 1",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt2166834",
+        "title": "Batman: The Dark Knight Returns, Part 2",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt2617456",
+        "title": "Superman: Unbound",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt2820466",
+        "title": "Justice League: The Flashpoint Paradox",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt3468260",
+        "title": "JLA Adventures: Trapped in Time",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt3060952",
+        "title": "Justice League: War",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt3139072",
+        "title": "Son of Batman",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt3139086",
+        "title": "Batman: Assault on Arkham",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt3878542",
+        "title": "Justice League: Throne of Atlantis",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt4324274",
+        "title": "Batman vs. Robin",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt4324302",
+        "title": "Justice League: Gods and Monsters",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt4729754",
+        "title": "Batman Unlimited: Monster Mayhem",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt4437640",
+        "title": "Batman Unlimited: Animal Instincts",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt4870838",
+        "title": "Batman: Bad Blood",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt5091548",
+        "title": "Justice League vs. Teen Titans",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt5836262",
+        "title": "DC Super Hero Girls: Hero of the Year",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt5896146",
+        "title": "Batman Unlimited: Mechs vs. Mutants",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt2494376",
+        "title": "Justice League Dark",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt6315800",
+        "title": "Teen Titans: The Judas Contract",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt6869644",
+        "title": "DC Super Hero Girls: Intergalactic Games",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt6142314",
+        "title": "Batman vs. Two-Face",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt7578566",
+        "title": "Scooby-Doo & Batman: The Brave and the Bold",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt7167630",
+        "title": "Batman: Gotham by Gaslight",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt7167602",
+        "title": "Suicide Squad: Hell to Pay",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt7167658",
+        "title": "The Death of Superman",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt8634256",
+        "title": "DC Super Hero Girls: Legends of Atlantis",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt7167686",
+        "title": "Reign of the Supermen",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt9775360",
+        "title": "Batman vs Teenage Mutant Ninja Turtles",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt8752440",
+        "title": "Batman: Hush",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt10548944",
+        "title": "Teen Titans Go! Vs. Teen Titans",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt10985510",
+        "title": "Superman: Red Son",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt11079148",
+        "title": "Justice League Dark: Apokolips War",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt11079116",
+        "title": "Superman: Man of Tomorrow",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt5012504",
+        "title": "Injustice",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt18250460",
+        "title": "Teen Titans Go! & DC Super Hero Girls: Mayhem in the Multiverse",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt21197740",
+        "title": "Batman and Superman: Battle of the Super Sons",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt24223450",
+        "title": "Batman: The Doom That Came to Gotham",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt24548912",
+        "title": "Justice League x RWBY: Super Heroes and Huntsmen Part One",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt28508231",
+        "title": "Scooby-Doo! And Krypto, Too!",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt28786861",
+        "title": "Justice League x RWBY: Super Heroes and Huntsmen Part Two",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt32508210",
+        "title": "Batman Ninja vs. Yakuza League",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls058721118/"
+      },
+      {
+        "imdb_id": "tt3366668",
+        "title": "The Dark Knight's First Night",
+        "type": "tvShort",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt0143127",
+        "title": "Batman & Mr. Freeze: SubZero",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt0119185",
+        "title": "GenÂ¹Â³",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt0233298",
+        "title": "Batman Beyond: Return of the Joker",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt0982860",
+        "title": "Chase Me",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt0346578",
+        "title": "Batman: Mystery of the Batwoman",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt0472219",
+        "title": "The Batman vs. Dracula",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt0800226",
+        "title": "Superman: Brainiac Attacks",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt0934706",
+        "title": "Superman: Doomsday",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt0902272",
+        "title": "Justice League: The New Frontier",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt1117563",
+        "title": "Batman: Gotham Knight",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt1186373",
+        "title": "Wonder Woman",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt1295071",
+        "title": "Tales of the Black Freighter",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt1384590",
+        "title": "Green Lantern: First Flight",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt1398941",
+        "title": "Superman/Batman: Public Enemies",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt1494772",
+        "title": "Justice League: Crisis on Two Earths",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt1601188",
+        "title": "The Spectre",
+        "type": "short",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt1569923",
+        "title": "Batman: Under the Red Hood",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt1606600",
+        "title": "Jonah Hex",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt1773355",
+        "title": "DC Super Friends: The Joker's Playhouse",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt1663633",
+        "title": "Green Arrow",
+        "type": "short",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt1673430",
+        "title": "Superman/Batman: Apocalypse",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt1696202",
+        "title": "DC Showcase Animated Original Shorts Collection",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt1701223",
+        "title": "Superman/Shazam!: The Return of Black Adam",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt1986806",
+        "title": "Catwoman",
+        "type": "short",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt1683043",
+        "title": "Green Lantern: Emerald Knights",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt1699114",
+        "title": "All-Star Superman",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt1672723",
+        "title": "Batman: Year One",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt2027128",
+        "title": "Justice League: Doom",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt2224455",
+        "title": "Superman vs. The Elite",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt2313197",
+        "title": "Batman: The Dark Knight Returns, Part 1",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt3254454",
+        "title": "Superman 75th Anniversary",
+        "type": "tvShort",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt2166834",
+        "title": "Batman: The Dark Knight Returns, Part 2",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt2617456",
+        "title": "Superman: Unbound",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt2820466",
+        "title": "Justice League: The Flashpoint Paradox",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt2465238",
+        "title": "Lego Batman: The Movie - DC Super Heroes Unite",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt3643208",
+        "title": "Batman: Strange Days",
+        "type": "tvShort",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt3643216",
+        "title": "Batman Beyond",
+        "type": "tvShort",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt3468260",
+        "title": "JLA Adventures: Trapped in Time",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt3060952",
+        "title": "Justice League: War",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt3139072",
+        "title": "Son of Batman",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt3139086",
+        "title": "Batman: Assault on Arkham",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt4189294",
+        "title": "Lego DC Comics: Batman Be-Leaguered",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt7516768",
+        "title": "Nightwing and Robin",
+        "type": "short",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt3878542",
+        "title": "Justice League: Throne of Atlantis",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt4324274",
+        "title": "Batman vs. Robin",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt4437640",
+        "title": "Batman Unlimited: Animal Instincts",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt4324302",
+        "title": "Justice League: Gods and Monsters",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt4729754",
+        "title": "Batman Unlimited: Monster Mayhem",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt4189260",
+        "title": "Lego DC Comics Super Heroes: Justice League vs. Bizarro League",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt4938416",
+        "title": "Lego DC Super Heroes: Justice League - Attack of the Legion of Doom!",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt4870838",
+        "title": "Batman: Bad Blood",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt5091548",
+        "title": "Justice League vs. Teen Titans",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt5836262",
+        "title": "DC Super Hero Girls: Hero of the Year",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt5896146",
+        "title": "Batman Unlimited: Mechs vs. Mutants",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt5251438",
+        "title": "Lego DC Comics Super Heroes: Justice League - Cosmic Clash",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt5612702",
+        "title": "Lego DC Comics Superheroes: Justice League - Gotham City Breakout",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt2494376",
+        "title": "Justice League Dark",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt6315800",
+        "title": "Teen Titans: The Judas Contract",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt6869644",
+        "title": "DC Super Hero Girls: Intergalactic Games",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt6142314",
+        "title": "Batman vs. Two-Face",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt6945882",
+        "title": "Vixen",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt7158814",
+        "title": "Lego DC Super Hero Girls: Brain Drain",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt7578566",
+        "title": "Scooby-Doo & Batman: The Brave and the Bold",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt7167630",
+        "title": "Batman: Gotham by Gaslight",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt7167602",
+        "title": "Suicide Squad: Hell to Pay",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt8421602",
+        "title": "#TheLateBatsby",
+        "type": "short",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt7167658",
+        "title": "The Death of Superman",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt8634256",
+        "title": "DC Super Hero Girls: Legends of Atlantis",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt7877382",
+        "title": "Lego DC Comics Super Heroes: The Flash",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt8050266",
+        "title": "LEGO DC Super Hero Girls: Super-Villain High",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt8457394",
+        "title": "Lego DC Comics Super Heroes: Aquaman - Rage of Atlantis",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt9293522",
+        "title": "Freedom Fighters: The Ray",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt7167686",
+        "title": "Reign of the Supermen",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt10736082",
+        "title": "Sgt. Rock",
+        "type": "short",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt9775360",
+        "title": "Batman vs Teenage Mutant Ninja Turtles",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt8752440",
+        "title": "Batman: Hush",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt10548944",
+        "title": "Teen Titans Go! Vs. Teen Titans",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt11229556",
+        "title": "Death",
+        "type": "short",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt10327712",
+        "title": "Lego DC Batman: Family Matters",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt11079148",
+        "title": "Justice League Dark: Apokolips War",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt11079116",
+        "title": "Superman: Man of Tomorrow",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt11802028",
+        "title": "The Phantom Stranger",
+        "type": "short",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt12093878",
+        "title": "Lego DC: Shazam! Magic and Monsters",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt12272414",
+        "title": "Adam Strange",
+        "type": "short",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt10985510",
+        "title": "Superman: Red Son",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt12794046",
+        "title": "Batman: Death in the Family",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt12876132",
+        "title": "Deathstroke: Knights & Dragons",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt14577038",
+        "title": "Kamandi: The Last Boy on Earth!",
+        "type": "short",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt14948338",
+        "title": "The Losers",
+        "type": "short",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt15129756",
+        "title": "Blue Beetle",
+        "type": "short",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt5012504",
+        "title": "Injustice",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt18305072",
+        "title": "Constantine: The House of Mystery",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt18250460",
+        "title": "Teen Titans Go! & DC Super Hero Girls: Mayhem in the Multiverse",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt21197740",
+        "title": "Batman and Superman: Battle of the Super Sons",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt24223450",
+        "title": "Batman: The Doom That Came to Gotham",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt24548912",
+        "title": "Justice League x RWBY: Super Heroes and Huntsmen Part One",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt28786861",
+        "title": "Justice League x RWBY: Super Heroes and Huntsmen Part Two",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt28508231",
+        "title": "Scooby-Doo! And Krypto, Too!",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      },
+      {
+        "imdb_id": "tt32508210",
+        "title": "Batman Ninja vs. Yakuza League",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls045579204/"
+      }
+    ],
+    "trek": [],
+    "starwars": [
+      {
+        "imdb_id": "tt0193524",
+        "title": "The Star Wars Holiday Special",
+        "type": "tvMovie",
+        "source": "https://www.imdb.com/list/ls024519932/"
+      },
+      {
+        "imdb_id": "tt0087225",
+        "title": "The Ewok Adventure",
+        "type": "tvMovie",
+        "source": "https://www.imdb.com/list/ls024519932/"
+      },
+      {
+        "imdb_id": "tt0089110",
+        "title": "Ewoks: The Battle for Endor",
+        "type": "tvMovie",
+        "source": "https://www.imdb.com/list/ls024519932/"
+      },
+      {
+        "imdb_id": "tt0490479",
+        "title": "Return of the Ewok",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls024519932/"
+      },
+      {
+        "imdb_id": "tt2008565",
+        "title": "Lego Star Wars: Revenge of the Brick",
+        "type": "video",
+        "source": "https://www.imdb.com/list/ls024519932/"
+      },
+      {
+        "imdb_id": "tt1509637",
+        "title": "Lego Star Wars: The Quest for R2-D2",
+        "type": "tvShort",
+        "source": "https://www.imdb.com/list/ls024519932/"
+      },
+      {
+        "imdb_id": "tt1808255",
+        "title": "Lego Star Wars: Bombad Bounty",
+        "type": "tvShort",
+        "source": "https://www.imdb.com/list/ls024519932/"
+      },
+      {
+        "imdb_id": "tt2005268",
+        "title": "Lego Star Wars: The Padawan Menace",
+        "type": "tvShort",
+        "source": "https://www.imdb.com/list/ls024519932/"
+      },
+      {
+        "imdb_id": "tt2402600",
+        "title": "Lego Star Wars: The Empire Strikes Out",
+        "type": "tvShort",
+        "source": "https://www.imdb.com/list/ls024519932/"
+      },
+      {
+        "imdb_id": "tt23626160",
+        "title": "Zen: Grogu and Dust Bunnies",
+        "type": "short",
+        "source": "https://www.imdb.com/list/ls024519932/"
+      },
+      {
+        "imdb_id": "tt12885438",
+        "title": "The Lego Star Wars Holiday Special",
+        "type": "tvShort",
+        "source": "https://www.imdb.com/title/tt12885438/"
+      },
+      {
+        "imdb_id": "tt15164924",
+        "title": "Lego Star Wars Terrifying Tales",
+        "type": "tvShort",
+        "source": "https://www.imdb.com/title/tt15164924/"
+      },
+      {
+        "imdb_id": "tt20784210",
+        "title": "Lego Star Wars Summer Vacation",
+        "type": "tvMovie",
+        "source": "https://www.imdb.com/title/tt20784210/"
+      },
+      {
+        "imdb_id": "tt43679852",
+        "title": "Lego Star Wars: The Mandalorian",
+        "type": "tvSpecial",
+        "source": "https://www.imdb.com/title/tt43679852/"
+      }
+    ]
+  }
+}

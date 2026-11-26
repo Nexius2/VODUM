@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="340" viewBox="0 0 1200 340" role="img" aria-labelledby="title desc">
+<title id="title">VODUM</title><desc id="desc">The Control Center for Plex and Jellyfin Communities</desc>
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#0f172a"/><stop offset="1" stop-color="#182044"/></linearGradient><linearGradient id="accent"><stop stop-color="#818cf8"/><stop offset="1" stop-color="#22d3ee"/></linearGradient></defs>
+<rect width="1200" height="340" rx="20" fill="url(#bg)"/>
+<path d="M930 0V340M1040 0V340M1150 0V340M850 65H1200M850 175H1200M850 285H1200" stroke="#334155" opacity=".35"/>
+<rect x="58" y="57" width="64" height="6" rx="3" fill="url(#accent)"/>
+<text x="58" y="149" fill="#f8fafc" font-family="Arial,sans-serif" font-size="78" font-weight="700" letter-spacing="5">VODUM</text>
+<text x="60" y="207" fill="#e2e8f0" font-family="Arial,sans-serif" font-size="28">The Control Center for Plex &amp; Jellyfin Communities.</text>
+<text x="60" y="267" fill="#94a3b8" font-family="Arial,sans-serif" font-size="20">MULTI-SERVER  /  MEMBERS  /  ACCESS  /  MONITORING</text>
+<circle cx="1055" cy="145" r="69" fill="#6366f1" opacity=".16"/><circle cx="1055" cy="145" r="40" fill="none" stroke="url(#accent)" stroke-width="4"/><circle cx="1055" cy="145" r="10" fill="#22d3ee"/>
+</svg>

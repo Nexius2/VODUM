@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% set active_page = "subscriptions" %}
+
+{% block title %}{{ t("subscriptions") }} - {{ app_brand_name }}{% endblock %}
+{% block header_title %}{{ t("subscriptions") }}{% endblock %}
+{% block header_subtitle %}{{ t("subscriptions_description") }}{% endblock %}
+
+{% block content %}
+
+<div class="mb-6">
+  <div class="flex flex-wrap gap-3 border-b border-slate-800">
+    <a href="{{ url_for('subscriptions', tab='templates') }}"
+       class="pb-2 border-b-2 {{ 'border-primary text-primary' if tab=='templates' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
+      {{ t("subscriptions_tab_templates") }}
+    </a>
+
+    <a href="{{ url_for('subscriptions', tab='applications') }}"
+       class="pb-2 border-b-2 {{ 'border-primary text-primary' if tab=='applications' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
+      {{ t("subscriptions_tab_applications") }}
+    </a>
+
+    <a href="{{ url_for('subscriptions', tab='policies') }}"
+       class="pb-2 border-b-2 {{ 'border-primary text-primary' if tab=='policies' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
+      {{ t("subscriptions_tab_policies") }}
+    </a>
+
+    <a href="{{ url_for('subscriptions', tab='gifts') }}"
+       class="pb-2 border-b-2 {{ 'border-primary text-primary' if tab=='gifts' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
+      {{ t("subscriptions_tab_gifts") }}
+    </a>
+
+    <a href="{{ url_for('subscriptions', tab='settings') }}"
+       class="pb-2 border-b-2 {{ 'border-primary text-primary' if tab=='settings' else 'border-transparent text-slate-400 hover:text-slate-200' }}">
+      {{ t("subscriptions_tab_settings") }}
+    </a>
+  </div>
+</div>
+
+
+{% if tab == 'templates' %}
+  <div class="grid grid-cols-1 xl:grid-cols-12 gap-6 w-full">
+    {% include "subscriptions/_templates_editor.html" %}
+    {% include "subscriptions/_templates_list.html" %}
+  </div>
+
+{% elif tab == 'applications' %}
+  {% include "subscriptions/_applications.html" %}
+
+{% elif tab == 'policies' %}
+  {% include "subscriptions/_policies.html" %}
+
+{% elif tab == 'settings' %}
+  {% include "subscriptions/_settings.html" %}
+
+{% else %}
+  <div id="page-alert" class="hidden mb-6"></div>
+
+  <form id="gift-form"
+        action="{{ url_for('subscriptions_api.api_gift_subscription') }}"
+        method="post"
+        data-gift-form>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
+      {% include "subscriptions/_gift_form.html" %}
+      {% include "subscriptions/_gift_history.html" %}
+    </div>
+
+  </form>
+
+  {% include "subscriptions/_gift_modal.html" %}
+  {% include "subscriptions/_scripts.html" %}
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/pages/subscriptions.js', v=g.app_version|default('dev')) }}"></script>
+<script src="{{ url_for('static', filename='js/pages/subscriptions-template-editor.js', v=g.app_version|default('dev')) }}"></script>
+{% endblock %}

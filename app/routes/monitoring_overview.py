@@ -1,0 +1,503 @@
+from datetime import datetime, timezone
+
+# Auto-split from app.py (keep URLs/endpoints intact)
+from flask import (
+    render_template, request, url_for, make_response, g,
+)
+from core.monitoring.precomputed import load_overview, load_libraries, load_library_top
+from core.monitoring.precomputed_tabs import load_tab_snapshot, normalize, overlay_server_live, portal_online, load_location_view
+from core.monitoring.overview_servers import (
+    load_monitoring_server_context,
+)
+from core.monitoring.overview_live import load_monitoring_live_context
+from core.monitoring.overview_activity import load_recent_monitoring_events
+from core.monitoring.library_growth import PERIODS
+from core.monitoring.overview_libraries import (
+    build_monitoring_library_options,
+    build_monitoring_library_pagination,
+)
+from core.monitoring.overview_users import (
+    build_monitoring_users_options,
+    build_monitoring_users_pagination,
+)
+from core.monitoring.overview_policies import (
+    load_policy_catalog,
+    load_policy_tracked_state,
+)
+from logging_utils import get_logger
+from web.helpers import get_db
+from core.auth_principal import admin_required
+from .monitoring_enforcements import register as register_enforcement_routes
+
+monitoring_logger = get_logger("monitoring_overview")
+MONITORING_TABS = {
+    "overview", "now_playing", "location", "policies", "usage_risk", "activity",
+    "history", "libraries", "users", "servers", "user_portal",
+}
+
+def register(app):
+    register_enforcement_routes(app)
+
+    @app.route("/monitoring")
+    @admin_required
+    def monitoring_page():
+        db = get_db()
+        tab = request.args.get("tab", "overview")
+        show_library_top = tab == "libraries" and request.args.get("library_top") == "1"
+        if tab in MONITORING_TABS:
+            request.environ["vodum.route_view"] = "libraries_top" if show_library_top else tab
+        if show_library_top and request.headers.get("HX-Request"):
+            options = build_monitoring_library_options(request.args, request.cookies)
+            cards, g.monitoring_snapshot = load_library_top(db, options)
+            response = make_response(render_template(
+                "monitoring/partials/_library_top_cards.html",
+                library_top_cards=cards,
+            ))
+            response.cache_control.no_store = True
+            response.vary.add("HX-Request")
+            return response
+        portal_setting = db.query_one("SELECT portal_enabled FROM settings WHERE id=1") or {}
+        portal_enabled = int(dict(portal_setting).get("portal_enabled") or 0) == 1
+        live_window_seconds = 300
+        if tab == "location":
+            preference = "monitoring_location_live"
+            selected = request.args.get("live")
+            live_only = (selected if selected in {"0", "1"} else request.cookies.get(preference)) == "1"
+            now = int(datetime.now(timezone.utc).timestamp())
+            period = request.args.get("period", 0, type=int)
+            period = period if period in {1, 7, 30} else 0
+            window_end = max(0, min(now, request.args.get('until', now, type=int))) if period else now
+            start = window_end - period * 86400
+            instant = max(start, min(window_end, request.args.get("at", start, type=int))) if period else None
+            server_id = request.args.get("server", type=int)
+            country = request.args.get("country", "").upper()
+            country = country if len(country) == 2 and country.isascii() and country.isalpha() else ""
+            playing_only = not period and request.args.get("playing") == "1"
+            location, g.monitoring_snapshot = load_location_view(
+                db, live_only=live_only, live_window_seconds=live_window_seconds,
+                server_id=server_id, instant=instant, country=country, playing_only=playing_only,
+            )
+            partial = request.headers.get("HX-Request") == "true"
+            template = "monitoring/tabs/location.html" if partial else "monitoring/monitoring.html"
+            servers = [] if partial else db.query(
+                "SELECT id, name FROM servers WHERE type IN ('plex', 'jellyfin') ORDER BY name"
+            )
+            response = make_response(render_template(
+                template, active_page="monitoring", tab=tab, portal_enabled=portal_enabled,
+                live_only=live_only, location=location, location_servers=servers,
+                location_server_id=server_id, location_country=country, playing_only=playing_only,
+                location_period=period, location_start=start, location_end=window_end, location_instant=instant,
+                location_heat=request.args.get("heat") == "1",
+            ))
+            response.cache_control.no_store = True
+            response.vary.add('HX-Request')
+            response.headers['X-VODUM-Statistics-Ready'] = '1' if not g.monitoring_snapshot or g.monitoring_snapshot['ready'] else '0'
+            if g.monitoring_snapshot and g.monitoring_snapshot['queue_full']:
+                response.status_code = 429
+            if not partial and selected in {"0", "1"}:
+                response.set_cookie(preference, selected, max_age=365 * 24 * 60 * 60,
+                                    httponly=True, secure=request.is_secure, samesite="Lax")
+            return response
+        if tab == "user_portal":
+            from flask import abort
+            if not portal_enabled:
+                abort(404)
+            try:
+                days = int(request.args.get("days", 30))
+                page = int(request.args.get("page", 1))
+            except ValueError:
+                abort(400)
+            portal_usage, g.monitoring_snapshot = load_tab_snapshot(db, 'user_portal', dict(days=days, page=page))
+            g.monitoring_portal_online = portal_online(db)
+            if portal_usage is not None:
+                portal_usage['stats']['online'] = g.monitoring_portal_online
+            template = 'monitoring/tabs/user_portal.html' if request.headers.get('HX-Request') else 'monitoring/monitoring.html'
+            response = make_response(render_template(template, active_page='monitoring',
+                tab=tab, portal_enabled=True, portal_usage=portal_usage))
+            response.cache_control.no_store = True
+            response.vary.add('HX-Request')
+            return response
+        if tab not in MONITORING_TABS:
+            from flask import abort
+            abort(400)
+
+        live_window_sql = f"-{live_window_seconds} seconds"
+
+        server_context = (
+            load_monitoring_server_context(db, tab)
+            if tab in {"overview", "now_playing", "servers", "usage_risk"}
+            else dict(servers=[], configured_server_count=0, server_resource_stats={}, server_stats={})
+        )
+        servers = server_context["servers"]
+        configured_server_count = server_context["configured_server_count"]
+        server_resource_stats = server_context["server_resource_stats"]
+        server_stats = server_context["server_stats"]
+        live_context = load_monitoring_live_context(
+            db,
+            tab,
+            server_resource_stats,
+            live_window_seconds=live_window_seconds,
+        )
+        sessions_stats = live_context["sessions_stats"]
+        live_servers = live_context["live_servers"]
+        sessions = live_context["sessions"]
+        events = [] if tab == "overview" and not request.headers.get("HX-Request") else load_recent_monitoring_events(db, tab)
+        stats_7d = {"sessions": 0, "active_users": 0, "total_watch_ms": 0, "avg_watch_ms": 0}
+        top_users_30d = []
+        top_content_30d = []
+        top_movies_30d = []
+        concurrent_7d = {"peak_streams": 0}
+        # --------------------------
+        # Donnees overview uniquement
+        # --------------------------
+        overview_deferred = tab == "overview" and not request.headers.get("HX-Request")
+        if tab == "overview" and not overview_deferred:
+            overview_aggregates, g.monitoring_snapshot = load_overview(db, sessions_stats)
+            overview_aggregates = overview_aggregates or {
+                "stats_7d": stats_7d, "top_users_30d": [], "top_content_30d": [],
+                "top_movies_30d": [], "concurrent_7d": concurrent_7d,
+            }
+            stats_7d = overview_aggregates["stats_7d"]
+            top_users_30d = overview_aggregates["top_users_30d"]
+            top_content_30d = overview_aggregates["top_content_30d"]
+            top_movies_30d = overview_aggregates["top_movies_30d"]
+            concurrent_7d = overview_aggregates["concurrent_7d"]
+
+        if tab == 'activity':
+            _, g.monitoring_snapshot = load_tab_snapshot(db, 'activity', request.args)
+
+        sort_key = None
+        sort_dir = None
+
+
+        # --------------------------
+        # Tabs data
+        # --------------------------
+        policies = []
+        rows = []
+        filters = {}
+        pagination = None
+        library_top_cards = None
+        growth_period = "7"
+        library_users = []
+        library_range = "30d"
+        library_user = "all"
+        hidden_libraries_count = 0
+
+        policy_dashboard = {}
+        policy_hits_30d = []
+        policy_rule_breakdown_30d = []
+        policy_provider_breakdown_30d = []
+        policy_scope_breakdown = {}
+        policy_top_users_30d = []
+        policy_recent_enforcements = []
+        policy_enforcement_page = 1
+        policy_enforcement_per_page = 20
+        policy_enforcement_total_pages = 1
+        policy_enforcement_total = 0
+        policy_grouped_enforcements = []
+        policy_tracked_state = {}
+
+        usage_risk_report = {
+            "enabled": True,
+            "summary": {"high": 0, "medium": 0, "low": 0, "suggested": 0},
+            "rows": [],
+            "filters": {},
+        }
+        usage_risk_filters = {}
+        subscription_templates = []
+        stream_policy_types = []
+        
+
+        if tab == "history":
+            def build_url(p):
+                args = dict(request.args)
+                args["tab"] = "history"
+                args["page"] = p
+                return url_for("monitoring_page", **args)
+
+            options = normalize('history', request.args, request.cookies)
+            history_context, g.monitoring_snapshot = load_tab_snapshot(db, 'history', request.args, request.cookies)
+            if history_context is not None:
+                rows = history_context["rows"]
+                filters = history_context["filters"]
+                pagination = history_context["pagination"]
+                for key in ('first_url', 'prev_url', 'next_url', 'last_url'):
+                    pagination[key] = build_url(pagination[key])
+            else:
+                filters = options
+            sort_key, sort_dir = options['sort'], options['dir']
+
+        elif tab == "usage_risk":
+            usage_risk_context, g.monitoring_snapshot = load_tab_snapshot(db, 'usage_risk', request.args)
+            usage_risk_context = usage_risk_context or dict(usage_risk_filters=normalize('usage_risk', request.args),
+                usage_risk_report=usage_risk_report, subscription_templates=[], stream_policy_types=[])
+            enabled = db.query_one('SELECT usage_risk_enabled FROM settings WHERE id=1')
+            if enabled and not int(enabled['usage_risk_enabled'] or 0):
+                usage_risk_context['usage_risk_report'] = dict(enabled=False, rows=[], summary={})
+            usage_risk_filters = usage_risk_context["usage_risk_filters"]
+            usage_risk_report = usage_risk_context["usage_risk_report"]
+            subscription_templates = usage_risk_context["subscription_templates"]
+            stream_policy_types = usage_risk_context["stream_policy_types"]
+        elif tab == "users":
+            user_options = build_monitoring_users_options(request.args, request.cookies)
+            user_options['page'] = max(1, user_options['page'])
+            user_options['offset'] = (user_options['page'] - 1) * user_options['per_page']
+            sort_key = user_options["sort_key"]
+            sort_dir = user_options["sort_dir"]
+
+            user_data, g.monitoring_snapshot = load_tab_snapshot(db, 'users', request.args, request.cookies)
+            total_rows = user_data['total_rows'] if user_data else 0
+            rows = user_data['rows'] if user_data else []
+
+            # Pagination
+            def build_url(p):
+                args = dict(request.args)
+                args["tab"] = "users"
+                args["page"] = p
+                return url_for("monitoring_page", **args)
+
+            pagination = build_monitoring_users_pagination(
+                total_rows,
+                user_options,
+                build_url,
+            )
+
+        elif tab == "policies":
+            policy_data, g.monitoring_snapshot = load_tab_snapshot(db, 'policies', request.args)
+            policy_data = policy_data or {}
+            policy_catalog = load_policy_catalog(db, request.args.get('edit_policy_id', type=int))
+            policies, edit_policy = policy_catalog['policies'], policy_catalog['edit_policy']
+            policy_tracked_state = load_policy_tracked_state(db)
+            policy_dashboard = policy_data.get("policy_dashboard", policy_dashboard)
+            policy_top_users_30d = policy_data.get("policy_top_users_30d", policy_top_users_30d)
+            policy_recent_enforcements = policy_data.get("policy_recent_enforcements", policy_recent_enforcements)
+            policy_grouped_enforcements = policy_data.get("policy_grouped_enforcements", policy_grouped_enforcements)
+            policy_hits_30d = policy_data.get("policy_hits_30d", policy_hits_30d)
+            policy_scope_breakdown = policy_data.get("policy_scope_breakdown", policy_scope_breakdown)
+            policy_provider_breakdown_30d = policy_data.get("policy_provider_breakdown_30d", policy_provider_breakdown_30d)
+            policy_rule_breakdown_30d = policy_data.get("policy_rule_breakdown_30d", policy_rule_breakdown_30d)
+            policy_enforcement_page = policy_data.get("policy_enforcement_page", policy_enforcement_page)
+            policy_enforcement_per_page = policy_data.get("policy_enforcement_per_page", policy_enforcement_per_page)
+            policy_enforcement_total = policy_data.get("policy_enforcement_total", policy_enforcement_total)
+            policy_enforcement_total_pages = policy_data.get("policy_enforcement_total_pages", policy_enforcement_total_pages)
+
+
+        elif tab == "libraries":
+            requested_period = request.args.get("growth", "7")
+            if requested_period in {str(days) for days in PERIODS}:
+                growth_period = requested_period
+            library_options = build_monitoring_library_options(
+                request.args,
+                request.cookies,
+            )
+            library_range = library_options["library_range"]
+            library_user = library_options["library_user"]
+            library_user_id = library_options["library_user_id"]
+            sort_key = library_options["sort_key"]
+            sort_dir = library_options["sort_dir"]
+
+            library_table, g.monitoring_snapshot = load_libraries(db, library_options, growth_period)
+            rows = library_table["rows"]
+            total_rows = library_table["total_rows"]
+            hidden_libraries_count = library_table["hidden_libraries_count"]
+            def build_url(p):
+                args = dict(request.args)
+                args["tab"] = "libraries"
+                args["page"] = p
+                return url_for("monitoring_page", **args)
+
+            pagination = build_monitoring_library_pagination(
+                total_rows,
+                library_options,
+                build_url,
+            )
+
+            library_users = library_table["users"]
+
+            if show_library_top:
+                library_top_cards, g.monitoring_top_snapshot = load_library_top(db, library_options)
+
+        server_range = request.args.get("range", "7d")
+        servers_combined = None
+        servers_details = None
+        servers_sessions_day = None
+        servers_media_types = None
+        servers_clients = None
+        servers_top_users = None
+        servers_top_titles = None
+        servers_unique_ips = None
+
+        if tab == "servers":
+            servers_tab, g.monitoring_snapshot = load_tab_snapshot(db, 'servers', request.args)
+            servers_tab = servers_tab or dict(server_range=normalize('servers', request.args)['range'],
+                servers_combined={}, servers_details=[], servers_sessions_day=[], servers_media_types=[],
+                servers_clients=[], servers_top_users=[], servers_top_titles=[], servers_unique_ips=[],
+                arr_monitoring=dict(servers=[], days=[]))
+            servers_tab = overlay_server_live(db, servers_tab, live_window_sql, server_resource_stats)
+            g.monitoring_live_servers = servers_tab.pop('live_servers')
+            server_range = servers_tab["server_range"]
+            servers_combined = servers_tab["servers_combined"]
+            servers_details = servers_tab["servers_details"]
+            servers_sessions_day = servers_tab["servers_sessions_day"]
+            servers_media_types = servers_tab["servers_media_types"]
+            servers_clients = servers_tab["servers_clients"]
+            servers_top_users = servers_tab["servers_top_users"]
+            servers_top_titles = servers_tab["servers_top_titles"]
+            servers_unique_ips = servers_tab["servers_unique_ips"]
+
+
+        # ------------------------------------------------------------------
+        # HTMX: une requete dynamique renvoie uniquement le contenu de l'onglet
+        # ------------------------------------------------------------------
+        is_hx = bool(request.headers.get("HX-Request"))
+        if is_hx:
+            tab_tpl = {
+                "overview": "monitoring/overview_body.html",
+                "now_playing": "monitoring/tabs/now_playing.html",
+                "policies": "monitoring/tabs/policies.html",
+                "usage_risk": "monitoring/tabs/usage_risk.html",
+                "activity": "monitoring/tabs/activity.html",
+                "history": "monitoring/tabs/history.html",
+                "libraries": "monitoring/tabs/libraries.html",
+                "users": "monitoring/tabs/users.html",
+                "servers": "monitoring/tabs/servers.html",
+            }.get(tab, "monitoring/overview_body.html")
+
+            resp = make_response(render_template(
+                tab_tpl,
+                active_page="monitoring",
+                tab=tab,
+                servers=servers,
+                configured_server_count=configured_server_count,
+                server_stats=server_stats,
+                sessions_stats=sessions_stats,
+                live_servers=live_servers,
+                sessions=sessions,
+                events=events,
+                live_window_seconds=live_window_seconds,
+                overview_deferred=overview_deferred,
+                stats_7d=stats_7d,
+                top_users_30d=top_users_30d,
+                top_content_30d=top_content_30d,
+                top_movies_30d=top_movies_30d,
+                concurrent_7d=concurrent_7d,
+                rows=rows,
+                filters=filters,
+                pagination=pagination,
+                sort_key=sort_key,
+                sort_dir=sort_dir,
+                policies=policies,
+                edit_policy=locals().get('edit_policy'),
+                server_range=server_range,
+                servers_combined=servers_combined,
+                arr_monitoring=servers_tab['arr_monitoring'] if tab == "servers" else {},
+                servers_details=servers_details,
+                servers_sessions_day=servers_sessions_day,
+                servers_media_types=servers_media_types,
+                servers_clients=servers_clients,
+                servers_top_users=servers_top_users,
+                servers_top_titles=servers_top_titles,
+                servers_unique_ips=servers_unique_ips,
+                library_top_cards=library_top_cards,
+                growth_period=growth_period,
+                library_users=library_users,
+                library_range=library_range,
+                library_user=library_user,
+                hidden_libraries_count=hidden_libraries_count,
+                policy_dashboard=policy_dashboard,
+                policy_hits_30d=policy_hits_30d,
+                policy_rule_breakdown_30d=policy_rule_breakdown_30d,
+                policy_provider_breakdown_30d=policy_provider_breakdown_30d,
+                policy_scope_breakdown=policy_scope_breakdown,
+                policy_top_users_30d=policy_top_users_30d,
+                policy_recent_enforcements=policy_recent_enforcements,
+                policy_enforcement_page=policy_enforcement_page,
+                policy_enforcement_per_page=policy_enforcement_per_page,
+                policy_enforcement_total_pages=policy_enforcement_total_pages,
+                policy_enforcement_total=policy_enforcement_total,
+                policy_grouped_enforcements=policy_grouped_enforcements,
+                policy_tracked_state=policy_tracked_state,
+                usage_risk_report=usage_risk_report,
+                usage_risk_filters=usage_risk_filters,
+                subscription_templates=subscription_templates,
+                stream_policy_types=stream_policy_types,
+            ))
+            if sort_key and sort_dir:
+                resp.set_cookie(f"monitoring_{tab}_sort", str(sort_key), max_age=60*60*24*365)
+                resp.set_cookie(f"monitoring_{tab}_dir",  str(sort_dir),  max_age=60*60*24*365)
+
+            resp.vary.add("HX-Request")
+            resp.cache_control.no_store = True
+            return resp
+
+        # Page complete (chargement normal)
+        resp = make_response(render_template(
+            "monitoring/monitoring.html",
+            active_page="monitoring",
+            tab=tab,
+            portal_enabled=portal_enabled,
+            servers=servers,
+            configured_server_count=configured_server_count,
+            server_stats=server_stats,
+            sessions_stats=sessions_stats,
+            live_servers=live_servers,
+            sessions=sessions,
+            events=events,
+            live_window_seconds=live_window_seconds,
+            overview_deferred=overview_deferred,
+            stats_7d=stats_7d,
+            top_users_30d=top_users_30d,
+            top_content_30d=top_content_30d,
+            top_movies_30d=top_movies_30d,
+            concurrent_7d=concurrent_7d,
+            rows=rows,
+            filters=filters,
+            pagination=pagination,
+            sort_key=sort_key,
+            sort_dir=sort_dir,
+            policies=policies,
+            edit_policy=locals().get('edit_policy'),
+            server_range=server_range,
+            servers_combined=servers_combined,
+            arr_monitoring=servers_tab['arr_monitoring'] if tab == "servers" else {},
+            servers_details=servers_details,
+            servers_sessions_day=servers_sessions_day,
+            servers_media_types=servers_media_types,
+            servers_clients=servers_clients,
+            servers_top_users=servers_top_users,
+            servers_top_titles=servers_top_titles,
+            servers_unique_ips=servers_unique_ips,
+            library_top_cards=library_top_cards,
+            growth_period=growth_period,
+            library_users=library_users,
+            library_range=library_range,
+            library_user=library_user,
+            hidden_libraries_count=hidden_libraries_count,
+            policy_dashboard=policy_dashboard,
+            policy_hits_30d=policy_hits_30d,
+            policy_rule_breakdown_30d=policy_rule_breakdown_30d,
+            policy_provider_breakdown_30d=policy_provider_breakdown_30d,
+            policy_scope_breakdown=policy_scope_breakdown,
+            policy_top_users_30d=policy_top_users_30d,
+            policy_recent_enforcements=policy_recent_enforcements,
+            policy_enforcement_page=policy_enforcement_page,
+            policy_enforcement_per_page=policy_enforcement_per_page,
+            policy_enforcement_total_pages=policy_enforcement_total_pages,
+            policy_enforcement_total=policy_enforcement_total,
+            policy_grouped_enforcements=policy_grouped_enforcements,
+            policy_tracked_state=policy_tracked_state,
+            usage_risk_report=usage_risk_report,
+            usage_risk_filters=usage_risk_filters,
+            subscription_templates=subscription_templates,
+            stream_policy_types=stream_policy_types,
+        ))
+        
+        if show_library_top or tab == "overview":
+            resp.vary.add("HX-Request")
+        resp.cache_control.no_store = True
+        resp.vary.add('HX-Request')
+        if sort_key and sort_dir:
+            resp.set_cookie(f"monitoring_{tab}_sort", str(sort_key), max_age=60*60*24*365)
+            resp.set_cookie(f"monitoring_{tab}_dir",  str(sort_dir),  max_age=60*60*24*365)
+        return resp

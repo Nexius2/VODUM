@@ -1,0 +1,5 @@
+{# Silent placeholder: Plex suggestions appear only when there is something to offer. #}
+<div id="plex-suggestions"
+     hx-get="{{ url_for('server_plex_suggestions_partial') }}"
+     hx-trigger="load" hx-swap="outerHTML" hx-sync="this:drop"
+     hx-request='{"timeout":20000}' aria-live="polite"></div>

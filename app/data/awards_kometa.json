@@ -1,0 +1,147 @@
+{
+  "upstream": "https://github.com/Kometa-Team/Kometa/tree/e1327dc4e7f709277e3e2be88df76c3eefe349e2/defaults/award",
+  "license": "MIT",
+  "awards": {
+    "oscars": {
+      "name": "Oscars",
+      "media_types": [
+        "movie"
+      ],
+      "event_id": "ev0000003",
+      "award_filter": [],
+      "category_filter": [
+        "best motion picture of the year",
+        "best picture",
+        "best picture, production",
+        "best picture, unique and artistic production"
+      ]
+    },
+    "bafta": {
+      "name": "BAFTA",
+      "media_types": [
+        "movie"
+      ],
+      "event_id": "ev0000123",
+      "award_filter": [],
+      "category_filter": [
+        "best film",
+        "best film from any source"
+      ]
+    },
+    "golden": {
+      "name": "Golden Globes",
+      "media_types": [
+        "movie",
+        "shows"
+      ],
+      "event_id": "ev0000292",
+      "award_filter": [],
+      "category_filter": [
+        "best animated feature film",
+        "best animated film",
+        "best foreign film",
+        "best foreign language film",
+        "best foreign-language foreign film",
+        "best motion picture - animated",
+        "best motion picture - comedy",
+        "best motion picture - comedy or musical",
+        "best motion picture - drama",
+        "best motion picture - foreign language",
+        "best motion picture - musical",
+        "best motion picture - musical or comedy",
+        "best motion picture - non-english language",
+        "best motion picture, musical or comedy",
+        "best picture"
+      ],
+      "category_filter_tv": [
+        "best television series - drama",
+        "best television series - musical or comedy",
+        "best television limited series, anthology series, or motion picture made for television",
+        "best mini-series or motion picture made for television",
+        "best miniseries or television film",
+        "best television series",
+        "best tv-series - comedy/musical",
+        "best tv-series - drama"
+      ]
+    },
+    "emmy": {
+      "name": "Emmy Awards",
+      "media_types": [
+        "shows"
+      ],
+      "event_id": "ev0000223",
+      "award_filter": [],
+      "category_filter": [
+        "best comedy series",
+        "best comedy show",
+        "best dramatic anthology series",
+        "best dramatic program",
+        "best dramatic series",
+        "best dramatic series - less than one hour",
+        "best dramatic series - one hour or longer",
+        "best series - half hour or less",
+        "best series - one hour or more",
+        "outstanding animated program",
+        "outstanding animated program (for programming less than one hour)",
+        "outstanding animated program (for programming more than one hour)",
+        "outstanding animated program (for programming one hour or less)",
+        "outstanding animated program (for programming one hour or more)",
+        "outstanding animated programming",
+        "outstanding comedy series",
+        "outstanding drama series",
+        "outstanding drama series - continuing",
+        "outstanding drama/comedy - limited episodes",
+        "outstanding dramatic program",
+        "outstanding dramatic series",
+        "outstanding miniseries",
+        "outstanding series - comedy",
+        "outstanding series - drama"
+      ]
+    },
+    "cannes": {
+      "name": "Cannes",
+      "media_types": [
+        "movie"
+      ],
+      "event_id": "ev0000147",
+      "award_filter": "palme d'or",
+      "category_filter": []
+    },
+    "cesar": {
+      "name": "Césars",
+      "media_types": [
+        "movie"
+      ],
+      "event_id": "ev0000157",
+      "award_filter": "César",
+      "category_filter": "best film (meilleur film)"
+    },
+    "berlinale": {
+      "name": "Berlinale",
+      "media_types": [
+        "movie"
+      ],
+      "event_id": "ev0000091",
+      "award_filter": "golden berlin bear",
+      "category_filter": []
+    },
+    "venice": {
+      "name": "Venice",
+      "media_types": [
+        "movie"
+      ],
+      "event_id": "ev0000681",
+      "award_filter": [
+        "golden lion",
+        "international critics award",
+        "grand international award"
+      ],
+      "category_filter": [
+        "golden lion",
+        "best feature film",
+        "best film",
+        "grand international award"
+      ]
+    }
+  }
+}

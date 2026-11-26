@@ -1,0 +1,896 @@
+from core.error_reporting import log_handled_failure
+import json
+import re
+import traceback
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
+
+import os
+from flask import Blueprint, jsonify, request, g, flash
+
+from db_manager import DBManager
+from logging_utils import get_logger
+from notifications_utils import is_email_ready
+
+from communications_engine import (
+    schedule_template_notification,
+    select_comm_template_for_user,
+)
+from core.user_provider_provisioning import provision_provider_account
+from core.media_jobs import insert_jellyfin_media_job, insert_plex_media_job
+from core.user_subscription_snapshots import apply_template_snapshot
+from tasks_engine import auto_enable_stream_enforcer
+from secret_store import (
+    decrypt_server_record,
+    find_plex_server_ids_by_token,
+    find_plex_servers_by_token,
+)
+from core.provider_onboarding import provider_onboarding_links
+from core.user_phone import normalize_phone
+from core.user_activation import activation_settings, activation_mode, prepare_activation, send_activation
+
+log = get_logger("users_create")
+
+users_bp = Blueprint("users_bp", __name__)
+
+
+def get_db() -> DBManager:
+    if "db" not in g:
+        g.db = DBManager(os.environ.get("DATABASE_PATH", "/appdata/database.db"))
+    return g.db
+
+
+def is_smtp_ready(settings_row) -> bool:
+    return is_email_ready(dict(settings_row or {}))
+
+def _iso_date_or_none(raw: str) -> Optional[str]:
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+
+    # 1) Formats "classiques"
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(raw, fmt).date().isoformat()
+        except Exception:
+            pass
+
+    # 2) Tolérance: YYYY-M-D (sans zéros) -> on normalise
+    m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})$", raw)
+    if m:
+        y, mo, d = m.group(1), m.group(2).zfill(2), m.group(3).zfill(2)
+        try:
+            return datetime.strptime(f"{y}-{mo}-{d}", "%Y-%m-%d").date().isoformat()
+        except Exception:
+            pass
+
+    # 3) Tolérance: ISO datetime (ex: 2026-02-02T00:00:00Z / +01:00 / etc.)
+    try:
+        # On coupe à la date si jamais il y a une heure derrière
+        date_part = raw.split("T", 1)[0].split(" ", 1)[0]
+        m2 = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})$", date_part)
+        if m2:
+            y, mo, d = m2.group(1), m2.group(2).zfill(2), m2.group(3).zfill(2)
+            return datetime.strptime(f"{y}-{mo}-{d}", "%Y-%m-%d").date().isoformat()
+
+        return datetime.fromisoformat(raw).date().isoformat()
+    except Exception:
+        return None
+
+
+
+def _valid_email(email: str) -> bool:
+    email = (email or "").strip()
+    if not email:
+        return False
+    return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email))
+
+def _apply_subscription_template_snapshot(db: DBManager, vodum_user_id: int, template_id: int) -> str:
+    try:
+        return apply_template_snapshot(
+            db,
+            vodum_user_id,
+            template_id,
+            auto_enable_stream_enforcer,
+        )
+    except ValueError as exc:
+        if str(exc) == "subscription_template_not_found":
+            raise ValueError("Subscription template not found") from exc
+        raise
+
+@users_bp.get("/api/servers")
+def api_servers():
+    db = get_db()
+    rows = db.query(
+        """
+        SELECT id, name, type, url, local_url, public_url, server_identifier, status, token
+        FROM servers
+        WHERE LOWER(type) IN ('plex', 'jellyfin')
+        ORDER BY name ASC
+        """
+    )
+
+    # Tokens are encrypted independently in the database.  Decrypt each record
+    # before grouping, otherwise two servers owned by the same Plex account have
+    # different ciphertexts and are no longer detected as linked.
+    servers = [decrypt_server_record(r) for r in rows]
+
+    # Group Plex servers by token (same admin/token concept in your DB)
+    plex_groups = {}
+    for s in servers:
+        if (s.get("type") or "").lower() == "plex":
+            tok = (s.get("token") or "")
+            plex_groups.setdefault(tok, []).append(s)
+
+    out = []
+    for s in servers:
+        d = {
+            "id": s["id"],
+            "name": s.get("name"),
+            "type": s.get("type"),
+            "url": s.get("url"),
+            "local_url": s.get("local_url"),
+            "public_url": s.get("public_url"),
+            "server_identifier": s.get("server_identifier"),
+            "status": s.get("status"),
+            "linked_servers": [],
+        }
+
+        if (s.get("type") or "").lower() == "plex":
+            tok = (s.get("token") or "")
+            linked = [x for x in plex_groups.get(tok, []) if x["id"] != s["id"]]
+            d["linked_servers"] = [{"id": x["id"], "name": x.get("name")} for x in linked]
+
+        out.append(d)
+
+    return jsonify(out)
+
+
+
+@users_bp.get("/api/servers/<int:server_id>/libraries")
+def api_server_libraries(server_id: int):
+    db = get_db()
+
+    server = db.query_one("SELECT id, name, type, token FROM servers WHERE id = ?", (server_id,))
+    if not server:
+        return jsonify([])
+
+    server = decrypt_server_record(server)
+    provider = (server.get("type") or "").lower()
+
+    server_ids = [server_id]
+
+    # Plex: include servers with same token (linked)
+    if provider == "plex":
+        token = server.get("token") or ""
+        if token:
+            server_ids = find_plex_server_ids_by_token(db, token) or [server_id]
+
+    placeholders = ",".join(["?"] * len(server_ids))
+    rows = db.query(
+        f"""
+        SELECT l.id, l.server_id, l.section_id, l.name, l.type,
+               s.name AS server_name
+        FROM libraries l
+        JOIN servers s ON s.id = l.server_id
+        WHERE l.server_id IN ({placeholders})
+        ORDER BY s.name ASC, l.name ASC
+        """,
+        server_ids,
+    )
+    return jsonify([dict(r) for r in rows])
+
+@users_bp.get("/api/users/referrer-candidates")
+def api_referrer_candidates():
+    db = get_db()
+    q = " ".join((request.args.get("q") or "").split()).strip()
+    like = f"%{q}%"
+
+    rows = db.query(
+        """
+        SELECT
+            u.id,
+            u.username,
+            u.email,
+            u.expiration_date,
+            COUNT(r.id) AS referrals_count
+        FROM vodum_users u
+        LEFT JOIN user_referrals r ON r.referrer_user_id = u.id
+        WHERE u.status = 'active'
+          AND (
+                ? = ''
+                OR COALESCE(u.username,'') LIKE ?
+                OR COALESCE(u.email,'') LIKE ?
+                OR COALESCE(u.second_email,'') LIKE ?
+                OR COALESCE(u.phone,'') LIKE ?
+                OR COALESCE(u.firstname,'') LIKE ?
+                OR COALESCE(u.lastname,'') LIKE ?
+                OR COALESCE(u.discord_name,'') LIKE ?
+                OR EXISTS (
+                    SELECT 1
+                    FROM media_users mu
+                    WHERE mu.vodum_user_id = u.id
+                      AND (
+                            COALESCE(mu.username,'') LIKE ?
+                            OR COALESCE(mu.email,'') LIKE ?
+                          )
+                )
+              )
+        GROUP BY u.id
+        ORDER BY u.username ASC
+        LIMIT 50
+        """,
+        (q, like, like, like, like, like, like, like, like, like),
+    ) or []
+
+    return jsonify([dict(r) for r in rows])
+
+@users_bp.post("/api/users/create")
+def api_users_create():
+    return create_user_from_payload(get_db(), request.get_json(silent=True) or {})
+
+
+def create_user_from_payload(db, payload, *, invitation_source=None):
+    log.info(f"[CREATE USER] payload received: keys={list(payload.keys())}")
+    print(f"[CREATE USER STDOUT] payload received: keys={list(payload.keys())}", flush=True)
+
+    email = (payload.get("email") or "").strip()
+    second_email = (payload.get("second_email") or "").strip()
+    try:
+        phone = normalize_phone(payload.get("phone"))
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    username = (payload.get("username") or "").strip() or (email.split("@", 1)[0] if email else "")
+    firstname = (payload.get("firstname") or "").strip()
+    lastname = (payload.get("lastname") or "").strip()
+    vodum_username = username or None
+
+    # --- Dates: support aliases + parsing tolerant ---
+    raw_exp = payload.get("expiration_date") or payload.get("expirationDate") or payload.get("expiration") or ""
+    expiration_date = _iso_date_or_none(raw_exp)
+
+    raw_renew = payload.get("renewal_date") or payload.get("renewalDate") or ""
+    renewal_date = _iso_date_or_none(raw_renew)
+
+    renewal_method = (payload.get("renewal_method") or payload.get("renewalMethod") or "").strip() or None
+
+    notes = (payload.get("notes") or "").strip()
+
+    # Fallback: if expiration date is empty, use today + default_subscription_days
+    settings = db.query_one("SELECT id, mail_from, smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_auth_method, smtp_oauth_access_token, email_history_retention_years, disable_on_expiry, delete_after_expiry_days, send_reminders, preavis_days, reminder_days, default_language, timezone, admin_email, contact_email, admin_password_hash, auth_enabled, admin_totp_enabled, admin_totp_secret, wizard_active, wizard_completed, wizard_step, wizard_state_json, web_secure_cookies, web_cookie_samesite, web_trust_proxy, enable_cron_jobs, default_expiration_days, default_subscription_days, maintenance_mode, debug_mode, backup_retention_days, backup_retention_count, data_retention_years, brand_name, notifications_order, user_notifications_can_override, notifications_send_mode, expiry_mode, warn_then_disable_days, discord_enabled, discord_bot_token, discord_bot_id, mailing_enabled, skip_never_used_accounts, plex_user_import_mode, enable_anonymous_telemetry, telemetry_instance_id, telemetry_last_sent_at, task_defaults_version, stream_enforcer_boost_until, usage_risk_enabled, usage_risk_send_upgrade_suggestions, usage_risk_send_stream_blocked_message, usage_risk_min_kills_before_suggestion, usage_risk_analysis_window_days, usage_risk_suggestion_cooldown_days, usage_risk_medium_threshold, usage_risk_high_threshold FROM settings WHERE id = 1")
+    settings = dict(settings) if settings else {}
+
+    if not expiration_date:
+        try:
+            default_days = int(settings.get("default_subscription_days") or 90)
+        except Exception:
+            default_days = 90
+
+        if default_days < 1:
+            default_days = 90
+
+        expiration_date = (datetime.utcnow().date() + timedelta(days=default_days)).isoformat()
+
+    referrer_user_id_raw = payload.get("referrer_user_id")
+    referrer_user_id = None
+    if referrer_user_id_raw not in (None, "", "null", "none"):
+        if not str(referrer_user_id_raw).isdigit():
+            return jsonify({"ok": False, "error": "Invalid referrer_user_id"}), 400
+        referrer_user_id = int(referrer_user_id_raw)
+
+        referrer = db.query_one(
+            "SELECT id, username, status FROM vodum_users WHERE id = ?",
+            (referrer_user_id,),
+        )
+        if not referrer:
+            return jsonify({"ok": False, "error": "Referrer not found"}), 400
+
+        if (referrer["status"] or "").lower() != "active":
+            return jsonify({"ok": False, "error": "Referrer must be active"}), 400
+
+    subscription_template_id_raw = payload.get("subscription_template_id")
+    subscription_template_id = None
+
+    if subscription_template_id_raw in (None, "", "null", "none"):
+        tpl = db.query_one(
+            "SELECT id FROM subscription_templates WHERE is_default = 1 ORDER BY id ASC LIMIT 1"
+        )
+        if tpl:
+            subscription_template_id = int(tpl["id"])
+    else:
+        if not str(subscription_template_id_raw).isdigit():
+            return jsonify({"ok": False, "error": "Invalid subscription_template_id"}), 400
+
+        subscription_template_id = int(subscription_template_id_raw)
+
+        tpl = db.query_one(
+            "SELECT id FROM subscription_templates WHERE id = ?",
+            (subscription_template_id,),
+        )
+        if not tpl:
+            return jsonify({"ok": False, "error": "Subscription template not found"}), 400
+
+    server_blocks = payload.get("servers") or []
+    if not isinstance(server_blocks, list):
+        return jsonify({"ok": False, "error": "No server selected"}), 400
+
+    if email and not _valid_email(email):
+        return jsonify({"ok": False, "error": "Invalid email"}), 400
+
+    servers_by_id: Dict[int, Dict[str, Any]] = {}
+    sent_welcome_keys = set()  # avoid duplicate welcome mails (plex linked servers)
+    for block in server_blocks:
+        try:
+            sid = int(block.get("server_id"))
+        except Exception:
+            return jsonify({"ok": False, "error": "Invalid server_id"}), 400
+
+        srv = db.query_one("SELECT id, name, server_identifier, type, url, local_url, public_url, token, settings_json, server_version, unavailable_since, cooldown_until, last_failure, last_checked, status FROM servers WHERE id = ?", (sid,))
+        if not srv:
+            return jsonify({"ok": False, "error": f"Server not found (id={sid})"}), 400
+        if (srv['type'] or '').lower() not in ('plex', 'jellyfin'):
+            return jsonify({"ok": False, "error": "User access requires a Plex or Jellyfin server"}), 400
+        # Keep the working copy decrypted: linked Plex server discovery compares
+        # the selected token with the decrypted tokens returned by secret_store.
+        srv = decrypt_server_record(srv)
+        servers_by_id[sid] = srv
+
+        lib_ids = block.get("library_ids") or []
+        if not isinstance(lib_ids, list):
+            return jsonify({"ok": False, "error": "Invalid library_ids"}), 400
+
+        if lib_ids:
+            # If Plex: allow libraries from linked servers (same token)
+            srv_type = (srv.get("type") or "").lower()
+            allowed_server_ids = [sid]
+
+            if srv_type == "plex":
+                tok = (srv.get("token") or "")
+                if tok:
+                    allowed_server_ids = find_plex_server_ids_by_token(db, tok) or [sid]
+
+            placeholders_ids = ",".join(["?"] * len(lib_ids))
+            placeholders_srv = ",".join(["?"] * len(allowed_server_ids))
+
+            rows = db.query(
+                f"""
+                SELECT id FROM libraries
+                WHERE id IN ({placeholders_ids})
+                  AND server_id IN ({placeholders_srv})
+                """,
+                [int(x) for x in lib_ids] + [int(x) for x in allowed_server_ids],
+            )
+
+            if len(rows) != len(set([int(x) for x in lib_ids])):
+                return jsonify({"ok": False, "error": "One or more libraries do not belong to the selected server or its linked Plex servers"}), 400
+
+    try:
+        guided_mode = activation_mode(activation_settings(db), {s['type'].lower() for s in servers_by_id.values()})
+        if not server_blocks and not guided_mode:
+            return jsonify({"ok": False, "error": "No server selected"}), 400
+        if guided_mode and not _valid_email(email):
+            return jsonify({"ok": False, "error": "portal_invite_email_required"}), 400
+        if guided_mode and any(servers_by_id[int(b['server_id'])]['type'].lower() == 'plex' and not b.get('library_ids') for b in server_blocks):
+            return jsonify({"ok": False, "error": "activation_libraries_required"}), 400
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    initial_status = "active"
+    if any((servers_by_id[int(b.get("server_id"))].get("type") or "").lower() == "plex" for b in server_blocks):
+        initial_status = "invited"
+
+    # --- INSERT: include renewal_method + renewal_date ---
+    try:
+        cur = db.execute(
+            """
+            INSERT INTO vodum_users(
+                username, firstname, lastname,
+                email, second_email, phone,
+                expiration_date,
+                renewal_method, renewal_date,
+                notes, status,
+                referrer_user_id
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                vodum_username,
+                firstname,
+                lastname,
+                email or None,
+                second_email or None,
+                phone,
+                expiration_date,
+                renewal_method,
+                renewal_date,
+                notes,
+                initial_status,
+                referrer_user_id,
+            ),
+        )
+    except Exception as e:
+        log.error(f"Create Vodum user failed: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": f"Failed to create Vodum user: {e}"}), 500
+    vodum_user_id = cur.lastrowid
+    log.info(f"[CREATE USER] vodum_user created id={vodum_user_id} email={email} username={vodum_username}")
+    print(f"[CREATE USER STDOUT] vodum_user created id={vodum_user_id} email={email} username={vodum_username}", flush=True)
+    try:
+        cur.close()
+    except Exception:
+        pass
+
+    if referrer_user_id is not None:
+        referral_settings = db.query_one("SELECT id, enabled, reward_enabled, qualification_days, reward_days, allow_referrer_change_before_qualification, auto_notify_reward, eligible_statuses, created_at, updated_at, auto_expire_pending, auto_archive_rewarded, auto_archive_expired, pending_expire_days, rewarded_archive_days, expired_archive_days FROM user_referral_settings WHERE id = 1")
+        referral_settings = dict(referral_settings) if referral_settings else {}
+
+        qualification_days = int(referral_settings.get("qualification_days") or 60)
+        reward_days = int(referral_settings.get("reward_days") or 60)
+
+        db.execute(
+            """
+            INSERT INTO user_referrals(
+                referrer_user_id,
+                referred_user_id,
+                status,
+                referral_source,
+                start_at,
+                qualification_due_at,
+                qualification_days_snapshot,
+                reward_days_snapshot,
+                created_at,
+                updated_at
+            )
+            VALUES(
+                ?, ?, 'pending', 'manual',
+                CURRENT_TIMESTAMP,
+                datetime('now', ?),
+                ?, ?,
+                CURRENT_TIMESTAMP,
+                CURRENT_TIMESTAMP
+            )
+            """,
+            (
+                referrer_user_id,
+                int(vodum_user_id),
+                f"+{qualification_days} days",
+                qualification_days,
+                reward_days,
+            ),
+        )
+
+        referral_row = db.query_one(
+            "SELECT id FROM user_referrals WHERE referred_user_id = ?",
+            (int(vodum_user_id),),
+        )
+        if referral_row:
+            db.execute(
+                """
+                INSERT INTO user_referral_events(
+                    referral_id, event_type, actor,
+                    old_referrer_user_id, new_referrer_user_id, details_json
+                )
+                VALUES (?, 'created', 'ui', NULL, ?, ?)
+                """,
+                (
+                    int(referral_row["id"]),
+                    referrer_user_id,
+                    json.dumps({
+                        "source": "create_user",
+                        "referred_user_id": int(vodum_user_id),
+                    }, ensure_ascii=False),
+                ),
+            )
+
+    if invitation_source is not None:
+        from core.portal_user_invitations import copy_invitation_subscription
+        copy_invitation_subscription(db, int(vodum_user_id), invitation_source)
+    elif subscription_template_id is not None:
+        try:
+            _apply_subscription_template_snapshot(db, int(vodum_user_id), subscription_template_id)
+        except Exception as e:
+            log.error(f"Apply subscription template failed for vodum_user_id={vodum_user_id}: {e}", exc_info=True)
+            return jsonify({"ok": False, "error": f"Failed to apply subscription template: {e}"}), 500
+
+    created_accounts: List[Dict[str, Any]] = []
+    mailing_errors: List[str] = []
+    provider_errors: List[str] = []
+    jellyfin_credentials = []
+
+    if guided_mode:
+        prepare_activation(db, int(vodum_user_id), guided_mode, server_blocks, servers_by_id)
+
+    settings = db.query_one("SELECT id, mail_from, smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_auth_method, smtp_oauth_access_token, email_history_retention_years, disable_on_expiry, delete_after_expiry_days, send_reminders, preavis_days, reminder_days, default_language, timezone, admin_email, contact_email, admin_password_hash, auth_enabled, admin_totp_enabled, admin_totp_secret, wizard_active, wizard_completed, wizard_step, wizard_state_json, web_secure_cookies, web_cookie_samesite, web_trust_proxy, enable_cron_jobs, default_expiration_days, default_subscription_days, maintenance_mode, debug_mode, backup_retention_days, backup_retention_count, data_retention_years, brand_name, notifications_order, user_notifications_can_override, notifications_send_mode, expiry_mode, warn_then_disable_days, discord_enabled, discord_bot_token, discord_bot_id, mailing_enabled, skip_never_used_accounts, plex_user_import_mode, enable_anonymous_telemetry, telemetry_instance_id, telemetry_last_sent_at, task_defaults_version, stream_enforcer_boost_until, usage_risk_enabled, usage_risk_send_upgrade_suggestions, usage_risk_send_stream_blocked_message, usage_risk_min_kills_before_suggestion, usage_risk_analysis_window_days, usage_risk_suggestion_cooldown_days, usage_risk_medium_threshold, usage_risk_high_threshold FROM settings WHERE id = 1")
+    settings = dict(settings) if settings else {}
+    for block in server_blocks:
+        server_id = int(block.get("server_id"))
+        server = servers_by_id[server_id]
+        provider = (server.get("type") or "").lower()
+        if guided_mode and provider == 'plex':
+            # Durable intent replaces early Plex invites; identity is verified first.
+            continue
+        library_ids = [int(x) for x in (block.get("library_ids") or [])]
+
+        libs = []
+        if library_ids:
+            placeholders = ",".join(["?"] * len(library_ids))
+            libs = [dict(r) for r in db.query(
+                f"""
+                SELECT l.id, l.name, l.section_id, l.server_id, s.name AS server_name
+                FROM libraries l
+                JOIN servers s ON s.id = l.server_id
+                WHERE l.id IN ({placeholders})
+                """,
+                library_ids,
+            )]
+
+        external_user_id: Optional[str] = None
+        server_username: Optional[str] = None
+        details_json: Dict[str, Any] = {}
+
+        try:
+            external_user_id, server_username, details_json = provision_provider_account(
+                db,
+                server,
+                block,
+                libs,
+                username,
+                email,
+                vodum_user_id=vodum_user_id,
+            )
+
+        except Exception as e:
+            provider_errors.append(f"server_id={server_id} ({server.get('name')}): {e}")
+            log.error(
+                f"[ERROR CREATE USER] vodum_user_id={vodum_user_id} server_id={server_id} provider={provider} error={e}",
+                exc_info=True
+            )
+            print(
+                f"[ERROR CREATE USER STDOUT] vodum_user_id={vodum_user_id} "
+                f"server_id={server_id} provider={provider} error={e}",
+                flush=True
+            )
+            traceback.print_exc()
+            continue
+
+        # ... le reste de ta fonction inchangé ...
+        # (j’ai laissé volontairement le reste identique pour que tu puisses coller sans te perdre)
+
+        if provider == "jellyfin":
+            existing_media_user_id = details_json.pop("_existing_media_user_id", None)
+            if existing_media_user_id:
+                media_user_id = int(existing_media_user_id)
+            else:
+                cur2 = db.execute(
+                    """
+                    INSERT INTO media_users(server_id, vodum_user_id, external_user_id, username, email, type, details_json)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        server_id,
+                        vodum_user_id,
+                        external_user_id,
+                        server_username or username,
+                        email or None,
+                        provider,
+                        json.dumps(details_json) if details_json else None,
+                    ),
+                )
+                media_user_id = cur2.lastrowid
+                try:
+                    cur2.close()
+                except Exception:
+                    pass
+
+            if external_user_id:
+                db.execute(
+                    """
+                    INSERT OR IGNORE INTO user_identities(vodum_user_id, type, server_id, external_user_id)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (vodum_user_id, provider, server_id, external_user_id),
+                )
+
+            if library_ids:
+                db.executemany(
+                    """
+                    INSERT OR IGNORE INTO media_user_libraries(media_user_id, library_id)
+                    VALUES (?, ?)
+                    """,
+                    [(media_user_id, lid) for lid in library_ids],
+                )
+
+            insert_jellyfin_media_job(
+                db,
+                action="sync",
+                vodum_user_id=vodum_user_id,
+                server_id=server_id,
+                dedupe_key=f"jellyfin:sync:server={server_id}:user={vodum_user_id}:create_user",
+                payload={"source": "create_user"},
+            )
+
+            created_accounts.append({
+                "server_id": server_id,
+                "provider": provider,
+                "external_user_id": external_user_id,
+                "username": server_username or username,
+            })
+
+        elif provider == "plex":
+            try:
+                tok = (server.get("token") or "")
+                if tok:
+                    group_servers = find_plex_servers_by_token(db, tok) or [server]
+                else:
+                    group_servers = [server]
+
+                libs_by_server = {}
+                for l in libs:
+                    libs_by_server.setdefault(int(l["server_id"]), []).append(int(l["id"]))
+
+                for s in group_servers:
+                    sid2 = int(s["id"])
+                    selected_lib_ids = libs_by_server.get(sid2, [])
+                    if not selected_lib_ids:
+                        continue
+
+                    existing_mu = None
+
+                    # 1) priorité absolue : même user Vodum + même serveur
+                    existing_mu = db.query_one(
+                        """
+                        SELECT id
+                        FROM media_users
+                        WHERE server_id = ?
+                          AND vodum_user_id = ?
+                        LIMIT 1
+                        """,
+                        (sid2, vodum_user_id),
+                    )
+
+                    # 2) sinon on tente via l'identité Plex native
+                    if not existing_mu and external_user_id:
+                        existing_mu = db.query_one(
+                            """
+                            SELECT id
+                            FROM media_users
+                            WHERE server_id = ?
+                              AND type = 'plex'
+                              AND external_user_id = ?
+                            LIMIT 1
+                            """,
+                            (sid2, str(external_user_id)),
+                        )
+
+                    # 3) sinon par email
+                    if not existing_mu and email:
+                        existing_mu = db.query_one(
+                            """
+                            SELECT id
+                            FROM media_users
+                            WHERE server_id = ?
+                              AND type = 'plex'
+                              AND lower(email) = lower(?)
+                            LIMIT 1
+                            """,
+                            (sid2, email),
+                        )
+
+                    # 4) sinon par username
+                    if not existing_mu and (server_username or username):
+                        existing_mu = db.query_one(
+                            """
+                            SELECT id
+                            FROM media_users
+                            WHERE server_id = ?
+                              AND type = 'plex'
+                              AND lower(username) = lower(?)
+                            LIMIT 1
+                            """,
+                            (sid2, server_username or username),
+                        )
+
+                    if existing_mu:
+                        db.execute(
+                            """
+                            UPDATE media_users
+                            SET vodum_user_id = ?,
+                                external_user_id = COALESCE(?, external_user_id),
+                                username = ?,
+                                email = ?,
+                                type = 'plex',
+                                details_json = ?
+                            WHERE id = ?
+                            """,
+                            (
+                                vodum_user_id,
+                                external_user_id or None,
+                                server_username or username,
+                                email or None,
+                                json.dumps(details_json) if details_json else None,
+                                existing_mu["id"],
+                            ),
+                        )
+                        media_user_id = existing_mu["id"]
+                    else:
+                        cur2 = db.execute(
+                            """
+                            INSERT INTO media_users(server_id, vodum_user_id, external_user_id, username, email, type, details_json)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                sid2,
+                                vodum_user_id,
+                                external_user_id,
+                                server_username or username,
+                                email or None,
+                                "plex",
+                                json.dumps(details_json) if details_json else None,
+                            ),
+                        )
+                        media_user_id = cur2.lastrowid
+                        try:
+                            cur2.close()
+                        except Exception:
+                            pass
+
+                    if external_user_id:
+                        db.execute(
+                            """
+                            INSERT OR IGNORE INTO user_identities(vodum_user_id, type, server_id, external_user_id)
+                            VALUES (?, 'plex', NULL, ?)
+                            """,
+                            (vodum_user_id, external_user_id),
+                        )
+
+                    db.executemany(
+                        """
+                        INSERT OR IGNORE INTO media_user_libraries(media_user_id, library_id)
+                        VALUES (?, ?)
+                        """,
+                        [(media_user_id, lid) for lid in selected_lib_ids],
+                    )
+
+                    enqueue_jobs = bool(block.get("enqueue_plex_jobs")) or bool(
+                        (details_json.get("plex_invite_state") or {}).get("is_pending")
+                    )
+
+                    if enqueue_jobs:
+                        insert_plex_media_job(
+                            db,
+                            action="sync",
+                            vodum_user_id=vodum_user_id,
+                            server_id=sid2,
+                            dedupe_key=f"plex:sync:server={sid2}:user={vodum_user_id}:create_user",
+                            payload={"source": "create_user", "library_ids": selected_lib_ids},
+                        )
+
+                    created_accounts.append({
+                        "server_id": sid2,
+                        "provider": "plex",
+                        "external_user_id": external_user_id,
+                        "username": server_username or username,
+                    })
+
+            except Exception as e:
+                provider_errors.append(f"server_id={server_id} ({server.get('name')}) persistence: {e}")
+                log.error(
+                    f"Plex persistence failed: vodum_user_id={vodum_user_id} server_id={server_id}: {e}",
+                    exc_info=True,
+                )
+                continue
+
+        if provider == "jellyfin" and block.get("jellyfin_password"):
+            from core.jellyfin_creation_credentials import encrypted_credential
+            jellyfin_credentials.append(encrypted_credential(server, server_username or username, block["jellyfin_password"]))
+
+        # ------------------------------------------------------------
+        # USER CREATION NOTIFICATION (EMAIL ONLY, 1 TEMPLATE MAX)
+        # Rules:
+        # - If no comm_templates(trigger_event='user_creation') => send NOTHING
+        # - Email only (no Discord)
+        # - Only one template is used (first one by id)
+        # - days_after > 0 => schedule in comm_scheduled (picked by send_expiration_emails flush)
+        # ------------------------------------------------------------
+        if email and not guided_mode:
+            try:
+                welcome_gate_key = f"{provider}:{server.get('id')}"
+                if provider == "plex":
+                    welcome_gate_key = f"plex_token:{(server.get('token') or '')}"
+
+                if welcome_gate_key not in sent_welcome_keys:
+                    ct = select_comm_template_for_user(
+                        db=db,
+                        trigger_event="user_creation",
+                        provider=provider,
+                        user_id=int(vodum_user_id),
+                    )
+
+                    if ct:
+                        try:
+                            days_after = int(ct.get("days_after")) if ct.get("days_after") is not None else None
+                        except Exception:
+                            days_after = None
+
+                        queue_server_id = int(server_id)
+                        if provider == "plex":
+                            queue_server_id = int(
+                                (details_json.get("plex_invite_state") or {}).get("primary_server_id") or server_id
+                            )
+
+                        queue_dedupe_key = (
+                            f"user_creation:template:{int(ct['id'])}:user:{int(vodum_user_id)}:"
+                            f"provider:{provider}:server:{queue_server_id}"
+                        )
+
+                        payload = {
+                            "trigger_event": "user_creation",
+                            "expiration_date": (expiration_date or "")[:10],
+                            "username": username,
+                            "firstname": firstname,
+                            "lastname": lastname,
+                            "email": email,
+                            "server_name": server.get("name") or "",
+                            "server_url": server.get("public_url") or server.get("url") or server.get("local_url") or "",
+                            "login_username": server_username or username,
+                            **provider_onboarding_links(provider),
+                            "jellyfin_credentials": jellyfin_credentials[-1:] if provider == "jellyfin" else [],
+                        }
+
+                        if days_after is not None and days_after > 0:
+                            schedule_template_notification(
+                                db=db,
+                                template_id=int(ct["id"]),
+                                user_id=int(vodum_user_id),
+                                provider=provider,
+                                server_id=queue_server_id,
+                                send_at_modifier=f"+{days_after} days",
+                                payload=payload,
+                                dedupe_key=queue_dedupe_key,
+                                max_attempts=10,
+                            )
+                        else:
+                            schedule_template_notification(
+                                db=db,
+                                template_id=int(ct["id"]),
+                                user_id=int(vodum_user_id),
+                                provider=provider,
+                                server_id=queue_server_id,
+                                send_at_modifier=None,
+                                payload=payload,
+                                dedupe_key=queue_dedupe_key,
+                                max_attempts=10,
+                            )
+
+                    sent_welcome_keys.add(welcome_gate_key)
+
+            except Exception as e:
+                log_handled_failure("users.send_welcome")
+                mailing_errors.append(f"server_id={server_id}: {e}")
+
+    if guided_mode:
+        try:
+            send_activation(db, int(vodum_user_id), jellyfin_credentials=jellyfin_credentials)
+        except ValueError as exc:
+            mailing_errors.append(str(exc))
+        except Exception:
+            log_handled_failure("users.send_activation")
+            mailing_errors.append('portal_invite_send_failed')
+        for error in mailing_errors:
+            flash(error, 'error')
+
+    if not created_accounts and not guided_mode:
+        db.execute(
+            "UPDATE vodum_users SET status = 'unknown' WHERE id = ?",
+            (vodum_user_id,),
+        )
+
+    return jsonify(
+        {
+            "ok": True,
+            "vodum_user_id": vodum_user_id,
+            "created_accounts": created_accounts,
+            "provider_errors": provider_errors,
+            "mailing_errors": mailing_errors,
+            "activation_pending": bool(guided_mode),
+        }
+    )

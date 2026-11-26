@@ -1,0 +1,834 @@
+from typing import Any, Dict, List, Optional, Tuple
+
+import requests
+import time
+
+from logging_utils import get_logger, is_debug_mode_enabled
+from core.server_cooldown import should_skip_unreachable_server, mark_server_unreachable, clear_server_cooldown
+from core.server_cooldown import authentication_failure_status, mark_server_authentication_failed
+from core.http_security import servers_http_session
+from core.jellyfin_http import (
+    _jellyfin_library_total_items_no_user,
+)
+from core.jellyfin_runtime import (
+    build_jellyfin_api_url,
+    get_jellyfin_json,
+    load_jellyfin_servers,
+    pick_jellyfin_base_url,
+)
+from core.jellyfin_user_metadata import (
+    extract_avatar_path,
+    extract_joined_at,
+    extract_role,
+    store_user_metadata,
+)
+from core.user_first_access_subscription import ensure_first_access_expiration
+from core.jellyfin_vodum_user_matching import (
+    is_placeholder_vodum_user,
+    pick_best_vodum_user_for_username,
+)
+from core.jellyfin_sync_repository import (
+    prune_jellyfin_libraries,
+    mark_jellyfin_media_user_removed,
+    mark_jellyfin_media_user_present,
+    replace_jellyfin_library_access,
+    set_jellyfin_media_user_state,
+    upsert_jellyfin_library,
+)
+
+
+logger = get_logger("sync_jellyfin")
+
+
+# ----------------------------
+# helpers
+# ----------------------------
+
+def ensure_expiration_date_on_first_access(db, vodum_user_id: int) -> bool:
+    """
+    Initialise expiration_date UNIQUEMENT si :
+      - expiration_date est NULL
+      - default_subscription_days > 0
+
+    ⚠️ Sur la DB v2, l'expiration est portée par vodum_users (contractuel),
+    pas par media_users.
+    """
+    return ensure_first_access_expiration(db, vodum_user_id, logger=logger)
+
+def _extract_joined_at(detail: Dict[str, Any]) -> Optional[str]:
+    """
+    Jellyfin ne fournit pas toujours une date de création dans UserDto selon versions/config.
+    On tente plusieurs champs courants ; sinon None.
+    """
+    return extract_joined_at(detail)
+
+
+def _extract_role_from_policy(policy: Dict[str, Any]) -> Optional[str]:
+    """
+    Rôle simple, adapté à ton champ `media_users.role` :
+    - admin si IsAdministrator
+    - user sinon
+    """
+    return extract_role(policy)
+
+
+def _extract_avatar_path(jellyfin_user_id: str, detail: Dict[str, Any]) -> Optional[str]:
+    """
+    On stocke une URL *relative* (sans api_key) : le front pourra l’appeler avec l’auth habituelle.
+    PrimaryImageTag existe dans UserDto.
+    """
+    return extract_avatar_path(jellyfin_user_id, detail)
+
+
+def _store_full_user_json_and_fields(
+    db,
+    media_user_id: int,
+    jellyfin_user_id: str,
+    detail: Dict[str, Any],
+):
+    """
+    Stocke :
+      - raw_json = JSON complet renvoyé par Jellyfin (/Users/{id})
+      - role (admin/user)
+      - joined_at (si dispo)
+      - avatar (optionnel)
+    """
+    return store_user_metadata(db, media_user_id, jellyfin_user_id, detail)
+
+
+# ----------------------------
+# Jellyfin API helpers
+# ----------------------------
+
+def _build_api_url(base_url: str, path: str, token: str) -> str:
+    """
+    Construit une URL Jellyfin en ajoutant api_key=<token> proprement,
+    même si `path` contient déjà une querystring (?...).
+    """
+    return build_jellyfin_api_url(base_url, path)
+
+
+def _get_json(session: requests.Session, url: str, timeout: int = 20, token: str | None = None) -> Any:
+    return get_jellyfin_json(session, url, timeout=timeout, token=token)
+
+
+
+# ----------------------------
+# DB helpers (DB v2)
+# ----------------------------
+
+def _get_jellyfin_servers(db):
+    return load_jellyfin_servers(db)
+
+
+def _pick_jellyfin_base_url(server) -> str:
+    return pick_jellyfin_base_url(server)
+
+
+
+def _is_placeholder_vodum_user(u: dict) -> bool:
+    """
+    Détecte un vodum_user "placeholder" typiquement créé automatiquement :
+    - pas d'email
+    - pas de prénom/nom
+    - pas d'expiration_date
+    - (souvent status='active' car créé par sync)
+    """
+    return is_placeholder_vodum_user(u)
+
+
+def _pick_best_vodum_user_for_username(db, username: str) -> Optional[int]:
+    """
+    Retourne le "meilleur" vodum_user_id correspondant au username (case-insensitive).
+    On préfère un compte déjà renseigné (email/expiration/prénom/nom).
+    """
+    return pick_best_vodum_user_for_username(db, username)
+
+
+def _ensure_vodum_user_for_username(
+    db,
+    username: str,
+    *,
+    provider_type: Optional[str] = None,
+    server_id: Optional[int] = None,
+    external_user_id: Optional[str] = None,
+) -> int:
+    """
+    Fix principal :
+    - Identity-first (type/server_id/external_user_id) comme avant
+    - MAIS :
+      - si l'identité n'existe pas => on tente de rattacher à un vodum_user existant (même username)
+      - si l'identité existe MAIS pointe vers un placeholder => on migre vers le meilleur vodum_user (même username)
+    """
+
+    uname = (str(username or "")).strip()
+    if not uname:
+        # dernier recours : on crée un placeholder minimal
+        cur = db.execute(
+            "INSERT INTO vodum_users (username, status) VALUES (?, 'active')",
+            ("unknown",),
+        )
+        return int(cur.lastrowid)
+
+    # --- Mode identity-first (recommandé) ---
+    if provider_type and server_id is not None and external_user_id:
+        row_ident = db.query_one(
+            """
+            SELECT vodum_user_id
+            FROM user_identities
+            WHERE type = ?
+              AND server_id = ?
+              AND external_user_id = ?
+            LIMIT 1
+            """,
+            (provider_type, int(server_id), str(external_user_id)),
+        )
+
+        vuid_val = row_ident["vodum_user_id"] if row_ident is not None else None
+        if vuid_val is not None:
+            current_vuid = int(vuid_val)
+
+
+            # Si l'identité est déjà liée, mais vers un placeholder,
+            # et qu'on trouve un vodum_user "meilleur" avec même username,
+            # on migre l'identité (et on réutilise le bon vodum_user_id).
+            urow = db.query_one(
+                """
+                SELECT id, username, firstname, lastname, email, expiration_date, notes, status
+                FROM vodum_users
+                WHERE id = ?
+                LIMIT 1
+                """,
+                (current_vuid,),
+            )
+            current_user = dict(urow) if urow else {}
+
+            best_vuid = None
+
+            # IMPORTANT:
+            # Jellyfin users must never auto-merge by username.
+            # Same usernames across Jellyfin servers are not reliable identities.
+            if provider_type != "jellyfin":
+                best_vuid = _pick_best_vodum_user_for_username(db, uname)
+
+            if best_vuid and best_vuid != current_vuid and _is_placeholder_vodum_user(current_user):
+                # migre l'identité vers le compte existant "meilleur"
+                db.execute(
+                    """
+                    UPDATE user_identities
+                    SET vodum_user_id = ?
+                    WHERE type = ?
+                      AND server_id = ?
+                      AND external_user_id = ?
+                    """,
+                    (int(best_vuid), provider_type, int(server_id), str(external_user_id)),
+                )
+
+                # ✅ Remplit le vodum username si vide
+                db.execute(
+                    "UPDATE vodum_users SET username = COALESCE(username, ?) WHERE id = ?",
+                    (uname, int(best_vuid)),
+                )
+                return int(best_vuid)
+
+            # ✅ Remplit le vodum username si vide
+            db.execute(
+                "UPDATE vodum_users SET username = COALESCE(username, ?) WHERE id = ?",
+                (uname, int(current_vuid)),
+            )
+            return current_vuid
+
+        # IMPORTANT:
+        # Jellyfin users must NEVER auto-merge by username.
+        # Same username on different Jellyfin servers can be different people.
+        #
+        # Merge must remain a manual admin action.
+        #
+        # Therefore:
+        # - identity = server_id + external_user_id
+        # - username is display only
+
+        if provider_type != "jellyfin":
+            best_vuid = _pick_best_vodum_user_for_username(db, uname)
+
+            if best_vuid:
+                db.execute(
+                    """
+                    INSERT INTO user_identities (vodum_user_id, type, server_id, external_user_id)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (int(best_vuid), provider_type, int(server_id), str(external_user_id)),
+                )
+
+                # ✅ Remplit le vodum username si vide
+                db.execute(
+                    "UPDATE vodum_users SET username = COALESCE(username, ?) WHERE id = ?",
+                    (uname, int(best_vuid)),
+                )
+
+                return int(best_vuid)
+
+        # Sinon : crée un vodum_user placeholder + identité
+        cur = db.execute(
+            "INSERT INTO vodum_users (username, status) VALUES (?, 'active')",
+            (uname,),
+        )
+        vodum_user_id = int(cur.lastrowid)
+
+        db.execute(
+            """
+            INSERT INTO user_identities (vodum_user_id, type, server_id, external_user_id)
+            VALUES (?, ?, ?, ?)
+            """,
+            (vodum_user_id, provider_type, int(server_id), str(external_user_id)),
+        )
+
+        return vodum_user_id
+
+    # --- Fallback legacy (username only) ---
+    row = db.query_one(
+        "SELECT id FROM vodum_users WHERE lower(username) = lower(?) LIMIT 1",
+        (uname,),
+    )
+    if row:
+        return int(row["id"])
+
+    cur = db.execute(
+        "INSERT INTO vodum_users (username, status) VALUES (?, 'active')",
+        (uname,),
+    )
+    return int(cur.lastrowid)
+
+
+def _upsert_media_user_by_jellyfin_id(
+    db,
+    server_id: int,
+    jellyfin_id: str,
+    username: str,
+) -> Tuple[int, int]:
+    """
+    Upsert d'un compte Jellyfin dans media_users.
+
+    Fix :
+    - on s'assure d'obtenir le BON vodum_user_id (merge placeholder -> user existant si possible)
+    - on met à jour media_users.vodum_user_id même si déjà set (dans le cas d'une migration)
+    """
+    # 1) Cherche un compte existant sur CE serveur
+    row = db.query_one(
+        """
+        SELECT id, vodum_user_id
+        FROM media_users
+        WHERE server_id = ?
+          AND type = 'jellyfin'
+          AND external_user_id = ?
+        LIMIT 1
+        """,
+        (server_id, jellyfin_id),
+    )
+
+    # 2) Assure un vodum_user (avec logique de merge)
+    vodum_user_id = _ensure_vodum_user_for_username(
+        db,
+        username,
+        provider_type="jellyfin",
+        server_id=server_id,
+        external_user_id=jellyfin_id,
+    )
+
+    # 3) Assure identité
+    db.execute(
+        """
+        INSERT OR IGNORE INTO user_identities (vodum_user_id, type, server_id, external_user_id)
+        VALUES (?, 'jellyfin', ?, ?)
+        """,
+        (vodum_user_id, server_id, jellyfin_id),
+    )
+
+    if row:
+        media_user_id = int(row["id"])
+        db.execute(
+            """
+            UPDATE media_users
+            SET username = ?,
+                vodum_user_id = ?
+            WHERE id = ?
+            """,
+            (str(username or ""), int(vodum_user_id), media_user_id),
+        )
+        return media_user_id, int(vodum_user_id)
+
+    # 4) Insert nouveau media_user
+    cur = db.execute(
+        """
+        INSERT INTO media_users (server_id, vodum_user_id, external_user_id, username, type)
+        VALUES (?, ?, ?, ?, 'jellyfin')
+        """,
+        (server_id, int(vodum_user_id), jellyfin_id, str(username or "")),
+    )
+    return int(cur.lastrowid), int(vodum_user_id)
+
+
+
+def _upsert_library(db, server_id, section_id, name, lib_type) -> int:
+    return upsert_jellyfin_library(db, server_id, section_id, name, lib_type)
+
+
+def _set_media_user_state(
+    db,
+    media_user_id: int,
+    server_id: int,
+    owned: int,
+    all_libraries: int,
+    num_libraries: int,
+    last_seen_at: Optional[str],
+):
+    """
+    Anciennement: user_servers (DB v1).
+    DB v2: on stocke l'état dans media_users.details_json pour garder l'info,
+    sans recréer une table user_servers.
+    """
+    return set_jellyfin_media_user_state(
+        db, media_user_id, server_id, owned,
+        all_libraries, num_libraries, last_seen_at,
+    )
+
+
+def _refresh_shared_libraries_for_server(
+    db,
+    media_user_id: int,
+    server_id: int,
+    allowed_library_ids: List[int],
+):
+    """
+    Anciennement: shared_libraries (DB v1).
+    DB v2: media_user_libraries.
+    """
+    return replace_jellyfin_library_access(
+        db, media_user_id, server_id, allowed_library_ids,
+    )
+
+
+# ----------------------------
+# Jellyfin sync steps
+# ----------------------------
+
+def _sync_libraries_for_server(
+    session: requests.Session,
+    db,
+    server_id: int,
+    url: str,
+    token: str,
+) -> Dict[str, int]:
+    """
+    Récupère les VirtualFolders et les upsert dans libraries.
+    Retourne un mapping {ItemId -> libraries.id}
+    Met à jour libraries.item_count SANS dépendre d’un user Jellyfin.
+    """
+    api_url = _build_api_url(url, "/Library/VirtualFolders", token)
+    started_at = time.monotonic()
+    logger.info(f"Jellyfin libraries: GET {api_url}")
+
+    data = _get_json(session, api_url, timeout=30, token=token)
+    mapping: Dict[str, int] = {}
+
+    if not isinstance(data, list) or any(
+        not isinstance(entry, dict) or not entry.get("ItemId") or not entry.get("Name")
+        for entry in data
+    ):
+        raise ValueError("Jellyfin returned an invalid library list; existing access preserved")
+
+    updated_counts = 0
+    unchanged_counts = 0
+    skipped_counts = 0
+    count_deadline = time.monotonic() + 15
+    counts_unavailable = False
+
+    for entry in data:
+        item_id = entry.get("ItemId")
+        name = entry.get("Name") or ""
+        lib_type = entry.get("CollectionType") or entry.get("Type") or ""
+
+        item_id = str(item_id)
+        name = str(name)
+        lib_type = str(lib_type)
+
+        lib_db_id = _upsert_library(db, server_id, item_id, name, lib_type)
+        mapping[item_id] = lib_db_id
+
+        # Optional counts must not multiply timeouts by users and libraries.
+        remaining = count_deadline - time.monotonic()
+        count = None
+        if not counts_unavailable and remaining > 0:
+            try:
+                count = _jellyfin_library_total_items_no_user(
+                    session, url, token, item_id, timeout=min(5, remaining),
+                )
+            except requests.exceptions.RequestException as exc:
+                counts_unavailable = True
+                logger.warning(
+                    "Jellyfin server_id=%s: item counts unavailable (%s); keeping previous "
+                    "counts for this run and continuing user synchronization",
+                    server_id, type(exc).__name__,
+                )
+
+        # Si toujours rien → skip
+        if count is None:
+            skipped_counts += 1
+            continue
+
+        cursor = db.execute(
+            """
+            UPDATE libraries SET item_count = ?
+            WHERE server_id = ? AND section_id = ? AND item_count IS NOT ?
+            """,
+            (int(count), server_id, item_id, int(count)),
+        )
+        if cursor.rowcount:
+            updated_counts += 1
+        else:
+            unchanged_counts += 1
+
+
+    retained = prune_jellyfin_libraries(db, server_id, set(mapping.values()))
+    if retained:
+        logger.warning("Jellyfin server_id=%s: removed libraries still referenced by local settings: %s",
+                       server_id, ", ".join(retained))
+
+    logger.info(
+        f"Jellyfin libraries: {len(mapping)} importées/mises à jour "
+        f"(item_count updated={updated_counts}, unchanged={unchanged_counts}, skipped={skipped_counts}) "
+        f"(server_id={server_id}, elapsed={time.monotonic() - started_at:.1f}s)"
+    )
+    return mapping
+
+
+
+
+def _sync_users_and_policies_for_server(
+    session: requests.Session,
+    db,
+    server_id: int,
+    url: str,
+    token: str,
+    lib_map_itemid_to_dbid: Dict[str, int],
+) -> Tuple[int, int]:
+    """
+    - Récupère tous les users Jellyfin
+    - Pour chacun, récupère /Users/{id} pour Policy
+    - Met à jour media_users + media_user_libraries (DB v2)
+    """
+    users_url = _build_api_url(url, "/Users", token)
+    logger.info(f"Jellyfin users: GET {users_url}")
+
+    users = _get_json(session, users_url, timeout=15, token=token)
+    processed = 0
+    policy_ok = 0
+
+    if not isinstance(users, list) or any(not isinstance(u, dict) or not u.get("Id") or not u.get("Name") for u in users):
+        raise ValueError("Jellyfin returned an invalid user list; existing users preserved")
+
+    seen_jellyfin_ids = set()
+    for u in users:
+        if not isinstance(u, dict):
+            continue
+
+        jellyfin_id = u.get("Id")
+        username = u.get("Name")
+        if not jellyfin_id or not username:
+            continue
+
+        jellyfin_id = str(jellyfin_id)
+        username = str(username)
+        seen_jellyfin_ids.add(jellyfin_id)
+
+        media_user_id, vodum_user_id = _upsert_media_user_by_jellyfin_id(
+            db, server_id, jellyfin_id, username
+        )
+
+        # Ignore inactive Vodum users
+        vodum_user = db.query_one(
+            """
+            SELECT status
+            FROM vodum_users
+            WHERE id = ?
+            """,
+            (vodum_user_id,),
+        )
+
+        user_status = (
+            str(vodum_user["status"]).strip().lower()
+            if vodum_user and vodum_user["status"]
+            else ""
+        )
+
+        if user_status in ("expired", "disabled", "removed"):
+            logger.info(
+                f"[SYNC JELLYFIN] ignored user status={user_status} "
+                f"(vodum_user_id={vodum_user_id}, "
+                f"media_user_id={media_user_id}, "
+                f"server_id={server_id})"
+            )
+            continue
+
+        # /Users supplies Policy and metadata in the normal case.
+        detail = u
+        if not isinstance(u.get("Policy"), dict):
+            detail_url = _build_api_url(url, f"/Users/{jellyfin_id}", token)
+            # Abort rather than repeating a timeout for every remaining user.
+            detail = _get_json(session, detail_url, timeout=15, token=token)
+        if not isinstance(detail, dict) or not isinstance(detail.get("Policy"), dict):
+            raise ValueError("Jellyfin user policy unavailable; existing access preserved")
+        policy_ok += 1
+
+        # Stockage "max info" : JSON brut + champs utiles (role/joined_at/avatar)
+        try:
+            if isinstance(detail, dict):
+                _store_full_user_json_and_fields(db, media_user_id, jellyfin_id, detail)
+        except Exception as e:
+            logger.warning(
+                f"Impossible de stocker raw_json/role/joined_at pour user={username} ({jellyfin_id}) "
+                f"sur server_id={server_id}: {e}"
+            )
+
+
+        policy = (
+            (detail.get("Policy") or u.get("Policy") or {})
+            if isinstance(detail, dict)
+            else {}
+        )
+
+        # Force expiration override for Jellyfin admins
+        try:
+            is_admin = bool(policy.get("IsAdministrator"))
+
+            if is_admin:
+                db.execute(
+                    """
+                    UPDATE vodum_users
+                    SET expiration_date_override = 1
+                    WHERE id = ?
+                    """,
+                    (vodum_user_id,),
+                )
+
+        except Exception as e:
+            logger.warning(
+                f"[SYNC JELLYFIN] unable to force expiration override "
+                f"for vodum_user_id={vodum_user_id}: {e}"
+            )
+
+
+        enable_all = 1 if policy.get("EnableAllFolders") else 0
+        enabled_folders = policy.get("EnabledFolders") or []
+
+        # last activity info (si présent)
+        last_seen_at = None
+        if isinstance(detail, dict):
+            last_seen_at = (
+                detail.get("LastActivityDate")
+                or detail.get("LastLoginDate")
+                or None
+            )
+
+        # Calcul libraries autorisées
+        allowed_db_lib_ids: List[int] = []
+        if enable_all:
+            allowed_db_lib_ids = list(lib_map_itemid_to_dbid.values())
+        else:
+            if isinstance(enabled_folders, list):
+                for folder_id in enabled_folders:
+                    if not folder_id:
+                        continue
+                    lib_db_id = lib_map_itemid_to_dbid.get(str(folder_id))
+                    if lib_db_id:
+                        allowed_db_lib_ids.append(lib_db_id)
+
+        _set_media_user_state(
+            db,
+            media_user_id=media_user_id,
+            server_id=server_id,
+            owned=0,
+            all_libraries=enable_all,
+            num_libraries=len(allowed_db_lib_ids),
+            last_seen_at=last_seen_at,
+        )
+
+        if bool(policy.get("IsDisabled")):
+            from core.jellyfin_sync_repository import set_jellyfin_media_user_presence
+            set_jellyfin_media_user_presence(db, media_user_id, jellyfin_id, "disabled")
+        else:
+            mark_jellyfin_media_user_present(db, media_user_id, jellyfin_id)
+
+        _refresh_shared_libraries_for_server(
+            db, media_user_id, server_id, allowed_db_lib_ids
+        )
+
+        # Si accès réel → init expiration_date sur le vodum_user
+        processed += 1
+
+    existing_accounts = db.query(
+        """
+        SELECT id, external_user_id, details_json
+        FROM media_users
+        WHERE server_id = ?
+          AND type = 'jellyfin'
+          AND TRIM(COALESCE(external_user_id, '')) <> ''
+        """,
+        (server_id,),
+    ) or []
+    removed_count = 0
+    for raw_account in existing_accounts:
+        account = dict(raw_account)
+        external_user_id = str(account.get("external_user_id") or "").strip()
+        if external_user_id in seen_jellyfin_ids:
+            continue
+        mark_jellyfin_media_user_removed(db, int(account["id"]), external_user_id)
+        removed_count += 1
+
+    if removed_count:
+        logger.warning(
+            f"[SYNC JELLYFIN] {removed_count} account(s) marked removed "
+            f"because they are absent from Jellyfin (server_id={server_id})"
+        )
+
+    logger.info(
+        f"Jellyfin users/policies: {processed} users traités, "
+        f"policy récupérée pour {policy_ok} users (server_id={server_id})"
+    )
+    return processed, policy_ok
+
+
+# ----------------------------
+# Public task entrypoint
+# ----------------------------
+
+def run(task_id: int, db):
+    """
+    Synchronisation complète Jellyfin (lecture seule côté Jellyfin)
+    - Libraries (libraries + item_count)
+    - Users (media_users)
+    - Policies → media_user_libraries
+
+    Important: la sync users/policies ne doit pas empêcher le commit des libraries/item_count.
+    """
+    logger.info("=== SYNC JELLYFIN : START ===")
+
+    servers = _get_jellyfin_servers(db)
+    if not servers:
+        logger.warning("Aucun serveur Jellyfin en base.")
+        logger.info("=== SYNC JELLYFIN : END ===")
+        return
+
+    total_users = 0
+    total_policy_ok = 0
+    total_libraries = 0
+
+    session = servers_http_session(servers)
+
+    try:
+        any_success = False
+        failed_servers = []
+        skipped_unreachable = 0
+        
+        for srv in servers:
+            srv = dict(srv)
+            server_id = int(srv["id"])
+            name = srv.get("name") or f"server_{server_id}"
+            if should_skip_unreachable_server(srv):
+                skipped_unreachable += 1
+                logger.info(f"[SYNC JELLYFIN] skipped server={name} id={server_id} because it is down or in cooldown")
+                continue
+            url = _pick_jellyfin_base_url(srv)
+            token = (srv.get("token") or "").strip()
+
+            if not url or not token:
+                logger.warning(
+                    f"[SYNC JELLYFIN] serveur {name} (id={server_id}) URL/TOKEN manquant"
+                )
+                continue
+
+            # ---- 1) LIBRARIES (doit rester même si users/policies plante) ----
+            try:
+                lib_map = _sync_libraries_for_server(session, db, server_id, url, token)
+                total_libraries += len(lib_map)
+
+                if hasattr(db, "commit"):
+                    db.commit()
+
+                # ✅ dès que les libs sont OK, on considère que ce serveur a réussi quelque chose
+                any_success = True
+
+                logger.info(
+                    f"[SYNC JELLYFIN] Libraries OK server={name} (libs={len(lib_map)})"
+                )
+                clear_server_cooldown(db, server_id)
+
+            except Exception as e:
+                auth_status = authentication_failure_status(e)
+                failed_servers.append(server_id)
+                if auth_status is not None:
+                    mark_server_authentication_failed(db, server_id, auth_status)
+                    logger.warning(
+                        "[SYNC JELLYFIN] server_id=%s reachable but API authentication rejected "
+                        "(HTTP %s); check API key and permissions", server_id, auth_status,
+                    )
+                    continue
+                if is_debug_mode_enabled():
+                    logger.error(
+                        f"[SYNC JELLYFIN] Libraries FAILED pour {name} : {e}",
+                        exc_info=True,
+                    )
+                else:
+                    logger.warning(f"[SYNC JELLYFIN] server={name} unavailable: {e}")
+                mark_server_unreachable(db, server_id, str(e), cooldown_seconds=300)
+                # Si même les libs plantent, on passe au serveur suivant
+                continue
+
+            # ---- 2) USERS + POLICIES (peut échouer sans annuler les libs) ----
+            try:
+                users_count, policy_ok = _sync_users_and_policies_for_server(
+                    session, db, server_id, url, token, lib_map
+                )
+                total_users += users_count
+                total_policy_ok += policy_ok
+
+                logger.info(
+                    f"[SYNC JELLYFIN] Users/Policies OK server={name} "
+                    f"(users={users_count}, policies_ok={policy_ok})"
+                )
+
+            except Exception as e:
+                failed_servers.append(server_id)
+                # Finish other servers before reporting partial failure.
+                logger.error(
+                    f"[SYNC JELLYFIN] Users/Policies FAILED pour {name} "
+                    f"(libs OK, counts conservés) : {e}",
+                    exc_info=True,
+                )
+
+        if not any_success:
+            if skipped_unreachable == len(servers):
+                logger.warning("[SYNC JELLYFIN] All Jellyfin servers are down or in cooldown; sync skipped.")
+                return
+            raise RuntimeError("Aucun serveur Jellyfin n'a pu être synchronisé")
+
+        if failed_servers:
+            raise RuntimeError(f"Jellyfin user synchronization incomplete for server IDs: {failed_servers}; completed data preserved")
+
+        logger.info(f"Sync Jellyfin OK — users={total_users}, libraries={total_libraries}")
+
+    except Exception:
+        logger.error("Erreur globale sync_jellyfin", exc_info=True)
+        raise
+
+    finally:
+        try:
+            session.close()
+        except Exception:
+            pass
+
+        logger.info(
+            f"Sync Jellyfin terminé. users={total_users}, "
+            f"policies_ok={total_policy_ok}, libraries_seen={total_libraries}"
+        )
+        logger.info("=== SYNC JELLYFIN : END ===")

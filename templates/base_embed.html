@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="{{ active_lang or 'en' }}">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}VODUM{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  	<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icon.png', v=g.app_version|default('dev')) }}">
+	<link rel="icon" type="image/png" sizes="96x96" href="{{ url_for('static', filename='icon_96.png', v=g.app_version|default('dev')) }}">
+	<link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icon_192.png', v=g.app_version|default('dev')) }}">
+	<link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='icon_180.png', v=g.app_version|default('dev')) }}">
+	<meta name="theme-color" content="#0b1220">
+
+  <!-- CSS custom -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/vodum.css', v=g.app_version|default('dev')) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css', v=g.app_version|default('dev')) }}">
+
+  {% block head %}{% endblock %}
+</head>
+
+<body class="bg-slate-950 text-slate-100">
+  <!-- Pas de sidebar / pas de header -->
+  <main class="p-0 m-0">
+    {% block content %}{% endblock %}
+  </main>
+
+  <script src="{{ url_for('static', filename='js/app.js', v=g.app_version|default('dev')) }}"></script>
+  <script src="{{ url_for('static', filename='js/modal_manager.js', v=g.app_version|default('dev')) }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

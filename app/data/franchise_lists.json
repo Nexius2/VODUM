@@ -1,0 +1,6576 @@
+{
+  "version": 1,
+  "source_snapshot": "2026-10-29",
+  "lists": [
+    {
+      "id": "dcu",
+      "name": "DC Universe",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0044091",
+          "reference_title": "Superman and the Mole-Men",
+          "reference_year": "1951"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0060153",
+          "reference_title": "Batman: The Movie",
+          "reference_year": "1966"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0072419",
+          "reference_title": "Wonder Woman",
+          "reference_year": "1974"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0073449",
+          "reference_title": "The New Original Wonder Woman",
+          "reference_year": "1975"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0078346",
+          "reference_title": "Superman",
+          "reference_year": "1978"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0081573",
+          "reference_title": "Superman II",
+          "reference_year": "1980"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0084745",
+          "reference_title": "Swamp Thing",
+          "reference_year": "1982"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0086393",
+          "reference_title": "Superman III",
+          "reference_year": "1983"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0088206",
+          "reference_title": "Supergirl",
+          "reference_year": "1984"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0094074",
+          "reference_title": "Superman IV: The Quest for Peace",
+          "reference_year": "1987"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0098193",
+          "reference_title": "The Return of Swamp Thing",
+          "reference_year": "1989"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0096895",
+          "reference_title": "Batman",
+          "reference_year": "1989"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0103776",
+          "reference_title": "Batman Returns",
+          "reference_year": "1992"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0106364",
+          "reference_title": "Batman: Mask of the Phantasm",
+          "reference_year": "1993"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0112462",
+          "reference_title": "Batman Forever",
+          "reference_year": "1995"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0118365",
+          "reference_title": "Justice League of America",
+          "reference_year": "1997"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0118688",
+          "reference_title": "Batman & Robin",
+          "reference_year": "1997"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0120207",
+          "reference_title": "Steel",
+          "reference_year": "1997"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0327554",
+          "reference_title": "Catwoman",
+          "reference_year": "2004"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0360486",
+          "reference_title": "Constantine",
+          "reference_year": "2005"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0372784",
+          "reference_title": "Batman Begins",
+          "reference_year": "2005"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0348150",
+          "reference_title": "Superman Returns",
+          "reference_year": "2006"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0468569",
+          "reference_title": "The Dark Knight",
+          "reference_year": "2008"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0409459",
+          "reference_title": "Watchmen",
+          "reference_year": "2009"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1075747",
+          "reference_title": "Jonah Hex",
+          "reference_year": "2010"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1133985",
+          "reference_title": "Green Lantern",
+          "reference_year": "2011"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1345836",
+          "reference_title": "The Dark Knight Rises",
+          "reference_year": "2012"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0770828",
+          "reference_title": "Man of Steel",
+          "reference_year": "2013",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2975590",
+          "reference_title": "Batman v Superman: Dawn of Justice",
+          "reference_year": "2016",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1386697",
+          "reference_title": "Suicide Squad",
+          "reference_year": "2016",
+          "chronology": 50
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4116284",
+          "reference_title": "The Lego Batman Movie",
+          "reference_year": "2017"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0451279",
+          "reference_title": "Wonder Woman",
+          "reference_year": "2017",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0974015",
+          "reference_title": "Justice League",
+          "reference_year": "2017",
+          "chronology": 60
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7424200",
+          "reference_title": "Teen Titans GO! To the Movies",
+          "reference_year": "2018"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1477834",
+          "reference_title": "Aquaman",
+          "reference_year": "2018",
+          "chronology": 80
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0448115",
+          "reference_title": "Shazam!",
+          "reference_year": "2019",
+          "chronology": 90
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7286456",
+          "reference_title": "Joker",
+          "reference_year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7713068",
+          "reference_title": "Birds of Prey and the Fantabulous Emancipation of One Harley Quinn",
+          "reference_year": "2020",
+          "chronology": 100
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7126948",
+          "reference_title": "Wonder Woman 1984",
+          "reference_year": "2020",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt12361974",
+          "reference_title": "Zack Snyder's Justice League",
+          "reference_year": "2021",
+          "chronology": 70
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6334354",
+          "reference_title": "The Suicide Squad",
+          "reference_year": "2021",
+          "chronology": 110
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1877830",
+          "reference_title": "The Batman",
+          "reference_year": "2022"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt8912936",
+          "reference_title": "DC League of Super-Pets",
+          "reference_year": "2022"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6443346",
+          "reference_title": "Black Adam",
+          "reference_year": "2022",
+          "chronology": 130
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10151854",
+          "reference_title": "Shazam! Fury of the Gods",
+          "reference_year": "2023",
+          "chronology": 140
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0439572",
+          "reference_title": "The Flash",
+          "reference_year": "2023",
+          "chronology": 150
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt9362930",
+          "reference_title": "Blue Beetle",
+          "reference_year": "2023",
+          "chronology": 160
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt9663764",
+          "reference_title": "Aquaman and the Lost Kingdom",
+          "reference_year": "2023",
+          "chronology": 170
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt11315808",
+          "reference_title": "Joker: Folie à Deux",
+          "reference_year": "2024"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5950044",
+          "reference_title": "Superman",
+          "reference_year": "2025",
+          "chronology": 190
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt8814476",
+          "reference_title": "Supergirl",
+          "reference_year": "2026",
+          "chronology": 200
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt34890576",
+          "reference_title": "Clayface",
+          "reference_year": "2026",
+          "chronology": 220
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt19850008",
+          "reference_title": "The Batman: Part II",
+          "reference_year": "2028"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0143127",
+          "reference_title": "Batman & Mr. Freeze: SubZero",
+          "reference_year": "1998"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0233298",
+          "reference_title": "Batman Beyond: Return of the Joker",
+          "reference_year": "2000"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0346578",
+          "reference_title": "Batman: Mystery of the Batwoman",
+          "reference_year": "2003"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0472219",
+          "reference_title": "The Batman vs. Dracula",
+          "reference_year": "2005"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0800226",
+          "reference_title": "Superman: Brainiac Attacks",
+          "reference_year": "2006"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0816671",
+          "reference_title": "Teen Titans: Trouble in Tokyo",
+          "reference_year": "2006"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0934706",
+          "reference_title": "Superman: Doomsday",
+          "reference_year": "2007"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0902272",
+          "reference_title": "Justice League: The New Frontier",
+          "reference_year": "2008"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1117563",
+          "reference_title": "Batman: Gotham Knight",
+          "reference_year": "2008"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1186373",
+          "reference_title": "Wonder Woman",
+          "reference_year": "2009"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1295071",
+          "reference_title": "Tales of the Black Freighter",
+          "reference_year": "2009"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1384590",
+          "reference_title": "Green Lantern: First Flight",
+          "reference_year": "2009"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1398941",
+          "reference_title": "Superman/Batman: Public Enemies",
+          "reference_year": "2009"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1494772",
+          "reference_title": "Justice League: Crisis on Two Earths",
+          "reference_year": "2010"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1569923",
+          "reference_title": "Batman: Under the Red Hood",
+          "reference_year": "2010"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1673430",
+          "reference_title": "Superman/Batman: Apocalypse",
+          "reference_year": "2010"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1699114",
+          "reference_title": "All-Star Superman",
+          "reference_year": "2011"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1683043",
+          "reference_title": "Green Lantern: Emerald Knights",
+          "reference_year": "2011"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1672723",
+          "reference_title": "Batman: Year One",
+          "reference_year": "2011"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2027128",
+          "reference_title": "Justice League: Doom",
+          "reference_year": "2012"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2224455",
+          "reference_title": "Superman vs. The Elite",
+          "reference_year": "2012"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2313197",
+          "reference_title": "Batman: The Dark Knight Returns, Part 1",
+          "reference_year": "2012"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2166834",
+          "reference_title": "Batman: The Dark Knight Returns, Part 2",
+          "reference_year": "2013"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2617456",
+          "reference_title": "Superman: Unbound",
+          "reference_year": "2013"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2820466",
+          "reference_title": "Justice League: The Flashpoint Paradox",
+          "reference_year": "2013"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3468260",
+          "reference_title": "JLA Adventures: Trapped in Time",
+          "reference_year": "2014"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3060952",
+          "reference_title": "Justice League: War",
+          "reference_year": "2014"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3139072",
+          "reference_title": "Son of Batman",
+          "reference_year": "2014"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3139086",
+          "reference_title": "Batman: Assault on Arkham",
+          "reference_year": "2014"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3878542",
+          "reference_title": "Justice League: Throne of Atlantis",
+          "reference_year": "2015"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4324274",
+          "reference_title": "Batman vs. Robin",
+          "reference_year": "2015"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4324302",
+          "reference_title": "Justice League: Gods and Monsters",
+          "reference_year": "2015"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4729754",
+          "reference_title": "Batman Unlimited: Monster Mayhem",
+          "reference_year": "2015"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4437640",
+          "reference_title": "Batman Unlimited: Animal Instincts",
+          "reference_year": "2015"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4870838",
+          "reference_title": "Batman: Bad Blood",
+          "reference_year": "2016"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5091548",
+          "reference_title": "Justice League vs. Teen Titans",
+          "reference_year": "2016"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4853102",
+          "reference_title": "Batman: The Killing Joke",
+          "reference_year": "2016"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5836262",
+          "reference_title": "DC Super Hero Girls: Hero of the Year",
+          "reference_year": "2016"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5896146",
+          "reference_title": "Batman Unlimited: Mechs vs. Mutants",
+          "reference_year": "2016"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5973626",
+          "reference_title": "Batman: Return of the Caped Crusaders",
+          "reference_year": "2016"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2494376",
+          "reference_title": "Justice League Dark",
+          "reference_year": "2017"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6315800",
+          "reference_title": "Teen Titans: The Judas Contract",
+          "reference_year": "2017"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6869644",
+          "reference_title": "DC Super Hero Girls: Intergalactic Games",
+          "reference_year": "2017"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6556890",
+          "reference_title": "Batman and Harley Quinn",
+          "reference_year": "2017"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6142314",
+          "reference_title": "Batman vs. Two-Face",
+          "reference_year": "2017"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7112166",
+          "reference_title": "DC Super Heroes vs. Eagle Talon",
+          "reference_year": "2017"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7578566",
+          "reference_title": "Scooby-Doo & Batman: The Brave and the Bold",
+          "reference_year": "2018"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7167630",
+          "reference_title": "Batman: Gotham by Gaslight",
+          "reference_year": "2018"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7167602",
+          "reference_title": "Suicide Squad: Hell to Pay",
+          "reference_year": "2018"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7451284",
+          "reference_title": "Batman Ninja",
+          "reference_year": "2018"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7167658",
+          "reference_title": "The Death of Superman",
+          "reference_year": "2018"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt8634256",
+          "reference_title": "DC Super Hero Girls: Legends of Atlantis",
+          "reference_year": "2018"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7167686",
+          "reference_title": "Reign of the Supermen",
+          "reference_year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt8752474",
+          "reference_title": "Justice League vs. The Fatal Five",
+          "reference_year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt9775360",
+          "reference_title": "Batman vs Teenage Mutant Ninja Turtles",
+          "reference_year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt8752440",
+          "reference_title": "Batman: Hush",
+          "reference_year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10548944",
+          "reference_title": "Teen Titans Go! Vs. Teen Titans",
+          "reference_year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt8752498",
+          "reference_title": "Wonder Woman: Bloodlines",
+          "reference_year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10985510",
+          "reference_title": "Superman: Red Son",
+          "reference_year": "2020"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt11079148",
+          "reference_title": "Justice League Dark: Apokolips War",
+          "reference_year": "2020"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt11079116",
+          "reference_title": "Superman: Man of Tomorrow",
+          "reference_year": "2020"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt12885852",
+          "reference_title": "Batman: Soul of the Dragon",
+          "reference_year": "2021"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt13804084",
+          "reference_title": "Justice Society: World War II",
+          "reference_year": "2021"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt14851194",
+          "reference_title": "Teen Titans Go! See Space Jam",
+          "reference_year": "2021"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt14324650",
+          "reference_title": "Batman: The Long Halloween, Part One",
+          "reference_year": "2021"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt14402926",
+          "reference_title": "Batman: The Long Halloween, Part Two",
+          "reference_year": "2021"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5012504",
+          "reference_title": "Injustice",
+          "reference_year": "2021"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt15248702",
+          "reference_title": "Catwoman: Hunted",
+          "reference_year": "2022"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt15352516",
+          "reference_title": "Merry Little Batman",
+          "reference_year": "2023"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt18250460",
+          "reference_title": "Teen Titans Go! & DC Super Hero Girls: Mayhem in the Multiverse",
+          "reference_year": "2022"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt20192230",
+          "reference_title": "Green Lantern: Beware My Power",
+          "reference_year": "2022"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt21197740",
+          "reference_title": "Batman and Superman: Battle of the Super Sons",
+          "reference_year": "2022"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt22769820",
+          "reference_title": "Legion of Super-Heroes",
+          "reference_year": "2023"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt24223450",
+          "reference_title": "Batman: The Doom That Came to Gotham",
+          "reference_year": "2023"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt24548912",
+          "reference_title": "Justice League x RWBY: Super Heroes and Huntsmen Part One",
+          "reference_year": "2023"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt27687527",
+          "reference_title": "Justice League: Warworld",
+          "reference_year": "2023"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt28508231",
+          "reference_title": "Scooby-Doo! And Krypto, Too!",
+          "reference_year": "2023"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt28786861",
+          "reference_title": "Justice League x RWBY: Super Heroes and Huntsmen Part Two",
+          "reference_year": "2023"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt29195117",
+          "reference_title": "Justice League: Crisis on Infinite Earths - Part One",
+          "reference_year": "2024"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt30150907",
+          "reference_title": "Justice League: Crisis on Infinite Earths - Part Two",
+          "reference_year": "2024"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt30150917",
+          "reference_title": "Justice League: Crisis on Infinite Earths - Part Three",
+          "reference_year": "2024"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt32627540",
+          "reference_title": "Watchmen: Chapter I",
+          "reference_year": "2024"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt32627545",
+          "reference_title": "Watchmen: Chapter II",
+          "reference_year": "2024"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt32508210",
+          "reference_title": "Batman Ninja vs. Yakuza League",
+          "reference_year": "2025"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt21110654",
+          "reference_title": "Aztec Batman: Clash of Empires",
+          "reference_year": "2025"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt32333324",
+          "reference_title": "Batman: Knightfall - Part 1: Knightfall",
+          "reference_year": "2026"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3366668",
+          "reference_title": "The Dark Knight's First Night",
+          "reference_year": "1992"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0982860",
+          "reference_title": "Chase Me",
+          "reference_year": "2003"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1601188",
+          "reference_title": "The Spectre",
+          "reference_year": "2010"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1606600",
+          "reference_title": "Jonah Hex",
+          "reference_year": "2010"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1773355",
+          "reference_title": "DC Super Friends: The Joker's Playhouse",
+          "reference_year": "2010"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1663633",
+          "reference_title": "Green Arrow",
+          "reference_year": "2010"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1696202",
+          "reference_title": "DC Showcase Animated Original Shorts Collection",
+          "reference_year": "2010"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1701223",
+          "reference_title": "Superman/Shazam!: The Return of Black Adam",
+          "reference_year": "2010"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1986806",
+          "reference_title": "Catwoman",
+          "reference_year": "2011"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3254454",
+          "reference_title": "Superman 75th Anniversary",
+          "reference_year": "2013"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2465238",
+          "reference_title": "Lego Batman: The Movie - DC Super Heroes Unite",
+          "reference_year": "2013"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3643208",
+          "reference_title": "Batman: Strange Days",
+          "reference_year": "2014"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3643216",
+          "reference_title": "Batman Beyond",
+          "reference_year": "2014"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4189294",
+          "reference_title": "Lego DC Comics: Batman Be-Leaguered",
+          "reference_year": "2014"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7516768",
+          "reference_title": "Nightwing and Robin",
+          "reference_year": "2015"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4189260",
+          "reference_title": "Lego DC Comics Super Heroes: Justice League vs. Bizarro League",
+          "reference_year": "2015"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4938416",
+          "reference_title": "Lego DC Super Heroes: Justice League - Attack of the Legion of Doom!",
+          "reference_year": "2015"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5251438",
+          "reference_title": "Lego DC Comics Super Heroes: Justice League - Cosmic Clash",
+          "reference_year": "2016"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5612702",
+          "reference_title": "Lego DC Comics Superheroes: Justice League - Gotham City Breakout",
+          "reference_year": "2016"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6945882",
+          "reference_title": "Vixen",
+          "reference_year": "2017"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7158814",
+          "reference_title": "Lego DC Super Hero Girls: Brain Drain",
+          "reference_year": "2017"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt8421602",
+          "reference_title": "#TheLateBatsby",
+          "reference_year": "2018"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7877382",
+          "reference_title": "Lego DC Comics Super Heroes: The Flash",
+          "reference_year": "2018"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt8050266",
+          "reference_title": "LEGO DC Super Hero Girls: Super-Villain High",
+          "reference_year": "2018"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt8457394",
+          "reference_title": "Lego DC Comics Super Heroes: Aquaman - Rage of Atlantis",
+          "reference_year": "2018"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt9293522",
+          "reference_title": "Freedom Fighters: The Ray",
+          "reference_year": "2018"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10736082",
+          "reference_title": "Sgt. Rock",
+          "reference_year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt11229556",
+          "reference_title": "Death",
+          "reference_year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10327712",
+          "reference_title": "Lego DC Batman: Family Matters",
+          "reference_year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt11802028",
+          "reference_title": "The Phantom Stranger",
+          "reference_year": "2020"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt12093878",
+          "reference_title": "Lego DC: Shazam! Magic and Monsters",
+          "reference_year": "2020"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt12272414",
+          "reference_title": "Adam Strange",
+          "reference_year": "2020"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt12794046",
+          "reference_title": "Batman: Death in the Family",
+          "reference_year": "2020"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt12876132",
+          "reference_title": "Deathstroke: Knights & Dragons",
+          "reference_year": "2020"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt14577038",
+          "reference_title": "Kamandi: The Last Boy on Earth!",
+          "reference_year": "2021"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt14948338",
+          "reference_title": "The Losers",
+          "reference_year": "2021"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt15129756",
+          "reference_title": "Blue Beetle",
+          "reference_year": "2021"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt18305072",
+          "reference_title": "Constantine: The House of Mystery",
+          "reference_year": "2022"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt5957358",
+          "reference_title": "Freedom Fighters: The Ray",
+          "reference_year": "2017"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt26545355",
+          "reference_title": "Creature Commandos",
+          "reference_year": "2024",
+          "chronology": 180
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt13146488",
+          "reference_title": "Peacemaker",
+          "reference_year": "2022",
+          "chronology": 120
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt26545992",
+          "reference_title": "Lanterns",
+          "reference_year": "2026",
+          "chronology": 210
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt37833661",
+          "reference_title": "Man of Tomorrow",
+          "reference_year": "2027"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt33549695",
+          "reference_title": "Dynamic Duo",
+          "reference_year": "2028"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0044231",
+          "reference_title": "Adventures of Superman",
+          "reference_year": "1952"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0059968",
+          "reference_title": "Batman",
+          "reference_year": "1966"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0074074",
+          "reference_title": "Wonder Woman",
+          "reference_year": "1975"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0071050",
+          "reference_title": "Shazam!",
+          "reference_year": "1974"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0069641",
+          "reference_title": "Super Friends",
+          "reference_year": "1973"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0131675",
+          "reference_title": "Legends of the Superheroes",
+          "reference_year": "1979"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0060012",
+          "reference_title": "The New Adventures of Superman",
+          "reference_year": "1966"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0231046",
+          "reference_title": "The Superman/Aquaman Hour of Adventure",
+          "reference_year": "1967"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0062544",
+          "reference_title": "The Adventures of Batman",
+          "reference_year": "1968"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0075543",
+          "reference_title": "The New Adventures of Batman",
+          "reference_year": "1977"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0242224",
+          "reference_title": "The Plastic Man Comedy/Adventure Show",
+          "reference_year": "1979"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0213370",
+          "reference_title": "Superman",
+          "reference_year": "1988"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0094559",
+          "reference_title": "Superboy",
+          "reference_year": "1988"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0098798",
+          "reference_title": "The Flash",
+          "reference_year": "1990"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0098919",
+          "reference_title": "Swamp Thing",
+          "reference_year": "1990"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0408427",
+          "reference_title": "Swamp Thing",
+          "reference_year": "1990"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0103447",
+          "reference_title": "Human Target",
+          "reference_year": "1992"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt1439741",
+          "reference_title": "Human Target",
+          "reference_year": "2010"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0106057",
+          "reference_title": "Lois & Clark: The New Adventures of Superman",
+          "reference_year": "1993"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0103359",
+          "reference_title": "Batman: The Animated Series",
+          "reference_year": "1992"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0118266",
+          "reference_title": "The New Batman Adventures",
+          "reference_year": "1997"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0115378",
+          "reference_title": "Superman: The Animated Series",
+          "reference_year": "1996"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0147746",
+          "reference_title": "Batman Beyond",
+          "reference_year": "1999"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0260662",
+          "reference_title": "The Zeta Project",
+          "reference_year": "2001"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0247729",
+          "reference_title": "Static Shock",
+          "reference_year": "2000"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0275137",
+          "reference_title": "Justice League",
+          "reference_year": "2001"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt6025022",
+          "reference_title": "Justice League Unlimited",
+          "reference_year": "2004"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0343314",
+          "reference_title": "Teen Titans",
+          "reference_year": "2003"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0398417",
+          "reference_title": "The Batman",
+          "reference_year": "2004"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0437018",
+          "reference_title": "Krypto the Superdog",
+          "reference_year": "2005"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0775372",
+          "reference_title": "Legion of Super Heroes",
+          "reference_year": "2006"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt1213218",
+          "reference_title": "Batman: The Brave and the Bold",
+          "reference_year": "2008"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt1641384",
+          "reference_title": "Young Justice",
+          "reference_year": "2010"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt1724587",
+          "reference_title": "Green Lantern: The Animated Series",
+          "reference_year": "2011"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt2329077",
+          "reference_title": "Beware the Batman",
+          "reference_year": "2013"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt2771780",
+          "reference_title": "Teen Titans Go!",
+          "reference_year": "2013"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt5419200",
+          "reference_title": "Justice League Action",
+          "reference_year": "2016"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt5582302",
+          "reference_title": "DC Super Hero Girls",
+          "reference_year": "2015"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt9628244",
+          "reference_title": "DC Super Hero Girls",
+          "reference_year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt7658402",
+          "reference_title": "Harley Quinn",
+          "reference_year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt14681924",
+          "reference_title": "My Adventures with Superman",
+          "reference_year": "2023"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt19853518",
+          "reference_title": "Kite Man: Hell Yeah!",
+          "reference_year": "2024"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt13292830",
+          "reference_title": "Batwheels",
+          "reference_year": "2022"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt27621333",
+          "reference_title": "Bat-Fam",
+          "reference_year": "2025"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt37899471",
+          "reference_title": "Krypto Saves the Day!",
+          "reference_year": "2025"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0279600",
+          "reference_title": "Smallville",
+          "reference_year": "2001"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0312098",
+          "reference_title": "Birds of Prey",
+          "reference_year": "2002"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt2193021",
+          "reference_title": "Arrow",
+          "reference_year": "2012"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt3107288",
+          "reference_title": "The Flash",
+          "reference_year": "2014"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt4016454",
+          "reference_title": "Supergirl",
+          "reference_year": "2015"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt4532368",
+          "reference_title": "Legends of Tomorrow",
+          "reference_year": "2016"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt6045840",
+          "reference_title": "Black Lightning",
+          "reference_year": "2018"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt8712204",
+          "reference_title": "Batwoman",
+          "reference_year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt11192306",
+          "reference_title": "Superman & Lois",
+          "reference_year": "2021"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt4406248",
+          "reference_title": "Vixen",
+          "reference_year": "2015"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt3489184",
+          "reference_title": "Constantine",
+          "reference_year": "2014"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt6404896",
+          "reference_title": "Constantine: City of Demons",
+          "reference_year": "2018"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt3749900",
+          "reference_title": "Gotham",
+          "reference_year": "2014"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt4052886",
+          "reference_title": "Lucifer",
+          "reference_year": "2016"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt5083928",
+          "reference_title": "Powerless",
+          "reference_year": "2016"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt4276624",
+          "reference_title": "Krypton",
+          "reference_year": "2018"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt1043813",
+          "reference_title": "Titans",
+          "reference_year": "2018"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt8416494",
+          "reference_title": "Doom Patrol",
+          "reference_year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt8362852",
+          "reference_title": "Swamp Thing",
+          "reference_year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt8722888",
+          "reference_title": "Stargirl",
+          "reference_year": "2020"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt8425532",
+          "reference_title": "Pennyworth",
+          "reference_year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt1751634",
+          "reference_title": "The Sandman",
+          "reference_year": "2022"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt15358446",
+          "reference_title": "Dead Boy Detectives",
+          "reference_year": "2024"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt16418896",
+          "reference_title": "Gotham Knights",
+          "reference_year": "2023"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt13624900",
+          "reference_title": "Naomi",
+          "reference_year": "2022"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt15435876",
+          "reference_title": "The Penguin",
+          "reference_year": "2024"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt14681596",
+          "reference_title": "Batman: Caped Crusader",
+          "reference_year": "2024"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt11639062",
+          "reference_title": "Aquaman: King of Atlantis",
+          "reference_year": "2021"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt4759674",
+          "reference_title": "Justice League: Gods and Monsters Chronicles",
+          "reference_year": "2015"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt2303889",
+          "reference_title": "Super Best Friends Forever",
+          "reference_year": "2012"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt5468690",
+          "reference_title": "DC Super Friends",
+          "reference_year": "2015"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt4818178",
+          "reference_title": "Batman Unlimited",
+          "reference_year": "2015"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt1458796",
+          "reference_title": "Batman: Black and White",
+          "reference_year": "2008"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt3215888",
+          "reference_title": "Superman: Red Son",
+          "reference_year": "2009"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt7049682",
+          "reference_title": "Watchmen",
+          "reference_year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt1322240",
+          "reference_title": "Watchmen",
+          "reference_year": "2008"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0035665",
+          "reference_title": "Batman",
+          "reference_year": "1943"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0041162",
+          "reference_title": "Batman and Robin",
+          "reference_year": "1949"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0040852",
+          "reference_title": "Superman",
+          "reference_year": "1948"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0042211",
+          "reference_title": "Atom Man vs. Superman",
+          "reference_year": "1950"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0040243",
+          "reference_title": "Congo Bill",
+          "reference_year": "1948"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0044427",
+          "reference_title": "Blackhawk: Fearless Champion of Freedom",
+          "reference_year": "1952"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt9177882",
+          "reference_title": "Constantine: City of Demons",
+          "reference_year": "2018"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0169590",
+          "reference_title": "The Batman Superman Movie: World's Finest",
+          "reference_year": "1997"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0177267",
+          "reference_title": "Superman: The Last Son of Krypton",
+          "reference_year": "1996"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0231237",
+          "reference_title": "Batman Beyond: The Movie",
+          "reference_year": "1999"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4608596",
+          "reference_title": "Justice League: Starcrossed the Movie",
+          "reference_year": "2004"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt37749559",
+          "reference_title": "Justice League: Secret Origins",
+          "reference_year": "2002"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt38807532",
+          "reference_title": "Batman: Knightfall, Part 2 - Knightquest",
+          "reference_year": "2026"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt38807533",
+          "reference_title": "Batman: Knightfall, Part 3 - KnightsEnd",
+          "reference_year": "2027"
+        }
+      ]
+    },
+    {
+      "id": "avp",
+      "name": "Alien & Predator",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt11866324",
+          "reference_title": "Prey",
+          "reference_year": "2022",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt36463894",
+          "reference_title": "Predator: Killer of Killers",
+          "reference_year": "2025"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0093773",
+          "reference_title": "Predator",
+          "reference_year": "1987",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0100403",
+          "reference_title": "Predator 2",
+          "reference_year": "1990",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0370263",
+          "reference_title": "Alien vs. Predator",
+          "reference_year": "2004",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0758730",
+          "reference_title": "Aliens vs. Predator: Requiem",
+          "reference_year": "2007",
+          "chronology": 50
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3829266",
+          "reference_title": "The Predator",
+          "reference_year": "2018",
+          "chronology": 70
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5362760",
+          "reference_title": "The Peter Weyland Files: TED Conference, 2023",
+          "reference_year": "2012"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1424381",
+          "reference_title": "Predators",
+          "reference_year": "2010",
+          "chronology": 60
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5362738",
+          "reference_title": "The Peter Weyland Files: Happy Birthday, David",
+          "reference_year": "2012"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5362730",
+          "reference_title": "The Peter Weyland Files: Quiet Eye, Elizabeth Shaw",
+          "reference_year": "2012"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5362752",
+          "reference_title": "The Peter Weyland Files: 'Prometheus' Transmission",
+          "reference_year": "2012"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1446714",
+          "reference_title": "Prometheus",
+          "reference_year": "2012",
+          "chronology": 80
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6878760",
+          "reference_title": "Alien: Covenant - Prologue: The Crossing",
+          "reference_year": "2017"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6971180",
+          "reference_title": "Alien: Covenant - Meet Walter",
+          "reference_year": "2017"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7309934",
+          "reference_title": "Alien: Covenant - Phobos",
+          "reference_year": "2017"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6571148",
+          "reference_title": "Alien: Covenant - Prologue: Last Supper",
+          "reference_year": "2017"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2316204",
+          "reference_title": "Alien: Covenant",
+          "reference_year": "2017",
+          "chronology": 90
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7309938",
+          "reference_title": "Alien: Covenant - Advent",
+          "reference_year": "2017"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt12058458",
+          "reference_title": "Last Signs of Life",
+          "reference_year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0078748",
+          "reference_title": "Alien",
+          "reference_year": "1979",
+          "chronology": 110
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt18412256",
+          "reference_title": "Alien: Romulus",
+          "reference_year": "2024",
+          "chronology": 120
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0090605",
+          "reference_title": "Aliens",
+          "reference_year": "1986",
+          "chronology": 130
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0103644",
+          "reference_title": "Alien³",
+          "reference_year": "1992",
+          "chronology": 140
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0118583",
+          "reference_title": "Alien: Resurrection",
+          "reference_year": "1997",
+          "chronology": 150
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt31227572",
+          "reference_title": "Predator: Badlands",
+          "reference_year": "2025"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10110646",
+          "reference_title": "Alien: Containment",
+          "reference_year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10135070",
+          "reference_title": "Alien: Specimen",
+          "reference_year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10150302",
+          "reference_title": "Alien: Night Shift",
+          "reference_year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10090626",
+          "reference_title": "Alien: Ore",
+          "reference_year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10172856",
+          "reference_title": "Alien: Alone",
+          "reference_year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10015040",
+          "reference_title": "Alien: Harvest",
+          "reference_year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt13623632",
+          "reference_title": "Alien: Earth",
+          "reference_year": "2025",
+          "chronology": 100
+        }
+      ]
+    },
+    {
+      "id": "fast",
+      "name": "Fast & Furious",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0232500",
+          "reference_title": "The Fast and the Furious",
+          "reference_year": "2001",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0322259",
+          "reference_title": "2 Fast 2 Furious",
+          "reference_year": "2003",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2055789",
+          "reference_title": "The Turbo-Charged Prelude for 2 Fast 2 Furious",
+          "reference_year": "2003",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0463985",
+          "reference_title": "The Fast and the Furious: Tokyo Drift",
+          "reference_year": "2006",
+          "chronology": 80
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1013752",
+          "reference_title": "Fast & Furious",
+          "reference_year": "2009",
+          "chronology": 50
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1538503",
+          "reference_title": "Los Bandoleros",
+          "reference_year": "2009",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1596343",
+          "reference_title": "Fast Five",
+          "reference_year": "2011",
+          "chronology": 60
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1905041",
+          "reference_title": "Fast & Furious 6",
+          "reference_year": "2013",
+          "chronology": 70
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2820852",
+          "reference_title": "Furious 7",
+          "reference_year": "2015",
+          "chronology": 90
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4630562",
+          "reference_title": "The Fate of the Furious",
+          "reference_year": "2017",
+          "chronology": 100
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6806448",
+          "reference_title": "Fast & Furious Presents: Hobbs & Shaw",
+          "reference_year": "2019",
+          "chronology": 110
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5433138",
+          "reference_title": "F9: The Fast Saga",
+          "reference_year": "2021",
+          "chronology": 120
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5433140",
+          "reference_title": "Fast X",
+          "reference_year": "2023",
+          "chronology": 130
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt27550022",
+          "reference_title": "Fast Forever",
+          "reference_year": "2028",
+          "chronology": 140
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3401738",
+          "reference_title": "Fast & Furious 6: Take Control",
+          "reference_year": "2013"
+        }
+      ]
+    },
+    {
+      "id": "mcu",
+      "name": "Marvel Cinematic Universe",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0458339",
+          "reference_title": "Captain America: The First Avenger",
+          "reference_year": "2011",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3067038",
+          "reference_title": "Marvel One-Shot: Agent Carter",
+          "reference_year": "2013",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4154664",
+          "reference_title": "Captain Marvel",
+          "reference_year": "2019",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0371746",
+          "reference_title": "Iron Man",
+          "reference_year": "2008",
+          "chronology": 50
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1228705",
+          "reference_title": "Iron Man 2",
+          "reference_year": "2010",
+          "chronology": 60
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2011109",
+          "reference_title": "Marvel One-Shot: A Funny Thing Happened on the Way to Thor's Hammer",
+          "reference_year": "2011",
+          "chronology": 80
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0800369",
+          "reference_title": "Thor",
+          "reference_year": "2011",
+          "chronology": 90
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0800080",
+          "reference_title": "The Incredible Hulk",
+          "reference_year": "2008",
+          "chronology": 70
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2011118",
+          "reference_title": "Marvel One-Shot: The Consultant",
+          "reference_year": "2011",
+          "chronology": 100
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0848228",
+          "reference_title": "The Avengers",
+          "reference_year": "2012",
+          "chronology": 110
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2247732",
+          "reference_title": "Marvel One-Shot: Item 47",
+          "reference_year": "2012",
+          "chronology": 120
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1300854",
+          "reference_title": "Iron Man 3",
+          "reference_year": "2013",
+          "chronology": 140
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3438640",
+          "reference_title": "Marvel One-Shot: All Hail the King",
+          "reference_year": "2014",
+          "chronology": 150
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1981115",
+          "reference_title": "Thor: The Dark World",
+          "reference_year": "2013",
+          "chronology": 130
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1843866",
+          "reference_title": "Captain America: The Winter Soldier",
+          "reference_year": "2014",
+          "chronology": 160
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2015381",
+          "reference_title": "Guardians of the Galaxy",
+          "reference_year": "2014",
+          "chronology": 180
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3896198",
+          "reference_title": "Guardians of the Galaxy: Vol. 2",
+          "reference_year": "2017",
+          "chronology": 190
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2395427",
+          "reference_title": "Avengers: Age of Ultron",
+          "reference_year": "2015",
+          "chronology": 220
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0478970",
+          "reference_title": "Ant-Man",
+          "reference_year": "2015",
+          "chronology": 240
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1431045",
+          "reference_title": "Deadpool"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3498820",
+          "reference_title": "Captain America: Civil War",
+          "reference_year": "2016",
+          "chronology": 280
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3480822",
+          "reference_title": "Black Widow",
+          "reference_year": "2021",
+          "chronology": 290
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6016776",
+          "reference_title": "Team Thor",
+          "reference_year": "2016",
+          "chronology": 300
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1825683",
+          "reference_title": "Black Panther",
+          "reference_year": "2018",
+          "chronology": 320
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2250912",
+          "reference_title": "Spider-Man: Homecoming",
+          "reference_year": "2017",
+          "chronology": 330
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6599818",
+          "reference_title": "Team Thor: Part 2",
+          "reference_year": "2017",
+          "chronology": 310
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1211837",
+          "reference_title": "Doctor Strange",
+          "reference_year": "2016",
+          "chronology": 340
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3501632",
+          "reference_title": "Thor: Ragnarok",
+          "reference_year": "2017",
+          "chronology": 350
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt8023090",
+          "reference_title": "Team Darryl",
+          "reference_year": "2018",
+          "chronology": 360
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5095030",
+          "reference_title": "Ant-Man and the Wasp",
+          "reference_year": "2018",
+          "chronology": 370
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4154756",
+          "reference_title": "Avengers: Infinity War",
+          "reference_year": "2018",
+          "chronology": 380
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5463162",
+          "reference_title": "Deadpool 2"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4154796",
+          "reference_title": "Avengers: Endgame",
+          "reference_year": "2019",
+          "chronology": 390
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt9032400",
+          "reference_title": "Eternals",
+          "reference_year": "2021",
+          "chronology": 450
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt9376612",
+          "reference_title": "Shang-Chi and the Legend of the Ten Rings",
+          "reference_year": "2021",
+          "chronology": 440
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10648342",
+          "reference_title": "Thor: Love and Thunder",
+          "reference_year": "2022",
+          "chronology": 560
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt11107678",
+          "reference_title": "Peter's To-Do List",
+          "reference_year": "2019",
+          "chronology": 460
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6320628",
+          "reference_title": "Spider-Man: Far from Home",
+          "reference_year": "2019",
+          "chronology": 470
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10872600",
+          "reference_title": "Spider-Man: No Way Home",
+          "reference_year": "2021",
+          "chronology": 480
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt9419884",
+          "reference_title": "Doctor Strange in the Multiverse of Madness",
+          "reference_year": "2022",
+          "chronology": 490
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt9114286",
+          "reference_title": "Black Panther: Wakanda Forever",
+          "reference_year": "2022",
+          "chronology": 530
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt15318872",
+          "reference_title": "Werewolf by Night",
+          "reference_year": "2022",
+          "chronology": 570
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt13623136",
+          "reference_title": "The Guardians of the Galaxy Holiday Special",
+          "reference_year": "2022",
+          "chronology": 580
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10954600",
+          "reference_title": "Ant-Man and the Wasp: Quantumania",
+          "reference_year": "2023",
+          "chronology": 590
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6791350",
+          "reference_title": "Guardians of the Galaxy Vol. 3",
+          "reference_year": "2023",
+          "chronology": 600
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10676048",
+          "reference_title": "The Marvels",
+          "reference_year": "2023",
+          "chronology": 620
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6263850",
+          "reference_title": "Deadpool & Wolverine",
+          "reference_year": "2024",
+          "chronology": 640
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt14513804",
+          "reference_title": "Captain America: Brave New World",
+          "reference_year": "2025",
+          "chronology": 660
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt20969586",
+          "reference_title": "Thunderbolts*",
+          "reference_year": "2025",
+          "chronology": 670
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10676052",
+          "reference_title": "The Fantastic Four: First Steps",
+          "reference_year": "2025",
+          "chronology": 710
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt36042156",
+          "reference_title": "The Punisher: One Last Kill",
+          "reference_year": "2026",
+          "chronology": 690
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt22084616",
+          "reference_title": "Spider-Man: Brand New Day",
+          "reference_year": "2026",
+          "chronology": 720
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt21357150",
+          "reference_title": "Avengers: Doomsday",
+          "reference_year": "2026",
+          "chronology": 740
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt21361444",
+          "reference_title": "Avengers: Secret Wars",
+          "reference_year": "2027",
+          "chronology": 750
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt9140560",
+          "reference_title": "WandaVision",
+          "reference_year": "2021",
+          "chronology": 420
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt9208876",
+          "reference_title": "The Falcon and the Winter Soldier",
+          "reference_year": "2021",
+          "chronology": 430
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt9140554",
+          "reference_title": "Loki",
+          "reference_year": "2021",
+          "chronology": 400
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt10168312",
+          "reference_title": "What If...?",
+          "reference_year": "2021",
+          "chronology": 410
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt10160804",
+          "reference_title": "Hawkeye",
+          "reference_year": "2021",
+          "chronology": 500
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt10234724",
+          "reference_title": "Moon Knight",
+          "reference_year": "2022",
+          "chronology": 520
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt10857164",
+          "reference_title": "Ms. Marvel",
+          "reference_year": "2022",
+          "chronology": 550
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt10857160",
+          "reference_title": "She-Hulk: Attorney at Law",
+          "reference_year": "2022",
+          "chronology": 540
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt13157618",
+          "reference_title": "Secret Invasion",
+          "reference_year": "2023",
+          "chronology": 610
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt13966962",
+          "reference_title": "Echo",
+          "reference_year": "2023",
+          "chronology": 510
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt15571732",
+          "reference_title": "Agatha All Along",
+          "reference_year": "2024",
+          "chronology": 630
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt18923754",
+          "reference_title": "Daredevil: Born Again",
+          "reference_year": "2025",
+          "chronology": 650
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt13623126",
+          "reference_title": "Ironheart",
+          "reference_year": "2025",
+          "chronology": 680
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt21066182",
+          "reference_title": "Wonder Man",
+          "reference_year": "2026",
+          "chronology": 700
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt23112594",
+          "reference_title": "VisionQuest",
+          "reference_year": "2026",
+          "chronology": 730
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt16026746",
+          "reference_title": "X-Men '97",
+          "reference_year": "2024"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt13623148",
+          "reference_title": "I Am Groot",
+          "reference_year": "2022"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt16027074",
+          "reference_title": "Your Friendly Neighborhood Spider-Man",
+          "reference_year": "2025"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt13968252",
+          "reference_title": "Eyes of Wakanda",
+          "reference_year": "2025"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt16027014",
+          "reference_title": "Marvel Zombies",
+          "reference_year": "2025"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt2364582",
+          "reference_title": "Agents of S.H.I.E.L.D.",
+          "reference_year": "2013",
+          "chronology": 170
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt6313900",
+          "reference_title": "Agents of S.H.I.E.L.D.: Slingshot",
+          "reference_year": "2016"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt3475734",
+          "reference_title": "Agent Carter",
+          "reference_year": "2015",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt4154858",
+          "reference_title": "Inhumans",
+          "reference_year": "2017"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt5614844",
+          "reference_title": "Cloak & Dagger",
+          "reference_year": "2018"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt1236246",
+          "reference_title": "Runaways",
+          "reference_year": "2017"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt10266874",
+          "reference_title": "Helstrom",
+          "reference_year": "2020"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt3322312",
+          "reference_title": "Daredevil",
+          "reference_year": "2015",
+          "chronology": 200
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt2357547",
+          "reference_title": "Jessica Jones",
+          "reference_year": "2015",
+          "chronology": 210
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt3322314",
+          "reference_title": "Luke Cage",
+          "reference_year": "2016",
+          "chronology": 230
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt3322310",
+          "reference_title": "Iron Fist",
+          "reference_year": "2017",
+          "chronology": 250
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt4230076",
+          "reference_title": "The Defenders",
+          "reference_year": "2017",
+          "chronology": 260
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt5675620",
+          "reference_title": "The Punisher",
+          "reference_year": "2017",
+          "chronology": 270
+        }
+      ]
+    },
+    {
+      "id": "starwars",
+      "name": "Star Wars",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0490479",
+          "reference_title": "Return of the Ewok",
+          "reference_year": "1982"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2008565",
+          "reference_title": "Lego Star Wars: Revenge of the Brick",
+          "reference_year": "2005"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1509637",
+          "reference_title": "Lego Star Wars: The Quest for R2-D2",
+          "reference_year": "2009"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1808255",
+          "reference_title": "Lego Star Wars: Bombad Bounty",
+          "reference_year": "2010"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2005268",
+          "reference_title": "Lego Star Wars: The Padawan Menace",
+          "reference_year": "2011"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2402600",
+          "reference_title": "Lego Star Wars: The Empire Strikes Out",
+          "reference_year": "2012"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt23626160",
+          "reference_title": "Zen: Grogu and Dust Bunnies",
+          "reference_year": "2022"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt8466564",
+          "reference_title": "Obi-Wan Kenobi",
+          "reference_year": "2022",
+          "chronology": 130
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0088515",
+          "reference_title": "Star Wars: Ewoks",
+          "reference_year": "1985"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0361243",
+          "reference_title": "Star Wars: Clone Wars",
+          "reference_year": "2003"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0458290",
+          "reference_title": "Star Wars: The Clone Wars",
+          "reference_year": "2008",
+          "chronology": 60
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt2930604",
+          "reference_title": "Star Wars: Rebels",
+          "reference_year": "2014",
+          "chronology": 150
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt6779076",
+          "reference_title": "Star Wars: Forces of Destiny",
+          "reference_year": "2017"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt8336340",
+          "reference_title": "Star Wars: Resistance",
+          "reference_year": "2018",
+          "chronology": 250
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0299485",
+          "reference_title": "R2-D2: Beneath the Dome",
+          "reference_year": "2001"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt2362866",
+          "reference_title": "Star Wars: Detours",
+          "reference_year": "2020"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt3014650",
+          "reference_title": "Lego Star Wars: The Yoda Chronicles",
+          "reference_year": "2013"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt4855868",
+          "reference_title": "Lego Star Wars: Droid Tales",
+          "reference_year": "2015"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt5459566",
+          "reference_title": "Lego Star Wars: The Freemaker Adventures",
+          "reference_year": "2016"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0088510",
+          "reference_title": "Star Wars: Droids",
+          "reference_year": "1985"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt12708542",
+          "reference_title": "Star Wars: The Bad Batch",
+          "reference_year": "2021",
+          "chronology": 90
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt13622982",
+          "reference_title": "Star Wars: Visions",
+          "reference_year": "2021"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt20723374",
+          "reference_title": "Star Wars: Tales of the Jedi",
+          "reference_year": "2022",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt20674124",
+          "reference_title": "Young Jedi Adventures",
+          "reference_year": "2023"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt11281500",
+          "reference_title": "Star Wars Blips",
+          "reference_year": "2017"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt9353248",
+          "reference_title": "Star Wars Galaxy of Adventures",
+          "reference_year": "2018"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt10799452",
+          "reference_title": "Star Wars Roll Out",
+          "reference_year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt15719948",
+          "reference_title": "Star Wars Galaxy of Creatures",
+          "reference_year": "2021"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt19712356",
+          "reference_title": "Star Wars Galactic Pals",
+          "reference_year": "2022"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt8111088",
+          "reference_title": "The Mandalorian",
+          "reference_year": "2019",
+          "chronology": 200
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt13668894",
+          "reference_title": "The Book of Boba Fett",
+          "reference_year": "2021",
+          "chronology": 210
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt9253284",
+          "reference_title": "Andor",
+          "reference_year": "2022",
+          "chronology": 140
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt13622776",
+          "reference_title": "Ahsoka",
+          "reference_year": "2023",
+          "chronology": 240
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt12262202",
+          "reference_title": "The Acolyte",
+          "reference_year": "2024",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt20600980",
+          "reference_title": "Skeleton Crew",
+          "reference_year": "2024",
+          "chronology": 230
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "11",
+          "chronology": 170
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "1891",
+          "chronology": 180
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "1892",
+          "chronology": 190
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "1893",
+          "chronology": 30
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "1894",
+          "chronology": 40
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "1895",
+          "chronology": 70
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "140607",
+          "chronology": 260
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "181808",
+          "chronology": 270
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "181812",
+          "chronology": 280
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "12180",
+          "chronology": 50
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "330459",
+          "chronology": 160
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "348350",
+          "chronology": 120
+        },
+        {
+          "provider": "tmdb",
+          "media_type": "movie",
+          "external_id": "1228710",
+          "chronology": 220
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt12885438",
+          "reference_title": "The Lego Star Wars Holiday Special",
+          "reference_year": "2020"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt15164924",
+          "reference_title": "Lego Star Wars Terrifying Tales",
+          "reference_year": "2021"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt20784210",
+          "reference_title": "Lego Star Wars Summer Vacation",
+          "reference_year": "2022"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt43679852",
+          "reference_title": "Lego Star Wars: The Mandalorian",
+          "reference_year": "2026"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0193524",
+          "reference_title": "The Star Wars Holiday Special",
+          "reference_year": "1978"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0087225",
+          "reference_title": "Caravan of Courage: An Ewok Adventure",
+          "reference_year": "1984"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0089110",
+          "reference_title": "Ewoks: The Battle for Endor",
+          "reference_year": "1985"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt28069611",
+          "reference_title": "Star Wars: Starfighter",
+          "reference_year": "2027",
+          "chronology": 290
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt32306451",
+          "reference_title": "Lego Star Wars: Rebuild the Galaxy",
+          "reference_year": "2024"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt36594331",
+          "reference_title": "Star Wars: Maul - Shadow Lord",
+          "reference_year": "2026",
+          "chronology": 100
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt9297164",
+          "reference_title": "Lego Star Wars: All-Stars",
+          "reference_year": "2018"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt32019314",
+          "reference_title": "Star Wars: Tales of the Empire",
+          "reference_year": "2024",
+          "chronology": 80
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt36414431",
+          "reference_title": "Star Wars: Tales of the Underworld",
+          "reference_year": "2025",
+          "chronology": 110
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt43337681",
+          "reference_title": "Star Wars: Visions Presents - The Ninth Jedi",
+          "reference_year": "2026"
+        }
+      ]
+    },
+    {
+      "id": "trek",
+      "name": "Star Trek",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0117731",
+          "reference_title": "Star Trek: First Contact",
+          "reference_year": "1996",
+          "chronology": 160
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0079945",
+          "reference_title": "Star Trek: The Motion Picture",
+          "reference_year": "1979",
+          "chronology": 60
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0084726",
+          "reference_title": "Star Trek II: The Wrath of Khan",
+          "reference_year": "1982",
+          "chronology": 70
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0088170",
+          "reference_title": "Star Trek III: The Search for Spock",
+          "reference_year": "1984",
+          "chronology": 80
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0092007",
+          "reference_title": "Star Trek IV: The Voyage Home",
+          "reference_year": "1986",
+          "chronology": 90
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0098382",
+          "reference_title": "Star Trek V: The Final Frontier",
+          "reference_year": "1989",
+          "chronology": 100
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0102975",
+          "reference_title": "Star Trek VI: The Undiscovered Country",
+          "reference_year": "1991",
+          "chronology": 110
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0111280",
+          "reference_title": "Star Trek: Generations",
+          "reference_year": "1994",
+          "chronology": 140
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt9603060",
+          "reference_title": "Star Trek: Section 31",
+          "reference_year": "2025"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0120844",
+          "reference_title": "Star Trek: Insurrection",
+          "reference_year": "1998",
+          "chronology": 170
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0253754",
+          "reference_title": "Star Trek: Nemesis",
+          "reference_year": "2002",
+          "chronology": 180
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0796366",
+          "reference_title": "Star Trek",
+          "reference_year": "2009"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1408101",
+          "reference_title": "Star Trek Into Darkness",
+          "reference_year": "2013"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2660888",
+          "reference_title": "Star Trek Beyond",
+          "reference_year": "2016"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0060028",
+          "reference_title": "Star Trek",
+          "reference_year": "1966",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0069637",
+          "reference_title": "Star Trek: The Animated Series",
+          "reference_year": "1973",
+          "chronology": 50
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0092455",
+          "reference_title": "Star Trek: The Next Generation",
+          "reference_year": "1987",
+          "chronology": 120
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0106145",
+          "reference_title": "Star Trek: Deep Space Nine",
+          "reference_year": "1993",
+          "chronology": 130
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0112178",
+          "reference_title": "Star Trek: Voyager",
+          "reference_year": "1995",
+          "chronology": 150
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0244365",
+          "reference_title": "Star Trek: Enterprise",
+          "reference_year": "2001",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt5171438",
+          "reference_title": "Star Trek: Discovery",
+          "reference_year": "2017",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt8806524",
+          "reference_title": "Star Trek: Picard",
+          "reference_year": "2020",
+          "chronology": 210
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt9184820",
+          "reference_title": "Star Trek: Lower Decks",
+          "reference_year": "2020",
+          "chronology": 190
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt9795876",
+          "reference_title": "Star Trek: Prodigy",
+          "reference_year": "2021",
+          "chronology": 200
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt12327578",
+          "reference_title": "Star Trek: Strange New Worlds",
+          "reference_year": "2022",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt8622160",
+          "reference_title": "Star Trek: Starfleet Academy",
+          "reference_year": "2026",
+          "chronology": 220
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt9059594",
+          "reference_title": "Star Trek: Short Treks",
+          "reference_year": "2018"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt29064560",
+          "reference_title": "Star Trek: Very Short Treks",
+          "reference_year": "2023"
+        }
+      ]
+    },
+    {
+      "id": "stargate",
+      "name": "Stargate",
+      "added_on": "2026-11-20",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0111282",
+          "title": "Stargate",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0942903",
+          "title": "Stargate: The Ark of Truth",
+          "chronology": 60
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0929629",
+          "title": "Stargate: Continuum",
+          "chronology": 70
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt37161637",
+          "title": "Stargate Origins: Catherine",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0118480",
+          "title": "Stargate SG-1",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0374455",
+          "title": "Stargate Atlantis",
+          "chronology": 50
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt1286039",
+          "title": "Stargate Universe",
+          "chronology": 80
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0320969",
+          "title": "Stargate Infinity"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt7161862",
+          "title": "Stargate Origins",
+          "chronology": 10
+        }
+      ]
+    },
+    {
+      "id": "wizarding_world",
+      "name": "Harry Potter & Fantastic Beasts",
+      "added_on": "2026-11-20",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0241527",
+          "title": "Harry Potter and the Philosopher's Stone",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0295297",
+          "title": "Harry Potter and the Chamber of Secrets",
+          "chronology": 50
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0304141",
+          "title": "Harry Potter and the Prisoner of Azkaban",
+          "chronology": 60
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0330373",
+          "title": "Harry Potter and the Goblet of Fire",
+          "chronology": 70
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0373889",
+          "title": "Harry Potter and the Order of the Phoenix",
+          "chronology": 80
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0417741",
+          "title": "Harry Potter and the Half-Blood Prince",
+          "chronology": 90
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0926084",
+          "title": "Harry Potter and the Deathly Hallows: Part 1",
+          "chronology": 100
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1201607",
+          "title": "Harry Potter and the Deathly Hallows: Part 2",
+          "chronology": 110
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3183660",
+          "title": "Fantastic Beasts and Where to Find Them",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4123430",
+          "title": "Fantastic Beasts: The Crimes of Grindelwald",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4123432",
+          "title": "Fantastic Beasts: The Secrets of Dumbledore",
+          "chronology": 30
+        }
+      ]
+    },
+    {
+      "id": "middle_earth",
+      "name": "The Lord of the Rings & The Hobbit",
+      "added_on": "2026-11-20",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0120737",
+          "title": "The Lord of the Rings: The Fellowship of the Ring",
+          "chronology": 60
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0167261",
+          "title": "The Lord of the Rings: The Two Towers",
+          "chronology": 70
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0167260",
+          "title": "The Lord of the Rings: The Return of the King",
+          "chronology": 80
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0903624",
+          "title": "The Hobbit: An Unexpected Journey",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1170358",
+          "title": "The Hobbit: The Desolation of Smaug",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2310332",
+          "title": "The Hobbit: The Battle of the Five Armies",
+          "chronology": 50
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0077687",
+          "title": "The Hobbit"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0077869",
+          "title": "The Lord of the Rings"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt14824600",
+          "title": "The Lord of the Rings: The War of the Rohirrim",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt7631058",
+          "title": "The Lord of the Rings: The Rings of Power",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0079802",
+          "reference_title": "The Return of the King",
+          "reference_year": "1980"
+        }
+      ]
+    },
+    {
+      "id": "jurassic",
+      "name": "Jurassic Park & Jurassic World",
+      "verified_at": "2026-11-21",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0107290",
+          "title": "Jurassic Park",
+          "year": "1993",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0119567",
+          "title": "The Lost World: Jurassic Park",
+          "year": "1997",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0163025",
+          "title": "Jurassic Park III",
+          "year": "2001",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0369610",
+          "title": "Jurassic World",
+          "year": "2015",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4881806",
+          "title": "Jurassic World: Fallen Kingdom",
+          "year": "2018",
+          "chronology": 60
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt8041270",
+          "title": "Jurassic World: Dominion",
+          "year": "2022",
+          "chronology": 90
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt31036941",
+          "title": "Jurassic World: Rebirth",
+          "year": "2025",
+          "chronology": 100
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10942816",
+          "title": "Battle at Big Rock",
+          "year": "2019",
+          "chronology": 70
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt10436228",
+          "title": "Jurassic World: Camp Cretaceous",
+          "year": "2020",
+          "chronology": 50
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt29899148",
+          "title": "Jurassic World: Chaos Theory",
+          "year": "2024",
+          "chronology": 80
+        }
+      ]
+    },
+    {
+      "id": "terminator",
+      "name": "Terminator",
+      "verified_at": "2026-11-21",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0088247",
+          "title": "The Terminator",
+          "year": "1984",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0103064",
+          "title": "Terminator 2: Judgment Day",
+          "year": "1991",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0181852",
+          "title": "Terminator 3: Rise of the Machines",
+          "year": "2003",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0438488",
+          "title": "Terminator Salvation",
+          "year": "2009",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1340138",
+          "title": "Terminator Genisys",
+          "year": "2015"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6450804",
+          "title": "Terminator: Dark Fate",
+          "year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0851851",
+          "title": "Terminator: The Sarah Connor Chronicles",
+          "year": "2008"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt14153236",
+          "title": "Terminator Zero",
+          "year": "2024"
+        }
+      ]
+    },
+    {
+      "id": "matrix",
+      "name": "The Matrix",
+      "verified_at": "2026-11-21",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0133093",
+          "title": "The Matrix",
+          "year": "1999",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0234215",
+          "title": "The Matrix Reloaded",
+          "year": "2003",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0242653",
+          "title": "The Matrix Revolutions",
+          "year": "2003",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10838180",
+          "title": "The Matrix Resurrections",
+          "year": "2021",
+          "chronology": 50
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0328832",
+          "title": "The Animatrix",
+          "year": "2003",
+          "chronology": 20
+        }
+      ]
+    },
+    {
+      "id": "james_bond",
+      "name": "James Bond 007",
+      "verified_at": "2026-11-21",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0055928",
+          "title": "Dr. No",
+          "year": "1962",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0057076",
+          "title": "From Russia with Love",
+          "year": "1963",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0058150",
+          "title": "Goldfinger",
+          "year": "1964",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0059800",
+          "title": "Thunderball",
+          "year": "1965",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0062512",
+          "title": "You Only Live Twice",
+          "year": "1967",
+          "chronology": 50
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0064757",
+          "title": "On Her Majesty's Secret Service",
+          "year": "1969",
+          "chronology": 60
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0066995",
+          "title": "Diamonds Are Forever",
+          "year": "1971",
+          "chronology": 70
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0070328",
+          "title": "Live and Let Die",
+          "year": "1973",
+          "chronology": 80
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0071807",
+          "title": "The Man with the Golden Gun",
+          "year": "1974",
+          "chronology": 90
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0076752",
+          "title": "The Spy Who Loved Me",
+          "year": "1977",
+          "chronology": 100
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0079574",
+          "title": "Moonraker",
+          "year": "1979",
+          "chronology": 110
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0082398",
+          "title": "For Your Eyes Only",
+          "year": "1981",
+          "chronology": 120
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0086034",
+          "title": "Octopussy",
+          "year": "1983",
+          "chronology": 130
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0090264",
+          "title": "A View to a Kill",
+          "year": "1985",
+          "chronology": 140
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0093428",
+          "title": "The Living Daylights",
+          "year": "1987",
+          "chronology": 150
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0097742",
+          "title": "Licence to Kill",
+          "year": "1989",
+          "chronology": 160
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0113189",
+          "title": "GoldenEye",
+          "year": "1995",
+          "chronology": 170
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0120347",
+          "title": "Tomorrow Never Dies",
+          "year": "1997",
+          "chronology": 180
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0143145",
+          "title": "The World Is Not Enough",
+          "year": "1999",
+          "chronology": 190
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0246460",
+          "title": "Die Another Day",
+          "year": "2002",
+          "chronology": 200
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0381061",
+          "title": "Casino Royale",
+          "year": "2006",
+          "chronology": 210
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0830515",
+          "title": "Quantum of Solace",
+          "year": "2008",
+          "chronology": 220
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1074638",
+          "title": "Skyfall",
+          "year": "2012",
+          "chronology": 230
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2379713",
+          "title": "Spectre",
+          "year": "2015",
+          "chronology": 240
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2382320",
+          "title": "No Time to Die",
+          "year": "2021",
+          "chronology": 250
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0061452",
+          "title": "Casino Royale",
+          "year": "1967"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0086006",
+          "title": "Never Say Never Again",
+          "year": "1983"
+        }
+      ]
+    },
+    {
+      "id": "mission_impossible",
+      "name": "Mission: Impossible",
+      "verified_at": "2026-11-21",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0117060",
+          "title": "Mission: Impossible",
+          "year": "1996",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0120755",
+          "title": "Mission: Impossible II",
+          "year": "2000",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0317919",
+          "title": "Mission: Impossible III",
+          "year": "2006",
+          "chronology": 50
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1229238",
+          "title": "Mission: Impossible - Ghost Protocol",
+          "year": "2011",
+          "chronology": 60
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2381249",
+          "title": "Mission: Impossible - Rogue Nation",
+          "year": "2015",
+          "chronology": 70
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4912910",
+          "title": "Mission: Impossible - Fallout",
+          "year": "2018",
+          "chronology": 80
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt9603212",
+          "title": "Mission: Impossible - Dead Reckoning Part One",
+          "year": "2023",
+          "chronology": 90
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt9603208",
+          "title": "Mission: Impossible - The Final Reckoning",
+          "year": "2025",
+          "chronology": 100
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0060009",
+          "title": "Mission: Impossible",
+          "year": "1966",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0094511",
+          "title": "Mission: Impossible",
+          "year": "1988",
+          "chronology": 20
+        }
+      ]
+    },
+    {
+      "id": "conjuring",
+      "name": "The Conjuring Universe",
+      "verified_at": "2026-11-21",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1457767",
+          "title": "The Conjuring",
+          "year": "2013",
+          "chronology": 50
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3322940",
+          "title": "Annabelle",
+          "year": "2014",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3065204",
+          "title": "The Conjuring 2",
+          "year": "2016",
+          "chronology": 80
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5140878",
+          "title": "Annabelle: Creation",
+          "year": "2017",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5814060",
+          "title": "The Nun",
+          "year": "2018",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4913966",
+          "title": "The Curse of La Llorona",
+          "year": "2019",
+          "chronology": 70
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt8350360",
+          "title": "Annabelle Comes Home",
+          "year": "2019",
+          "chronology": 60
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7069210",
+          "title": "The Conjuring: The Devil Made Me Do It",
+          "year": "2021",
+          "chronology": 90
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10160976",
+          "title": "The Nun II",
+          "year": "2023",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt22898462",
+          "title": "The Conjuring: Last Rites",
+          "year": "2025",
+          "chronology": 100
+        }
+      ]
+    },
+    {
+      "id": "indiana_jones",
+      "name": "Indiana Jones",
+      "verified_at": "2026-11-21",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0082971",
+          "title": "Raiders of the Lost Ark",
+          "year": "1981",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0087469",
+          "title": "Indiana Jones and the Temple of Doom",
+          "year": "1984",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0097576",
+          "title": "Indiana Jones and the Last Crusade",
+          "year": "1989",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0367882",
+          "title": "Indiana Jones and the Kingdom of the Crystal Skull",
+          "year": "2008",
+          "chronology": 50
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1462764",
+          "title": "Indiana Jones and the Dial of Destiny",
+          "year": "2023",
+          "chronology": 60
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0103586",
+          "title": "The Young Indiana Jones Chronicles",
+          "year": "1992",
+          "chronology": 10
+        }
+      ]
+    },
+    {
+      "id": "pirates_caribbean",
+      "name": "Pirates of the Caribbean",
+      "verified_at": "2026-11-21",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0325980",
+          "title": "Pirates of the Caribbean: The Curse of the Black Pearl",
+          "year": "2003",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0383574",
+          "title": "Pirates of the Caribbean: Dead Man's Chest",
+          "year": "2006",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0449088",
+          "title": "Pirates of the Caribbean: At World's End",
+          "year": "2007",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1298650",
+          "title": "Pirates of the Caribbean: On Stranger Tides",
+          "year": "2011",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1790809",
+          "title": "Pirates of the Caribbean: Dead Men Tell No Tales",
+          "year": "2017",
+          "chronology": 50
+        }
+      ]
+    },
+    {
+      "id": "planet_apes",
+      "name": "Planet of the Apes",
+      "verified_at": "2026-11-21",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0063442",
+          "title": "Planet of the Apes",
+          "year": "1968",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0065462",
+          "title": "Beneath the Planet of the Apes",
+          "year": "1970",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0067065",
+          "title": "Escape from the Planet of the Apes",
+          "year": "1971",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0068408",
+          "title": "Conquest of the Planet of the Apes",
+          "year": "1972",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0069768",
+          "title": "Battle for the Planet of the Apes",
+          "year": "1973",
+          "chronology": 50
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0133152",
+          "title": "Planet of the Apes",
+          "year": "2001"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1318514",
+          "title": "Rise of the Planet of the Apes",
+          "year": "2011",
+          "chronology": 60
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2103281",
+          "title": "Dawn of the Planet of the Apes",
+          "year": "2014",
+          "chronology": 70
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3450958",
+          "title": "War for the Planet of the Apes",
+          "year": "2017",
+          "chronology": 80
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt11389872",
+          "title": "Kingdom of the Planet of the Apes",
+          "year": "2024",
+          "chronology": 90
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0071033",
+          "title": "Planet of the Apes",
+          "year": "1974"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0207267",
+          "title": "Return to the Planet of the Apes",
+          "year": "1975"
+        }
+      ]
+    },
+    {
+      "id": "ghostbusters",
+      "name": "Ghostbusters",
+      "verified_at": "2026-11-21",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0087332",
+          "title": "Ghostbusters",
+          "year": "1984",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0097428",
+          "title": "Ghostbusters II",
+          "year": "1989",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1289401",
+          "title": "Ghostbusters",
+          "year": "2016"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4513678",
+          "title": "Ghostbusters: Afterlife",
+          "year": "2021",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt21235248",
+          "title": "Ghostbusters: Frozen Empire",
+          "year": "2024",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0090506",
+          "title": "The Real Ghostbusters",
+          "year": "1986"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0121932",
+          "title": "Extreme Ghostbusters",
+          "year": "1997"
+        }
+      ]
+    },
+    {
+      "id": "transformers",
+      "name": "Transformers",
+      "verified_at": "2026-11-21",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0092106",
+          "title": "The Transformers: The Movie",
+          "year": "1986"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0418279",
+          "title": "Transformers",
+          "year": "2007",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1055369",
+          "title": "Transformers: Revenge of the Fallen",
+          "year": "2009",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1399103",
+          "title": "Transformers: Dark of the Moon",
+          "year": "2011",
+          "chronology": 50
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2109248",
+          "title": "Transformers: Age of Extinction",
+          "year": "2014",
+          "chronology": 60
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3371366",
+          "title": "Transformers: The Last Knight",
+          "year": "2017",
+          "chronology": 70
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4701182",
+          "title": "Bumblebee",
+          "year": "2018",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5090568",
+          "title": "Transformers: Rise of the Beasts",
+          "year": "2023",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt8864596",
+          "title": "Transformers One",
+          "year": "2024"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0086817",
+          "title": "Transformers",
+          "year": "1984"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0127402",
+          "title": "Transformers: The Headmasters",
+          "year": "1987"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0127396",
+          "title": "Transformers: Super-God Masterforce",
+          "year": "1988"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0127403",
+          "title": "Transformers: Victory",
+          "year": "1989"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0115108",
+          "title": "Beast Wars: Transformers",
+          "year": "1996"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0189315",
+          "title": "Beast Machines: Transformers",
+          "year": "1999"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0231050",
+          "title": "Transformers: Robots in Disguise",
+          "year": "2000"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0329938",
+          "title": "Transformers: Armada",
+          "year": "2002"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0388650",
+          "title": "Transformers: Energon",
+          "year": "2004"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0472252",
+          "title": "Transformers: Cybertron",
+          "year": "2005"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt1055335",
+          "title": "Transformers: Animated",
+          "year": "2007"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt1659175",
+          "title": "Transformers Prime",
+          "year": "2010"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt2139371",
+          "title": "Transformers: Rescue Bots",
+          "year": "2011"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt3604232",
+          "title": "Transformers: Robots in Disguise",
+          "year": "2014"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt8891990",
+          "title": "Transformers: Cyberverse",
+          "year": "2018"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt9557812",
+          "title": "Transformers: Rescue Bots Academy",
+          "year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt9789660",
+          "title": "Transformers: War for Cybertron Trilogy",
+          "year": "2020"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt14298658",
+          "title": "Transformers: EarthSpark",
+          "year": "2022"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2788526",
+          "title": "Transformers Prime Beast Hunters: Predacons Rising",
+          "year": "2013"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt36984460",
+          "title": "Transformers: Cyberworld",
+          "year": "2025"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0145639",
+          "title": "Beast Wars II: Super Life-Form Transformers",
+          "year": "1998"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0182562",
+          "title": "Super Life-Form Transformers: Beast Wars Neo",
+          "year": "1999"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt5831646",
+          "title": "Transformers: Combiner Wars",
+          "year": "2016"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt7156718",
+          "title": "Transformers: Titans Return",
+          "year": "2017"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt7856082",
+          "title": "Transformers: Power of the Primes",
+          "year": "2018"
+        }
+      ]
+    },
+    {
+      "id": "rocky_creed",
+      "name": "Rocky & Creed",
+      "verified_at": "2026-11-21",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0075148",
+          "title": "Rocky",
+          "year": "1976",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0079817",
+          "title": "Rocky II",
+          "year": "1979",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0084602",
+          "title": "Rocky III",
+          "year": "1982",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0089927",
+          "title": "Rocky IV",
+          "year": "1985",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0100507",
+          "title": "Rocky V",
+          "year": "1990",
+          "chronology": 50
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0479143",
+          "title": "Rocky Balboa",
+          "year": "2006",
+          "chronology": 60
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3076658",
+          "title": "Creed",
+          "year": "2015",
+          "chronology": 70
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6343314",
+          "title": "Creed II",
+          "year": "2018",
+          "chronology": 80
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt11145118",
+          "title": "Creed III",
+          "year": "2023",
+          "chronology": 90
+        }
+      ]
+    },
+    {
+      "id": "john_wick",
+      "name": "John Wick",
+      "verified_at": "2026-11-21",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2911666",
+          "title": "John Wick",
+          "year": "2014",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4425200",
+          "title": "John Wick: Chapter 2",
+          "year": "2017",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6146586",
+          "title": "John Wick: Chapter 3 - Parabellum",
+          "year": "2019",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt10366206",
+          "title": "John Wick: Chapter 4",
+          "year": "2023",
+          "chronology": 60
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7181546",
+          "title": "Ballerina",
+          "year": "2025",
+          "chronology": 50
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt6486762",
+          "title": "The Continental",
+          "year": "2023",
+          "chronology": 10
+        }
+      ]
+    },
+    {
+      "id": "resident_evil",
+      "name": "Resident Evil",
+      "verified_at": "2026-11-21",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0120804",
+          "title": "Resident Evil",
+          "year": "2002",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0318627",
+          "title": "Resident Evil: Apocalypse",
+          "year": "2004",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0432021",
+          "title": "Resident Evil: Extinction",
+          "year": "2007",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1220634",
+          "title": "Resident Evil: Afterlife",
+          "year": "2010",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1855325",
+          "title": "Resident Evil: Retribution",
+          "year": "2012",
+          "chronology": 50
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2592614",
+          "title": "Resident Evil: The Final Chapter",
+          "year": "2016",
+          "chronology": 60
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt6920084",
+          "title": "Resident Evil: Welcome to Raccoon City",
+          "year": "2021"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1174954",
+          "title": "Resident Evil: Degeneration",
+          "year": "2008",
+          "chronology": 70
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1753496",
+          "title": "Resident Evil: Damnation",
+          "year": "2012",
+          "chronology": 90
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5776208",
+          "title": "Resident Evil: Vendetta",
+          "year": "2017",
+          "chronology": 100
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt26674627",
+          "title": "Resident Evil: Death Island",
+          "year": "2023",
+          "chronology": 110
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt13173144",
+          "title": "Resident Evil: Infinite Darkness",
+          "year": "2021",
+          "chronology": 80
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt9660182",
+          "title": "Resident Evil",
+          "year": "2022"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt35538033",
+          "title": "Resident Evil",
+          "year": "2026"
+        }
+      ]
+    },
+    {
+      "id": "godzilla_kong",
+      "name": "Godzilla & Kong",
+      "verified_at": "2026-11-21",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0047034",
+          "title": "Godzilla",
+          "year": "1954"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0048127",
+          "title": "Godzilla Raids Again",
+          "year": "1955"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt13364334",
+          "title": "King Kong vs. Godzilla",
+          "year": "1962"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0058379",
+          "title": "Mothra vs. Godzilla",
+          "year": "1964"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0058544",
+          "title": "Ghidorah: The Three-Headed Monster",
+          "year": "1964"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0059346",
+          "title": "Invasion of Astro-Monster",
+          "year": "1965"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0060464",
+          "title": "Ebirah, Horror of the Deep",
+          "year": "1966"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0061856",
+          "title": "Son of Godzilla",
+          "year": "1967"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0063172",
+          "title": "Destroy All Monsters",
+          "year": "1968"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0064373",
+          "title": "All Monsters Attack",
+          "year": "1969"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0067148",
+          "title": "Godzilla vs. Hedorah",
+          "year": "1971"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0068371",
+          "title": "Godzilla vs. Gigan",
+          "year": "1972"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0070122",
+          "title": "Godzilla vs. Megalon",
+          "year": "1973"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0071565",
+          "title": "Godzilla vs. Mechagodzilla",
+          "year": "1974"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0073373",
+          "title": "Terror of Mechagodzilla",
+          "year": "1975"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt9015178",
+          "title": "The Return of Godzilla",
+          "year": "1984"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0097444",
+          "title": "Godzilla vs. Biollante",
+          "year": "1989"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0101962",
+          "title": "Godzilla vs. King Ghidorah",
+          "year": "1991"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0104352",
+          "title": "Godzilla and Mothra: The Battle for Earth",
+          "year": "1992"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0107027",
+          "title": "Godzilla vs. Mechagodzilla II",
+          "year": "1993"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0109916",
+          "title": "Godzilla vs. SpaceGodzilla",
+          "year": "1994"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0113187",
+          "title": "Godzilla vs. Destoroyah",
+          "year": "1995"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0188640",
+          "title": "Godzilla 2000",
+          "year": "1999"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0255198",
+          "title": "Godzilla vs. Megaguirus",
+          "year": "2000"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0279112",
+          "title": "Godzilla, Mothra and King Ghidorah: Giant Monsters All-Out Attack",
+          "year": "2001"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0314111",
+          "title": "Godzilla Against Mechagodzilla",
+          "year": "2002"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0366526",
+          "title": "Godzilla: Tokyo S.O.S.",
+          "year": "2003"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0399102",
+          "title": "Godzilla: Final Wars",
+          "year": "2004"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt4262980",
+          "title": "Shin Godzilla",
+          "year": "2016"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5979874",
+          "title": "Godzilla: Planet of the Monsters",
+          "year": "2017"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt8015080",
+          "title": "Godzilla: City on the Edge of Battle",
+          "year": "2018"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt8478602",
+          "title": "Godzilla: The Planet Eater",
+          "year": "2018"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt23289160",
+          "title": "Godzilla Minus One",
+          "year": "2023"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0024216",
+          "title": "King Kong",
+          "year": "1933"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0024593",
+          "title": "Son of Kong",
+          "year": "1933"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0061868",
+          "title": "King Kong Escapes",
+          "year": "1967"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0074751",
+          "title": "King Kong",
+          "year": "1976"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0091344",
+          "title": "King Kong Lives",
+          "year": "1986"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0360717",
+          "title": "King Kong",
+          "year": "2005"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0120685",
+          "title": "Godzilla",
+          "year": "1998"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0831387",
+          "title": "Godzilla",
+          "year": "2014"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3731562",
+          "title": "Kong: Skull Island",
+          "year": "2017"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3741700",
+          "title": "Godzilla: King of the Monsters",
+          "year": "2019"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt5034838",
+          "title": "Godzilla vs. Kong",
+          "year": "2021"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt14539740",
+          "title": "Godzilla X Kong: The New Empire",
+          "year": "2024"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0177814",
+          "title": "Godzilla",
+          "year": "1978"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0177443",
+          "title": "Godzilla: The Series",
+          "year": "1998"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt13229934",
+          "title": "Godzilla Singular Point",
+          "year": "2021"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt17220216",
+          "title": "Monarch: Legacy of Monsters",
+          "year": "2023"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt13929756",
+          "title": "Skull Island",
+          "year": "2023"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt5462936",
+          "title": "Kong: King of the Apes",
+          "year": "2016"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt34384661",
+          "title": "Godzilla Minus Zero",
+          "year": "2026"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0285377",
+          "title": "Kong: The Animated Series",
+          "year": "2000"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0293728",
+          "title": "The King Kong Show",
+          "year": "1966"
+        }
+      ]
+    },
+    {
+      "id": "narnia",
+      "name": "The Chronicles of Narnia",
+      "verified_at": "2026-11-21",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0363771",
+          "title": "The Chronicles of Narnia: The Lion, the Witch and the Wardrobe",
+          "year": "2005",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0499448",
+          "title": "The Chronicles of Narnia: Prince Caspian",
+          "year": "2008",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0980970",
+          "title": "The Chronicles of Narnia: The Voyage of the Dawn Treader",
+          "year": "2010",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0094500",
+          "title": "The Lion, the Witch and the Wardrobe",
+          "year": "1988"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0096681",
+          "title": "Prince Caspian and the Voyage of the Dawn Treader",
+          "year": "1989"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0098912",
+          "title": "The Silver Chair",
+          "year": "1990"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0079474",
+          "title": "The Lion, the Witch & the Wardrobe",
+          "year": "1979"
+        }
+      ]
+    },
+    {
+      "id": "dune",
+      "name": "Dune",
+      "verified_at": "2026-11-21",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0087182",
+          "title": "Dune",
+          "year": "1984"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1160419",
+          "title": "Dune",
+          "year": "2021",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt15239678",
+          "title": "Dune: Part Two",
+          "year": "2024",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0142032",
+          "title": "Dune",
+          "year": "2000"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0287839",
+          "title": "Children of Dune",
+          "year": "2003"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt10466872",
+          "title": "Dune: Prophecy",
+          "year": "2024",
+          "chronology": 10
+        }
+      ]
+    },
+    {
+      "id": "shrek",
+      "name": "Shrek & Puss in Boots",
+      "verified_at": "2026-11-21",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0126029",
+          "title": "Shrek",
+          "year": "2001",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0298148",
+          "title": "Shrek 2",
+          "year": "2004",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0413267",
+          "title": "Shrek the Third",
+          "year": "2007",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0892791",
+          "title": "Shrek Forever After",
+          "year": "2010",
+          "chronology": 50
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0448694",
+          "title": "Puss in Boots",
+          "year": "2011",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3915174",
+          "title": "Puss in Boots: The Last Wish",
+          "year": "2022",
+          "chronology": 60
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0307461",
+          "title": "Shrek in the Swamp Karaoke Dance Party",
+          "year": "2001"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0360985",
+          "title": "Shrek: The Ghost of Lord Farquaad",
+          "year": "2003"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0438844",
+          "title": "Far Far Away Idol",
+          "year": "2004"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0897387",
+          "title": "Shrek the Halls",
+          "year": "2007"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1725156",
+          "title": "Scared Shrekless",
+          "year": "2010"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1830577",
+          "title": "Donkey's Caroling Christmas-tacular",
+          "year": "2010"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2268617",
+          "title": "Puss in Boots: The Three Diablos",
+          "year": "2012"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2087984",
+          "title": "The Pig Who Cried Werewolf",
+          "year": "2011"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2051999",
+          "title": "Shrek: Thriller Night",
+          "year": "2011"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt3807034",
+          "title": "The Adventures of Puss in Boots",
+          "year": "2015"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7042082",
+          "title": "Puss in Book: Trapped in an Epic Tale",
+          "year": "2017"
+        }
+      ]
+    },
+    {
+      "id": "walking_dead",
+      "name": "The Walking Dead Universe",
+      "verified_at": "2026-11-21",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt1520211",
+          "title": "The Walking Dead",
+          "year": "2010",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt3743822",
+          "title": "Fear the Walking Dead",
+          "year": "2015",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt10148174",
+          "title": "The Walking Dead: World Beyond",
+          "year": "2020",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt15669534",
+          "title": "Tales of the Walking Dead",
+          "year": "2022"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt18546730",
+          "title": "The Walking Dead: Dead City",
+          "year": "2023",
+          "chronology": 50
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt13062500",
+          "title": "The Walking Dead: Daryl Dixon",
+          "year": "2023",
+          "chronology": 60
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt9859436",
+          "title": "The Walking Dead: The Ones Who Live",
+          "year": "2024",
+          "chronology": 40
+        }
+      ]
+    },
+    {
+      "id": "game_thrones",
+      "name": "Game of Thrones Universe",
+      "verified_at": "2026-11-21",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0944947",
+          "title": "Game of Thrones",
+          "year": "2011",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt11198330",
+          "title": "House of the Dragon",
+          "year": "2022",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt27497448",
+          "title": "A Knight of the Seven Kingdoms",
+          "year": "2026",
+          "chronology": 20
+        }
+      ]
+    },
+    {
+      "id": "yellowstone",
+      "name": "Yellowstone Universe",
+      "verified_at": "2026-11-21",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt4236770",
+          "title": "Yellowstone",
+          "year": "2018",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt13991232",
+          "title": "1883",
+          "year": "2021",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt18335752",
+          "title": "1923",
+          "year": "2022",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt36849871",
+          "title": "Marshals",
+          "year": "2026",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt34991493",
+          "title": "Dutton Ranch",
+          "year": "2026",
+          "chronology": 50
+        }
+      ]
+    },
+    {
+      "id": "doctor_who",
+      "name": "Doctor Who Universe",
+      "verified_at": "2026-11-21",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0056751",
+          "title": "Doctor Who",
+          "year": "1963",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0436992",
+          "title": "Doctor Who",
+          "year": "2005",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt31433814",
+          "title": "Doctor Who",
+          "year": "2023",
+          "chronology": 80
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0485301",
+          "title": "Torchwood",
+          "year": "2006",
+          "chronology": 50
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0862620",
+          "title": "The Sarah Jane Adventures",
+          "year": "2007",
+          "chronology": 60
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt5079788",
+          "title": "Class",
+          "year": "2016",
+          "chronology": 70
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0138972",
+          "title": "K-9 and Company",
+          "year": "1981",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt1102732",
+          "title": "K9",
+          "year": "2009"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt30645193",
+          "title": "The War Between the Land and the Sea",
+          "year": "2025",
+          "chronology": 90
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0116118",
+          "title": "Doctor Who: The Movie",
+          "year": "1996",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0059126",
+          "title": "Dr. Who and the Daleks",
+          "year": "1965"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0060278",
+          "title": "Daleks' Invasion Earth 2150 A.D.",
+          "year": "1966"
+        }
+      ]
+    },
+    {
+      "id": "dragon_ball",
+      "name": "Dragon Ball Universe",
+      "verified_at": "2026-11-21",
+      "items": [
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0088509",
+          "title": "Dragon Ball",
+          "year": "1986",
+          "chronology": 10
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0121220",
+          "title": "Dragon Ball Z",
+          "year": "1989",
+          "chronology": 20
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt0139774",
+          "title": "Dragon Ball GT",
+          "year": "1996",
+          "chronology": 70
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt1409055",
+          "title": "Dragon Ball Z Kai",
+          "year": "2009"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt4644488",
+          "title": "Dragon Ball Super",
+          "year": "2015",
+          "chronology": 40
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt29485149",
+          "title": "Dragon Ball Daima",
+          "year": "2024",
+          "chronology": 30
+        },
+        {
+          "provider": "imdb",
+          "media_type": "tv",
+          "external_id": "tt8433216",
+          "title": "Super Dragon Ball Heroes",
+          "year": "2018"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0142251",
+          "title": "Dragon Ball: Curse of the Blood Rubies",
+          "year": "1986"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0142249",
+          "title": "Dragon Ball: Sleeping Princess in Devil's Castle",
+          "year": "1987"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0142248",
+          "title": "Dragon Ball: Mystical Adventure",
+          "year": "1988"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0142250",
+          "title": "Dragon Ball: The Path to Power",
+          "year": "1996"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0142235",
+          "title": "Dragon Ball Z: Dead Zone",
+          "year": "1989"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0142240",
+          "title": "Dragon Ball Z: The World's Strongest",
+          "year": "1990"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0142233",
+          "title": "Dragon Ball Z: The Tree of Might",
+          "year": "1990"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0142244",
+          "title": "Dragon Ball Z: Lord Slug",
+          "year": "1991"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1125254",
+          "title": "Dragon Ball Z: Cooler's Revenge",
+          "year": "1991"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0142237",
+          "title": "Dragon Ball Z: The Return of Cooler",
+          "year": "1992"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0142241",
+          "title": "Dragon Ball Z: Super Android 13!",
+          "year": "1992"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0142242",
+          "title": "Dragon Ball Z: Broly - The Legendary Super Saiyan",
+          "year": "1993"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0142238",
+          "title": "Dragon Ball Z: Bojack Unbound",
+          "year": "1993"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0142239",
+          "title": "Dragon Ball Z: Broly - Second Coming",
+          "year": "1994"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0142234",
+          "title": "Dragon Ball Z: Bio-Broly",
+          "year": "1994"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0142236",
+          "title": "Dragon Ball Z: Fusion Reborn",
+          "year": "1995"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0142243",
+          "title": "Dragon Ball Z: Wrath of the Dragon",
+          "year": "1995"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2263944",
+          "title": "Dragon Ball Z: Battle of Gods",
+          "year": "2013"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt3819668",
+          "title": "Dragon Ball Z: Resurrection 'F'",
+          "year": "2015"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt7961060",
+          "title": "Dragon Ball Super: Broly",
+          "year": "2018",
+          "chronology": 50
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt14614892",
+          "title": "Dragon Ball Super: Super Hero",
+          "year": "2022",
+          "chronology": 60
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1098327",
+          "title": "Dragonball: Evolution",
+          "year": "2009"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0142245",
+          "title": "Dragon Ball Z: Bardock - The Father of Goku",
+          "year": "1990"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt0142247",
+          "title": "Dragon Ball Z: The History of Trunks",
+          "year": "1993"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt2980736",
+          "title": "Dragon Ball: Episode of Bardock",
+          "year": "2011"
+        },
+        {
+          "provider": "imdb",
+          "media_type": "movie",
+          "external_id": "tt1317478",
+          "title": "Dragon Ball: The Return of Son Goku and Friends!",
+          "year": "2008"
+        }
+      ]
+    }
+  ],
+  "updated_at": "2026-11-26",
+  "removed_items": [
+    {
+      "list_id": "trek",
+      "provider": "imdb",
+      "media_type": "movie",
+      "external_id": "tt30833980",
+      "title": "Untitled Star Trek Prequel",
+      "reason": "Untitled Star Trek prequel: placeholder with no title or date; cannot be matched.",
+      "removed_at": "2026-11-26"
+    },
+    {
+      "list_id": "trek",
+      "provider": "imdb",
+      "media_type": "movie",
+      "external_id": "tt4756228",
+      "title": "Untitled Noah Hawley/Star Trek Film",
+      "reason": "Untitled Noah Hawley Star Trek film: cancelled project placeholder.",
+      "removed_at": "2026-11-26"
+    },
+    {
+      "list_id": "middle_earth",
+      "provider": "imdb",
+      "media_type": "movie",
+      "external_id": "tt0081479",
+      "title": "Seed of Innocence",
+      "reason": "Wrong IMDb ID: resolves to \"Seed of Innocence\" (1980), not The Return of the King (1980).",
+      "removed_at": "2026-11-26"
+    },
+    {
+      "list_id": "dcu",
+      "provider": "imdb",
+      "media_type": "movie",
+      "external_id": "tt0094017",
+      "title": "The Spirit",
+      "reason": "The Spirit (1987): Will Eisner character, not a DC Universe property.",
+      "removed_at": "2026-11-26"
+    },
+    {
+      "list_id": "dcu",
+      "provider": "imdb",
+      "media_type": "movie",
+      "external_id": "tt0114614",
+      "title": "Tank Girl",
+      "reason": "Tank Girl (1995): British comic (Deadline), not DC Universe.",
+      "removed_at": "2026-11-26"
+    },
+    {
+      "list_id": "dcu",
+      "provider": "imdb",
+      "media_type": "movie",
+      "external_id": "tt0119185",
+      "title": "Gen¹³",
+      "reason": "Gen13 (1998): WildStorm universe, separate from the DC Universe.",
+      "removed_at": "2026-11-26"
+    },
+    {
+      "list_id": "dcu",
+      "provider": "imdb",
+      "media_type": "movie",
+      "external_id": "tt0257044",
+      "title": "Road to Perdition",
+      "reason": "Road to Perdition (2002): Paradox Press graphic novel, no DC Universe link.",
+      "removed_at": "2026-11-26"
+    },
+    {
+      "list_id": "dcu",
+      "provider": "imdb",
+      "media_type": "movie",
+      "external_id": "tt0311429",
+      "title": "The League of Extraordinary Gentlemen",
+      "reason": "The League of Extraordinary Gentlemen (2003): America's Best Comics, outside DC continuity.",
+      "removed_at": "2026-11-26"
+    },
+    {
+      "list_id": "dcu",
+      "provider": "imdb",
+      "media_type": "movie",
+      "external_id": "tt0305206",
+      "title": "American Splendor",
+      "reason": "American Splendor (2003): Harvey Pekar autobiographical comic, not DC Universe.",
+      "removed_at": "2026-11-26"
+    },
+    {
+      "list_id": "dcu",
+      "provider": "imdb",
+      "media_type": "movie",
+      "external_id": "tt0434409",
+      "title": "V for Vendetta",
+      "reason": "V for Vendetta (2005): Vertigo, standalone story outside DC continuity.",
+      "removed_at": "2026-11-26"
+    },
+    {
+      "list_id": "dcu",
+      "provider": "imdb",
+      "media_type": "movie",
+      "external_id": "tt0399146",
+      "title": "A History of Violence",
+      "reason": "A History of Violence (2005): Paradox Press graphic novel, no DC Universe link.",
+      "removed_at": "2026-11-26"
+    },
+    {
+      "list_id": "dcu",
+      "provider": "imdb",
+      "media_type": "movie",
+      "external_id": "tt0486655",
+      "title": "Stardust",
+      "reason": "Stardust (2007): Neil Gaiman/Charles Vess fantasy novel, not DC Universe.",
+      "removed_at": "2026-11-26"
+    },
+    {
+      "list_id": "dcu",
+      "provider": "imdb",
+      "media_type": "movie",
+      "external_id": "tt0831887",
+      "title": "The Spirit",
+      "reason": "The Spirit (2008): Will Eisner character, not a DC Universe property.",
+      "removed_at": "2026-11-26"
+    },
+    {
+      "list_id": "dcu",
+      "provider": "imdb",
+      "media_type": "movie",
+      "external_id": "tt0480255",
+      "title": "The Losers",
+      "reason": "The Losers (2010): Vertigo series, separate from the DC war comic (the 2021 DC Showcase short stays).",
+      "removed_at": "2026-11-26"
+    },
+    {
+      "list_id": "dcu",
+      "provider": "imdb",
+      "media_type": "movie",
+      "external_id": "tt1245526",
+      "title": "RED",
+      "reason": "RED (2010): Homage/WildStorm comic, outside DC continuity.",
+      "removed_at": "2026-11-26"
+    },
+    {
+      "list_id": "dcu",
+      "provider": "imdb",
+      "media_type": "movie",
+      "external_id": "tt1821694",
+      "title": "RED 2",
+      "reason": "RED 2 (2013): sequel of RED, outside DC continuity.",
+      "removed_at": "2026-11-26"
+    },
+    {
+      "list_id": "dcu",
+      "provider": "imdb",
+      "media_type": "movie",
+      "external_id": "tt5822564",
+      "title": "The Kitchen",
+      "reason": "The Kitchen (2019): Vertigo crime comic, outside DC continuity.",
+      "removed_at": "2026-11-26"
+    }
+  ]
+}

@@ -1,0 +1,575 @@
+{% extends "base.html" %}
+{% set active_page = 'communications' %}
+
+{% block title %}{{ t("communications") }} - VODUM{% endblock %}
+{% block header_title %}{{ t("communications") }}{% endblock %}
+{% block header_subtitle %}{{ t("communications_subtitle") }}{% endblock %}
+
+{% block content %}
+
+{% set current_subpage = 'templates' %}
+{% include "communications/_communications_nav.html" %}
+
+{% set stream_blocked_locked = loaded_is_stream_blocked|default(false) %}
+{% set stream_blocked_enabled_locked = stream_blocked_locked and stream_blocked_required|default(false) %}
+
+<div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+
+  <!-- LEFT : editor -->
+  <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-4">
+
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-sm font-semibold">
+        {% if loaded_template %}{{ t('comm_template_edit') }}{% else %}{{ t('comm_template_new') }}{% endif %}
+      </h2>
+
+      <div class="flex items-center gap-2">
+        <span class="text-[11px] text-slate-400">{{ t('enabled') }}</span>
+        <label class="relative inline-flex items-center {% if stream_blocked_enabled_locked %}cursor-not-allowed opacity-70{% else %}cursor-pointer{% endif %}"
+               {% if stream_blocked_enabled_locked %}title="{{ t('comm_stream_blocked_required_by_expiry') }}"{% endif %}>
+          <input type="checkbox"
+                 id="template_enabled_switch"
+                 class="sr-only peer"
+                 {% if stream_blocked_enabled_locked or (loaded_template and loaded_template.enabled) or (not loaded_template) %}checked{% endif %}
+                 {% if stream_blocked_enabled_locked %}disabled{% endif %}>
+          <div class="w-11 h-6 bg-slate-600 rounded-full peer-checked:bg-emerald-500 transition"></div>
+          <div class="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full transition peer-checked:translate-x-5"></div>
+        </label>
+      </div>
+    </div>
+
+    <form method="post" action="{{ url_for('communications_templates_action') }}" enctype="multipart/form-data" class="space-y-4">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="action" id="commTemplateFormAction" value="{% if loaded_template %}save{% else %}create{% endif %}">
+      <input type="hidden" name="template_id" value="{{ loaded_template.id if loaded_template else '' }}">
+      <input type="hidden" name="enabled" id="template_enabled" value="{{ 1 if stream_blocked_enabled_locked or (loaded_template and loaded_template.enabled) or (not loaded_template) else 0 }}">
+
+      {% if stream_blocked_locked %}
+      <div class="rounded-xl border border-amber-700/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+        {{ t('comm_stream_blocked_template_notice') }}
+      </div>
+      {% endif %}
+
+      <!-- {% if not loaded_template %}
+      <div class="text-xs">
+        <label class="block mb-1">{{ t('key') }}</label>
+        <input type="text" name="key" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs" required>
+        <p class="mt-1 text-[11px] text-slate-500">{{ t('comm_key_help') }}</p>
+      </div>
+      {% else %}
+      <div class="text-xs">
+        <label class="block mb-1">{{ t('key') }}</label>
+        <input type="text" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-slate-400" value="{{ loaded_template.key }}" disabled>
+      </div>
+      {% endif %} -->
+
+      <div class="text-xs">
+        <label class="block mb-1">{{ t('name') }}</label>
+        <input type="text" name="name" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs" value="{{ loaded_template.name if loaded_template else '' }}" required>
+      </div>
+
+			<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+			  <div class="text-xs">
+				<label class="block mb-1">{{ t('comm_trigger_event') }}</label>
+				{% set ev = (loaded_template.trigger_event if loaded_template and loaded_template.trigger_event else 'expiration') %}
+				<select name="trigger_event"
+						id="trigger_event"
+						class="w-full border rounded-lg px-2 py-1 text-xs {% if stream_blocked_locked %}bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed opacity-70{% else %}bg-slate-950 border-slate-800{% endif %}"
+						{% if stream_blocked_locked %}disabled title="{{ t('comm_stream_blocked_template_notice') }}"{% endif %}>
+				  <option value="expiration" {% if ev == 'expiration' %}selected{% endif %}>{{ t('comm_trigger_expiration') }}</option>
+				  <option value="user_creation" {% if ev == 'user_creation' %}selected{% endif %}>{{ t('comm_trigger_user_creation') }}</option>
+				  <option value="pending_invite_reminder" {% if ev == 'pending_invite_reminder' %}selected{% endif %}>{{ t('comm_trigger_pending_invite_reminder') }}</option>
+				  <option value="referral_reward" {% if ev == 'referral_reward' %}selected{% endif %}>{{ t('comm_trigger_referral_reward') }}</option>
+				  <option value="expiration_change" {% if ev == 'expiration_change' %}selected{% endif %}>{{ t('comm_trigger_expiration_change') }}</option>
+				  <option value="stream_blocked" {% if ev == 'stream_blocked' %}selected{% endif %}>{{ t('comm_trigger_stream_blocked') }}</option>
+				  <option value="usage_risk_upgrade_suggestion" {% if ev == 'usage_risk_upgrade_suggestion' %}selected{% endif %}>{{ t('comm_trigger_usage_risk_upgrade_suggestion') }}</option>
+				</select>
+			  </div>
+
+			  <div class="text-xs">
+				<label class="block mb-1">{{ t('comm_trigger_provider') }}</label>
+				{% set pv = (loaded_template.trigger_provider if loaded_template and loaded_template.trigger_provider else 'all') %}
+				<select name="trigger_provider"
+						class="w-full border rounded-lg px-2 py-1 text-xs {% if stream_blocked_locked %}bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed opacity-70{% else %}bg-slate-950 border-slate-800{% endif %}"
+						{% if stream_blocked_locked %}disabled title="{{ t('comm_stream_blocked_template_notice') }}"{% endif %}>
+				  <option value="all" {% if pv == 'all' %}selected{% endif %}>{{ t('comm_provider_all') }}</option>
+				  <option value="plex" {% if pv == 'plex' %}selected{% endif %}>{{ t("plex") }}</option>
+				  <option value="jellyfin" {% if pv == 'jellyfin' %}selected{% endif %}>{{ t("jellyfin") }}</option>
+				</select>
+			  </div>
+
+			  <div class="text-xs">
+				<label class="block mb-1">{{ t('comm_subscription_target') }}</label>
+				{% set sub_scope = (loaded_template.subscription_scope if loaded_template and loaded_template.subscription_scope else 'none') %}
+				{% set sub_id = (loaded_template.subscription_template_id if loaded_template and loaded_template.subscription_template_id is not none else None) %}
+				<select name="subscription_scope_value"
+						class="w-full border rounded-lg px-2 py-1 text-xs {% if stream_blocked_locked %}bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed opacity-70{% else %}bg-slate-950 border-slate-800{% endif %}"
+						{% if stream_blocked_locked %}disabled title="{{ t('comm_stream_blocked_template_notice') }}"{% endif %}>
+				  <option value="none" {% if sub_scope == 'none' %}selected{% endif %}>{{ t('comm_subscription_none') }}</option>
+				  <option value="all" {% if sub_scope == 'all' %}selected{% endif %}>{{ t('comm_subscription_all') }}</option>
+				  {% for sub in subscription_templates %}
+					<option value="subscription:{{ sub.id }}"
+							{% if sub_scope == 'specific' and sub_id == sub.id %}selected{% endif %}>
+					  {{ sub.name }}
+					</option>
+				  {% endfor %}
+				</select>
+			  </div>
+
+			<div class="text-xs hidden" id="expiration_change_direction_block">
+			  <label class="block mb-1">{{ t('comm_expiration_change_direction') }}</label>
+			  {% set exp_change_dir = (loaded_template.expiration_change_direction if loaded_template and loaded_template.expiration_change_direction else 'all') %}
+			  <select name="expiration_change_direction" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+				<option value="all" {% if exp_change_dir == 'all' %}selected{% endif %}>{{ t('comm_expiration_change_all') }}</option>
+				<option value="increase" {% if exp_change_dir == 'increase' %}selected{% endif %}>{{ t('comm_expiration_change_increase') }}</option>
+				<option value="decrease" {% if exp_change_dir == 'decrease' %}selected{% endif %}>{{ t('comm_expiration_change_decrease') }}</option>
+			  </select>
+			</div>
+
+			</div>
+
+		{#
+		  UI rule:
+		  - trigger_event = user_creation  => only "days_after" is allowed
+		  - trigger_event = expiration     => [X] days (before/after) the event
+		#}
+		{% set ev2 = (loaded_template.trigger_event if loaded_template and loaded_template.trigger_event else 'expiration') %}
+		{% set _dir = 'before' %}
+		{% set _offset = 0 %}
+		{% if loaded_template %}
+		  {% if loaded_template.days_before is not none %}
+			{% set _dir = 'before' %}
+			{% set _offset = loaded_template.days_before %}
+		  {% elif loaded_template.days_after is not none %}
+			{% set _dir = 'after' %}
+			{% set _offset = loaded_template.days_after %}
+		  {% endif %}
+		{% endif %}
+
+		<div class="text-xs {% if stream_blocked_locked %}hidden{% endif %}">
+		  <label class="block mb-1">{{ t('comm_delay') }}</label>
+
+		  <!-- Expiration : [X] days (before/after) the event -->
+		  <div id="delay_block_expiration" class="flex flex-wrap items-center gap-2">
+			<input id="days_offset" type="number" min="0"
+				   class="w-20 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs"
+				   value="{{ _offset if ev2 == 'expiration' else 0 }}">
+			<span class="text-slate-400">{{ t('days') }}</span>
+			<select id="delay_direction_select" name="delay_direction" class="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+			  <option value="before" {% if _dir == 'before' %}selected{% endif %}>{{ t('comm_delay_before') }}</option>
+			  <option value="after" {% if _dir == 'after' %}selected{% endif %}>{{ t('comm_delay_after') }}</option>
+			</select>
+			<span class="text-slate-400">{{ t('comm_delay_event') }}</span>
+
+			{# Keep server-side compatibility (routes expect days_before/days_after) #}
+			<input type="hidden" id="days_before_hidden" name="days_before" value="{% if ev2 == 'expiration' and _dir == 'before' %}{{ _offset }}{% endif %}">
+			<input type="hidden" id="days_after_hidden" name="days_after" value="{% if ev2 == 'expiration' and _dir == 'after' %}{{ _offset }}{% endif %}">
+		  </div>
+
+		  <!-- User creation : [X] days after account creation (no "before") -->
+		  <div id="delay_block_user_creation" class="hidden flex flex-wrap items-center gap-2">
+			<input type="number" name="days_after" min="0"
+				   class="w-20 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs"
+				   value="{{ (loaded_template.days_after if loaded_template and loaded_template.days_after is not none else 0) if ev2 in ('user_creation', 'pending_invite_reminder') else 0 }}">
+			<span class="text-slate-400">{{ t('days') }}</span>
+			<span class="text-slate-400">{{ t('comm_delay_after') }}</span>
+			<span class="text-slate-400">{{ t('comm_user_creation_event') }}</span>
+
+			{# Ensure server gets a valid direction even if something reads it #}
+			<input type="hidden" name="delay_direction" value="after">
+			<input type="hidden" name="days_before" value="">
+		  </div>
+		</div>
+
+      {% with selected_delivery_channels=loaded_template.delivery_channels if loaded_template and loaded_template.delivery_channels else 'inherit' %}
+        {% include "communications/_delivery_channels.html" %}
+      {% endwith %}
+
+      <div class="text-xs">
+        <label class="block mb-1">{{ t('subject') }}</label>
+        <input type="text" name="subject" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs" value="{{ loaded_template.subject if loaded_template else '' }}" required>
+        <p class="mt-1 text-[11px] text-slate-500">{{ t('comm_subject_help') }}</p>
+      </div>
+
+      <div class="text-xs">
+        <label class="block mb-1">{{ t('body') }}</label>
+        <textarea id="template_body" name="body" rows="14" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-2 text-xs resize-none" required>{{ loaded_template.body if loaded_template else '' }}</textarea>
+        <div id="template_discord_counter" data-label="{{ t('comm_discord_body_counter') }}" class="mt-1 text-[11px] text-slate-500" hidden></div>
+        <div class="mt-2">
+          <button type="button"
+                  id="commVarsHelpBtn"
+                  class="text-[11px] text-slate-400 hover:text-emerald-300 transition-colors underline underline-offset-2">
+            {{ t('comm_vars_help') }}
+          </button>
+        </div>      </div>
+
+      <div class="text-xs">
+        <label class="block mb-1">{{ t('attachments') }}</label>
+        <input id="template-attachments" type="file" name="attachments" multiple class="sr-only peer">
+        <label for="template-attachments" class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-indigo-400 bg-indigo-600 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-500 peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-300">
+          <span aria-hidden="true">＋</span> {{ t('comm_attachments_add') }}
+        </label>
+        <div id="template-attachments-pending" class="mt-2 space-y-2" aria-live="polite"
+             data-pending-label="{{ t('comm_attachments_pending') }}"
+             data-remove-label="{{ t('comm_attachments_remove') }}"></div>
+        <p class="mt-1 text-[11px] text-slate-500">{{ t('comm_attachments_help') }}</p>
+
+        {% if loaded_template and loaded_template.attachments %}
+          <div class="mt-2 space-y-1">
+            <p class="font-medium text-slate-300">{{ t('comm_attachments_saved') }}</p>
+            {% for a in loaded_template.attachments %}
+              <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-700 bg-slate-950 p-2">
+                <span class="min-w-0 break-all text-slate-200">📎 {{ a.filename }}</span>
+                <label class="inline-flex cursor-pointer items-center gap-2 rounded border border-rose-500/60 px-2 py-1 text-rose-300 has-[:checked]:bg-rose-950">
+                  <input type="checkbox" name="remove_attachment_ids" value="{{ a.id }}" class="accent-rose-500">
+                  {{ t('comm_attachments_remove') }}
+                </label>
+              </div>
+            {% endfor %}
+            <p class="text-[11px] text-slate-400">{{ t('comm_attachments_remove_help') }}</p>
+          </div>
+        {% else %}
+          <p class="mt-2 text-slate-400">{{ t('comm_attachments_none') }}</p>
+        {% endif %}
+      </div>
+
+      <div id="commVarsHelpModal" class="hidden fixed inset-0 z-50 p-4" aria-hidden="true">
+        <div class="absolute inset-0 bg-black/70"></div>
+
+        <div class="relative mx-auto w-full max-w-6xl max-h-[calc(100dvh-2rem)]">
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="p-5 overflow-y-auto">
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <div class="text-sm font-semibold text-slate-100">{{ t("comm_vars_modal_title") }}</div>
+                  <div class="text-xs text-slate-400 mt-1">{{ t("comm_vars_modal_subtitle") }}</div>
+                </div>
+
+                <!-- <button type="button"
+                        id="commVarsHelpCloseTop"
+                        class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200">
+                  {{ t("close") }}
+                </button> -->
+              </div>
+
+              <div class="mt-5 grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4">
+
+                <!-- General -->
+                <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-4">
+                  <div class="text-sm font-semibold text-slate-100 mb-3">{{ t("comm_vars_group_general") }}</div>
+                  <div class="space-y-2 text-xs">
+                    <div><code class="break-all text-primary">{username}</code><div class="text-slate-400 mt-1">{{ t("comm_var_username_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{firstusername}</code><div class="text-slate-400 mt-1">{{ t("comm_var_firstusername_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{email}</code><div class="text-slate-400 mt-1">{{ t("comm_var_email_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{portal_login_url}</code><div class="text-slate-400 mt-1">{{ t("comm_var_portal_login_url_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{brand_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_brand_name_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{expiration_date}</code><div class="text-slate-400 mt-1">{{ t("comm_var_expiration_date_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{days_left}</code><div class="text-slate-400 mt-1">{{ t("comm_var_days_left_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{firstname}</code><div class="text-slate-400 mt-1">{{ t("comm_var_firstname_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{lastname}</code><div class="text-slate-400 mt-1">{{ t("comm_var_lastname_desc") }}</div></div>
+                  </div>
+                </div>
+
+                <!-- Server / welcome -->
+                <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-4">
+                  <div class="text-sm font-semibold text-slate-100 mb-3">{{ t("comm_vars_group_server") }}</div>
+                  <div class="space-y-2 text-xs">
+                    <div><code class="break-all text-primary">{server_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_server_name_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{server_url}</code><div class="text-slate-400 mt-1">{{ t("comm_var_server_url_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{login_username}</code><div class="text-slate-400 mt-1">{{ t("comm_var_login_username_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{jellyfin_username}</code><div class="text-slate-400 mt-1">{{ t("comm_var_jellyfin_username_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{jellyfin_password}</code><div class="text-slate-400 mt-1">{{ t("comm_var_jellyfin_password_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{temporary_password}</code><div class="text-slate-400 mt-1">{{ t("comm_var_temporary_password_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{provider_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_provider_name_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{player_download_url}</code><div class="text-slate-400 mt-1">{{ t("comm_var_player_download_url_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{player_help_url}</code><div class="text-slate-400 mt-1">{{ t("comm_var_player_help_url_desc") }}</div></div>
+                  </div>
+                </div>
+
+                <!-- Subscription -->
+                <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-4">
+                  <div class="text-sm font-semibold text-slate-100 mb-3">{{ t("comm_vars_group_subscription") }}</div>
+                  <div class="space-y-2 text-xs">
+                    <div><code class="break-all text-primary">{subscription_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_subscription_name_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{subscription_value}</code><div class="text-slate-400 mt-1">{{ t("comm_var_subscription_value_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{subscription_duration_days}</code><div class="text-slate-400 mt-1">{{ t("comm_var_subscription_duration_days_desc") }}</div></div>
+					<div><code class="break-all text-primary">{old_expiration_date}</code><div class="text-slate-400 mt-1">{{ t("comm_var_old_expiration_date_desc") }}</div></div>
+					<div><code class="break-all text-primary">{new_expiration_date}</code><div class="text-slate-400 mt-1">{{ t("comm_var_new_expiration_date_desc") }}</div></div>
+					<div><code class="break-all text-primary">{expiration_change_days}</code><div class="text-slate-400 mt-1">{{ t("comm_var_expiration_change_days_desc") }}</div></div>
+					<div><code class="break-all text-primary">{expiration_change_signed_days}</code><div class="text-slate-400 mt-1">{{ t("comm_var_expiration_change_signed_days_desc") }}</div></div>
+					<div><code class="break-all text-primary">{expiration_change_direction}</code><div class="text-slate-400 mt-1">{{ t("comm_var_expiration_change_direction_desc") }}</div></div>
+					<div><code class="break-all text-primary">{expiration_change_reason}</code><div class="text-slate-400 mt-1">{{ t("comm_var_expiration_change_reason_desc") }}</div></div>
+					<div><code class="break-all text-primary">{referred_username}</code><div class="text-slate-400 mt-1">{{ t("comm_var_referred_username_desc") }}</div></div>
+					<div><code class="break-all text-primary">{referral_reward_days}</code><div class="text-slate-400 mt-1">{{ t("comm_var_referral_reward_days_desc") }}</div></div>
+					<div><code class="break-all text-primary">{referrer_old_expiration_date}</code><div class="text-slate-400 mt-1">{{ t("comm_var_referrer_old_expiration_date_desc") }}</div></div>
+					<div><code class="break-all text-primary">{referrer_new_expiration_date}</code><div class="text-slate-400 mt-1">{{ t("comm_var_referrer_new_expiration_date_desc") }}</div></div>
+                  </div>
+                </div>
+
+                <!-- Stream policies -->
+                <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-4">
+                  <div class="text-sm font-semibold text-slate-100 mb-3">{{ t("comm_trigger_stream_blocked") }}</div>
+                  <div class="space-y-2 text-xs">
+                    <div><code class="break-all text-primary">{policy_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_policy_name_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{policy_reason}</code><div class="text-slate-400 mt-1">{{ t("comm_var_policy_reason_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{media_title}</code><div class="text-slate-400 mt-1">{{ t("comm_var_media_title_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{server_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_server_name_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{client_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_client_name_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{device_name}</code><div class="text-slate-400 mt-1">{{ t("comm_var_device_name_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{blocked_at}</code><div class="text-slate-400 mt-1">{{ t("comm_var_blocked_at_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{stream_killed}</code><div class="text-slate-400 mt-1">{{ t("comm_var_stream_killed_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{other_streams}</code><div class="text-slate-400 mt-1">{{ t("comm_var_other_streams_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{other_streams_count}</code><div class="text-slate-400 mt-1">{{ t("comm_var_other_streams_count_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{all_streams}</code><div class="text-slate-400 mt-1">{{ t("comm_var_all_streams_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{stream_count}</code><div class="text-slate-400 mt-1">{{ t("comm_var_stream_count_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{ip_count}</code><div class="text-slate-400 mt-1">{{ t("comm_var_ip_count_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{policy_limit}</code><div class="text-slate-400 mt-1">{{ t("comm_var_policy_limit_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{policy_observed}</code><div class="text-slate-400 mt-1">{{ t("comm_var_policy_observed_desc") }}</div></div>
+					<div><code class="break-all text-primary">{policy_explanation}</code><div class="text-slate-400 mt-1">{{ t("comm_var_policy_explanation_desc") }}</div></div>
+					<div><code class="break-all text-primary">{policy_limit_label}</code><div class="text-slate-400 mt-1">{{ t("comm_var_policy_limit_label_desc") }}</div></div>
+					<div><code class="break-all text-primary">{active_streams_count}</code><div class="text-slate-400 mt-1">{{ t("comm_var_active_streams_count_desc") }}</div></div>
+					<div><code class="break-all text-primary">{active_streams}</code><div class="text-slate-400 mt-1">{{ t("comm_var_active_streams_desc") }}</div></div>
+					<div><code class="break-all text-primary">{active_devices_count}</code><div class="text-slate-400 mt-1">{{ t("comm_var_active_devices_count_desc") }}</div></div>
+					<div><code class="break-all text-primary">{active_devices}</code><div class="text-slate-400 mt-1">{{ t("comm_var_active_devices_desc") }}</div></div>
+					<div><code class="break-all text-primary">{active_ips_count}</code><div class="text-slate-400 mt-1">{{ t("comm_var_active_ips_count_desc") }}</div></div>
+					<div><code class="break-all text-primary">{active_ips}</code><div class="text-slate-400 mt-1">{{ t("comm_var_active_ips_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{maximum_streams}</code><div class="text-slate-400 mt-1">{{ t("comm_var_maximum_streams_desc") }}</div></div>
+                    <div><code class="break-all text-primary">{maximum_ips}</code><div class="text-slate-400 mt-1">{{ t("comm_var_maximum_ips_desc") }}</div></div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <div class="border-t border-slate-800"></div>
+
+            <div class="p-4 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2">
+              <button type="button"
+                      id="commVarsHelpCloseBottom"
+                      class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-200">
+                {{ t("close") }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap gap-2">
+        <button type="submit" class="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-dark text-xs font-medium">{{ t('save') if loaded_template else t('create') }}</button>
+        <button type="button" id="commTemplateTestBtn" data-test-url="{{ url_for('communications_templates_action') }}" data-sending-label="{{ t('comm_test_sending') }}" class="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium transition-colors hover:bg-slate-700 disabled:cursor-wait disabled:opacity-60">
+          {{ t('test') }}
+        </button>
+        <span id="commTemplateTestStatus" class="self-center text-xs text-slate-400" role="status" aria-live="polite"></span>
+
+        {% if loaded_template and not stream_blocked_locked %}
+          <button type="button"
+                  id="commTemplateDeleteBtn"
+                  class="px-3 py-1.5 rounded-lg bg-rose-700/50 hover:bg-rose-700 text-xs font-medium">
+            {{ t('delete') }}
+          </button>
+          <a href="{{ url_for('communications_templates_page') }}" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium">{{ t('new') }}</a>
+        {% endif %}
+      </div>
+
+    </form>
+
+  </div>
+
+  <!-- RIGHT : list -->
+  <div class="lg:col-span-3">
+    <form method="get" class="mb-3 flex justify-end">
+      <input type="hidden" name="language" value="{{ selected_language }}">
+      <select name="per_page" aria-label="{{ t('rows_per_page') }}" class="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs" onchange="this.form.submit()">
+        {% for size in (20, 50, 100) %}<option value="{{ size }}" {% if per_page == size %}selected{% endif %}>{{ size }}</option>{% endfor %}
+      </select>
+    </form>
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+      <table class="w-full text-xs">
+        <thead class="bg-slate-950/60 text-slate-400 text-left">
+	          <tr>
+	            <th class="px-4 py-2">{{ t('name') }}</th>
+	            <th class="px-4 py-2">{{ t('enabled') }}</th>
+				<th class="px-4 py-2">{{ t('comm_trigger_event') }}</th>
+				<th class="px-4 py-2">{{ t('comm_trigger_provider') }}</th>
+				<th class="px-4 py-2">{{ t('comm_subscription_target') }}</th>
+				<th class="px-4 py-2">{{ t('comm_delay') }}</th>
+	            <th class="px-4 py-2">{{ t('subject') }}</th>
+	          </tr>
+        </thead>
+        <tbody>
+        {% for tpl in templates %}
+          <tr
+            class="border-t border-slate-800 cursor-pointer hover:bg-slate-800/40 focus-within:bg-slate-800/40"
+            tabindex="0"
+            role="button"
+            data-href="{{ url_for('communications_templates_page', load=tpl.id, page=page, per_page=per_page, language=selected_language) }}"
+          >
+            <td class="px-4 py-2">{{ tpl.name }}</td>
+            <td class="px-4 py-2">
+              {% if tpl.enabled %}
+                <span class="text-emerald-300">{{ t('yes') }}</span>
+              {% else %}
+                <span class="text-slate-400">{{ t('no') }}</span>
+              {% endif %}
+            </td>
+			<td class="px-4 py-2">
+				{% if tpl.trigger_event == 'user_creation' %}
+				  {{ t('comm_trigger_user_creation') }}
+				{% elif tpl.trigger_event == 'pending_invite_reminder' %}
+				  {{ t('comm_trigger_pending_invite_reminder') }}
+				{% elif tpl.trigger_event == 'referral_reward' %}
+				  {{ t('comm_trigger_referral_reward') }}
+				{% elif tpl.trigger_event == 'expiration_change' %}
+				  {{ t('comm_trigger_expiration_change') }}
+				{% elif tpl.trigger_event == 'stream_blocked' %}
+				  {{ t('comm_trigger_stream_blocked') }}
+				{% elif tpl.trigger_event == 'usage_risk_upgrade_suggestion' %}
+				  {{ t('comm_trigger_usage_risk_upgrade_suggestion') }}
+				{% else %}
+				  {{ t('comm_trigger_expiration') }}
+				{% endif %}
+			</td>
+
+			<td class="px-4 py-2">
+			  {% if tpl.trigger_provider == 'plex' %}Plex
+			  {% elif tpl.trigger_provider == 'jellyfin' %}Jellyfin
+			  {% else %}{{ t('comm_provider_all') }}
+			  {% endif %}
+			</td>
+
+			<td class="px-4 py-2">
+			  {% if tpl.subscription_scope == 'specific' and tpl.subscription_template_name %}
+				{{ tpl.subscription_template_name }}
+			  {% elif tpl.subscription_scope == 'all' %}
+				{{ t('comm_subscription_all') }}
+			  {% else %}
+				{{ t('comm_subscription_none') }}
+			  {% endif %}
+			</td>
+
+			<td class="px-4 py-2">
+			  {% if tpl.days_before is not none %}
+				{{ t('comm_delay_before_short') }} {{ tpl.days_before }}
+			  {% elif tpl.days_after is not none %}
+				{{ t('comm_delay_after_short') }} {{ tpl.days_after }}
+			  {% else %}
+				-
+			  {% endif %}
+			</td>
+            <td class="px-4 py-2">{{ tpl.subject }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="border-t border-slate-800 px-4 py-3 flex justify-end">
+        <form method="post" action="{{ url_for('communications_templates_restore_defaults') }}">
+          <button type="submit"
+                  class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs">
+            Restore default templates
+          </button>
+        </form>
+      </div>
+    </div>
+
+    {% set pagination = {
+      "page": page, "total_pages": total_pages, "total_rows": total_rows,
+      "unit_label": t("templates"),
+      "first_url": url_for("communications_templates_page", page=1, per_page=per_page, language=selected_language),
+      "prev_url": url_for("communications_templates_page", page=page-1, per_page=per_page, language=selected_language),
+      "next_url": url_for("communications_templates_page", page=page+1, per_page=per_page, language=selected_language),
+      "last_url": url_for("communications_templates_page", page=total_pages, per_page=per_page, language=selected_language)
+    } %}
+    <div class="mt-4">{% include "partials/_pagination.html" %}</div>
+
+    <!-- <div class="mt-3 text-[11px] text-slate-500">
+      {{ t('comm_templates_note') }}
+    </div> -->
+  </div>
+
+</div>
+
+{% if loaded_template and not stream_blocked_locked %}
+<div id="commTemplateDeleteModal" class="hidden fixed inset-0 z-50" aria-hidden="true">
+  <div class="absolute inset-0 bg-black/70"></div>
+
+  <div class="relative mx-auto mt-8 sm:mt-24 w-full max-w-lg">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+      <div class="p-5">
+        <div class="text-sm font-semibold text-slate-100">
+          {{ t('delete') }}
+        </div>
+
+        <div class="text-sm text-slate-300 mt-4">
+          {{ t('confirm_delete') }}
+        </div>
+
+        <div class="text-xs text-slate-500 mt-3">
+          {{ loaded_template.name }}
+        </div>
+      </div>
+
+      <div class="border-t border-slate-800 p-4 flex justify-end gap-2">
+        <button type="button"
+                id="commTemplateDeleteCancel"
+                class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-200">
+          {{ t('cancel') }}
+        </button>
+
+        <button type="button"
+                id="commTemplateDeleteConfirm"
+                class="px-4 py-2 rounded-lg bg-rose-700/60 hover:bg-rose-700 text-sm text-rose-100">
+          {{ t('delete') }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if duplicate_disabled %}
+<div id="duplicateDisabledModal" class="fixed inset-0 z-50" aria-hidden="false">
+  <div class="absolute inset-0 bg-black/70"></div>
+
+  <div class="relative mx-auto mt-8 sm:mt-16 w-full max-w-xl">
+    <div class="bg-slate-900 border border-amber-700/40 rounded-2xl shadow-xl overflow-hidden">
+      <div class="p-5">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <div class="text-sm font-semibold text-amber-300">{{ t("warning") }}</div>
+            <div class="text-xs text-slate-400 mt-1">{{ t("comm_duplicate_disabled_subtitle") }}</div>
+          </div>
+
+
+        </div>
+
+        <div class="mt-4 rounded-xl border border-amber-700/30 bg-amber-500/10 px-4 py-3 text-xs text-slate-200">
+          {{ t("comm_duplicate_disabled_reason") }} {{ duplicate_disabled_reason }}
+        </div>
+
+        <div class="mt-3 text-xs text-slate-400">
+          {{ t("comm_duplicate_disabled_help") }}
+        </div>
+      </div>
+
+      <div class="border-t border-slate-800"></div>
+
+      <div class="p-4 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2">
+        <button type="button"
+                id="duplicateDisabledCloseBottom"
+                class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-200">
+          {{ t("done") }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<script type="application/json" id="comm-templates-config">
+  {
+    "streamBlockedEnabledLocked": {{ 'true' if stream_blocked_enabled_locked else 'false' }}
+  }
+</script>
+<script src="{{ url_for('static', filename='js/pages/communications-templates.js', v=g.app_version|default('dev')) }}"></script>
+{% endblock %}

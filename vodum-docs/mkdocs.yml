@@ -1,0 +1,109 @@
+site_name: VODUM Docs
+site_description: Manage Plex and Jellyfin users, subscriptions, collections and your user portal with VODUM.
+site_url: https://nexius2.github.io/vodum-docs/
+use_directory_urls: true
+repo_name: Nexius2/vodum-docs
+repo_url: https://github.com/Nexius2/vodum-docs
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  language: en
+  logo: assets/images/vodum.png
+  favicon: assets/images/vodum.png
+  font: false
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.tracking
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+    - content.action.view
+  palette:
+    - scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - def_list
+  - footnotes
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+extra_css:
+  - assets/stylesheets/extra.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Nexius2/VODUM
+      name: VODUM on GitHub
+
+nav:
+  - Home: index.md
+  - Get started:
+      - Installation & upgrades: getting-started.md
+      - What's new: whats-new.md
+  - Administration:
+      - Dashboard: dashboard.md
+      - Users: users.md
+      - Referrals & invitations: referrals.md
+      - Subscriptions & gifts: subscriptions.md
+      - Servers & libraries: servers-libraries.md
+      - Collections:
+          - Overview: collections.md
+          - Models & sources: collection-sources.md
+      - Communications: communications.md
+      - Migrations: migrations.md
+      - Backup & import: backup.md
+      - Tasks: tasks.md
+      - Settings: settings.md
+      - Logs: logs.md
+  - Monitoring:
+      - Overview & playback: monitoring.md
+      - User map: monitoring-map.md
+      - Library growth: library-growth.md
+      - Stream policies: policies.md
+  - User portal:
+      - Setup & user guide: user-portal.md
+      - Media requests: media-requests.md
+      - Permissions: user-portal-permissions.md
+      - API: portal-api.md
+  - Operations:
+      - Deployment configuration: configuration.md
+      - Security: security.md
+      - Architecture: architecture.md
+      - Route access policy: route-access-policy.md
+      - Performance: performance.md
+      - Troubleshooting: troubleshooting.md
+      - FAQ: faq.md
+      - About: about.md
